@@ -1,0 +1,37 @@
+node_modules
+.env
+.env.local
+data/
+dist/
+release/
+test/
+web/dist-app/
+models/
+python/runtime/
+python/sidecar/
+*.log
+.DS_Store
+dev-docs/
+CLAUDE.md
+package-lock.json
+
+# Per-space sidecars StashBase itself writes when the repo is opened
+# as a space. Never meant to travel with the repo.
+.stashbase/
+.claude/
+.codex/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# TypeScript
+*.tsbuildinfo

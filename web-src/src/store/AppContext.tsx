@@ -1,0 +1,977 @@
+/**
+ * React Provider + action thunks for the renderer.
+ *
+ * All pure state (types, reducer, initialState, helpers) lives in
+ * `state.ts`. This file holds:
+ *   - the React Context wiring (`AppContext`, `AppProvider`, `useApp`)
+ *   - imperative refs for long-lived state (autosave timer, poll timer,
+ *     `<CodeEditor>` handle, cascade + modal resolvers)
+ *   - the ~30 async action thunks that components call via `actions.*`
+ *   - the two `useEffect`s that own bootstrap + before-unload flush
+ */
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  type ReactNode,
+} from 'react';
+import {
+  api,
+  ApiError,
+  type Heading,
+} from '../api';
+import {
+  getActiveTab,
+  initialState,
+  reducer,
+  type Action,
+  type CascadeDecision,
+  type CascadePrompt,
+  type State,
+} from './state';
+
+// Re-export the state types from a single barrel so consumers that
+// import from `'../store/AppContext'` keep working. The Provider
+// itself owns the React-side surface (AppActions, EditorHandle); the
+// data shapes live in `state.ts`.
+export type {
+  Action,
+  CascadeDecision,
+  CascadePrompt,
+  CtxMenu,
+  ModalRequest,
+  NavEntry,
+  OpenFile,
+  SaveStatus,
+  State,
+  Tab,
+} from './state';
+
+/** Imperative handle a `<CodeEditor>` registers on mount so save /
+ *  rename / file-switch actions can pull the live buffer. */
+export interface EditorHandle {
+  getValue: () => string;
+  focus: () => void;
+}
+
+export interface AppActions {
+  bootstrap: () => Promise<void>;
+  openSpace: (path: string) => Promise<void>;
+  goHome: () => void;
+
+  loadFiles: () => Promise<void>;
+  refreshIndexState: () => Promise<void>;
+  runSync: () => Promise<void>;
+  runSearch: (query: string) => Promise<void>;
+  /** Replace a folder's ordered child list (manual sidebar ordering).
+   *  Optimistic — state updates immediately, then a PUT is fired.
+   *  Failure of the PUT rolls the renderer back to whatever the server
+   *  has next time we reload. */
+  setFolderOrder: (parentPath: string, names: string[]) => Promise<void>;
+
+  selectFile: (name: string) => Promise<void>;
+  /** Open a file in a new tab (double-click in sidebar / drag-out
+   *  semantics). Always creates a new tab even if the file is already
+   *  open in another tab — VS Code does the same with the explicit
+   *  "Open in New Tab" command. */
+  openInNewTab: (name: string) => Promise<void>;
+  newTab: () => Promise<void>;
+  closeTab: (id: string) => Promise<void>;
+  /** Close whichever tab is currently active. Convenience for keyboard
+   *  shortcuts (`⌘W`) and UI buttons that don't have a tab id handy. */
+  closeActiveTab: () => Promise<void>;
+  activateTab: (id: string) => Promise<void>;
+  /** Cross-file link nav: open `name` (with optional anchor) and push a
+   *  new entry into the back/forward stack. Used by preview iframes
+   *  forwarding `<a>` clicks. */
+  navigateTo: (name: string, anchor?: string) => Promise<void>;
+  navBack: () => Promise<void>;
+  navForward: () => Promise<void>;
+  /** Called by the preview iframe after it has consumed the pending
+   *  anchor / scrollY so a follow-up keystroke / re-render won't
+   *  re-scroll. */
+  consumePendingScroll: () => void;
+  /** Settle the pending cascade dialog with the user's choice. The
+   *  rename action awaits this. */
+  resolveCascadePrompt: (decision: CascadeDecision) => void;
+  /** Show a modal alert and resolve once dismissed. Replaces
+   *  `window.alert`. */
+  alert: (message: string) => Promise<void>;
+  /** Show a modal confirm and resolve to true (OK) / false (Cancel).
+   *  Replaces `window.confirm`. */
+  confirm: (message: string) => Promise<boolean>;
+  /** Settle the pending alert/confirm modal with the user's choice.
+   *  Called by the rendered modal's buttons. */
+  resolveModal: (value: boolean) => void;
+  toggleEditMode: () => Promise<void>;
+
+  newNote: (format?: 'md' | 'html') => Promise<void>;
+  newFolder: (path: string) => Promise<void>;
+  deleteFile: (name: string) => Promise<void>;
+  deleteFolder: (path: string) => Promise<void>;
+  renameFile: (oldName: string, newBaseName: string) => Promise<void>;
+  renameFolder: (oldPath: string, newName: string) => Promise<void>;
+  moveFile: (oldPath: string, targetDir: string) => Promise<void>;
+  upload: (items: { file: File; relPath: string }[], dir: string) => Promise<void>;
+
+  scheduleSave: () => void;
+  flushSave: () => Promise<void>;
+
+  setOutlineHeadings: (headings: Heading[]) => void;
+  registerEditor: (h: EditorHandle | null) => void;
+  /** Sidebar SearchBox registers its input element on mount so
+   *  `focusSearch` can reach it without a DOM query. Same shape as
+   *  `registerEditor` — pass `null` on unmount. */
+  registerSearchInput: (el: HTMLInputElement | null) => void;
+  /** Focus + select the sidebar search input. Un-collapses the sidebar
+   *  first if hidden; flashes a brief glow so the user can tell where
+   *  focus landed. Used by the empty-tab landing and the `⌘O` hotkey. */
+  focusSearch: () => void;
+}
+
+const AppContext = createContext<{
+  state: State;
+  actions: AppActions;
+  dispatch: (a: Action) => void;
+} | null>(null);
+
+const AUTOSAVE_DEBOUNCE_MS = 1200;
+const POLL_PENDING_MS = 1500;
+const POLL_IDLE_MS = 8000;
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editorRef = useRef<EditorHandle | null>(null);
+  // Sidebar's SearchBox registers its input here so `focusSearch` can
+  // reach it without a global DOM query. Mirrors `editorRef`.
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // Race protection for `runSearch`: every call bumps this counter and
+  // remembers its own value; an older request's response is dropped
+  // when it returns after a newer one has been issued.
+  const searchGen = useRef(0);
+  // Last `treeVersion` we saw from `/api/index-status`. Any bump means
+  // the watcher detected a disk change since last poll → refetch files.
+  const lastTreeVersion = useRef<number>(-1);
+  /** Promise resolver for the pending cascade dialog. Set when the
+   *  rename action asks the user; cleared once they pick. */
+  const cascadeResolveRef = useRef<((d: CascadeDecision) => void) | null>(null);
+
+  const askCascade = useCallback((prompt: CascadePrompt): Promise<CascadeDecision> => {
+    return new Promise<CascadeDecision>((resolve) => {
+      // If a previous prompt is still open (shouldn't happen — rename
+      // input is single-tracked), cancel it so we don't lose a
+      // resolver in the ref.
+      if (cascadeResolveRef.current) cascadeResolveRef.current('cancel');
+      cascadeResolveRef.current = resolve;
+      dispatch({ type: 'CASCADE_PROMPT', prompt });
+    });
+  }, []);
+
+  const resolveCascadePrompt = useCallback((decision: CascadeDecision) => {
+    const r = cascadeResolveRef.current;
+    cascadeResolveRef.current = null;
+    dispatch({ type: 'CASCADE_PROMPT', prompt: null });
+    if (r) r(decision);
+  }, []);
+
+  // Modal alert/confirm — single-tracked: a previous open prompt that
+  // hasn't been resolved gets a false answer so we don't leak the
+  // resolver. The native window.alert blocks the renderer thread in
+  // Electron and steals focus; this version is async and themable.
+  const modalResolveRef = useRef<((v: boolean) => void) | null>(null);
+  const showAlert = useCallback((message: string): Promise<void> => {
+    return new Promise<void>((resolve) => {
+      if (modalResolveRef.current) modalResolveRef.current(false);
+      modalResolveRef.current = () => resolve();
+      dispatch({ type: 'MODAL_OPEN', request: { type: 'alert', message } });
+    });
+  }, []);
+  const askConfirm = useCallback((message: string): Promise<boolean> => {
+    return new Promise<boolean>((resolve) => {
+      if (modalResolveRef.current) modalResolveRef.current(false);
+      modalResolveRef.current = resolve;
+      dispatch({ type: 'MODAL_OPEN', request: { type: 'confirm', message } });
+    });
+  }, []);
+  const resolveModal = useCallback((value: boolean) => {
+    const r = modalResolveRef.current;
+    modalResolveRef.current = null;
+    dispatch({ type: 'MODAL_CLOSE' });
+    if (r) r(value);
+  }, []);
+
+  /** Run the rename-preview probe, and if it surfaces cross-references,
+   *  pop the cascade dialog. Encodes the decision tri-state once so the
+   *  rename / move / folder-rename actions don't each spell it out:
+   *
+   *    `true`  → cascade-update links
+   *    `false` → user wants to skip link updates but still rename
+   *    `null`  → user cancelled; caller should bail without side effects
+   *
+   *  Preview-API failures are swallowed (treated as zero-hit). */
+  const askCascadeForRename = useCallback(async (
+    kind: 'file' | 'folder',
+    oldPath: string,
+    newPath: string,
+  ): Promise<boolean | null> => {
+    try {
+      const preview = await api.renamePreview(kind, oldPath, newPath);
+      if (preview.files === 0) return true;
+      const decision = await askCascade({
+        kind, oldPath, newPath,
+        files: preview.files, links: preview.links,
+      });
+      if (decision === 'cancel') return null;
+      return decision === 'update';
+    } catch (err) {
+      console.warn(`[${kind} rename] preview failed:`, err);
+      return true;
+    }
+  }, [askCascade]);
+
+  const loadFiles = useCallback(async () => {
+    try {
+      const j = await api.listFiles();
+      dispatch({
+        type: 'FILES_LOADED',
+        files: j.files ?? [],
+        folders: j.folders ?? [],
+        space: j.space ?? 'notes',
+      });
+    } catch {
+      dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: 'notes' });
+    }
+  }, []);
+
+  /** Fetch the per-space manual ordering map. Called alongside
+   *  `loadFiles` on space switch and on bootstrap. Errors are
+   *  swallowed — the tree falls back to default sort. */
+  const loadFileOrder = useCallback(async () => {
+    try {
+      const order = await api.getFileOrder();
+      dispatch({ type: 'FILE_ORDER_LOADED', order });
+    } catch {
+      dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
+    }
+  }, []);
+
+  const setFolderOrder = useCallback(async (parentPath: string, names: string[]) => {
+    // Optimistic — render the new order now, persist behind it.
+    dispatch({ type: 'FILE_ORDER_SET', parentPath, names });
+    try {
+      await api.putFileOrder(parentPath, names);
+    } catch (err) {
+      console.warn('[file-order] PUT failed; will resync on next space load', err);
+    }
+  }, []);
+
+  /** Re-fetch the active tab's body from disk and patch the open file
+   *  if it changed. Used after the watcher detects an external edit
+   *  (typically: Claude Code wrote to the file via its `Edit` tool from
+   *  the panel). No-op when nothing's open, when the active tab is in
+   *  edit mode (would clobber the unsaved buffer), or when disk + tab
+   *  agree. Failures are swallowed — the sidebar reload that runs in
+   *  the same poll cycle covers the "file got deleted externally" case. */
+  const refreshActiveTabFromDisk = useCallback(async () => {
+    const tab = getActiveTab(stateRef.current);
+    if (!tab?.file) return;
+    if (tab.editMode) return;
+    const name = tab.file.name;
+    try {
+      const body = await api.getFile(name);
+      // The active tab may have been swapped (or the file renamed) in
+      // the time it took to fetch — re-check before patching.
+      const stillActive = getActiveTab(stateRef.current)?.file?.name === name;
+      if (!stillActive) return;
+      if (body.content === tab.file.content) return;
+      dispatch({
+        type: 'FILE_PATCH',
+        patch: { content: body.content, headings: body.headings ?? [] },
+      });
+    } catch {
+      /* swallow — sidebar will reflect a delete on the next poll */
+    }
+  }, []);
+
+  const refreshIndexState = useCallback(async () => {
+    let nextDelay = POLL_IDLE_MS;
+    try {
+      const s = await api.indexStatus();
+      const newPending = new Set(s.pending ?? []);
+      const newConv = s.pendingConversions ?? [];
+      const prev = stateRef.current;
+      // Trigger a `/api/files` refresh whenever the indexer's
+      // awareness of the disk grew or shrank — covers new files
+      // landing from the watcher (vim edits) AND `.html` notes
+      // appearing after PDF conversion finishes, both of which
+      // would otherwise leave the sidebar tree stale until the
+      // next user action.
+      const pendingChanged =
+        newPending.size !== prev.pendingNames.size
+        || [...newPending].some((n) => !prev.pendingNames.has(n))
+        || [...prev.pendingNames].some((n) => !newPending.has(n));
+      const convChanged =
+        newConv.length !== prev.pendingConversions.length
+        || newConv.some((p, i) => p !== prev.pendingConversions[i]);
+      // `treeVersion` covers writes the indexer's `pending` set wouldn't
+      // catch — non-indexable files (`.json`, `.csv`, empty dirs) and
+      // fast embeds whose pending flips empty between polls. First
+      // poll initialises the ref (no spurious reload).
+      const newTreeVersion = typeof s.treeVersion === 'number' ? s.treeVersion : -1;
+      const treeChanged =
+        lastTreeVersion.current >= 0 && newTreeVersion !== lastTreeVersion.current;
+      lastTreeVersion.current = newTreeVersion;
+      dispatch({ type: 'PENDING_NAMES', names: newPending });
+      if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
+      if (pendingChanged || convChanged || treeChanged) void loadFiles();
+      // Tree changed = someone else wrote to disk (Claude Code in the
+      // terminal panel is the common case). Re-read the active tab's
+      // body so the preview / read-only editor doesn't keep showing
+      // stale content. Skipped while the user is editing — clobbering
+      // their unsaved buffer is worse than showing slightly old text;
+      // a "this file changed on disk, reload?" prompt belongs here
+      // long-term, but for now silent reload-when-safe is the best
+      // tradeoff vs. silently stale.
+      if (treeChanged) void refreshActiveTabFromDisk();
+      // Keep polling fast while a conversion is in flight, even if
+      // the index itself is settled — the user is waiting on a file
+      // to appear.
+      const busy = !s.upToDate || newConv.length > 0;
+      nextDelay = busy ? POLL_PENDING_MS : POLL_IDLE_MS;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 412) {
+        dispatch({ type: 'PENDING_NAMES', names: new Set() });
+        dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
+      }
+    }
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    pollTimer.current = setTimeout(() => { void refreshIndexState(); }, nextDelay);
+  }, [loadFiles, refreshActiveTabFromDisk]);
+
+  /** Fire a `/api/search` and dispatch the result. Empty query clears
+   *  the hit list (back to tree view). Bails out on stale responses so
+   *  fast typing doesn't show flashes of older results. */
+  const runSearch = useCallback(async (query: string) => {
+    const myGen = ++searchGen.current;
+    const q = query.trim();
+    if (!q) {
+      dispatch({ type: 'SEARCH_CLEAR' });
+      return;
+    }
+    dispatch({ type: 'SEARCH_START' });
+    try {
+      const { hits } = await api.search(q, 15);
+      if (myGen !== searchGen.current) return; // newer query in flight
+      dispatch({ type: 'SEARCH_HITS', hits });
+    } catch (err) {
+      if (myGen !== searchGen.current) return;
+      // ApiError 412 = no space open. Anything else: surface empty
+      // result so the UI says "No matches" instead of hanging on
+      // "Searching…".
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[search] failed:', msg);
+      dispatch({ type: 'SEARCH_HITS', hits: [] });
+    }
+  }, []);
+
+  const flushSave = useCallback(async () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const cur = getActiveTab(stateRef.current)?.file ?? null;
+    const handle = editorRef.current;
+    if (!cur || !handle) return;
+    const content = handle.getValue();
+    if (content === cur.content) {
+      dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
+      return;
+    }
+    dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
+    try {
+      await api.putFile(cur.name, content);
+      dispatch({ type: 'FILE_PATCH', patch: { content } });
+      dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
+      void loadFiles();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + msg, cls: 'error' } });
+    }
+  }, [loadFiles]);
+
+  const scheduleSave = useCallback(() => {
+    dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
+  }, [flushSave]);
+
+  /** Read the current MD preview's scroll position so the entry we're
+   *  about to leave can be restored on back. Only the read-only MD
+   *  iframe is `allow-same-origin`; HTML and split-edit previews can't
+   *  be read from the parent, so they return null. */
+  function captureCurrentScrollY(): number | null {
+    const tab = getActiveTab(stateRef.current);
+    if (!tab?.file || tab.file.format !== 'md' || tab.editMode) return null;
+    const iframe = document.getElementById('previewFrame') as HTMLIFrameElement | null;
+    const doc = iframe?.contentDocument;
+    if (!doc) return null;
+    return doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+  }
+
+  /** Shared file-load. Pushes onto the nav stack when `push=true`
+   *  (sidebar click, link click); back/forward call this with
+   *  `push=false` and provide a precomputed cursor update. With
+   *  `newTab=true` (double-click / `+` then click) the file lands in a
+   *  freshly-created tab rather than replacing the active tab's file.
+   *  `preview` is forwarded to the FILE_OPEN action — see its docstring
+   *  in `state.ts` for the create-vs-replace semantics. */
+  const loadFile = useCallback(async (
+    name: string,
+    opts: {
+      push: boolean;
+      newTab?: boolean;
+      preview?: boolean;
+      anchor?: string;
+      restoreScrollY?: number;
+      cursor?: number;
+    },
+  ) => {
+    const cur = getActiveTab(stateRef.current)?.file ?? null;
+    if (editorRef.current && cur && cur.name !== name && !opts.newTab) {
+      await flushSave();
+    }
+    let body;
+    try {
+      body = await api.getFile(name);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      dispatch({ type: 'SAVE_STATUS', status: { text: msg, cls: 'error' } });
+      return;
+    }
+    const scrollY = opts.newTab ? null : captureCurrentScrollY();
+    // "Implicit new tab" — first open in a fresh session (no active
+    // tab yet) goes through the new-tab path too, so the new tab's
+    // navStack gets the initial NAV_PUSH instead of dropping it.
+    const noActiveTab = stateRef.current.activeTabId == null || !getActiveTab(stateRef.current);
+    const newTabMode = !!opts.newTab || noActiveTab;
+    // For new-tab mode we must dispatch FILE_OPEN with newTab=true
+    // FIRST — that creates the tab and makes it active — so the
+    // subsequent NAV_PUSH writes into the new tab's nav stack.
+    if (newTabMode) {
+      dispatch({ type: 'FILE_OPEN', body, newTab: !noActiveTab, preview: opts.preview });
+      dispatch({
+        type: 'NAV_PUSH',
+        entry: { name, anchor: opts.anchor },
+        currentScrollY: null,
+      });
+    } else {
+      if (opts.push) {
+        dispatch({
+          type: 'NAV_PUSH',
+          entry: { name, anchor: opts.anchor },
+          currentScrollY: scrollY,
+        });
+      } else if (opts.cursor != null) {
+        dispatch({ type: 'NAV_GOTO', cursor: opts.cursor, currentScrollY: scrollY });
+      }
+      dispatch({ type: 'FILE_OPEN', body, preview: opts.preview });
+    }
+    dispatch({
+      type: 'PENDING_SCROLL',
+      anchor: opts.anchor ?? null,
+      scrollY: opts.restoreScrollY ?? null,
+    });
+  }, [flushSave]);
+
+  /** Single-click in the sidebar = open as PREVIEW. VS Code semantics:
+   *    1. File already in any tab → activate it, keep its preview/
+   *       pinned status unchanged.
+   *    2. Active tab is blank (no file) → reuse it as preview.
+   *    3. Some other tab is already a preview → activate + replace its
+   *       content (the previewed file gets "kicked out" — by design).
+   *    4. Otherwise → create a fresh preview tab. */
+  const selectFile = useCallback(async (name: string) => {
+    const s = stateRef.current;
+    const existing = s.tabs.find((t) => t.file?.name === name);
+    if (existing) {
+      if (s.activeTabId !== existing.id) {
+        if (editorRef.current) await flushSave();
+        dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
+      }
+      return;
+    }
+    const active = getActiveTab(s);
+    if (active && !active.file) {
+      await loadFile(name, { push: true, preview: true });
+      return;
+    }
+    const previewTab = s.tabs.find((t) => t.preview);
+    if (previewTab) {
+      if (s.activeTabId !== previewTab.id) {
+        if (editorRef.current) await flushSave();
+        dispatch({ type: 'ACTIVATE_TAB', id: previewTab.id });
+      }
+      // FILE_OPEN with no `preview` field preserves the tab's existing
+      // preview=true status, so the slot stays the "preview slot".
+      await loadFile(name, { push: true });
+      return;
+    }
+    await loadFile(name, { push: true, newTab: true, preview: true });
+  }, [flushSave, loadFile]);
+
+  /** Double-click in the sidebar = open PINNED. VS Code semantics:
+   *    1. File already open → activate, AND promote it if it was
+   *       living in the preview slot (so it stops being kickable).
+   *    2. Otherwise → fresh pinned tab. */
+  const openInNewTab = useCallback(async (name: string) => {
+    const s = stateRef.current;
+    const existing = s.tabs.find((t) => t.file?.name === name);
+    if (existing) {
+      if (s.activeTabId !== existing.id) {
+        if (editorRef.current) await flushSave();
+        dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
+      }
+      if (existing.preview) dispatch({ type: 'PROMOTE_TAB', id: existing.id });
+      return;
+    }
+    if (editorRef.current) await flushSave();
+    await loadFile(name, { push: true, newTab: true });
+  }, [flushSave, loadFile]);
+
+  const newTab = useCallback(async () => {
+    if (editorRef.current) await flushSave();
+    dispatch({ type: 'NEW_TAB' });
+  }, [flushSave]);
+
+  const closeTab = useCallback(async (id: string) => {
+    const s = stateRef.current;
+    if (s.activeTabId === id && editorRef.current) await flushSave();
+    dispatch({ type: 'CLOSE_TAB', id });
+  }, [flushSave]);
+
+  const closeActiveTab = useCallback(async () => {
+    const id = stateRef.current.activeTabId;
+    if (!id) return;
+    await closeTab(id);
+  }, [closeTab]);
+
+  const registerSearchInput = useCallback((el: HTMLInputElement | null) => {
+    searchInputRef.current = el;
+  }, []);
+
+  const focusSearch = useCallback(() => {
+    // Un-collapse the sidebar first if hidden — focusing an invisible
+    // input is technically valid but reads as "nothing happened".
+    if (stateRef.current.sidebarCollapsed) {
+      dispatch({ type: 'SIDEBAR_FOLD_TOGGLE' });
+    }
+    // Defer one frame so the un-collapse layout commits before we
+    // focus + flash. RAF is more reliable than setTimeout(0) here.
+    requestAnimationFrame(() => {
+      const el = searchInputRef.current;
+      if (!el) return;
+      el.focus();
+      el.select();
+      el.classList.remove('flash-focus');
+      void el.offsetWidth; // force reflow so animation restarts
+      el.classList.add('flash-focus');
+    });
+  }, []);
+
+  const activateTab = useCallback(async (id: string) => {
+    const s = stateRef.current;
+    if (s.activeTabId === id) return;
+    if (editorRef.current) await flushSave();
+    dispatch({ type: 'ACTIVATE_TAB', id });
+  }, [flushSave]);
+
+  const navigateTo = useCallback(async (name: string, anchor?: string) => {
+    const tab = getActiveTab(stateRef.current);
+    const cur = tab?.file ?? null;
+    if (cur && cur.name === name && anchor) {
+      const scrollY = captureCurrentScrollY();
+      if (scrollY != null) dispatch({ type: 'NAV_SNAPSHOT_SCROLL', scrollY });
+      dispatch({
+        type: 'NAV_PUSH',
+        entry: { name, anchor },
+        currentScrollY: scrollY,
+      });
+      dispatch({ type: 'PENDING_SCROLL', anchor, scrollY: null });
+      return;
+    }
+    await loadFile(name, { push: true, anchor });
+  }, [loadFile]);
+
+  const navBack = useCallback(async () => {
+    const tab = getActiveTab(stateRef.current);
+    if (!tab || tab.navCursor <= 0) return;
+    const target = tab.navStack[tab.navCursor - 1];
+    if (!target) return;
+    await loadFile(target.name, {
+      push: false,
+      anchor: target.anchor,
+      restoreScrollY: target.scrollY,
+      cursor: tab.navCursor - 1,
+    });
+  }, [loadFile]);
+
+  const navForward = useCallback(async () => {
+    const tab = getActiveTab(stateRef.current);
+    if (!tab || tab.navCursor < 0 || tab.navCursor >= tab.navStack.length - 1) return;
+    const target = tab.navStack[tab.navCursor + 1];
+    if (!target) return;
+    await loadFile(target.name, {
+      push: false,
+      anchor: target.anchor,
+      restoreScrollY: target.scrollY,
+      cursor: tab.navCursor + 1,
+    });
+  }, [loadFile]);
+
+  const consumePendingScroll = useCallback(() => {
+    dispatch({ type: 'PENDING_SCROLL', anchor: null, scrollY: null });
+  }, []);
+
+  const toggleEditMode = useCallback(async () => {
+    const tab = getActiveTab(stateRef.current);
+    if (!tab?.file) return;
+    if (tab.editMode) {
+      await flushSave();
+      dispatch({ type: 'EDIT_MODE', on: false });
+    } else {
+      dispatch({ type: 'EDIT_MODE', on: true });
+    }
+  }, [flushSave]);
+
+  const setOutlineHeadings = useCallback((headings: Heading[]) => {
+    dispatch({ type: 'OUTLINE_HEADINGS', headings });
+  }, []);
+
+  const registerEditor = useCallback((h: EditorHandle | null) => {
+    editorRef.current = h;
+  }, []);
+
+  const newNote = useCallback(async (format: 'md' | 'html' = 'md') => {
+    await flushSave();
+    const dir = stateRef.current.activeFolder;
+    try {
+      const { name } = await api.createNote('', dir, format);
+      if (dir) dispatch({ type: 'EXPAND_FOLDER', path: dir });
+      await loadFiles();
+      const body = await api.getFile(name);
+      dispatch({ type: 'FILE_OPEN', body });
+      // Seed the nav stack with this new note so back/forward inside
+      // the tab has a starting point.
+      dispatch({ type: 'NAV_PUSH', entry: { name }, currentScrollY: null });
+      dispatch({ type: 'EDIT_MODE', on: true });
+      dispatch({ type: 'RENAMING', renaming: { path: name, kind: 'file' } });
+      void refreshIndexState();
+    } catch (e: unknown) {
+      await showAlert('Failed to create: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [flushSave, loadFiles, refreshIndexState, showAlert]);
+
+  const newFolder = useCallback(async (path: string) => {
+    if (!path) return;
+    try {
+      const j = await api.createFolder(path);
+      dispatch({ type: 'EXPAND_FOLDER', path: j.path });
+      dispatch({ type: 'ACTIVE_FOLDER', path: j.path });
+      await loadFiles();
+    } catch (e: unknown) {
+      await showAlert('Failed to create folder: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [loadFiles, showAlert]);
+
+  const deleteFile = useCallback(async (name: string) => {
+    if (!(await askConfirm(`Delete ${name}? (removes file + index)`))) return;
+    const activeFile = getActiveTab(stateRef.current)?.file;
+    if (saveTimer.current && activeFile?.name === name) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    try {
+      await api.deleteFile(name);
+      // Close every tab that was showing the deleted file.
+      const stale = stateRef.current.tabs.filter((t) => t.file?.name === name);
+      for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+      await loadFiles();
+    } catch (e: unknown) {
+      await showAlert('Delete failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [loadFiles, showAlert, askConfirm]);
+
+  const deleteFolder = useCallback(async (path: string) => {
+    if (!path) return;
+    if (!(await askConfirm(`Delete folder "${path}" and everything inside?`))) return;
+    try {
+      await api.deleteFolder(path);
+      const stale = stateRef.current.tabs.filter(
+        (t) => t.file && t.file.name.startsWith(path + '/'),
+      );
+      for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+      await loadFiles();
+    } catch (e: unknown) {
+      await showAlert('Delete failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [loadFiles, showAlert, askConfirm]);
+
+  const renameFile = useCallback(async (oldName: string, newBaseName: string) => {
+    const extMatch = oldName.match(/\.(md|markdown|html|htm)$/i);
+    const ext = extMatch ? extMatch[0] : '';
+    const newName = newBaseName + ext;
+    if (newName === oldName) {
+      dispatch({ type: 'RENAMING', renaming: null });
+      return;
+    }
+    const cascade = await askCascadeForRename('file', oldName, newName);
+    if (cascade === null) {
+      dispatch({ type: 'RENAMING', renaming: null });
+      return;
+    }
+    const activeFile = getActiveTab(stateRef.current)?.file;
+    const wasActive = activeFile?.name === oldName;
+    if (wasActive) {
+      await flushSave();
+      dispatch({ type: 'SAVE_STATUS', status: { text: 'Renaming…', cls: '' } });
+    }
+    try {
+      const j = await api.renameFile(oldName, newName, { cascade });
+      if (wasActive && activeFile) {
+        dispatch({ type: 'FILE_PATCH', patch: { name: j.name } });
+        dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
+      }
+      await loadFiles();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await showAlert('Rename failed: ' + msg);
+      if (wasActive) {
+        dispatch({ type: 'SAVE_STATUS', status: { text: 'Rename failed', cls: 'error' } });
+      }
+    } finally {
+      dispatch({ type: 'RENAMING', renaming: null });
+    }
+  }, [askCascadeForRename, flushSave, loadFiles, showAlert]);
+
+  const renameFolder = useCallback(async (oldPath: string, newName: string) => {
+    if (!newName || newName.includes('/')) {
+      await showAlert('Folder name cannot contain "/".');
+      dispatch({ type: 'RENAMING', renaming: null });
+      return;
+    }
+    const lastSlash = oldPath.lastIndexOf('/');
+    const parent = lastSlash >= 0 ? oldPath.slice(0, lastSlash + 1) : '';
+    const newPath = parent + newName;
+    if (newPath === oldPath) {
+      dispatch({ type: 'RENAMING', renaming: null });
+      return;
+    }
+    const cascade = await askCascadeForRename('folder', oldPath, newPath);
+    if (cascade === null) {
+      dispatch({ type: 'RENAMING', renaming: null });
+      return;
+    }
+    try {
+      const j = await api.renameFolder(oldPath, newName, { cascade });
+      const s = stateRef.current;
+      // Server has rewritten the on-disk path; mirror the expansion
+      // across so the renamed folder stays open after `loadFiles`.
+      // The orphan oldPath entry in the set is harmless — no folder
+      // row matches it, so it just sits inert until the next reset.
+      if (s.expanded.has(oldPath)) {
+        dispatch({ type: 'EXPAND_FOLDER', path: j.path });
+      }
+      if (s.activeFolder === oldPath) dispatch({ type: 'ACTIVE_FOLDER', path: j.path });
+      const activeFile = getActiveTab(s)?.file;
+      if (activeFile && activeFile.name.startsWith(oldPath + '/')) {
+        const newFileName = j.path + activeFile.name.slice(oldPath.length);
+        dispatch({ type: 'FILE_PATCH', patch: { name: newFileName } });
+      }
+      await loadFiles();
+    } catch (e: unknown) {
+      await showAlert('Rename failed: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      dispatch({ type: 'RENAMING', renaming: null });
+    }
+  }, [askCascadeForRename, loadFiles, showAlert]);
+
+  const moveFile = useCallback(async (oldPath: string, targetDir: string) => {
+    const basename = oldPath.split('/').pop() ?? oldPath;
+    const newPath = targetDir ? `${targetDir}/${basename}` : basename;
+    if (newPath === oldPath) return;
+    const cascade = await askCascadeForRename('file', oldPath, newPath);
+    if (cascade === null) return;
+    try {
+      const j = await api.renameFile(oldPath, newPath, { cascade });
+      const cur = getActiveTab(stateRef.current)?.file;
+      if (cur?.name === oldPath) dispatch({ type: 'FILE_PATCH', patch: { name: j.name } });
+      if (targetDir) dispatch({ type: 'EXPAND_FOLDER', path: targetDir });
+      await loadFiles();
+    } catch (e: unknown) {
+      await showAlert('Move failed: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [askCascadeForRename, loadFiles, showAlert]);
+
+  const upload = useCallback(async (
+    items: { file: File; relPath: string }[],
+    dir: string,
+  ) => {
+    if (dir) dispatch({ type: 'EXPAND_FOLDER', path: dir });
+    try {
+      const j = await api.upload(items, dir);
+      await loadFiles();
+      // Now the server has fired any PDF conversions and updated its
+      // `pendingConversions` set. Poll immediately so the sidebar
+      // banner shows even when the conversion is fast enough to
+      // finish inside the regular poll window.
+      void refreshIndexState();
+      const first = j.files?.find(
+        (x) => !x.error && /\.(md|markdown|html|htm)$/i.test(x.file),
+      );
+      if (first) void selectFile(first.file);
+      const failed = (j.files || []).filter((x) => x.error);
+      if (failed.length) {
+        console.warn('[upload] failed:', failed);
+        await showAlert(`${failed.length} file(s) failed to import. Check console for details.`);
+      }
+    } catch (e: unknown) {
+      console.warn('[upload] request failed:', e);
+      await showAlert('Upload failed — see console.');
+    }
+  }, [loadFiles, refreshIndexState, selectFile, showAlert]);
+
+  const runSync = useCallback(async () => {
+    if (stateRef.current.syncRunning) return;
+    dispatch({ type: 'SYNC_RUNNING', running: true });
+    void refreshIndexState();
+    try {
+      await api.sync();
+      await loadFiles();
+    } catch (e: unknown) {
+      await showAlert('Sync failed: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      dispatch({ type: 'SYNC_RUNNING', running: false });
+    }
+  }, [loadFiles, refreshIndexState, showAlert]);
+
+  const openSpace = useCallback(async (path: string) => {
+    try {
+      await api.openSpace(path);
+      // Load files BEFORE hiding the welcome overlay so the sidebar
+      // doesn't briefly flash "NOTES" with an empty tree behind the
+      // overlay's fade-out.
+      dispatch({ type: 'TABS_RESET' });
+      dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
+      dispatch({ type: 'NAV_RESET' });
+      // Prior space's search hits + manual ordering are stale.
+      dispatch({ type: 'FILTER', q: '' });
+      dispatch({ type: 'SEARCH_CLEAR' });
+      dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
+      void refreshIndexState();
+      await Promise.all([loadFiles(), loadFileOrder()]);
+      dispatch({ type: 'WELCOME_HIDE' });
+    } catch (e: unknown) {
+      dispatch({ type: 'WELCOME_ERROR', error: e instanceof Error ? e.message : String(e) });
+    }
+  }, [loadFiles, loadFileOrder, refreshIndexState]);
+
+  const goHome = useCallback(() => {
+    dispatch({ type: 'TABS_RESET' });
+    dispatch({ type: 'FILTER', q: '' });
+    dispatch({ type: 'SEARCH_CLEAR' });
+    dispatch({ type: 'WELCOME_SHOW', recent: stateRef.current.recent });
+  }, []);
+
+  const bootstrap = useCallback(async () => {
+    try {
+      const j = await api.getSpace();
+      dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir });
+    } catch {
+      dispatch({ type: 'WELCOME_SHOW', recent: [], error: 'Server unreachable' });
+    }
+  }, []);
+
+  const actions = useMemo<AppActions>(() => ({
+    bootstrap, openSpace, goHome,
+    loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
+    selectFile, openInNewTab, newTab, closeTab, closeActiveTab, activateTab,
+    navigateTo, navBack, navForward, consumePendingScroll,
+    resolveCascadePrompt,
+    alert: showAlert, confirm: askConfirm, resolveModal,
+    toggleEditMode,
+    newNote, newFolder, deleteFile, deleteFolder,
+    renameFile, renameFolder, moveFile, upload,
+    scheduleSave, flushSave,
+    setOutlineHeadings, registerEditor,
+    registerSearchInput, focusSearch,
+  }), [
+    bootstrap, openSpace, goHome,
+    loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
+    selectFile, openInNewTab, newTab, closeTab, closeActiveTab, activateTab,
+    navigateTo, navBack, navForward, consumePendingScroll,
+    resolveCascadePrompt,
+    showAlert, askConfirm, resolveModal,
+    toggleEditMode,
+    newNote, newFolder, deleteFile, deleteFolder,
+    renameFile, renameFolder, moveFile, upload,
+    scheduleSave, flushSave,
+    setOutlineHeadings, registerEditor,
+    registerSearchInput, focusSearch,
+  ]);
+
+  // Bootstrap + start polling on first mount.
+  useEffect(() => {
+    void actions.bootstrap();
+    void actions.refreshIndexState();
+    return () => {
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Best-effort flush before unload. `sendBeacon` keeps the PUT alive
+  // past page teardown.
+  useEffect(() => {
+    function onUnload() {
+      const cur = getActiveTab(stateRef.current)?.file ?? null;
+      const h = editorRef.current;
+      if (saveTimer.current && cur && h) {
+        clearTimeout(saveTimer.current);
+        try {
+          navigator.sendBeacon?.(
+            '/api/files/' + encodeURIComponent(cur.name),
+            new Blob([JSON.stringify({ content: h.getValue() })], { type: 'application/json' }),
+          );
+        } catch { /* swallow */ }
+      }
+    }
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, []);
+
+  const value = useMemo(() => ({ state, actions, dispatch }), [state, actions]);
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+export function useApp() {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp must be used inside <AppProvider>');
+  // Derive the active tab once per render so consumers don't repeat the
+  // lookup. `null` when there are no tabs (initial / after closing the
+  // last tab) — components that depended on the old `state.current`
+  // should now read `activeTab?.file`.
+  const activeTab = ctx.state.activeTabId
+    ? ctx.state.tabs.find((t) => t.id === ctx.state.activeTabId) ?? null
+    : null;
+  return { ...ctx, activeTab };
+}

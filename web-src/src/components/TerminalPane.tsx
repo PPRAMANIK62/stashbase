@@ -1,0 +1,383 @@
+/**
+ * Right-side terminal panel. xterm.js renderer + WebSocket to the
+ * server's pty bridge. Single shell, auto-runs the user's currently
+ * selected CLI (Claude Code / Codex / …) after `cd` to the space.
+ *
+ * Three states once a CLI is picked:
+ *   1. CLI binary detected → connect WS, shell opens, runs the binary
+ *   2. CLI missing → install card with "Install for me" + manual copy
+ *   3. Installing → SSE-streamed npm log; flips back to (1) on success
+ */
+import { useEffect, useRef, useState } from 'react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
+import { api, type TerminalCli, type TerminalClisResponse } from '../api';
+import { useApp } from '../store/AppContext';
+
+type DetectState =
+  | { kind: 'loading' }
+  | { kind: 'installed'; cli: TerminalCli }
+  | { kind: 'missing'; cli: TerminalCli }
+  | { kind: 'installing'; cli: TerminalCli; log: string }
+  | { kind: 'install-failed'; cli: TerminalCli; error: string; log: string };
+
+export function TerminalPane() {
+  const { state } = useApp();
+  const space = state.space;
+  const currentCliId = state.terminalCli;
+  const [detect, setDetect] = useState<DetectState>({ kind: 'loading' });
+
+  // Re-check whenever the panel mounts, space changes, or CLI choice
+  // changes. The server returns the freshest `installed` flag for the
+  // selected CLI as part of the full registry payload.
+  useEffect(() => {
+    if (!space) return;
+    let cancelled = false;
+    setDetect({ kind: 'loading' });
+    api.listClis().then((res: TerminalClisResponse) => {
+      if (cancelled) return;
+      const cli = res.clis.find((c) => c.id === currentCliId) ?? res.clis[0];
+      if (!cli) return;
+      setDetect({ kind: cli.installed ? 'installed' : 'missing', cli });
+    }).catch(() => {
+      if (!cancelled) {
+        // No registry response → assume current CLI is missing so we
+        // surface a card rather than hang on "loading".
+        setDetect({
+          kind: 'missing',
+          cli: { id: currentCliId, label: currentCliId, vendor: '', installHint: '', installed: false },
+        });
+      }
+    });
+    // Mirror `skills/<name>/SKILL.md` into the active CLI's per-project
+    // prompt directory so the user can author slash commands once under
+    // `skills/` and have them appear for whichever CLI they pick.
+    // Only `claude` and `codex` have a known target convention; other
+    // CLIs in the registry skip sync silently. Fire-and-forget — sync
+    // is idempotent and failures (no `skills/` dir, perms) are
+    // non-fatal to the terminal session itself.
+    if (currentCliId === 'claude' || currentCliId === 'codex') {
+      api.syncSkills(currentCliId).catch(() => { /* silent — see above */ });
+    }
+    return () => { cancelled = true; };
+  }, [space, currentCliId]);
+
+  function recheck(cli: TerminalCli) {
+    setDetect({ kind: 'loading' });
+    api.checkCli(cli.id).then((r) => {
+      setDetect({ kind: r.installed ? 'installed' : 'missing', cli });
+    }).catch(() => setDetect({ kind: 'missing', cli }));
+  }
+
+  function startInstall(cli: TerminalCli) {
+    setDetect({ kind: 'installing', cli, log: '' });
+    const es = new EventSource('/api/terminal/install/' + encodeURIComponent(cli.id));
+    let log = '';
+    const append = (txt: string) => {
+      log += txt;
+      setDetect({ kind: 'installing', cli, log });
+    };
+    es.addEventListener('out', (e: MessageEvent) => append(e.data + '\n'));
+    es.addEventListener('err', (e: MessageEvent) => append(e.data + '\n'));
+    es.addEventListener('exit', (e: MessageEvent) => {
+      es.close();
+      const payload = JSON.parse(e.data) as { code: number | null };
+      if (payload.code === 0) {
+        recheck(cli);
+      } else {
+        setDetect({
+          kind: 'install-failed',
+          cli,
+          error: `npm install exited with code ${payload.code}`,
+          log,
+        });
+      }
+    });
+  }
+
+  if (!space) return null;
+  if (detect.kind === 'loading') {
+    return <div className="terminal-pane status">Checking…</div>;
+  }
+  if (detect.kind === 'missing' || detect.kind === 'install-failed') {
+    return (
+      <InstallCard
+        cli={detect.cli}
+        error={detect.kind === 'install-failed' ? detect.error : null}
+        log={detect.kind === 'install-failed' ? detect.log : null}
+        onInstall={() => startInstall(detect.cli)}
+        onRetry={() => recheck(detect.cli)}
+      />
+    );
+  }
+  if (detect.kind === 'installing') {
+    return <InstallProgress cli={detect.cli} log={detect.log} />;
+  }
+  return (
+    <XtermView
+      space={space}
+      launchCmd={detect.cli.launchCommand}
+      sessionId={state.terminalSessionId}
+    />
+  );
+}
+
+/** Renders xterm + connects to /ws/terminal. `launchCmd` is the full
+ *  shell command we feed to the shell once it's ready (e.g. `claude`
+ *  or `codex`); built server-side in `terminal.ts:launchCommandFor`
+ *  so per-CLI flags live with the registry. `sessionId` is a
+ *  monotonic counter — bumping it (via the CLI picker's "Start new
+ *  session" item) re-runs the effect, which tears the old WS + PTY
+ *  down and spawns a fresh one. Space / CLI change also re-spawns
+ *  because they show up in `launchCmd`. */
+function XtermView({
+  space,
+  launchCmd,
+  sessionId,
+}: {
+  space: string;
+  launchCmd: string;
+  sessionId: number;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const host = containerRef.current;
+    if (!host) return;
+
+    const term = new Terminal({
+      fontSize: 12.5,
+      fontFamily: [
+        '"MesloLGS NF"',
+        '"FiraCode Nerd Font"',
+        '"JetBrainsMono Nerd Font"',
+        '"Hack Nerd Font"',
+        '"Iosevka Nerd Font"',
+        'ui-monospace',
+        'SFMono-Regular',
+        '"SF Mono"',
+        'Menlo',
+        'Consolas',
+        'monospace',
+      ].join(', '),
+      cursorBlink: true,
+      // Light-background theme to match the rest of the app — StashBase
+      // is a knowledge-base, not a developer tool, so a user who isn't
+      // a programmer shouldn't get a "VS Code dark terminal" panel
+      // popping out beside their notes. The ANSI 16 colours below are
+      // re-tuned for legibility on white (xterm.js's defaults are
+      // calibrated for dark backgrounds — `brightWhite` ≈ #ffffff
+      // disappears entirely, plain `yellow` is illegible). Palette
+      // inspired by Atom One Light. The server also exports
+      // `COLORFGBG=0;15` so adaptive CLIs (Claude Code, vim, fzf, …)
+      // pick the right rendering automatically.
+      theme: {
+        background: '#fafafa',
+        foreground: '#262626',
+        cursor: '#0891b2',
+        cursorAccent: '#fafafa',
+        selectionBackground: 'rgba(8, 145, 178, 0.25)',
+        black: '#000000',
+        red: '#e45649',
+        green: '#50a14f',
+        yellow: '#c18401',
+        blue: '#4078f2',
+        magenta: '#a626a4',
+        cyan: '#0184bc',
+        // "white" in ANSI = the dim text colour. On a light bg it has
+        // to be darker than the background, not lighter — flip it from
+        // the conventional #d3d7cf to a mid-grey that reads.
+        white: '#a0a1a7',
+        brightBlack: '#5c6370',
+        brightRed: '#ca1243',
+        brightGreen: '#50a14f',
+        brightYellow: '#986801',
+        brightBlue: '#4078f2',
+        brightMagenta: '#a626a4',
+        brightCyan: '#0184bc',
+        // Same flip as `white`: `brightWhite` on a light bg can't be
+        // #ffffff or it vanishes. Map to a deeper grey so apps that
+        // use bright-white for "bold neutral text" stay legible.
+        brightWhite: '#383a42',
+      },
+      allowProposedApi: true,
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(host);
+    fit.fit();
+
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/terminal`;
+    const ws = new WebSocket(wsUrl);
+    let opened = false;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        type: 'open',
+        cols: term.cols,
+        rows: term.rows,
+        run: launchCmd,
+      }));
+    };
+    ws.onmessage = (e) => {
+      let msg: { type: string; data?: string; error?: string };
+      try { msg = JSON.parse(e.data); } catch { return; }
+      if (msg.type === 'data' && typeof msg.data === 'string') {
+        term.write(msg.data);
+      } else if (msg.type === 'open-ok') {
+        opened = true;
+      } else if (msg.type === 'open-fail') {
+        term.write(`\r\n\x1b[31mFailed to open terminal: ${msg.error ?? ''}\x1b[0m\r\n`);
+      } else if (msg.type === 'exit') {
+        term.write('\r\n\x1b[2m[shell exited]\x1b[0m\r\n');
+      }
+    };
+    ws.onclose = () => {
+      if (!opened) {
+        term.write('\r\n\x1b[31mDisconnected before shell started.\x1b[0m\r\n');
+      } else {
+        // Server-initiated close (most commonly: user switched spaces,
+        // which kills the PTY because the cwd is now wrong). Tell the
+        // user how to come back instead of leaving them with a frozen
+        // panel — the CLI picker menu has the restart action.
+        term.write('\r\n\x1b[2mSession ended. Open the CLI menu (chevron next to the chip) and pick "Start new session" to restart.\x1b[0m\r\n');
+      }
+    };
+
+    const stdinDisposer = term.onData((data) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'stdin', data }));
+      }
+    });
+    const resizeDisposer = term.onResize(({ cols, rows }) => {
+      // Guard against the panel being collapsed (column width → 0).
+      // FitAddon happily proposes cols=0 / rows=0 when the host is
+      // hidden, and most shells (zsh, bash) treat resize-to-zero as
+      // garbage — line editing breaks until the next non-zero resize.
+      // We send only sane sizes; xterm's internal state still updates
+      // either way, so the next non-zero resize after re-expand fires.
+      if (cols < 1 || rows < 1) return;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+      }
+    });
+
+    const ro = new ResizeObserver(() => {
+      try { fit.fit(); } catch { /* container detached */ }
+    });
+    ro.observe(host);
+
+    // Drop sidebar files onto the terminal → insert their
+    // space-relative path at the cursor. Same FILE_MIME the sidebar
+    // uses for intra-tree moves, so dragging a row from FileTree
+    // straight into Claude Code's slash-command prompt drops
+    // `/level1 <path>` in one motion.
+    function onDragOver(e: DragEvent) {
+      if (!e.dataTransfer) return;
+      if (!e.dataTransfer.types.includes('application/x-stashbase-file')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Sidebar's drag source sets `effectAllowed = 'move'`. The
+      // browser silently cancels the drop when dropEffect isn't in
+      // that allow-list, which is why 'copy' produced dragover-but-
+      // no-drop. 'move' is semantically wrong (we're copying text,
+      // not consuming the source) but functionally fine since the
+      // source has no dragend handler that would react to it.
+      e.dataTransfer.dropEffect = 'move';
+    }
+    function onDrop(e: DragEvent) {
+      if (!e.dataTransfer) return;
+      const path = e.dataTransfer.getData('application/x-stashbase-file');
+      if (!path) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const needsQuote = /[\s'"\\$`!*?()<>|&;]/.test(path);
+      const safe = needsQuote ? `'${path.replace(/'/g, `'\\''`)}'` : path;
+      ws.send(JSON.stringify({ type: 'stdin', data: safe }));
+      term.focus();
+    }
+    // Capture phase so we run BEFORE xterm.js's own drag handlers.
+    host.addEventListener('dragover', onDragOver, true);
+    host.addEventListener('drop', onDrop, true);
+
+    return () => {
+      ro.disconnect();
+      stdinDisposer.dispose();
+      resizeDisposer.dispose();
+      host.removeEventListener('dragover', onDragOver, true);
+      host.removeEventListener('drop', onDrop, true);
+      try { ws.send(JSON.stringify({ type: 'close' })); } catch { /* gone */ }
+      ws.close();
+      term.dispose();
+    };
+  }, [space, launchCmd, sessionId]);
+
+  return <div className="terminal-pane xterm-host" ref={containerRef} />;
+}
+
+function InstallCard({
+  cli, error, log, onInstall, onRetry,
+}: {
+  cli: TerminalCli;
+  error: string | null;
+  log: string | null;
+  onInstall: () => void;
+  onRetry: () => void;
+}) {
+  const cmd = cli.installHint;
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    void navigator.clipboard.writeText(cmd).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <div className="terminal-pane install-card">
+      <div className="install-card-title">{cli.label} not found</div>
+      <p className="install-card-hint">
+        We couldn't find the <code>{cli.id}</code> CLI on your PATH. Install
+        it and we'll connect a terminal here.
+      </p>
+      <div className="install-card-cmd">
+        <code>{cmd}</code>
+        <button type="button" className="install-card-copy" onClick={copy}>
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      {error && (
+        <div className="modal-error">{error}</div>
+      )}
+      {log && (
+        <pre className="install-card-log">{log}</pre>
+      )}
+      <div className="install-card-actions">
+        <button type="button" className="modal-btn" onClick={onRetry}>
+          I already installed it
+        </button>
+        <button type="button" className="modal-btn primary" onClick={onInstall}>
+          Install for me
+        </button>
+      </div>
+      <p className="install-card-foot">
+        "Install for me" runs the command above in the background. You may
+        be prompted for your password if npm needs elevated permissions.
+      </p>
+    </div>
+  );
+}
+
+function InstallProgress({ cli, log }: { cli: TerminalCli; log: string }) {
+  const ref = useRef<HTMLPreElement | null>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [log]);
+  return (
+    <div className="terminal-pane install-progress">
+      <div className="install-card-title">Installing {cli.label}…</div>
+      <pre ref={ref} className="install-card-log live">{log || '…'}</pre>
+    </div>
+  );
+}

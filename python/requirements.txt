@@ -1,0 +1,13 @@
+# StashBase Python sidecar dependencies. Installed into a venv at
+# `<project>/python/.venv/` by the `setup:python` npm script.
+#
+# mfs-cli vendors most of what we need (pymilvus, langchain-text-splitters,
+# pyyaml, filelock, tree-sitter etc.) so we only have to add the bits the
+# sidecar uses directly:
+#   - onnxruntime: run Qwen3 ONNX locally
+#   - tokenizers:  Qwen3 tokenizer (HF .json format)
+#   - numpy:       pooling + L2 normalize
+mfs-cli>=0.1.0
+onnxruntime>=1.18
+tokenizers>=0.20
+numpy>=1.26

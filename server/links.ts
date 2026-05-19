@@ -1,0 +1,311 @@
+/**
+ * Cross-reference link maintenance: when a file or folder is renamed
+ * or moved, walk every other note in the space and rewrite any link
+ * that resolves to the moved item so it still points at the right
+ * place. Also handles re-relativising links inside the moved file
+ * itself when its parent depth changed.
+ *
+ * Two entry points, used independently:
+ *   - `planRenameLinks(renames)` — dry-run preview. Reads the space in
+ *     its PRE-rename state and returns the prospective new content
+ *     for every file that would have at least one link rewritten.
+ *     Powers the VSCode-style "Update N references in M files?"
+ *     confirmation dialog (`/api/rename-preview`). The returned plan
+ *     is never written by this module — the route applies it directly
+ *     so it can reuse the bodies without re-walking disk.
+ *   - `cascadeRenameLinks(renames)` — post-rename execution. Reads the
+ *     space in its POST-rename state, recovers each file's pre-rename
+ *     location via the reverse mapping, rewrites + saves in place.
+ *     Run AFTER the on-disk rename so a rolled-back rename leaves no
+ *     stale link rewrites behind. Caller re-indexes the returned files.
+ *
+ * The two share `rewriteLinks` (pure-string rewrite, also exported for
+ * tests) but otherwise walk disk independently — keeping them separate
+ * lets the preview path be side-effect-free while the cascade path
+ * stays simple (no "apply this prebuilt plan" branch to maintain).
+ *
+ * Scope:
+ *   - Markdown `[text](url)` and `![alt](url)`.
+ *   - HTML `<a href="...">`.
+ *
+ * Out of scope (left untouched):
+ *   - `<img src>`, `<script src>`, `<link href>` (CSS/font/image refs
+ *     resolve against the file's own `<stem>_files/` bundle, which
+ *     moves with the note via `renameOnDisk`).
+ *   - Reference-style markdown links (`[text][id]` + `[id]: url`).
+ *     Possible follow-up; KB-style docs rarely use this form.
+ *   - External URLs, `mailto:`, fragment-only `#anchor`.
+ *
+ * Path semantics:
+ *   - Hrefs starting with `/` are treated as space-root absolute
+ *     (after stripping the leading slash). Anything that resolves
+ *     outside the space root is skipped.
+ *   - `?query` and `#anchor` suffixes are preserved verbatim.
+ */
+import path from 'node:path';
+import { detectFormat, listFiles, readText, saveText } from './files.ts';
+import { logger, errorMessage } from './log.ts';
+
+const log = logger('links');
+
+const { posix } = path;
+
+export interface RenameEntry {
+  /** `file`: exact path match only. `folder`: also matches paths under `old/`. */
+  kind: 'file' | 'folder';
+  /** Pre-rename space-relative POSIX path. */
+  old: string;
+  /** Post-rename space-relative POSIX path. */
+  new: string;
+}
+
+export interface CascadeResult {
+  /** Files whose contents were rewritten + saved to disk. Caller is
+   *  responsible for re-indexing — `indexer.upsertFile` per entry, or
+   *  bundled into whatever follow-up sync the route runs. */
+  updated: Array<{ name: string; changes: number }>;
+  /** Files that failed to read / write. */
+  failed: Array<{ name: string; error: string }>;
+}
+
+export interface PlanEntry {
+  /** Path BEFORE the rename. Used to read the source from disk. */
+  fromName: string;
+  /** Path AFTER the rename. The plan writer saves to this location. */
+  toName: string;
+  /** Rewritten body. */
+  newContent: string;
+  /** Number of `<a>` hrefs that changed. */
+  changes: number;
+}
+
+interface LinkMatch {
+  /** Inclusive start index of the URL portion within the original content. */
+  start: number;
+  /** Exclusive end index. */
+  end: number;
+  /** The raw href text. */
+  href: string;
+}
+
+/** Match every `[text](url)` and `![alt](url)` and emit the URL span.
+ *  Title (`[..](url "title")`) is preserved by only capturing the
+ *  URL portion. Nested brackets in the text part are tolerated one
+ *  level deep — good enough for hand-written docs. */
+function extractMdLinks(content: string): LinkMatch[] {
+  const re = /(!?\[(?:[^\[\]]|\[[^\[\]]*\])*\])\(([^)\s]+?)((?:\s+"[^"]*")?)\)/gd;
+  const out: LinkMatch[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const idx = (m as unknown as { indices?: Array<[number, number] | undefined> }).indices;
+    if (!idx?.[2]) continue;
+    const [s, e] = idx[2];
+    out.push({ start: s, end: e, href: m[2] });
+  }
+  return out;
+}
+
+/** Match every `<a ... href="..." ...>`. Quotes can be `"` or `'`. */
+function extractHtmlLinks(content: string): LinkMatch[] {
+  const re = /<a\b[^>]*?\bhref\s*=\s*(["'])([^"']*)\1/gid;
+  const out: LinkMatch[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const idx = (m as unknown as { indices?: Array<[number, number] | undefined> }).indices;
+    if (!idx?.[2]) continue;
+    const [s, e] = idx[2];
+    out.push({ start: s, end: e, href: m[2] });
+  }
+  return out;
+}
+
+/** Split a raw href into its space-relative path target and any
+ *  `?query` / `#anchor` tail. Returns null for external URLs,
+ *  anchor-only links, or anything that escapes the space root. */
+function resolveLink(href: string, fileDir: string): { path: string; suffix: string } | null {
+  if (!href || href.startsWith('#')) return null;
+  // Any explicit scheme — http(s), mailto, data, file, ...
+  if (/^[a-z][a-z0-9+.\-]*:/i.test(href)) return null;
+  // Protocol-relative links (`//example.com/x`) are external too.
+  if (href.startsWith('//')) return null;
+
+  let pathPart = href;
+  let suffix = '';
+  const hashIdx = pathPart.indexOf('#');
+  const queryIdx = pathPart.indexOf('?');
+  const cuts: number[] = [];
+  if (hashIdx >= 0) cuts.push(hashIdx);
+  if (queryIdx >= 0) cuts.push(queryIdx);
+  if (cuts.length) {
+    const cut = Math.min(...cuts);
+    suffix = pathPart.slice(cut);
+    pathPart = pathPart.slice(0, cut);
+  }
+  if (!pathPart) return null;
+
+  let resolved: string;
+  if (pathPart.startsWith('/')) {
+    resolved = pathPart.slice(1);
+  } else {
+    resolved = posix.normalize(posix.join(fileDir, pathPart));
+  }
+  resolved = resolved.replace(/^\/+/, '').replace(/\/+$/, '');
+  if (resolved === '..' || resolved.startsWith('../') || resolved === '.') return null;
+
+  return { path: resolved, suffix };
+}
+
+/** Forward-map a path through the rename mapping (current → future). */
+function applyRenameForward(name: string, renames: RenameEntry[]): string {
+  for (const r of renames) {
+    if (r.kind === 'file') {
+      if (name === r.old) return r.new;
+    } else {
+      if (name === r.old) return r.new;
+      if (name.startsWith(r.old + '/')) return r.new + name.slice(r.old.length);
+    }
+  }
+  return name;
+}
+
+/** Reverse-map a path through the rename mapping (current → pre-rename). */
+function applyRenameReverse(name: string, renames: RenameEntry[]): string {
+  for (const r of renames) {
+    if (r.kind === 'file') {
+      if (name === r.new) return r.old;
+    } else {
+      if (name === r.new) return r.old;
+      if (name.startsWith(r.new + '/')) return r.old + name.slice(r.new.length);
+    }
+  }
+  return name;
+}
+
+/** Decide what the link href should become after the rename. Returns
+ *  `null` when the link is untouchable (external, broken, etc.) or
+ *  doesn't need rewriting. */
+function rewriteOneHref(
+  href: string,
+  fromDir: string,
+  toDir: string,
+  renames: RenameEntry[],
+): string | null {
+  const resolved = resolveLink(href, fromDir);
+  if (!resolved) return null;
+  const newTarget = applyRenameForward(resolved.path, renames);
+  // If nothing about the target changed AND the source file didn't
+  // move, the relative href is still correct.
+  if (newTarget === resolved.path && fromDir === toDir) return null;
+  const newPath = toDir
+    ? (posix.relative(toDir, newTarget) || '.')
+    : newTarget;
+  const newHref = newPath + resolved.suffix;
+  return newHref === href ? null : newHref;
+}
+
+/** Pure-string rewrite of every `<a>` / `[..]` href in `content`,
+ *  re-relativised from `fromDir` to `toDir` and remapped through
+ *  `renames`. Used both during cascade and exposed for tests. */
+export function rewriteLinks(opts: {
+  content: string;
+  format: 'md' | 'html';
+  fromDir: string;
+  toDir: string;
+  renames: RenameEntry[];
+}): { content: string; changes: number } {
+  const { content, format, fromDir, toDir, renames } = opts;
+  const matches = format === 'md' ? extractMdLinks(content) : extractHtmlLinks(content);
+  if (matches.length === 0) return { content, changes: 0 };
+
+  let changes = 0;
+  let result = content;
+  // Splice from the back so earlier offsets stay valid.
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const m = matches[i];
+    const newHref = rewriteOneHref(m.href, fromDir, toDir, renames);
+    if (newHref == null) continue;
+    result = result.slice(0, m.start) + newHref + result.slice(m.end);
+    changes++;
+  }
+  return { content: result, changes };
+}
+
+function dirOf(name: string): string {
+  const d = posix.dirname(name);
+  return d === '.' ? '' : d;
+}
+
+/** Dry-run: walks the space in its PRE-rename state and returns the
+ *  prospective new content for every file that would have at least
+ *  one link rewritten. Used by `/api/rename-preview` to power the
+ *  confirmation dialog AND by the apply step to avoid re-walking. */
+export function planRenameLinks(renames: RenameEntry[]): PlanEntry[] {
+  if (renames.length === 0) return [];
+  const out: PlanEntry[] = [];
+  for (const f of listFiles()) {
+    const format = detectFormat(f.name);
+    if (format !== 'md' && format !== 'html') continue;
+    const content = readText(f.name);
+    if (content == null) continue;
+    const fromName = f.name;
+    const toName = applyRenameForward(fromName, renames);
+    const { content: next, changes } = rewriteLinks({
+      content,
+      format,
+      fromDir: dirOf(fromName),
+      toDir: dirOf(toName),
+      renames,
+    });
+    if (changes === 0) continue;
+    out.push({ fromName, toName, newContent: next, changes });
+  }
+  return out;
+}
+
+/** Walk in POST-rename disk state and rewrite. Used after the disk
+ *  rename has succeeded — re-reads each file from its current
+ *  location and recovers its pre-rename location via the reverse
+ *  mapping. */
+export function cascadeRenameLinks(renames: RenameEntry[]): CascadeResult {
+  if (renames.length === 0) return { updated: [], failed: [] };
+
+  const updated: Array<{ name: string; changes: number }> = [];
+  const failed: Array<{ name: string; error: string }> = [];
+
+  for (const f of listFiles()) {
+    const format = detectFormat(f.name);
+    if (format !== 'md' && format !== 'html') continue;
+    const content = readText(f.name);
+    if (content == null) {
+      failed.push({ name: f.name, error: 'read returned null' });
+      continue;
+    }
+    const toName = f.name;
+    const fromName = applyRenameReverse(toName, renames);
+    const { content: next, changes } = rewriteLinks({
+      content,
+      format,
+      fromDir: dirOf(fromName),
+      toDir: dirOf(toName),
+      renames,
+    });
+    if (changes === 0) continue;
+    try {
+      saveText(toName, next);
+      updated.push({ name: toName, changes });
+    } catch (err: unknown) {
+      failed.push({ name: toName, error: errorMessage(err) });
+    }
+  }
+
+  if (updated.length) {
+    log.info(
+      `rewrote ${updated.length} file(s), ${updated.reduce((a, b) => a + b.changes, 0)} link(s) total ` +
+        `(rename map size ${renames.length})`,
+    );
+  }
+  if (failed.length) {
+    log.warn(`${failed.length} file(s) failed during link cascade`);
+  }
+  return { updated, failed };
+}
