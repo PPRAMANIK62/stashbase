@@ -19,8 +19,11 @@ const threshold: number = LEVELS[(process.env.STASHBASE_LOG as Level) ?? 'info']
 function emit(level: Level, scope: string, ...args: unknown[]): void {
   if (LEVELS[level] < threshold) return;
   const ts = new Date().toISOString().slice(11, 23);   // HH:MM:SS.mmm
-  const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-  fn(`${ts} ${level.padEnd(5)} [${scope}]`, ...args);
+  // Always write to stderr. stdout is reserved for MCP stdio JSON-RPC —
+  // any console.log in a module imported by mcp/server.ts corrupts the
+  // protocol stream ("Unexpected non-whitespace character after JSON").
+  // Web server logs are unaffected (terminals interleave stdout+stderr).
+  console.error(`${ts} ${level.padEnd(5)} [${scope}]`, ...args);
 }
 
 export function logger(scope: string) {
