@@ -32,11 +32,7 @@
 brew install --cask liliu-z/stashbase/stashbase
 ```
 
-The cask installs from the latest [GitHub Release](https://github.com/liliu-z/stashbase/releases/latest). It automatically clears the Gatekeeper quarantine and applies an ad-hoc signature so the unsigned alpha build launches without intervention.
-
-Direct download if you don't have brew: [latest macOS build](https://github.com/liliu-z/stashbase/releases/latest) — macOS arm64 (Apple Silicon). Unsigned; the DMG includes a `Fix.sh` script to handle Gatekeeper.
-
-For Intel Mac, Windows, or Linux, build from source (see below).
+*macOS arm64 (Apple Silicon). For Intel Mac, Windows, or Linux, see [Build from source](#build-from-source).*
 
 Once the app is running:
 
@@ -44,6 +40,8 @@ Once the app is running:
 2. Let StashBase build the local index (progress shown in the status bar)
 3. Open the in-app Claude Code or Codex terminal from the sidebar
 4. Start generating or retrieving knowledge
+
+**Embedding setup.** StashBase asks for an OpenAI API key on first launch — used only for embeddings (no chat completions), typically a few cents per month for a few MB of notes. [Create a key.](https://platform.openai.com/api-keys) Or skip it: the modal also offers a free built-in local model (`bge-m3` ONNX) that's slower to switch and index but fully offline.
 
 **Starter content:** clone [`stashbase-cs183b`](https://github.com/0-bingwu-0/stashbase-cs183b) from the Welcome screen's "Clone repo" option — example notes built from Y Combinator's *How to Start a Startup* (CS183B) lectures.
 
