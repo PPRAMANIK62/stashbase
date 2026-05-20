@@ -107,10 +107,23 @@ export class MfsIndexer implements Indexer {
   }
 
   private makeBoundReady(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    const p = new Promise<void>((resolve, reject) => {
       this.boundReadyResolve = resolve;
       this.boundReadyReject = reject;
     });
+    // Attach a no-op handler so an unattended rejection doesn't crash
+    // the Node process. `setSpace` calls `boundReadyReject` whenever a
+    // bind fails (so any data op queued behind `await ensureBound()`
+    // fails fast), but in practice the bind often fails BEFORE any op
+    // has had a chance to subscribe — typical case: user opens a space
+    // whose `milvus.db` is locked by an orphan daemon, no other call
+    // is in flight, rejection has no consumer. Node 22 treats that as
+    // unhandled and aborts. The `.catch` here marks the promise as
+    // handled for that purpose; the rejection is still surfaced
+    // through any future `await this.boundReady` (rejections are
+    // sticky), so real consumers still see the error.
+    p.catch(() => { /* see comment above */ });
+    return p;
   }
 
   async setSpace(spaceRoot: string): Promise<void> {

@@ -19,6 +19,7 @@ import {
   onSwitch,
 } from './space.ts';
 import { syncNewFiles } from './sync.ts';
+import { clearStaleMilvusLock } from './stale-lock.ts';
 import { logger, errorMessage } from './log.ts';
 
 const log = logger('state');
@@ -45,6 +46,12 @@ export async function bindIndexerForSpace(spaceRoot: string): Promise<void> {
   // Persist the resolved provider on first bind so a later key change
   // doesn't silently flip an already-indexed space.
   lockInSpaceProvider(spaceRoot);
+  // Defensive: if a previous session (or a crashed daemon) is still
+  // holding the flock on this space's `milvus.db`, kill it before our
+  // fresh daemon tries to bind — otherwise pymilvus raises
+  // DataDirLockedError and we surface a scary stack trace to the
+  // renderer instead of just opening the space.
+  clearStaleMilvusLock(spaceRoot);
   const runtime = resolveSpaceEmbedder(spaceRoot);
   if (runtime) {
     await indexer.setEmbedder(runtime);

@@ -1,0 +1,75 @@
+/**
+ * Defensive cleanup of an orphaned Milvus Lite flock before binding a
+ * space. The story we keep hitting:
+ *
+ *   1. Previous StashBase session held the lock on
+ *      `<space>/.stashbase/mfs/milvus.db`.
+ *   2. It exited dirtily — `kill -9`, force-quit, OS shutdown, or a
+ *      shutdown that ran past our 4 s `indexer.close()` ceiling on a
+ *      big library where Milvus's own flush takes longer.
+ *   3. The previous Python daemon orphans, kernel keeps the flock
+ *      held against its dead FD reference (rare on POSIX but happens
+ *      with adopted orphans / FS quirks).
+ *   4. New session spawns a fresh daemon, calls `set_space`,
+ *      pymilvus raises `DataDirLockedError`, the user is stuck.
+ *
+ * What we do here: list the PIDs holding the db file via `lsof -t`,
+ * filter to anything that looks like a stashbase daemon (Python or
+ * the PyInstaller-frozen binary), and `kill -9` the lot. Anything
+ * that isn't one of ours is left alone — we'd rather error on a
+ * non-stashbase locker than risk killing a stranger's process.
+ *
+ * macOS + Linux only — `lsof` isn't a standard Windows tool. Windows
+ * paths fall through silently; on those platforms the
+ * "Most likely a stale stashbase_daemon" hint in the Python error
+ * is still the user's recourse.
+ */
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { logger } from './log.ts';
+
+const log = logger('stale-lock');
+
+/** Kill any orphaned stashbase daemon still holding the flock on
+ *  this space's `milvus.db`. No-op when the db doesn't exist yet,
+ *  when `lsof` isn't available, or when no one's holding the lock. */
+export function clearStaleMilvusLock(spaceRoot: string): void {
+  if (process.platform === 'win32') return;
+  const milvusDb = path.join(spaceRoot, '.stashbase', 'mfs', 'milvus.db');
+  if (!fs.existsSync(milvusDb)) return;
+
+  const lsof = spawnSync('lsof', ['-t', milvusDb], { encoding: 'utf8' });
+  // `lsof -t <file>` exits 1 when nobody holds it (which is the happy
+  // path — nothing to clean up). It exits 127 when lsof itself isn't
+  // installed; we silently bail in both cases.
+  if (lsof.status !== 0 || !lsof.stdout.trim()) return;
+
+  const pids = lsof.stdout
+    .trim()
+    .split('\n')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0 && n !== process.pid);
+
+  for (const pid of pids) {
+    // Sanity-check the holder is one of ours. macOS `comm` truncates
+    // long process names, so we accept any of: `stashbase-daemon`
+    // (PyInstaller binary), `python`/`python3` (dev mode running
+    // `stashbase_daemon.py`). Anything else, leave alone with a
+    // breadcrumb in the log so the user can investigate.
+    const ps = spawnSync('ps', ['-p', String(pid), '-o', 'comm='], { encoding: 'utf8' });
+    if (ps.status !== 0) continue;
+    const comm = ps.stdout.trim();
+    const isOurs = /stashbase-daemon|stashbase_daemon|^python\d*$/i.test(comm);
+    if (!isOurs) {
+      log.warn(`milvus.db is held by pid=${pid} (${comm}) — not a stashbase daemon, leaving alone`);
+      continue;
+    }
+    log.warn(`clearing stale milvus lock: killing orphan pid=${pid} (${comm})`);
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Already dead — fine, the flock will be released by the kernel.
+    }
+  }
+}
