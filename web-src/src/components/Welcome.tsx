@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api';
 import { CubeLogoIcon, FolderIcon, GitCloneIcon, NewFolderIcon } from '../icons';
 import { useApp } from '../store/AppContext';
@@ -26,6 +26,81 @@ function prettifyHome(abs: string, home: string): string {
   return abs;
 }
 
+/** Shared canvas context for text measurement. Cached so we don't
+ *  pay the alloc per row × per resize. */
+let _measureCtx: CanvasRenderingContext2D | null = null;
+function measureCtx(): CanvasRenderingContext2D {
+  if (!_measureCtx) {
+    _measureCtx = document.createElement('canvas').getContext('2d')!;
+  }
+  return _measureCtx;
+}
+
+/** VSCode-style middle ellipsis: drops chars from the middle, keeping
+ *  the prefix and suffix visible (`StashBase/work/…/2024/Q3`). Uses
+ *  canvas `measureText` for measurement and `ResizeObserver` to recompute
+ *  on width changes. Falls back to the full string when it fits. */
+function MiddleEllipsis({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [out, setOut] = useState(text);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const compute = () => {
+      const w = el.clientWidth;
+      if (!w) return;
+      const style = window.getComputedStyle(el);
+      const ctx = measureCtx();
+      ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      if (ctx.measureText(text).width <= w) {
+        setOut(text);
+        return;
+      }
+      const target = w - ctx.measureText('…').width;
+      const len = text.length;
+      // Binary search over symmetric prefix+suffix lengths.
+      let lo = 0;
+      let hi = Math.floor(len / 2);
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const probe = text.slice(0, mid) + text.slice(len - mid);
+        if (ctx.measureText(probe).width <= target) lo = mid;
+        else hi = mid - 1;
+      }
+      setOut(lo > 0 ? `${text.slice(0, lo)}…${text.slice(len - lo)}` : '…');
+    };
+
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text]);
+
+  return <span ref={ref} className={className} title={text}>{out}</span>;
+}
+
+/** Path label for a recent space row — VSCode-style: shows only the
+ *  containing directory chain, not the space's own folder name (that's
+ *  the name column to the left):
+ *
+ *    `<kbRoot>/Notes`            → `StashBase`
+ *    `<kbRoot>/work/proj`        → `StashBase/work`
+ *    `<kbRoot>/work/2024/proj`   → `StashBase/work/2024`
+ *
+ *  Falls back to home-relative if the path isn't under kbRoot (legacy
+ *  entries, or kbRoot not yet fetched on first paint). */
+function spacePathLabel(spaceAbs: string, kbRoot: string, home: string): string {
+  if (!kbRoot) return prettifyHome(spaceAbs, home);
+  const rootWithSep = kbRoot.endsWith('/') ? kbRoot : kbRoot + '/';
+  if (!spaceAbs.startsWith(rootWithSep)) return prettifyHome(spaceAbs, home);
+  const rootName = kbRoot.split('/').filter(Boolean).pop() || 'StashBase';
+  const parts = spaceAbs.slice(rootWithSep.length).split('/');
+  const parent = parts.slice(0, -1).join('/');
+  return parent ? `${rootName}/${parent}` : rootName;
+}
+
 /**
  * Landing overlay shown when no space is open (or after the user
  * explicitly goes home). All spaces must live under the library root
@@ -42,6 +117,7 @@ export function Welcome() {
   const { state, actions, dispatch } = useApp();
   const [cloneOpen, setCloneOpen] = useState(false);
   const [kbRoot, setKbRoot] = useState('');
+  const [showAllRecent, setShowAllRecent] = useState(false);
 
   // Fetch the kbRoot once the welcome screen mounts so the OS dialog
   // can seed `defaultPath` and so we can validate picks client-side.
@@ -112,26 +188,40 @@ export function Welcome() {
           </div>
           <div className="welcome-title">StashBase</div>
           <div className="welcome-sub">
-            Local knowledge base for you and your AI.
-            <br />
-            HTML-first, continuously indexed, MCP-compatible.
+            Local knowledge base for you and your AI. Continuously indexed,{' '}
+            <span style={{ whiteSpace: 'nowrap' }}>MCP-compatible</span>.
           </div>
         </div>
 
         <div className="welcome-actions">
-          <button className="welcome-action" type="button" onClick={() => pickAndOpen('open')}>
+          <button
+            className="welcome-action"
+            type="button"
+            onClick={() => pickAndOpen('open')}
+            title="Open an existing folder under your library"
+          >
             <span className="welcome-action-icon">
               <FolderIcon />
             </span>
             <span className="welcome-action-label">Open space</span>
           </button>
-          <button className="welcome-action" type="button" onClick={() => pickAndOpen('new')}>
+          <button
+            className="welcome-action"
+            type="button"
+            onClick={() => pickAndOpen('new')}
+            title="Create a new folder under your library"
+          >
             <span className="welcome-action-icon">
               <NewFolderIcon />
             </span>
             <span className="welcome-action-label">New space</span>
           </button>
-          <button className="welcome-action" type="button" onClick={openClone}>
+          <button
+            className="welcome-action"
+            type="button"
+            onClick={openClone}
+            title="Clone a git repo (HTTPS or SSH) into your library"
+          >
             <span className="welcome-action-icon">
               <GitCloneIcon />
             </span>
@@ -143,7 +233,7 @@ export function Welcome() {
           <div className="welcome-mcp-text">
             <div className="welcome-mcp-title">Connect AI tools</div>
             <div className="welcome-mcp-sub">
-              Use MCP Settings to connect StashBase to Claude Code, Codex, Cursor, Gemini, and other MCP clients.
+              Searchable from Claude, Codex, ChatGPT, and more.
             </div>
           </div>
           <button className="welcome-mcp-btn" type="button" onClick={openMcpSettings}>
@@ -153,9 +243,20 @@ export function Welcome() {
 
         {state.recent.length > 0 && (
           <div className="welcome-recent">
-            <div className="welcome-recent-head">Recent spaces</div>
+            <div className="welcome-recent-head">
+              <span>Recent spaces</span>
+              {state.recent.length > 5 && (
+                <button
+                  className="welcome-recent-more"
+                  type="button"
+                  onClick={() => setShowAllRecent((v) => !v)}
+                >
+                  {showAllRecent ? 'Show less' : `Show all (${state.recent.length})`}
+                </button>
+              )}
+            </div>
             <div className="welcome-recent-list">
-              {state.recent.map((r) => {
+              {(showAllRecent ? state.recent : state.recent.slice(0, 5)).map((r) => {
                 const name = r.path.split('/').filter(Boolean).pop() || r.path;
                 return (
                   <div
@@ -164,7 +265,11 @@ export function Welcome() {
                     onClick={() => { void actions.openSpace(r.path); }}
                   >
                     <span className="welcome-recent-name">{name}</span>
-                    <span className="welcome-recent-path">{prettifyHome(r.path, state.homeDir)}</span>
+                    <MiddleEllipsis
+                      className="welcome-recent-path"
+                      text={spacePathLabel(r.path, kbRoot, state.homeDir)}
+                    />
+
                   </div>
                 );
               })}

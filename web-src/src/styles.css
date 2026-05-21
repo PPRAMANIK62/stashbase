@@ -2201,6 +2201,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: auto;
       color: #222;
       font-family: inherit;
     }
@@ -2224,7 +2225,7 @@
     }
 
     .welcome-inner {
-      width: min(560px, calc(100vw - 48px));
+      width: min(620px, calc(100vw - 48px));
       padding: 32px 36px 28px;
     }
 
@@ -2372,6 +2373,10 @@
       color: #888;
       font-weight: 600;
       margin-bottom: 8px;
+      padding: 0 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
     }
 
     .welcome-recent-list {
@@ -2408,6 +2413,22 @@
       flex: 1;
       text-align: right;
       min-width: 0;
+    }
+
+    .welcome-recent-more {
+      padding: 0;
+      background: none;
+      border: none;
+      color: #0891b2;
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .welcome-recent-more:hover {
+      text-decoration: underline;
     }
 
     .welcome-err {
