@@ -7,13 +7,15 @@
 [![Powered by mfs](https://img.shields.io/badge/powered%20by-mfs-0891b2.svg)](https://github.com/zilliztech/mfs)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
+> ⭐ **If this idea interests you, drop a star and let's explore it together.**
+
 **StashBase** is an HTML-first local knowledge base with built-in Claude Code/Codex, continuous indexing, and MCP-compatible access for AI clients.
 
-🎨 **HTML-first notes:** Rich layouts, links, tables, and media — designed for AI-assisted writing and long-term reference.
+🎨 **HTML-first notes:** Let your AI write structured HTML with rich layouts for long-term reference.
 
 ⚡ **Continuously indexed:** New notes become searchable immediately through semantic retrieval.
 
-🤖 **MCP-compatible access:** Expose the whole indexed knowledge base to Claude, ChatGPT, Codex, and other AI tools.
+🤖 **MCP-compatible access:** Expose the whole indexed knowledge base to Claude, ChatGPT, and other AI tools.
 
 ---
 
