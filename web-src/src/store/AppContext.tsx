@@ -597,6 +597,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openLibraryOverview = useCallback(async () => {
     try {
+      // If the library tab is already open, activate it instead of
+      // stacking a duplicate — repeated clicks on the chrome button
+      // shouldn't spawn endless tabs of the same overview file.
+      const s = stateRef.current;
+      const existing = s.tabs.find((t) => t.file?.kind === 'library');
+      if (existing) {
+        if (existing.id !== s.activeTabId) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
+        return;
+      }
       if (editorRef.current) await flushSave();
       const r = await api.getLibraryOverview();
       dispatch({

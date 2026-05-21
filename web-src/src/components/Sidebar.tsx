@@ -2,6 +2,7 @@ import {
   ChevronDownIcon,
   CollapseAllIcon,
   ExpandAllIcon,
+  LibraryIcon,
   NewFileIcon,
   NewFolderIcon,
   SearchIcon,
@@ -45,9 +46,21 @@ export function Sidebar() {
 
   const rootSelected = state.selectedPath === '';
 
+  const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
+  const libraryActive = activeTab?.file?.kind === 'library';
+
   return (
     <aside className="sidebar">
       <SearchBox />
+      <div
+        className={'library-row' + (libraryActive ? ' active' : '')}
+        role="button"
+        title="Open AGENT.md — the AI assistant's library overview"
+        onClick={() => { void actions.openLibraryOverview(); }}
+      >
+        <LibraryIcon className="library-row-icon" />
+        <span className="library-row-label">AGENT.md</span>
+      </div>
       <div
         id="sideHead"
         className={

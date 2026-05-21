@@ -25,7 +25,7 @@ import { TerminalPane } from './components/TerminalPane';
 import { TerminalToggleButton } from './components/TerminalToggleButton';
 import { SettingsButton } from './components/SettingsButton';
 import { SettingsPortal } from './components/SettingsModal';
-import { HomeIcon, LibraryIcon, SidebarLeftIcon } from './icons';
+import { HomeIcon, SidebarLeftIcon } from './icons';
 import { AppProvider, useApp } from './store/AppContext';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 
@@ -152,14 +152,6 @@ function AppBody() {
               title="Back to Welcome"
               onClick={() => actions.goHome()}
             ><HomeIcon /></button>
-          )}
-          {!state.welcomeVisible && (
-            <button
-              className="icon-btn"
-              type="button"
-              title="View library overview (AGENT.md)"
-              onClick={() => { void actions.openLibraryOverview(); }}
-            ><LibraryIcon /></button>
           )}
         </div>
         {!state.welcomeVisible && state.space && (

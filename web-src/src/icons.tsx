@@ -111,10 +111,13 @@ export function EditIcon({ className }: IconProps) {
 }
 
 export function PreviewIcon({ className }: IconProps) {
+  // Same open-book silhouette `LibraryIcon` used to use — the floating
+  // edit/read toggle was drawn with two geometric half-pages that read
+  // as "two trapezoids", not a book. This shape is unambiguous.
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
-      <path d="M2 4h6a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2z" />
-      <path d="M22 4h-6a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h7z" />
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.7} {...stroke}>
+      <path d="M3 5 C7 4 9 4 12 6 C15 4 17 4 21 5 V19 C17 18 15 18 12 20 C9 18 7 18 3 19 Z" />
+      <path d="M12 6 V20" />
     </svg>
   );
 }
@@ -205,14 +208,20 @@ export function HomeIcon({ className }: IconProps) {
   );
 }
 
-/** Open book — chrome-strip button for the library-level AGENT.md.
- *  Distinct enough from FolderIcon / FileGenericIcon that the button
- *  reads as "library overview" at a glance. */
+/** AGENT.md icon — sidebar row for the library-level overview.
+ *  Robot head: antenna + rounded head + two eyes + a mouth line. The
+ *  bot motif maps directly to "the AI assistant maintains this file"
+ *  — that's what AGENT.md is for, and a robot reads as that intent
+ *  at any size, unlike a generic page or catalog glyph. */
 export function LibraryIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.7} {...stroke}>
-      <path d="M3 5 C7 4 9 4 12 6 C15 4 17 4 21 5 V19 C17 18 15 18 12 20 C9 18 7 18 3 19 Z" />
-      <path d="M12 6 V20" />
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+      <line x1="12" y1="2" x2="12" y2="5" />
+      <circle cx="12" cy="2" r="0.8" fill="currentColor" stroke="none" />
+      <rect x="4" y="5" width="16" height="14" rx="3" />
+      <circle cx="9" cy="11" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="11" r="1.2" fill="currentColor" stroke="none" />
+      <line x1="9" y1="15.5" x2="15" y2="15.5" />
     </svg>
   );
 }
