@@ -31,6 +31,10 @@ export interface OpenFile {
   content: string;
   /** Server-supplied for HTML; live-extracted for MD (see Outline). */
   headings: Heading[];
+  /** `'library'` for the `<kbRoot>/AGENT.md` special tab — read-only,
+   *  no edit button, no save path. Default (omitted) means a regular
+   *  per-space file. */
+  kind?: 'space' | 'library';
 }
 
 export interface CtxMenu {
@@ -376,6 +380,9 @@ export function reducer(s: State, a: Action): State {
         format: a.body.format,
         content: a.body.content,
         headings: a.body.headings ?? [],
+        // Carried through for the library-overview tab so MainPane
+        // can hide the edit button and the save path can skip it.
+        ...((a.body as any).kind ? { kind: (a.body as any).kind } : {}),
       };
       // New-tab mode (double-click in tree, `+` then a click): create
       // a fresh tab and load into it. Otherwise replace the active

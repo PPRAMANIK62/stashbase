@@ -34,6 +34,11 @@ const CONFIG_DIR = path.join(os.homedir(), '.stashbase');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const MAX_RECENT = 10;
 
+/** Default KB root: `~/Documents/StashBase/`. All spaces must live
+ *  under this folder. Persisted in `config.json` so a future "change
+ *  library location" UI can edit it; for now it's just the constant. */
+const DEFAULT_KB_ROOT = path.join(os.homedir(), 'Documents', 'StashBase');
+
 export interface RecentSpace {
   path: string;
   openedAt: string;
@@ -42,6 +47,10 @@ export interface RecentSpace {
 export type EmbedderProvider = 'onnx' | 'openai';
 
 interface ConfigFile {
+  /** Absolute path of the library root. All spaces must live under it.
+   *  Defaults to `~/Documents/StashBase/`; persisted so a future UI
+   *  can rebase it without changing code. */
+  kbRoot?: string;
   recentSpaces?: RecentSpace[];
   /** Legacy field from when the concept was called "vault". Read for
    *  back-compat (existing users keep their recents) and rewritten as
@@ -64,6 +73,125 @@ interface SpaceConfigFile {
 
 let currentSpace: string | null = null;
 const switchListeners: Array<(newRoot: string) => void> = [];
+
+// ---------- KB root (library folder) ----------
+
+/** Absolute path of the KB root folder. Reads from config if set,
+ *  otherwise the default `~/Documents/StashBase/`. Always returns a
+ *  normalised path — caller can compare directly. */
+export function getKbRoot(): string {
+  const raw = readConfig().kbRoot;
+  const p = typeof raw === 'string' && raw.trim() ? raw.trim() : DEFAULT_KB_ROOT;
+  return path.resolve(p);
+}
+
+/** True if `absPath` is the KB root itself or any descendant of it.
+ *  The root itself is intentionally NOT considered "under root" so it
+ *  can't be opened as a space — it's strictly a container. */
+export function isUnderRoot(absPath: string): boolean {
+  const root = getKbRoot();
+  const target = path.resolve(absPath);
+  if (target === root) return false;
+  const rel = path.relative(root, target);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  return true;
+}
+
+/** Current space's name, expressed as a kbRoot-relative POSIX path.
+ *  E.g. `cs183b` or `work/research`. null if no space open.
+ *
+ *  This is the bridge between the rest of the server (which operates
+ *  in space-relative paths) and the indexer (which uses kbRoot-relative
+ *  paths so it can route to per-provider collections). See `toKbRel`
+ *  / `fromKbRel`. */
+export function getCurrentSpaceName(): string | null {
+  const cs = getCurrentSpace();
+  if (!cs) return null;
+  const root = getKbRoot();
+  if (cs === root) return null;
+  const rel = path.relative(root, cs);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return rel.split(path.sep).join('/');
+}
+
+/** Convert a space-relative path (`topic/note.md`) to a kbRoot-relative
+ *  one (`cs183b/topic/note.md`). Throws if no space is open — every
+ *  call site should already be inside a request that has space context. */
+export function toKbRel(spaceRel: string): string {
+  const name = getCurrentSpaceName();
+  if (!name) throw new Error('no space open');
+  return spaceRel ? `${name}/${spaceRel}` : name;
+}
+
+/** Convert a kbRoot-relative path to a space-relative one, or null if
+ *  the path doesn't fall under the current space. Used to translate
+ *  daemon-returned paths (search hits, status lists) back into the
+ *  space-relative form the UI expects. */
+export function fromKbRel(kbRel: string): string | null {
+  const name = getCurrentSpaceName();
+  if (!name) return null;
+  if (kbRel === name) return '';
+  const prefix = `${name}/`;
+  if (!kbRel.startsWith(prefix)) return null;
+  return kbRel.slice(prefix.length);
+}
+
+/** Walk the KB root looking for spaces (directories containing a
+ *  `.stashbase/` subdir — markers that the user has opened them at
+ *  some point). Returns kbRoot-relative POSIX paths. Depth-capped at 8
+ *  to match the open-space picker. Used at server boot to bind every
+ *  known space so MCP cross-space search has them all available. */
+export function listKnownSpaces(): string[] {
+  const root = getKbRoot();
+  const out: string[] = [];
+  walkForKnownSpaces(root, '', 0, out);
+  out.sort();
+  return out;
+}
+
+function walkForKnownSpaces(absDir: string, relPrefix: string, depth: number, out: string[]): void {
+  if (depth > 8) return;
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(absDir, { withFileTypes: true }); }
+  catch { return; }
+  // A directory that contains a `.stashbase/` subdir is a space — the
+  // user has opened it before. Record it AND stop descending (a space
+  // doesn't contain other spaces under it from the binding standpoint;
+  // its files are routed under its own collection).
+  if (relPrefix && entries.some((e) => e.isDirectory() && e.name === '.stashbase')) {
+    out.push(relPrefix);
+    return;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith('.')) continue; // skip .git, .stashbase, etc.
+    const rel = relPrefix ? `${relPrefix}/${e.name}` : e.name;
+    walkForKnownSpaces(path.join(absDir, e.name), rel, depth + 1, out);
+  }
+}
+
+/** Idempotent startup hook:
+ *   1. Ensure the KB root exists (mkdir -p).
+ *   2. Prune `recentSpaces` entries that are outside the root —
+ *      enforces the new invariant ("all spaces must live under the
+ *      root") so old recents from the unrestricted era don't keep
+ *      offering invalid one-click opens. Persists the trimmed list. */
+export function ensureKbRoot(): void {
+  const root = getKbRoot();
+  try {
+    fs.mkdirSync(root, { recursive: true });
+  } catch (err: any) {
+    log.warn(`failed to create kbRoot ${root}: ${errorMessage(err)}`);
+  }
+  const cfg = readConfig();
+  const before = cfg.recentSpaces ?? [];
+  const after = before.filter((r) => isUnderRoot(r.path));
+  if (after.length !== before.length) {
+    cfg.recentSpaces = after;
+    writeConfig(cfg);
+    log.info(`pruned ${before.length - after.length} out-of-root recent(s) (kbRoot=${root})`);
+  }
+}
 
 /** Absolute path of the currently open space, or null if none. */
 export function getCurrentSpace(): string | null {
@@ -95,6 +223,13 @@ export function setCurrentSpace(absPath: string): void {
   }
   if (!path.isAbsolute(expanded)) throw new Error('path must be absolute');
   const normalized = path.resolve(expanded);
+  // Spaces are strictly constrained to live under the KB root. The
+  // SpacePicker UI only surfaces in-root folders, but this check is
+  // defence-in-depth for direct API hits / stale recent entries that
+  // slipped through the boot prune.
+  if (!isUnderRoot(normalized)) {
+    throw new Error(`space must live under ${getKbRoot()}`);
+  }
   // Opening a brand-new folder is a valid flow (user picked a fresh
   // location for a new knowledge base), but silently mkdir-ing an
   // arbitrary path turns "I typo'd ~/Notess" into a ghost directory.
@@ -127,10 +262,13 @@ export function onSwitch(fn: (newRoot: string) => void): void {
 }
 
 /** Returns recent spaces, most-recent first. Filters out paths that no
- *  longer exist on disk so stale entries don't clutter the welcome UI. */
+ *  longer exist on disk OR have drifted outside the KB root (e.g. a
+ *  user moved the library folder externally) so the Welcome list only
+ *  shows one-click-openable spaces. */
 export function getRecentSpaces(): RecentSpace[] {
   const all = readConfig().recentSpaces ?? [];
   return all.filter((v) => {
+    if (!isUnderRoot(v.path)) return false;
     try { return fs.statSync(v.path).isDirectory(); } catch { return false; }
   });
 }

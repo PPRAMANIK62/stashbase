@@ -1,9 +1,14 @@
 """StashBase sidecar daemon.
 
-Owns MFS's default ONNX embedding pipeline (bge-m3 int8, 1024-dim,
-multilingual) and a per-space Milvus Lite collection. The Node side
-(server/mfs-daemon.ts) spawns this script once and talks to it over
-stdin/stdout in line-delimited JSON.
+Owns the **single** Milvus Lite DB at ``<kb_root>/.stashbase/mfs/milvus.db``
+and N collections inside it — one per (provider, dimension) pair (e.g.
+``vectors_onnx_1024``, ``vectors_openai_1536``). Each space (a folder
+directly under the KB root) is **bound** to exactly one collection, the
+one matching the embedder provider chosen for that space. New files
+under a space write to that space's bound collection.
+
+The Node side (server/mfs-daemon.ts) spawns this script once and talks
+to it over stdin/stdout in line-delimited JSON.
 
 Protocol
 --------
@@ -16,66 +21,69 @@ Each response is one JSON object on a single stdout line:
     {"id": 7, "ok": true,  "result": ...}
     {"id": 7, "ok": false, "error": "..."}
 
-The daemon also emits zero or more unsolicited progress events
-(``{"event": "ready" | "indexing" | ...}``) — Node treats events as
-informational and matches results back to requests by ``id``.
+The daemon also emits unsolicited progress events
+(``{"event": "ready" | "starting" | "error", ...}``) — Node treats
+events as informational and matches results back to requests by ``id``.
 
 Supported ops
 -------------
-- ``set_space {home}``  — change ``MFS_HOME`` and reopen the store.
-                          Must be called before any other data op.
-- ``upsert {path, content, ext}``
+- ``bind_space {space, provider, api_key?, model?, dimension?}``
+                        — register that ``space`` writes to the
+                          collection for ``provider``. Creates the
+                          collection (and the corresponding embedder)
+                          on demand. Idempotent; safe to call after a
+                          daemon respawn to re-establish state.
+- ``unbind_space {space}``
+                        — stop routing ``space``'s new files. Existing
+                          rows stay; the space can be re-bound later.
+- ``upsert {path, content, ext, file_hash?}``
                         — chunk + embed + insert/replace one file.
-- ``delete {path}``     — drop all rows for one file.
+                          ``path`` is **kbRoot-relative** (e.g.
+                          ``cs183b/lecture-01.md``); the space is the
+                          first path segment.
+- ``delete {path}``     — drop rows for one file. Deletes from all
+                          collections (provider may have changed).
 - ``delete_prefix {prefix}``
-                        — drop all rows for files under a folder;
-                          used by recursive folder delete.
-- ``rename {old, new, content, ext}``
-                        — delete + re-embed, not a true rename
-                          (MFS has no in-place source update).
+                        — drop rows for files under a folder.
+- ``rename {old, new, content, ext, file_hash}``
+                        — delete (from all) + re-embed into the new
+                          path's bound collection.
 - ``rename_prefix {old, new, files}``
-                        — folder rename: delete every row under the
-                          old prefix, re-embed each file under the new
-                          prefix. Painful but correct (gap §3).
-- ``search {query, top_k}``  — hybrid search (dense + BM25 + RRF).
-- ``scan_diff {root}``  — walk the space with MFS Scanner + diff
-                          against current index. Returns
-                          ``{added, modified, deleted}`` lists of
-                          space-relative paths. Picks up external
-                          edits (vim / git checkout) that the
-                          in-app save path doesn't go through.
-- ``status {root}``     — lightweight progress check. Returns
-                          ``{total, indexed, pending_count, pending,
-                          orphaned_count, up_to_date}``. ``pending``
-                          is the full list of unindexed paths so the
-                          web UI can grey out exactly those rows.
-                          No hashing — see ``scan_diff`` for that.
-- ``set_embedder {provider, model?, api_key?, dimension?}``
-                        — swap the embedding provider. Closes the
-                          Milvus store if dim changes; server should
-                          delete the on-disk DB before next
-                          ``set_space`` if it wants the new dim.
-- ``close_store``       — release Milvus Lite's flock so the server
-                          can delete or move the DB file.
+                        — folder rename: bulk version.
+- ``search {query, space?, top_k}``
+                        — hybrid search (dense + BM25 + RRF) across
+                          all bound collections, optionally scoped to
+                          one space via a ``source like "<space>/%"``
+                          filter. Results from multiple collections
+                          are re-fused with RRF.
+- ``status {space?}``   — name-only diff of disk vs index. ``space``
+                          omitted means the whole library.
+- ``scan_diff {space?}`` — content-hash diff. ``space`` omitted = whole
+                          library.
+- ``list {space?}``     — ``{path: file_hash}`` of every indexed file.
+                          Scoped by ``space`` prefix when given.
+- ``close_store``       — release Milvus Lite's flock so the server can
+                          delete or move the DB file.
 
 Paths
 -----
-``path`` in every op is **space-relative POSIX** (``topic/note.md``)
-exactly as the Node side stores it. The daemon writes that string
-verbatim into Milvus's ``source`` field; no abs-path conversion either
-direction. The space root is implicit in ``MFS_HOME`` (which lives
-inside the space's ``.stashbase/mfs/``).
+``path`` / ``prefix`` / ``old`` / ``new`` in every op are
+**kbRoot-relative POSIX** (``cs183b/lecture-01.md``). The first path
+segment is the space name; the daemon uses it to look up the bound
+collection. The Node side translates between space-relative (its native
+representation) and kbRoot-relative at the indexer boundary.
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
 import sys
 import time
 import traceback
-from dataclasses import asdict, dataclass
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -87,13 +95,10 @@ print(json.dumps({"event": "starting", "pid": os.getpid()}), flush=True)
 
 # ---------------------------------------------------------------- embedder
 #
-# Daemon ships with MFS's ONNX provider as the default (`bge-m3-onnx-int8`,
-# 1024d, local, ~200 MB downloaded once into `~/.cache/huggingface/`). The
-# server can swap it at runtime via `set_embedder` — currently used to
-# switch to OpenAI's `text-embedding-3-small` (1536d, API). Provider swap
-# closes any open Milvus store; the server is responsible for deleting
-# the on-disk Milvus DB before re-binding so the fresh collection picks
-# up the new dimension.
+# Two providers in v1: MFS's ONNX (`bge-m3-onnx-int8`, 1024d, local) and
+# OpenAI (`text-embedding-3-small`, 1536d). Embedders are constructed
+# lazily on first bind that needs them — the daemon may have zero
+# embedders loaded at idle.
 
 def make_embedder(provider: str = "onnx", *, model=None, api_key=None, dimension=None):
     """Build an embedding provider satisfying MFS's protocol
@@ -127,17 +132,13 @@ class _OpenAIEmbedder:
 
     Rolled separately from `mfs.embedder.get_provider('openai')` so we can
     (a) cap the OpenAI client timeout at 60s instead of the SDK default
-    of 10 minutes — a stalled embed-on-save shouldn't lock up indexing
-    for ten minutes before the user can retry — and (b) wrap retries
-    around transient errors without monkey-patching MFS internals.
+    of 10 minutes, and (b) wrap retries around transient errors without
+    monkey-patching MFS internals.
 
-    Satisfies MFS's `EmbeddingProvider` protocol used by `StashbaseStore`:
-    `.embed(texts) -> list[list[float]]`, `.dimension`, `.model_name`.
+    Satisfies MFS's `EmbeddingProvider` protocol: `.embed(texts)`,
+    `.dimension`, `.model_name`.
     """
 
-    # OpenAI's matryoshka-style truncation lets us request a smaller dim
-    # via the `dimensions` parameter; passing None falls back to the
-    # model's native size.
     _NATIVE_DIMS = {
         "text-embedding-3-small": 1536,
         "text-embedding-3-large": 3072,
@@ -161,8 +162,6 @@ class _OpenAIEmbedder:
             self._openai.RateLimitError,
             self._openai.InternalServerError,
         )
-        # Only forward `dimensions` when it diverges from the model's
-        # native size — older OpenAI models reject the parameter.
         native = self._NATIVE_DIMS.get(self.model_name)
         kwargs: dict = {"model": self.model_name, "input": texts}
         if native is not None and self.dimension != native:
@@ -183,10 +182,6 @@ class _OpenAIEmbedder:
                     file=sys.stderr,
                 )
                 time.sleep(delay)
-        # Unreachable: the final transient raise re-raises; non-transient
-        # errors propagate without entering this branch. Guards against
-        # someone tightening `max_retries=0` later and silently returning
-        # None into Milvus as if it were a vector.
         raise RuntimeError(f"embed retry loop exhausted: {last_err}")
 
 
@@ -202,8 +197,6 @@ def _chunk(path_rel: str, content: str, ext: str):
     """
     from mfs.ingest.chunker import chunk_file
     effective_ext = ".md" if ext in (".html", ".htm") else ext
-    # `path` is only used for content_type routing; the real source key
-    # is set in the ChunkRecord below.
     return chunk_file(Path(path_rel), content, effective_ext)
 
 
@@ -212,26 +205,17 @@ def _chunk(path_rel: str, content: str, ext: str):
 def _patch_inverted_index_skip() -> None:
     """Drop INVERTED scalar indexes that Milvus Lite refuses.
 
-    MFS adds INVERTED indexes on `source` / `parent_dir` / `content_type`
-    / `is_dir` to speed up filter queries. Recent pymilvus + Milvus Lite
-    versions are stricter: they reject any ``add_index`` call without an
-    explicit ``metric_type``, but INVERTED is a scalar index type that
-    has no meaningful metric. For now we monkey-patch ``add_index`` to
-    swallow these calls — the affected fields fall back to table-scan
-    filtering, which on a single-user KB is comfortably under 10ms.
-    Idempotent: safe to call before every ``connect()``.
-
-    The idempotency check reads a sentinel attribute off ``add_index``
-    itself rather than a module-global flag — that way a re-import or
-    hot-reload can't get the global out of sync with the actually-
-    installed function.
+    MFS adds INVERTED indexes on ``source`` / ``parent_dir`` /
+    ``content_type`` / ``is_dir``. Recent pymilvus + Milvus Lite reject
+    ``add_index`` calls without ``metric_type``; INVERTED is a scalar
+    index with no meaningful metric, so we monkey-patch ``add_index`` to
+    swallow them. Affected fields fall back to table-scan filtering,
+    which on a single-user KB is comfortably under 10ms. Idempotent —
+    flagged via a sentinel attribute on the patched function.
     """
     try:
         from pymilvus.milvus_client.index import IndexParams  # type: ignore
     except ImportError:
-        # Layout shifts across pymilvus versions — if we can't find the
-        # symbol the collection create will surface the real error, no
-        # need to mask it here.
         return
     if getattr(IndexParams.add_index, "__stashbase_patched__", False):
         return
@@ -247,71 +231,87 @@ def _patch_inverted_index_skip() -> None:
     IndexParams.add_index = _add_index
 
 
-class StashbaseStore:
-    """Thin wrapper around ``mfs.store.MilvusStore`` keyed by space.
+def _provider_key(provider: str, dim: int) -> str:
+    """Stable identifier for a (provider, dim) pair used as both the
+    in-process store dict key and the on-disk Milvus collection name
+    suffix. Two embedders that produce the same dim with the same
+    provider share a collection; switching model within a provider keeps
+    routing stable as long as dim doesn't change. (`text-embedding-3-small`
+    and `text-embedding-3-large` would differ — 1536 vs 3072.)
+    """
+    return f"{provider}_{dim}"
 
-    The Node side calls ``set_space`` whenever the user switches; we
-    close the old store and open a fresh one against the new
-    ``MFS_HOME``. Lazy-loaded on first data op so cold start cost
-    lands on the user's first interaction, not on daemon spawn.
+
+def _collection_name(provider_key: str) -> str:
+    return f"vectors_{provider_key}"
+
+
+class StashbaseStore:
+    """Holds the kb-root-anchored DB and a lazy pool of per-provider
+    ``MilvusStore`` instances, plus the space-to-provider routing table.
+
+    Lifecycle:
+        1. ``__init__`` records the kb-root and the resolved
+           ``milvus.db`` path. No daemon-side I/O yet.
+        2. ``bind_space(space, provider, ...)`` — first call for a
+           given provider creates that collection on disk; subsequent
+           calls reuse the cached store. Sets ``self._bindings[space]``.
+        3. ``store_for_path(path)`` — looks up the bound collection
+           for the space implied by ``path``. Raises if unbound.
+        4. ``all_stores()`` — every collection currently in use; used
+           by full-library reads (search, list, status).
+
+    A daemon respawn loses ``_bindings``; the Node side re-issues
+    ``bind_space`` for every known space on reconnect.
     """
 
-    def __init__(self, embedder) -> None:
-        # `embedder` satisfies the MFS `EmbeddingProvider` protocol:
-        # `.embed(texts) -> list[list[float]]` + `.dimension` + `.model_name`.
-        self._embedder = embedder
-        self._store = None
-        self._home: Path | None = None
+    def __init__(self, kb_root: str) -> None:
+        self._kb_root: Path = Path(kb_root).resolve()
+        self._db_path: Path = self._kb_root / ".stashbase" / "mfs" / "milvus.db"
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        # provider_key -> (embedder, MilvusStore)
+        self._stores: dict[str, tuple[Any, Any]] = {}
+        # space (kb-root-relative, first path segment) -> provider_key
+        self._bindings: dict[str, str] = {}
 
-    def set_space(self, home: str) -> None:
+    @property
+    def kb_root(self) -> Path:
+        return self._kb_root
+
+    def _ensure_store(self, provider_key: str, embedder, dim: int):
+        """Open (or reopen) the Milvus collection for ``provider_key``.
+
+        Returns the ``MilvusStore``. Idempotent: a second call for the
+        same ``provider_key`` reuses the cached instance. The collection
+        is created on first access; the underlying ``milvus.db`` file
+        accommodates multiple collections of varying dim side-by-side
+        (verified — see ``mfs_probe.py``).
+        """
+        if provider_key in self._stores:
+            return self._stores[provider_key][1]
         from mfs.store import MilvusStore
         from mfs.config import MilvusConfig
-
-        new_home = Path(home).resolve()
-        new_home.mkdir(parents=True, exist_ok=True)
-        os.environ["MFS_HOME"] = str(new_home)
-
-        # Close any existing connection cleanly; MilvusClient holds a
-        # file lock on the Lite db.
-        if self._store is not None:
-            try:
-                self._store.close()
-            except Exception:
-                pass
-
-        config = MilvusConfig(uri=str(new_home / "milvus.db"))
-        self._store = MilvusStore(config, self._embedder.dimension)
+        os.environ["MFS_HOME"] = str(self._db_path.parent)
+        config = MilvusConfig(uri=str(self._db_path), collection_name=_collection_name(provider_key))
+        store = MilvusStore(config, dim)
         _patch_inverted_index_skip()
         try:
-            self._store.connect()
+            store.connect()
         except Exception as err:
-            # Milvus Lite uses flock() on the data dir. A stale daemon
-            # from a crashed earlier run holds the lock and prevents us
-            # from opening the same DB. pymilvus wraps this as
-            # ConnectionConfigException("Open local milvus failed"),
-            # so we walk __cause__ to find the real reason and surface
-            # an actionable message — "pkill -f stashbase_daemon" beats
-            # staring at a generic error.
-            # Walk both __cause__ (explicit `raise ... from`) and
-            # __context__ (implicit chain from raising inside except).
-            # pymilvus uses the latter, hiding the real lock error.
+            # Lock-detection logic mirrors the old single-store flow:
+            # pymilvus wraps Milvus Lite's lock error generically, so we
+            # walk the exception chain (both __cause__ and __context__)
+            # and also pattern-match the wrapper message.
             chain = [err]
             cur = err
             seen = {id(err)}
-            for _ in range(20):  # depth cap, paranoia
+            for _ in range(20):
                 nxt = cur.__cause__ or cur.__context__
                 if nxt is None or id(nxt) in seen:
                     break
                 seen.add(id(nxt))
                 chain.append(nxt)
                 cur = nxt
-            # Milvus Lite's lock error gets swallowed by pymilvus and
-            # rethrown as a generic "Open local milvus failed". The
-            # original DataDirLockedError lives across a thread boundary
-            # and isn't reachable via __cause__ / __context__, so we
-            # match on the wrapper message as a heuristic — this exact
-            # phrasing is only ever produced for local-DB connection
-            # failures, and the lock conflict is by far the most common.
             msg = str(err)
             is_lock = (
                 'open local milvus failed' in msg.lower()
@@ -319,68 +319,73 @@ class StashbaseStore:
             )
             if is_lock:
                 raise RuntimeError(
-                    f"Milvus DB is locked by another process: {new_home / 'milvus.db'}\n"
+                    f"Milvus DB is locked by another process: {self._db_path}\n"
                     f"  Most likely a stale stashbase_daemon from a previous run.\n"
                     f"  Fix: pkill -f stashbase_daemon, then retry."
                 ) from err
             raise
-        # Recent Milvus Lite leaves freshly-created (and re-opened)
-        # collections in the "released" state — any query fails with
-        # code=101 until we explicitly load it into memory. MFS's
-        # ensure_collection doesn't do this for us; one extra call here
-        # keeps it transparent to the rest of the daemon.
+        # Milvus Lite leaves freshly-created (and re-opened) collections
+        # in the "released" state — queries fail with code=101 until we
+        # explicitly load. MFS's ensure_collection doesn't do this for us.
         try:
-            self._store.client.load_collection(config.collection_name)
+            store.client.load_collection(config.collection_name)
         except Exception as err:
-            # If load_collection isn't supported in this pymilvus build
-            # (Milvus Lite skipped the no-op in older versions), let
-            # downstream ops surface the real error rather than masking it.
             print(f"[stashbase] load_collection warn: {err}", file=sys.stderr)
-        self._home = new_home
+        self._stores[provider_key] = (embedder, store)
+        return store
 
-    @property
-    def store(self):
-        if self._store is None:
-            raise RuntimeError("set_space must be called before any data op")
-        return self._store
+    def bind_space(self, space: str, provider: str, *, api_key=None, model=None, dimension=None) -> dict:
+        embedder = make_embedder(provider, model=model, api_key=api_key, dimension=dimension)
+        pk = _provider_key(provider, embedder.dimension)
+        # Cache embedder per provider_key. Two bindings with the same pk
+        # share the embedder instance so we don't reload the 200 MB ONNX
+        # model when the second space binds.
+        if pk in self._stores:
+            self._stores[pk] = (embedder, self._stores[pk][1])
+        else:
+            self._ensure_store(pk, embedder, embedder.dimension)
+        self._bindings[space] = pk
+        return {
+            "space": space,
+            "provider": provider,
+            "model": embedder.model_name,
+            "dim": embedder.dimension,
+            "collection": _collection_name(pk),
+        }
 
-    @property
-    def embedder(self):
-        return self._embedder
+    def unbind_space(self, space: str) -> dict:
+        had = self._bindings.pop(space, None)
+        return {"space": space, "was_bound": had is not None}
 
-    def set_embedder(self, embedder) -> None:
-        """Swap in a new embedding provider and close the current store
-        unconditionally.
+    def store_for_path(self, path: str):
+        """Look up (embedder, store) for ``path`` (kb-root-relative).
+        First path segment is the space name."""
+        if "/" not in path:
+            # Top-level file directly under kbRoot — not allowed; every
+            # file must live inside a space.
+            raise RuntimeError(f"path '{path}' is not inside a space (must be '<space>/...')")
+        space = path.split("/", 1)[0]
+        pk = self._bindings.get(space)
+        if pk is None:
+            raise RuntimeError(f"space '{space}' is not bound; call bind_space first")
+        return self._stores[pk]
 
-        We used to only close on dim change. That was wrong: two
-        same-dim providers (e.g. two 1024d ONNX models, or a finetune
-        vs base) produce vectors that live in different spaces, so
-        mixing old + new rows in one collection silently corrupts
-        ranking. The Node side always re-issues `set_space` after
-        `set_embedder` anyway, so the close here is the cheap part —
-        what matters is that we never serve a hybrid index.
-        """
-        self._embedder = embedder
-        if self._store is not None:
+    def all_stores(self) -> list[tuple[str, Any, Any]]:
+        """Returns [(provider_key, embedder, store), ...] for every
+        currently-open collection. Used by reads that span providers
+        (search, list, status, scan_diff)."""
+        return [(pk, emb, st) for pk, (emb, st) in self._stores.items()]
+
+    def close_all(self) -> None:
+        """Release Milvus Lite's flock on every collection. Subsequent
+        ops will reopen lazily via ``bind_space``."""
+        for _emb, store in self._stores.values():
             try:
-                self._store.close()
+                store.close()
             except Exception:
                 pass
-            self._store = None
-            self._home = None
-
-    def close_store(self) -> None:
-        """Release Milvus Lite's flock so the server can delete / move
-        the on-disk DB file. Next `set_space` reopens fresh."""
-        if self._store is None:
-            return
-        try:
-            self._store.close()
-        except Exception:
-            pass
-        self._store = None
-        self._home = None
-
+        self._stores.clear()
+        self._bindings.clear()
 
 
 # ---------------------------------------------------------------- ops
@@ -390,54 +395,64 @@ def _hash_text(text: str) -> str:
 
 
 def _require(args: dict, *keys: str) -> None:
-    """Validate required fields are present (not None) in an op args dict.
-
-    A full Pydantic / TypedDict layer would be overkill — the protocol
-    has 11 ops, each with 1-4 fields — but raw `args["x"]` access in
-    handlers turns a missing field into an opaque `KeyError: 'x'` that
-    Node surfaces verbatim. One ``_require`` call at the top of every op
-    converts that into ``{"error": "missing field(s): x", "op": "..."}``
-    which the Node side can log / display meaningfully.
-    """
     missing = [k for k in keys if args.get(k) is None]
     if missing:
         raise ValueError(f"missing field(s): {', '.join(missing)}")
 
 
+def op_bind_space(svc: StashbaseStore, args: dict) -> dict:
+    """Register ``space`` → ``provider`` mapping. Creates the
+    collection if first use; idempotent."""
+    _require(args, "space", "provider")
+    return svc.bind_space(
+        args["space"],
+        args["provider"],
+        api_key=args.get("api_key"),
+        model=args.get("model"),
+        dimension=args.get("dimension"),
+    )
+
+
+def op_unbind_space(svc: StashbaseStore, args: dict) -> dict:
+    _require(args, "space")
+    return svc.unbind_space(args["space"])
+
+
 def op_upsert(svc: StashbaseStore, args: dict) -> dict:
     """Replace all rows for ``path`` with freshly-embedded chunks.
 
-    Args: ``path`` (space-relative POSIX), ``content`` (raw text or
-    pre-flattened HTML-as-markdown), ``ext`` (file extension, default
-    ``.md``), optional ``file_hash`` (sha256 of original bytes — used by
-    ``scan_diff`` to detect external edits).
-
-    MFS's chunker may emit zero chunks for an empty file — we still
-    issue the delete so the file effectively disappears from the
-    index instead of leaving stale rows."""
+    Args: ``path`` (kb-root-relative POSIX), ``content`` (raw text /
+    pre-flattened HTML-as-markdown), ``ext``, optional ``file_hash``.
+    Routes to the bound provider for the space implied by ``path``.
+    """
     from mfs.store import ChunkRecord
 
     _require(args, "path", "content")
     path = args["path"]
     content = args["content"]
     ext = args.get("ext", ".md")
+    embedder, store = svc.store_for_path(path)
     chunks = _chunk(path, content, ext)
-
-    # Prefer the hash Node computed over the original on-disk content,
-    # so it matches what Scanner.compute_file_hash will produce later
-    # during sync_diff. Falling back to hashing `content` only works
-    # when content == disk bytes (markdown), not for the HTML path
-    # where content has been transformed to markdown-shaped text.
     file_hash = args.get("file_hash") or _hash_text(content)
     t0 = time.time()
 
-    svc.store.delete_by_source(path)
+    # Defensive: also wipe the same source from OTHER collections, so
+    # if a user switched providers we don't accidentally retain stale
+    # rows under the old collection that'd surface in search hits.
+    for _pk, _emb, other in svc.all_stores():
+        if other is store:
+            continue
+        try:
+            other.delete_by_source(path)
+        except Exception:
+            pass
+    store.delete_by_source(path)
     if not chunks:
         return {"chunks": 0, "embed_ms": 0, "total_ms": int((time.time() - t0) * 1000)}
 
     texts = [c.text for c in chunks]
     te0 = time.time()
-    vectors = svc.embedder.embed(texts)
+    vectors = embedder.embed(texts)
     embed_ms = int((time.time() - te0) * 1000)
 
     parent = "/".join(path.split("/")[:-1])
@@ -461,7 +476,7 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
             metadata=ch.metadata or {},
             account_id="stashbase",
         ))
-    svc.store.insert_chunks(records)
+    store.insert_chunks(records)
     return {
         "chunks": len(records),
         "embed_ms": embed_ms,
@@ -470,20 +485,30 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
 
 
 def op_delete(svc: StashbaseStore, args: dict) -> dict:
-    """Drop all rows whose ``source`` equals ``path``."""
+    """Drop rows whose ``source`` equals ``path`` from every open
+    collection — a file may have rows in any collection if the user
+    switched providers."""
     _require(args, "path")
-    n = svc.store.delete_by_source(args["path"])
-    return {"removed": int(n)}
+    path = args["path"]
+    n = 0
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            n += int(store.delete_by_source(path))
+        except Exception:
+            pass
+    return {"removed": n}
 
 
 def op_rename(svc: StashbaseStore, args: dict) -> dict:
-    """Delete-and-reinsert (MFS lacks in-place source update).
-
-    Args: ``old``, ``new`` (both space-relative POSIX), ``content``
-    (new file body), ``ext``, ``file_hash``.
-    """
+    """Delete-and-reinsert (MFS lacks in-place source update). Old
+    rows wiped from all collections; new rows land in the bound
+    collection for the new path's space."""
     _require(args, "old", "new", "content")
-    svc.store.delete_by_source(args["old"])
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            store.delete_by_source(args["old"])
+        except Exception:
+            pass
     return op_upsert(svc, {
         "path": args["new"],
         "content": args["content"],
@@ -493,20 +518,17 @@ def op_rename(svc: StashbaseStore, args: dict) -> dict:
 
 
 def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
-    """Folder rename — delete every old-prefix row, re-embed each file
-    under the new prefix.
-
-    Args: ``old``, ``new`` (folder paths), ``files`` (list of
-    ``{path, content, ext?, file_hash?}`` for every file under ``new``;
-    may be empty if the folder had no indexable content).
-
-    Node supplies the full list of files so we don't have to re-walk
-    disk; total time scales with content, not with file count.
-    """
+    """Folder rename — wipe every old-prefix row from all collections,
+    then re-embed each file under the new prefix into its bound
+    collection."""
     _require(args, "old", "new")
     old_prefix = args["old"].rstrip("/") + "/"
     files = args.get("files", [])
-    svc.store.delete_by_prefix(old_prefix)
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            store.delete_by_prefix(old_prefix)
+        except Exception:
+            pass
     total = 0
     for f in files:
         res = op_upsert(svc, {
@@ -518,60 +540,106 @@ def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
 
 
 def op_delete_prefix(svc: StashbaseStore, args: dict) -> dict:
-    """Drop every chunk row whose source starts with ``prefix/``.
-    Used by folder-delete (recursive) to clear the index in one
-    Milvus call instead of per-file deletes. Safe to call with no
-    matching rows — store returns 0."""
+    """Drop every chunk row whose source starts with ``prefix/`` from
+    every collection."""
     _require(args, "prefix")
     prefix = args["prefix"].rstrip("/") + "/"
-    removed = svc.store.delete_by_prefix(prefix)
-    return {"removed": int(removed)}
+    removed = 0
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            removed += int(store.delete_by_prefix(prefix))
+        except Exception:
+            pass
+    return {"removed": removed}
 
 
 def op_search(svc: StashbaseStore, args: dict) -> dict:
-    """Hybrid search via Milvus server-side BM25 + RRFRanker.
-
-    `top_k` is bounded to [1, 200]. The upper limit is defensive: a
-    misconfigured MCP client could otherwise pass an absurd `top_k`
-    and OOM the daemon assembling the result list. 200 is well past
-    anything a human search UI needs and still cheap for Milvus Lite.
-    """
+    """Hybrid search across all bound collections, optionally scoped to
+    one ``space``. Each collection's MFS ``hybrid_search`` is already
+    RRF-fused (dense + BM25 within the collection); we do a second
+    RRF across collections by rank position. ``top_k`` bounded to
+    [1, 200]."""
     _require(args, "query")
     query = args["query"].strip()
+    space = args.get("space")
     top_k_raw = int(args.get("top_k", 10))
     top_k = max(1, min(200, top_k_raw))
     if not query:
         return {"hits": []}
-
-    if svc.store.is_empty():
+    stores = svc.all_stores()
+    if not stores:
         return {"hits": []}
 
-    qvec = svc.embedder.embed([query])[0]
-    raw_hits = svc.store.hybrid_search(qvec, query, path_filter=None, top_k=top_k)
-    return {
-        "hits": [
-            {
-                "path": h.source,
-                "chunk_index": h.chunk_index,
-                "chunk_text": h.chunk_text,
-                "start_line": h.start_line,
-                "end_line": h.end_line,
-                "content_type": h.content_type,
-                "score": h.score,
-                "metadata": h.metadata or {},
-            }
-            for h in raw_hits if not h.is_dir
-        ],
-    }
+    # Path filter: MFS's _make_filter applies `source like "<prefix>%"`.
+    # Passing `"cs183b/"` constrains to that space; None means whole library.
+    path_filter = (space.rstrip("/") + "/") if space else None
+
+    # Collect per-collection hits, each list ranked by score desc.
+    # MFS's hybrid_search already returns sorted hits.
+    per_store: list[list[Any]] = []
+    for _pk, embedder, store in stores:
+        try:
+            if store.is_empty():
+                continue
+            qvec = embedder.embed([query])[0]
+            hits = store.hybrid_search(qvec, query, path_filter=path_filter, top_k=top_k)
+            per_store.append([h for h in hits if not h.is_dir])
+        except Exception as exc:
+            sys.stderr.write(f"[stashbase] search store failed: {exc}\n")
+
+    if not per_store:
+        return {"hits": []}
+
+    # Cross-collection RRF fusion. Key by (source, chunk_index) so the
+    # same chunk reported by multiple collections (shouldn't happen
+    # post-rebind, but defensive) collapses to one entry.
+    K = 60  # RRF damping; matches MFS's intra-collection ranker
+    fused: dict[tuple[str, int], dict] = {}
+    rep: dict[tuple[str, int], Any] = {}
+    for hits in per_store:
+        for rank, h in enumerate(hits):
+            key = (h.source, h.chunk_index)
+            contrib = 1.0 / (K + rank + 1)
+            if key in fused:
+                fused[key]["score"] += contrib
+            else:
+                fused[key] = {"score": contrib}
+                rep[key] = h
+    # Order by fused score descending; emit top_k.
+    ranked = sorted(fused.items(), key=lambda kv: kv[1]["score"], reverse=True)[:top_k]
+    out = []
+    for key, info in ranked:
+        h = rep[key]
+        out.append({
+            "path": h.source,
+            "chunk_index": h.chunk_index,
+            "chunk_text": h.chunk_text,
+            "start_line": h.start_line,
+            "end_line": h.end_line,
+            "content_type": h.content_type,
+            "score": info["score"],
+            "metadata": h.metadata or {},
+        })
+    return {"hits": out}
 
 
-def op_list(svc: StashbaseStore, _args: dict) -> dict:
-    """Return ``{path: file_hash}`` for every file with rows in the
-    index. Used by the Node-side ``MfsIndexer`` to prime its in-memory
-    indexed-names cache after ``set_space``, so subsequent ``status()``
-    calls don't have to round-trip through the daemon (which would
-    queue behind any in-flight embed and freeze the UI poll)."""
-    return {"files": svc.store.get_indexed_files("")}
+def op_list(svc: StashbaseStore, args: dict) -> dict:
+    """Return ``{path: file_hash}`` for every file with rows across all
+    open collections, optionally scoped to one ``space``. A file in
+    multiple collections collapses to one entry (last write wins —
+    shouldn't matter in practice, files live in exactly one collection
+    in the steady state)."""
+    space = args.get("space")
+    prefix = (space.rstrip("/") + "/") if space else ""
+    out: dict[str, str] = {}
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            files = store.get_indexed_files(prefix)
+        except Exception:
+            continue
+        for src, fh in files.items():
+            out[src] = fh
+    return {"files": out}
 
 
 def _make_scanner():
@@ -588,59 +656,55 @@ def _make_scanner():
     return Scanner(config, extra_excludes=[".stashbase/", ".stashbase"])
 
 
-def _walk_disk(space_root: Path) -> dict:
-    """Return ``{space_relative_path: FileInfo}`` for every indexable
-    file under ``space_root``. Absolute paths from Scanner get
-    translated to space-relative POSIX at this boundary.
+def _walk_disk(root: Path, rel_prefix: str = "") -> dict:
+    """Walk ``root`` returning ``{rel_path: FileInfo}`` for indexable
+    files. ``rel_path`` is prefixed with ``rel_prefix`` so callers can
+    return kb-root-relative paths even when scanning a single space's
+    subdir.
 
-    Also filters out anything inside a ``<stem>_files/`` bundle dir —
-    those hold a note's iframe assets (images, JS, CSS, fonts) and
-    must never be embedded. The Node-side ``files.ts:walk`` already
-    hides bundles from the sidebar; this is the daemon-side equivalent
-    for ``scan_diff`` / ``status``."""
+    Filters out anything inside a ``<stem>_files/`` bundle dir and any
+    0-byte note — same rules as the sidebar's tree walk.
+    """
     scanner = _make_scanner()
     raw = []
-    for f in scanner.scan([space_root]):
+    for f in scanner.scan([root]):
         try:
-            rel = str(f.path.relative_to(space_root))
+            rel_local = str(f.path.relative_to(root)).replace(os.sep, "/")
         except ValueError:
             continue
-        raw.append((rel.replace(os.sep, "/"), f))
+        full_rel = f"{rel_prefix}/{rel_local}" if rel_prefix else rel_local
+        raw.append((full_rel, rel_local, f))
 
-    # Build the set of "note stems" at each directory level so we know
-    # which `<stem>_files/` dirs are real bundles vs. coincidentally-
-    # named user folders. Stem = parent path + filename minus the
-    # `.md` / `.html` extension.
+    # Note-stem detection runs against the local-relative path; only
+    # `.md` / `.html` files in the SAME directory can produce a bundle.
     note_stems = set()
-    for rel, _ in raw:
-        base = rel.rsplit("/", 1)[-1]
+    for _full, rel_local, _f in raw:
+        base = rel_local.rsplit("/", 1)[-1]
         for ext in (".md", ".markdown", ".html", ".htm"):
             if base.lower().endswith(ext):
-                parent = rel[: -len(base)]
+                parent = rel_local[: -len(base)]
                 stem = base[: -len(ext)]
                 note_stems.add(parent + stem)
                 break
 
     on_disk = {}
-    for rel, f in raw:
-        if _under_bundle(rel, note_stems):
+    for full_rel, rel_local, f in raw:
+        if _under_bundle(rel_local, note_stems):
             continue
         try:
             if f.path.stat().st_size == 0:
                 continue
         except OSError:
             continue
-        on_disk[rel] = f
+        on_disk[full_rel] = f
     return on_disk
 
 
 def _under_bundle(rel: str, note_stems: set) -> bool:
-    """True if ``rel`` lives inside any ``<stem>_files/`` bundle dir
-    whose ``<stem>.{md,html}`` note we know about."""
+    """True if ``rel`` lives inside a ``<stem>_files/`` bundle whose
+    sibling ``<stem>.{md,html}`` we know about."""
     segments = rel.split("/")
-    # Walk segment prefixes — at each, check whether the segment is
-    # `<X>_files` and `<parent>/X` is a known note stem.
-    for i, seg in enumerate(segments[:-1]):  # exclude the filename itself
+    for i, seg in enumerate(segments[:-1]):
         if not seg.endswith("_files"):
             continue
         stem = seg[: -len("_files")]
@@ -651,21 +715,41 @@ def _under_bundle(rel: str, note_stems: set) -> bool:
     return False
 
 
-def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
-    """Walk the space + content-hash diff against the index.
-
-    Catches the external-edit drift case the name-set diff misses:
-    file present in both disk and index but with different content
-    (vim / git checkout / Dropbox sync). Hashes every disk file once
-    per call — for big vaults this is the slow op.
-
-    See ``op_status`` for a cheaper name-only version.
+def _walk_for_scope(svc: StashbaseStore, space: str | None) -> dict:
+    """Pick the right disk walk for ``status`` / ``scan_diff``:
+    - ``space`` given → walk just ``<kb_root>/<space>`` with the space
+      name as rel-prefix so returned paths are kb-root-relative.
+    - ``space`` omitted → walk every bound space; skip unbound
+      directories so we don't count files no collection is responsible
+      for.
     """
-    _require(args, "root")
+    if space is not None:
+        root = svc.kb_root / space
+        return _walk_disk(root, rel_prefix=space)
+    out: dict = {}
+    for sp in svc._bindings.keys():
+        root = svc.kb_root / sp
+        out.update(_walk_disk(root, rel_prefix=sp))
+    return out
+
+
+def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
+    """Content-hash diff: catches external edits the name-set diff misses.
+
+    ``args.space`` optional; whole library if omitted.
+    """
     scanner = _make_scanner()
-    space_root = Path(args["root"]).resolve()
-    on_disk = _walk_disk(space_root)
-    indexed = svc.store.get_indexed_files("")  # {source: file_hash}
+    space = args.get("space")
+    on_disk = _walk_for_scope(svc, space)
+    # Aggregate indexed files across all collections, scoped if needed.
+    indexed: dict[str, str] = {}
+    prefix = (space.rstrip("/") + "/") if space else ""
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            for src, fh in store.get_indexed_files(prefix).items():
+                indexed[src] = fh
+        except Exception:
+            continue
 
     added, modified, unchanged = [], [], []
     for rel, f in on_disk.items():
@@ -675,7 +759,6 @@ def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
         try:
             disk_hash = scanner.compute_file_hash(f.path)
         except OSError:
-            # Unreadable file — leave alone, don't pretend it's modified
             unchanged.append(rel)
             continue
         if disk_hash != indexed[rel]:
@@ -693,28 +776,20 @@ def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
 
 
 def op_status(svc: StashbaseStore, args: dict) -> dict:
-    """Lightweight progress check — name-set diff only, no hashing.
-
-    Designed for two callers:
-      - Claude (via MCP `index_status` tool): "is search caught up?"
-      - The web UI: greys out file rows that aren't indexed yet,
-        polling until `up_to_date`.
-
-    Cheap on big vaults: O(files) directory walk + one Milvus name
-    query, no per-file sha256. Doesn't detect external content drift
-    — use `scan_diff` for that.
-
-    `pending` is the **full** list of unindexed file names (not a
-    sample); the UI needs all of them to grey out the right rows.
-    Worst-case payload is small even for 10k-file vaults (~500 KB).
-    """
-    _require(args, "root")
-    space_root = Path(args["root"]).resolve()
-    on_disk = set(_walk_disk(space_root).keys())
-    indexed = set(svc.store.get_indexed_files("").keys())
+    """Name-only diff. ``args.space`` optional; whole library if omitted."""
+    space = args.get("space")
+    on_disk = set(_walk_for_scope(svc, space).keys())
+    prefix = (space.rstrip("/") + "/") if space else ""
+    indexed: set[str] = set()
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            indexed.update(store.get_indexed_files(prefix).keys())
+        except Exception:
+            continue
 
     pending = sorted(on_disk - indexed)
     orphaned_count = len(indexed - on_disk)
+    orphaned = sorted(indexed - on_disk)
 
     return {
         "total": len(on_disk),
@@ -722,35 +797,21 @@ def op_status(svc: StashbaseStore, args: dict) -> dict:
         "pending_count": len(pending),
         "pending": pending,
         "orphaned_count": orphaned_count,
+        "orphaned": orphaned,
         "up_to_date": len(pending) == 0 and orphaned_count == 0,
     }
 
 
-# ---------------------------------------------------------------- loop
-
-def op_set_embedder(svc: StashbaseStore, args: dict) -> dict:
-    """Swap the embedding provider. Server must call this before
-    `set_space` if the dimension changes — and must have deleted the
-    on-disk Milvus DB for any space about to be reopened."""
-    _require(args, "provider")
-    provider = args["provider"]
-    embedder = make_embedder(
-        provider,
-        model=args.get("model"),
-        api_key=args.get("api_key"),
-        dimension=args.get("dimension"),
-    )
-    svc.set_embedder(embedder)
-    return {"provider": provider, "model": embedder.model_name, "dim": embedder.dimension}
-
-
 def op_close_store(svc: StashbaseStore, _args: dict) -> dict:
-    """Release the Milvus Lite flock so the server can `rm` the DB file."""
-    svc.close_store()
+    """Release every Milvus Lite flock so the server can move / wipe the
+    DB. Next ``bind_space`` reopens lazily."""
+    svc.close_all()
     return {}
 
 
 OPS = {
+    "bind_space": op_bind_space,
+    "unbind_space": op_unbind_space,
     "upsert": op_upsert,
     "delete": op_delete,
     "delete_prefix": op_delete_prefix,
@@ -760,7 +821,6 @@ OPS = {
     "scan_diff": op_scan_diff,
     "status": op_status,
     "list": op_list,
-    "set_embedder": op_set_embedder,
     "close_store": op_close_store,
 }
 
@@ -774,21 +834,24 @@ def main() -> int:
     import atexit
     import signal
 
+    parser = argparse.ArgumentParser(description="StashBase MFS sidecar daemon")
+    parser.add_argument("--kb-root", required=True,
+                        help="Absolute path of the StashBase library root; the daemon "
+                             "owns one Milvus DB at <kb_root>/.stashbase/mfs/milvus.db")
+    parsed, _unknown = parser.parse_known_args()
     try:
-        embedder = make_embedder()
+        svc = StashbaseStore(parsed.kb_root)
     except Exception as exc:
-        _emit({"event": "error", "phase": "embedder_init", "error": str(exc)})
+        _emit({"event": "error", "phase": "store_init", "error": str(exc)})
         return 1
-    svc = StashbaseStore(embedder)
 
-    # Release Milvus Lite's flock cleanly on any exit path. Without
-    # this, killing the Node parent (or daemon crashing) leaves the
-    # lock held until the kernel reaps the FD, and the next StashBase
-    # launch gets `another process holds the lock` from MilvusLite.
+    # Release every Milvus Lite flock cleanly on any exit path. Without
+    # this, killing the Node parent leaves the locks held until the kernel
+    # reaps the FDs, and the next StashBase launch gets a "DataDirLocked"
+    # error from MilvusLite.
     def _cleanup_store(*_):
         try:
-            if svc._store is not None:
-                svc._store.close()
+            svc.close_all()
         except Exception:
             pass
     atexit.register(_cleanup_store)
@@ -798,7 +861,7 @@ def main() -> int:
         except (ValueError, OSError):
             pass
 
-    _emit({"event": "ready", "model": embedder.model_name, "dim": embedder.dimension})
+    _emit({"event": "ready", "kb_root": str(svc.kb_root), "db": str(svc._db_path)})
 
     for line in sys.stdin:
         line = line.strip()
@@ -814,11 +877,6 @@ def main() -> int:
             continue
 
         try:
-            if op == "set_space":
-                _require(args, "home")
-                svc.set_space(args["home"])
-                _emit({"id": req_id, "ok": True, "result": None})
-                continue
             handler = OPS.get(op)
             if handler is None:
                 _emit({"id": req_id, "ok": False, "error": f"unknown op: {op}", "op": op})
@@ -826,15 +884,9 @@ def main() -> int:
             result = handler(svc, args)
             _emit({"id": req_id, "ok": True, "result": result})
         except (KeyError, ValueError) as exc:
-            # Argument validation failure — clean message back to Node,
-            # short stderr breadcrumb (no full traceback — these are
-            # caller bugs and tracebacks would just be noise).
             sys.stderr.write(f"[stashbase] bad args for {op}: {exc}\n")
             _emit({"id": req_id, "ok": False, "error": f"bad args for {op}: {exc}", "op": op})
         except Exception as exc:
-            # Full traceback to stderr so the Node side can surface it
-            # in the developer console; short message in the JSON reply
-            # so the UI doesn't get spammed.
             sys.stderr.write(traceback.format_exc())
             sys.stderr.flush()
             _emit({"id": req_id, "ok": False, "error": str(exc), "op": op})

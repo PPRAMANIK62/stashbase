@@ -205,6 +205,18 @@ export function HomeIcon({ className }: IconProps) {
   );
 }
 
+/** Open book — chrome-strip button for the library-level AGENT.md.
+ *  Distinct enough from FolderIcon / FileGenericIcon that the button
+ *  reads as "library overview" at a glance. */
+export function LibraryIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.7} {...stroke}>
+      <path d="M3 5 C7 4 9 4 12 6 C15 4 17 4 21 5 V19 C17 18 15 18 12 20 C9 18 7 18 3 19 Z" />
+      <path d="M12 6 V20" />
+    </svg>
+  );
+}
+
 /** "Clone into a tray" — used on the Welcome screen alongside Open /
  *  New as the third primary action. Mirrors VS Code's repo-clone card. */
 export function GitCloneIcon({ className }: IconProps) {

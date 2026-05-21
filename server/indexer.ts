@@ -5,13 +5,15 @@
  * upstream ships one) means writing a new class behind this interface
  * and changing one import line in `index.ts`.
  *
- * Paths are space-relative POSIX (`topic/note.md`) on every method —
- * the impl is responsible for any conversion to / from the underlying
- * store's path representation.
+ * Paths on every method are **kbRoot-relative POSIX**
+ * (e.g. `cs183b/lecture-01.md`). The first path segment is the space
+ * name. Server modules that operate in space-relative terms translate
+ * at the indexer boundary — see `server/space.ts:toKbRel` /
+ * `fromKbRel`.
  */
 
 export interface SearchHit {
-  /** Space-relative POSIX path (`topic/note.md`). */
+  /** kbRoot-relative POSIX path (e.g. `cs183b/lecture-01.md`). */
   fileName: string;
   chunkIndex: number;
   /** Indexed chunk body — already heading-prefixed for markdown / html. */
@@ -36,76 +38,65 @@ export interface EmbedderRuntimeConfig {
 }
 
 export interface Indexer {
-  /** Bind the indexer to a space directory. Idempotent on repeated calls
-   *  with the same path; switches the underlying store on a new path. */
-  setSpace(spaceRoot: string): Promise<void>;
+  /** Bind a space to its embedder provider. Determines which collection
+   *  new files under this space land in. Idempotent — safe to call on
+   *  every server start for every known space, and after a daemon
+   *  respawn (the impl re-issues the underlying op on reconnect). */
+  bindSpace(space: string, cfg: EmbedderRuntimeConfig): Promise<void>;
 
-  /** Swap the embedding provider. After this call the indexer is in a
-   *  "no space bound" state — caller must `setSpace` again before any
-   *  data op. The impl is responsible for closing any open store with
-   *  the old dim; the caller is responsible for clearing on-disk Milvus
-   *  files (so the fresh collection can be created at the new dim). */
-  setEmbedder(cfg: EmbedderRuntimeConfig): Promise<void>;
-
-  /** Release any open underlying store file so the caller can `rm` it.
-   *  Used as the second half of "delete the milvus.db then rebind". */
-  closeStore(): Promise<void>;
-
-  /** Drop the current collection in the backing store AND release the
-   *  underlying file. Use this instead of `closeStore` when the next
-   *  embedder will have a different vector dimension — just `rm`-ing
-   *  the DB on disk leaves the backend's in-process schema cache
-   *  stale, which then rejects the new `setSpace` with a dim mismatch. */
-  dropStore(): Promise<void>;
+  /** Stop routing new files for the space. Existing rows stay
+   *  searchable until explicit delete. */
+  unbindSpace(space: string): Promise<void>;
 
   /** Insert / replace all chunks for one file. Empty content is valid —
    *  the file disappears from the index but no error is raised. */
-  upsertFile(fileName: string, content: string): Promise<void>;
+  upsertFile(path: string, content: string): Promise<void>;
 
   /** Drop all chunks for one file. Safe to call on a never-indexed file. */
-  deleteFile(fileName: string): Promise<void>;
+  deleteFile(path: string): Promise<void>;
 
   /** Drop all chunks for every file whose path starts with `prefix/`.
-   *  Used by recursive folder-delete to clear the index in one shot
-   *  instead of per-file deletes (avoids N round-trips to the daemon
-   *  when wiping a populated folder). Safe on a prefix that has no
-   *  matching rows. */
+   *  Used by recursive folder-delete to clear the index in one shot. */
   deletePathPrefix(prefix: string): Promise<void>;
 
   /** Move a file in the index. `content` is the (unchanged) body — the
    *  impl may or may not re-embed depending on the backend. The MFS
    *  impl does a full re-embed (no in-place source update upstream). */
-  renameFile(oldName: string, newName: string, content: string): Promise<void>;
+  renameFile(oldPath: string, newPath: string, content: string): Promise<void>;
 
   /** Move every file under `oldPrefix` to `newPrefix`. `files` carries
-   *  the bodies under the OLD names, ordered however the caller likes.
-   *  The MFS impl deletes every old-prefix row and re-embeds each file. */
+   *  the bodies under the OLD paths. The MFS impl deletes every
+   *  old-prefix row and re-embeds each file. */
   renamePathPrefix(
     oldPrefix: string,
     newPrefix: string,
-    files: Array<{ fileName: string; content: string }>,
+    files: Array<{ path: string; content: string }>,
   ): Promise<void>;
 
-  /** Hybrid search. Returns at most `topK` ordered by descending score. */
-  search(query: string, topK: number): Promise<SearchHit[]>;
+  /** Hybrid search. `space?` scopes to one space (its kbRoot-relative
+   *  dirname); omitted = whole library. Returns at most `topK` hits
+   *  ordered by descending score, with `fileName` kbRoot-relative. */
+  search(query: string, topK: number, space?: string): Promise<SearchHit[]>;
 
-  /** Walk the space root and compute the diff against the current index.
-   *  Used by `syncIndex` to catch external edits (vim / git checkout /
-   *  Dropbox) that the in-app save path doesn't go through. Paths in
-   *  the returned lists are space-relative. */
-  syncDiff(spaceRoot: string): Promise<SyncDiff>;
+  /** Walk the library and compute the content-hash diff against the
+   *  index. `space?` scopes the walk; omitted = whole library. Paths
+   *  in the returned lists are kbRoot-relative. */
+  syncDiff(space?: string): Promise<SyncDiff>;
 
-  /** Lightweight progress check — name-set diff only, no hashing. Cheap
-   *  enough that the MCP `index_status` tool can call it inline during
-   *  a chat to tell the user whether search results may be incomplete. */
-  status(spaceRoot: string): Promise<IndexStatus>;
+  /** Lightweight progress check — name-set diff only, no hashing.
+   *  `space?` scopes; omitted = whole library. */
+  status(space?: string): Promise<IndexStatus>;
+
+  /** Release the Milvus Lite locks so the server can move / wipe the
+   *  underlying DB file. Next op reopens lazily via `bindSpace`. */
+  closeStore(): Promise<void>;
 
   /** Shut down underlying resources. Currently called only on process exit. */
   close(): Promise<void>;
 }
 
 export interface SyncDiff {
-  /** On disk, not yet in the index. */
+  /** On disk, not yet in the index. kbRoot-relative paths. */
   added: string[];
   /** In both, but content hash differs — likely an external edit. */
   modified: string[];
@@ -120,22 +111,16 @@ export interface IndexStatus {
   indexed: number;
   /** How many files are still waiting to be indexed. */
   pendingCount: number;
-  /** **Full** list of space-relative paths waiting to be indexed.
-   *  The web UI uses this to grey out exactly those rows in the
-   *  sidebar; MCP / Claude can sample / quote as needed. */
+  /** Full list of kbRoot-relative paths waiting to be indexed. */
   pending: string[];
   /** Files in the index that no longer exist on disk. Usually 0. */
   orphanedCount: number;
-  /** **Full** list of orphaned paths. The startup-sync path
-   *  uses this to drop stale rows without paying a re-embed cost.
-   *  Same shape as `pending` so both lists are comparable. */
+  /** Full list of orphaned kbRoot-relative paths. */
   orphaned: string[];
   /** True iff pending = 0 and orphaned = 0. */
   upToDate: boolean;
   /** False while the indexer is still loading its indexed-file cache. */
   indexReady?: boolean;
-  /** PDFs currently being converted to a readable note + bundle.
-   *  Stashed onto the status response (rather than its own route)
-   *  so the sidebar polls one endpoint to drive its busy-state UI. */
+  /** PDFs currently being converted to a readable note + bundle. */
   pendingConversions?: string[];
 }

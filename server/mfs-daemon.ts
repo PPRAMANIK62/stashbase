@@ -6,6 +6,12 @@
  * to requests by an auto-incrementing id. Auto-respawns if the daemon
  * dies (in-flight requests get rejected with the exit info).
  *
+ * The daemon is anchored at the **KB root**: every space lives under
+ * `<kb_root>/<space>/...` and one `milvus.db` at
+ * `<kb_root>/.stashbase/mfs/milvus.db` holds every collection. The
+ * Node side ensures each known space is `bind_space`-ed (recorded
+ * here so a respawn can replay them).
+ *
  * Python lives in `<project>/python/.venv/bin/python` after the user
  * runs `pnpm setup:python`. In packaged Electron a portable Python
  * runtime is bundled via `extraResources` and the path is overridden
@@ -34,10 +40,11 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
-export interface DaemonEvents {
-  ready: { model: string; dim: number };
-  starting: { pid: number };
-  error: { phase: string; error: string };
+export interface BindSpaceArgs {
+  provider: 'onnx' | 'openai';
+  apiKey?: string;
+  model?: string;
+  dimension?: number;
 }
 
 /** Singleton-ish handle. Use `getDaemon()` to access. */
@@ -50,6 +57,26 @@ class MfsDaemon extends EventEmitter {
    *  cache "I already configured this daemon" state can compare against
    *  the value at config time — if it changed, re-issue the config op. */
   private generation = 0;
+
+  /** KB-root passed to every Python child via `--kb-root`. Configured
+   *  exactly once via `configure()` before the first `ensureReady()`. */
+  private kbRoot: string | null = null;
+
+  /** Every space the server has asked us to bind. Keyed by the
+   *  kb-root-relative space name (e.g. `cs183b` or `work/research`).
+   *  Persisted in memory so we can replay them after a respawn — the
+   *  Python child loses its `_bindings` map on exit. */
+  private bindings = new Map<string, BindSpaceArgs>();
+
+  /** Set the KB root before the first spawn. Must be called once at
+   *  startup; later spawns reuse the same value. Idempotent on the
+   *  same path. */
+  configure(opts: { kbRoot: string }): void {
+    if (this.kbRoot !== null && this.kbRoot !== opts.kbRoot) {
+      throw new Error(`kbRoot already configured to ${this.kbRoot}; reconfigure not supported`);
+    }
+    this.kbRoot = opts.kbRoot;
+  }
 
   /** Spawn (idempotent) and resolve once the daemon emits `ready`. */
   async ensureReady(): Promise<void> {
@@ -64,9 +91,45 @@ class MfsDaemon extends EventEmitter {
     return this.generation;
   }
 
+  /** Issue a `bind_space` op, recording the binding for replay on a
+   *  later respawn. Safe to call repeatedly with the same args (the
+   *  daemon-side op is idempotent). */
+  async bindSpace(space: string, cfg: BindSpaceArgs): Promise<void> {
+    this.bindings.set(space, cfg);
+    await this.call('bind_space', {
+      space,
+      provider: cfg.provider,
+      ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
+      ...(cfg.model ? { model: cfg.model } : {}),
+      ...(cfg.dimension ? { dimension: cfg.dimension } : {}),
+    });
+  }
+
+  /** Drop the renderer-side binding entry AND ask the daemon to stop
+   *  routing new files for the space. Existing rows stay searchable
+   *  until explicit delete. */
+  async unbindSpace(space: string): Promise<void> {
+    this.bindings.delete(space);
+    if (this.proc) {
+      try { await this.call('unbind_space', { space }); }
+      catch (err) { log.warn(`unbind_space ${space} failed: ${(err as Error).message}`); }
+    }
+  }
+
+  /** Snapshot of every space currently bound on the renderer side.
+   *  Used by the boot path to seed all spaces under kbRoot before the
+   *  first search. */
+  knownBindings(): ReadonlyMap<string, BindSpaceArgs> {
+    return this.bindings;
+  }
+
   private spawnAndWait(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const daemon = resolveDaemonCommand();
+      if (!this.kbRoot) {
+        reject(new Error('MfsDaemon.configure({ kbRoot }) must be called before ensureReady'));
+        return;
+      }
+      const daemon = resolveDaemonCommand(this.kbRoot);
       log.info(`spawning ${daemon.command} ${daemon.args.join(' ')}`);
       const proc = spawn(daemon.command, daemon.args, {
         cwd: daemon.cwd,
@@ -77,9 +140,7 @@ class MfsDaemon extends EventEmitter {
           // client's default keepalive ping (every 10s) is too aggressive
           // for that loopback server and trips a `ENHANCE_YOUR_CALM`
           // GOAWAY ~every minute. The reconnect is transparent — only
-          // the log is noisy. Drop gRPC's INFO chatter to ERROR so real
-          // failures still surface but the keepalive spam goes away.
-          // (`NONE` would also silence genuine errors — too aggressive.)
+          // the log is noisy. Drop gRPC's INFO chatter to ERROR.
           GRPC_VERBOSITY: process.env.GRPC_VERBOSITY ?? 'ERROR',
         },
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -90,8 +151,6 @@ class MfsDaemon extends EventEmitter {
       const lines = readline.createInterface({ input: proc.stdout });
       lines.on('line', (line) => this.onLine(line, resolve));
 
-      // Surface daemon stderr to the Electron / dev terminal verbatim;
-      // Python `traceback.format_exc()` lands here when an op crashes.
       proc.stderr.on('data', (chunk: Buffer) => {
         process.stderr.write(`[mfs/py] ${chunk.toString()}`);
       });
@@ -118,22 +177,31 @@ class MfsDaemon extends EventEmitter {
       return;
     }
     if ('event' in msg) {
-      // Forward typed events under a namespaced prefix. Node's
-      // EventEmitter treats a bare `'error'` event as fatal if there
-      // are no listeners — and our well-intentioned `{event:"error"}`
-      // payload from the daemon was tripping that. Namespacing avoids
-      // the collision and still lets callers subscribe if they want.
+      // Namespaced event prefix so a daemon-side `{event:"error"}` doesn't
+      // collide with EventEmitter's bare 'error' (which is fatal without
+      // a listener).
       this.emit(`daemon:${msg.event}`, msg);
       if (msg.event === 'ready') {
-        log.info(`daemon ready: model=${msg.model} dim=${msg.dim}`);
+        log.info(`daemon ready: kb_root=${msg.kb_root}`);
+        // Replay every space binding the renderer has seen so far so a
+        // crash + respawn doesn't strand the daemon empty-handed. Fire-
+        // and-forget; if any individual rebind fails, the next user op
+        // for that space surfaces the error.
+        if (this.bindings.size > 0) {
+          for (const [space, cfg] of this.bindings) {
+            this.call('bind_space', {
+              space,
+              provider: cfg.provider,
+              ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
+              ...(cfg.model ? { model: cfg.model } : {}),
+              ...(cfg.dimension ? { dimension: cfg.dimension } : {}),
+            }).catch((err) => log.warn(`rebind ${space} after respawn failed: ${(err as Error).message}`));
+          }
+        }
         readyResolve();
       } else if (msg.event === 'starting') {
         log.info(`daemon starting, pid=${msg.pid}`);
       } else if (msg.event === 'error') {
-        // A startup-phase error from Python (e.g. ImportError on
-        // onnxruntime) means the daemon is about to exit. Surface it
-        // with an actionable hint and reject the readyP so any caller
-        // awaiting first use gets a clean error instead of hanging.
         const hint = /No module named/i.test(msg.error ?? '')
           ? '\n  → Looks like the Python sidecar deps aren\'t installed. Run: pnpm setup:python'
           : '';
@@ -169,8 +237,7 @@ class MfsDaemon extends EventEmitter {
     this.proc = null;
     this.readyP = null;
     // Reject any in-flight calls so awaiters don't hang forever once
-    // the process is gone. They'd otherwise sit pending until next
-    // tick, then surface as misleading timeouts.
+    // the process is gone.
     const inflight = [...this.pending.values()];
     this.pending.clear();
     const closeErr = new Error('MFS daemon closing');
@@ -180,8 +247,7 @@ class MfsDaemon extends EventEmitter {
     // signal handler can't run while the main thread is blocked inside
     // a C extension (Milvus Lite, ONNX), so a stuck daemon won't die
     // on SIGTERM. SIGKILL can't be caught — guarantees the slot frees
-    // up before our caller (e.g. dropStore) proceeds to wipe the DB
-    // file that the daemon would otherwise still hold via flock.
+    // up so the next bind doesn't trip on a stale flock.
     await new Promise<void>((resolve) => {
       let exited = false;
       proc.once('exit', () => { exited = true; resolve(); });
@@ -192,9 +258,6 @@ class MfsDaemon extends EventEmitter {
       setTimeout(() => {
         if (exited) return;
         try { proc.kill('SIGKILL'); } catch { /* already gone */ }
-        // Hard ceiling: if even SIGKILL didn't surface an exit event
-        // within another 500 ms, give up waiting. The kernel reaps
-        // the process eventually; we just don't have to block here.
         setTimeout(() => { if (!exited) resolve(); }, 500);
       }, 3000);
     });
@@ -220,10 +283,6 @@ function resolvePythonBin(): string {
     return 'python3';
   })();
 
-  // Probe imports up-front. Catches "user forgot to run setup:python"
-  // (or system python3 lacks deps) here, with an actionable message —
-  // way better than letting the daemon spawn and emit a JSON error
-  // event seconds later from a cryptic ImportError.
   const probe = spawnSync(bin, ['-c', 'import mfs, onnxruntime, tokenizers, numpy'], {
     encoding: 'utf8',
   });
@@ -238,14 +297,14 @@ function resolvePythonBin(): string {
   return bin;
 }
 
-function resolveDaemonCommand(): { command: string; args: string[]; cwd: string } {
+function resolveDaemonCommand(kbRoot: string): { command: string; args: string[]; cwd: string } {
   const binary = resolveDaemonBinary();
   if (binary) {
-    return { command: binary, args: [], cwd: path.dirname(binary) };
+    return { command: binary, args: ['--kb-root', kbRoot], cwd: path.dirname(binary) };
   }
   const pythonBin = resolvePythonBin();
   const script = resolvePythonDaemonScript();
-  return { command: pythonBin, args: ['-u', script], cwd: PROJECT_ROOT };
+  return { command: pythonBin, args: ['-u', script, '--kb-root', kbRoot], cwd: PROJECT_ROOT };
 }
 
 function resolveDaemonBinary(): string | null {

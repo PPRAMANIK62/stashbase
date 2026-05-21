@@ -437,15 +437,22 @@ async function createWindow() {
   mainWindow.loadURL(SERVER_URL);
 }
 
-// Folder picker — invoked from the welcome screen. Includes
-// `createDirectory` so the user can spin up a fresh folder from inside
-// the dialog itself (the macOS "New Folder" button at the bottom-left).
+// Folder picker — invoked from the Clone modal (Open/New use the
+// custom in-app SpacePicker so they can enforce the kbRoot rule via
+// list filtering; Clone wants the native "New Folder" affordance so
+// the user can spin up `~/Documents/StashBase/<new>` on the spot).
+// `defaultPath` opens the panel at a sensible starting location; the
+// caller still validates the result is under kbRoot before using it.
 ipcMain.handle('dialog:openFolder', async (_e, opts = {}) => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: opts.title || 'Choose a space folder',
-    buttonLabel: opts.buttonLabel || 'Open',
+  const dialogOpts = {
+    title: opts.title || 'Choose a folder',
+    buttonLabel: opts.buttonLabel || 'Choose',
     properties: ['openDirectory', 'createDirectory'],
-  });
+  };
+  if (typeof opts.defaultPath === 'string' && opts.defaultPath) {
+    dialogOpts.defaultPath = opts.defaultPath;
+  }
+  const result = await dialog.showOpenDialog(mainWindow, dialogOpts);
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });

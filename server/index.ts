@@ -25,7 +25,9 @@ import {
   attachTerminalWebSocket,
   killActiveTerminal,
 } from './terminal.ts';
-import { onSwitch, migrateLegacyEmbedderConfig } from './space.ts';
+import { onSwitch, migrateLegacyEmbedderConfig, ensureKbRoot } from './space.ts';
+import { bootBindAllSpaces } from './state.ts';
+import { ensureLibraryOverview } from './library.ts';
 import { logger } from './log.ts';
 import { startWatcher, stopWatcher } from './watcher.ts';
 import { indexer } from './state.ts';
@@ -63,6 +65,19 @@ const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'web', 'dist-app');
 
 // One-time migration from the old global-provider schema. Idempotent.
 migrateLegacyEmbedderConfig();
+// Ensure ~/Documents/StashBase/ exists (creates on first launch),
+// and prune any recent entries that aren't under it. Idempotent.
+ensureKbRoot();
+// Seed `<kbRoot>/AGENT.md` with a placeholder if absent so the agent
+// has something to extend on its first read. Idempotent.
+ensureLibraryOverview();
+// Configure the daemon with kbRoot + bind every known space found
+// under it so MCP / cross-space search sees them without waiting for
+// the user to open each one. Fire-and-forget — the server starts
+// listening immediately; binds finish in the background.
+bootBindAllSpaces().catch((err) =>
+  log.warn(`bootBindAllSpaces failed: ${err?.message ?? err}`),
+);
 
 // fs.watch the space root so external edits (vim / git / Dropbox)
 // trigger a debounced re-sync. Self-writes are suppressed inside

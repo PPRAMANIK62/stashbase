@@ -13,6 +13,7 @@ import {
   sanitizeFilename,
 } from '../files.ts';
 import { cascadeRenameLinks } from '../links.ts';
+import { toKbRel } from '../space.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
@@ -41,7 +42,7 @@ export function mount(app: express.Express): void {
       // can respond fast (same fire-and-forget pattern as file delete).
       if (!deleteFolder(p)) return res.status(404).json({ error: 'not found' });
       res.json({});
-      indexer.deletePathPrefix(p).catch((err) => {
+      indexer.deletePathPrefix(toKbRel(p)).catch((err) => {
         log.warn(`delete_prefix: index cleanup failed for ${p}: ${errorMessage(err)}`);
       });
     } catch (err: unknown) {
@@ -88,10 +89,11 @@ export function mount(app: express.Express): void {
         const filesUnder = listFiles()
           .filter((f) => f.name === newPath || f.name.startsWith(newPath + '/'))
           .map((f) => ({
-            fileName: oldPath + f.name.slice(newPath.length),
+            // Indexer's renamePathPrefix takes OLD-keyed paths, kbRoot-relative.
+            path: toKbRel(oldPath + f.name.slice(newPath.length)),
             content: readText(f.name) ?? '',
           }));
-        await indexer.renamePathPrefix(oldPath, newPath, filesUnder);
+        await indexer.renamePathPrefix(toKbRel(oldPath), toKbRel(newPath), filesUnder);
 
         // Files OUTSIDE the renamed folder that had links rewritten
         // need a separate upsert — the prefix rename only touches rows
@@ -100,7 +102,7 @@ export function mount(app: express.Express): void {
           if (u.name === newPath || u.name.startsWith(newPath + '/')) continue;
           const body = readText(u.name);
           if (body == null) continue;
-          await indexer.upsertFile(u.name, body);
+          await indexer.upsertFile(toKbRel(u.name), body);
         }
       },
       okResponse: () => ({ path: newPath }),

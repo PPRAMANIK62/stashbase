@@ -15,7 +15,9 @@ import path from 'node:path';
 import { getSpaceName } from '../files.ts';
 import {
   getCurrentSpace,
+  getKbRoot,
   getRecentSpaces,
+  isUnderRoot,
   setCurrentSpace,
 } from '../space.ts';
 import { errorMessage } from '../log.ts';
@@ -48,22 +50,39 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Clone a remote git repo into <parentDir>/<inferred-name>, then
-  // return the absolute working-tree path. UI follows up with
+  // Library root: the folder all spaces must live under. The Welcome
+  // and Clone flows use it to seed the OS folder dialog's
+  // `defaultPath` and to validate the picked folder before submission.
+  app.get('/api/kb-root', (_req, res) => {
+    res.json({ path: getKbRoot() });
+  });
+
+  // Clone a remote git repo into <kbRoot>/<relParentDir>/<inferred-name>,
+  // then return the absolute working-tree path. UI follows up with
   // POST /api/space to actually open it. We block here until git
   // exits so the caller can flip "Cloning…" → "Opening…" in one step.
+  // `relParentDir` is optional (POSIX, relative to kbRoot); empty
+  // means clone directly under the library root.
   app.post('/api/git/clone', async (req, res) => {
     const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
-    const parentDir = typeof req.body?.parentDir === 'string' ? req.body.parentDir.trim() : '';
+    const relParent = typeof req.body?.relParentDir === 'string' ? req.body.relParentDir.trim() : '';
     if (!url) return res.status(400).json({ error: 'url required' });
-    if (!parentDir) return res.status(400).json({ error: 'parentDir required' });
     // Whitelist schemes — refuse `file://` / `javascript:` / `--upload-pack=...`
     // and anything else that could escape into a git option or local file read.
     if (!/^(https?:\/\/|git@[\w.-]+:|ssh:\/\/|git:\/\/)/.test(url)) {
       return res.status(400).json({ error: 'url must be http(s) / ssh / git scheme' });
     }
+    if (relParent && (path.isAbsolute(relParent) || relParent.split('/').some((seg: string) => seg === '..' || seg === '.' || !seg))) {
+      return res.status(400).json({ error: 'relParentDir must be a clean subpath of the library root' });
+    }
+    const root = getKbRoot();
+    const parentDir = relParent ? path.resolve(root, relParent) : root;
+    if (parentDir !== root && !isUnderRoot(parentDir)) {
+      return res.status(400).json({ error: 'parent directory must be under the library root' });
+    }
     const name = inferRepoName(url);
     if (!name) return res.status(400).json({ error: 'could not derive repo name from url' });
+    try { fs.mkdirSync(parentDir, { recursive: true }); } catch { /* surface below if it still isn't a dir */ }
     if (!fs.existsSync(parentDir) || !fs.statSync(parentDir).isDirectory()) {
       return res.status(400).json({ error: 'parentDir is not a directory' });
     }

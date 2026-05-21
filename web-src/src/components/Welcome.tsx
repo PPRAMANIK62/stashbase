@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api, errorMessage } from '../api';
 import { CubeLogoIcon, FolderIcon, GitCloneIcon, NewFolderIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { CloneRepoModal } from './CloneRepoModal';
 import { openMcpSettings } from './McpSettingsButton';
 
 interface ElectronAPI {
-  openFolderDialog?: (opts: { title?: string; buttonLabel?: string }) => Promise<string | null>;
+  openFolderDialog?: (opts: {
+    title?: string;
+    buttonLabel?: string;
+    defaultPath?: string;
+  }) => Promise<string | null>;
 }
-
 declare global {
   interface Window { electron?: ElectronAPI }
 }
@@ -24,15 +28,33 @@ function prettifyHome(abs: string, home: string): string {
 
 /**
  * Landing overlay shown when no space is open (or after the user
- * explicitly goes home). Calls into the Electron-side folder picker,
- * falling back to a clear "run desktop app" message when the bridge
- * isn't exposed (i.e. when the page is loaded in a plain browser).
+ * explicitly goes home). All spaces must live under the library root
+ * (`~/Documents/StashBase/` by default).
  *
- * Three primary actions (matches VS Code's welcome): Open / New / Clone.
+ * Open / New / Clone all use the native OS folder dialog with
+ * `defaultPath = kbRoot` so the user lands in the right place and can
+ * use the "New Folder" affordance. The picker is unrestricted (it'd
+ * be a worse UX to disable the rest of the filesystem), so we
+ * validate the pick is under kbRoot client-side; the server
+ * re-validates inside `setCurrentSpace`.
  */
 export function Welcome() {
   const { state, actions, dispatch } = useApp();
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [kbRoot, setKbRoot] = useState('');
+
+  // Fetch the kbRoot once the welcome screen mounts so the OS dialog
+  // can seed `defaultPath` and so we can validate picks client-side.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await api.getKbRoot();
+        setKbRoot(r.path);
+      } catch (err) {
+        dispatch({ type: 'WELCOME_ERROR', error: errorMessage(err) });
+      }
+    })();
+  }, [dispatch]);
 
   if (!state.welcomeVisible) return null;
 
@@ -41,20 +63,33 @@ export function Welcome() {
     if (!bridge?.openFolderDialog) {
       dispatch({
         type: 'WELCOME_ERROR',
-        error:
-          'Folder picker requires the desktop app. Run `npm run electron`.',
+        error: 'Folder picker requires the desktop app. Run `npm run electron`.',
       });
       return;
     }
-    // Both modes call the same OS folder picker — the dialog itself
-    // exposes a "New Folder" button at the bottom-left so a "new space"
-    // flow doesn't need a separate API. Only the dialog title differs
-    // so the user gets a hint that "create new folder here" is expected.
+    if (!kbRoot) {
+      dispatch({ type: 'WELCOME_ERROR', error: 'Library root not loaded yet — try again in a moment.' });
+      return;
+    }
+    // The dialog title hints at which affordance to use; the actual
+    // dialog is identical (createDirectory is always enabled).
     const picked = await bridge.openFolderDialog({
       title: mode === 'new' ? 'New space — pick or create a folder' : 'Open a space',
       buttonLabel: mode === 'new' ? 'Use folder' : 'Open',
+      defaultPath: kbRoot,
     });
-    if (picked) await actions.openSpace(picked);
+    if (!picked) return;
+    // Enforce the kbRoot invariant: must be the root itself's child or
+    // deeper (the root itself is a container, not openable as a space).
+    const rootWithSep = kbRoot.endsWith('/') ? kbRoot : kbRoot + '/';
+    if (picked === kbRoot || !picked.startsWith(rootWithSep)) {
+      dispatch({
+        type: 'WELCOME_ERROR',
+        error: `Spaces must live under ${prettifyHome(kbRoot, state.homeDir ?? '')}.`,
+      });
+      return;
+    }
+    await actions.openSpace(picked);
   }
 
   function openClone() {
@@ -77,7 +112,9 @@ export function Welcome() {
           </div>
           <div className="welcome-title">StashBase</div>
           <div className="welcome-sub">
-            Your own knowledge base, indexed for AI. Supports HTML and Markdown.
+            Local knowledge base for you and your AI.
+            <br />
+            HTML-first, continuously indexed, MCP-compatible.
           </div>
         </div>
 

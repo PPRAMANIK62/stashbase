@@ -26,7 +26,7 @@ import {
 } from '../files.ts';
 import { readFileOrder, setFolderOrder } from '../file-order.ts';
 import { cascadeRenameLinks, planRenameLinks, type RenameEntry } from '../links.ts';
-import { getCurrentSpace } from '../space.ts';
+import { getCurrentSpace, toKbRel } from '../space.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError, revealInOsFileManager } from '../http.ts';
@@ -118,7 +118,7 @@ export function mount(app: express.Express): void {
       // New notes with empty content are common (sidebar `+` button); skip
       // indexing them to avoid round-tripping a no-op to the sidecar.
       if (content.trim()) {
-        await indexer.upsertFile(name, content);
+        await indexer.upsertFile(toKbRel(name), content);
       }
       res.json({ name, content });
     } catch (err: unknown) {
@@ -168,7 +168,7 @@ export function mount(app: express.Express): void {
     const name = (req.params as any)[0] as string;
     try {
       saveText(name, content);
-      await indexer.upsertFile(name, content);
+      await indexer.upsertFile(toKbRel(name), content);
       res.json({});
     } catch (err: unknown) {
       sendError(res, err);
@@ -231,10 +231,10 @@ export function mount(app: express.Express): void {
             if (u.name === newName) continue;
             const body = readText(u.name);
             if (body == null) continue;
-            await indexer.upsertFile(u.name, body);
+            await indexer.upsertFile(toKbRel(u.name), body);
           }
         }
-        await indexer.renameFile(oldName, newName, content);
+        await indexer.renameFile(toKbRel(oldName), toKbRel(newName), content);
       },
       okResponse: () => ({ name: newName, linksUpdated }),
     });
@@ -253,7 +253,7 @@ export function mount(app: express.Express): void {
       // is harmless: search filters by file_name on read and the next
       // sync sweeps orphans.
       res.json({});
-      indexer.deleteFile(name).catch((err) => {
+      indexer.deleteFile(toKbRel(name)).catch((err) => {
         log.warn(`delete: index cleanup failed for ${name}: ${errorMessage(err)}`);
       });
     } catch (err: unknown) {

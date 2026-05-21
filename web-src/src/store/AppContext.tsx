@@ -96,6 +96,9 @@ export interface AppActions {
    *  "Open in New Tab" command. */
   openInNewTab: (name: string) => Promise<void>;
   newTab: () => Promise<void>;
+  /** Open `<kbRoot>/AGENT.md` (the agent-maintained library overview)
+   *  in a new tab. Read-only — no save / edit. */
+  openLibraryOverview: () => Promise<void>;
   closeTab: (id: string) => Promise<void>;
   /** Close whichever tab is currently active. Convenience for keyboard
    *  shortcuts (`⌘W`) and UI buttons that don't have a tab id handy. */
@@ -426,6 +429,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cur = getActiveTab(stateRef.current)?.file ?? null;
     const handle = editorRef.current;
     if (!cur || !handle) return;
+    // Library-overview tab is read-only — even if a CodeMirror handle
+    // is registered (edit button hidden but defense-in-depth), don't
+    // ever PUT it back to /api/files/AGENT.md (which would resolve
+    // inside the current space, not at kbRoot).
+    if (cur.kind === 'library') return;
     const content = handle.getValue();
     if (content === cur.content) {
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
@@ -586,6 +594,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (editorRef.current) await flushSave();
     dispatch({ type: 'NEW_TAB' });
   }, [flushSave]);
+
+  const openLibraryOverview = useCallback(async () => {
+    try {
+      if (editorRef.current) await flushSave();
+      const r = await api.getLibraryOverview();
+      dispatch({
+        type: 'FILE_OPEN',
+        body: {
+          name: 'AGENT.md',
+          format: 'md',
+          content: r.content,
+          headings: [],
+          // Marks the tab as library-scope: MainPane hides the edit
+          // button and the save path is short-circuited for this kind.
+          kind: 'library',
+        } as any,
+        newTab: true,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await showAlert('Failed to load library overview: ' + msg);
+    }
+  }, [flushSave, showAlert]);
 
   const closeTab = useCallback(async (id: string) => {
     const s = stateRef.current;
@@ -997,7 +1028,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<AppActions>(() => ({
     bootstrap, openSpace, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
-    selectFile, openInNewTab, newTab, closeTab, closeActiveTab, activateTab,
+    selectFile, openInNewTab, newTab, openLibraryOverview, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     resolveCascadePrompt,
     alert: showAlert, confirm: askConfirm, resolveModal,
@@ -1012,7 +1043,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }), [
     bootstrap, openSpace, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
-    selectFile, openInNewTab, newTab, closeTab, closeActiveTab, activateTab,
+    selectFile, openInNewTab, newTab, openLibraryOverview, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     resolveCascadePrompt,
     showAlert, askConfirm, resolveModal,

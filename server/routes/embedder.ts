@@ -2,6 +2,16 @@
  * Embedder routes: pick / change the per-space embedding provider,
  * manage the global OpenAI key, validate a key without persisting it,
  * estimate the re-embed cost of a provider switch.
+ *
+ * Multi-collection model: switching a space's provider does NOT drop
+ * any data. The daemon owns one DB at kbRoot with one collection per
+ * (provider, dim); `bind_space` registers which collection a space's
+ * future writes go to. After a switch:
+ *   - Already-indexed files stay in their OLD collection, still
+ *     searchable across the library via the same Milvus DB.
+ *   - New / re-saved files write to the NEW collection.
+ *   - A follow-up syncIndex re-embeds existing rows under the new
+ *     provider — fire-and-forget so the UI stays responsive.
  */
 import express from 'express';
 import fs from 'node:fs';
@@ -11,36 +21,36 @@ import { logger, errorMessage } from '../log.ts';
 import {
   getApiKey,
   getCurrentSpace,
+  getCurrentSpaceName,
   getSpaceEmbedderProvider,
   setApiKey,
   setSpaceEmbedderProvider,
   type EmbedderProvider,
 } from '../space.ts';
 import { syncIndex } from '../sync.ts';
-import { indexer, bindIndexerForSpace } from '../state.ts';
+import { indexer, bindIndexerForSpace, resolveSpaceEmbedder } from '../state.ts';
 import { sendError, validateOpenAIKey } from '../http.ts';
 
 const log = logger('routes/embedder');
 
 export function mount(app: express.Express): void {
-  // Per-space provider + global API key. The provider is baked into a
-  // space's Milvus collection at creation time, so switching a space
-  // invalidates *its* index (and only its).
+  // Per-space provider + global API key. The provider determines which
+  // collection a space's NEW writes go to; existing rows in the old
+  // collection stay searchable.
   app.get('/api/embedder', (_req, res) => {
     const cur = getCurrentSpace();
     if (!cur) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
     res.json({
       provider: getSpaceEmbedderProvider(cur),
-      // hasKey is global (one key per user across all spaces).
       hasKey: !!getApiKey(),
     });
   });
 
   // Change the global OpenAI key WITHOUT touching providers / spaces.
   // Validates the new key first so a typo can't blow away a working
-  // one. If the current space happens to be on OpenAI, hot-swap the
-  // daemon's embedder so subsequent embed calls use the new key —
-  // same dimension, no re-embed needed.
+  // one. If the current space is on OpenAI, we re-bind so the daemon
+  // picks up the new key for subsequent embeds (same dim, no data
+  // movement).
   app.put('/api/embedder/key', async (req, res) => {
     const key = typeof req.body?.openaiKey === 'string' ? req.body.openaiKey.trim() : '';
     if (!key) return res.status(400).json({ error: 'openaiKey required' });
@@ -50,9 +60,9 @@ export function mount(app: express.Express): void {
     const cur = getCurrentSpace();
     if (cur && getSpaceEmbedderProvider(cur) === 'openai') {
       try {
-        await indexer.setEmbedder({ provider: 'openai', apiKey: key });
+        await bindIndexerForSpace(cur);
       } catch (err: unknown) {
-        log.warn(`key rotate: daemon hot-swap failed: ${errorMessage(err)}`);
+        log.warn(`key rotate: rebind failed: ${errorMessage(err)}`);
       }
     }
     res.json({ hasKey: true });
@@ -67,9 +77,7 @@ export function mount(app: express.Express): void {
     res.json({ hasKey: false });
   });
 
-  // Validate an OpenAI key without persisting it. Uses the standard
-  // envelope: 200 + `{}` on valid, 4xx + `{ error }` on invalid — the
-  // client `ApiError` throws on non-2xx so the caller's catch fires.
+  // Validate an OpenAI key without persisting it.
   app.post('/api/embedder/validate', async (req, res) => {
     const provider = typeof req.body?.provider === 'string' ? req.body.provider : 'openai';
     const key = typeof req.body?.openaiKey === 'string' ? req.body.openaiKey.trim() : '';
@@ -80,14 +88,15 @@ export function mount(app: express.Express): void {
     res.status(check.status).json({ error: check.error });
   });
 
-  // Switch the embedder *for the current space*. On success: the
-  // space's Milvus DB is wiped (mismatched dim), the daemon is re-bound
-  // to the new provider, and the space is re-synced from disk in the
-  // background. Other spaces are unaffected — they keep their own
-  // per-space provider.
+  // Switch the embedder for the current space. Re-binds to the new
+  // provider's collection — existing rows stay in the OLD collection
+  // (still searchable) and a background sync re-embeds them into the
+  // NEW one to keep results stable. Other spaces are unaffected.
   app.put('/api/embedder', async (req, res) => {
     const cur = getCurrentSpace();
     if (!cur) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
+    const space = getCurrentSpaceName();
+    if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
     const provider: EmbedderProvider | undefined = req.body?.provider;
     if (provider !== 'onnx' && provider !== 'openai') {
       return res.status(400).json({ error: 'provider must be "onnx" or "openai"' });
@@ -99,15 +108,16 @@ export function mount(app: express.Express): void {
       return res.status(400).json({ error: 'openaiKey required for openai provider' });
     }
     try {
-      // Drop the collection from Milvus *and* release the flock before
-      // wiping the on-disk DB. `closeStore` alone leaves pymilvus's
-      // in-process schema cache populated; the next `connect()` then
-      // sees the old dim and rejects the new embedder with a mismatch.
-      await indexer.dropStore();
-      wipeSpaceMilvus(cur);
       setSpaceEmbedderProvider(cur, provider);
-      await bindIndexerForSpace(cur);
-      syncIndex(indexer).catch((err) =>
+      const cfg = resolveSpaceEmbedder(cur) ?? { provider: 'onnx' as const };
+      await indexer.bindSpace(space, cfg);
+      // Schedule a full re-embed against the new collection in the
+      // background — without this, search within the space would
+      // partly hit the old collection (where existing rows live) and
+      // partly miss new edits. The cross-collection search still works
+      // either way, but a single coherent collection per space is
+      // simpler to reason about. Errors logged, not fatal.
+      syncIndex(indexer, space).catch((err) =>
         log.warn(`embedder: post-switch sync failed: ${errorMessage(err)}`),
       );
       res.json({ provider, hasKey: !!apiKey });
@@ -116,14 +126,9 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Cost estimate for switching the *current* space to a given provider.
-  // Walks the space's content on disk (without going through the daemon)
-  // and reports a rough token + USD estimate so the UI can show
-  // "switching this space will cost about $X" before the user confirms.
-  //
-  // Tokens are estimated as bytes/4 — accurate for English, too low for
-  // CJK by ~2× (where 3 UTF-8 bytes can be 1-2 tokens). Acceptable: the
-  // number is labelled "estimate" and the goal is order-of-magnitude.
+  // Cost estimate for switching the current space to a given provider.
+  // Walks the space on disk and reports a rough token + USD estimate.
+  // Tokens are estimated as bytes/4 — accurate for English, low for CJK.
   app.get('/api/embedder/cost-estimate', (req, res) => {
     const cur = getCurrentSpace();
     if (!cur) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
@@ -136,17 +141,13 @@ export function mount(app: express.Express): void {
       log.warn(`cost-estimate: failed to walk ${cur}: ${errorMessage(err)}`);
     }
     const tokens = Math.ceil(bytes / 4);
-    // text-embedding-3-small is $0.02 per 1M input tokens. Hardcoded
-    // because the model itself is hardcoded for v1; revisit when we
-    // expose model selection.
     const costUsd = provider === 'openai' ? (tokens * 0.02) / 1_000_000 : 0;
     res.json({ provider, files, bytes, tokens, costUsd });
   });
 }
 
 /** Walk a space directory and report each indexable file's size.
- *  Skips `.stashbase/` (our sidecar dir) and load-bearing hidden dirs.
- *  Synchronous fs.readdirSync is fine — invoked at most once per click. */
+ *  Skips `.stashbase/` (our sidecar dir) and load-bearing hidden dirs. */
 function walkSpaceForCost(root: string, onFile: (size: number) => void): void {
   const stack: string[] = [root];
   while (stack.length > 0) {
@@ -158,10 +159,6 @@ function walkSpaceForCost(root: string, onFile: (size: number) => void): void {
       continue;
     }
     for (const e of entries) {
-      // Same visibility rule as the sidebar tree (`files.ts:walk`) —
-      // hide only the load-bearing internals so cost-estimate counts
-      // every file the indexer will actually embed (`.claude/*.md`
-      // slash commands included).
       if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
@@ -173,16 +170,5 @@ function walkSpaceForCost(root: string, onFile: (size: number) => void): void {
         }
       }
     }
-  }
-}
-
-/** Drop the given space's Milvus DB so it rebuilds at the new embedder's
- *  dim on next open. */
-function wipeSpaceMilvus(spaceRoot: string): void {
-  const dir = path.join(spaceRoot, '.stashbase', 'mfs');
-  try {
-    fs.rmSync(dir, { recursive: true, force: true });
-  } catch (err: unknown) {
-    log.warn(`embedder: failed to wipe ${dir}: ${errorMessage(err)}`);
   }
 }

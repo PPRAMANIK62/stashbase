@@ -5,58 +5,183 @@
  * active CLI's per-project prompt dir.
  */
 import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
 import { errorMessage, logger } from '../log.ts';
-import { getCurrentSpace } from '../space.ts';
+import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isUnderRoot } from '../space.ts';
 import { syncIndex } from '../sync.ts';
 import { syncSkillsToCli } from '../skills.ts';
 import { getInFlightPdfs } from '../pdf.ts';
 import { getFsChangeCounter } from '../watcher.ts';
+import { getDaemon } from '../mfs-daemon.ts';
 import { indexer } from '../state.ts';
+import { getLibraryInfo, getLibraryOverview, setLibraryOverview } from '../library.ts';
 import { sendError } from '../http.ts';
 
 const log = logger('routes/indexing');
 
 export function mount(app: express.Express): void {
   // Trigger a space sync manually — useful after external edits / file
-  // moves. Returns the diff (added / removed / failed).
+  // moves. Returns the diff (added / removed / failed). Scoped to the
+  // current space; cross-space syncs would happen automatically as
+  // other spaces are opened.
   app.post('/api/sync', async (_req, res) => {
     try {
-      res.json(await syncIndex(indexer));
+      const space = getCurrentSpaceName();
+      if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
+      res.json(await syncIndex(indexer, space));
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
 
-  // Hybrid (vector + BM25) search. Also powers the MCP server when the
-  // web server is running, so the MCP doesn't have to spawn its own
-  // daemon (saves ~600 MB of duplicate model load).
+  // Hybrid (vector + BM25) search, scoped to the current open space.
+  // Cross-space search lives behind the MCP `search_kb` tool (different
+  // mental model: "AI searching all my notes" vs "I'm searching the KB
+  // I'm currently editing").
   app.post('/api/search', async (req, res) => {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
       const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
       if (!query) return res.status(400).json({ error: 'query required' });
-      res.json({ hits: await indexer.search(query, topK) });
+      const space = getCurrentSpaceName();
+      const hits = await indexer.search(query, topK, space ?? undefined);
+      // Daemon hits arrive kbRoot-relative; translate fileName back to
+      // space-relative for the sidebar (which only knows the current
+      // space). Hits outside the current space (shouldn't happen with
+      // the space filter, defensive) get dropped.
+      const out = space
+        ? hits
+            .map((h) => {
+              const rel = fromKbRel(h.fileName);
+              return rel == null ? null : { ...h, fileName: rel };
+            })
+            .filter((h): h is NonNullable<typeof h> => h !== null)
+        : hits;
+      res.json({ hits: out });
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
 
   // Lightweight status — full `pending` list (not a sample) so the
-  // sidebar can grey out the right rows. `treeVersion` bumps on every
-  // external fs event, covering writes from Claude Code / `touch` that
-  // wouldn't move `pending` (non-indexable files, empty dirs). Also
-  // surfaces in-flight PDF conversions for the conversion indicator.
+  // sidebar can grey out the right rows. Scoped to the current space.
+  // `treeVersion` bumps on every external fs event, covering writes
+  // from Claude Code / `touch` that wouldn't move `pending`
+  // (non-indexable files, empty dirs). Also surfaces in-flight PDF
+  // conversions for the conversion indicator.
   app.get('/api/index-status', async (_req, res) => {
     try {
-      const root = getCurrentSpace();
-      if (!root) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
-      const status = await indexer.status(root);
+      const cur = getCurrentSpace();
+      if (!cur) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
+      const space = getCurrentSpaceName();
+      const status = await indexer.status(space ?? undefined);
+      // Convert kbRoot-relative paths back to space-relative for the UI.
+      const pending = status.pending
+        .map((p) => fromKbRel(p))
+        .filter((p): p is string => p != null);
+      const orphaned = status.orphaned
+        .map((p) => fromKbRel(p))
+        .filter((p): p is string => p != null);
       res.json({
         ...status,
+        pending,
+        orphaned,
         pendingConversions: getInFlightPdfs(),
         treeVersion: getFsChangeCounter(),
       });
     } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // --- Library-scoped endpoints (powered by the same single daemon) ---
+  //
+  // These are the cross-space surface used by MCP. They speak in
+  // kbRoot-relative paths and accept an optional `space` filter so an
+  // AI client can search the whole library by default, or narrow to one
+  // space when needed. Kept separate from the sidebar-facing /api/search
+  // / /api/index-status / /api/files routes (which are space-scoped and
+  // return space-relative paths the UI consumes directly).
+  app.post('/api/library/search', async (req, res) => {
+    try {
+      const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
+      const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
+      const space = typeof req.body?.space === 'string' && req.body.space.trim()
+        ? req.body.space.trim() : undefined;
+      if (!query) return res.status(400).json({ error: 'query required' });
+      res.json({ hits: await indexer.search(query, topK, space) });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  app.get('/api/library/index-status', async (req, res) => {
+    try {
+      const space = typeof req.query.space === 'string' && req.query.space.trim()
+        ? req.query.space.trim() : undefined;
+      res.json(await indexer.status(space));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // List indexed paths across the library (paths only — rich metadata
+  // would require a filesystem walk per space and bloats the response).
+  app.get('/api/library/files', async (req, res) => {
+    try {
+      const space = typeof req.query.space === 'string' && req.query.space.trim()
+        ? req.query.space.trim() : undefined;
+      const args: Record<string, unknown> = {};
+      if (space) args.space = space;
+      const r = await getDaemon().call<{ files: Record<string, string> }>('list', args);
+      res.json({ files: Object.keys(r.files).sort() });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Library overview (AGENT.md at kbRoot). The chrome-strip button in
+  // the renderer GETs this as a regular markdown blob; MCP forwards
+  // both reads and writes here so the daemon shares one source of truth.
+  app.get('/api/library/overview', (_req, res) => {
+    res.json({ content: getLibraryOverview() });
+  });
+
+  app.post('/api/library/overview', (req, res) => {
+    const content = typeof req.body?.content === 'string' ? req.body.content : '';
+    try {
+      setLibraryOverview(content);
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Library info = overview + per-space structured facts. Powers MCP's
+  // `library_info` tool — Claude reads this when deciding which space
+  // to search.
+  app.get('/api/library/info', async (_req, res) => {
+    try {
+      res.json(await getLibraryInfo());
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Read any file under kbRoot by kbRoot-relative path. Powers MCP's
+  // `get_file` so an AI client can fetch a file outside the currently
+  // open space. Refuses anything escaping the root.
+  app.get('/api/library/file/*', (req, res) => {
+    try {
+      const rel = (req.params as any)[0] as string;
+      if (!rel) return res.status(400).json({ error: 'path required' });
+      const abs = path.resolve(getKbRoot(), rel);
+      if (!isUnderRoot(abs)) return res.status(400).json({ error: 'path escapes kbRoot' });
+      const content = fs.readFileSync(abs, 'utf8');
+      res.json({ path: rel, content });
+    } catch (err: unknown) {
+      if ((err as any)?.code === 'ENOENT') return res.status(404).json({ error: 'not found' });
       sendError(res, err);
     }
   });

@@ -808,6 +808,7 @@
       box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.32);
     }
 
+
     /* Always-visible search input at the top of the sidebar. Plain
      case-insensitive substring filter against file name / heading /
      snippet — see renderFilteredFiles. */

@@ -7,6 +7,8 @@
 [![Powered by mfs](https://img.shields.io/badge/powered%20by-mfs-0891b2.svg)](https://github.com/zilliztech/mfs)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
+**StashBase** is a local knowledge base supporting HTML and Markdown, with deep integration of Claude/Codex, and retrievable via MCP.
+
 🎨 **HTML-first notes:** Native HTML rendering for rich layouts, links, tables, and media — ready for AI workflows and long-term reference.
 
 ⚡ **Entire knowledge base as context:** Notes are semantically embedded and indexed as they land, giving your AI clients a searchable, long-lived library without multi-round searching or manual discovery.
@@ -23,7 +25,7 @@
 
 ---
 
-## Try it
+## ⚡ Try it
 
 Install the macOS cask with Homebrew:
 

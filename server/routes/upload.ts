@@ -22,7 +22,7 @@ import {
   saveBytes,
 } from '../files.ts';
 import { errorMessage, logger } from '../log.ts';
-import { getCurrentSpace } from '../space.ts';
+import { getCurrentSpace, toKbRel } from '../space.ts';
 import { maybeConvertPdf } from '../pdf.ts';
 import { indexer } from '../state.ts';
 
@@ -88,7 +88,7 @@ export function mount(app: express.Express): void {
     (async () => {
       for (const { name, text } of toIndex) {
         try {
-          await indexer.upsertFile(name, text);
+          await indexer.upsertFile(toKbRel(name), text);
         } catch (err: unknown) {
           log.warn(`upload: index failed for ${name}: ${errorMessage(err)}`);
         }

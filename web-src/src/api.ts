@@ -192,11 +192,18 @@ export const api = {
   // Space ---------------------------------------------------------
   getSpace: () => getJson<SpaceState>('/api/space'),
   openSpace: (path: string) => send<SpaceState>('POST', '/api/space', { path }),
-  /** Run `git clone <url>` into `parentDir`, returning the absolute
-   *  path of the freshly-cloned working tree. Caller follows up with
-   *  `openSpace(path)`. */
-  gitClone: (url: string, parentDir: string) =>
-    send<{ path: string }>('POST', '/api/git/clone', { url, parentDir }),
+  /** Absolute path of the KB root. All spaces live under it; the
+   *  Welcome / Clone flows use this to seed the OS folder dialog's
+   *  `defaultPath` and to validate the user's pick. */
+  getKbRoot: () => getJson<{ path: string }>('/api/kb-root'),
+  /** Read `<kbRoot>/AGENT.md` — the agent-maintained library overview.
+   *  Powers the "View library" chrome-strip button. */
+  getLibraryOverview: () => getJson<{ content: string }>('/api/library/overview'),
+  /** Run `git clone <url>` into `<kbRoot>/<relParentDir>` (defaults to
+   *  the root itself), returning the absolute path of the freshly-
+   *  cloned working tree. Caller follows up with `openSpace(path)`. */
+  gitClone: (url: string, relParentDir = '') =>
+    send<{ path: string }>('POST', '/api/git/clone', { url, relParentDir }),
   /** Mirror this space's `skills/<name>/SKILL.md` into the active
    *  CLI's per-project prompt dir (`.claude/commands` / `.codex/prompts`).
    *  Renderer fires this on terminal panel open / CLI switch. */

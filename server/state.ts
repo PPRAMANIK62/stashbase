@@ -2,9 +2,12 @@
  * Process-wide indexer state + space-switch orchestration.
  *
  * One `MfsIndexer` instance lives for the lifetime of the server
- * process. Switching spaces flows through `scheduleIndexerSync` —
- * queued so back-to-back switches don't race, no-ops if the user
- * already moved on by the time the binding finishes.
+ * process. The daemon underneath owns one Milvus DB at kbRoot with
+ * one collection per (provider, dim); each space is `bind_space`-ed to
+ * the collection matching its embedder provider. Boot binds every
+ * known space under kbRoot so MCP cross-space search has them all
+ * available; opening a space re-binds (idempotent) and runs a name-
+ * only sync to pick up any new files.
  *
  * Extracted from `server/index.ts` so route modules can import the
  * indexer without picking up the whole route registration kitchen sink.
@@ -14,13 +17,17 @@ import type { Indexer, EmbedderRuntimeConfig } from './indexer.ts';
 import {
   getApiKey,
   getCurrentSpace,
+  getCurrentSpaceName,
+  getKbRoot,
   getSpaceEmbedderProvider,
+  listKnownSpaces,
   lockInSpaceProvider,
   onSwitch,
 } from './space.ts';
 import { syncNewFiles } from './sync.ts';
-import { clearStaleMilvusLock } from './stale-lock.ts';
+import { getDaemon } from './mfs-daemon.ts';
 import { logger, errorMessage } from './log.ts';
+import path from 'node:path';
 
 const log = logger('state');
 
@@ -29,40 +36,63 @@ export const indexer: Indexer = new MfsIndexer();
 
 /** Resolve a space's runtime embedder config from disk. Returns null
  *  when the resolved provider can't be used right now (openai without
- *  a global key) so the caller can fall back to local. */
-export function resolveSpaceEmbedder(spaceRoot: string): EmbedderRuntimeConfig | null {
-  const provider = getSpaceEmbedderProvider(spaceRoot);
+ *  a global key) so the caller can fall back to local. `spaceAbs` is
+ *  the absolute on-disk path of the space (used by per-space config
+ *  read/write). */
+export function resolveSpaceEmbedder(spaceAbs: string): EmbedderRuntimeConfig | null {
+  const provider = getSpaceEmbedderProvider(spaceAbs);
   if (provider === 'onnx') return { provider: 'onnx' };
   const apiKey = getApiKey();
   if (!apiKey) return null;
   return { provider: 'openai', apiKey };
 }
 
-/** Bind the indexer to a space: apply that space's provider on the
- *  daemon (no-op if it's already loaded) then set_space. Centralises
- *  the "embed-then-bind" order so callers can't accidentally invert it
- *  and create a dim mismatch. */
-export async function bindIndexerForSpace(spaceRoot: string): Promise<void> {
+/** Configure + spawn the daemon, then bind every known space under
+ *  kbRoot. Idempotent on the bind side; safe to call once at server
+ *  startup. Spaces with no openai key fall back to onnx so they stay
+ *  searchable (the choice isn't persisted — user intent is preserved). */
+export async function bootBindAllSpaces(): Promise<void> {
+  const daemon = getDaemon();
+  daemon.configure({ kbRoot: getKbRoot() });
+  const known = listKnownSpaces();
+  if (known.length === 0) {
+    log.info('boot bind: no spaces found under kbRoot');
+    return;
+  }
+  log.info(`boot bind: ${known.length} space(s): ${known.join(', ')}`);
+  for (const space of known) {
+    const spaceAbs = path.join(getKbRoot(), space);
+    try {
+      const cfg = resolveSpaceEmbedder(spaceAbs) ?? { provider: 'onnx' as const };
+      await indexer.bindSpace(space, cfg);
+    } catch (err: unknown) {
+      log.warn(`boot bind ${space} failed: ${errorMessage(err)}`);
+    }
+  }
+}
+
+/** Bind the indexer to a space: persist its embedder choice, resolve
+ *  the runtime config, hand it to the indexer. Called on every space
+ *  switch (idempotent). Doesn't trigger sync — caller's responsibility
+ *  via `scheduleIndexerSync`. */
+export async function bindIndexerForSpace(spaceAbs: string): Promise<void> {
   // Persist the resolved provider on first bind so a later key change
   // doesn't silently flip an already-indexed space.
-  lockInSpaceProvider(spaceRoot);
-  // Defensive: if a previous session (or a crashed daemon) is still
-  // holding the flock on this space's `milvus.db`, kill it before our
-  // fresh daemon tries to bind — otherwise pymilvus raises
-  // DataDirLockedError and we surface a scary stack trace to the
-  // renderer instead of just opening the space.
-  clearStaleMilvusLock(spaceRoot);
-  const runtime = resolveSpaceEmbedder(spaceRoot);
-  if (runtime) {
-    await indexer.setEmbedder(runtime);
-  } else {
-    // openai configured but key gone: fall back to local so the space
-    // is still searchable. Doesn't mutate the persisted provider — the
-    // user's intent is preserved, just stalled.
-    log.warn(`embedder: space ${spaceRoot} wants openai but no global key; falling back to local`);
-    await indexer.setEmbedder({ provider: 'onnx' });
+  lockInSpaceProvider(spaceAbs);
+  const cfg = resolveSpaceEmbedder(spaceAbs);
+  const runtime = cfg ?? { provider: 'onnx' as const };
+  if (!cfg) {
+    log.warn(`embedder: space ${spaceAbs} wants openai but no global key; falling back to local`);
   }
-  await indexer.setSpace(spaceRoot);
+  // The kbRoot-relative name is the space identifier on the indexer side.
+  // We can't use getCurrentSpaceName() here — the switch listener fires
+  // BEFORE the renderer sees the new currentSpace, and bootBindAllSpaces
+  // calls this without changing currentSpace at all.
+  const rel = path.relative(getKbRoot(), spaceAbs).split(path.sep).join('/');
+  if (rel === '' || rel.startsWith('..')) {
+    throw new Error(`bindIndexerForSpace: ${spaceAbs} is not under kbRoot`);
+  }
+  await indexer.bindSpace(rel, runtime);
 }
 
 // Serialise indexer bind + sync so rapid space switches don't race. The
@@ -81,11 +111,12 @@ export function scheduleIndexerSync(spaceRoot: string, reason: string): void {
         await bindIndexerForSpace(spaceRoot);
         if (getCurrentSpace() !== spaceRoot || seq !== indexerSwitchSeq) return;
         // Name-only diff: trust existing rows, only embed new files
-        // and drop orphans. Reopening a fully-indexed space costs
-        // zero tokens. The full content-hash diff lives behind the
-        // manual /api/sync button (`syncIndex`) for the rare case
-        // where the user edited files externally with the app closed.
-        await syncNewFiles(indexer);
+        // and drop orphans. Reopening a fully-indexed space costs zero
+        // tokens. The full content-hash diff lives behind the manual
+        // /api/sync button for the rare case where the user edited
+        // files externally with the app closed.
+        const spaceName = getCurrentSpaceName();
+        if (spaceName) await syncNewFiles(indexer, spaceName);
       } catch (err: unknown) {
         log.warn(`${reason}: index sync failed for ${spaceRoot}: ${errorMessage(err)}`);
       }
@@ -95,8 +126,5 @@ export function scheduleIndexerSync(spaceRoot: string, reason: string): void {
 // Fire a queued bind + sync on every space switch. Registered at module
 // load time so any importer (index.ts, tests) gets the wiring for free.
 onSwitch((newRoot) => {
-  // Opening a space should feel instant; Python/MFS startup, embedder
-  // swap, Milvus binding, and disk reconciliation continue in the
-  // background while the UI lists files from disk immediately.
   scheduleIndexerSync(newRoot, 'space switch');
 });
