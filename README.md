@@ -222,6 +222,16 @@ pnpm dist:mac
 pnpm dist:win
 ```
 
+## Publishing
+
+`dist:brew` is the one-command publishing flow: build the macOS package, upload the current version's files in `release/` to this repository's GitHub Release, then publish the Homebrew cask update.
+
+```bash
+pnpm dist:brew
+```
+
+The cask defaults to `liliu-z/stashbase/stashbase`, backed by `git@github.com:liliu-z/homebrew-stashbase.git`; override it with `HOMEBREW_TAP`, `HOMEBREW_TAP_GIT_URL`, or `HOMEBREW_CASK` if needed. GitHub Release asset upload uses `gh` when `GITHUB_TOKEN` is not set, so run `brew install gh && gh auth login` once on a new machine. Homebrew cask publishing commits and pushes directly to the SSH tap repository.
+
 ---
 
 ## MCP integration
@@ -298,4 +308,3 @@ Coding with AI already feels fluid inside IDEs. Personal knowledge tools still l
 StashBase is my attempt at the missing layer: a local-first workspace where papers, notes, transcripts, and saved analysis remain continuously retrievable across AI workflows.
 
 This is a personal side project built in the open. PRs, issues, and experiments are welcome.
-

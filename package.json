@@ -43,6 +43,7 @@
     "prestart": "pnpm build:web",
     "electron": "electron .",
     "dist": "node scripts/package-unsigned.mjs && node scripts/package-unsigned.mjs --win",
+    "dist:brew": "node scripts/publish.mjs",
     "pack:mac": "node scripts/package-unsigned.mjs --dir",
     "dist:mac": "node scripts/package-unsigned.mjs",
     "dist:mac:unsigned": "node scripts/package-unsigned.mjs",
