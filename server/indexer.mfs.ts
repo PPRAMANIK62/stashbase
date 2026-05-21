@@ -140,23 +140,18 @@ export class MfsIndexer implements Indexer {
     await this.primeSpace(space);
   }
 
-  /** Find the bound space whose path-prefix matches `kbRel`. Longest
-   *  prefix wins — spaces can be nested (e.g. cloning a starter into
-   *  an outer space). Returns null if no primed space covers the
-   *  path, in which case the cache simply skips the update (the
-   *  daemon is still the source of truth). */
+  /** Find the bound space owning `kbRel`. Spaces are flat under
+   *  kbRoot, so the owner is simply the first path segment. Returns
+   *  null if no primed space covers the path, in which case the cache
+   *  simply skips the update (the daemon is still the source of
+   *  truth). */
   private spaceForKbRel(kbRel: string): string | null {
-    let best: string | null = null;
-    for (const sp of this.spaceIndex.keys()) {
-      if (kbRel === sp || kbRel.startsWith(sp + '/')) {
-        if (best === null || sp.length > best.length) best = sp;
-      }
-    }
-    return best;
+    const slash = kbRel.indexOf('/');
+    const head = slash >= 0 ? kbRel.slice(0, slash) : kbRel;
+    return this.spaceIndex.has(head) ? head : null;
   }
 
-  /** Mark a file as indexed in the local cache. Resolves the owning
-   *  space by longest-prefix match against primed spaces. */
+  /** Mark a file as indexed in the local cache. */
   private noteIndexed(kbRel: string): void {
     const space = this.spaceForKbRel(kbRel);
     if (!space) return;

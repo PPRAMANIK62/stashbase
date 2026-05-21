@@ -3,29 +3,13 @@ import { api, errorMessage } from '../api';
 import { useApp } from '../store/AppContext';
 import { ModalShell } from './ModalShell';
 
-interface ElectronAPI {
-  openFolderDialog?: (opts: {
-    title?: string;
-    buttonLabel?: string;
-    defaultPath?: string;
-  }) => Promise<string | null>;
-}
-declare global {
-  interface Window { electron?: ElectronAPI }
-}
-
 /**
- * Two-step clone flow:
- *   1. User types a git URL in this modal.
- *   2. We open the OS folder dialog (rooted at the library folder) so
- *      they can choose / create the parent directory using the native
- *      "New Folder" affordance.
+ * Clone flow: user enters a git URL plus a space name (defaults to
+ * the inferred repo name and stays in sync until the user edits it).
+ * Server clones into `<kbRoot>/<name>` and we open it on success.
  *
- * After picking, the absolute path is validated against the kbRoot
- * invariant client-side; out-of-root selections surface inline with an
- * error and the modal stays open so the user can retry. The path is
- * then handed to the server as a relative subpath (server re-validates
- * before clone).
+ * No folder picker — spaces are flat under kbRoot, identified by
+ * name, so a system dialog round-trip would be pure friction.
  */
 function prettifyHome(abs: string, home: string): string {
   if (!home) return abs;
@@ -34,16 +18,28 @@ function prettifyHome(abs: string, home: string): string {
   return abs;
 }
 
+/** Mirror the server's `inferRepoName`: pull the tail segment off a
+ *  git URL (`https://github.com/user/repo.git` → `repo`). Returns ''
+ *  when the URL is incomplete. */
+function inferRepoName(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, '').replace(/\.git$/, '');
+  const m = trimmed.match(/[/:]([A-Za-z0-9._-]+)$/);
+  return m ? m[1] : '';
+}
+
 export function CloneRepoModal({ onClose }: { onClose: () => void }) {
   const { state, actions } = useApp();
   const [url, setUrl] = useState('');
+  const [name, setName] = useState('');
+  // Tracks whether the user has manually edited the name — once they
+  // have, we stop auto-syncing it to the URL so their choice isn't
+  // overwritten on the next keystroke.
+  const [nameTouched, setNameTouched] = useState(false);
   const [kbRoot, setKbRoot] = useState('');
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState('Cloning…');
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch kbRoot up front so step 2 can both seed the dialog's
-  // `defaultPath` and validate the user's pick without a round-trip.
   useEffect(() => {
     void (async () => {
       try {
@@ -55,49 +51,30 @@ export function CloneRepoModal({ onClose }: { onClose: () => void }) {
     })();
   }, []);
 
+  function onUrlChange(v: string) {
+    setUrl(v);
+    if (!nameTouched) setName(inferRepoName(v));
+  }
+
   async function submit() {
     const u = url.trim();
     if (!u) { setError('URL required'); return; }
-    const bridge = window.electron;
-    if (!bridge?.openFolderDialog) {
-      setError('Folder picker requires the desktop app.');
-      return;
-    }
-    if (!kbRoot) {
-      setError('Library root not loaded yet — try again in a moment.');
+    const n = (name.trim() || inferRepoName(u));
+    if (!n) { setError('Could not derive a name from the URL — enter one manually.'); return; }
+    if (n.includes('/') || n.includes('\\') || n.startsWith('.')) {
+      setError('Name cannot contain slashes or start with "."');
       return;
     }
     setError(null);
-    const picked = await bridge.openFolderDialog({
-      title: 'Clone into…',
-      buttonLabel: 'Clone here',
-      defaultPath: kbRoot,
-    });
-    if (!picked) return; // user cancelled the picker — modal stays open
-
-    // kbRoot invariant: parent must be the library root or a descendant.
-    // The server re-validates, but checking client-side gives a nicer
-    // error than a 400 round-trip.
-    const rootWithSep = kbRoot.endsWith('/') ? kbRoot : kbRoot + '/';
-    let relParent = '';
-    if (picked === kbRoot) {
-      relParent = '';
-    } else if (picked.startsWith(rootWithSep)) {
-      relParent = picked.slice(rootWithSep.length);
-    } else {
-      setError(`Folder must be under ${prettifyHome(kbRoot, state.homeDir ?? '')}.`);
-      return;
-    }
-
     setBusy(true);
     setBusyLabel('Cloning…');
     try {
-      const { path } = await api.gitClone(u, relParent);
+      await api.gitClone(u, n);
       setBusyLabel('Opening…');
-      // Close before openSpace so the welcome overlay's fade-out and
-      // the new space's first paint don't race over each other.
+      // Close before openSpaceByName so the welcome overlay's fade-out
+      // and the new space's first paint don't race over each other.
       onClose();
-      await actions.openSpace(path);
+      await actions.openSpaceByName(n);
     } catch (err: any) {
       setError(errorMessage(err));
       setBusy(false);
@@ -110,9 +87,8 @@ export function CloneRepoModal({ onClose }: { onClose: () => void }) {
     <ModalShell onCancel={busy ? () => { /* swallow during clone */ } : onClose}>
       <h3>Clone repository</h3>
       <p className="modal-hint">
-        Git URL (HTTPS or SSH). After clicking Clone you'll pick a
-        parent folder under <code>{rootDisplay}</code> (you can create
-        a new folder in the dialog).
+        Clones into <code>{rootDisplay}/&lt;name&gt;</code>. The name
+        defaults to the repo name — edit if you want a different one.
       </p>
       <input
         type="text"
@@ -121,9 +97,25 @@ export function CloneRepoModal({ onClose }: { onClose: () => void }) {
         autoComplete="off"
         spellCheck={false}
         value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        onChange={(e) => onUrlChange(e.target.value)}
         disabled={busy}
         autoFocus
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Enter') { e.preventDefault(); void submit(); }
+          else if (e.key === 'Escape' && !busy) { e.preventDefault(); onClose(); }
+        }}
+      />
+      <input
+        type="text"
+        className="modal-input"
+        placeholder="Space name"
+        autoComplete="off"
+        spellCheck={false}
+        value={name}
+        onChange={(e) => { setName(e.target.value); setNameTouched(true); }}
+        disabled={busy}
+        style={{ marginTop: 8 }}
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing) return;
           if (e.key === 'Enter') { e.preventDefault(); void submit(); }
@@ -140,7 +132,7 @@ export function CloneRepoModal({ onClose }: { onClose: () => void }) {
           className="modal-btn primary"
           onClick={() => { void submit(); }}
           disabled={busy || !url.trim()}
-        >{busy ? busyLabel : 'Clone…'}</button>
+        >{busy ? busyLabel : 'Clone'}</button>
       </div>
     </ModalShell>
   );

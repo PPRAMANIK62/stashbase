@@ -1,20 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '../api';
 import { CubeLogoIcon, FolderIcon, GitCloneIcon, NewFolderIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { CloneRepoModal } from './CloneRepoModal';
+import { ModalShell } from './ModalShell';
 import { openSettings } from './SettingsModal';
-
-interface ElectronAPI {
-  openFolderDialog?: (opts: {
-    title?: string;
-    buttonLabel?: string;
-    defaultPath?: string;
-  }) => Promise<string | null>;
-}
-declare global {
-  interface Window { electron?: ElectronAPI }
-}
 
 /** Shorten an absolute path for display: `/Users/foo/Notes` → `~/Notes`
  *  when it lives under the user's home dir. Falls through unchanged
@@ -26,101 +16,30 @@ function prettifyHome(abs: string, home: string): string {
   return abs;
 }
 
-/** Shared canvas context for text measurement. Cached so we don't
- *  pay the alloc per row × per resize. */
-let _measureCtx: CanvasRenderingContext2D | null = null;
-function measureCtx(): CanvasRenderingContext2D {
-  if (!_measureCtx) {
-    _measureCtx = document.createElement('canvas').getContext('2d')!;
-  }
-  return _measureCtx;
-}
-
-/** VSCode-style middle ellipsis: drops chars from the middle, keeping
- *  the prefix and suffix visible (`StashBase/work/…/2024/Q3`). Uses
- *  canvas `measureText` for measurement and `ResizeObserver` to recompute
- *  on width changes. Falls back to the full string when it fits. */
-function MiddleEllipsis({ text, className }: { text: string; className?: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [out, setOut] = useState(text);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const compute = () => {
-      const w = el.clientWidth;
-      if (!w) return;
-      const style = window.getComputedStyle(el);
-      const ctx = measureCtx();
-      ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-      if (ctx.measureText(text).width <= w) {
-        setOut(text);
-        return;
-      }
-      const target = w - ctx.measureText('…').width;
-      const len = text.length;
-      // Binary search over symmetric prefix+suffix lengths.
-      let lo = 0;
-      let hi = Math.floor(len / 2);
-      while (lo < hi) {
-        const mid = Math.ceil((lo + hi) / 2);
-        const probe = text.slice(0, mid) + text.slice(len - mid);
-        if (ctx.measureText(probe).width <= target) lo = mid;
-        else hi = mid - 1;
-      }
-      setOut(lo > 0 ? `${text.slice(0, lo)}…${text.slice(len - lo)}` : '…');
-    };
-
-    compute();
-    const ro = new ResizeObserver(compute);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [text]);
-
-  return <span ref={ref} className={className} title={text}>{out}</span>;
-}
-
-/** Path label for a recent space row — VSCode-style: shows only the
- *  containing directory chain, not the space's own folder name (that's
- *  the name column to the left):
- *
- *    `<kbRoot>/Notes`            → `StashBase`
- *    `<kbRoot>/work/proj`        → `StashBase/work`
- *    `<kbRoot>/work/2024/proj`   → `StashBase/work/2024`
- *
- *  Falls back to home-relative if the path isn't under kbRoot (legacy
- *  entries, or kbRoot not yet fetched on first paint). */
-function spacePathLabel(spaceAbs: string, kbRoot: string, home: string): string {
-  if (!kbRoot) return prettifyHome(spaceAbs, home);
-  const rootWithSep = kbRoot.endsWith('/') ? kbRoot : kbRoot + '/';
-  if (!spaceAbs.startsWith(rootWithSep)) return prettifyHome(spaceAbs, home);
-  const rootName = kbRoot.split('/').filter(Boolean).pop() || 'StashBase';
-  const parts = spaceAbs.slice(rootWithSep.length).split('/');
-  const parent = parts.slice(0, -1).join('/');
-  return parent ? `${rootName}/${parent}` : rootName;
-}
-
 /**
  * Landing overlay shown when no space is open (or after the user
- * explicitly goes home). All spaces must live under the library root
- * (`~/Documents/StashBase/` by default).
+ * explicitly goes home). Spaces are flat under the library root
+ * (`~/Documents/StashBase/` by default) and are identified by name.
  *
- * Open / New / Clone all use the native OS folder dialog with
- * `defaultPath = kbRoot` so the user lands in the right place and can
- * use the "New Folder" affordance. The picker is unrestricted (it'd
- * be a worse UX to disable the rest of the filesystem), so we
- * validate the pick is under kbRoot client-side; the server
- * re-validates inside `setCurrentSpace`.
+ *   - **New space**: text input for a name; server creates the folder
+ *     under kbRoot and opens it.
+ *   - **Open space**: dropdown of existing direct-child folders under
+ *     kbRoot; click to open.
+ *   - **Clone repo**: name defaults to repo name, user can override.
+ *
+ * No folder picker — names alone make the kbRoot invariant trivial to
+ * enforce and skip a system dialog round-trip.
  */
 export function Welcome() {
   const { state, actions, dispatch } = useApp();
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [openOpen, setOpenOpen] = useState(false);
   const [kbRoot, setKbRoot] = useState('');
   const [showAllRecent, setShowAllRecent] = useState(false);
 
-  // Fetch the kbRoot once the welcome screen mounts so the OS dialog
-  // can seed `defaultPath` and so we can validate picks client-side.
+  // Fetch kbRoot so copy can show `~/Documents/StashBase` as the
+  // container path in the hints below the action buttons.
   useEffect(() => {
     void (async () => {
       try {
@@ -133,51 +52,6 @@ export function Welcome() {
   }, [dispatch]);
 
   if (!state.welcomeVisible) return null;
-
-  async function pickAndOpen(mode: 'open' | 'new') {
-    const bridge = window.electron;
-    if (!bridge?.openFolderDialog) {
-      dispatch({
-        type: 'WELCOME_ERROR',
-        error: 'Folder picker requires the desktop app. Run `npm run electron`.',
-      });
-      return;
-    }
-    if (!kbRoot) {
-      dispatch({ type: 'WELCOME_ERROR', error: 'Library root not loaded yet — try again in a moment.' });
-      return;
-    }
-    // The dialog title hints at which affordance to use; the actual
-    // dialog is identical (createDirectory is always enabled).
-    const picked = await bridge.openFolderDialog({
-      title: mode === 'new' ? 'New space — pick or create a folder' : 'Open a space',
-      buttonLabel: mode === 'new' ? 'Use folder' : 'Open',
-      defaultPath: kbRoot,
-    });
-    if (!picked) return;
-    // Enforce the kbRoot invariant: must be the root itself's child or
-    // deeper (the root itself is a container, not openable as a space).
-    const rootWithSep = kbRoot.endsWith('/') ? kbRoot : kbRoot + '/';
-    if (picked === kbRoot || !picked.startsWith(rootWithSep)) {
-      dispatch({
-        type: 'WELCOME_ERROR',
-        error: `Spaces must live under ${prettifyHome(kbRoot, state.homeDir ?? '')}.`,
-      });
-      return;
-    }
-    await actions.openSpace(picked);
-  }
-
-  function openClone() {
-    if (!window.electron?.openFolderDialog) {
-      dispatch({
-        type: 'WELCOME_ERROR',
-        error: 'Clone requires the desktop app. Run `npm run electron`.',
-      });
-      return;
-    }
-    setCloneOpen(true);
-  }
 
   return (
     <div className="welcome">
@@ -197,8 +71,8 @@ export function Welcome() {
           <button
             className="welcome-action"
             type="button"
-            onClick={() => pickAndOpen('open')}
-            title="Open an existing folder under your library"
+            onClick={() => setOpenOpen(true)}
+            title="Open an existing space in your library"
           >
             <span className="welcome-action-icon">
               <FolderIcon />
@@ -208,8 +82,8 @@ export function Welcome() {
           <button
             className="welcome-action"
             type="button"
-            onClick={() => pickAndOpen('new')}
-            title="Create a new folder under your library"
+            onClick={() => setNewOpen(true)}
+            title="Create a new space in your library"
           >
             <span className="welcome-action-icon">
               <NewFolderIcon />
@@ -219,8 +93,8 @@ export function Welcome() {
           <button
             className="welcome-action"
             type="button"
-            onClick={openClone}
-            title="Clone a git repo (HTTPS or SSH) into your library"
+            onClick={() => setCloneOpen(true)}
+            title="Clone a git repo (HTTPS or SSH) as a new space"
           >
             <span className="welcome-action-icon">
               <GitCloneIcon />
@@ -249,7 +123,7 @@ export function Welcome() {
           <div className="welcome-recent">
             <div className="welcome-recent-head">
               <span>Recent spaces</span>
-              {state.recent.length > 5 && (
+              {state.recent.length > 12 && (
                 <button
                   className="welcome-recent-more"
                   type="button"
@@ -259,22 +133,19 @@ export function Welcome() {
                 </button>
               )}
             </div>
-            <div className="welcome-recent-list">
-              {(showAllRecent ? state.recent : state.recent.slice(0, 5)).map((r) => {
+            <div className="welcome-recent-pills">
+              {(showAllRecent ? state.recent : state.recent.slice(0, 12)).map((r) => {
                 const name = r.path.split('/').filter(Boolean).pop() || r.path;
                 return (
-                  <div
+                  <button
                     key={r.path}
-                    className="welcome-recent-row"
+                    type="button"
+                    className="welcome-recent-pill"
+                    title={name}
                     onClick={() => { void actions.openSpace(r.path); }}
                   >
-                    <span className="welcome-recent-name">{name}</span>
-                    <MiddleEllipsis
-                      className="welcome-recent-path"
-                      text={spacePathLabel(r.path, kbRoot, state.homeDir)}
-                    />
-
-                  </div>
+                    {name}
+                  </button>
                 );
               })}
             </div>
@@ -286,6 +157,211 @@ export function Welcome() {
         )}
       </div>
       {cloneOpen && <CloneRepoModal onClose={() => setCloneOpen(false)} />}
+      {newOpen && (
+        <NewSpaceModal
+          kbRoot={kbRoot}
+          homeDir={state.homeDir ?? ''}
+          onClose={() => setNewOpen(false)}
+        />
+      )}
+      {openOpen && (
+        <OpenSpaceModal
+          kbRoot={kbRoot}
+          homeDir={state.homeDir ?? ''}
+          onClose={() => setOpenOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+/** "New space" modal: a single text input. Server creates the folder
+ *  under kbRoot and opens it in one shot. Names go through
+ *  `validateSpaceName` server-side; we do a quick client-side check
+ *  to avoid a round-trip on obvious mistakes. */
+function NewSpaceModal({
+  kbRoot,
+  homeDir,
+  onClose,
+}: {
+  kbRoot: string;
+  homeDir: string;
+  onClose: () => void;
+}) {
+  const { actions } = useApp();
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const rootDisplay = kbRoot ? prettifyHome(kbRoot, homeDir) : '~/Documents/StashBase';
+
+  async function submit() {
+    const n = name.trim();
+    if (!n) { setError('Name required'); return; }
+    if (n.includes('/') || n.includes('\\') || n.startsWith('.')) {
+      setError('Name cannot contain slashes or start with "."');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await actions.openSpaceByName(n);
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell onCancel={busy ? () => { /* swallow during create */ } : onClose}>
+      <h3>New space</h3>
+      <p className="modal-hint">
+        Creates <code>{rootDisplay}/&lt;name&gt;</code> and opens it. The
+        folder is created if it doesn't exist yet.
+      </p>
+      <input
+        type="text"
+        className="modal-input"
+        placeholder="e.g. research, notes, cs183b"
+        autoComplete="off"
+        spellCheck={false}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        disabled={busy}
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Enter') { e.preventDefault(); void submit(); }
+          else if (e.key === 'Escape' && !busy) { e.preventDefault(); onClose(); }
+        }}
+      />
+      {error && <div className="modal-error">{error}</div>}
+      <div className="modal-actions">
+        <button type="button" className="modal-btn" onClick={onClose} disabled={busy}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="modal-btn primary"
+          onClick={() => { void submit(); }}
+          disabled={busy || !name.trim()}
+        >{busy ? 'Opening…' : 'Create'}</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/** "Open space" modal: list of direct-child folders under kbRoot,
+ *  recently-opened ones first then the rest alphabetically. Includes
+ *  everything in the library — folders the user created via Finder
+ *  but never opened still show up. Empty state nudges toward
+ *  New / Clone. */
+function OpenSpaceModal({
+  kbRoot,
+  homeDir,
+  onClose,
+}: {
+  kbRoot: string;
+  homeDir: string;
+  onClose: () => void;
+}) {
+  const { actions } = useApp();
+  const [names, setNames] = useState<string[] | null>(null);
+  // Re-fetched on mount instead of read from AppContext: `state.recent`
+  // is captured at bootstrap and never refreshed after opens (`goHome`
+  // reuses `stateRef.current.recent`), so it would skew this modal's
+  // ordering after the user has opened any new space.
+  const [recentNames, setRecentNames] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const rootDisplay = kbRoot ? prettifyHome(kbRoot, homeDir) : '~/Documents/StashBase';
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [avail, spaceState] = await Promise.all([
+          api.listAvailableSpaces(),
+          api.getSpace(),
+        ]);
+        setNames(avail.names);
+        // RecentSpace paths are absolute; under the flat invariant
+        // the last segment is the space name. Server returns them
+        // most-recent-first already.
+        setRecentNames(
+          (spaceState.recent ?? [])
+            .map((r) => r.path.split('/').filter(Boolean).pop() || '')
+            .filter(Boolean),
+        );
+      } catch (err) {
+        setError(errorMessage(err));
+        setNames([]);
+      }
+    })();
+  }, []);
+
+  // Recently-opened first (freshest at top), then everything else
+  // alphabetically.
+  const ordered = useMemo(() => {
+    if (!names) return [];
+    const present = new Set(names);
+    const seen = new Set<string>();
+    const head: string[] = [];
+    for (const n of recentNames) {
+      if (present.has(n) && !seen.has(n)) {
+        head.push(n);
+        seen.add(n);
+      }
+    }
+    const rest = names.filter((n) => !seen.has(n));
+    return [...head, ...rest];
+  }, [names, recentNames]);
+
+  async function pick(n: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await actions.openSpaceByName(n);
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell onCancel={busy ? () => { /* swallow during open */ } : onClose}>
+      <h3>Open space</h3>
+      <p className="modal-hint">
+        Spaces in <code>{rootDisplay}</code>.
+      </p>
+      {names === null ? (
+        <div className="modal-hint">Loading…</div>
+      ) : names.length === 0 ? (
+        <div className="modal-hint">
+          No spaces yet — use <strong>New space</strong> or <strong>Clone repo</strong> to create one.
+        </div>
+      ) : (
+        <div className="welcome-open-list">
+          {ordered.map((n) => (
+            <button
+              key={n}
+              type="button"
+              className="welcome-open-row"
+              disabled={busy}
+              onClick={() => { void pick(n); }}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <div className="modal-error">{error}</div>}
+      <div className="modal-actions">
+        <button type="button" className="modal-btn" onClick={onClose} disabled={busy}>
+          {busy ? 'Opening…' : 'Cancel'}
+        </button>
+      </div>
+    </ModalShell>
   );
 }

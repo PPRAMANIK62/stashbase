@@ -192,18 +192,27 @@ export const api = {
   // Space ---------------------------------------------------------
   getSpace: () => getJson<SpaceState>('/api/space'),
   openSpace: (path: string) => send<SpaceState>('POST', '/api/space', { path }),
-  /** Absolute path of the KB root. All spaces live under it; the
-   *  Welcome / Clone flows use this to seed the OS folder dialog's
-   *  `defaultPath` and to validate the user's pick. */
+  /** Open a space by name (single segment under the library root).
+   *  Preferred over `openSpace(path)` for new flows now that spaces
+   *  are flat. */
+  openSpaceByName: (name: string) => send<SpaceState>('POST', '/api/space', { name }),
+  /** Absolute path of the KB root. All spaces live under it as direct
+   *  children; the renderer uses this to display the home-relative
+   *  form (`~/Documents/StashBase`) in copy. */
   getKbRoot: () => getJson<{ path: string }>('/api/kb-root'),
+  /** Direct-child directory names under kbRoot — every entry is a
+   *  candidate the server will accept as a space name. Powers the
+   *  "Open space" dropdown. */
+  listAvailableSpaces: () => getJson<{ names: string[] }>('/api/spaces/available'),
   /** Read `<kbRoot>/AGENT.md` — the agent-maintained library overview.
    *  Powers the "View library" chrome-strip button. */
   getLibraryOverview: () => getJson<{ content: string }>('/api/library/overview'),
-  /** Run `git clone <url>` into `<kbRoot>/<relParentDir>` (defaults to
-   *  the root itself), returning the absolute path of the freshly-
-   *  cloned working tree. Caller follows up with `openSpace(path)`. */
-  gitClone: (url: string, relParentDir = '') =>
-    send<{ path: string }>('POST', '/api/git/clone', { url, relParentDir }),
+  /** Run `git clone <url>` into `<kbRoot>/<name>`, returning the
+   *  absolute path of the freshly-cloned working tree. `name`
+   *  defaults to the inferred repo name. Caller follows up with
+   *  `openSpaceByName(name)`. */
+  gitClone: (url: string, name = '') =>
+    send<{ path: string }>('POST', '/api/git/clone', { url, name }),
   /** Mirror this space's `skills/<name>/SKILL.md` into the active
    *  CLI's per-project prompt dir (`.claude/commands` / `.codex/prompts`).
    *  Renderer fires this on terminal panel open / CLI switch. */

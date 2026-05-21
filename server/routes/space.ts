@@ -17,8 +17,9 @@ import {
   getCurrentSpace,
   getKbRoot,
   getRecentSpaces,
-  isUnderRoot,
+  listAvailableSpaceNames,
   setCurrentSpace,
+  validateSpaceName,
 } from '../space.ts';
 import { errorMessage } from '../log.ts';
 import { sendError } from '../http.ts';
@@ -36,13 +37,23 @@ export function mount(app: express.Express): void {
     });
   });
 
-  // Switch to a different space. Returns immediately; the indexer
-  // catches up in the background via `state.ts:onSwitch`.
+  // Switch to a different space. Accepts either `{ name }` (preferred —
+  // a single segment under kbRoot) or legacy `{ path }` (absolute path
+  // kept for any remaining callers / recent entries that haven't been
+  // migrated). Returns immediately; the indexer catches up in the
+  // background via `state.ts:onSwitch`.
   app.post('/api/space', async (req, res) => {
-    const requested = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
-    if (!requested) return res.status(400).json({ error: 'path required' });
+    const rawName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const rawPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+    if (!rawName && !rawPath) return res.status(400).json({ error: 'name or path required' });
+    let target = rawPath;
+    if (rawName) {
+      const bad = validateSpaceName(rawName);
+      if (bad) return res.status(400).json({ error: bad });
+      target = path.join(getKbRoot(), rawName);
+    }
     try {
-      setCurrentSpace(requested);
+      setCurrentSpace(target);
       const spaceRoot = getCurrentSpace()!;
       res.json({ current: { path: spaceRoot, name: getSpaceName() } });
     } catch (err: unknown) {
@@ -50,48 +61,49 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Library root: the folder all spaces must live under. The Welcome
-  // and Clone flows use it to seed the OS folder dialog's
-  // `defaultPath` and to validate the picked folder before submission.
+  // Library root: the folder all spaces must live under as direct
+  // children. Surfaced to the renderer so it can render the home-
+  // relative form (`~/Documents/StashBase`) in copy.
   app.get('/api/kb-root', (_req, res) => {
     res.json({ path: getKbRoot() });
   });
 
-  // Clone a remote git repo into <kbRoot>/<relParentDir>/<inferred-name>,
-  // then return the absolute working-tree path. UI follows up with
-  // POST /api/space to actually open it. We block here until git
-  // exits so the caller can flip "Cloning…" → "Opening…" in one step.
-  // `relParentDir` is optional (POSIX, relative to kbRoot); empty
-  // means clone directly under the library root.
+  // List candidate space names — direct child directories of kbRoot.
+  // Powers the "Open space" dropdown. Distinct from `recentSpaces`:
+  // includes folders the user dropped in via Finder but never opened.
+  app.get('/api/spaces/available', (_req, res) => {
+    res.json({ names: listAvailableSpaceNames() });
+  });
+
+  // Clone a remote git repo into <kbRoot>/<name>, then return the
+  // absolute working-tree path. UI follows up with POST /api/space to
+  // actually open it. We block here until git exits so the caller can
+  // flip "Cloning…" → "Opening…" in one step. `name` is optional; if
+  // omitted we derive it from the URL.
   app.post('/api/git/clone', async (req, res) => {
     const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
-    const relParent = typeof req.body?.relParentDir === 'string' ? req.body.relParentDir.trim() : '';
+    const rawName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     if (!url) return res.status(400).json({ error: 'url required' });
     // Whitelist schemes — refuse `file://` / `javascript:` / `--upload-pack=...`
     // and anything else that could escape into a git option or local file read.
     if (!/^(https?:\/\/|git@[\w.-]+:|ssh:\/\/|git:\/\/)/.test(url)) {
       return res.status(400).json({ error: 'url must be http(s) / ssh / git scheme' });
     }
-    if (relParent && (path.isAbsolute(relParent) || relParent.split('/').some((seg: string) => seg === '..' || seg === '.' || !seg))) {
-      return res.status(400).json({ error: 'relParentDir must be a clean subpath of the library root' });
-    }
-    const root = getKbRoot();
-    const parentDir = relParent ? path.resolve(root, relParent) : root;
-    if (parentDir !== root && !isUnderRoot(parentDir)) {
-      return res.status(400).json({ error: 'parent directory must be under the library root' });
-    }
-    const name = inferRepoName(url);
+    const name = rawName || inferRepoName(url);
     if (!name) return res.status(400).json({ error: 'could not derive repo name from url' });
-    try { fs.mkdirSync(parentDir, { recursive: true }); } catch { /* surface below if it still isn't a dir */ }
-    if (!fs.existsSync(parentDir) || !fs.statSync(parentDir).isDirectory()) {
-      return res.status(400).json({ error: 'parentDir is not a directory' });
+    const nameErr = validateSpaceName(name);
+    if (nameErr) return res.status(400).json({ error: nameErr });
+    const root = getKbRoot();
+    try { fs.mkdirSync(root, { recursive: true }); } catch { /* surface below if it still isn't a dir */ }
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+      return res.status(400).json({ error: 'library root is not a directory' });
     }
-    const dest = path.join(parentDir, name);
+    const dest = path.join(root, name);
     if (fs.existsSync(dest)) {
-      return res.status(409).json({ error: `${dest} already exists` });
+      return res.status(409).json({ error: `space "${name}" already exists` });
     }
     try {
-      await spawnGitClone(url, dest, parentDir);
+      await spawnGitClone(url, dest, root);
       // Selective cleanup of the upstream `.stashbase/` directory.
       // Per-machine internal state (`config.json`, `mfs/`, `cache/`)
       // must never travel with a clone — they'd inherit the previous

@@ -2445,40 +2445,71 @@
       align-items: baseline;
     }
 
-    .welcome-recent-list {
+    .welcome-recent-pills {
       display: flex;
-      flex-direction: column;
+      flex-wrap: wrap;
+      gap: 6px 8px;
     }
 
-    .welcome-recent-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 16px;
-      padding: 7px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-
-    .welcome-recent-row:hover {
-      background: #eef0f3;
-    }
-
-    .welcome-recent-name {
+    .welcome-recent-pill {
+      padding: 5px 12px;
+      border-radius: 999px;
+      border: 1px solid #d6d9dd;
+      background: #f5f6f8;
       color: #1f1f1f;
-      font-weight: 500;
-    }
-
-    .welcome-recent-path {
-      color: #888;
       font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      line-height: 1.4;
+      max-width: 240px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      flex: 1;
-      text-align: right;
-      min-width: 0;
+      transition: background 0.08s ease, border-color 0.08s ease;
+    }
+
+    .welcome-recent-pill:hover {
+      background: #e9ebef;
+      border-color: #c1c5cb;
+    }
+
+    .welcome-recent-pill:active {
+      background: #dde0e5;
+    }
+
+    .welcome-open-list {
+      display: flex;
+      flex-direction: column;
+      max-height: 260px;
+      overflow-y: auto;
+      border: 1px solid #e1e3e6;
+      border-radius: 4px;
+      margin: 8px 0 12px;
+    }
+
+    .welcome-open-row {
+      text-align: left;
+      padding: 8px 12px;
+      border: none;
+      background: transparent;
+      font-size: 13px;
+      color: #1f1f1f;
+      cursor: pointer;
+      border-bottom: 1px solid #f1f2f4;
+    }
+
+    .welcome-open-row:last-child {
+      border-bottom: none;
+    }
+
+    .welcome-open-row:hover:not(:disabled),
+    .welcome-open-row.active:not(:disabled) {
+      background: #eef0f3;
+    }
+
+    .welcome-open-row:disabled {
+      cursor: default;
+      opacity: 0.6;
     }
 
     .welcome-recent-more {

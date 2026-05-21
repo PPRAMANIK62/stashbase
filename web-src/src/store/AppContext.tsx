@@ -77,6 +77,10 @@ export interface FindController {
 export interface AppActions {
   bootstrap: () => Promise<void>;
   openSpace: (path: string) => Promise<void>;
+  /** Open a space by name — single segment under the library root.
+   *  Preferred over `openSpace(path)` for new UI flows now that
+   *  spaces are flat. */
+  openSpaceByName: (name: string) => Promise<void>;
   goHome: () => void;
 
   loadFiles: () => Promise<void>;
@@ -997,30 +1001,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [loadFiles, refreshIndexState, showAlert]);
 
+  const finishOpenSpace = useCallback(async () => {
+    // Load files BEFORE hiding the welcome overlay so the sidebar
+    // doesn't briefly flash "NOTES" with an empty tree behind the
+    // overlay's fade-out.
+    dispatch({ type: 'TABS_RESET' });
+    dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
+    dispatch({ type: 'NAV_RESET' });
+    // Server kills every PTY on space switch (onSwitch →
+    // killActiveTerminal). Drop our tab list to match so we don't
+    // render orphan xterms pointing at the old cwd.
+    dispatch({ type: 'TERMINAL_TABS_RESET' });
+    // Prior space's search hits + manual ordering are stale.
+    dispatch({ type: 'FILTER', q: '' });
+    dispatch({ type: 'SEARCH_CLEAR' });
+    dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
+    void refreshIndexState();
+    await Promise.all([loadFiles(), loadFileOrder()]);
+    dispatch({ type: 'WELCOME_HIDE' });
+  }, [loadFiles, loadFileOrder, refreshIndexState]);
+
   const openSpace = useCallback(async (path: string) => {
     try {
       await api.openSpace(path);
-      // Load files BEFORE hiding the welcome overlay so the sidebar
-      // doesn't briefly flash "NOTES" with an empty tree behind the
-      // overlay's fade-out.
-      dispatch({ type: 'TABS_RESET' });
-      dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
-      dispatch({ type: 'NAV_RESET' });
-      // Server kills every PTY on space switch (onSwitch →
-      // killActiveTerminal). Drop our tab list to match so we don't
-      // render orphan xterms pointing at the old cwd.
-      dispatch({ type: 'TERMINAL_TABS_RESET' });
-      // Prior space's search hits + manual ordering are stale.
-      dispatch({ type: 'FILTER', q: '' });
-      dispatch({ type: 'SEARCH_CLEAR' });
-      dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
-      void refreshIndexState();
-      await Promise.all([loadFiles(), loadFileOrder()]);
-      dispatch({ type: 'WELCOME_HIDE' });
+      await finishOpenSpace();
     } catch (e: unknown) {
       dispatch({ type: 'WELCOME_ERROR', error: e instanceof Error ? e.message : String(e) });
     }
-  }, [loadFiles, loadFileOrder, refreshIndexState]);
+  }, [finishOpenSpace]);
+
+  const openSpaceByName = useCallback(async (name: string) => {
+    try {
+      await api.openSpaceByName(name);
+      await finishOpenSpace();
+    } catch (e: unknown) {
+      dispatch({ type: 'WELCOME_ERROR', error: e instanceof Error ? e.message : String(e) });
+    }
+  }, [finishOpenSpace]);
 
   const goHome = useCallback(() => {
     dispatch({ type: 'TABS_RESET' });
@@ -1040,7 +1057,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const actions = useMemo<AppActions>(() => ({
-    bootstrap, openSpace, goHome,
+    bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
     selectFile, openInNewTab, newTab, openLibraryOverview, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
@@ -1055,7 +1072,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindWholeWord, findNext, findPrev,
   }), [
-    bootstrap, openSpace, goHome,
+    bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
     selectFile, openInNewTab, newTab, openLibraryOverview, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,

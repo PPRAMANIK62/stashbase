@@ -85,16 +85,49 @@ export function getKbRoot(): string {
   return path.resolve(p);
 }
 
-/** True if `absPath` is the KB root itself or any descendant of it.
- *  The root itself is intentionally NOT considered "under root" so it
- *  can't be opened as a space — it's strictly a container. */
+/** True if `absPath` is a **direct child** of the KB root. Spaces are
+ *  flat: nesting isn't allowed, so `<root>/foo` is valid but
+ *  `<root>/foo/bar` and the root itself are not. */
 export function isUnderRoot(absPath: string): boolean {
   const root = getKbRoot();
   const target = path.resolve(absPath);
   if (target === root) return false;
   const rel = path.relative(root, target);
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  // Reject anything deeper than one segment — spaces are flat under
+  // the library root. Caller silently filters; the daemon/indexer
+  // depend on the one-segment invariant for O(1) routing.
+  if (rel.includes(path.sep)) return false;
   return true;
+}
+
+/** Validate a user-supplied space name. Names must be a single
+ *  filesystem-safe segment (no slashes, no dots-only, no leading dot,
+ *  no NUL). Returns null when valid, error message otherwise. */
+export function validateSpaceName(name: string): string | null {
+  if (typeof name !== 'string' || !name.trim()) return 'name required';
+  const n = name.trim();
+  if (n === '.' || n === '..') return 'name cannot be "." or ".."';
+  if (n.startsWith('.')) return 'name cannot start with "."';
+  if (n.includes('/') || n.includes('\\')) return 'name cannot contain slashes';
+  if (n.includes('\0')) return 'name cannot contain NUL';
+  if (n.length > 64) return 'name too long (max 64 chars)';
+  return null;
+}
+
+/** Direct child directories of the KB root, sorted alphabetically.
+ *  Powers the "Open space" dropdown — every entry is a candidate the
+ *  server will accept as a space name. Dot-dirs are skipped (`.git`,
+ *  `.stashbase`, etc.). Errors (root missing, permission) return []. */
+export function listAvailableSpaceNames(): string[] {
+  const root = getKbRoot();
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); }
+  catch { return []; }
+  return entries
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+    .map((e) => e.name)
+    .sort();
 }
 
 /** Current space's name, expressed as a kbRoot-relative POSIX path.
@@ -136,38 +169,25 @@ export function fromKbRel(kbRel: string): string | null {
   return kbRel.slice(prefix.length);
 }
 
-/** Walk the KB root looking for spaces (directories containing a
- *  `.stashbase/` subdir — markers that the user has opened them at
- *  some point). Returns kbRoot-relative POSIX paths. Depth-capped at 8
- *  to match the open-space picker. Used at server boot to bind every
- *  known space so MCP cross-space search has them all available. */
+/** Direct-child spaces of the KB root that have been opened before
+ *  (their directory contains a `.stashbase/` subdir). Returns
+ *  kbRoot-relative names. Used at server boot to bind every known
+ *  space so MCP cross-space search has them all available. */
 export function listKnownSpaces(): string[] {
   const root = getKbRoot();
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); }
+  catch { return []; }
   const out: string[] = [];
-  walkForKnownSpaces(root, '', 0, out);
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name.startsWith('.')) continue;
+    const inner = path.join(root, e.name, '.stashbase');
+    try {
+      if (fs.statSync(inner).isDirectory()) out.push(e.name);
+    } catch { /* not yet opened — skip */ }
+  }
   out.sort();
   return out;
-}
-
-function walkForKnownSpaces(absDir: string, relPrefix: string, depth: number, out: string[]): void {
-  if (depth > 8) return;
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(absDir, { withFileTypes: true }); }
-  catch { return; }
-  // A directory that contains a `.stashbase/` subdir is a space — the
-  // user has opened it before. Record it AND stop descending (a space
-  // doesn't contain other spaces under it from the binding standpoint;
-  // its files are routed under its own collection).
-  if (relPrefix && entries.some((e) => e.isDirectory() && e.name === '.stashbase')) {
-    out.push(relPrefix);
-    return;
-  }
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    if (e.name.startsWith('.')) continue; // skip .git, .stashbase, etc.
-    const rel = relPrefix ? `${relPrefix}/${e.name}` : e.name;
-    walkForKnownSpaces(path.join(absDir, e.name), rel, depth + 1, out);
-  }
 }
 
 /** Idempotent startup hook:
