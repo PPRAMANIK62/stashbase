@@ -91,16 +91,25 @@ export function launchCommandFor(cli: CliDef): string {
 }
 
 /** Check whether a given CLI's binary is on PATH. Cheap shell probe —
- *  runs `command -v <bin>` in the user's login shell so PATH additions
- *  from `.zprofile` / nvm shims are honoured. */
+ *  runs `command -v <bin>` in the user's login + INTERACTIVE shell so
+ *  PATH additions from `.zshrc` / `.bashrc` (where nvm, pyenv, rbenv,
+ *  asdf and most version-manager bootstraps actually live) are
+ *  sourced. `-l` alone is non-interactive, which on macOS only reads
+ *  `.zprofile` / `.profile`, missing the npm-global PATH that most
+ *  users install Claude Code into. Bounded by a 5s timeout so a
+ *  pathologically slow rc file can't deadlock the request. */
 export function checkCliInstalled(id: string): boolean {
   const cli = CLIS[id];
   if (!cli) return false;
   const shell = defaultShell();
   try {
-    const r = spawnSync(shell, ['-l', '-c', `command -v ${cli.bin}`], {
+    const r = spawnSync(shell, ['-l', '-i', '-c', `command -v ${cli.bin}`], {
       encoding: 'utf8',
-      timeout: 3000,
+      timeout: 5000,
+      // Close stdin — an interactive shell that tries to read (rare
+      // .zshrc patterns: `read -k`, `vared`, etc.) would otherwise
+      // hang for the full timeout.
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     return r.status === 0 && r.stdout.trim().length > 0;
   } catch {
