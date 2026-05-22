@@ -29,6 +29,10 @@
  *     }
  *   }
  */
+// Must come FIRST — silences console.log/info/warn/debug to stderr so
+// no later import can corrupt the stdio JSON-RPC stream. See module.
+import './stdio-guard.ts';
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
