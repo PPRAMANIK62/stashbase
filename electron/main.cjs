@@ -25,6 +25,13 @@ function parsePortArg(argv, fallback) {
   return fallback;
 }
 const SERVER_PORT = parsePortArg(process.argv.slice(1), 8090);
+
+// Capture server stdout/stderr to a file the user can `cat` after a
+// failed launch. Dock-launched packaged apps inherit Electron's stderr
+// which goes to /dev/null, so without this every server crash is
+// invisible. Path is shown in the failure dialog.
+const SERVER_LOG_DIR = path.join(os.homedir(), 'Library', 'Logs', 'StashBase');
+const SERVER_LOG_PATH = path.join(SERVER_LOG_DIR, 'server.log');
 // Use the IPv4 loopback address explicitly. The server binds to
 // 127.0.0.1, and `localhost` may resolve to ::1 first on dual-stack
 // systems — pointing the renderer at 127.0.0.1 sidesteps the silent
@@ -295,6 +302,16 @@ async function ensureServer() {
   // electron asar shim) and bails with ENOTDIR. Use the real
   // Resources/ directory there; in dev keep PROJECT_ROOT (the repo).
   const serverCwd = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
+  // Tee server output to a per-launch log file in ~/Library/Logs/StashBase/
+  // so a packaged Dock launch is debuggable, AND to the parent stdio so
+  // `pnpm electron` from a terminal still shows live logs. The file is
+  // truncated each launch — old crashes would only confuse the user.
+  fs.mkdirSync(SERVER_LOG_DIR, { recursive: true });
+  const logFd = fs.openSync(SERVER_LOG_PATH, 'w');
+  fs.writeSync(
+    logFd,
+    `--- StashBase server launch ${new Date().toISOString()} (pid=${process.pid}, packaged=${app.isPackaged}) ---\n`,
+  );
   serverProc = spawn(serverBin, serverArgs, {
     cwd: serverCwd,
     // Port flows via the CLI arg above, not the env — keeps the server
@@ -308,9 +325,9 @@ async function ensureServer() {
     // unread stream which had no listener → unhandled 'error'
     // event, killed the whole electron process. Closing stdin
     // entirely sidesteps the class of bug.
-    // stdout / stderr stay inherited so the server's logs land in
-    // whatever terminal launched `pnpm electron`.
-    stdio: ['ignore', 'inherit', 'inherit'],
+    // stdout + stderr go to the per-launch log file so dock launches
+    // are debuggable; terminal launches can `tail -f` the same file.
+    stdio: ['ignore', logFd, logFd],
   });
   // `spawn` can fail asynchronously (ENOENT when tsx isn't installed,
   // permission errors, etc.). Without an explicit listener Node treats
@@ -374,7 +391,10 @@ async function createWindow() {
   try {
     await ensureServer();
   } catch (err) {
-    dialog.showErrorBox('StashBase failed to start', String(err?.message ?? err));
+    dialog.showErrorBox(
+      'StashBase failed to start',
+      `${String(err?.message ?? err)}\n\nServer log: ${SERVER_LOG_PATH}`,
+    );
     app.quit();
     return;
   }
