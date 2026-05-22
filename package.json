@@ -81,7 +81,10 @@
         ]
       }
     ],
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/node-pty/**/*"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "identity": null,
