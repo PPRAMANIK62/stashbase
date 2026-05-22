@@ -290,8 +290,13 @@ async function ensureServer() {
         ...(packagedPython ? { STASHBASE_PYTHON: packagedPython } : {}),
       }
     : { STASHBASE_APP_ROOT: PROJECT_ROOT };
+  // In packaged+asar mode PROJECT_ROOT is `.../Resources/app.asar` —
+  // a FILE, not a directory. spawn(cwd) hits the OS syscall (no
+  // electron asar shim) and bails with ENOTDIR. Use the real
+  // Resources/ directory there; in dev keep PROJECT_ROOT (the repo).
+  const serverCwd = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
   serverProc = spawn(serverBin, serverArgs, {
-    cwd: PROJECT_ROOT,
+    cwd: serverCwd,
     // Port flows via the CLI arg above, not the env — keeps the server
     // entry's argv parser the single source of truth for port config.
     env: { ...process.env, ...packagedEnv },
