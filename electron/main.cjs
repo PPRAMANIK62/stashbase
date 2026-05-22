@@ -480,6 +480,19 @@ ipcMain.handle('mcp:configure', async (_e, client) => {
 });
 
 app.whenReady().then(() => {
+  // Refresh the MCP wrapper on every launch so the most recently-opened
+  // app owns it. Without this, a wrapper written by an earlier `pnpm
+  // dev` run still points at a vanished `node_modules/.bin/tsx`, and
+  // Claude Code / Claude Desktop spawn it after a brew install with
+  // "command not found" (or, on macOS, "Operation not permitted" when
+  // the old path is under ~/Downloads and TCC blocks it). Skip silently
+  // if the entry for *this* app isn't on disk — partial dev checkouts
+  // shouldn't clobber a working packaged wrapper.
+  try {
+    if (fs.existsSync(MCP_ENTRY)) writeMcpWrapper();
+  } catch (err) {
+    console.warn(`[electron] MCP wrapper refresh failed: ${err && err.message ? err.message : err}`);
+  }
   createWindow();
 });
 
