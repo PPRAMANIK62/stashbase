@@ -15,7 +15,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { analyzeHtml } from './html.ts';
-import { detectFormat } from './files.ts';
+import { detectFormat } from './format.ts';
 import { logger, errorMessage } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import type {

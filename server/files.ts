@@ -18,6 +18,9 @@ import { onSwitch, requireCurrentSpace } from './space.ts';
 import { noteSelfWrite } from './watcher.ts';
 import { decodeEntities } from './html.ts';
 import { errorCode } from './log.ts';
+import { detectFormat, type FileFormat } from './format.ts';
+
+export { detectFormat, type FileFormat } from './format.ts';
 
 /** Resolve the current space root every time we touch the FS — the user
  *  can switch spaces at runtime from the welcome screen, so caching the
@@ -279,8 +282,6 @@ export function deleteFolder(relPath: string): boolean {
   }
 }
 
-export type FileFormat = 'md' | 'html';
-
 export interface FileEntry {
   /** Space-relative POSIX path (e.g. `topic/note.md`). */
   name: string;
@@ -290,20 +291,6 @@ export interface FileEntry {
   heading: string;
   snippet: string;
   imported_at: string;
-}
-
-/** Recognised note extensions and how the rest of the pipeline should
- *  treat them. Adding a format = one line here + a chunker + a viewer. */
-const NOTE_FORMATS: Array<{ pattern: RegExp; format: FileFormat }> = [
-  { pattern: /\.(md|markdown)$/i, format: 'md' },
-  { pattern: /\.(html|htm)$/i, format: 'html' },
-];
-
-export function detectFormat(name: string): FileFormat | null {
-  for (const { pattern, format } of NOTE_FORMATS) {
-    if (pattern.test(name)) return format;
-  }
-  return null;
 }
 
 export interface FolderEntry {
