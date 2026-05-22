@@ -50,7 +50,6 @@ execFileSync(
     '--noconfirm',
     '--name',
     'stashbase-daemon',
-    '--onefile',
     '--hidden-import',
     'mfs.embedder.onnx',
     '--hidden-import',
@@ -78,9 +77,12 @@ execFileSync(
   { cwd: root, stdio: 'inherit' },
 );
 
-const out = path.join(distPath, 'stashbase-daemon');
-if (!fs.existsSync(out)) {
-  throw new Error(`PyInstaller did not produce ${out}`);
+// --onedir layout: <distPath>/stashbase-daemon/{stashbase-daemon, _internal/}.
+// The executable is inside the same-named directory.
+const outDir = path.join(distPath, 'stashbase-daemon');
+const outBin = path.join(outDir, 'stashbase-daemon');
+if (!fs.existsSync(outBin)) {
+  throw new Error(`PyInstaller did not produce ${outBin}`);
 }
-fs.chmodSync(out, 0o755);
-console.log('[build:python-sidecar] done ->', out);
+fs.chmodSync(outBin, 0o755);
+console.log('[build:python-sidecar] done ->', outBin);

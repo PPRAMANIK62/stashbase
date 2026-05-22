@@ -308,10 +308,12 @@ function resolveDaemonCommand(kbRoot: string): { command: string; args: string[]
 }
 
 function resolveDaemonBinary(): string | null {
+  // PyInstaller --onedir output: `python/sidecar/stashbase-daemon/stashbase-daemon`
+  // (the outer name is the directory, the inner name is the executable).
   const candidates = [
     process.env.STASHBASE_DAEMON_BIN,
-    path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-daemon'),
-    path.join(PROJECT_ROOT, 'python', 'sidecar', 'stashbase-daemon'),
+    path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-daemon', 'stashbase-daemon'),
+    path.join(PROJECT_ROOT, 'python', 'sidecar', 'stashbase-daemon', 'stashbase-daemon'),
   ].filter(Boolean) as string[];
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
