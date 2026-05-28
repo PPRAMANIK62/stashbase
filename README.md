@@ -17,7 +17,7 @@ StashBase is an agent-native, local-first knowledge base — built for personal 
 
 💾 **Local-first & user-owned:** Plain HTML / Markdown / PDF files on your disk, fully portable. The accumulated context is your asset.
 
-🎨 **HTML-first:** Native HTML rendering inside the app, plus a PDF → HTML pipeline that turns fixed-layout, read-only PDFs into pages agents can edit, maintain, and retrieve.
+🎨 **Native HTML:** Native HTML rendering inside the app, plus a PDF → HTML pipeline that turns fixed-layout, read-only PDFs into pages agents can edit, maintain, and retrieve.
 
 ---
 
