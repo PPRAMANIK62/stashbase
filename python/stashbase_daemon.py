@@ -402,9 +402,38 @@ class StashbaseStore:
 
     def all_stores(self) -> list[tuple[str, Any, Any]]:
         """Returns [(provider_key, embedder, store), ...] for every
-        currently-open collection. Used by reads that span providers
-        (search, list, status, scan_diff)."""
+        currently-open collection — INCLUDING archived ones (i.e.,
+        collections whose provider_key is no longer bound by any
+        space). Used by **write paths** (defensive delete-by-source
+        across the whole DB so stale archive rows don't leak into
+        search hits or rename copies)."""
         return [(pk, emb, st) for pk, (emb, st) in self._stores.items()]
+
+    def active_stores(self) -> list[tuple[str, Any, Any]]:
+        """Returns the subset of ``all_stores()`` whose provider_key is
+        still referenced by at least one space binding. Used by **read
+        paths** (search, list, status, scan_diff) so a previous
+        embedder's leftover collection — same DB file, no longer
+        bound — doesn't contribute hits or mask "this file needs
+        re-embedding under the current embedder" state. See build-map
+        04-indexing #03 + 05-retrieval #02."""
+        active_keys = set(self._bindings.values())
+        return [
+            (pk, emb, st)
+            for pk, (emb, st) in self._stores.items()
+            if pk in active_keys
+        ]
+
+    def archived_stores(self) -> list[tuple[str, Any, Any]]:
+        """Returns the complement of ``active_stores()`` — collections
+        held open in this process but with no remaining bindings.
+        These are the rows a future GC pass will reclaim."""
+        active_keys = set(self._bindings.values())
+        return [
+            (pk, emb, st)
+            for pk, (emb, st) in self._stores.items()
+            if pk not in active_keys
+        ]
 
     def close_all(self) -> None:
         """Release Milvus Lite's flock on every collection. Subsequent
@@ -690,11 +719,17 @@ def op_delete_prefix(svc: StashbaseStore, args: dict) -> dict:
 
 
 def op_search(svc: StashbaseStore, args: dict) -> dict:
-    """Hybrid search across all bound collections, optionally scoped to
-    one ``space``. Each collection's MFS ``hybrid_search`` is already
+    """Hybrid search across all **active** collections, optionally scoped
+    to one ``space``. Each collection's MFS ``hybrid_search`` is already
     RRF-fused (dense + BM25 within the collection); we do a second
     RRF across collections by rank position. ``top_k`` bounded to
-    [1, 200]."""
+    [1, 200].
+
+    Archive collections (previous embedder's leftover rows) are
+    explicitly excluded — cross-collection BM25 IDF isn't comparable,
+    and mixing archived rows into the ranked list shows the user stale
+    results from before they switched embedders. See build-map
+    05-retrieval #02."""
     _require(args, "query")
     query = args["query"].strip()
     space = args.get("space")
@@ -703,7 +738,7 @@ def op_search(svc: StashbaseStore, args: dict) -> dict:
     top_k = max(1, min(200, top_k_raw))
     if not query:
         return {"hits": []}
-    stores = svc.all_stores()
+    stores = svc.active_stores()
     if not stores:
         return {"hits": []}
 
@@ -769,15 +804,20 @@ def op_search(svc: StashbaseStore, args: dict) -> dict:
 
 
 def op_list(svc: StashbaseStore, args: dict) -> dict:
-    """Return ``{path: file_hash}`` for every file with rows across all
-    open collections, optionally scoped to one ``space``. A file in
-    multiple collections collapses to one entry (last write wins —
-    shouldn't matter in practice, files live in exactly one collection
-    in the steady state)."""
+    """Return ``{path: file_hash}`` for every file with rows across the
+    **active** collections, optionally scoped to one ``space``. A file
+    in multiple active collections collapses to one entry (last write
+    wins — shouldn't matter in practice, files live in exactly one
+    collection in the steady state).
+
+    Archive collections are excluded: if an old collection still has
+    rows for a file the reconcile path would see ``hash matches`` and
+    skip re-embedding under the current embedder, leaving the file
+    unsearchable. See build-map 04-indexing #03."""
     space = args.get("space")
     prefix = (space.rstrip("/") + "/") if space else ""
     out: dict[str, str] = {}
-    for _pk, _emb, store in svc.all_stores():
+    for _pk, _emb, store in svc.active_stores():
         try:
             files = store.get_indexed_files(prefix)
         except Exception:
@@ -894,10 +934,14 @@ def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
     scanner = _make_scanner()
     space = args.get("space")
     on_disk = _walk_for_scope(svc, space)
-    # Aggregate indexed files across all collections, scoped if needed.
+    # Aggregate indexed files across **active** collections, scoped if
+    # needed. Archive collections are excluded so a stale row from the
+    # previous embedder doesn't mark a file as "indexed" — the
+    # reconcile loop would then skip re-embedding it under the current
+    # embedder and the file would stay unsearchable.
     indexed: dict[str, str] = {}
     prefix = (space.rstrip("/") + "/") if space else ""
-    for _pk, _emb, store in svc.all_stores():
+    for _pk, _emb, store in svc.active_stores():
         try:
             for src, fh in store.get_indexed_files(prefix).items():
                 indexed[src] = fh
@@ -965,12 +1009,16 @@ def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
 
 
 def op_status(svc: StashbaseStore, args: dict) -> dict:
-    """Name-only diff. ``args.space`` optional; whole library if omitted."""
+    """Name-only diff. ``args.space`` optional; whole library if omitted.
+
+    Active-store-only (mirrors ``op_scan_diff``): archive rows must not
+    inflate the "indexed" set or the UI would report green when files
+    actually still need to be re-embedded under the current embedder."""
     space = args.get("space")
     on_disk = set(_walk_for_scope(svc, space).keys())
     prefix = (space.rstrip("/") + "/") if space else ""
     indexed: set[str] = set()
-    for _pk, _emb, store in svc.all_stores():
+    for _pk, _emb, store in svc.active_stores():
         try:
             indexed.update(store.get_indexed_files(prefix).keys())
         except Exception:
@@ -1210,6 +1258,43 @@ def op_close_store(svc: StashbaseStore, _args: dict) -> dict:
     return {}
 
 
+def op_archive_info(svc: StashbaseStore, _args: dict) -> dict:
+    """Surface which collections are currently active vs. archived.
+
+    A collection is **active** if at least one space still binds to its
+    ``provider_key``; otherwise it's **archived** — held open in this
+    process but excluded from read paths (search / list / status /
+    scan_diff). Chunk counts come from MFS's ``get_indexed_files``;
+    failures fall back to ``null`` so the UI can still surface the
+    archive's existence even if its collection is unhealthy.
+
+    Returned for the future "clean up old embeddings" UI entry (build-
+    map 04-indexing #03 (c)). The cleanup itself is destructive and
+    needs daemon-restart sequencing, so it's not wired here yet."""
+    active_keys = set(svc._bindings.values())  # noqa: SLF001
+    def info(pk: str, store) -> dict:
+        try:
+            chunk_count = len(store.get_indexed_files(""))
+        except Exception:
+            chunk_count = None
+        provider, dim_s = pk.rsplit("_", 1)
+        return {
+            "provider_key": pk,
+            "provider": provider,
+            "dim": int(dim_s) if dim_s.isdigit() else None,
+            "collection": _collection_name(pk),
+            "chunk_count": chunk_count,
+        }
+    active = [info(pk, st) for pk, _emb, st in svc.active_stores()]
+    archived = [info(pk, st) for pk, _emb, st in svc.archived_stores()]
+    return {
+        "active": active,
+        "archived": archived,
+        "bindings": dict(svc._bindings),  # noqa: SLF001
+        "active_provider_keys": sorted(active_keys),
+    }
+
+
 OPS = {
     "bind_space": op_bind_space,
     "unbind_space": op_unbind_space,
@@ -1225,6 +1310,7 @@ OPS = {
     "export_space": op_export_space,
     "import_space": op_import_space,
     "close_store": op_close_store,
+    "archive_info": op_archive_info,
 }
 
 

@@ -42,8 +42,14 @@ export const requireSpace: express.RequestHandler = (_req, res, next) => {
 };
 
 export const withWindowContext: express.RequestHandler = (req, _res, next) => {
+  // The header is the primary channel — every fetch via `api.ts` sets
+  // it. Browser-loaded URLs (`<img src="/asset/…">`, iframe src) can't
+  // attach custom headers, so we also honour a `?windowId=` query
+  // param. `api.assetUrl()` appends it so previews resolve against the
+  // current window's space instead of the process-wide default.
   const header = req.header(WINDOW_ID_HEADER);
-  runWithWindowId(header, next);
+  const fromQuery = typeof req.query.windowId === 'string' ? req.query.windowId : undefined;
+  runWithWindowId(header ?? fromQuery, next);
 };
 
 export type OpenAIKeyCheck = { ok: true } | { ok: false; status: number; error: string };
