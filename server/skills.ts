@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { logger } from './log.ts';
 import { noteSelfWrite } from './watcher.ts';
+import { getKbRoot, resolveSpaceConfig } from './space.ts';
 
 const log = logger('skills');
 
@@ -39,27 +40,35 @@ export interface SkillsSyncResult {
 }
 
 export function syncSkillsToCli(spaceRoot: string, cli: SyncCli): SkillsSyncResult {
-  const skillsDir = path.join(spaceRoot, 'skills');
-  let stat;
-  try { stat = fs.statSync(skillsDir); } catch { return { synced: [], skipped: [] }; }
-  if (!stat.isDirectory()) return { synced: [], skipped: [] };
+  const spaceName = path.relative(getKbRoot(), spaceRoot).split(path.sep).join('/');
+  const cfg = resolveSpaceConfig(spaceName);
 
   const target = path.join(spaceRoot, TARGET[cli]);
   fs.mkdirSync(target, { recursive: true });
 
   const synced: string[] = [];
   const skipped: string[] = [];
-  for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const skillFile = path.join(skillsDir, entry.name, 'SKILL.md');
-    let content: string;
-    try { content = fs.readFileSync(skillFile, 'utf8'); }
-    catch { skipped.push(entry.name); continue; }
-    const targetFile = path.join(target, `${entry.name}.md`);
-    // Avoid the watcher round-tripping this back as an "external" event.
-    noteSelfWrite(targetFile);
-    fs.writeFileSync(targetFile, content, 'utf8');
-    synced.push(entry.name);
+  const seen = new Set<string>();
+  for (const relDir of cfg.skillsDirs) {
+    const skillsDir = path.resolve(spaceRoot, relDir);
+    if (!skillsDir.startsWith(spaceRoot + path.sep) && skillsDir !== spaceRoot) continue;
+    let stat;
+    try { stat = fs.statSync(skillsDir); } catch { continue; }
+    if (!stat.isDirectory()) continue;
+
+    for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      const skillFile = path.join(skillsDir, entry.name, 'SKILL.md');
+      let content: string;
+      try { content = fs.readFileSync(skillFile, 'utf8'); }
+      catch { skipped.push(entry.name); continue; }
+      const targetFile = path.join(target, `${entry.name}.md`);
+      // Avoid the watcher round-tripping this back as an "external" event.
+      noteSelfWrite(targetFile);
+      fs.writeFileSync(targetFile, content, 'utf8');
+      synced.push(entry.name);
+    }
   }
   if (synced.length > 0) {
     log.info(`mirrored ${synced.length} skill(s) → ${cli}: ${synced.join(', ')}`);

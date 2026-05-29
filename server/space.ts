@@ -23,6 +23,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { logger, errorMessage } from './log.ts';
 
 const log = logger('space');
@@ -35,6 +36,7 @@ const MAX_RECENT = 10;
  *  under this folder. Persisted in `config.json` so a future "change
  *  library location" UI can edit it; for now it's just the constant. */
 const DEFAULT_KB_ROOT = path.join(os.homedir(), 'Documents', 'StashBase');
+export const WINDOW_ID_HEADER = 'x-stashbase-window-id';
 
 export interface RecentSpace {
   path: string;
@@ -43,7 +45,18 @@ export interface RecentSpace {
 
 export type EmbedderProvider = 'onnx' | 'openai';
 
-interface ConfigFile {
+export interface McpServerConfig {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export interface SpaceConfigFile {
+  mcpServers?: Record<string, McpServerConfig>;
+  skillsDirs?: string[];
+}
+
+interface ConfigFile extends SpaceConfigFile {
   /** Absolute path of the library root. All spaces must live under it.
    *  Defaults to `~/Documents/StashBase/`; persisted so a future UI
    *  can rebase it without changing code. */
@@ -66,8 +79,25 @@ interface ConfigFile {
   terminalCli?: string;
 }
 
-let currentSpace: string | null = null;
-const switchListeners: Array<(newRoot: string) => void> = [];
+const DEFAULT_WINDOW_ID = 'default';
+const requestWindow = new AsyncLocalStorage<string>();
+const currentSpaces = new Map<string, string>();
+const switchListeners: Array<(newRoot: string, windowId: string) => void> = [];
+const closeListeners: Array<(oldRoot: string, windowId: string) => void> = [];
+const kbRootListeners: Array<(newRoot: string) => void | Promise<void>> = [];
+
+export function runWithWindowId<T>(windowId: string | null | undefined, fn: () => T): T {
+  return requestWindow.run(normalizeWindowId(windowId), fn);
+}
+
+export function currentWindowId(): string {
+  return requestWindow.getStore() ?? DEFAULT_WINDOW_ID;
+}
+
+function normalizeWindowId(windowId: string | null | undefined): string {
+  const raw = typeof windowId === 'string' ? windowId.trim() : '';
+  return raw ? raw.slice(0, 128) : DEFAULT_WINDOW_ID;
+}
 
 // ---------- KB root (library folder) ----------
 
@@ -78,6 +108,53 @@ export function getKbRoot(): string {
   const raw = readConfig().kbRoot;
   const p = typeof raw === 'string' && raw.trim() ? raw.trim() : DEFAULT_KB_ROOT;
   return path.resolve(p);
+}
+
+export function needsKbRootPicker(): boolean {
+  const raw = readConfig().kbRoot;
+  if (typeof raw === 'string' && raw.trim()) return false;
+  return listAvailableSpaceNames().length === 0;
+}
+
+export async function setKbRoot(absPath: string, opts: { allowNonEmpty?: boolean } = {}): Promise<void> {
+  if (typeof absPath !== 'string' || !absPath.trim()) throw new Error('path required');
+  let expanded = absPath.trim();
+  if (expanded === '~' || expanded.startsWith('~/')) {
+    expanded = path.join(os.homedir(), expanded.slice(1));
+  }
+  if (!path.isAbsolute(expanded)) throw new Error('path must be absolute');
+  const root = path.resolve(expanded);
+  if (fs.existsSync(root) && !opts.allowNonEmpty) {
+    if (!fs.statSync(root).isDirectory()) throw new Error('path is not a directory');
+    const entries = fs.readdirSync(root);
+    const selfEntries = new Set(['.DS_Store', '.stashbase', 'STASHBASE.md', 'AGENT.md']);
+    if (entries.some((name) => !selfEntries.has(name))) {
+      const err = new Error('directory is not empty');
+      (err as any).code = 'NON_EMPTY';
+      throw err;
+    }
+  }
+  fs.mkdirSync(root, { recursive: true });
+  if (!fs.statSync(root).isDirectory()) throw new Error('path is not a directory');
+  ensureKbMetadata(root);
+  const cfg = readConfig();
+  cfg.kbRoot = root;
+  cfg.recentSpaces = [];
+  delete cfg.recentVaults;
+  writeConfig(cfg);
+  for (const [windowId, oldRoot] of currentSpaces.entries()) {
+    for (const fn of closeListeners) {
+      try { fn(oldRoot, windowId); } catch (err) {
+        log.warn(`close listener threw: ${(err as any)?.message ?? err}`);
+      }
+    }
+  }
+  currentSpaces.clear();
+  await Promise.all(kbRootListeners.map(async (fn) => {
+    try { await fn(root); } catch (err) {
+      log.warn(`kbRoot listener threw: ${(err as any)?.message ?? err}`);
+    }
+  }));
 }
 
 /** True if `absPath` is a **direct child** of the KB root. Spaces are
@@ -94,6 +171,14 @@ export function isUnderRoot(absPath: string): boolean {
   // depend on the one-segment invariant for O(1) routing.
   if (rel.includes(path.sep)) return false;
   return true;
+}
+
+export function isInsideKbRoot(absPath: string): boolean {
+  const root = getKbRoot();
+  const target = path.resolve(absPath);
+  if (target === root) return true;
+  const rel = path.relative(root, target);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
 /** Validate a user-supplied space name. Names must be a single
@@ -195,28 +280,62 @@ export function ensureKbRoot(): void {
   const root = getKbRoot();
   try {
     fs.mkdirSync(root, { recursive: true });
+    ensureKbMetadata(root);
   } catch (err: any) {
     log.warn(`failed to create kbRoot ${root}: ${errorMessage(err)}`);
   }
   const cfg = readConfig();
+  let dirty = false;
+  if (typeof cfg.kbRoot !== 'string' || !cfg.kbRoot.trim()) {
+    cfg.kbRoot = root;
+    dirty = true;
+  }
   const before = cfg.recentSpaces ?? [];
   const after = before.filter((r) => isUnderRoot(r.path));
   if (after.length !== before.length) {
     cfg.recentSpaces = after;
-    writeConfig(cfg);
+    dirty = true;
     log.info(`pruned ${before.length - after.length} out-of-root recent(s) (kbRoot=${root})`);
   }
+  if (dirty) writeConfig(cfg);
+}
+
+export function getSpaceRootPath(spaceName: string): string {
+  const bad = validateSpaceName(spaceName);
+  if (bad) throw new Error(bad);
+  return path.join(getKbRoot(), spaceName);
+}
+
+export function spaceExists(spaceName: string): boolean {
+  try {
+    return fs.statSync(getSpaceRootPath(spaceName)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function requireSpaceExistsByName(spaceName: string): string {
+  const root = getSpaceRootPath(spaceName);
+  try {
+    if (fs.statSync(root).isDirectory()) return root;
+  } catch {
+    /* fall through */
+  }
+  const err = new Error('space not found');
+  (err as any).code = 'SPACE_NOT_FOUND';
+  throw err;
 }
 
 /** Absolute path of the currently open space, or null if none. */
 export function getCurrentSpace(): string | null {
-  return currentSpace;
+  return currentSpaces.get(currentWindowId()) ?? null;
 }
 
 /** Throws if no space is open — call this from request handlers that
  *  need space state. The thrown error carries a `code` so the route
  *  layer can map it to HTTP 412. */
 export function requireCurrentSpace(): string {
+  const currentSpace = getCurrentSpace();
   if (!currentSpace) {
     const err = new Error('no space open');
     (err as any).code = 'NO_SPACE';
@@ -258,22 +377,76 @@ export function setCurrentSpace(absPath: string): void {
   const st = fs.statSync(normalized);
   if (!st.isDirectory()) throw new Error('path is not a directory');
 
-  const changed = currentSpace !== normalized;
-  currentSpace = normalized;
+  ensureSpaceMetadata(normalized);
+  const windowId = currentWindowId();
+  const prev = currentSpaces.get(windowId) ?? null;
+  const changed = prev !== normalized;
+  currentSpaces.set(windowId, normalized);
   pushRecent(normalized);
   if (changed) {
     for (const fn of switchListeners) {
-      try { fn(normalized); } catch (err) {
+      try { fn(normalized, windowId); } catch (err) {
         log.warn(`switch listener threw: ${(err as any)?.message ?? err}`);
       }
     }
   }
 }
 
+export function clearCurrentSpace(windowId = currentWindowId()): void {
+  const id = normalizeWindowId(windowId);
+  const oldRoot = currentSpaces.get(id);
+  currentSpaces.delete(id);
+  if (oldRoot) {
+    for (const fn of closeListeners) {
+      try { fn(oldRoot, id); } catch (err) {
+        log.warn(`close listener threw: ${(err as any)?.message ?? err}`);
+      }
+    }
+  }
+}
+
+export function clearSpacePath(absPath: string): void {
+  for (const [windowId, value] of [...currentSpaces.entries()]) {
+    if (value === absPath) clearCurrentSpace(windowId);
+  }
+}
+
+export function replaceCurrentSpacePath(oldPath: string, newPath: string): void {
+  for (const [windowId, value] of currentSpaces.entries()) {
+    if (value === oldPath) {
+      currentSpaces.set(windowId, newPath);
+      for (const fn of switchListeners) {
+        try { fn(newPath, windowId); } catch (err) {
+          log.warn(`switch listener threw: ${(err as any)?.message ?? err}`);
+        }
+      }
+    }
+  }
+  const cfg = readConfig();
+  if (cfg.recentSpaces?.length) {
+    cfg.recentSpaces = cfg.recentSpaces.map((r) => (
+      r.path === oldPath ? { ...r, path: newPath } : r
+    ));
+    writeConfig(cfg);
+  }
+}
+
 /** Subscribe to space switches. The listener receives the absolute path
  *  of the newly-current space; fires after the switch is in place. */
-export function onSwitch(fn: (newRoot: string) => void): void {
+export function onSwitch(fn: (newRoot: string, windowId: string) => void): void {
   switchListeners.push(fn);
+}
+
+export function onClose(fn: (oldRoot: string, windowId: string) => void): void {
+  closeListeners.push(fn);
+}
+
+export function onKbRootChange(fn: (newRoot: string) => void | Promise<void>): void {
+  kbRootListeners.push(fn);
+}
+
+export function getActiveSpaces(): { windowId: string; path: string }[] {
+  return [...currentSpaces.entries()].map(([windowId, path]) => ({ windowId, path }));
 }
 
 /** Returns recent spaces, most-recent first. Filters out paths that no
@@ -331,6 +504,110 @@ function writeConfig(cfg: ConfigFile): void {
     fs.renameSync(tmp, CONFIG_FILE);
   } catch (err: any) {
     log.warn(`failed to persist config: ${errorMessage(err)}`);
+  }
+}
+
+export function getSpaceConfigPath(spaceName: string): string {
+  const bad = validateSpaceName(spaceName);
+  if (bad) throw new Error(bad);
+  return path.join(getKbRoot(), spaceName, '.stashbase', 'config.json');
+}
+
+export function readSpaceConfig(spaceName: string): SpaceConfigFile {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(getSpaceConfigPath(spaceName), 'utf8'));
+    return sanitizeSpaceConfig(parsed);
+  } catch {
+    return {};
+  }
+}
+
+export function writeSpaceConfig(spaceName: string, cfg: SpaceConfigFile): void {
+  const file = getSpaceConfigPath(spaceName);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(sanitizeSpaceConfig(cfg), null, 2) + '\n', {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+}
+
+export interface ResolvedSpaceConfig {
+  mcpServers: Record<string, McpServerConfig>;
+  skillsDirs: string[];
+}
+
+export function resolveSpaceConfig(spaceName: string): ResolvedSpaceConfig {
+  const base = sanitizeSpaceConfig(readConfig());
+  const local = readSpaceConfig(spaceName);
+  return {
+    mcpServers: { ...(base.mcpServers ?? {}), ...(local.mcpServers ?? {}) },
+    skillsDirs: mergeSkillsDirs(base.skillsDirs, local.skillsDirs),
+  };
+}
+
+function mergeSkillsDirs(base: string[] | undefined, local: string[] | undefined): string[] {
+  const out: string[] = [];
+  const push = (value: string) => {
+    const v = value.trim();
+    if (!v || path.isAbsolute(v) || v.includes('\0')) return;
+    if (!out.includes(v)) out.push(v);
+  };
+  for (const v of base ?? []) push(v);
+  for (const v of local ?? []) push(v);
+  if (out.length === 0) out.push('skills');
+  return out;
+}
+
+function sanitizeSpaceConfig(raw: unknown): SpaceConfigFile {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const obj = raw as Record<string, unknown>;
+  const out: SpaceConfigFile = {};
+  if (obj.mcpServers && typeof obj.mcpServers === 'object' && !Array.isArray(obj.mcpServers)) {
+    const servers: Record<string, McpServerConfig> = {};
+    for (const [name, value] of Object.entries(obj.mcpServers as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      const v = value as Record<string, unknown>;
+      if (typeof v.command !== 'string' || !v.command.trim()) continue;
+      servers[name] = {
+        command: v.command.trim(),
+        ...(Array.isArray(v.args) ? { args: v.args.filter((a): a is string => typeof a === 'string') } : {}),
+        ...(v.env && typeof v.env === 'object' && !Array.isArray(v.env)
+          ? { env: Object.fromEntries(
+              Object.entries(v.env as Record<string, unknown>)
+                .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+            ) }
+          : {}),
+      };
+    }
+    out.mcpServers = servers;
+  }
+  if (Array.isArray(obj.skillsDirs)) {
+    out.skillsDirs = obj.skillsDirs.filter((v): v is string => typeof v === 'string');
+  }
+  return out;
+}
+
+function ensureSpaceMetadata(spaceRoot: string): void {
+  const stash = path.join(spaceRoot, '.stashbase');
+  fs.mkdirSync(stash, { recursive: true });
+  const config = path.join(stash, 'config.json');
+  if (!fs.existsSync(config)) {
+    fs.writeFileSync(config, JSON.stringify({ mcpServers: {}, skillsDirs: ['skills'] }, null, 2) + '\n', {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+  }
+  const rules = path.join(spaceRoot, 'STASHBASE.md');
+  if (!fs.existsSync(rules)) {
+    fs.writeFileSync(rules, '# Space Rules\n\n', 'utf8');
+  }
+}
+
+function ensureKbMetadata(root: string): void {
+  fs.mkdirSync(path.join(root, '.stashbase'), { recursive: true });
+  const rules = path.join(root, 'STASHBASE.md');
+  if (!fs.existsSync(rules)) {
+    fs.writeFileSync(rules, '# KB Rules\n\n', 'utf8');
   }
 }
 

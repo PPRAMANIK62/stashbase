@@ -8,7 +8,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { errorMessage, logger } from '../log.ts';
-import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isUnderRoot, toKbRel } from '../space.ts';
+import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, toKbRel } from '../space.ts';
 import { syncIndex } from '../sync.ts';
 import { syncSkillsToCli } from '../skills.ts';
 import { derivedPathsForPdf, getInFlightPdfs, maybeConvertPdf, pdfPathForDerivedRel } from '../pdf.ts';
@@ -16,7 +16,14 @@ import { clearRecord, listByStatus, readAll as readPdfStatus } from '../pdf-stat
 import { getFsChangeCounter } from '../watcher.ts';
 import { getDaemon } from '../mfs-daemon.ts';
 import { indexer } from '../state.ts';
-import { getLibraryInfo, getLibraryOverview, setLibraryOverview } from '../library.ts';
+import {
+  getLibraryInfo,
+  getLibraryOverview,
+  getResolvedRules,
+  getSpaceRules,
+  setLibraryOverview,
+  setSpaceRules,
+} from '../library.ts';
 import { sendError } from '../http.ts';
 
 const log = logger('routes/indexing');
@@ -145,7 +152,10 @@ export function mount(app: express.Express): void {
       const space = getCurrentSpace();
       if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
       const abs = path.resolve(space, rel);
-      if (!isUnderRoot(abs)) return res.status(400).json({ error: 'path escapes kbRoot' });
+      const spaceRel = path.relative(space, abs);
+      if (spaceRel.startsWith('..') || path.isAbsolute(spaceRel) || !isInsideKbRoot(abs)) {
+        return res.status(400).json({ error: 'path escapes space' });
+      }
       if (!fs.existsSync(abs)) return res.status(404).json({ error: 'file not found' });
       // Clear by KB-relative form (matches what maybeConvertPdf writes
       // when it spins back up).
@@ -249,6 +259,35 @@ export function mount(app: express.Express): void {
     }
   });
 
+  app.get('/api/rules', (req, res) => {
+    try {
+      const space = typeof req.query.space === 'string' && req.query.space.trim()
+        ? req.query.space.trim()
+        : getCurrentSpaceName() ?? undefined;
+      res.json({ space: space ?? null, content: getResolvedRules(space) });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  app.get('/api/spaces/:name/rules', (req, res) => {
+    try {
+      res.json({ name: req.params.name, content: getSpaceRules(req.params.name) });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  app.put('/api/spaces/:name/rules', (req, res) => {
+    const content = typeof req.body?.content === 'string' ? req.body.content : '';
+    try {
+      setSpaceRules(req.params.name, content);
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
   // Read any file under kbRoot by kbRoot-relative path. Powers MCP's
   // `get_file` so an AI client can fetch a file outside the currently
   // open space. Refuses anything escaping the root.
@@ -257,7 +296,7 @@ export function mount(app: express.Express): void {
       const rel = (req.params as any)[0] as string;
       if (!rel) return res.status(400).json({ error: 'path required' });
       const abs = path.resolve(getKbRoot(), rel);
-      if (!isUnderRoot(abs)) return res.status(400).json({ error: 'path escapes kbRoot' });
+      if (!isInsideKbRoot(abs)) return res.status(400).json({ error: 'path escapes kbRoot' });
       const content = fs.readFileSync(abs, 'utf8');
       res.json({ path: rel, content });
     } catch (err: unknown) {

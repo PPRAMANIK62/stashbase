@@ -21,7 +21,9 @@ import {
   getEmbedderProvider,
   getKbRoot,
   listKnownSpaces,
+  onClose,
   onSwitch,
+  runWithWindowId,
 } from './space.ts';
 import { syncNewFiles } from './sync.ts';
 import { getDaemon } from './mfs-daemon.ts';
@@ -136,8 +138,8 @@ async function maybeImportSnapshot(spaceAbs: string, spaceName: string): Promise
 // Serialise indexer bind + sync so rapid space switches don't race. The
 // seq guard short-circuits a stale tail when the user has already moved
 // on; the queue chains each switch after the previous one finishes.
-let indexerSwitchSeq = 0;
-let indexerSwitchQueue: Promise<void> = Promise.resolve();
+const indexerSwitchSeq = new Map<string, number>();
+const indexerSwitchQueues = new Map<string, Promise<void>>();
 
 /** Resolves when the in-flight bind + snapshot-import work has settled.
  *  External callers (notably the fs watcher) await this before kicking
@@ -146,33 +148,43 @@ let indexerSwitchQueue: Promise<void> = Promise.resolve();
  *  report every file as `added` and re-embed everything the snapshot
  *  just imported. */
 export function awaitIndexerReady(): Promise<void> {
-  return indexerSwitchQueue.catch(() => undefined);
+  return Promise.all([...indexerSwitchQueues.values()].map((p) => p.catch(() => undefined))).then(() => undefined);
 }
 
-export function scheduleIndexerSync(spaceRoot: string, reason: string): void {
-  const seq = ++indexerSwitchSeq;
-  indexerSwitchQueue = indexerSwitchQueue
+export function scheduleIndexerSync(spaceRoot: string, reason: string, windowId = 'default'): void {
+  const seq = (indexerSwitchSeq.get(windowId) ?? 0) + 1;
+  indexerSwitchSeq.set(windowId, seq);
+  const prev = indexerSwitchQueues.get(windowId) ?? Promise.resolve();
+  const next = prev
     .catch(() => undefined)
     .then(async () => {
-      if (getCurrentSpace() !== spaceRoot) return;
-      try {
-        await bindIndexerForSpace(spaceRoot);
-        if (getCurrentSpace() !== spaceRoot || seq !== indexerSwitchSeq) return;
-        // Name-only diff: trust existing rows, only embed new files
-        // and drop orphans. Reopening a fully-indexed space costs zero
-        // tokens. The full content-hash diff lives behind the manual
-        // /api/sync button for the rare case where the user edited
-        // files externally with the app closed.
-        const spaceName = getCurrentSpaceName();
-        if (spaceName) await syncNewFiles(indexer, spaceName);
-      } catch (err: unknown) {
-        log.warn(`${reason}: index sync failed for ${spaceRoot}: ${errorMessage(err)}`);
-      }
+      await runWithWindowId(windowId, async () => {
+        if (getCurrentSpace() !== spaceRoot) return;
+        try {
+          await bindIndexerForSpace(spaceRoot);
+          if (getCurrentSpace() !== spaceRoot || seq !== indexerSwitchSeq.get(windowId)) return;
+          // Name-only diff: trust existing rows, only embed new files
+          // and drop orphans. Reopening a fully-indexed space costs zero
+          // tokens. The full content-hash diff lives behind the manual
+          // /api/sync button for the rare case where the user edited
+          // files externally with the app closed.
+          const spaceName = getCurrentSpaceName();
+          if (spaceName) await syncNewFiles(indexer, spaceName);
+        } catch (err: unknown) {
+          log.warn(`${reason}: index sync failed for ${spaceRoot}: ${errorMessage(err)}`);
+        }
+      });
     });
+  indexerSwitchQueues.set(windowId, next);
 }
 
 // Fire a queued bind + sync on every space switch. Registered at module
 // load time so any importer (index.ts, tests) gets the wiring for free.
-onSwitch((newRoot) => {
-  scheduleIndexerSync(newRoot, 'space switch');
+onSwitch((newRoot, windowId) => {
+  scheduleIndexerSync(newRoot, 'space switch', windowId);
+});
+
+onClose((_oldRoot, windowId) => {
+  indexerSwitchSeq.set(windowId, (indexerSwitchSeq.get(windowId) ?? 0) + 1);
+  indexerSwitchQueues.delete(windowId);
 });

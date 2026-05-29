@@ -10,10 +10,15 @@ import {
 } from '../icons';
 import { useApp } from '../store/AppContext';
 import { FileTree } from './FileTree';
+import { ModalShell } from './ModalShell';
 import { Outline } from './Outline';
+import { api, errorMessage } from '../api';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 
 const FILE_MIME = 'application/x-stashbase-file';
+interface ElectronBridge {
+  openSpaceWindow?: (name: string) => Promise<boolean>;
+}
 
 /**
  * Left rail composition. Search box → space header (chevron + label +
@@ -94,6 +99,7 @@ export function Sidebar() {
           >{(state.space || 'notes').toUpperCase()}</span>
         </span>
         <div className="side-actions">
+          <SpaceMenu />
           <NewNoteButton />
           <button
             className="icon-btn"
@@ -129,6 +135,169 @@ export function Sidebar() {
       </div>
       <Outline />
     </aside>
+  );
+}
+
+function SpaceMenu() {
+  const { state, actions } = useApp();
+  const [open, setOpen] = useState(false);
+  const [modal, setModal] = useState<null | { kind: 'new' | 'rename' | 'switch'; name: string }>(null);
+  const [spaces, setSpaces] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const current = state.space || '';
+
+  async function loadSpaces() {
+    try {
+      const r = await api.listAvailableSpaces();
+      setSpaces(r.names);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  function openModal(kind: 'new' | 'rename' | 'switch') {
+    setOpen(false);
+    setError(null);
+    if (kind === 'switch') void loadSpaces();
+    setModal({ kind, name: kind === 'rename' ? current : '' });
+  }
+
+  async function submitName() {
+    if (!modal) return;
+    const name = modal.name.trim();
+    if (!name) { setError('Name required'); return; }
+    setBusy(true);
+    setError(null);
+    const prevSpaces = spaces;
+    try {
+      if (modal.kind === 'new') {
+        setSpaces((currentSpaces) => currentSpaces.includes(name) ? currentSpaces : [...currentSpaces, name].sort());
+        await actions.openSpaceByName(name);
+      } else if (modal.kind === 'rename') {
+        setSpaces((currentSpaces) => currentSpaces.map((v) => (v === current ? name : v)).sort());
+        await api.renameSpace(current, name);
+        await actions.openSpaceByName(name);
+      } else {
+        await actions.openSpaceByName(name);
+      }
+      setModal(null);
+    } catch (err) {
+      setSpaces(prevSpaces);
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function switchTo(name: string) {
+    setBusy(true);
+    setError(null);
+    setModal({ kind: 'switch', name });
+    try {
+      await actions.openSpaceByName(name);
+      setModal(null);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteCurrent() {
+    setOpen(false);
+    if (!current) return;
+    const ok = await actions.confirm(`Delete space "${current}" and everything inside it?`);
+    if (!ok) return;
+    const prevSpaces = spaces;
+    setSpaces((currentSpaces) => currentSpaces.filter((name) => name !== current));
+    actions.goHome();
+    try {
+      await api.deleteSpace(current);
+    } catch (err) {
+      setSpaces(prevSpaces);
+      try { await actions.openSpaceByName(current); } catch { /* original delete error is what matters */ }
+      await actions.alert('Delete failed: ' + errorMessage(err));
+    }
+  }
+
+  async function openCurrentInNewWindow() {
+    setOpen(false);
+    if (!current) return;
+    const bridge = (window as { electron?: ElectronBridge }).electron;
+    const ok = await bridge?.openSpaceWindow?.(current);
+    if (!ok) await actions.alert('New window is only available in the desktop app.');
+  }
+
+  return (
+    <>
+      <span className="space-menu-wrap">
+        <button
+          className="icon-btn"
+          type="button"
+          title="Space actions"
+          onClick={() => setOpen((v) => !v)}
+        >⋯</button>
+        {open && (
+          <>
+            <div className="embedder-backdrop" onClick={() => setOpen(false)} />
+            <div className="space-menu" role="menu">
+              <button type="button" onClick={() => openModal('switch')}>Switch space</button>
+              <button type="button" onClick={() => { void openCurrentInNewWindow(); }} disabled={!current}>Open in new window</button>
+              <button type="button" onClick={() => openModal('new')}>New space</button>
+              <button type="button" onClick={() => openModal('rename')} disabled={!current}>Rename space</button>
+              <button type="button" className="danger" onClick={() => { void deleteCurrent(); }} disabled={!current}>Delete space</button>
+            </div>
+          </>
+        )}
+      </span>
+      {modal && (
+        <ModalShell onCancel={busy ? () => {} : () => setModal(null)}>
+          <h3>{modal.kind === 'new' ? 'New space' : modal.kind === 'rename' ? 'Rename space' : 'Switch space'}</h3>
+          {modal.kind === 'switch' ? (
+            spaces.length === 0 ? (
+              <p className="modal-hint">No spaces found.</p>
+            ) : (
+              <div className="welcome-open-list">
+                {spaces.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className="welcome-open-row"
+                    disabled={busy || name === current}
+                    onClick={() => { void switchTo(name); }}
+                  >{name}</button>
+                ))}
+              </div>
+            )
+          ) : (
+            <input
+              type="text"
+              className="modal-input"
+              autoFocus
+              spellCheck={false}
+              value={modal.name}
+              disabled={busy}
+              onChange={(e) => setModal({ ...modal, name: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === 'Enter') { e.preventDefault(); void submitName(); }
+                if (e.key === 'Escape' && !busy) { e.preventDefault(); setModal(null); }
+              }}
+            />
+          )}
+          {error && <div className="modal-error">{error}</div>}
+          <div className="modal-actions">
+            <button type="button" className="modal-btn" onClick={() => setModal(null)} disabled={busy}>Cancel</button>
+            {modal.kind !== 'switch' && (
+              <button type="button" className="modal-btn primary" onClick={() => { void submitName(); }} disabled={busy || !modal.name.trim()}>
+                {busy ? 'Saving…' : modal.kind === 'new' ? 'Create' : 'Rename'}
+              </button>
+            )}
+          </div>
+        </ModalShell>
+      )}
+    </>
   );
 }
 
@@ -334,4 +503,3 @@ function FolderFoldToggle() {
     >{allCollapsed ? <ExpandAllIcon /> : <CollapseAllIcon />}</button>
   );
 }
-

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, errorMessage } from '../api';
+import { api, ApiError, errorMessage } from '../api';
 import { CubeLogoIcon, FolderIcon, GitCloneIcon, NewFolderIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { CloneRepoModal } from './CloneRepoModal';
@@ -36,6 +36,7 @@ export function Welcome() {
   const [newOpen, setNewOpen] = useState(false);
   const [openOpen, setOpenOpen] = useState(false);
   const [kbRoot, setKbRoot] = useState('');
+  const [rootPickerOpen, setRootPickerOpen] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
 
   // Fetch kbRoot so copy can show `~/Documents/StashBase` as the
@@ -45,6 +46,7 @@ export function Welcome() {
       try {
         const r = await api.getKbRoot();
         setKbRoot(r.path);
+        if (r.needsPicker) setRootPickerOpen(true);
       } catch (err) {
         dispatch({ type: 'WELCOME_ERROR', error: errorMessage(err) });
       }
@@ -157,6 +159,16 @@ export function Welcome() {
         )}
       </div>
       {cloneOpen && <CloneRepoModal onClose={() => setCloneOpen(false)} />}
+      {rootPickerOpen && (
+        <KbRootPickerModal
+          initialPath={kbRoot}
+          homeDir={state.homeDir ?? ''}
+          onSaved={(path) => {
+            setKbRoot(path);
+            setRootPickerOpen(false);
+          }}
+        />
+      )}
       {newOpen && (
         <NewSpaceModal
           kbRoot={kbRoot}
@@ -172,6 +184,89 @@ export function Welcome() {
         />
       )}
     </div>
+  );
+}
+
+interface ElectronBridge {
+  openFolderDialog?: (opts?: unknown) => Promise<string | null>;
+}
+
+function KbRootPickerModal({
+  initialPath,
+  homeDir,
+  onSaved,
+}: {
+  initialPath: string;
+  homeDir: string;
+  onSaved: (path: string) => void;
+}) {
+  const { actions } = useApp();
+  const [path, setPath] = useState(initialPath);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const display = path ? prettifyHome(path, homeDir) : '~/Documents/StashBase';
+
+  useEffect(() => setPath(initialPath), [initialPath]);
+
+  async function browse() {
+    const bridge = (window as { electron?: ElectronBridge }).electron;
+    const picked = await bridge?.openFolderDialog?.({
+      title: 'Choose KB root',
+      buttonLabel: 'Use as KB Root',
+      defaultPath: path || undefined,
+    });
+    if (picked) setPath(picked);
+  }
+
+  async function submit(confirmNonEmpty = false) {
+    const p = path.trim();
+    if (!p) { setError('Path required'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.setKbRoot(p, confirmNonEmpty);
+      onSaved(r.path);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && !confirmNonEmpty) {
+        setBusy(false);
+        const ok = await actions.confirm('That directory is not empty. Use it as the KB root anyway?');
+        if (ok) void submit(true);
+        return;
+      }
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell onCancel={() => { /* first-run picker is required */ }}>
+      <h3>Choose KB root</h3>
+      <p className="modal-hint">
+        Spaces will live as folders inside <code>{display}</code>.
+      </p>
+      <input
+        type="text"
+        className="modal-input"
+        value={path}
+        disabled={busy}
+        spellCheck={false}
+        onChange={(e) => setPath(e.target.value)}
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Enter') { e.preventDefault(); void submit(); }
+        }}
+      />
+      {error && <div className="modal-error">{error}</div>}
+      <div className="modal-actions">
+        <button type="button" className="modal-btn" onClick={() => { void browse(); }} disabled={busy}>
+          Browse
+        </button>
+        <button type="button" className="modal-btn primary" onClick={() => { void submit(); }} disabled={busy || !path.trim()}>
+          {busy ? 'Saving…' : 'Use this folder'}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 

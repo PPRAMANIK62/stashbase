@@ -25,13 +25,21 @@ import {
   attachTerminalWebSocket,
   killActiveTerminal,
 } from './terminal.ts';
-import { onSwitch, migrateLegacyEmbedderConfig, ensureKbRoot } from './space.ts';
+import { stopSpaceMcpServers, switchSpaceMcpServers } from './mcp-host.ts';
+import {
+  onClose,
+  onKbRootChange,
+  onSwitch,
+  migrateLegacyEmbedderConfig,
+  ensureKbRoot,
+  needsKbRootPicker,
+} from './space.ts';
 import { bootBindAllSpaces } from './state.ts';
 import { ensureLibraryOverview } from './library.ts';
 import { logger } from './log.ts';
 import { startWatcher, stopWatcher } from './watcher.ts';
 import { indexer } from './state.ts';
-import { requireSpace } from './http.ts';
+import { requireSpace, withWindowContext } from './http.ts';
 import { mount as mountSpaceRoutes } from './routes/space.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountFilesRoutes } from './routes/files.ts';
@@ -65,27 +73,34 @@ const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'web', 'dist-app');
 
 // One-time migration from the old global-provider schema. Idempotent.
 migrateLegacyEmbedderConfig();
-// Ensure ~/Documents/StashBase/ exists (creates on first launch),
-// and prune any recent entries that aren't under it. Idempotent.
-ensureKbRoot();
-// Seed `<kbRoot>/AGENT.md` with a placeholder if absent so the agent
-// has something to extend on its first read. Idempotent.
-ensureLibraryOverview();
-// Configure the daemon with kbRoot + bind every known space found
-// under it so MCP / cross-space search sees them without waiting for
-// the user to open each one. Fire-and-forget — the server starts
-// listening immediately; binds finish in the background.
-bootBindAllSpaces().catch((err) =>
-  log.warn(`bootBindAllSpaces failed: ${err?.message ?? err}`),
-);
+const kbRootReadyAtBoot = !needsKbRootPicker();
+if (kbRootReadyAtBoot) {
+  // Ensure the configured/default KB root exists and prune any stale
+  // recent entries. On a true first launch we skip this until the
+  // picker persists the user's chosen root.
+  ensureKbRoot();
+  // Seed `<kbRoot>/AGENT.md` with a placeholder if absent so the agent
+  // has something to extend on its first read. Idempotent.
+  ensureLibraryOverview();
+  // Configure the daemon with kbRoot + bind every known space found
+  // under it so MCP / cross-space search sees them without waiting for
+  // the user to open each one. Fire-and-forget — the server starts
+  // listening immediately; binds finish in the background.
+  bootBindAllSpaces().catch((err) =>
+    log.warn(`bootBindAllSpaces failed: ${err?.message ?? err}`),
+  );
 
-// fs.watch the space root so external edits (vim / git / Dropbox)
-// trigger a debounced re-sync. Self-writes are suppressed inside
-// `files.ts:saveText` etc.
-startWatcher(indexer);
+  // fs.watch the space root so external edits (vim / git / Dropbox)
+  // trigger a debounced re-sync. Self-writes are suppressed inside
+  // `files.ts:saveText` etc.
+  startWatcher(indexer);
+} else {
+  log.info('kbRoot is not initialised; waiting for first-run picker');
+}
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+app.use(withWindowContext);
 
 // ----- security middleware ------------------------------------------------
 //
@@ -233,12 +248,37 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // `server/terminal.ts` for the protocol + lifecycle. `noServer: true`
 // because we share the existing http.Server with Vite's HMR proxy.
 const termWss = new WebSocketServer({ noServer: true });
-termWss.on('connection', (ws) => attachTerminalWebSocket(ws));
+termWss.on('connection', (ws, req) => {
+  let windowId = 'default';
+  try {
+    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
+    windowId = u.searchParams.get('windowId') || 'default';
+  } catch {
+    windowId = 'default';
+  }
+  attachTerminalWebSocket(ws, windowId);
+});
 
 // Tear the terminal down when the user switches spaces — that session
 // was bound to the old cwd; the renderer will reconnect for the new
 // space when the user opens the panel again.
-onSwitch(() => killActiveTerminal());
+onSwitch((newRoot, windowId) => {
+  killActiveTerminal(windowId);
+  switchSpaceMcpServers(windowId, newRoot);
+});
+onClose((_oldRoot, windowId) => {
+  killActiveTerminal(windowId);
+  stopSpaceMcpServers(windowId);
+});
+onKbRootChange(async () => {
+  stopWatcher();
+  stopSpaceMcpServers();
+  killActiveTerminal();
+  await indexer.closeStore();
+  ensureLibraryOverview();
+  await bootBindAllSpaces();
+  startWatcher(indexer);
+});
 
 // Hook WebSocket upgrades. `/ws/terminal` goes to our pty bridge;
 // everything else (Vite HMR in dev) falls through to the existing
@@ -289,6 +329,7 @@ async function shutdown(reason: string): Promise<void> {
   // Stop accepting new connections immediately; in-flight ones drain.
   try { server.close(); } catch { /* already gone */ }
   try { stopWatcher(); } catch { /* swallow */ }
+  try { stopSpaceMcpServers(); } catch { /* swallow */ }
   try { killActiveTerminal(); } catch { /* swallow */ }
   // Hard ceiling: if the indexer's close ladder can't unstick the
   // Python child in 4 s, exit anyway. The daemon's own kill ladder

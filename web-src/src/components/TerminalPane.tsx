@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { api, type TerminalCli, type TerminalClisResponse } from '../api';
+import { api, getWindowId, type TerminalCli, type TerminalClisResponse } from '../api';
 import { useApp } from '../store/AppContext';
 import type { TerminalTab } from '../store/state';
 
@@ -286,7 +286,7 @@ function XtermView({
     term.open(host);
     fit.fit();
 
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/terminal`;
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/terminal?windowId=${encodeURIComponent(getWindowId())}`;
     const ws = new WebSocket(wsUrl);
     let opened = false;
 

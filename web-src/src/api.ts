@@ -40,6 +40,11 @@ export interface SpaceState {
   homeDir?: string;
 }
 
+export interface SpaceConfig {
+  mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
+  skillsDirs?: string[];
+}
+
 export interface FilesPayload {
   files: FileMeta[];
   folders: FolderMeta[];
@@ -181,17 +186,35 @@ export class ApiError extends Error {
 }
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
+const WINDOW_ID_KEY = 'stashbase.windowId';
+
+export function getWindowId(): string {
+  try {
+    let id = window.sessionStorage.getItem(WINDOW_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      window.sessionStorage.setItem(WINDOW_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'web';
+  }
+}
+
+function requestHeaders(extra?: HeadersInit): HeadersInit {
+  return { ...(extra ?? {}), 'x-stashbase-window-id': getWindowId() };
+}
 
 /** GET wrapper. Throws `ApiError` for non-2xx; returns parsed JSON. */
 async function getJson<T>(path: string): Promise<T> {
-  const r = await fetch(path);
+  const r = await fetch(path, { headers: requestHeaders() });
   return parseJsonOrThrow<T>(r);
 }
 
 async function send<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
-  const init: RequestInit = { method };
+  const init: RequestInit = { method, headers: requestHeaders() };
   if (body !== undefined) {
-    init.headers = JSON_HEADERS;
+    init.headers = requestHeaders(JSON_HEADERS);
     init.body = JSON.stringify(body);
   }
   const r = await fetch(path, init);
@@ -232,11 +255,32 @@ export const api = {
   /** Absolute path of the KB root. All spaces live under it as direct
    *  children; the renderer uses this to display the home-relative
    *  form (`~/Documents/StashBase`) in copy. */
-  getKbRoot: () => getJson<{ path: string }>('/api/kb-root'),
+  getKbRoot: () => getJson<{ path: string; needsPicker?: boolean }>('/api/kb-root'),
+  setKbRoot: (path: string, confirmNonEmpty = false) =>
+    send<{ path: string }>('PUT', '/api/kb-root', { path, confirmNonEmpty }),
   /** Direct-child directory names under kbRoot — every entry is a
    *  candidate the server will accept as a space name. Powers the
    *  "Open space" dropdown. */
   listAvailableSpaces: () => getJson<{ names: string[] }>('/api/spaces/available'),
+  renameSpace: (name: string, nextName: string) =>
+    send<{ name: string; path: string }>('PATCH', '/api/spaces/' + encodeURIComponent(name), { name: nextName }),
+  deleteSpace: (name: string) =>
+    send<Record<string, never>>('DELETE', '/api/spaces/' + encodeURIComponent(name)),
+  getSpaceConfig: (name: string) =>
+    getJson<{ path: string; local: SpaceConfig; resolved: Required<SpaceConfig> }>(
+      '/api/spaces/' + encodeURIComponent(name) + '/config',
+    ),
+  putSpaceConfig: (name: string, config: SpaceConfig) =>
+    send<{ path: string; local: SpaceConfig; resolved: Required<SpaceConfig> }>(
+      'PUT',
+      '/api/spaces/' + encodeURIComponent(name) + '/config',
+      config,
+    ),
+  getSpaceRules: (name: string) =>
+    getJson<{ name: string; content: string }>('/api/spaces/' + encodeURIComponent(name) + '/rules'),
+  putSpaceRules: (name: string, content: string) =>
+    send<{ ok: true }>('PUT', '/api/spaces/' + encodeURIComponent(name) + '/rules', { content }),
+  getResolvedRules: () => getJson<{ space: string | null; content: string }>('/api/rules'),
   /** Read `<kbRoot>/AGENT.md` — the agent-maintained library overview.
    *  Powers the "View library" chrome-strip button. */
   getLibraryOverview: () => getJson<{ content: string }>('/api/library/overview'),
@@ -315,7 +359,7 @@ export const api = {
       fd.append('paths', it.relPath);
     }
     if (dir) fd.append('dir', dir);
-    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    const r = await fetch('/api/upload', { method: 'POST', body: fd, headers: requestHeaders() });
     return parseJsonOrThrow<UploadResult>(r);
   },
 
@@ -358,6 +402,10 @@ export const api = {
     getJson<{ installed: boolean }>('/api/terminal/check/' + encodeURIComponent(id)),
   mcpStatus: () =>
     getJson<{ clients: Record<string, boolean> }>('/api/mcp/status'),
+  listMcpTools: () =>
+    getJson<{ tools: { server: string; name: string; fqName: string; description?: string; inputSchema: unknown }[] }>('/api/mcp/tools'),
+  callMcpTool: (name: string, args: Record<string, unknown> = {}) =>
+    send<{ result: unknown }>('POST', '/api/mcp/tools/call', { name, arguments: args }),
   configureMcp: (client: string) =>
     send<{
       ok: boolean;

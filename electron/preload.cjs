@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electron', {
    *  This is only run from the user's MCP Settings click path; app
    *  launch and package install no longer modify client configs. */
   configureMcp: (client) => ipcRenderer.invoke('mcp:configure', client),
+  openSpaceWindow: (name) => ipcRenderer.invoke('window:openSpace', name),
   /** Subscribe to fullscreen-state pushes. macOS green-button fullscreen
    *  hides traffic lights; the renderer uses this to toggle the body
    *  class that controls the chrome-strip left padding. */

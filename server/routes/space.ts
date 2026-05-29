@@ -12,17 +12,29 @@ import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getSpaceName } from '../files.ts';
+import { detectFormat, getSpaceName, HIDDEN_DOT_DIRS } from '../files.ts';
 import {
+  clearSpacePath,
   getCurrentSpace,
   getKbRoot,
   getRecentSpaces,
+  getActiveSpaces,
+  getSpaceConfigPath,
+  requireSpaceExistsByName,
   listAvailableSpaceNames,
+  needsKbRootPicker,
+  readSpaceConfig,
+  replaceCurrentSpacePath,
+  resolveSpaceConfig,
   setCurrentSpace,
+  setKbRoot,
   validateSpaceName,
+  writeSpaceConfig,
 } from '../space.ts';
 import { errorMessage } from '../log.ts';
 import { sendError } from '../http.ts';
+import { indexer } from '../state.ts';
+import { switchSpaceMcpServers } from '../mcp-host.ts';
 
 export function mount(app: express.Express): void {
   // List the open + recent spaces. Powers the Welcome screen. Includes
@@ -65,7 +77,21 @@ export function mount(app: express.Express): void {
   // children. Surfaced to the renderer so it can render the home-
   // relative form (`~/Documents/StashBase`) in copy.
   app.get('/api/kb-root', (_req, res) => {
-    res.json({ path: getKbRoot() });
+    res.json({ path: getKbRoot(), needsPicker: needsKbRootPicker() });
+  });
+
+  app.put('/api/kb-root', async (req, res) => {
+    const rawPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+    if (!rawPath) return res.status(400).json({ error: 'path required' });
+    try {
+      await setKbRoot(rawPath, { allowNonEmpty: req.body?.confirmNonEmpty === true });
+      res.json({ path: getKbRoot() });
+    } catch (err: unknown) {
+      if ((err as any)?.code === 'NON_EMPTY') {
+        return res.status(409).json({ error: 'directory is not empty', code: 'NON_EMPTY' });
+      }
+      res.status(400).json({ error: errorMessage(err) });
+    }
   });
 
   // List candidate space names — direct child directories of kbRoot.
@@ -73,6 +99,91 @@ export function mount(app: express.Express): void {
   // includes folders the user dropped in via Finder but never opened.
   app.get('/api/spaces/available', (_req, res) => {
     res.json({ names: listAvailableSpaceNames() });
+  });
+
+  app.get('/api/spaces/:name/config', (req, res) => {
+    const name = req.params.name;
+    const bad = validateSpaceName(name);
+    if (bad) return res.status(400).json({ error: bad });
+    try {
+      requireSpaceExistsByName(name);
+      res.json({
+        path: getSpaceConfigPath(name),
+        local: readSpaceConfig(name),
+        resolved: resolveSpaceConfig(name),
+      });
+    } catch (err: unknown) {
+      if ((err as any)?.code === 'SPACE_NOT_FOUND') return res.status(404).json({ error: 'space not found' });
+      res.status(400).json({ error: errorMessage(err) });
+    }
+  });
+
+  app.put('/api/spaces/:name/config', (req, res) => {
+    const name = req.params.name;
+    const bad = validateSpaceName(name);
+    if (bad) return res.status(400).json({ error: bad });
+    try {
+      requireSpaceExistsByName(name);
+      writeSpaceConfig(name, req.body ?? {});
+      for (const active of getActiveSpaces()) {
+        if (path.basename(active.path) === name) {
+          switchSpaceMcpServers(active.windowId, active.path);
+        }
+      }
+      res.json({
+        path: getSpaceConfigPath(name),
+        local: readSpaceConfig(name),
+        resolved: resolveSpaceConfig(name),
+      });
+    } catch (err: unknown) {
+      if ((err as any)?.code === 'SPACE_NOT_FOUND') return res.status(404).json({ error: 'space not found' });
+      res.status(400).json({ error: errorMessage(err) });
+    }
+  });
+
+  app.patch('/api/spaces/:name', async (req, res) => {
+    const oldName = req.params.name;
+    const newName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const oldErr = validateSpaceName(oldName);
+    if (oldErr) return res.status(400).json({ error: oldErr });
+    const newErr = validateSpaceName(newName);
+    if (newErr) return res.status(400).json({ error: newErr });
+    if (oldName === newName) return res.json({ name: oldName });
+    const root = getKbRoot();
+    const oldPath = path.join(root, oldName);
+    const newPath = path.join(root, newName);
+    try {
+      if (!fs.existsSync(oldPath)) return res.status(404).json({ error: 'space not found' });
+      if (fs.existsSync(newPath)) return res.status(409).json({ error: `space "${newName}" already exists` });
+      fs.renameSync(oldPath, newPath);
+      try {
+        const files = collectIndexableFilesForRename(newPath, oldName);
+        await indexer.renamePathPrefix(oldName, newName, files);
+      } catch (err) {
+        try { fs.renameSync(newPath, oldPath); } catch { /* leave original error */ }
+        throw err;
+      }
+      replaceCurrentSpacePath(oldPath, newPath);
+      res.json({ name: newName, path: newPath });
+    } catch (err: unknown) {
+      res.status(400).json({ error: errorMessage(err) });
+    }
+  });
+
+  app.delete('/api/spaces/:name', async (req, res) => {
+    const name = req.params.name;
+    const bad = validateSpaceName(name);
+    if (bad) return res.status(400).json({ error: bad });
+    const target = path.join(getKbRoot(), name);
+    try {
+      if (!fs.existsSync(target)) return res.status(404).json({ error: 'space not found' });
+      fs.rmSync(target, { recursive: true, force: true });
+      clearSpacePath(target);
+      await indexer.deletePathPrefix(name);
+      res.json({});
+    } catch (err: unknown) {
+      res.status(400).json({ error: errorMessage(err) });
+    }
   });
 
   // Clone a remote git repo into <kbRoot>/<name>, then return the
@@ -119,6 +230,45 @@ export function mount(app: express.Express): void {
       sendError(res, err);
     }
   });
+}
+
+function collectIndexableFilesForRename(
+  spaceRoot: string,
+  oldSpaceName: string,
+): Array<{ path: string; content: string }> {
+  const files: Array<{ path: string; content: string }> = [];
+  walkSpace(spaceRoot, '', (rel, full, ent) => {
+    if (!ent.isFile() || !detectFormat(ent.name)) return;
+    const oldPath = rel ? `${oldSpaceName}/${rel}` : oldSpaceName;
+    files.push({ path: oldPath, content: fs.readFileSync(full, 'utf8') });
+  });
+  return files;
+}
+
+function walkSpace(
+  dir: string,
+  prefix: string,
+  fn: (rel: string, full: string, ent: fs.Dirent) => void,
+): void {
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  const noteStems = new Set<string>();
+  for (const e of entries) {
+    if (!e.isFile()) continue;
+    const m = e.name.match(/^(.+)\.(md|markdown|html|htm)$/i);
+    if (m) noteStems.add(m[1]);
+  }
+  for (const e of entries) {
+    if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
+    if (e.isDirectory() && e.name.endsWith('_files')) {
+      const stem = e.name.slice(0, -'_files'.length);
+      if (noteStems.has(stem)) continue;
+    }
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    const full = path.join(dir, e.name);
+    fn(rel, full, e);
+    if (e.isDirectory()) walkSpace(full, rel, fn);
+  }
 }
 
 /** Internal entries under `.stashbase/` that **must** be wiped after a

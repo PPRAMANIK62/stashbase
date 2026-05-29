@@ -2,6 +2,8 @@ import express from 'express';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { currentWindowId } from '../space.ts';
+import { callSpaceMcpTool, listSpaceMcpTools } from '../mcp-host.ts';
 
 const APP_ROOT = process.env.STASHBASE_APP_ROOT
   ? path.resolve(process.env.STASHBASE_APP_ROOT)
@@ -18,6 +20,29 @@ const JSON_MCP_CONFIG_FILES: Record<string, () => string> = {
 };
 
 export function mount(app: express.Express): void {
+  app.get('/api/mcp/tools', async (_req, res) => {
+    try {
+      res.json({ tools: await listSpaceMcpTools(currentWindowId()) });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: message });
+    }
+  });
+
+  app.post('/api/mcp/tools/call', async (req, res) => {
+    const name = typeof req.body?.name === 'string' ? req.body.name : '';
+    const args = req.body?.arguments && typeof req.body.arguments === 'object' && !Array.isArray(req.body.arguments)
+      ? req.body.arguments as Record<string, unknown>
+      : {};
+    try {
+      if (!name) return res.status(400).json({ error: 'name required' });
+      res.json({ result: await callSpaceMcpTool(currentWindowId(), name, args) });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: message });
+    }
+  });
+
   app.get('/api/mcp/status', (_req, res) => {
     try {
       const wrapper = currentMcpWrapper();

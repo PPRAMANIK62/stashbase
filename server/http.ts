@@ -10,7 +10,7 @@ import express from 'express';
 import childProcess from 'node:child_process';
 import path from 'node:path';
 import { logger, errorMessage, errorCode } from './log.ts';
-import { getCurrentSpace } from './space.ts';
+import { getCurrentSpace, runWithWindowId, WINDOW_ID_HEADER } from './space.ts';
 
 const log = logger('http');
 
@@ -21,6 +21,10 @@ const log = logger('http');
 export function sendError(res: express.Response, err: unknown): void {
   if (errorCode(err) === 'NO_SPACE') {
     res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
+    return;
+  }
+  if (errorCode(err) === 'SPACE_NOT_FOUND') {
+    res.status(404).json({ error: 'space not found', code: 'SPACE_NOT_FOUND' });
     return;
   }
   res.status(500).json({ error: errorMessage(err) });
@@ -35,6 +39,11 @@ export const requireSpace: express.RequestHandler = (_req, res, next) => {
     return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
   }
   next();
+};
+
+export const withWindowContext: express.RequestHandler = (req, _res, next) => {
+  const header = req.header(WINDOW_ID_HEADER);
+  runWithWindowId(header, next);
 };
 
 export type OpenAIKeyCheck = { ok: true } | { ok: false; status: number; error: string };

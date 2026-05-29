@@ -23,12 +23,15 @@ import {
   getEmbedderProvider,
   getKbRoot,
   listKnownSpaces,
+  requireSpaceExistsByName,
+  validateSpaceName,
 } from './space.ts';
 import { getDaemon } from './mfs-daemon.ts';
 
 const log = logger('library');
 
 const FILENAME = 'AGENT.md';
+const RULES_FILENAME = 'STASHBASE.md';
 
 const PLACEHOLDER = `# StashBase Library
 
@@ -40,6 +43,16 @@ intelligently.)
 
 function agentMdPath(): string {
   return path.join(getKbRoot(), FILENAME);
+}
+
+function kbRulesPath(): string {
+  return path.join(getKbRoot(), RULES_FILENAME);
+}
+
+function spaceRulesPath(spaceName: string): string {
+  const bad = validateSpaceName(spaceName);
+  if (bad) throw new Error(bad);
+  return path.join(getKbRoot(), spaceName, RULES_FILENAME);
 }
 
 /** Read `<kbRoot>/AGENT.md`. Returns empty string if missing (callers
@@ -82,6 +95,29 @@ export function ensureLibraryOverview(): void {
   }
 }
 
+export function getKbRules(): string {
+  try { return fs.readFileSync(kbRulesPath(), 'utf8'); } catch { return ''; }
+}
+
+export function getSpaceRules(spaceName: string): string {
+  requireSpaceExistsByName(spaceName);
+  try { return fs.readFileSync(spaceRulesPath(spaceName), 'utf8'); } catch { return ''; }
+}
+
+export function setSpaceRules(spaceName: string, content: string): void {
+  requireSpaceExistsByName(spaceName);
+  const target = spaceRulesPath(spaceName);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target + '.tmp', content, 'utf8');
+  fs.renameSync(target + '.tmp', target);
+}
+
+export function getResolvedRules(spaceName?: string): string {
+  const parts = [getKbRules().trim()];
+  if (spaceName) parts.push(getSpaceRules(spaceName).trim());
+  return parts.filter(Boolean).join('\n\n');
+}
+
 export interface SpaceInfo {
   /** kbRoot-relative space name (`cs183b`, `work/research`). */
   name: string;
@@ -94,11 +130,15 @@ export interface SpaceInfo {
   /** Sample of first-line headings from indexed files, up to 15.
    *  Best-effort: derived from each sampled file's leading H1/H2. */
   sample_headings: string[];
+  /** KB rules plus this space's `STASHBASE.md`, concatenated in precedence order. */
+  rules: string;
 }
 
 export interface LibraryInfo {
   /** `<kbRoot>/AGENT.md` content (agent-maintained narrative). */
   overview: string;
+  /** KB-level maintenance rules from `<kbRoot>/STASHBASE.md`. */
+  rules: string;
   /** Per-space structured facts. */
   spaces: SpaceInfo[];
 }
@@ -108,6 +148,7 @@ export interface LibraryInfo {
  *  to compute on demand — typical libraries are O(100s of files). */
 export async function getLibraryInfo(): Promise<LibraryInfo> {
   const overview = getLibraryOverview();
+  const rules = getKbRules();
   const root = getKbRoot();
   const provider = getEmbedderProvider();
   const spaces: SpaceInfo[] = [];
@@ -129,9 +170,10 @@ export async function getLibraryInfo(): Promise<LibraryInfo> {
       file_count: files.length,
       sample_files,
       sample_headings,
+      rules: getResolvedRules(name),
     });
   }
-  return { overview, spaces };
+  return { overview, rules, spaces };
 }
 
 /** First H1/H2 line per file, capped at 15 across the input set.

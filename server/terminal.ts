@@ -20,7 +20,7 @@ import { spawn as childSpawn, spawnSync } from 'node:child_process';
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import type { WebSocket } from 'ws';
 import { logger, errorMessage } from './log.ts';
-import { getCurrentSpace } from './space.ts';
+import { getCurrentSpace, runWithWindowId } from './space.ts';
 import { ensureLightTheme } from './claude-settings.ts';
 
 const log = logger('term');
@@ -138,7 +138,7 @@ type ClientMessage = OpenMessage | StdinMessage | ResizeMessage | CloseMessage;
 class TerminalSession {
   private pty: IPty | null = null;
 
-  constructor(private ws: WebSocket) {
+  constructor(private ws: WebSocket, readonly windowId: string) {
     ws.on('message', (raw) => this.onMessage(String(raw)));
     ws.on('close', () => this.dispose());
     ws.on('error', () => this.dispose());
@@ -149,7 +149,7 @@ class TerminalSession {
     try { msg = JSON.parse(text); }
     catch { return; }
     switch (msg.type) {
-      case 'open':  this.open(msg); break;
+      case 'open':  runWithWindowId(this.windowId, () => this.open(msg)); break;
       case 'stdin': this.pty?.write(msg.data); break;
       case 'resize': this.pty?.resize(msg.cols, msg.rows); break;
       case 'close': this.dispose(); break;
@@ -198,6 +198,9 @@ class TerminalSession {
           // and screenshots stay clean. Doesn't affect regular
           // terminal usage.
           STASHBASE_TERMINAL: '1',
+          // Let MCP clients launched from this chat session route
+          // StashBase's proxy tools back to the per-window MCP host.
+          STASHBASE_WINDOW_ID: this.windowId,
           // Tell colour-aware CLIs (Claude Code, vim, less, fzf, …)
           // that the terminal has a LIGHT background. Format is
           // `fg;bg` with the standard 16-colour codes — 0 (black) on
@@ -245,17 +248,21 @@ class TerminalSession {
  *  in the new space). Each session removes itself on `ws.close`. */
 const sessions = new Set<TerminalSession>();
 
-export function attachTerminalWebSocket(ws: WebSocket): void {
-  const session = new TerminalSession(ws);
+export function attachTerminalWebSocket(ws: WebSocket, windowId = 'default'): void {
+  const session = new TerminalSession(ws, windowId);
   sessions.add(session);
   ws.on('close', () => { sessions.delete(session); });
 }
 
 /** Kill every live PTY. Used when the user switches spaces — every
  *  session's cwd no longer makes sense. */
-export function killActiveTerminal(): void {
-  for (const session of sessions) session.dispose();
-  sessions.clear();
+export function killActiveTerminal(windowId?: string): void {
+  for (const session of [...sessions]) {
+    if (!windowId || session.windowId === windowId) {
+      session.dispose();
+      sessions.delete(session);
+    }
+  }
 }
 
 /** Spawn `npm install -g <package>` for a given CLI outside the PTY,

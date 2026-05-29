@@ -47,23 +47,28 @@ import {
   getApiKey,
   getEmbedderProvider,
   getKbRoot,
-  isUnderRoot,
+  isInsideKbRoot,
   listKnownSpaces,
   migrateLegacyEmbedderConfig,
+  needsKbRootPicker,
 } from '../server/space.ts';
 import { getDaemon } from '../server/mfs-daemon.ts';
 import {
   ensureLibraryOverview,
   getLibraryInfo,
+  getResolvedRules,
   setLibraryOverview,
+  setSpaceRules,
   type LibraryInfo,
 } from '../server/library.ts';
 
 // Idempotent migrations. Safe to run from both the web server and MCP —
 // second call no-ops.
 migrateLegacyEmbedderConfig();
-ensureKbRoot();
-ensureLibraryOverview();
+if (!needsKbRootPicker()) {
+  ensureKbRoot();
+  ensureLibraryOverview();
+}
 
 function parsePortArg(argv: string[], fallback: number): number {
   for (let i = 0; i < argv.length; i++) {
@@ -142,6 +147,77 @@ async function webIsLive(): Promise<boolean> {
 
 function invalidateWebLive(): void {
   webLiveCache = { value: false, expires: Date.now() + WEB_LIVE_TTL_MS };
+}
+
+interface HostedMcpTool {
+  server: string;
+  name: string;
+  fqName: string;
+  description?: string;
+  inputSchema?: unknown;
+}
+
+const externalToolMap = new Map<string, string>();
+
+function webHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...(extra ?? {}) };
+  const windowId = process.env.STASHBASE_WINDOW_ID;
+  if (windowId) headers['x-stashbase-window-id'] = windowId;
+  return headers;
+}
+
+async function listExternalToolsViaWeb(): Promise<Array<Record<string, unknown>>> {
+  if (!process.env.STASHBASE_WINDOW_ID) return [];
+  if (!await webIsLive()) return [];
+  try {
+    const r = await fetch(`${WEB_BASE}/api/mcp/tools`, { headers: webHeaders() });
+    if (!r.ok) throw new Error(`web /api/mcp/tools failed: ${r.status}`);
+    const j = await r.json() as { tools?: HostedMcpTool[] };
+    externalToolMap.clear();
+    return (j.tools ?? []).map((tool, i) => {
+      const name = externalToolName(tool, i);
+      externalToolMap.set(name, tool.fqName);
+      return {
+        name,
+        description: `Per-space MCP tool ${tool.fqName}. ${tool.description ?? ''}`.trim(),
+        inputSchema: normalizeInputSchema(tool.inputSchema),
+      };
+    });
+  } catch (err: unknown) {
+    process.stderr.write(`[StashBase] listing per-space MCP tools failed: ${err instanceof Error ? err.message : String(err)}\n`);
+    return [];
+  }
+}
+
+async function callExternalToolViaWeb(name: string, args: Record<string, unknown>): Promise<unknown> {
+  let fqName = externalToolMap.get(name);
+  if (!fqName) {
+    await listExternalToolsViaWeb();
+    fqName = externalToolMap.get(name);
+  }
+  if (!fqName) throw new Error(`unknown tool: ${name}`);
+  const r = await fetch(`${WEB_BASE}/api/mcp/tools/call`, {
+    method: 'POST',
+    headers: webHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ name: fqName, arguments: args }),
+  });
+  if (!r.ok) throw new Error(`web /api/mcp/tools/call failed: ${r.status}`);
+  const j = await r.json() as { result: unknown };
+  return j.result;
+}
+
+function externalToolName(tool: HostedMcpTool, index: number): string {
+  return `space_${index}_${slugToolPart(tool.server)}_${slugToolPart(tool.name)}`;
+}
+
+function slugToolPart(value: string): string {
+  const slug = value.toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+  return slug || 'tool';
+}
+
+function normalizeInputSchema(schema: unknown): unknown {
+  if (schema && typeof schema === 'object' && !Array.isArray(schema)) return schema;
+  return { type: 'object', properties: {}, additionalProperties: true };
 }
 
 async function tryWebElseEmbedded<T>(
@@ -224,8 +300,7 @@ const server = new Server(
   { capabilities: { tools: {} } },
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+const BUILTIN_TOOLS = [
     {
       name: 'search_kb',
       description:
@@ -327,6 +402,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'get_rules',
+      description:
+        'Read StashBase maintenance rules. Without `space`, returns KB-level rules. ' +
+        'With `space`, returns KB-level rules followed by that space\'s `STASHBASE.md`, ' +
+        'so later space rules can override earlier baseline guidance.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          space: { type: 'string', description: 'Optional space name.' },
+        },
+      },
+    },
+    {
+      name: 'update_space_rules',
+      description:
+        'Overwrite one space\'s `STASHBASE.md` maintenance rules. This does not edit ' +
+        'the KB-level `STASHBASE.md` baseline.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          space: { type: 'string', description: 'Space name to update.' },
+          content: { type: 'string', description: 'Full markdown content for the space rules.' },
+        },
+        required: ['space', 'content'],
+      },
+    },
+    {
       name: 'index_status',
       description:
         'Check whether the index has caught up with the files on disk. Returns ' +
@@ -345,7 +447,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
       },
     },
-  ],
+  ];
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [...BUILTIN_TOOLS, ...await listExternalToolsViaWeb()],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
@@ -400,7 +505,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       async () => {
         // Direct fs read. We don't need the daemon for content retrieval.
         const abs = path.resolve(getKbRoot(), kbRel);
-        if (!isUnderRoot(abs)) throw new Error('path escapes kbRoot');
+        if (!isInsideKbRoot(abs)) throw new Error('path escapes kbRoot');
         try { return fs.readFileSync(abs, 'utf8'); }
         catch (err: any) {
           if (err?.code === 'ENOENT') return null;
@@ -444,6 +549,45 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     };
   }
 
+  if (req.params.name === 'get_rules') {
+    const content = await tryWebElseEmbedded(
+      'get_rules',
+      async () => {
+        const url = space ? `${WEB_BASE}/api/rules?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/rules`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`web /api/rules failed: ${r.status}`);
+        const j = await r.json() as { content: string };
+        return j.content;
+      },
+      async () => getResolvedRules(space),
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, content }, null, 2) }],
+    };
+  }
+
+  if (req.params.name === 'update_space_rules') {
+    const target = typeof args.space === 'string' ? args.space.trim() : '';
+    const content = typeof args.content === 'string' ? args.content : '';
+    if (!target) throw new Error('`space` is required');
+    if (!content) throw new Error('`content` is required');
+    await tryWebElseEmbedded(
+      'update_space_rules',
+      async () => {
+        const r = await fetch(`${WEB_BASE}/api/spaces/${encodeURIComponent(target)}/rules`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ content }),
+        });
+        if (!r.ok) throw new Error(`web /api/spaces/${target}/rules failed: ${r.status}`);
+      },
+      async () => { setSpaceRules(target, content); },
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ ok: true, space: target }, null, 2) }],
+    };
+  }
+
   if (req.params.name === 'index_status') {
     const status = await tryWebElseEmbedded(
       'index_status',
@@ -456,6 +600,13 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     );
     return {
       content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, ...status as object }, null, 2) }],
+    };
+  }
+
+  if (req.params.name.startsWith('space_')) {
+    const result = await callExternalToolViaWeb(req.params.name, args);
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   }
 

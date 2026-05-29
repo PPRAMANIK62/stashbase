@@ -1118,6 +1118,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'TERMINAL_TABS_RESET' });
     dispatch({ type: 'FILTER', q: '' });
     dispatch({ type: 'SEARCH_CLEAR' });
+    dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: '' });
+    dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
     dispatch({ type: 'WELCOME_SHOW', recent: stateRef.current.recent });
   }, []);
 
@@ -1125,10 +1127,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const j = await api.getSpace();
       dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir });
+      const initialSpace = new URLSearchParams(window.location.search).get('space');
+      if (initialSpace) {
+        window.history.replaceState(null, '', window.location.pathname);
+        await openSpaceByName(initialSpace);
+      }
     } catch {
       dispatch({ type: 'WELCOME_SHOW', recent: [], error: 'Server unreachable' });
     }
-  }, []);
+  }, [openSpaceByName]);
 
   const actions = useMemo<AppActions>(() => ({
     bootstrap, openSpace, openSpaceByName, goHome,

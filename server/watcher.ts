@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
-import { onSwitch, getCurrentSpace, getCurrentSpaceName } from './space.ts';
+import { onClose, onSwitch, getActiveSpaces, getCurrentSpaceName, runWithWindowId } from './space.ts';
 import { syncIndex } from './sync.ts';
 import { awaitIndexerReady } from './state.ts';
 import type { Indexer } from './indexer.ts';
@@ -29,10 +29,11 @@ const log = logger('watcher');
 const DEBOUNCE_MS = 800;
 const SELF_WRITE_TTL_MS = 1500;
 
-let activeWatcher: fs.FSWatcher | null = null;
-let watchedRoot: string | null = null;
-let debounceHandle: NodeJS.Timeout | null = null;
+const activeWatchers = new Map<string, fs.FSWatcher>();
+const watchedRoots = new Map<string, string>();
+const debounceHandles = new Map<string, NodeJS.Timeout>();
 const selfWrites = new Map<string, number>(); // absolute path → epoch ms
+let registered = false;
 
 // Monotonic counter bumped every time the watcher sees an external
 // change on disk (after self-write filtering). Exposed through
@@ -52,8 +53,13 @@ export function getFsChangeCounter(): number {
  *  times (idempotent registration of the onSwitch listener — only do
  *  it once at server startup). */
 export function startWatcher(indexer: Indexer): void {
-  bindToSpace(indexer, getCurrentSpace());
-  onSwitch((newRoot) => bindToSpace(indexer, newRoot));
+  for (const active of getActiveSpaces()) {
+    bindToSpace(indexer, active.path, active.windowId);
+  }
+  if (registered) return;
+  registered = true;
+  onSwitch((newRoot, windowId) => bindToSpace(indexer, newRoot, windowId));
+  onClose((_oldRoot, windowId) => closeWindow(windowId));
 }
 
 /** Tell the watcher "we're about to write this file ourselves" so the
@@ -68,13 +74,13 @@ export function noteSelfWrite(absPath: string): void {
   }
 }
 
-function bindToSpace(indexer: Indexer, root: string | null): void {
-  if (root === watchedRoot) return;
-  closeActive();
-  watchedRoot = root;
+function bindToSpace(indexer: Indexer, root: string | null, windowId: string): void {
+  if (root === watchedRoots.get(windowId)) return;
+  closeWindow(windowId);
+  if (root) watchedRoots.set(windowId, root);
   if (!root) return;
   try {
-    activeWatcher = fs.watch(root, { recursive: true }, (_event, filename) => {
+    const watcher = fs.watch(root, { recursive: true }, (_event, filename) => {
       if (!filename) return;
       const fname = filename.toString();
       // Skip our own sidecar dir — Milvus writes to it every embed.
@@ -86,23 +92,26 @@ function bindToSpace(indexer: Indexer, root: string | null): void {
       // every disk-tree change — including non-indexable files that
       // wouldn't move the indexer's `pending` set.
       fsChangeCounter++;
-      scheduleSync(indexer);
+      scheduleSync(indexer, windowId);
     });
-    log.info(`watching ${root}`);
+    activeWatchers.set(windowId, watcher);
+    log.info(`watching ${root} (${windowId})`);
   } catch (err: unknown) {
     log.warn(`fs.watch failed for ${root}: ${errorMessage(err)}`);
   }
 }
 
-function scheduleSync(indexer: Indexer): void {
-  if (debounceHandle) clearTimeout(debounceHandle);
-  debounceHandle = setTimeout(() => {
-    debounceHandle = null;
-    void runSyncAfterReady(indexer);
+function scheduleSync(indexer: Indexer, windowId: string): void {
+  const existing = debounceHandles.get(windowId);
+  if (existing) clearTimeout(existing);
+  const handle = setTimeout(() => {
+    debounceHandles.delete(windowId);
+    void runSyncAfterReady(indexer, windowId);
   }, DEBOUNCE_MS);
+  debounceHandles.set(windowId, handle);
 }
 
-async function runSyncAfterReady(indexer: Indexer): Promise<void> {
+async function runSyncAfterReady(indexer: Indexer, windowId: string): Promise<void> {
   // Wait for any in-flight bind + snapshot-import to drain. Without
   // this gate, a clone that fires fs events at the same moment the
   // user opens the cloned space races: scan_diff runs before the
@@ -110,31 +119,37 @@ async function runSyncAfterReady(indexer: Indexer): Promise<void> {
   // file as `added`, and re-embeds the very chunks the snapshot just
   // imported.
   await awaitIndexerReady();
-  const space = getCurrentSpaceName();
-  if (!space) return; // space closed mid-debounce or never opened
-  log.info('external change detected → running sync');
-  try {
-    await syncIndex(indexer, space);
-  } catch (err: unknown) {
-    log.warn(`watcher-triggered sync failed: ${errorMessage(err)}`);
-  }
+  await runWithWindowId(windowId, async () => {
+    const space = getCurrentSpaceName();
+    if (!space) return; // space closed mid-debounce or never opened
+    log.info(`external change detected → running sync (${windowId})`);
+    try {
+      await syncIndex(indexer, space);
+    } catch (err: unknown) {
+      log.warn(`watcher-triggered sync failed: ${errorMessage(err)}`);
+    }
+  });
 }
 
-function closeActive(): void {
-  if (debounceHandle) {
-    clearTimeout(debounceHandle);
-    debounceHandle = null;
+function closeWindow(windowId: string): void {
+  const handle = debounceHandles.get(windowId);
+  if (handle) {
+    clearTimeout(handle);
+    debounceHandles.delete(windowId);
   }
-  if (activeWatcher) {
-    try { activeWatcher.close(); } catch { /* swallow */ }
-    activeWatcher = null;
+  const watcher = activeWatchers.get(windowId);
+  if (watcher) {
+    try { watcher.close(); } catch { /* swallow */ }
+    activeWatchers.delete(windowId);
   }
+  watchedRoots.delete(windowId);
 }
 
 /** Tear down the active fs.watch + cancel any pending debounce.
  *  Called from the server's shutdown path so the watcher doesn't
  *  keep the event loop alive past the intended exit. */
 export function stopWatcher(): void {
-  closeActive();
-  watchedRoot = null;
+  for (const windowId of [...activeWatchers.keys(), ...debounceHandles.keys()]) {
+    closeWindow(windowId);
+  }
 }

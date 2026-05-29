@@ -46,7 +46,6 @@ const MCP_ENTRY = app.isPackaged
   ? path.join(PROJECT_ROOT, 'dist', 'mcp', 'server.mjs')
   : path.join(PROJECT_ROOT, 'mcp', 'server.ts');
 
-let mainWindow = null;
 let serverProc = null;
 
 function shellQuote(value) {
@@ -398,7 +397,7 @@ function isAppUrl(rawUrl) {
   }
 }
 
-async function createWindow() {
+async function createWindow(initialSpace) {
   try {
     await ensureServer();
   } catch (err) {
@@ -409,7 +408,7 @@ async function createWindow() {
     app.quit();
     return;
   }
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 720,
@@ -433,11 +432,11 @@ async function createWindow() {
   // External links → OS default browser. Anything else (popups,
   // accidental navigation away from the app shell) gets denied so the
   // main window stays anchored at SERVER_URL.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isAppUrl(url) && isHttpUrl(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  mainWindow.webContents.on('will-navigate', (event, url) => {
+  win.webContents.on('will-navigate', (event, url) => {
     if (isAppUrl(url)) return;
     event.preventDefault();
     if (isHttpUrl(url)) shell.openExternal(url);
@@ -449,12 +448,12 @@ async function createWindow() {
   // up in case the window started fullscreen (rare but possible via
   // `Restore Window` on relaunch).
   function pushFullscreen() {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('fullscreen-change', mainWindow.isFullScreen());
+    if (win.isDestroyed()) return;
+    win.webContents.send('fullscreen-change', win.isFullScreen());
   }
-  mainWindow.on('enter-full-screen', pushFullscreen);
-  mainWindow.on('leave-full-screen', pushFullscreen);
-  mainWindow.webContents.on('did-finish-load', pushFullscreen);
+  win.on('enter-full-screen', pushFullscreen);
+  win.on('leave-full-screen', pushFullscreen);
+  win.webContents.on('did-finish-load', pushFullscreen);
 
   // Swallow ⌘R / Ctrl+R from the keyboard. Electron's default View
   // menu binds it to "Reload", which does a full renderer re-mount —
@@ -463,14 +462,17 @@ async function createWindow() {
   // (`actions.goHome()`), which resets tabs cleanly without re-mounting.
   // The View → Reload menu item is left in place as an escape hatch
   // (mouse click); only the keyboard chord is gone.
-  mainWindow.webContents.on('before-input-event', (event, input) => {
+  win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
     if (!(input.meta || input.control)) return;
     if (input.shift) return; // ⌘⇧R (Force Reload) stays — dev escape hatch.
     if (input.key.toLowerCase() === 'r') event.preventDefault();
   });
 
-  mainWindow.loadURL(SERVER_URL);
+  const url = initialSpace
+    ? `${SERVER_URL}/?space=${encodeURIComponent(initialSpace)}`
+    : SERVER_URL;
+  win.loadURL(url);
 }
 
 // Folder picker — invoked from the Clone modal (Open/New use the
@@ -488,7 +490,10 @@ ipcMain.handle('dialog:openFolder', async (_e, opts = {}) => {
   if (typeof opts.defaultPath === 'string' && opts.defaultPath) {
     dialogOpts.defaultPath = opts.defaultPath;
   }
-  const result = await dialog.showOpenDialog(mainWindow, dialogOpts);
+  const focused = BrowserWindow.getFocusedWindow();
+  const result = focused
+    ? await dialog.showOpenDialog(focused, dialogOpts)
+    : await dialog.showOpenDialog(dialogOpts);
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
@@ -513,6 +518,12 @@ ipcMain.handle('mcp:configure', async (_e, client) => {
     const message = err && typeof err.message === 'string' ? err.message : String(err);
     return { ok: false, error: message };
   }
+});
+
+ipcMain.handle('window:openSpace', async (_e, name) => {
+  if (typeof name !== 'string' || !name.trim()) return false;
+  await createWindow(name.trim());
+  return true;
 });
 
 app.whenReady().then(() => {

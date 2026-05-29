@@ -1063,6 +1063,51 @@
       height: 16px;
     }
 
+    .space-menu-wrap {
+      position: relative;
+      display: inline-flex;
+    }
+
+    .space-menu {
+      position: absolute;
+      top: 32px;
+      right: 0;
+      z-index: 60;
+      min-width: 170px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .space-menu button {
+      border: 0;
+      background: transparent;
+      color: var(--fg);
+      text-align: left;
+      font: inherit;
+      font-size: 12.5px;
+      padding: 7px 9px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .space-menu button:hover:not(:disabled) {
+      background: var(--hover);
+    }
+
+    .space-menu button.danger {
+      color: #b91c1c;
+    }
+
+    .space-menu button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
     /* Spinner for the sidebar sync (↻) button. JS sets a guaranteed
      * minimum spin window even on fast requests so the click always
      * leaves a visible trace. */
@@ -2867,6 +2912,82 @@
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+    }
+
+    .settings-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .settings-copy,
+    .settings-note,
+    .settings-ok,
+    .settings-error {
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 0;
+    }
+
+    .settings-copy,
+    .settings-note {
+      color: var(--muted);
+    }
+
+    .settings-ok {
+      color: #047857;
+    }
+
+    .settings-error {
+      color: #b91c1c;
+    }
+
+    .settings-field-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .settings-text-input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--fg);
+      background: #fff;
+    }
+
+    .settings-primary-btn,
+    .settings-secondary-btn {
+      height: 32px;
+      border-radius: 6px;
+      padding: 0 12px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .settings-primary-btn {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .settings-secondary-btn {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--fg);
+    }
+
+    .settings-primary-btn:disabled,
+    .settings-secondary-btn:disabled,
+    .settings-text-input:disabled {
+      opacity: 0.6;
+      cursor: default;
     }
 
     .modal-btn.danger {
