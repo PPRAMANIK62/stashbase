@@ -602,10 +602,15 @@ function ensureSpaceMetadata(spaceRoot: string): void {
       mode: 0o600,
     });
   }
-  const rules = path.join(spaceRoot, 'STASHBASE.md');
-  if (!fs.existsSync(rules)) {
-    fs.writeFileSync(rules, '# Space Rules\n\n', 'utf8');
-  }
+  // NOTE: deliberately do NOT auto-create `<spaceRoot>/STASHBASE.md`
+  // here. Per build-map 08-maintenance #01, the space-level rules
+  // file is **optional** ("可选模板" — only generated when the user
+  // explicitly opts in during space creation). Auto-creating it on
+  // every space made the file tree noisy and silently wrote content
+  // the user never asked for. When the user wants per-space rules
+  // they can either start typing in the LibraryPanel's per-space row
+  // (clicking opens an empty tab and `setSpaceRules` writes on save)
+  // or have an agent write via `PUT /api/spaces/:name/rules`.
 }
 
 function ensureKbMetadata(root: string): void {
