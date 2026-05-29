@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
 import { ChevronDownIcon } from '../icons';
-import type { FileMeta, FolderMeta, SearchHit } from '../api';
+import type { FileMeta, FolderMeta } from '../api';
 import { useApp } from '../store/AppContext';
 import { RenameInput, useRenameTarget } from './RenameInput';
 
@@ -152,12 +152,6 @@ export function FileTree() {
     [state.files, state.folders, state.fileOrder],
   );
 
-  // Non-empty query → render `/api/search` hits instead of the tree.
-  // The action handles debounce + race protection; we just react to
-  // whichever state phase the store is in.
-  if (state.filterQuery.trim()) {
-    return <SearchResults query={state.filterQuery.trim()} />;
-  }
   const inputAtRoot = state.newFolderInputOpen && state.activeFolder === '';
   if (root.children.length === 0 && !inputAtRoot) {
     return <div className="empty-list">No notes yet — click + to create one</div>;
@@ -168,79 +162,6 @@ export function FileTree() {
       <TreeNodes nodes={root.children} depth={0} parent="" />
     </>
   );
-}
-
-function SearchResults({ query }: { query: string }) {
-  const { state } = useApp();
-  if (state.searching && state.searchHits === null) {
-    return <div className="empty-list">Searching…</div>;
-  }
-  // searchHits stays at its previous value while a newer query is
-  // in-flight — render those instead of flashing back to nothing.
-  if (!state.searchHits || state.searchHits.length === 0) {
-    return <div className="empty-list">No matches</div>;
-  }
-  return (
-    <div className="search-hits">
-      {state.searchHits.map((hit, i) => (
-        <SearchHitRow key={`${hit.fileName}#${hit.chunkIndex}#${i}`} hit={hit} query={query} />
-      ))}
-    </div>
-  );
-}
-
-/** One search result row. Click opens the source file. Highlight
- *  matches the user's literal query terms (case-insensitive) — coarse
- *  but matches what they typed; we don't have access to the actual
- *  Milvus hit spans. */
-function SearchHitRow({ hit, query }: { hit: SearchHit; query: string }) {
-  const { actions } = useApp();
-  const fileBasename = hit.fileName.split('/').pop() ?? hit.fileName;
-  return (
-    <div
-      className="search-hit"
-      onClick={() => {
-        // Arm the viewer with the chunk's line range + raw text so it
-        // can render a fade overlay (HTML / MD / Code) or do a pdfjs
-        // find-controller search (PDF). The viewer consumes the
-        // highlight on first render and clears it.
-        void actions.selectFileWithHighlight(hit.fileName, {
-          startLine: hit.startLine,
-          endLine: hit.endLine,
-          chunkText: hit.content,
-        });
-      }}
-      title={hit.fileName}
-    >
-      {hit.heading && <div className="search-hit-heading">{hit.heading}</div>}
-      <div className="search-hit-snippet">{highlight(hit.content, query)}</div>
-      <div className="search-hit-meta">
-        <span className="search-hit-file">{displayName(fileBasename)}</span>
-      </div>
-    </div>
-  );
-}
-
-/** Split text on query terms (case-insensitive) and wrap matches in
- *  `<mark>`. Handles multi-word queries by splitting on whitespace and
- *  matching any term. Falls back to plain text if the regex is empty. */
-function highlight(text: string, query: string) {
-  const terms = query.split(/\s+/).filter(Boolean).map(escapeRegExp);
-  if (terms.length === 0) return text;
-  const re = new RegExp(`(${terms.join('|')})`, 'gi');
-  // Truncate very long chunks so a single hit doesn't blow up the
-  // sidebar — full body is one click away in the main pane.
-  const trimmed = text.length > 240 ? text.slice(0, 240) + '…' : text;
-  // `split` with a capture group alternates non-match / match / non-match
-  // — even indices are gaps, odd indices are the matched terms.
-  const parts = trimmed.split(re);
-  return parts.map((p, i) =>
-    i % 2 === 1 ? <mark key={i}>{p}</mark> : <span key={i}>{p}</span>,
-  );
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number; parent: string }) {

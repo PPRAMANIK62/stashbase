@@ -84,6 +84,17 @@ export interface IndexStatus {
    *  up writes from the terminal panel (Claude Code, `touch`, …) even
    *  for non-indexable files / empty dirs that don't move `pending`. */
   treeVersion?: number;
+  /** Non-null when this space's most recent snapshot import skipped
+   *  chunks because their provider key didn't match the library's
+   *  current embedder. The renderer surfaces this as a dismissible
+   *  banner with a link to switch embedders. */
+  snapshotWarning?: SnapshotWarning | null;
+}
+
+export interface SnapshotWarning {
+  skipped: number;
+  details: { provider: string; chunks: number }[];
+  at: string;
 }
 
 /** Persistent PDF conversion failure record (subset of the on-disk
@@ -111,6 +122,10 @@ export interface SyncResult {
   added?: string[];
   modified?: string[];
   removed?: string[];
+  /** Files the daemon detected as renames (hash match between a
+   *  deleted and an added path). These bypass the embedding pipeline
+   *  entirely — cached vectors get re-stamped under the new source. */
+  renamed?: string[];
   error?: string;
 }
 
@@ -131,6 +146,26 @@ export interface SearchHit {
   startLine?: number;
   endLine?: number;
   score: number;
+}
+
+export interface KeywordMatch {
+  line: number;
+  text: string;
+  ranges: Array<[number, number]>;
+}
+
+export interface KeywordHitFile {
+  path: string;
+  matches: KeywordMatch[];
+  totalMatches: number;
+}
+
+export interface KeywordSearchResult {
+  query: string;
+  space: string;
+  files: KeywordHitFile[];
+  totalMatches: number;
+  truncated: boolean;
 }
 
 export type EmbedderProvider = 'onnx' | 'openai';
@@ -290,6 +325,12 @@ export const api = {
    *  `openSpaceByName(name)`. */
   gitClone: (url: string, name = '') =>
     send<{ path: string }>('POST', '/api/git/clone', { url, name }),
+  /** Copy a local folder into kbRoot as a new space. `source` is an
+   *  absolute path; the renderer obtains it from
+   *  `window.stashbase.openFolderDialog` (Electron-only). `name`
+   *  defaults to the basename of `source` server-side. */
+  importFolder: (source: string, name = '') =>
+    send<{ path: string }>('POST', '/api/space/import-folder', { source, name }),
   /** Mirror this space's `skills/<name>/SKILL.md` into the active
    *  CLI's per-project prompt dir (`.claude/commands` / `.codex/prompts`).
    *  Renderer fires this on terminal panel open / CLI switch. */
@@ -367,7 +408,15 @@ export const api = {
   sync: () => send<SyncResult>('POST', '/api/sync'),
   search: (query: string, top_k = 8) =>
     send<{ hits: SearchHit[] }>('POST', '/api/search', { query, top_k }),
+  keywordSearch: (query: string, opts?: { caseStrict?: boolean; wholeWord?: boolean }) => {
+    const qs = new URLSearchParams({ q: query });
+    if (opts?.caseStrict) qs.set('case_strict', '1');
+    if (opts?.wholeWord) qs.set('whole_word', '1');
+    return getJson<KeywordSearchResult>(`/api/keyword-search?${qs.toString()}`);
+  },
   indexStatus: () => getJson<IndexStatus>('/api/index-status'),
+  dismissSnapshotWarning: () =>
+    send<{ ok: boolean }>('POST', '/api/snapshot-warning/dismiss'),
 
   /** Full per-file PDF conversion status, KB-wide, keyed by KB-relative
    *  path. PdfPreview calls this when the active file is a PDF to

@@ -51,8 +51,15 @@ export function ContextMenu() {
 
   if (!state.ctxMenu) return null;
   const { target, kind } = state.ctxMenu;
+  // "Retry conversion" is only meaningful when the target is a PDF
+  // currently in the failures list. Showing it on every PDF would let
+  // the user nuke + re-convert a working file by accident — the route
+  // deletes the derived `.<stem>.md` / `_files/` before re-running.
+  const canRetryPdf =
+    kind === 'file' && /\.pdf$/i.test(target) && state.pdfFailures.some((f) => f.path === target);
 
-  function dispatchAction(action: 'rename' | 'delete' | 'reveal') {
+  type CtxAction = 'rename' | 'delete' | 'reveal' | 'retry-pdf';
+  function dispatchAction(action: CtxAction) {
     dispatch({ type: 'CTX_MENU', menu: null });
     if (action === 'rename') {
       dispatch({ type: 'RENAMING', renaming: { path: target, kind } });
@@ -61,6 +68,14 @@ export function ContextMenu() {
       else void actions.deleteFile(target);
     } else if (action === 'reveal') {
       void api.revealFile(target);
+    } else if (action === 'retry-pdf') {
+      // Fire-and-forget — the failures-list / banner update on the next
+      // index-status poll (~1.5s in pending mode). If the API itself
+      // 4xx's we log; user-facing feedback comes via that banner
+      // flipping `failed` → in-flight → done.
+      void api.retryPdf(target).catch((err) => {
+        console.warn('[ctxmenu] retry pdf failed:', err instanceof Error ? err.message : String(err));
+      });
     }
   }
 
@@ -69,7 +84,7 @@ export function ContextMenu() {
   // div (not button) — the existing `.ctx-item` styling assumes block
   // semantics, and reskinning a native button to match would just
   // duplicate every rule.
-  function itemKeyDown(action: 'rename' | 'delete' | 'reveal') {
+  function itemKeyDown(action: CtxAction) {
     return (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -93,6 +108,16 @@ export function ContextMenu() {
         onClick={() => dispatchAction('reveal')}
         onKeyDown={itemKeyDown('reveal')}
       >{revealLabel()}</div>
+      {canRetryPdf && (
+        <div
+          className="ctx-item"
+          role="menuitem"
+          tabIndex={0}
+          onClick={() => dispatchAction('retry-pdf')}
+          onKeyDown={itemKeyDown('retry-pdf')}
+          title="Re-run the PDF converter — clears the derived note and bundle"
+        >Retry conversion</div>
+      )}
       <div
         className="ctx-item danger"
         role="menuitem"

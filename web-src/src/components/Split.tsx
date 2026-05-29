@@ -4,6 +4,27 @@ import { extractHeadings, renderMarkdown, withScrollBootstrap } from '../markdow
 import { useApp } from '../store/AppContext';
 import { CodeEditor } from './CodeEditor';
 
+type SplitOrientation = 'horizontal' | 'vertical';
+const SPLIT_RATIO_KEY = 'stashbase:split-ratio';
+const SPLIT_ORIENTATION_KEY = 'stashbase:split-orientation';
+const SPLIT_RATIO_MIN = 0.15;
+const SPLIT_RATIO_MAX = 0.85;
+const SPLIT_RATIO_DEFAULT = 0.5;
+
+function readStoredRatio(): number {
+  if (typeof window === 'undefined') return SPLIT_RATIO_DEFAULT;
+  const raw = window.localStorage.getItem(SPLIT_RATIO_KEY);
+  if (!raw) return SPLIT_RATIO_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return SPLIT_RATIO_DEFAULT;
+  return Math.min(SPLIT_RATIO_MAX, Math.max(SPLIT_RATIO_MIN, n));
+}
+
+function readStoredOrientation(): SplitOrientation {
+  if (typeof window === 'undefined') return 'horizontal';
+  return window.localStorage.getItem(SPLIT_ORIENTATION_KEY) === 'vertical' ? 'vertical' : 'horizontal';
+}
+
 /**
  * Two-pane source+preview for both MD and HTML. Edits debounce-update
  * the right pane (~80ms — below perceptual threshold but spares
@@ -155,8 +176,66 @@ export function Split({
     };
   }, [previewHtml, format, applyPendingScroll]);
 
+  const [ratio, setRatio] = useState<number>(readStoredRatio);
+  const [orientation, setOrientation] = useState<SplitOrientation>(readStoredOrientation);
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef<boolean>(false);
+
+  // Persist on every settled change. The user pays a single localStorage
+  // write per drag — we don't write per mousemove tick — and orientation
+  // changes are user-initiated clicks so they write at most a few times
+  // per session.
+  useEffect(() => { window.localStorage.setItem(SPLIT_RATIO_KEY, String(ratio)); }, [ratio]);
+  useEffect(() => { window.localStorage.setItem(SPLIT_ORIENTATION_KEY, orientation); }, [orientation]);
+
+  function onDividerMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    e.preventDefault();
+    draggingRef.current = true;
+    const el = splitRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // Lock the cursor look while dragging so cross-component mouse events
+    // don't flicker between resize / default. Reset on mouseup.
+    document.body.style.cursor = orientation === 'horizontal' ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+    function onMove(ev: MouseEvent) {
+      if (!draggingRef.current) return;
+      const next = orientation === 'horizontal'
+        ? (ev.clientX - rect.left) / rect.width
+        : (ev.clientY - rect.top) / rect.height;
+      const clamped = Math.min(SPLIT_RATIO_MAX, Math.max(SPLIT_RATIO_MIN, next));
+      setRatio(clamped);
+    }
+    function onUp() {
+      draggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  function toggleOrientation() {
+    setOrientation((prev) => (prev === 'horizontal' ? 'vertical' : 'horizontal'));
+  }
+
+  // Use template strings so the divider is its own track — clicking on
+  // it doesn't accidentally route into either pane (which would steal
+  // focus to the editor mid-drag).
+  const sourcePct = (ratio * 100).toFixed(3);
+  const previewPct = ((1 - ratio) * 100).toFixed(3);
+  const splitStyle: React.CSSProperties = orientation === 'horizontal'
+    ? { gridTemplateColumns: `${sourcePct}% 6px ${previewPct}%`, gridTemplateRows: '1fr' }
+    : { gridTemplateRows: `${sourcePct}% 6px ${previewPct}%`, gridTemplateColumns: '1fr' };
+
   return (
-    <div className="split">
+    <div
+      ref={splitRef}
+      className={'split split-' + orientation}
+      style={splitStyle}
+    >
       <div className="split-source">
         <CodeEditor
           // Re-mount on file/format change so CM picks up the new
@@ -166,6 +245,22 @@ export function Split({
           format={format}
           onChange={onEditorChange}
         />
+      </div>
+      <div
+        className={'split-divider split-divider-' + orientation}
+        onMouseDown={onDividerMouseDown}
+        onDoubleClick={() => setRatio(SPLIT_RATIO_DEFAULT)}
+        title="Drag to resize · double-click to reset · click ⇆ to flip orientation"
+      >
+        <button
+          type="button"
+          className="split-orient-btn"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); toggleOrientation(); }}
+          title={orientation === 'horizontal' ? 'Switch to vertical (top/bottom)' : 'Switch to horizontal (left/right)'}
+        >
+          {orientation === 'horizontal' ? '⇅' : '⇆'}
+        </button>
       </div>
       <div className="split-preview">
         <iframe

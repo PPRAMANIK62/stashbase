@@ -101,6 +101,28 @@ export function FileGenericIcon({ className }: IconProps) {
   );
 }
 
+/** Stacked-pages icon for the "Files" activity-bar view — two
+ *  overlapping document silhouettes, à la VS Code's Explorer icon.
+ *  Two independent paths (back-doc visible outline + front-doc full
+ *  outline) so the folded corners read cleanly; the back doc only
+ *  draws the edges that aren't occluded by the front. */
+export function FilesViewIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+      {/* Back document — top edge, folded corner diagonal, right side,
+          rounded bottom-right corner, short visible bottom segment. */}
+      <path d="M9 3 h7 l4 4 v9 a2 2 0 0 1 -2 2 h-1" />
+      {/* Back document's folded corner crease. */}
+      <polyline points="16 3 16 7 20 7" />
+      {/* Front document — full outline with the diagonal folded edge
+          closing the path. */}
+      <path d="M13 7 H5 a2 2 0 0 0 -2 2 V19 a2 2 0 0 0 2 2 H15 a2 2 0 0 0 2 -2 V11 Z" />
+      {/* Front document's folded corner crease. */}
+      <polyline points="13 7 13 11 17 11" />
+    </svg>
+  );
+}
+
 export function EditIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={1.8} {...stroke}>
@@ -208,10 +230,10 @@ export function HomeIcon({ className }: IconProps) {
   );
 }
 
-/** AGENT.md icon — sidebar row for the library-level overview.
+/** STASHBASE.md icon — sidebar row for the library-level overview.
  *  Robot head: antenna + rounded head + two eyes + a mouth line. The
  *  bot motif maps directly to "the AI assistant maintains this file"
- *  — that's what AGENT.md is for, and a robot reads as that intent
+ *  — that's what STASHBASE.md is for, and a robot reads as that intent
  *  at any size, unlike a generic page or catalog glyph. */
 export function LibraryIcon({ className }: IconProps) {
   return (

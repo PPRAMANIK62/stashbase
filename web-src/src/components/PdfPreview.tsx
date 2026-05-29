@@ -225,6 +225,138 @@ export function PdfPreview({ name }: { name: string }) {
     return () => { cancelled = true; };
   }, [doc, numPages, pendingHighlight, actions]);
 
+  // FindBar integration — registers a Cmd+F-driven controller so the
+  // user can search PDFs the same way they search MD / HTML / code.
+  // The controller scans pdfjs text content across all pages, builds
+  // an in-memory list of match positions, and jumps to each one on
+  // next / prev. No overlay or per-match highlight (pdfjs canvas
+  // rendering doesn't host DOM-selectable spans) — the FindBar's
+  // "N of M" counter + scroll-on-jump carries the navigation; the
+  // user's eye picks the match on the page.
+  useEffect(() => {
+    if (!doc) return;
+    let cancelled = false;
+    type PdfMatch = { page: number; yRatio: number };
+    const state: { matches: PdfMatch[]; current: number } = { matches: [], current: 0 };
+
+    function fold(s: string): string {
+      return s
+        .replace(/[‐-―−]/g, '-')
+        .replace(/[‘’]/g, "'")
+        .replace(/[“”]/g, '"')
+        .replace(/[  ​]/g, ' ');
+    }
+    function escapeRegExp(s: string): string {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    function scrollTo(m: PdfMatch) {
+      const root = containerRef.current;
+      const target = root?.querySelector(`[data-page="${m.page}"]`) as HTMLElement | null;
+      if (!root || !target) return;
+      const rendered = target.offsetHeight;
+      const desired = target.offsetTop + m.yRatio * rendered - root.clientHeight * 0.3;
+      root.scrollTo({ top: Math.max(0, desired), behavior: 'smooth' });
+    }
+    async function rebuild(query: string, wholeWord: boolean): Promise<void> {
+      state.matches = [];
+      state.current = 0;
+      const needle = fold(query).trim();
+      if (!needle) return;
+      const re = wholeWord
+        ? new RegExp(`\\b${escapeRegExp(needle)}\\b`, 'gi')
+        : null;
+      for (let i = 0; i < numPages; i++) {
+        if (cancelled) return;
+        try {
+          const page = await doc!.getPage(i + 1);
+          const tc = await page.getTextContent();
+          type StrItem = { str: string; transform: number[] };
+          const items: StrItem[] = [];
+          const itemStarts: number[] = [];
+          const segments: string[] = [];
+          let pos = 0;
+          let lastEnd = '';
+          for (const it of tc.items) {
+            if (!('str' in it) || typeof it.str !== 'string') continue;
+            const raw = it.str;
+            if (raw === '') continue;
+            if (lastEnd && !/\s/.test(lastEnd) && !/^\s/.test(raw)) {
+              segments.push(' ');
+              pos += 1;
+            }
+            const piece = raw.replace(/\s+/g, ' ');
+            itemStarts.push(pos);
+            items.push(it as StrItem);
+            segments.push(piece);
+            pos += piece.length;
+            lastEnd = piece.slice(-1);
+          }
+          const flat = fold(segments.join(''));
+          const viewport1x = page.getViewport({ scale: 1 });
+          function emit(idx: number) {
+            let itemIdx = 0;
+            for (let k = 0; k < itemStarts.length; k++) {
+              if (itemStarts[k] > idx) break;
+              itemIdx = k;
+            }
+            const m = items[itemIdx];
+            const yFromTop = viewport1x.height - (m.transform[5] ?? 0);
+            const yRatio = Math.max(0, Math.min(1, yFromTop / viewport1x.height));
+            state.matches.push({ page: i + 1, yRatio });
+          }
+          if (re) {
+            re.lastIndex = 0;
+            let m: RegExpExecArray | null;
+            while ((m = re.exec(flat)) !== null) {
+              emit(m.index);
+              if (re.lastIndex === m.index) re.lastIndex += 1;
+            }
+          } else {
+            const needleLower = needle.toLowerCase();
+            const flatLower = flat.toLowerCase();
+            let from = 0;
+            while (true) {
+              const idx = flatLower.indexOf(needleLower, from);
+              if (idx === -1) break;
+              emit(idx);
+              from = idx + needleLower.length;
+            }
+          }
+        } catch { /* skip page */ }
+      }
+    }
+
+    actions.registerFindController({
+      setQuery: async (q, { wholeWord }) => {
+        await rebuild(q, wholeWord);
+        if (state.matches.length === 0) return { current: 0, total: 0 };
+        scrollTo(state.matches[0]);
+        return { current: 1, total: state.matches.length };
+      },
+      next: () => {
+        if (state.matches.length === 0) return { current: 0, total: 0 };
+        state.current = (state.current + 1) % state.matches.length;
+        scrollTo(state.matches[state.current]);
+        return { current: state.current + 1, total: state.matches.length };
+      },
+      prev: () => {
+        if (state.matches.length === 0) return { current: 0, total: 0 };
+        state.current = (state.current - 1 + state.matches.length) % state.matches.length;
+        scrollTo(state.matches[state.current]);
+        return { current: state.current + 1, total: state.matches.length };
+      },
+      close: () => {
+        state.matches = [];
+        state.current = 0;
+      },
+    });
+
+    return () => {
+      cancelled = true;
+      actions.registerFindController(null);
+    };
+  }, [doc, numPages, actions]);
+
   async function onRetry() {
     setRetryBusy(true);
     try {

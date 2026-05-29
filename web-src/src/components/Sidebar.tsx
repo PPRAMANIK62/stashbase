@@ -2,16 +2,17 @@ import {
   ChevronDownIcon,
   CollapseAllIcon,
   ExpandAllIcon,
-  LibraryIcon,
   NewFileIcon,
   NewFolderIcon,
-  SearchIcon,
   SyncIcon,
 } from '../icons';
 import { useApp } from '../store/AppContext';
+import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
+import { LibraryPanel } from './LibraryPanel';
 import { ModalShell } from './ModalShell';
 import { Outline } from './Outline';
+import { SearchPanel } from './SearchPanel';
 import { api, errorMessage } from '../api';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 
@@ -21,12 +22,34 @@ interface ElectronBridge {
 }
 
 /**
- * Left rail composition. Search box → space header (chevron + label +
- * 4 action buttons) → file tree → outline. The SPACE header doubles
- * as a drop target for "move to root" gestures (otherwise files in a
- * subfolder have no obvious way back up).
+ * Left rail composition. The activity bar (narrow icon column on the
+ * far left) toggles between three mutually-exclusive side panels:
+ *   - Files   → SnapshotWarning, space header, file tree, outline
+ *   - Search  → search input + ≈/= toggle + result list (see
+ *               `SearchPanel.tsx`)
+ *   - Library → KB-root file list (STASHBASE.md + future root docs)
+ *
+ * Each panel keeps its own state when hidden — flipping back doesn't
+ * blow away tree expansion or the active query.
  */
 export function Sidebar() {
+  const { state } = useApp();
+  return (
+    <aside className="sidebar">
+      <ActivityBar />
+      <div className="sidebar-panel">
+        {state.activeSidebarView === 'search' ? <SearchPanel />
+          : state.activeSidebarView === 'library' ? <LibraryPanel />
+          : <FilesPanel />}
+      </div>
+    </aside>
+  );
+}
+
+/** The current sidebar content minus the search input and the
+ *  STASHBASE.md row — owns the snapshot-warning banner, the space header
+ *  (with the 4 action buttons), the file tree, and the outline. */
+function FilesPanel() {
   const { state, actions, dispatch } = useApp();
   const [sideHeadDrop, setSideHeadDrop] = useState(false);
 
@@ -51,21 +74,9 @@ export function Sidebar() {
 
   const rootSelected = state.selectedPath === '';
 
-  const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
-  const libraryActive = activeTab?.file?.kind === 'library';
-
   return (
-    <aside className="sidebar">
-      <SearchBox />
-      <div
-        className={'library-row' + (libraryActive ? ' active' : '')}
-        role="button"
-        title="Open AGENT.md — the AI assistant's library overview"
-        onClick={() => { void actions.openLibraryOverview(); }}
-      >
-        <LibraryIcon className="library-row-icon" />
-        <span className="library-row-label">AGENT.md</span>
-      </div>
+    <div className="files-panel" id="sidebar-panel-files" role="tabpanel">
+      <SnapshotWarningBanner />
       <div
         id="sideHead"
         className={
@@ -134,7 +145,7 @@ export function Sidebar() {
         <FileTree />
       </div>
       <Outline />
-    </aside>
+    </div>
   );
 }
 
@@ -391,48 +402,36 @@ function NewNoteButton() {
   );
 }
 
-/** Sidebar search input. Fires semantic search (`/api/search`) against
- *  the chunk index; input value updates immediately for responsiveness,
- *  the actual fetch debounces 250ms so fast typing isn't a stampede.
- *  Race protection lives in `actions.runSearch` itself. */
-function SearchBox() {
-  const { state, actions, dispatch } = useApp();
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => () => { if (debounce.current) clearTimeout(debounce.current); }, []);
-
-  // Hand the input handle to the store on mount so `actions.focusSearch`
-  // can reach it without a global DOM query. Mirrors the `registerEditor`
-  // pattern used by CodeEditor.
-  useEffect(() => {
-    actions.registerSearchInput(inputRef.current);
-    return () => actions.registerSearchInput(null);
-  }, [actions]);
-
-  function onChange(value: string) {
-    dispatch({ type: 'FILTER', q: value });
-    if (debounce.current) clearTimeout(debounce.current);
-    if (!value.trim()) {
-      // Clear immediately on empty — no point waiting to drop hits.
-      void actions.runSearch('');
-      return;
-    }
-    debounce.current = setTimeout(() => { void actions.runSearch(value); }, 250);
-  }
-
+/** One-time banner shown above the file tree when the active space's
+ *  most recent snapshot import skipped chunks because their provider
+ *  key didn't match the library's current embedder. Most users will
+ *  see this exactly once (after cloning a starter space whose snapshot
+ *  was exported with a different embedder). The banner offers a quick
+ *  link to the embedder settings + a dismiss button. */
+function SnapshotWarningBanner() {
+  const { state, actions } = useApp();
+  const w = state.snapshotWarning;
+  if (!w) return null;
+  const detail = w.details
+    .map((d) => `${d.chunks} from ${d.provider}`)
+    .join(', ');
   return (
-    <div className="side-search">
-      <SearchIcon className="side-search-icon" />
-      <input
-        ref={inputRef}
-        type="search"
-        placeholder="Search notes…"
-        autoComplete="off"
-        spellCheck={false}
-        value={state.filterQuery}
-        onChange={(e) => onChange(e.target.value)}
-      />
+    <div className="snapshot-warning">
+      <div className="snapshot-warning-body">
+        <div className="snapshot-warning-title">
+          Snapshot partly imported
+        </div>
+        <div className="snapshot-warning-msg">
+          Skipped {w.skipped} chunk{w.skipped === 1 ? '' : 's'} ({detail}).
+          Switch the library's embedder to match — or re-export the snapshot.
+        </div>
+      </div>
+      <button
+        type="button"
+        className="snapshot-warning-dismiss"
+        title="Dismiss"
+        onClick={() => { void actions.dismissSnapshotWarning(); }}
+      >×</button>
     </div>
   );
 }

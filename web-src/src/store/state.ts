@@ -15,7 +15,10 @@ import type {
   FileMeta,
   FolderMeta,
   Heading,
+  KeywordSearchResult,
+  PdfFailure,
   SearchHit,
+  SnapshotWarning,
   TerminalCli,
 } from '../api';
 
@@ -46,7 +49,7 @@ export interface OpenFile {
    *  PdfPreview dispatches OUTLINE_HEADINGS once pdfjs `getOutline()`
    *  returns. */
   headings: Heading[];
-  /** `'library'` for the `<kbRoot>/AGENT.md` special tab — read-only,
+  /** `'library'` for the `<kbRoot>/STASHBASE.md` special tab — read-only,
    *  no edit button, no save path. Default (omitted) means a regular
    *  per-space file. */
   kind?: 'space' | 'library';
@@ -100,11 +103,16 @@ export interface Tab {
 
 /** Search-hit-derived highlight signal: which lines (for HTML / MD /
  *  code viewers) plus the raw chunk text (for the PDF viewer to do
- *  text-layer search when line numbers don't apply). */
+ *  text-layer search when line numbers don't apply). When
+ *  `openFindBar` is true the viewer opens the FindBar pre-seeded with
+ *  `chunkText` so the user can walk every in-file match with Cmd+G —
+ *  set by the keyword-search hit click so a click on one match opens
+ *  navigation across all of them. */
 export interface PendingHighlight {
   startLine?: number;
   endLine?: number;
   chunkText: string;
+  openFindBar?: boolean;
 }
 
 /** Data for the rename-cascade confirmation dialog (VSCode "Update N
@@ -200,13 +208,47 @@ export interface State {
 
   syncRunning: boolean;
 
-  /** Sidebar search input. Empty = show tree; non-empty = run semantic
-   *  search against `/api/search`. The result lands in `searchHits`. */
+  /** Which sidebar view is active. `'files'` shows the file tree +
+   *  library row + outline + banners; `'search'` shows the search
+   *  input + result list (input visible only in this view).
+   *  Persisted to localStorage via the AppProvider so the user lands
+   *  back where they left off. */
+  activeSidebarView: 'files' | 'search' | 'library';
+  /** Sidebar search input. Empty = blank search panel; non-empty =
+   *  run search in whichever mode `searchMode` selects. */
   filterQuery: string;
+  /** `'semantic'` runs vector + BM25 hybrid via the daemon (`/api/search`).
+   *  `'keyword'` runs ripgrep against the active space dir
+   *  (`/api/keyword-search`) — no daemon, no embeddings. The toggle
+   *  switches without clearing the input so the user can compare. */
+  searchMode: 'semantic' | 'keyword';
+  /** Only meaningful in keyword mode. `false` = ripgrep `--smart-case`
+   *  (case-insensitive unless the query has uppercase chars); `true` =
+   *  `--case-sensitive` regardless. Semantic search ignores case via
+   *  embeddings, so this knob is hidden when `searchMode === 'semantic'`. */
+  caseStrict: boolean;
+  /** Only meaningful in keyword mode. `true` = `--word-regexp` so
+   *  "agent" doesn't match "agents". Hidden in semantic mode. */
+  wholeWord: boolean;
   /** `null` = not in search mode (query empty or cleared). `[]` = ran
-   *  and got nothing. Non-empty array = ranked hits from `/api/search`. */
+   *  and got nothing. Non-empty array = ranked hits from `/api/search`.
+   *  Populated only when `searchMode === 'semantic'`. */
   searchHits: SearchHit[] | null;
+  /** Same null / empty / populated convention as `searchHits`, but for
+   *  the keyword path. Holds the file-grouped result so the sidebar can
+   *  render each file's matches as a collapsible group. */
+  keywordResult: KeywordSearchResult | null;
   searching: boolean;
+
+  /** Non-null while the active space's most recent snapshot import
+   *  surfaced a provider-mismatch warning. Cleared by user dismissal
+   *  (`SNAPSHOT_WARNING_DISMISS`) or by the server reporting null. */
+  snapshotWarning: SnapshotWarning | null;
+  /** Space-relative paths of PDFs whose most recent conversion failed,
+   *  carried in from `/api/index-status`. Drives both the failures
+   *  banner inside `PdfPreview` and the context-menu "Retry
+   *  conversion" entry. Empty when no failures. */
+  pdfFailures: PdfFailure[];
 
   ctxMenu: CtxMenu | null;
   renaming: { path: string; kind: 'file' | 'folder' } | null;
@@ -266,9 +308,16 @@ export const initialState: State = {
   pendingNames: new Set(),
   pendingConversions: [],
   syncRunning: false,
+  activeSidebarView: 'files',
   filterQuery: '',
+  searchMode: 'semantic',
+  caseStrict: false,
+  wholeWord: false,
   searchHits: null,
+  keywordResult: null,
   searching: false,
+  snapshotWarning: null,
+  pdfFailures: [],
   ctxMenu: null,
   renaming: null,
   cascadePrompt: null,
@@ -331,7 +380,14 @@ export type Action =
   | { type: 'FILTER'; q: string }
   | { type: 'SEARCH_START' }
   | { type: 'SEARCH_HITS'; hits: SearchHit[] }
+  | { type: 'SEARCH_KEYWORD'; result: KeywordSearchResult }
   | { type: 'SEARCH_CLEAR' }
+  | { type: 'SEARCH_MODE'; mode: 'semantic' | 'keyword' }
+  | { type: 'SIDEBAR_VIEW'; view: 'files' | 'search' | 'library' }
+  | { type: 'SEARCH_CASE_STRICT'; strict: boolean }
+  | { type: 'SEARCH_WHOLE_WORD'; on: boolean }
+  | { type: 'SNAPSHOT_WARNING'; warning: SnapshotWarning | null }
+  | { type: 'PDF_FAILURES'; failures: PdfFailure[] }
   | { type: 'CTX_MENU'; menu: CtxMenu | null }
   | { type: 'RENAMING'; renaming: State['renaming'] }
   /** Push a new entry, truncating any forward history. Updates the
@@ -354,6 +410,11 @@ export type Action =
    *  Triggered by double-click on a sidebar file, double-click on the
    *  tab title, or entering edit mode on the tab. */
   | { type: 'PROMOTE_TAB'; id: string }
+  /** Move tab `id` to immediately before tab `beforeId` (drag-reorder).
+   *  `beforeId === null` appends to the end. No-op when the relative
+   *  position wouldn't change — keeps the reducer idempotent so a
+   *  hover-and-snap-back drag doesn't churn the React keys. */
+  | { type: 'TABS_REORDER'; id: string; beforeId: string | null }
   | { type: 'NEW_FOLDER_INPUT'; open: boolean }
   | { type: 'FIND_OPEN' }
   | { type: 'FIND_CLOSE' }
@@ -600,9 +661,26 @@ export function reducer(s: State, a: Action): State {
     case 'SEARCH_START':
       return { ...s, searching: true };
     case 'SEARCH_HITS':
-      return { ...s, searching: false, searchHits: a.hits };
+      return { ...s, searching: false, searchHits: a.hits, keywordResult: null };
+    case 'SEARCH_KEYWORD':
+      return { ...s, searching: false, keywordResult: a.result, searchHits: null };
     case 'SEARCH_CLEAR':
-      return { ...s, searching: false, searchHits: null };
+      return { ...s, searching: false, searchHits: null, keywordResult: null };
+    case 'SEARCH_MODE':
+      // Clear prior results so the renderer shows the new mode's empty
+      // state immediately; runSearch will repopulate if a query is live.
+      return { ...s, searchMode: a.mode, searchHits: null, keywordResult: null };
+    case 'SIDEBAR_VIEW':
+      return { ...s, activeSidebarView: a.view };
+    case 'SEARCH_CASE_STRICT':
+      // Result set semantics change → clear and let runSearch refill.
+      return { ...s, caseStrict: a.strict, keywordResult: null };
+    case 'SEARCH_WHOLE_WORD':
+      return { ...s, wholeWord: a.on, keywordResult: null };
+    case 'SNAPSHOT_WARNING':
+      return { ...s, snapshotWarning: a.warning };
+    case 'PDF_FAILURES':
+      return { ...s, pdfFailures: a.failures };
     case 'CTX_MENU':
       return { ...s, ctxMenu: a.menu };
     case 'RENAMING':
@@ -616,6 +694,22 @@ export function reducer(s: State, a: Action): State {
         ...s,
         tabs: s.tabs.map((t) => (t.id === a.id ? { ...t, preview: false } : t)),
       };
+    case 'TABS_REORDER': {
+      const fromIdx = s.tabs.findIndex((t) => t.id === a.id);
+      if (fromIdx < 0) return s;
+      const without = s.tabs.filter((t) => t.id !== a.id);
+      let insertAt: number;
+      if (a.beforeId == null) {
+        insertAt = without.length;
+      } else {
+        insertAt = without.findIndex((t) => t.id === a.beforeId);
+        if (insertAt < 0) insertAt = without.length;
+      }
+      // No-op when the resulting order matches what we have already.
+      if (insertAt === fromIdx) return s;
+      const next = [...without.slice(0, insertAt), s.tabs[fromIdx], ...without.slice(insertAt)];
+      return { ...s, tabs: next };
+    }
     case 'NAV_PUSH': {
       const tab = getActiveTab(s);
       if (!tab) return s;

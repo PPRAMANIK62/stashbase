@@ -88,7 +88,15 @@ export interface AppActions {
   loadFiles: () => Promise<void>;
   refreshIndexState: () => Promise<void>;
   runSync: () => Promise<void>;
-  runSearch: (query: string) => Promise<void>;
+  /** Run a search. Pass `mode` to force a specific routing — useful
+   *  when the caller has just dispatched `SEARCH_MODE` and can't rely
+   *  on `stateRef` reflecting that yet (it updates after commit, not
+   *  in-line with the dispatch). Default reads from state. */
+  runSearch: (query: string, mode?: 'semantic' | 'keyword') => Promise<void>;
+  /** Clear the active space's snapshot-import warning. Fires
+   *  `/api/snapshot-warning/dismiss` so the warning doesn't reappear
+   *  the next time `/api/index-status` polls. */
+  dismissSnapshotWarning: () => Promise<void>;
   /** Replace a folder's ordered child list (manual sidebar ordering).
    *  Optimistic — state updates immediately, then a PUT is fired.
    *  Failure of the PUT rolls the renderer back to whatever the server
@@ -112,7 +120,7 @@ export interface AppActions {
    *  "Open in New Tab" command. */
   openInNewTab: (name: string) => Promise<void>;
   newTab: () => Promise<void>;
-  /** Open `<kbRoot>/AGENT.md` (the agent-maintained library overview)
+  /** Open `<kbRoot>/STASHBASE.md` (the agent-maintained library overview)
    *  in a new tab. Read-only — no save / edit. */
   openLibraryOverview: () => Promise<void>;
   closeTab: (id: string) => Promise<void>;
@@ -196,10 +204,55 @@ const AUTOSAVE_DEBOUNCE_MS = 1200;
 const POLL_PENDING_MS = 1500;
 const POLL_IDLE_MS = 8000;
 
+function shallowEqualSnapshotWarning(
+  a: State['snapshotWarning'],
+  b: State['snapshotWarning'],
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.skipped !== b.skipped) return false;
+  if (a.at !== b.at) return false;
+  if (a.details.length !== b.details.length) return false;
+  return a.details.every((d, i) =>
+    d.provider === b.details[i].provider && d.chunks === b.details[i].chunks,
+  );
+}
+
+function shallowEqualPdfFailures(
+  a: State['pdfFailures'],
+  b: State['pdfFailures'],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((f, i) =>
+    f.path === b[i].path && f.attempts === b[i].attempts && f.lastError === b[i].lastError,
+  );
+}
+
+const SIDEBAR_VIEW_KEY = 'stashbase:sidebar-view';
+
+function readSidebarViewPref(): 'files' | 'search' | 'library' {
+  if (typeof window === 'undefined') return 'files';
+  const v = window.localStorage.getItem(SIDEBAR_VIEW_KEY);
+  if (v === 'search') return 'search';
+  if (v === 'library') return 'library';
+  return 'files';
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, (base) => ({
+    ...base,
+    activeSidebarView: readSidebarViewPref(),
+  }));
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // Mirror `activeSidebarView` to localStorage so the user lands back
+  // in their last-used view on reload. Cheap enough to write on every
+  // change — toggle is a click event, not a render-frequency thing.
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_VIEW_KEY, state.activeSidebarView);
+  }, [state.activeSidebarView]);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -390,6 +443,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastTreeVersion.current = newTreeVersion;
       dispatch({ type: 'PENDING_NAMES', names: newPending });
       if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
+      // Snapshot warning is sticky until the user dismisses it (or a
+      // fresh import wipes it server-side). Always reflect what the
+      // server reports so a switch back to a "fixed" space clears the
+      // banner.
+      const incomingWarning = s.snapshotWarning ?? null;
+      if (!shallowEqualSnapshotWarning(prev.snapshotWarning, incomingWarning)) {
+        dispatch({ type: 'SNAPSHOT_WARNING', warning: incomingWarning });
+      }
+      const incomingFailures = s.pdfFailures ?? [];
+      if (!shallowEqualPdfFailures(prev.pdfFailures, incomingFailures)) {
+        dispatch({ type: 'PDF_FAILURES', failures: incomingFailures });
+      }
       if (pendingChanged || convChanged || treeChanged) void loadFiles();
       // Tree changed = someone else wrote to disk (Claude Code in the
       // terminal panel is the common case). Re-read the active tab's
@@ -415,29 +480,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
     pollTimer.current = setTimeout(() => { void refreshIndexState(); }, nextDelay);
   }, [loadFiles, refreshActiveTabFromDisk]);
 
-  /** Fire a `/api/search` and dispatch the result. Empty query clears
-   *  the hit list (back to tree view). Bails out on stale responses so
-   *  fast typing doesn't show flashes of older results. */
-  const runSearch = useCallback(async (query: string) => {
+  /** Fire whichever search the current `searchMode` selects and dispatch
+   *  the result. Empty query clears (back to tree view). Bails out on
+   *  stale responses so fast typing doesn't show flashes of older
+   *  results — also covers the case where the user toggled mode while a
+   *  prior query was in flight.
+   *
+   *  `modeOverride` exists because `stateRef.current.searchMode`
+   *  updates AFTER React commits, not in-line with a dispatch — so a
+   *  caller that just dispatched `SEARCH_MODE` and synchronously calls
+   *  `runSearch` would otherwise read the stale mode and fire the
+   *  wrong API. Mode-toggle callers pass the new mode explicitly. */
+  const runSearch = useCallback(async (query: string, modeOverride?: 'semantic' | 'keyword') => {
     const myGen = ++searchGen.current;
     const q = query.trim();
     if (!q) {
       dispatch({ type: 'SEARCH_CLEAR' });
       return;
     }
+    const mode = modeOverride ?? stateRef.current.searchMode;
     dispatch({ type: 'SEARCH_START' });
     try {
-      const { hits } = await api.search(q, 15);
-      if (myGen !== searchGen.current) return; // newer query in flight
-      dispatch({ type: 'SEARCH_HITS', hits });
+      if (mode === 'keyword') {
+        // Pull case-strict / whole-word straight from state — those
+        // toggles only mean anything in keyword mode and runSearch is
+        // re-fired whenever they flip, so the live snapshot is right.
+        const s = stateRef.current;
+        const result = await api.keywordSearch(q, {
+          caseStrict: s.caseStrict,
+          wholeWord: s.wholeWord,
+        });
+        if (myGen !== searchGen.current) return;
+        dispatch({ type: 'SEARCH_KEYWORD', result });
+      } else {
+        const { hits } = await api.search(q, 15);
+        if (myGen !== searchGen.current) return;
+        dispatch({ type: 'SEARCH_HITS', hits });
+      }
     } catch (err) {
       if (myGen !== searchGen.current) return;
       // ApiError 412 = no space open. Anything else: surface empty
       // result so the UI says "No matches" instead of hanging on
       // "Searching…".
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn('[search] failed:', msg);
-      dispatch({ type: 'SEARCH_HITS', hits: [] });
+      console.warn(`[search:${mode}] failed:`, msg);
+      if (mode === 'keyword') {
+        dispatch({ type: 'SEARCH_KEYWORD', result: { query: q, space: '', files: [], totalMatches: 0, truncated: false } });
+      } else {
+        dispatch({ type: 'SEARCH_HITS', hits: [] });
+      }
     }
   }, []);
 
@@ -451,7 +542,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!cur || !handle) return;
     // Library-overview tab is read-only — even if a CodeMirror handle
     // is registered (edit button hidden but defense-in-depth), don't
-    // ever PUT it back to /api/files/AGENT.md (which would resolve
+    // ever PUT it back to /api/files/STASHBASE.md (which would resolve
     // inside the current space, not at kbRoot).
     if (cur.kind === 'library') return;
     const content = handle.getValue();
@@ -612,6 +703,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const selectFileWithHighlight = useCallback(async (name: string, hit: PendingHighlight) => {
     await selectFile(name);
     dispatch({ type: 'PENDING_HIGHLIGHT', highlight: hit });
+    // Keyword-search hits carry `openFindBar: true` so the user can
+    // walk every in-file match with Cmd+G. Setting `find.{open, query}`
+    // BEFORE the viewer mounts means `registerFindController` sees the
+    // pending query and primes the new controller immediately —
+    // matches show up without the user re-typing.
+    if (hit.openFindBar && hit.chunkText) {
+      dispatch({ type: 'FIND_SET', patch: { query: hit.chunkText } });
+      dispatch({ type: 'FIND_OPEN' });
+    }
   }, [selectFile]);
 
   /** Toggle the "Show original PDF" dual-view for the current tab.
@@ -677,7 +777,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({
         type: 'FILE_OPEN',
         body: {
-          name: 'AGENT.md',
+          name: 'STASHBASE.md',
           format: 'md',
           content: r.content,
           headings: [],
@@ -710,13 +810,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const focusSearch = useCallback(() => {
+    const s = stateRef.current;
     // Un-collapse the sidebar first if hidden — focusing an invisible
     // input is technically valid but reads as "nothing happened".
-    if (stateRef.current.sidebarCollapsed) {
+    if (s.sidebarCollapsed) {
       dispatch({ type: 'SIDEBAR_FOLD_TOGGLE' });
     }
-    // Defer one frame so the un-collapse layout commits before we
-    // focus + flash. RAF is more reliable than setTimeout(0) here.
+    // Make sure the search view is the active sidebar panel. The
+    // input only renders in the Search panel — without this, hitting
+    // ⌘O while the Files panel is up would do nothing.
+    if (s.activeSidebarView !== 'search') {
+      dispatch({ type: 'SIDEBAR_VIEW', view: 'search' });
+    }
+    // Defer one frame so the un-collapse / view-switch layout commits
+    // before we focus + flash. RAF is more reliable than setTimeout(0)
+    // here. Also gives SearchPanel's mount effect time to register
+    // the new input ref if we just flipped views.
     requestAnimationFrame(() => {
       const el = searchInputRef.current;
       if (!el) return;
@@ -739,11 +848,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const registerFindController = useCallback((c: FindController | null) => {
     // Replacing the controller (tab/mode switch while the bar is open):
     // tear down the outgoing one so its highlights don't outlive its
-    // owning view. The new one will pick up the current query via its
-    // own mount-time effect.
+    // owning view, then prime the new one with the current query so a
+    // file-switch (or a keyword-hit click that pre-armed the bar) ends
+    // up showing matches immediately instead of waiting for the user
+    // to re-type.
     const prev = findCtlRef.current;
     if (prev && prev !== c) prev.close();
     findCtlRef.current = c;
+    if (c) {
+      const { query, wholeWord, open } = stateRef.current.find;
+      if (open && query) {
+        void applyMatchInfo(c.setQuery(query, { wholeWord }));
+      }
+    }
   }, []);
 
   const openFind = useCallback(() => {
@@ -788,8 +905,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const activateTab = useCallback(async (id: string) => {
     const s = stateRef.current;
     if (s.activeTabId === id) return;
+    // Snapshot the outgoing tab's scroll into its current nav entry
+    // BEFORE flushSave (which may unmount the editor and lose the read
+    // path). MD previews give us a number; HTML / PDF return null
+    // because the iframe is cross-realm — we accept that those don't
+    // round-trip and just don't snapshot.
+    const outgoingScrollY = captureCurrentScrollY();
+    if (outgoingScrollY != null) {
+      dispatch({ type: 'NAV_SNAPSHOT_SCROLL', scrollY: outgoingScrollY });
+    }
     if (editorRef.current) await flushSave();
     dispatch({ type: 'ACTIVATE_TAB', id });
+    // After activating, arm the incoming tab's pendingScrollY from its
+    // current nav entry so the viewer's mount-time effect restores the
+    // position. React batches these two dispatches into a single
+    // render so the viewer mounts with pendingScrollY already set.
+    const incoming = stateRef.current.tabs.find((t) => t.id === id);
+    const entry = incoming?.navStack[incoming.navCursor];
+    if (entry?.scrollY != null) {
+      dispatch({ type: 'PENDING_SCROLL', anchor: entry.anchor ?? null, scrollY: entry.scrollY });
+    }
   }, [flushSave]);
 
   const navigateTo = useCallback(async (name: string, anchor?: string) => {
@@ -1137,9 +1272,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [openSpaceByName]);
 
+  const dismissSnapshotWarning = useCallback(async () => {
+    // Optimistic: blank the banner locally so the click feels instant;
+    // server call confirms. If it fails the next poll restores the
+    // warning (recordSnapshotWarning is still set server-side) so we
+    // don't need to roll back here.
+    dispatch({ type: 'SNAPSHOT_WARNING', warning: null });
+    try { await api.dismissSnapshotWarning(); }
+    catch (err) {
+      console.warn('[snapshot-warning] dismiss failed:', err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
   const actions = useMemo<AppActions>(() => ({
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
+    dismissSnapshotWarning,
     selectFile, selectFileWithHighlight, openInNewTab, newTab, openLibraryOverview, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     consumePendingHighlight,
@@ -1157,6 +1305,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }), [
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
+    dismissSnapshotWarning,
     selectFile, selectFileWithHighlight, openInNewTab, newTab, openLibraryOverview, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     consumePendingHighlight,

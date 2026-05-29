@@ -26,6 +26,7 @@ import { TerminalToggleButton } from './components/TerminalToggleButton';
 import { SettingsButton } from './components/SettingsButton';
 import { SettingsPortal } from './components/SettingsModal';
 import { HomeIcon, SidebarLeftIcon } from './icons';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppProvider, useApp } from './store/AppContext';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 
@@ -39,9 +40,11 @@ import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
  */
 export function App() {
   return (
-    <AppProvider>
-      <AppBody />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <AppBody />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -6,6 +6,10 @@ import { CloneRepoModal } from './CloneRepoModal';
 import { ModalShell } from './ModalShell';
 import { openSettings } from './SettingsModal';
 
+interface ElectronBridge {
+  openFolderDialog?: (opts?: unknown) => Promise<string | null>;
+}
+
 /** Shorten an absolute path for display: `/Users/foo/Notes` → `~/Notes`
  *  when it lives under the user's home dir. Falls through unchanged
  *  otherwise (e.g. `/tmp/scratch`). */
@@ -103,6 +107,7 @@ export function Welcome() {
             </span>
             <span className="welcome-action-label">Clone repo</span>
           </button>
+          <ImportFolderButton />
         </div>
 
         <div className="welcome-mcp">
@@ -267,6 +272,54 @@ function KbRootPickerModal({
         </button>
       </div>
     </ModalShell>
+  );
+}
+
+/** "Import folder" action — opens the native folder picker, then asks
+ *  the server to copy the chosen directory into <kbRoot>/<basename> as
+ *  a brand-new space. Browser fallback (no Electron bridge) hides the
+ *  button entirely: there's no portable file-picker we'd trust to
+ *  return an absolute path the server can act on. */
+function ImportFolderButton() {
+  const { actions, dispatch } = useApp();
+  const [busy, setBusy] = useState(false);
+  const bridge = useMemo<ElectronBridge | undefined>(
+    () => (window as { electron?: ElectronBridge }).electron,
+    [],
+  );
+  if (typeof bridge?.openFolderDialog !== 'function') return null;
+  async function onClick() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const picked = await bridge!.openFolderDialog!({
+        title: 'Import folder as space',
+        buttonLabel: 'Import',
+      });
+      if (!picked) return;
+      const result = await api.importFolder(picked);
+      // Server returns the destination path; flip into it like
+      // CloneRepoModal does so the user lands in the new space.
+      await actions.openSpace(result.path);
+    } catch (err) {
+      dispatch({ type: 'WELCOME_ERROR', error: errorMessage(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      className="welcome-action"
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title="Copy an existing folder on your disk into the library as a new space"
+    >
+      <span className="welcome-action-icon">
+        <FolderIcon />
+      </span>
+      <span className="welcome-action-label">{busy ? 'Importing…' : 'Import folder'}</span>
+    </button>
   );
 }
 
