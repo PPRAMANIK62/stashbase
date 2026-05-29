@@ -50,7 +50,10 @@ export function HtmlPreview({ name }: { name: string }) {
     }
     return (h >>> 0).toString(36);
   }, [content]);
-  const src = `${assetUrl(name)}?v=${fingerprint}`;
+  // `assetUrl()` already carries a `?windowId=…` query — append the
+  // cache-bust with `&` so we don't end up with two `?` separators
+  // (the second would be swallowed into the value of `windowId`).
+  const src = `${assetUrl(name)}&v=${fingerprint}`;
 
   function postScroll() {
     if (!pendingAnchor) return;

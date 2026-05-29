@@ -20,6 +20,7 @@ import { getDaemon } from '../mfs-daemon.ts';
 import { clearSnapshotWarning, getSnapshotWarning, indexer } from '../state.ts';
 import { noteSelfWrite } from '../watcher.ts';
 import {
+  getKbRules,
   getLibraryInfo,
   getLibraryOverview,
   getResolvedRules,
@@ -353,6 +354,17 @@ export function mount(app: express.Express): void {
         ? req.query.space.trim()
         : getCurrentSpaceName() ?? undefined;
       res.json({ space: space ?? null, content: getResolvedRules(space) });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Raw KB-level STASHBASE.md content (no per-space concatenation).
+  // Separate from `/api/rules` so the LibraryPanel can show each
+  // rules file as its own openable tab.
+  app.get('/api/library/rules', (_req, res) => {
+    try {
+      res.json({ content: getKbRules() });
     } catch (err: unknown) {
       sendError(res, err);
     }

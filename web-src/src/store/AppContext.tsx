@@ -22,6 +22,7 @@ import {
 import {
   api,
   ApiError,
+  getWindowId,
   type Heading,
 } from '../api';
 import {
@@ -123,6 +124,13 @@ export interface AppActions {
   /** Open `<kbRoot>/STASHBASE.md` (the agent-maintained library overview)
    *  in a new tab. Read-only — no save / edit. */
   openLibraryOverview: () => Promise<void>;
+  /** Open `<kbRoot>/STASHBASE.md` (KB-level rules book) as a
+   *  library-kind tab. Same one-tab-only / activate-if-open rule
+   *  as `openLibraryOverview`. */
+  openKbRules: () => Promise<void>;
+  /** Open `<space>/STASHBASE.md` (per-space rules) as a library-
+   *  kind tab. `name` is the space name. */
+  openSpaceRules: (name: string) => Promise<void>;
   closeTab: (id: string) => Promise<void>;
   /** Close whichever tab is currently active. Convenience for keyboard
    *  shortcuts (`⌘W`) and UI buttons that don't have a tab id handy. */
@@ -154,6 +162,24 @@ export interface AppActions {
   /** Settle the pending alert/confirm modal with the user's choice.
    *  Called by the rendered modal's buttons. */
   resolveModal: (value: boolean) => void;
+  /** Push a toast — lightweight non-blocking feedback. Use this for
+   *  "operation succeeded / failed" messages instead of `alert` when
+   *  the user can just keep working. Returns the new toast's id so
+   *  the caller can dismiss it programmatically (e.g. when a long-
+   *  running operation finally settles).
+   *
+   *  Default ttl: info / success 3000ms, warning 5000ms, error null
+   *  (persistent — error toasts only go away when the user clicks
+   *  the × or presses Esc / clicks the Reload button on the toast). */
+  toast: (
+    message: string,
+    opts?: {
+      level?: 'info' | 'success' | 'warning' | 'error';
+      ttl?: number | null;
+      action?: { label: string; onClick: () => void };
+    },
+  ) => string;
+  dismissToast: (id: string) => void;
   toggleEditMode: () => Promise<void>;
 
   newNote: (format?: 'md' | 'html') => Promise<void>;
@@ -317,6 +343,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     modalResolveRef.current = null;
     dispatch({ type: 'MODAL_CLOSE' });
     if (r) r(value);
+  }, []);
+
+  // Monotonic counter for toast ids — crypto.randomUUID would work
+  // too, but a plain counter is enough (toasts are short-lived and
+  // never persisted) and keeps test fixtures predictable.
+  const toastSeq = useRef(0);
+  const toast = useCallback((
+    message: string,
+    opts?: {
+      level?: 'info' | 'success' | 'warning' | 'error';
+      ttl?: number | null;
+      action?: { label: string; onClick: () => void };
+    },
+  ): string => {
+    const level = opts?.level ?? 'info';
+    // Per-level defaults: error is persistent so the user can't miss
+    // it; warnings linger a bit longer than success/info; everything
+    // else is a brisk 3 s.
+    const defaultTtl =
+      level === 'error' ? null
+      : level === 'warning' ? 5000
+      : 3000;
+    const id = `toast-${++toastSeq.current}`;
+    dispatch({
+      type: 'TOAST_ADD',
+      toast: {
+        id,
+        level,
+        message,
+        action: opts?.action,
+        ttl: opts?.ttl !== undefined ? opts.ttl : defaultTtl,
+      },
+    });
+    return id;
+  }, []);
+  const dismissToast = useCallback((id: string) => {
+    dispatch({ type: 'TOAST_DISMISS', id });
   }, []);
 
   /** Run the rename-preview probe, and if it surfaces cross-references,
@@ -502,13 +565,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SEARCH_START' });
     try {
       if (mode === 'keyword') {
-        // Pull case-strict / whole-word straight from state — those
-        // toggles only mean anything in keyword mode and runSearch is
-        // re-fired whenever they flip, so the live snapshot is right.
+        // Pull case-strict / whole-word / current space straight from
+        // state. The `space` field is the active space of THIS window;
+        // passing it explicitly avoids the server falling back to the
+        // process-wide `currentSpace` singleton, which would pick the
+        // wrong space in multi-window sessions.
         const s = stateRef.current;
         const result = await api.keywordSearch(q, {
           caseStrict: s.caseStrict,
           wholeWord: s.wholeWord,
+          space: s.space || undefined,
         });
         if (myGen !== searchGen.current) return;
         dispatch({ type: 'SEARCH_KEYWORD', result });
@@ -777,7 +843,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({
         type: 'FILE_OPEN',
         body: {
-          name: 'STASHBASE.md',
+          // Display name matches the actual on-disk file
+          // (<kbRoot>/AGENT.md per `server/library.ts:FILENAME`).
+          // STASHBASE.md (KB + per-space) is reserved for the
+          // separate rules-book role and opens via `openKbRules` /
+          // `openSpaceRules`.
+          name: 'AGENT.md',
           format: 'md',
           content: r.content,
           headings: [],
@@ -789,9 +860,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      await showAlert('Failed to load library overview: ' + msg);
+      toast('Failed to load library overview: ' + msg, { level: 'error' });
     }
   }, [flushSave, showAlert]);
+
+  /** Shared between `openKbRules` and `openSpaceRules` — fetch some
+   *  markdown, open it as a library-kind tab whose name matches the
+   *  on-disk filename (so the user reads "STASHBASE.md" or
+   *  "<space>/STASHBASE.md" exactly, no aliasing). Tab dedup is by
+   *  `name` since both rule files coexist in the same kind. */
+  const openLibraryFile = useCallback(async (name: string, fetcher: () => Promise<{ content: string }>) => {
+    try {
+      const s = stateRef.current;
+      const existing = s.tabs.find((t) => t.file?.kind === 'library' && t.file?.name === name);
+      if (existing) {
+        if (existing.id !== s.activeTabId) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
+        return;
+      }
+      if (editorRef.current) await flushSave();
+      const r = await fetcher();
+      dispatch({
+        type: 'FILE_OPEN',
+        body: {
+          name,
+          format: 'md',
+          content: r.content,
+          headings: [],
+          kind: 'library',
+        } as any,
+        newTab: true,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast(`Failed to load ${name}: ${msg}`, { level: 'error' });
+    }
+  }, [flushSave]);
+
+  const openKbRules = useCallback(async () => {
+    await openLibraryFile('STASHBASE.md', () => api.getKbRules());
+  }, [openLibraryFile]);
+
+  const openSpaceRules = useCallback(async (name: string) => {
+    await openLibraryFile(`${name}/STASHBASE.md`, () => api.getSpaceRules(name));
+  }, [openLibraryFile]);
 
   const closeTab = useCallback(async (id: string) => {
     const s = stateRef.current;
@@ -1013,7 +1124,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'RENAMING', renaming: { path: name, kind: 'file' } });
       void refreshIndexState();
     } catch (e: unknown) {
-      await showAlert('Failed to create: ' + (e instanceof Error ? e.message : String(e)));
+      toast('Failed to create: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [flushSave, loadFiles, refreshIndexState, showAlert]);
 
@@ -1025,7 +1136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'ACTIVE_FOLDER', path: j.path });
       await loadFiles();
     } catch (e: unknown) {
-      await showAlert('Failed to create folder: ' + (e instanceof Error ? e.message : String(e)));
+      toast('Failed to create folder: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [loadFiles, showAlert]);
 
@@ -1051,7 +1162,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       await loadFiles();
     } catch (e: unknown) {
-      await showAlert('Delete failed: ' + (e instanceof Error ? e.message : String(e)));
+      toast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [loadFiles, showAlert, askConfirm]);
 
@@ -1066,7 +1177,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       await loadFiles();
     } catch (e: unknown) {
-      await showAlert('Delete failed: ' + (e instanceof Error ? e.message : String(e)));
+      toast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [loadFiles, showAlert, askConfirm]);
 
@@ -1100,7 +1211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await loadFiles();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      await showAlert('Rename failed: ' + msg);
+      toast('Rename failed: ' + msg, { level: 'error' });
       if (wasActive) {
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Rename failed', cls: 'error' } });
       }
@@ -1111,7 +1222,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const renameFolder = useCallback(async (oldPath: string, newName: string) => {
     if (!newName || newName.includes('/')) {
-      await showAlert('Folder name cannot contain "/".');
+      toast('Folder name cannot contain "/".', { level: 'warning' });
       dispatch({ type: 'RENAMING', renaming: null });
       return;
     }
@@ -1145,7 +1256,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       await loadFiles();
     } catch (e: unknown) {
-      await showAlert('Rename failed: ' + (e instanceof Error ? e.message : String(e)));
+      toast('Rename failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     } finally {
       dispatch({ type: 'RENAMING', renaming: null });
     }
@@ -1164,7 +1275,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (targetDir) dispatch({ type: 'EXPAND_FOLDER', path: targetDir });
       await loadFiles();
     } catch (e: unknown) {
-      await showAlert('Move failed: ' + (e instanceof Error ? e.message : String(e)));
+      toast('Move failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [askCascadeForRename, loadFiles, showAlert]);
 
@@ -1188,11 +1299,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const failed = (j.files || []).filter((x) => x.error);
       if (failed.length) {
         console.warn('[upload] failed:', failed);
-        await showAlert(`${failed.length} file(s) failed to import. Check console for details.`);
+        toast(`${failed.length} file(s) failed to import. Check console for details.`, { level: 'error' });
       }
     } catch (e: unknown) {
       console.warn('[upload] request failed:', e);
-      await showAlert('Upload failed — see console.');
+      toast('Upload failed — see console.', { level: 'error' });
     }
   }, [loadFiles, refreshIndexState, selectFile, showAlert]);
 
@@ -1204,7 +1315,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await api.sync();
       await loadFiles();
     } catch (e: unknown) {
-      await showAlert('Sync failed: ' + (e instanceof Error ? e.message : String(e)));
+      toast('Sync failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     } finally {
       dispatch({ type: 'SYNC_RUNNING', running: false });
     }
@@ -1288,12 +1399,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
     dismissSnapshotWarning,
-    selectFile, selectFileWithHighlight, openInNewTab, newTab, openLibraryOverview, closeTab, closeActiveTab, activateTab,
+    selectFile, selectFileWithHighlight, openInNewTab, newTab, openLibraryOverview, openKbRules, openSpaceRules, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     consumePendingHighlight,
     toggleSplitOriginalPdf,
     resolveCascadePrompt,
     alert: showAlert, confirm: askConfirm, resolveModal,
+    toast, dismissToast,
     toggleEditMode,
     newNote, newFolder, deleteFile, deleteFolder,
     renameFile, renameFolder, moveFile, upload,
@@ -1306,12 +1418,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
     dismissSnapshotWarning,
-    selectFile, selectFileWithHighlight, openInNewTab, newTab, openLibraryOverview, closeTab, closeActiveTab, activateTab,
+    selectFile, selectFileWithHighlight, openInNewTab, newTab, openLibraryOverview, openKbRules, openSpaceRules, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     consumePendingHighlight,
     toggleSplitOriginalPdf,
     resolveCascadePrompt,
-    showAlert, askConfirm, resolveModal,
+    showAlert, askConfirm, resolveModal, toast, dismissToast,
     toggleEditMode,
     newNote, newFolder, deleteFile, deleteFolder,
     renameFile, renameFolder, moveFile, upload,
@@ -1379,11 +1491,15 @@ function derivePdfSibling(notePath: string): string | null {
 }
 
 /** HEAD `/asset/<path>` to test for existence. We tolerate any non-2xx
- *  as "absent" (404 is the common case; 403 / 500 also count). */
+ *  as "absent" (404 is the common case; 403 / 500 also count).
+ *  Includes the window-id header so the server resolves the asset
+ *  against THIS window's active space — without it, a multi-window
+ *  session would HEAD against the process-wide default space. */
 async function assetExists(spaceRel: string): Promise<boolean> {
   try {
     const resp = await fetch('/asset/' + encodeURIComponent(spaceRel).replace(/%2F/g, '/'), {
       method: 'HEAD',
+      headers: { 'x-stashbase-window-id': getWindowId() },
     });
     return resp.ok;
   } catch {

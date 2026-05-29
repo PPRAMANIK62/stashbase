@@ -138,6 +138,25 @@ export interface ModalRequest {
   message: string;
 }
 
+/** A toast notification: lightweight non-blocking feedback the user
+ *  can dismiss or just wait out. Use this for "operation succeeded /
+ *  failed" feedback where the user can keep working — reserve
+ *  `actions.alert` for content that genuinely needs the user to
+ *  stop and read. */
+export interface Toast {
+  id: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+  message: string;
+  /** Optional inline action (e.g. "Retry", "Undo"). The handler runs
+   *  in addition to dismissing the toast — the toast tracker takes
+   *  care of removing the toast from the stack afterwards. */
+  action?: { label: string; onClick: () => void };
+  /** Milliseconds before auto-dismiss. `null` = persistent (must be
+   *  clicked away). Defaults: info / success 3000, warning 5000,
+   *  error null. */
+  ttl: number | null;
+}
+
 export interface State {
   welcomeVisible: boolean;
   welcomeError: string | null;
@@ -261,6 +280,10 @@ export interface State {
    *  Provider's `actions.alert` / `actions.confirm` set this and resolve
    *  the returned Promise once the user dismisses. */
   modal: ModalRequest | null;
+  /** Active toast notifications, rendered as a stack in the bottom-
+   *  right corner. Each entry self-dismisses after its ttl; the
+   *  Provider trims this list on every `TOAST_DISMISS`. */
+  toasts: Toast[];
   /** True while the user is typing a new folder name. The input
    *  renders inside the FileTree at the row matching
    *  `state.activeFolder` so the new folder appears under the
@@ -322,6 +345,7 @@ export const initialState: State = {
   renaming: null,
   cascadePrompt: null,
   modal: null,
+  toasts: [],
   newFolderInputOpen: false,
   find: { open: false, query: '', wholeWord: false, current: 0, total: 0 },
 };
@@ -406,6 +430,8 @@ export type Action =
   | { type: 'CASCADE_PROMPT'; prompt: CascadePrompt | null }
   | { type: 'MODAL_OPEN'; request: ModalRequest }
   | { type: 'MODAL_CLOSE' }
+  | { type: 'TOAST_ADD'; toast: Toast }
+  | { type: 'TOAST_DISMISS'; id: string }
   /** Promote a preview tab to a pinned one (sets `preview = false`).
    *  Triggered by double-click on a sidebar file, double-click on the
    *  tab title, or entering edit mode on the tab. */
@@ -689,6 +715,10 @@ export function reducer(s: State, a: Action): State {
       return { ...s, modal: a.request };
     case 'MODAL_CLOSE':
       return { ...s, modal: null };
+    case 'TOAST_ADD':
+      return { ...s, toasts: [...s.toasts, a.toast] };
+    case 'TOAST_DISMISS':
+      return { ...s, toasts: s.toasts.filter((t) => t.id !== a.id) };
     case 'PROMOTE_TAB':
       return {
         ...s,

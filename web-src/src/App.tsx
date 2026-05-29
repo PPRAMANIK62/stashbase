@@ -21,6 +21,7 @@ import { Hotkeys } from './components/Hotkeys';
 import { ImageLightbox } from './components/ImageLightbox';
 import { CascadePromptModal } from './components/CascadePromptModal';
 import { AlertConfirmModal } from './components/AlertConfirmModal';
+import { Toasts } from './components/Toasts';
 import { TerminalPane } from './components/TerminalPane';
 import { TerminalToggleButton } from './components/TerminalToggleButton';
 import { SettingsButton } from './components/SettingsButton';
@@ -190,6 +191,7 @@ function AppBody() {
       )}
       <CascadePromptModal />
       <AlertConfirmModal />
+      <Toasts />
       {!state.welcomeVisible && <EmbedderRequireKeyGate />}
       <SettingsPortal />
     </>

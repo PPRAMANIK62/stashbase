@@ -316,6 +316,9 @@ export const api = {
   putSpaceRules: (name: string, content: string) =>
     send<{ ok: true }>('PUT', '/api/spaces/' + encodeURIComponent(name) + '/rules', { content }),
   getResolvedRules: () => getJson<{ space: string | null; content: string }>('/api/rules'),
+  /** Read `<kbRoot>/STASHBASE.md` — the KB-level rules book. Powers
+   *  the LibraryPanel's "open KB rules" row. */
+  getKbRules: () => getJson<{ content: string }>('/api/library/rules'),
   /** Read `<kbRoot>/AGENT.md` — the agent-maintained library overview.
    *  Powers the "View library" chrome-strip button. */
   getLibraryOverview: () => getJson<{ content: string }>('/api/library/overview'),
@@ -408,10 +411,14 @@ export const api = {
   sync: () => send<SyncResult>('POST', '/api/sync'),
   search: (query: string, top_k = 8) =>
     send<{ hits: SearchHit[] }>('POST', '/api/search', { query, top_k }),
-  keywordSearch: (query: string, opts?: { caseStrict?: boolean; wholeWord?: boolean }) => {
+  keywordSearch: (query: string, opts?: { caseStrict?: boolean; wholeWord?: boolean; space?: string }) => {
     const qs = new URLSearchParams({ q: query });
     if (opts?.caseStrict) qs.set('case_strict', '1');
     if (opts?.wholeWord) qs.set('whole_word', '1');
+    // Pass the active window's space explicitly so multi-window
+    // sessions don't fall back to the server's single `currentSpace`
+    // singleton and search the wrong space's tree.
+    if (opts?.space) qs.set('space', opts.space);
     return getJson<KeywordSearchResult>(`/api/keyword-search?${qs.toString()}`);
   },
   indexStatus: () => getJson<IndexStatus>('/api/index-status'),
@@ -485,14 +492,29 @@ export const api = {
 
 /** Asset URL for HTML files (used by the preview iframe so relative
  *  references inside the page — `<img src="X_files/figure.png">` —
- *  resolve correctly). Caller passes a space-relative path. */
+ *  resolve correctly). Caller passes a space-relative path.
+ *
+ *  The `?windowId=` query param mirrors the `x-stashbase-window-id`
+ *  header that fetch-based calls carry — the browser can't add a
+ *  custom header to `<img src>` or iframe loads, so the server's
+ *  `withWindowContext` middleware also honours this query param.
+ *  Without it, images would resolve against the process-wide default
+ *  space in a multi-window session. */
 export function assetUrl(name: string): string {
-  return '/asset/' + encodePath(name);
+  return '/asset/' + encodePath(name) + '?windowId=' + encodeURIComponent(getWindowId());
 }
 
 /** Base URL for live HTML edit previews. The preview itself is a blob,
  *  but relative image/css/font URLs should still resolve next to the
- *  saved file in the current space. */
+ *  saved file in the current space.
+ *
+ *  KNOWN multi-window limitation: a `?windowId=` query on the `<base
+ *  href>` does NOT propagate to relative `<img src="…">` URLs (per
+ *  the URL spec, only the path of a base href is inherited), so we
+ *  don't add one here. In multi-window sessions, images inside a
+ *  markdown preview resolve against the process-wide default space.
+ *  Fix requires either encoding windowId in the URL path or rewriting
+ *  each relative URL during preview compilation. */
 export function assetBaseUrl(name: string): string {
   const parts = name.split('/');
   parts.pop();
