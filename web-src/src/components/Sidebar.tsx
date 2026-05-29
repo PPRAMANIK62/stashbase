@@ -114,12 +114,12 @@ export function Sidebar() {
       </div>
       <div className={'file-list' + (state.spaceCollapsed ? ' collapsed' : '')}>
         {state.pendingConversions.length > 0 && (
-          <div className="pdf-converting-banner">
+          <div className="pdf-processing-banner">
             {state.pendingConversions.map((p) => (
-              <div key={p} className="pdf-converting-row" title={p}>
-                <span className="pdf-converting-spinner" />
-                <span className="pdf-converting-label">
-                  Converting <strong>{p.split('/').pop()}</strong>…
+              <div key={p} className="pdf-processing-row" title={p}>
+                <span className="pdf-processing-spinner" />
+                <span className="pdf-processing-label">
+                  Processing <strong>{p.split('/').pop()}</strong>…
                 </span>
               </div>
             ))}

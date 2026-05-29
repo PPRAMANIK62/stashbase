@@ -620,7 +620,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const s = stateRef.current;
     const active = getActiveTab(s);
     const cur = active?.file;
-    if (!cur || cur.format !== 'html') return;
+    // Works for any note-shaped viewer (md / html). PDFs themselves
+    // and library-overview tabs don't get the toggle.
+    if (!cur || (cur.format !== 'md' && cur.format !== 'html')) return;
     if (s.pdfSplit && s.pdfSplit.html === cur.name) {
       dispatch({ type: 'PDF_SPLIT', split: null });
       return;
@@ -628,6 +630,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const pdfPath = derivePdfSibling(cur.name);
     if (!pdfPath) return;
     if (await assetExists(pdfPath)) {
+      // `pdfSplit.html` is the note path field — kept for back-compat
+      // with the original HTML-only iteration; it now holds the
+      // active note regardless of format.
       dispatch({ type: 'PDF_SPLIT', split: { html: cur.name, pdf: pdfPath } });
     }
   }, []);
@@ -890,7 +895,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [loadFiles, showAlert]);
 
   const deleteFile = useCallback(async (name: string) => {
-    if (!(await askConfirm(`Delete ${name}? (removes file + index)`))) return;
+    // PDFs own a dot-prefixed derived note (`.paper.md`) + image
+    // bundle (`.paper_files/`) sitting next to them — say so up front
+    // so the user knows the index goes with it. Plain notes just
+    // mention "file + index".
+    const isPdf = /\.pdf$/i.test(name);
+    const prompt = isPdf
+      ? `Delete ${name}? This also removes the derived markdown + image bundle and the indexed content.`
+      : `Delete ${name}? (removes file + index)`;
+    if (!(await askConfirm(prompt))) return;
     const activeFile = getActiveTab(stateRef.current)?.file;
     if (saveTimer.current && activeFile?.name === name) {
       clearTimeout(saveTimer.current);
@@ -1188,13 +1201,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
-/** Map `paper.html` (or `paper.htm`) → `paper.pdf`. Returns null when
- *  the input doesn't look HTML-shaped, which short-circuits the
- *  sibling-existence check. */
-function derivePdfSibling(htmlPath: string): string | null {
-  const m = htmlPath.match(/^(.+)\.(html|htm)$/i);
-  if (!m) return null;
-  return `${m[1]}.pdf`;
+/** Map a viewer note path back to its parent PDF, if any. Handles the
+ *  two flavours of derived-from-PDF notes we might encounter:
+ *    - `.paper.md` / `.paper.html` — dot-prefixed app-derived (current
+ *      pymupdf4llm convention)
+ *    - `paper.html` / `paper.htm` / `paper.md` — historical / user-
+ *      authored notes that happen to sit next to a `paper.pdf`
+ *  Returns the candidate `paper.pdf` sibling path or null when the
+ *  input doesn't match a viewable note suffix. */
+function derivePdfSibling(notePath: string): string | null {
+  // Dot-prefixed derived: `.paper.md` → `paper.pdf`
+  const dot = notePath.match(/^(?:(.*)\/)?\.(.+)\.(md|markdown|html|htm)$/i);
+  if (dot) {
+    const prefix = dot[1] ? `${dot[1]}/` : '';
+    return `${prefix}${dot[2]}.pdf`;
+  }
+  // Plain co-located: `paper.md` / `paper.html` → `paper.pdf`
+  const plain = notePath.match(/^(.+)\.(md|markdown|html|htm)$/i);
+  if (!plain) return null;
+  return `${plain[1]}.pdf`;
 }
 
 /** HEAD `/asset/<path>` to test for existence. We tolerate any non-2xx

@@ -34,9 +34,15 @@ export function MainPane() {
   const canForward = navCursor >= 0 && navCursor < navStack.length - 1;
   const hasTabs = state.tabs.length > 0;
   const emptyTab = !!activeTab && !cur;
-  // PDF-derived HTML dual-view: side-by-side HTML + PDF when the
-  // search-hit flow detected a sibling .pdf for the active note.
-  const pdfSplit = cur && cur.format === 'html' && state.pdfSplit?.html === cur.name
+  // PDF-derived note dual-view: side-by-side note + PDF when the
+  // user clicked "Show original PDF" on a note with a sibling PDF.
+  // Works for either md or html viewers; the `pdfSplit.html` field
+  // is named after the original (HTML-only) iteration but now holds
+  // any note path. The active file must be one of the markdown-ish
+  // viewer formats (md / html) for the split to apply.
+  const splitNoteFormat = cur && (cur.format === 'md' || cur.format === 'html')
+    ? cur.format : null;
+  const pdfSplit = cur && splitNoteFormat && state.pdfSplit?.html === cur.name
     ? state.pdfSplit : null;
 
   return (
@@ -50,20 +56,23 @@ export function MainPane() {
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}
-        {cur && !editMode && cur.format === 'md' && (
+        {cur && !editMode && cur.format === 'md' && !pdfSplit && (
           <MarkdownPreview name={cur.name} content={cur.content} />
         )}
         {cur && !editMode && cur.format === 'html' && !pdfSplit && (
           <HtmlPreview name={cur.name} />
         )}
-        {cur && !editMode && cur.format === 'html' && pdfSplit && (
-          // Dual-view: HTML left, PDF right. Two viewer instances —
-          // each owns its own iframe / canvas state — sitting in a
-          // 50/50 horizontal split. Plain CSS grid; no draggable
-          // divider in v1 (see Desktop UI Planned 04 for the future).
+        {cur && !editMode && splitNoteFormat && pdfSplit && (
+          // Dual-view: note (md / html) on the left, PDF on the right.
+          // Two viewer instances — each owns its own iframe / canvas
+          // state — sitting in a 50/50 horizontal split. Plain CSS
+          // grid; no draggable divider in v1 (see Desktop UI Planned
+          // 03 for the future).
           <div className="pdf-dual-view">
             <div className="pdf-dual-pane">
-              <HtmlPreview name={cur.name} />
+              {splitNoteFormat === 'html'
+                ? <HtmlPreview name={cur.name} />
+                : <MarkdownPreview name={cur.name} content={cur.content} />}
             </div>
             <div className="pdf-dual-divider" aria-hidden />
             <div className="pdf-dual-pane">
@@ -117,7 +126,7 @@ export function MainPane() {
               {saveStatus.text}
             </span>
           )}
-          {cur.format === 'html' && (
+          {splitNoteFormat && (
             <button
               className={'icon-btn pdf-split-toggle' + (pdfSplit ? ' active' : '')}
               type="button"

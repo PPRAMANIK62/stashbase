@@ -47,6 +47,14 @@ export function PdfPreview({ name }: { name: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pdfStatus, setPdfStatus] = useState<PdfStatusEntry | null>(null);
   const [retryBusy, setRetryBusy] = useState(false);
+  // Sampled page 1 viewport at 1× scale. Used as the per-page
+  // placeholder height so the lazy-rendered pages reserve the
+  // correct layout slot up front — without this, scrolling to a
+  // chunk would mis-fire by hundreds of pixels whenever the target
+  // page hadn't rendered yet (placeholder 800px vs. real ~1100px
+  // shifts everything below). All pages in a typical paper share
+  // the same page size, so a single sample is enough.
+  const [pageMetrics, setPageMetrics] = useState<{ width: number; height: number } | null>(null);
 
   // Stable URL for this PDF + cache-bust so reopening after a Retry
   // re-fetches the binary instead of the stale 404 / failed body.
@@ -66,6 +74,12 @@ export function PdfPreview({ name }: { name: string }) {
         setDoc(pdf);
         setNumPages(pdf.numPages);
         void extractOutline(pdf, actions.setOutlineHeadings);
+        // Sample page 1 size for placeholder heights — see pageMetrics.
+        void pdf.getPage(1).then((p) => {
+          if (cancelled) return;
+          const vp = p.getViewport({ scale: 1 });
+          setPageMetrics({ width: vp.width, height: vp.height });
+        }).catch(() => { /* keep falling back to the 800px default */ });
       },
       (err: Error) => {
         if (cancelled) return;
@@ -94,35 +108,116 @@ export function PdfPreview({ name }: { name: string }) {
     return () => { cancelled = true; };
   }, [name, state.space, retryBusy]);
 
-  // Search for the chunk text across pages and scroll the matched
-  // page into view. Best-effort match: collapse whitespace, slice to
-  // first ~80 chars, indexOf on each page's concatenated text. Falls
-  // back to fade-out toast if no page matches. We don't draw a bbox
-  // overlay in V1 — landing on the right page is the dominant UX win.
+  // Search for the chunk text across pages and scroll directly to
+  // the matched paragraph (not just the page top).
+  //
+  // Two robustness measures, on top of the per-page placeholder
+  // trick that keeps target.offsetTop stable:
+  //   1. Both the chunk text and the pdfjs flat text get stripped
+  //      of markdown noise (bold / italic / links / code) and have
+  //      Unicode variants (smart quotes, dash variants) folded to
+  //      ASCII. Without this, a chunk like "**Figure 1:** Training
+  //      loss" never matches the PDF's "Figure 1: Training loss".
+  //   2. If the first ~60 chars don't hit, we retry with a slice
+  //      from the middle and one from the end. PDF column boundaries
+  //      and pymupdf4llm's paragraph reflowing can leave the head
+  //      of a chunk unrecognisable in pdfjs's reading order.
   useEffect(() => {
     if (!doc || !pendingHighlight?.chunkText) return;
     let cancelled = false;
-    const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
-    let needle = norm(pendingHighlight.chunkText).slice(0, 80);
+    const clean = (s: string) =>
+      s
+        // Strip markdown noise — chunk text comes from pymupdf4llm
+        // which embeds bold / italic / link / code markers, none of
+        // which appear in the rendered PDF text.
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/`[^`]*`/g, ' ')
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/(^|\s)[*_]([^\s*_][^*_]*?)[*_](?=\s|$|[.,;:])/g, '$1$2')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/^>\s+/gm, '')
+        // Fold Unicode variants the PDF text would have used.
+        .replace(/[‐-―−]/g, '-')
+        .replace(/[‘’]/g, "'")
+        .replace(/[“”]/g, '"')
+        .replace(/[  ​]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const cleaned = clean(pendingHighlight.chunkText);
+    if (!cleaned) { actions.consumePendingHighlight(); return; }
+    // Three anchors: head, middle, tail. Each ~60 chars so column
+    // breaks don't bisect them. We bail on the first hit.
+    const SLICE = 60;
+    const mid = Math.max(0, Math.floor(cleaned.length / 2) - Math.floor(SLICE / 2));
+    const tail = Math.max(0, cleaned.length - SLICE);
+    const anchors = Array.from(new Set([
+      cleaned.slice(0, SLICE),
+      cleaned.slice(mid, mid + SLICE),
+      cleaned.slice(tail),
+    ]).values()).filter((a) => a.length >= 12);
+    if (anchors.length === 0) { actions.consumePendingHighlight(); return; }
+
     void (async () => {
       for (let i = 0; i < numPages; i++) {
         if (cancelled) return;
         try {
           const page = await doc.getPage(i + 1);
           const tc = await page.getTextContent();
-          const txt = norm(
-            tc.items
-              .map((it) => ('str' in it && typeof it.str === 'string' ? it.str : ''))
-              .join(' '),
-          );
-          if (txt.indexOf(needle) >= 0) {
-            const root = containerRef.current;
-            if (root) {
-              const target = root.querySelector(`[data-page="${i + 1}"]`) as HTMLElement | null;
-              if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          type StrItem = { str: string; transform: number[] };
+          const items: StrItem[] = [];
+          const itemStarts: number[] = [];
+          const segments: string[] = [];
+          let pos = 0;
+          let lastEnd = '';
+          for (const it of tc.items) {
+            if (!('str' in it) || typeof it.str !== 'string') continue;
+            const raw = it.str;
+            if (raw === '') continue;
+            if (lastEnd && !/\s/.test(lastEnd) && !/^\s/.test(raw)) {
+              segments.push(' ');
+              pos += 1;
             }
-            break;
+            const piece = raw.replace(/\s+/g, ' ');
+            itemStarts.push(pos);
+            items.push(it as StrItem);
+            segments.push(piece);
+            pos += piece.length;
+            lastEnd = piece.slice(-1);
           }
+          // Same Unicode-folding pass as the needle. Cheaper than per-
+          // anchor, since the page's flat string is shared.
+          const flat = segments.join('')
+            .replace(/[‐-―−]/g, '-')
+            .replace(/[‘’]/g, "'")
+            .replace(/[“”]/g, '"')
+            .replace(/[  ​]/g, ' ');
+          let idx = -1;
+          for (const a of anchors) {
+            const found = flat.indexOf(a);
+            if (found >= 0) { idx = found; break; }
+          }
+          if (idx < 0) continue;
+          let itemIdx = 0;
+          for (let k = 0; k < itemStarts.length; k++) {
+            if (itemStarts[k] > idx) break;
+            itemIdx = k;
+          }
+          const match = items[itemIdx];
+          const viewport1x = page.getViewport({ scale: 1 });
+          const yFromTopPdf = viewport1x.height - (match.transform[5] ?? 0);
+          const yRatio = Math.max(0, Math.min(1, yFromTopPdf / viewport1x.height));
+          const root = containerRef.current;
+          const target = root?.querySelector(`[data-page="${i + 1}"]`) as HTMLElement | null;
+          if (!root || !target) break;
+          const renderedHeight = target.offsetHeight;
+          const desiredScroll = target.offsetTop
+            + yRatio * renderedHeight
+            - root.clientHeight * 0.3;
+          root.scrollTo({ top: Math.max(0, desiredScroll), behavior: 'smooth' });
+          break;
         } catch { /* skip page */ }
       }
       if (!cancelled) actions.consumePendingHighlight();
@@ -170,7 +265,7 @@ export function PdfPreview({ name }: { name: string }) {
       />
       <div className="pdf-pages">
         {doc && Array.from({ length: numPages }, (_, i) => (
-          <PdfPage key={`p-${i}`} doc={doc} pageIndex={i} scale={scale} />
+          <PdfPage key={`p-${i}`} doc={doc} pageIndex={i} scale={scale} placeholderHeight={pageMetrics ? pageMetrics.height * scale : 800} />
         ))}
       </div>
     </div>
@@ -216,7 +311,8 @@ function PdfPage({
   doc,
   pageIndex,
   scale,
-}: { doc: PDFDocumentProxy; pageIndex: number; scale: number }) {
+  placeholderHeight,
+}: { doc: PDFDocumentProxy; pageIndex: number; scale: number; placeholderHeight: number }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [visible, setVisible] = useState(pageIndex < 2); // eager-render first 2 pages
@@ -265,7 +361,7 @@ function PdfPage({
       ref={rootRef}
       className="pdf-page-wrap"
       data-page={pageIndex + 1}
-      style={{ minHeight: 800 }}
+      style={{ minHeight: placeholderHeight }}
     >
       {visible ? <canvas ref={canvasRef} className="pdf-page-canvas" /> : (
         <div className="pdf-page-placeholder">Page {pageIndex + 1}</div>

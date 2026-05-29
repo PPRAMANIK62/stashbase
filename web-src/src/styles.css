@@ -1078,7 +1078,7 @@
      * the user visible "something's happening" feedback. Auto-
      * dismisses when the conversion finishes (the index-status poll
      * drops the entry from `pendingConversions`). */
-    .pdf-converting-banner {
+    .pdf-processing-banner {
       padding: 4px 14px 6px;
       border-bottom: 1px solid var(--border);
       background: rgba(8, 145, 178, 0.04);
@@ -1088,24 +1088,24 @@
       flex-direction: column;
       gap: 4px;
     }
-    .pdf-converting-row {
+    .pdf-processing-row {
       display: flex;
       align-items: center;
       gap: 8px;
       min-width: 0;
     }
-    .pdf-converting-label {
+    .pdf-processing-label {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       flex: 1;
       min-width: 0;
     }
-    .pdf-converting-label strong {
+    .pdf-processing-label strong {
       color: var(--fg);
       font-weight: 500;
     }
-    .pdf-converting-spinner {
+    .pdf-processing-spinner {
       width: 10px;
       height: 10px;
       border-radius: 50%;

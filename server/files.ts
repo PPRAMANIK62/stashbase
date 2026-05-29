@@ -17,7 +17,9 @@ import path from 'node:path';
 import { onSwitch, requireCurrentSpace } from './space.ts';
 import { noteSelfWrite } from './watcher.ts';
 import { decodeEntities } from './html.ts';
-import { errorCode } from './log.ts';
+import { errorCode, errorMessage, logger } from './log.ts';
+
+const log = logger('files');
 import { detectFormat, detectViewerFormat, type FileFormat, type ViewerFormat } from './format.ts';
 
 export { detectFormat, type FileFormat } from './format.ts';
@@ -194,9 +196,17 @@ export function deleteFile(relPath: string): boolean {
   } catch (err: any) {
     if (errorCode(err) !== 'ENOENT') throw err;
   }
-  // Tear down the note's bundle (if any) so we don't leave an orphan
-  // `<stem>_files/` behind. Best-effort: a missing bundle is fine.
-  if (removed) deleteBundleSibling(relPath);
+  if (removed) {
+    // Tear down the note's bundle (if any) so we don't leave an orphan
+    // `<stem>_files/` behind. Best-effort: a missing bundle is fine.
+    deleteBundleSibling(relPath);
+    // Deleting a `paper.pdf` also tears down the dot-prefixed app-
+    // derived sibling note (`.paper.md` / `.paper.html`) and its
+    // bundle (`.paper_files/`). Without this, those orphaned files
+    // would re-appear in the sidebar (the sibling-bound hide rule in
+    // `walk()` depends on the parent PDF still being there).
+    if (/\.pdf$/i.test(relPath)) deletePdfDerivedSiblings(relPath);
+  }
   return removed;
 }
 
@@ -234,6 +244,42 @@ function deleteBundleSibling(noteRel: string): void {
   try {
     if (fs.statSync(abs).isDirectory()) {
       fs.rmSync(abs, { recursive: true, force: true });
+    }
+  } catch { /* no bundle — fine */ }
+}
+
+/** Tear down a PDF's app-derived siblings: the dot-prefixed
+ *  `.<stem>.md` (or `.html`) note + `.<stem>_files/` bundle. Called
+ *  from `deleteFile` whenever a `.pdf` goes away — otherwise the
+ *  sibling-bound hide rule in `walk()` would un-hide these orphans
+ *  on the next sidebar refresh. Best-effort: missing siblings are
+ *  fine. */
+function deletePdfDerivedSiblings(pdfRel: string): void {
+  const base = path.posix.basename(pdfRel);
+  const m = base.match(/^(.+)\.pdf$/i);
+  if (!m) return;
+  const stem = m[1];
+  const parent = path.posix.dirname(pdfRel);
+  const join = (name: string) => (parent === '.' ? name : `${parent}/${name}`);
+  // Notes (md / html — md is the current default, html stays covered
+  // for spaces that still have legacy derived html sitting around).
+  for (const ext of ['md', 'markdown', 'html', 'htm']) {
+    const rel = join(`.${stem}.${ext}`);
+    let abs: string;
+    try { abs = resolveSafe(rel); } catch { continue; }
+    try { fs.unlinkSync(abs); } catch (err: any) {
+      if (errorCode(err) !== 'ENOENT') {
+        log.warn(`failed to unlink derived ${rel}: ${errorMessage(err)}`);
+      }
+    }
+  }
+  // Bundle dir
+  const bundleRel = join(`.${stem}_files`);
+  let bundleAbs: string;
+  try { bundleAbs = resolveSafe(bundleRel); } catch { return; }
+  try {
+    if (fs.statSync(bundleAbs).isDirectory()) {
+      fs.rmSync(bundleAbs, { recursive: true, force: true });
     }
   } catch { /* no bundle — fine */ }
 }
@@ -432,9 +478,29 @@ function walk(
     // prefix is the user's content (`.claude` / `.codex` / `.vscode` /
     // `.github` / `.obsidian`, …) and shows through.
     if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
+    // Always hide app-derived dot-prefixed notes (`.<name>.md` /
+    // `.html`) and their bundle dirs — these are PDF converter
+    // outputs (or other future derived content). The unconditional
+    // rule means an orphaned derived file (PDF got deleted out from
+    // under it, conversion crashed mid-write, git checkout left it
+    // stale) stays hidden too, instead of leaking into the sidebar
+    // and surprising users.
+    //
+    // Indexer / agent shell still see these files (the daemon's
+    // scanner doesn't apply this rule); Cmd+P quick-open can target
+    // them by exact path. The sidebar is the only surface that
+    // hides them — and that's exactly what "dot-prefix = system
+    // artifact" should mean.
+    if (e.isFile() && e.name.startsWith('.')) {
+      if (/^\.(.+)\.(md|markdown|html|htm)$/i.test(e.name)) continue;
+    }
     if (e.isDirectory() && e.name.endsWith('_files')) {
       const stem = e.name.slice(0, -'_files'.length);
+      // `<stem>_files/` siblings to user-authored notes (browser
+      // "Save complete webpage" convention).
       if (noteStems.has(stem)) continue;
+      // `.<stem>_files/` dot-prefixed app-derived bundle — always hide.
+      if (stem.startsWith('.')) continue;
     }
     const rel = prefix ? `${prefix}/${e.name}` : e.name;
     const full = path.join(dir, e.name);

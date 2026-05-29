@@ -11,7 +11,7 @@ import { errorMessage, logger } from '../log.ts';
 import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isUnderRoot, toKbRel } from '../space.ts';
 import { syncIndex } from '../sync.ts';
 import { syncSkillsToCli } from '../skills.ts';
-import { getInFlightPdfs, maybeConvertPdf } from '../pdf.ts';
+import { derivedPathsForPdf, getInFlightPdfs, maybeConvertPdf, pdfPathForDerivedRel } from '../pdf.ts';
 import { clearRecord, listByStatus, readAll as readPdfStatus } from '../pdf-status.ts';
 import { getFsChangeCounter } from '../watcher.ts';
 import { getDaemon } from '../mfs-daemon.ts';
@@ -47,15 +47,24 @@ export function mount(app: express.Express): void {
       if (!query) return res.status(400).json({ error: 'query required' });
       const space = getCurrentSpaceName();
       const hits = await indexer.search(query, topK, space ?? undefined);
+      const spaceRoot = getCurrentSpace();
       // Daemon hits arrive kbRoot-relative; translate fileName back to
       // space-relative for the sidebar (which only knows the current
       // space). Hits outside the current space (shouldn't happen with
       // the space filter, defensive) get dropped.
+      //
+      // Then rewrite any PDF-derived dot-prefixed note (`.paper.md`) to
+      // point at its parent PDF — the derived file is hidden from the
+      // sidebar so leaving it as the click target gives a dead row.
+      // PdfPreview picks up the chunk text from pendingHighlight and
+      // jumps the pdfjs find controller to the matching passage.
       const out = space
         ? hits
             .map((h) => {
               const rel = fromKbRel(h.fileName);
-              return rel == null ? null : { ...h, fileName: rel };
+              if (rel == null) return null;
+              const remapped = spaceRoot ? pdfPathForDerivedRel(rel, spaceRoot) : null;
+              return { ...h, fileName: remapped ?? rel };
             })
             .filter((h): h is NonNullable<typeof h> => h !== null)
         : hits;
@@ -144,17 +153,13 @@ export function mount(app: express.Express): void {
         const kbRel = toKbRel(rel);
         clearRecord(kbRel);
       } catch { /* no current space — guarded above, defensive */ }
-      // Also remove any stale converted note so maybeConvertPdf's
+      // Also remove any stale derived files so maybeConvertPdf's
       // "skip if note exists" guard doesn't immediately bail. We
       // leave the .pdf in place (it's the source); the user's Retry
-      // intent is to re-derive the .html / .md.
-      const fmt = process.env.STASHBASE_PDF_FORMAT === 'md' ? 'md' : 'html';
-      const stem = path.basename(abs, path.extname(abs));
-      const dir = path.dirname(abs);
-      const stale = path.join(dir, `${stem}.${fmt}`);
-      try { fs.rmSync(stale, { force: true }); } catch { /* no stale to remove */ }
-      const bundle = path.join(dir, `${stem}_files`);
-      try { fs.rmSync(bundle, { recursive: true, force: true }); } catch { /* no bundle */ }
+      // intent is to re-derive the dot-prefixed `.md` + image bundle.
+      const { notePath: staleNote, bundleDir: staleBundle } = derivedPathsForPdf(abs);
+      try { fs.rmSync(staleNote, { force: true }); } catch { /* no stale to remove */ }
+      try { fs.rmSync(staleBundle, { recursive: true, force: true }); } catch { /* no bundle */ }
       maybeConvertPdf(abs, rel);
       res.json({ ok: true });
     } catch (err: unknown) {
@@ -177,7 +182,15 @@ export function mount(app: express.Express): void {
       const space = typeof req.body?.space === 'string' && req.body.space.trim()
         ? req.body.space.trim() : undefined;
       if (!query) return res.status(400).json({ error: 'query required' });
-      res.json({ hits: await indexer.search(query, topK, space) });
+      // Same PDF-derived rewrite as /api/search, but against kb-root
+      // since MCP callers (external AI clients) receive kbRoot-relative
+      // paths and operate library-wide.
+      const kbRoot = getKbRoot();
+      const hits = (await indexer.search(query, topK, space)).map((h) => {
+        const remapped = pdfPathForDerivedRel(h.fileName, kbRoot);
+        return { ...h, fileName: remapped ?? h.fileName };
+      });
+      res.json({ hits });
     } catch (err: unknown) {
       sendError(res, err);
     }

@@ -4,10 +4,14 @@
 # mfs-cli vendors most of what we need (pymilvus, langchain-text-splitters,
 # pyyaml, filelock, tree-sitter etc.) so we only have to add the bits the
 # sidecar uses directly:
-#   - onnxruntime: run Qwen3 ONNX locally
-#   - tokenizers:  Qwen3 tokenizer (HF .json format)
-#   - numpy:       pooling + L2 normalize
+#   - onnxruntime:  run Qwen3 ONNX locally
+#   - tokenizers:   Qwen3 tokenizer (HF .json format)
+#   - numpy:        pooling + L2 normalize
+#   - pymupdf4llm:  PDF → markdown for the pdf_extract pipeline
+#                   (heading detection, table extraction, figure
+#                   region screenshots). Brings pymupdf transitively.
 mfs-cli>=0.1.0
 onnxruntime>=1.18
 tokenizers>=0.20
 numpy>=1.26
+pymupdf4llm>=0.0.17

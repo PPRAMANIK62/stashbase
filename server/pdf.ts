@@ -1,20 +1,27 @@
 /**
- * PDF → note-with-bundle conversion, driven by `python/pdf_extract.py`.
+ * PDF → markdown-with-bundle conversion, driven by `python/pdf_extract.py`.
  *
  * Wired from the upload route: whenever a `.pdf` lands in a space we
- * spawn the extractor in the background. It writes `<stem>.html`
- * (default) and `<stem>_files/` alongside the PDF, then the fs.watch
- * debounce picks them up and the indexer embeds the new note. The
- * PDF stays on disk as a sibling — not indexed, not previewable from
- * sidebar, but kept so the user can verify against the source.
+ * spawn the extractor in the background. It writes `.<stem>.md` and
+ * `.<stem>_files/` alongside the PDF, then the fs.watch debounce picks
+ * them up and the indexer embeds the new note. Both the derived note
+ * and its bundle are dot-prefixed — they're app-maintained artifacts,
+ * not user content, so they sit alongside `.stashbase/` / `.claude/`
+ * in our "dot-prefix = system, no-prefix = user" convention. The PDF
+ * itself stays on disk as a regular file — the user-facing copy.
  *
- * Format / converter knobs (set on the server process, no per-space
- * config yet):
- *   - `STASHBASE_PDF_FORMAT`     html | md   (default html)
+ * Hidden in the sidebar via `files.ts walk()`'s sibling-bound hide
+ * rule (a `paper.pdf` next to `.paper.md` collapses the derived files
+ * into the PDF row), but the indexer still picks them up so RAG sees
+ * the structured content.
+ *
+ * Converter knob (set on the server process, no per-space config yet):
  *   - `STASHBASE_PDF_CONVERTER`  pymupdf | marker  (default pymupdf)
  *
- * `marker` needs a separate `pip install marker-pdf` inside the same
- * venv — see `python/pdf_extract.py` for why.
+ * Default `pymupdf` route uses `pymupdf4llm` for LLM-friendly markdown
+ * (heading detection, table extraction, figure screenshots). `marker`
+ * needs `pip install marker-pdf` in the same venv (~2 GB models, much
+ * heavier; ML-backed quality ceiling).
  */
 import { spawn } from 'node:child_process';
 import fs, { existsSync } from 'node:fs';
@@ -57,13 +64,45 @@ function extractorScript(): string {
 }
 
 export interface ConvertResult {
-  /** Absolute path of the written `<stem>.{md,html}`. */
+  /** Absolute path of the written `.<stem>.md` (dot-prefixed app-
+   *  derived note; hidden from the sidebar via sibling-bound rules
+   *  in files.ts walk()). */
   notePath: string;
-  /** Absolute path of the `<stem>_files/` bundle. */
+  /** Absolute path of the `.<stem>_files/` bundle (dot-prefixed for
+   *  the same reason). */
   bundleDir: string;
-  /** Resolved output format — needed by the caller to pick the right
-   *  re-index step. */
-  format: 'md' | 'html';
+}
+
+/** Derive the dot-prefixed sibling paths for a given PDF — the file
+ *  layout the rest of this module operates on. Returns both the
+ *  markdown note we'll emit and the image bundle dir, so callers
+ *  don't need to repeat the naming. */
+export function derivedPathsForPdf(pdfAbsPath: string): { notePath: string; bundleDir: string } {
+  const dir = path.dirname(pdfAbsPath);
+  const stem = path.basename(pdfAbsPath, path.extname(pdfAbsPath));
+  return {
+    notePath: path.join(dir, `.${stem}.md`),
+    bundleDir: path.join(dir, `.${stem}_files`),
+  };
+}
+
+/** Given a POSIX-relative path that points at a dot-prefixed PDF-
+ *  derived note (`.paper.md` / `.paper.html`), return the relative
+ *  path of the parent PDF when it exists on disk — or null if the
+ *  shape doesn't match or the PDF isn't there. Used by the search
+ *  routes to rewrite hits so users see the PDF row rather than the
+ *  app-derived note (which they can't open anyway because it's
+ *  hidden in the sidebar). `baseAbs` is the root the relative path
+ *  resolves against (space root for /api/search, kb root for
+ *  /api/library/search). */
+export function pdfPathForDerivedRel(noteRel: string, baseAbs: string): string | null {
+  const m = noteRel.match(/^(.*\/)?\.([^/]+)\.(md|markdown|html|htm)$/i);
+  if (!m) return null;
+  const dir = m[1] ?? '';
+  const stem = m[2];
+  const candidateRel = `${dir}${stem}.pdf`;
+  const candidateAbs = path.join(baseAbs, candidateRel);
+  return existsSync(candidateAbs) ? candidateRel : null;
 }
 
 /** Run the extractor on a single PDF. Resolves with paths on success;
@@ -71,17 +110,13 @@ export interface ConvertResult {
  *  forget at the call site if you don't want to block — `convertPdf`
  *  itself does not throw synchronously. */
 export function convertPdf(pdfAbsPath: string): Promise<ConvertResult> {
-  const fmt = (process.env.STASHBASE_PDF_FORMAT === 'md' ? 'md' : 'html') as 'md' | 'html';
-  const dir = path.dirname(pdfAbsPath);
-  const stem = path.basename(pdfAbsPath, path.extname(pdfAbsPath));
-  const notePath = path.join(dir, `${stem}.${fmt}`);
-  const bundleDir = path.join(dir, `${stem}_files`);
+  const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
   const converter = process.env.STASHBASE_PDF_CONVERTER === 'marker' ? 'marker' : 'pymupdf';
 
   return new Promise((resolve, reject) => {
     const proc = spawn(
       pythonBin(),
-      [extractorScript(), pdfAbsPath, notePath, bundleDir, '--converter', converter, '--format', fmt],
+      [extractorScript(), pdfAbsPath, notePath, bundleDir, '--converter', converter],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let stderr = '';
@@ -89,7 +124,7 @@ export function convertPdf(pdfAbsPath: string): Promise<ConvertResult> {
     proc.on('error', (err) => reject(new Error(`spawn failed: ${err.message}`)));
     proc.on('exit', (code) => {
       if (code === 0) {
-        resolve({ notePath, bundleDir, format: fmt });
+        resolve({ notePath, bundleDir });
       } else {
         const tail = stderr.trim().split('\n').slice(-3).join('\n');
         reject(new Error(`pdf_extract exit ${code}: ${tail || '(no stderr)'}`));
@@ -125,12 +160,9 @@ export function getInFlightPdfs(): string[] {
  *  via the in-flight list — same path shape the rest of the API
  *  uses. */
 export function maybeConvertPdf(pdfAbsPath: string, spaceRelative: string): void {
-  const fmt = process.env.STASHBASE_PDF_FORMAT === 'md' ? 'md' : 'html';
-  const dir = path.dirname(pdfAbsPath);
-  const stem = path.basename(pdfAbsPath, path.extname(pdfAbsPath));
-  const existing = path.join(dir, `${stem}.${fmt}`);
-  if (existsSync(existing)) {
-    log.info(`skipped ${pdfAbsPath} — ${path.basename(existing)} already present`);
+  const { notePath } = derivedPathsForPdf(pdfAbsPath);
+  if (existsSync(notePath)) {
+    log.info(`skipped ${pdfAbsPath} — ${path.basename(notePath)} already present`);
     return;
   }
   let kbRel: string;
@@ -158,15 +190,13 @@ export function maybeConvertPdf(pdfAbsPath: string, spaceRelative: string): void
  *  upstream). That keeps the JSON map in sync with reality and prevents
  *  this discovery from re-firing on every reconcile. */
 export function discoverNewPdfs(spaceAbs: string): void {
-  const fmt = process.env.STASHBASE_PDF_FORMAT === 'md' ? 'md' : 'html';
   walkPdfs(spaceAbs, '', (rel, abs) => {
     let kbRel: string;
     try { kbRel = toKbRel(rel); }
     catch { return; }
     if (hasRecord(kbRel)) return;
-    const stem = path.basename(abs, path.extname(abs));
-    const sibling = path.join(path.dirname(abs), `${stem}.${fmt}`);
-    if (existsSync(sibling)) {
+    const { notePath } = derivedPathsForPdf(abs);
+    if (existsSync(notePath)) {
       // Already converted upstream — record it so we don't keep
       // re-checking on every reconcile.
       markDone(kbRel);
@@ -196,11 +226,8 @@ function walkPdfs(dir: string, prefix: string, fn: (rel: string, full: string) =
 }
 
 function runConvert(pdfAbsPath: string, kbRel: string | null): void {
-  const targetName = (() => {
-    const fmt = process.env.STASHBASE_PDF_FORMAT === 'md' ? 'md' : 'html';
-    return `${path.basename(pdfAbsPath, path.extname(pdfAbsPath))}.${fmt}`;
-  })();
-  log.info(`converting ${pdfAbsPath} → ${targetName} …`);
+  const { notePath } = derivedPathsForPdf(pdfAbsPath);
+  log.info(`converting ${pdfAbsPath} → ${path.basename(notePath)} …`);
   if (kbRel) markInFlight(kbRel);
   const t0 = Date.now();
   // MIN_VISIBLE_MS keeps the in-flight indicator visible long enough
