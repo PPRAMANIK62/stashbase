@@ -61,6 +61,7 @@ import {
   setSpaceRules,
   type LibraryInfo,
 } from '../server/library.ts';
+import { syncIndex } from '../server/sync.ts';
 
 // Idempotent migrations. Safe to run from both the web server and MCP —
 // second call no-ops.
@@ -237,12 +238,18 @@ async function tryWebElseEmbedded<T>(
   return viaEmbedded();
 }
 
-async function searchViaWeb(query: string, topK: number, space: string | undefined): Promise<unknown[]> {
+async function searchViaWeb(
+  query: string,
+  topK: number,
+  space: string | undefined,
+  pathPrefix?: string,
+): Promise<unknown[]> {
   const body: Record<string, unknown> = { query, top_k: topK };
   if (space) body.space = space;
+  if (pathPrefix) body.path_prefix = pathPrefix;
   const r = await fetch(`${WEB_BASE}/api/library/search`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: webHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(`web /api/library/search failed: ${r.status}`);
@@ -288,8 +295,64 @@ async function getFileViaWeb(kbRel: string): Promise<string | null> {
   return j.content;
 }
 
+async function writeFileViaWeb(kbRel: string, content: string, overwrite: boolean): Promise<void> {
+  const r = await fetch(`${WEB_BASE}/api/library/file/${encodeKbPath(kbRel)}`, {
+    method: 'PUT',
+    headers: webHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ content, overwrite }),
+  });
+  if (r.status === 409) throw new Error(`file exists: ${kbRel} (pass overwrite=true to replace)`);
+  if (!r.ok) throw new Error(`web PUT /api/library/file/${kbRel} failed: ${r.status}`);
+}
+
+async function deleteFileViaWeb(kbRel: string): Promise<void> {
+  const r = await fetch(`${WEB_BASE}/api/library/file/${encodeKbPath(kbRel)}`, {
+    method: 'DELETE',
+    headers: webHeaders(),
+  });
+  if (r.status === 404) throw new Error(`file not found: ${kbRel}`);
+  if (!r.ok) throw new Error(`web DELETE /api/library/file/${kbRel} failed: ${r.status}`);
+}
+
+async function renameFileViaWeb(oldRel: string, newRel: string): Promise<void> {
+  const r = await fetch(`${WEB_BASE}/api/library/file/${encodeKbPath(oldRel)}`, {
+    method: 'PATCH',
+    headers: webHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ new_path: newRel }),
+  });
+  if (r.status === 404) throw new Error(`file not found: ${oldRel}`);
+  if (r.status === 409) throw new Error(`target exists: ${newRel}`);
+  if (!r.ok) throw new Error(`web PATCH /api/library/file/${oldRel} failed: ${r.status}`);
+}
+
+async function syncViaWeb(space: string | undefined): Promise<unknown> {
+  const url = space ? `${WEB_BASE}/api/sync?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/sync`;
+  const r = await fetch(url, { method: 'POST', headers: webHeaders() });
+  if (!r.ok) throw new Error(`web POST /api/sync failed: ${r.status}`);
+  return r.json();
+}
+
+async function recentFilesViaWeb(space: string | undefined, limit: number): Promise<unknown[]> {
+  const qs = new URLSearchParams();
+  if (space) qs.set('space', space);
+  qs.set('limit', String(limit));
+  const r = await fetch(`${WEB_BASE}/api/library/recent-files?${qs.toString()}`);
+  if (!r.ok) throw new Error(`web /api/library/recent-files failed: ${r.status}`);
+  const j = await r.json() as { files: unknown[] };
+  return j.files;
+}
+
 function encodeKbPath(p: string): string {
   return p.split('/').map(encodeURIComponent).join('/');
+}
+
+/** Same kbRoot-containment check as `isInsideKbRoot`, with the
+ *  one-line throw the embedded tool handlers want. Returns the
+ *  absolute path so callers can reuse it for fs ops. */
+function resolveUnderKb(kbRel: string): string {
+  const abs = path.resolve(getKbRoot(), kbRel);
+  if (!isInsideKbRoot(abs)) throw new Error(`path escapes kbRoot: ${kbRel}`);
+  return abs;
 }
 
 const DEFAULT_TOP_K = 8;
@@ -307,6 +370,8 @@ const BUILTIN_TOOLS = [
         'Hybrid (vector + full-text) search over the local Markdown / HTML knowledge base. ' +
         'Searches the **whole library** by default — every space under ~/Documents/StashBase/ ' +
         '— and scopes to one space when `space` is provided (e.g. "cs183b" or "work/research"). ' +
+        'For finer control, `path_prefix` restricts hits to chunks whose kbRoot-relative source ' +
+        'starts with that prefix (e.g. "cs183b/transcripts/" to search only lecture transcripts). ' +
         'Each hit returns the kbRoot-relative file path (`<space>/<file>`), the chunk content, ' +
         'optional heading and source line range, and a fused relevance score. Use this when ' +
         'the user asks something the notes might answer; pull a full document with `get_file`.',
@@ -319,6 +384,13 @@ const BUILTIN_TOOLS = [
             description:
               'Optional space name (kbRoot-relative path of a folder under ~/Documents/StashBase/, ' +
               'e.g. "cs183b"). Omit to search the whole library.',
+          },
+          path_prefix: {
+            type: 'string',
+            description:
+              'Optional kbRoot-relative path prefix (e.g. "cs183b/transcripts/"). Overrides ' +
+              '`space` when present — pass either, not both. Matches any chunk whose source ' +
+              'starts with the prefix.',
           },
           top_k: {
             type: 'integer',
@@ -432,17 +504,121 @@ const BUILTIN_TOOLS = [
       name: 'index_status',
       description:
         'Check whether the index has caught up with the files on disk. Returns ' +
-        '`{total, indexed, pending_count, pending, up_to_date}` for the **whole library** ' +
-        'by default, or for one `space` when scoped. `pending` is the full list of ' +
-        'kbRoot-relative paths still waiting to be indexed. Call this when `search_kb` ' +
-        'returns fewer or less relevant results than expected — especially right after ' +
-        'an import.',
+        '`{total, indexed, pendingCount, pending, upToDate, snapshotWarning, ' +
+        'recentlyIndexed}` for the **whole library** by default, or for one `space` ' +
+        'when scoped. `pending` is the full list of kbRoot-relative paths still ' +
+        'waiting to be indexed. `recentlyIndexed` is the top-10 indexed files ' +
+        'sorted by on-disk mtime — useful for "did my recent edits get embedded ' +
+        'yet?". `snapshotWarning` surfaces a provider-mismatch from a recent ' +
+        'snapshot import. Call this when `search_kb` returns fewer or less ' +
+        'relevant results than expected — especially right after an import.',
       inputSchema: {
         type: 'object',
         properties: {
           space: {
             type: 'string',
             description: 'Optional space name; omit to check the whole library.',
+          },
+        },
+      },
+    },
+    {
+      name: 'write_file',
+      description:
+        'Write a file to the knowledge base at a kbRoot-relative path (e.g. ' +
+        '`cs183b/lecture-01.md`). Creates parent directories as needed and indexes ' +
+        'the file synchronously — a follow-up `search_kb` sees the new content ' +
+        'immediately. Default `overwrite=false` returns an error if the target ' +
+        'exists; pass `overwrite=true` to replace user content. Intended for ' +
+        'markdown / HTML notes; binary formats can be written but won\'t enter the ' +
+        'index. The first path segment is the space name (must be an existing space).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'kbRoot-relative file path (e.g. "cs183b/lecture-01.md").',
+          },
+          content: { type: 'string', description: 'File content (UTF-8).' },
+          overwrite: {
+            type: 'boolean',
+            description: 'Replace an existing file at this path. Defaults to false.',
+          },
+        },
+        required: ['path', 'content'],
+      },
+    },
+    {
+      name: 'delete_file',
+      description:
+        'Delete a file at a kbRoot-relative path and remove it from the index. ' +
+        'Returns an error if the file does not exist. Intended for cleanup of ' +
+        'agent-written or stale notes — use carefully on user content.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'kbRoot-relative file path to delete.' },
+        },
+        required: ['path'],
+      },
+    },
+    {
+      name: 'rename_file',
+      description:
+        'Rename / move a file from one kbRoot-relative path to another. The new ' +
+        'path can be in a different folder within the same space; cross-space ' +
+        'moves are allowed but may invalidate links. V1 does NOT cascade-update ' +
+        'inbound markdown / HTML links — that lives behind the GUI confirm dialog ' +
+        'on `/api/files/*` PATCH. Returns 409 if the target exists.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          old_path: { type: 'string', description: 'Current kbRoot-relative file path.' },
+          new_path: { type: 'string', description: 'New kbRoot-relative file path.' },
+        },
+        required: ['old_path', 'new_path'],
+      },
+    },
+    {
+      name: 'update_index',
+      description:
+        'Force a reconcile sweep on one space (or every known space when `space` ' +
+        'is omitted). Use after editing files outside StashBase (git pull, external ' +
+        'script writes) when you want the changes searchable without first opening ' +
+        'the space in the GUI. Returns a per-space breakdown of ' +
+        '`{added, modified, removed, renamed, failed}`. WARNING: triggers ' +
+        're-embedding of changed files and consumes embedding tokens proportional ' +
+        'to the diff — pass `space` to limit blast radius when you only edited one.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          space: {
+            type: 'string',
+            description: 'Space name to reconcile. Omit to reconcile every known space.',
+          },
+        },
+      },
+    },
+    {
+      name: 'recent_files',
+      description:
+        'List indexable files (markdown / HTML) in the library sorted by on-disk mtime, ' +
+        'most recently modified first. Cheap fs walk — no daemon involved. Use to answer ' +
+        '"what did the user / I just touch?" or to prime the agent\'s context with the ' +
+        'most relevant recent material. Each entry is `{path, mtime_ms}` with `path` ' +
+        'kbRoot-relative. Default limit 20, max 200. Pass `space` to scope to one space.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          space: {
+            type: 'string',
+            description: 'Optional space name; omit to walk the whole library.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Max files to return. Default 20, capped at 200.',
+            minimum: 1,
+            maximum: 200,
           },
         },
       },
@@ -460,21 +636,23 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'search_kb') {
     const query = typeof args.query === 'string' ? args.query.trim() : '';
     if (!query) throw new Error('`query` is required');
+    const pathPrefix = typeof args.path_prefix === 'string' && args.path_prefix.trim()
+      ? args.path_prefix.trim() : undefined;
     const k = Math.max(
       1,
       Math.min(MAX_TOP_K, Math.floor(typeof args.top_k === 'number' ? args.top_k : DEFAULT_TOP_K)),
     );
     const hits = await tryWebElseEmbedded(
       'search',
-      () => searchViaWeb(query, k, space),
+      () => searchViaWeb(query, k, space, pathPrefix),
       async () => {
         const { indexer, ready } = getEmbedded();
         await ready;
-        return indexer.search(query, k, space);
+        return indexer.search(query, k, space, pathPrefix);
       },
     );
     return {
-      content: [{ type: 'text', text: JSON.stringify({ query, space: space ?? null, top_k: k, hits }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify({ query, space: space ?? null, path_prefix: pathPrefix ?? null, top_k: k, hits }, null, 2) }],
     };
   }
 
@@ -600,6 +778,185 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     );
     return {
       content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, ...status as object }, null, 2) }],
+    };
+  }
+
+  if (req.params.name === 'write_file') {
+    const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
+    const content = typeof args.content === 'string' ? args.content : '';
+    const overwrite = args.overwrite === true;
+    if (!kbRel) throw new Error('`path` is required');
+    if (typeof args.content !== 'string') throw new Error('`content` (string) is required');
+    await tryWebElseEmbedded(
+      'write_file',
+      () => writeFileViaWeb(kbRel, content, overwrite),
+      async () => {
+        const abs = resolveUnderKb(kbRel);
+        if (fs.existsSync(abs) && !overwrite) {
+          throw new Error(`file exists: ${kbRel} (pass overwrite=true to replace)`);
+        }
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, content);
+        if (content.trim()) {
+          const { indexer, ready } = getEmbedded();
+          await ready;
+          await indexer.upsertFile(kbRel, content);
+        }
+      },
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel }, null, 2) }],
+    };
+  }
+
+  if (req.params.name === 'delete_file') {
+    const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
+    if (!kbRel) throw new Error('`path` is required');
+    await tryWebElseEmbedded(
+      'delete_file',
+      () => deleteFileViaWeb(kbRel),
+      async () => {
+        const abs = resolveUnderKb(kbRel);
+        if (!fs.existsSync(abs)) throw new Error(`file not found: ${kbRel}`);
+        fs.rmSync(abs);
+        const { indexer, ready } = getEmbedded();
+        await ready;
+        await indexer.deleteFile(kbRel);
+      },
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel }, null, 2) }],
+    };
+  }
+
+  if (req.params.name === 'rename_file') {
+    const oldRel = typeof args.old_path === 'string' ? args.old_path.trim() : '';
+    const newRel = typeof args.new_path === 'string' ? args.new_path.trim() : '';
+    if (!oldRel) throw new Error('`old_path` is required');
+    if (!newRel) throw new Error('`new_path` is required');
+    if (oldRel === newRel) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ ok: true, path: oldRel }, null, 2) }],
+      };
+    }
+    await tryWebElseEmbedded(
+      'rename_file',
+      () => renameFileViaWeb(oldRel, newRel),
+      async () => {
+        const oldAbs = resolveUnderKb(oldRel);
+        const newAbs = resolveUnderKb(newRel);
+        if (!fs.existsSync(oldAbs)) throw new Error(`file not found: ${oldRel}`);
+        if (fs.existsSync(newAbs)) throw new Error(`target exists: ${newRel}`);
+        let content: string | null = null;
+        try { content = fs.readFileSync(oldAbs, 'utf8'); } catch { /* binary or unreadable — skip re-embed */ }
+        fs.mkdirSync(path.dirname(newAbs), { recursive: true });
+        fs.renameSync(oldAbs, newAbs);
+        if (content !== null) {
+          const { indexer, ready } = getEmbedded();
+          await ready;
+          try {
+            await indexer.renameFile(oldRel, newRel, content);
+          } catch (err) {
+            try { fs.renameSync(newAbs, oldAbs); } catch { /* best effort */ }
+            throw err;
+          }
+        }
+      },
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ ok: true, path: newRel }, null, 2) }],
+    };
+  }
+
+  if (req.params.name === 'update_index') {
+    // No-scope = reconcile every known space — matches the design
+    // contract that an external agent can ship "update everything"
+    // without knowing the library layout. Each space runs through
+    // /api/sync (web path) or syncIndex (embedded path) independently
+    // so a failure in one doesn't poison the others; failures land in
+    // each sub-result's `failed` field, not a top-level error.
+    const targets = space ? [space] : listKnownSpaces();
+    if (targets.length === 0) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ spaces: [], note: 'no known spaces to sync' }, null, 2) }],
+      };
+    }
+    const perSpace: Array<{ space: string; result?: unknown; error?: string }> = [];
+    for (const target of targets) {
+      try {
+        const result = await tryWebElseEmbedded(
+          `update_index:${target}`,
+          () => syncViaWeb(target),
+          async () => {
+            const { indexer, ready } = getEmbedded();
+            await ready;
+            return syncIndex(indexer, target);
+          },
+        );
+        perSpace.push({ space: target, result });
+      } catch (err: unknown) {
+        perSpace.push({ space: target, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    // Single-space callers historically expected a flat result; keep
+    // that shape when they passed `space`, switch to a list when they
+    // didn't, so the response shape matches the intent.
+    if (space && perSpace.length === 1) {
+      const r = perSpace[0];
+      const body = r.error
+        ? { space: r.space, error: r.error }
+        : { space: r.space, ...(r.result as object) };
+      return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }] };
+    }
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ spaces: perSpace }, null, 2) }],
+    };
+  }
+
+  if (req.params.name === 'recent_files') {
+    const limit = Math.max(1, Math.min(200, Math.floor(typeof args.limit === 'number' ? args.limit : 20)));
+    const files = await tryWebElseEmbedded(
+      'recent_files',
+      () => recentFilesViaWeb(space, limit),
+      async () => {
+        // No web app running — walk the filesystem directly from
+        // kbRoot. We don't need the daemon for this; the indexer
+        // listFiles intersect is expensive without state.db and adds
+        // no signal for "recent".
+        const start = space ? path.resolve(getKbRoot(), space) : getKbRoot();
+        if (!fs.existsSync(start)) throw new Error(`space not found: ${space}`);
+        const skip = new Set([
+          '.stashbase', '.git', '.DS_Store', '.Trashes',
+          '.Spotlight-V100', '.fseventsd', '.AppleDouble', '.TemporaryItems',
+        ]);
+        const indexable = /\.(md|markdown|html|htm)$/i;
+        const MAX_ENTRIES = 5000;
+        const out: Array<{ path: string; mtimeMs: number }> = [];
+        const queue: string[] = [start];
+        while (queue.length > 0 && out.length < MAX_ENTRIES) {
+          const dir = queue.shift()!;
+          let entries: fs.Dirent[];
+          try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+          catch { continue; }
+          for (const e of entries) {
+            if (e.name.startsWith('.') && skip.has(e.name)) continue;
+            if (e.name.endsWith('_files')) continue;
+            const abs = path.join(dir, e.name);
+            if (e.isDirectory()) { queue.push(abs); continue; }
+            if (!e.isFile() || !indexable.test(e.name)) continue;
+            try {
+              const st = fs.statSync(abs);
+              const rel = path.relative(getKbRoot(), abs).split(path.sep).join('/');
+              out.push({ path: rel, mtimeMs: st.mtimeMs });
+            } catch { /* skip unreadable */ }
+          }
+        }
+        out.sort((x, y) => y.mtimeMs - x.mtimeMs);
+        return out.slice(0, limit);
+      },
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, limit, files }, null, 2) }],
     };
   }
 
