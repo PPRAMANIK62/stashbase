@@ -173,10 +173,15 @@ export function isUnderRoot(absPath: string): boolean {
   return true;
 }
 
+/** True if `absPath` lives anywhere inside the KB root (any depth).
+ *  Use this for file-level operations on kbRoot-relative paths like
+ *  `cs183b/lecture-01.md` — `isUnderRoot` rejects them because it
+ *  enforces the one-segment space-boundary invariant. The kbRoot
+ *  itself doesn't qualify (it's the container, not "inside" it). */
 export function isInsideKbRoot(absPath: string): boolean {
   const root = getKbRoot();
   const target = path.resolve(absPath);
-  if (target === root) return true;
+  if (target === root) return false;
   const rel = path.relative(root, target);
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }

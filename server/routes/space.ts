@@ -186,6 +186,60 @@ export function mount(app: express.Express): void {
     }
   });
 
+  // Import an existing local folder as a new space by copying its
+  // contents into <kbRoot>/<name>. Source can be anywhere on disk; the
+  // copy is one-way (we never write back). Refuses if the source is
+  // already under kbRoot (the user can just "Open space" instead), if
+  // the destination already exists, or if the source is a sensitive
+  // parent (home / kbRoot / root). UI follows up with POST /api/space.
+  app.post('/api/space/import-folder', async (req, res) => {
+    const rawSrc = typeof req.body?.source === 'string' ? req.body.source.trim() : '';
+    const rawName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (!rawSrc) return res.status(400).json({ error: 'source required' });
+    const src = path.resolve(rawSrc.replace(/^~/, os.homedir()));
+    if (!fs.existsSync(src)) return res.status(404).json({ error: 'source not found' });
+    if (!fs.statSync(src).isDirectory()) return res.status(400).json({ error: 'source is not a directory' });
+    const home = os.homedir();
+    const root = getKbRoot();
+    // Refuse cases where copying would either be a no-op (already
+    // under kbRoot) or a catastrophe (copying $HOME or `/` somewhere).
+    if (src === home || src === path.parse(src).root) {
+      return res.status(400).json({ error: 'refusing to import home or filesystem root' });
+    }
+    const relFromRoot = path.relative(root, src);
+    const isUnderKb = src === root
+      || (relFromRoot !== '' && !relFromRoot.startsWith('..') && !path.isAbsolute(relFromRoot));
+    if (isUnderKb) {
+      return res.status(400).json({ error: 'source is already inside the library; use Open space' });
+    }
+    const name = rawName || path.basename(src);
+    const nameErr = validateSpaceName(name);
+    if (nameErr) return res.status(400).json({ error: nameErr });
+    try { fs.mkdirSync(root, { recursive: true }); } catch { /* fall through */ }
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+      return res.status(400).json({ error: 'library root is not a directory' });
+    }
+    const dest = path.join(root, name);
+    if (fs.existsSync(dest)) {
+      return res.status(409).json({ error: `space "${name}" already exists` });
+    }
+    try {
+      // Node's `fs.cp` (recursive copy) is sync-API stable since v16
+      // and follows symlinks by default; we keep that behavior to
+      // surface the user's content as plain files in the new space.
+      // `dereference: true` here would inflate snapshot bundles —
+      // leave default off; cps default behaviour preserves links.
+      fs.cpSync(src, dest, { recursive: true });
+      // Strip any per-machine .stashbase state that came along — same
+      // reasoning as a clone (the new copy shouldn't inherit the old
+      // host's embedder routing / Milvus DB).
+      pruneClonedStashbase(path.join(dest, '.stashbase'));
+      res.json({ path: dest });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
   // Clone a remote git repo into <kbRoot>/<name>, then return the
   // absolute working-tree path. UI follows up with POST /api/space to
   // actually open it. We block here until git exits so the caller can

@@ -254,13 +254,21 @@ export class MfsIndexer implements Indexer {
   async syncDiff(space?: string): Promise<SyncDiff> {
     const args: Record<string, unknown> = {};
     if (space) args.space = space;
-    const res = await getDaemon().call<SyncDiff & { unchanged_count: number }>('scan_diff', args);
-    return { added: res.added, modified: res.modified, deleted: res.deleted };
+    const res = await getDaemon().call<{
+      added: string[];
+      modified: string[];
+      deleted: string[];
+      renamed?: Array<{ old: string; new: string; file_hash: string }>;
+      unchanged_count: number;
+    }>('scan_diff', args);
+    const renamed = (res.renamed ?? []).map((r) => ({ old: r.old, new: r.new, fileHash: r.file_hash }));
+    return { added: res.added, modified: res.modified, deleted: res.deleted, renamed };
   }
 
-  async search(query: string, topK: number, space?: string): Promise<SearchHit[]> {
+  async search(query: string, topK: number, space?: string, pathPrefix?: string): Promise<SearchHit[]> {
     const args: Record<string, unknown> = { query, top_k: topK };
     if (space) args.space = space;
+    if (pathPrefix) args.path_prefix = pathPrefix;
     const res = await getDaemon().call<{ hits: DaemonHit[] }>('search', args);
     return res.hits.map((h) => ({
       fileName: h.path,
@@ -324,6 +332,13 @@ export class MfsIndexer implements Indexer {
       upToDate: res.up_to_date,
       indexReady: !space ? true : this.spaceReady.has(space),
     };
+  }
+
+  async listFiles(space?: string): Promise<Record<string, string>> {
+    const args: Record<string, unknown> = {};
+    if (space) args.space = space;
+    const res = await getDaemon().call<{ files: Record<string, string> }>('list', args);
+    return res.files;
   }
 
   async closeStore(): Promise<void> {

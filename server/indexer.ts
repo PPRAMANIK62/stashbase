@@ -74,9 +74,13 @@ export interface Indexer {
   ): Promise<void>;
 
   /** Hybrid search. `space?` scopes to one space (its kbRoot-relative
-   *  dirname); omitted = whole library. Returns at most `topK` hits
-   *  ordered by descending score, with `fileName` kbRoot-relative. */
-  search(query: string, topK: number, space?: string): Promise<SearchHit[]>;
+   *  dirname); omitted = whole library. `pathPrefix?` further narrows
+   *  to chunks whose `source` starts with that prefix — useful when an
+   *  agent wants to ask "only inside cs183b/transcripts/". When both
+   *  are passed, `pathPrefix` takes precedence (it's more specific).
+   *  Returns at most `topK` hits ordered by descending score, with
+   *  `fileName` kbRoot-relative. */
+  search(query: string, topK: number, space?: string, pathPrefix?: string): Promise<SearchHit[]>;
 
   /** Walk the library and compute the content-hash diff against the
    *  index. `space?` scopes the walk; omitted = whole library. Paths
@@ -86,6 +90,14 @@ export interface Indexer {
   /** Lightweight progress check — name-set diff only, no hashing.
    *  `space?` scopes; omitted = whole library. */
   status(space?: string): Promise<IndexStatus>;
+
+  /** Every file present in the index, keyed by kbRoot-relative path with
+   *  its stored content hash as value. `space?` scopes to one space;
+   *  omitted = whole library. Used by `/api/library/files`, MCP
+   *  `list_files`, and the library overview info aggregator — without
+   *  this method, those reach around the interface and call the daemon
+   *  directly. */
+  listFiles(space?: string): Promise<Record<string, string>>;
 
   /** Release the Milvus Lite locks so the server can move / wipe the
    *  underlying DB file. Next op reopens lazily via `bindSpace`. */
@@ -102,6 +114,12 @@ export interface SyncDiff {
   modified: string[];
   /** In the index, gone from disk. */
   deleted: string[];
+  /** Pairs where an added file's content hash matches a deleted file's
+   *  stored hash — almost certainly a rename / move. The reconcile path
+   *  routes these through `renameFile` so the daemon can keep the cached
+   *  embeddings instead of paying to re-embed. Only 1:1 hash matches
+   *  land here; ambiguous N:M pairs stay in `added`/`deleted`. */
+  renamed: Array<{ old: string; new: string; fileHash: string }>;
 }
 
 export interface IndexStatus {

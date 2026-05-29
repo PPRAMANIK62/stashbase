@@ -26,7 +26,7 @@ import {
   requireSpaceExistsByName,
   validateSpaceName,
 } from './space.ts';
-import { getDaemon } from './mfs-daemon.ts';
+import { indexer } from './state.ts';
 
 const log = logger('library');
 
@@ -155,10 +155,8 @@ export async function getLibraryInfo(): Promise<LibraryInfo> {
   for (const name of listKnownSpaces()) {
     let files: string[] = [];
     try {
-      const r = await getDaemon().call<{ files: Record<string, string> }>(
-        'list', { space: name },
-      );
-      files = Object.keys(r.files).sort();
+      const r = await indexer.listFiles(name);
+      files = Object.keys(r).sort();
     } catch (err) {
       log.warn(`library_info: list ${name} failed: ${errorMessage(err)}`);
     }

@@ -530,21 +530,127 @@ def op_delete(svc: StashbaseStore, args: dict) -> dict:
 
 
 def op_rename(svc: StashbaseStore, args: dict) -> dict:
-    """Delete-and-reinsert (MFS lacks in-place source update). Old
-    rows wiped from all collections; new rows land in the bound
-    collection for the new path's space."""
+    """Rename a file's chunks across all collections.
+
+    Fast path (no embedding) when the caller-supplied ``file_hash``
+    matches every stored row's ``file_hash`` for the old source: copy
+    each row with the new source / id / parent_dir, keep the cached
+    ``dense_vector``, then drop the old rows. Saves the embedding round
+    trip for true renames (huge PDFs, mass folder moves) — the common
+    case once scan_diff pairs adds + deletes by hash.
+
+    Falls back to delete-and-reinsert when the hash differs (content
+    actually changed alongside the rename) or when the stored row data
+    is incomplete.
+    """
+    from mfs.store import ChunkRecord
+
     _require(args, "old", "new", "content")
+    old = args["old"]
+    new = args["new"]
+    arg_hash = args.get("file_hash")
+
+    if arg_hash:
+        try:
+            copied = _try_rename_without_reembed(svc, old, new, arg_hash)
+            if copied is not None:
+                return {"chunks": copied, "embed_ms": 0, "fast_path": True}
+        except Exception:
+            # Any failure in the fast path falls back to the safe
+            # re-embed path below — never leaves the store half-renamed.
+            pass
+
     for _pk, _emb, store in svc.all_stores():
         try:
-            store.delete_by_source(args["old"])
+            store.delete_by_source(old)
         except Exception:
             pass
     return op_upsert(svc, {
-        "path": args["new"],
+        "path": new,
         "content": args["content"],
         "ext": args.get("ext", ".md"),
-        "file_hash": args.get("file_hash"),
+        "file_hash": arg_hash,
     })
+
+
+def _try_rename_without_reembed(
+    svc: StashbaseStore, old: str, new: str, expected_hash: str,
+) -> int | None:
+    """Copy each row of ``old`` to ``new`` while keeping cached vectors.
+
+    Returns ``None`` (caller should fall back to re-embed) when:
+      - no rows for the old source exist in any collection
+      - any row's stored ``file_hash`` differs from ``expected_hash``
+        (content drifted; we'd embed stale text otherwise)
+      - any row lacks a ``dense_vector`` we can re-insert
+
+    Otherwise returns the number of chunks moved. Old rows are dropped
+    only after every collection's copy succeeded, so a partial failure
+    leaves the index unchanged.
+    """
+    from mfs.store import ChunkRecord
+
+    new_parent = "/".join(new.split("/")[:-1])
+    fields = [
+        "id", "source", "parent_dir", "chunk_index", "start_line", "end_line",
+        "chunk_text", "dense_vector", "content_type", "file_hash",
+        "is_dir", "embed_status", "metadata", "account_id",
+    ]
+    per_store_records: list[tuple[Any, list[ChunkRecord]]] = []
+    total = 0
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            rows = store._query_all(
+                f'source == "{old}"', output_fields=fields,
+            )
+        except Exception:
+            return None
+        if not rows:
+            continue
+        records: list[ChunkRecord] = []
+        for r in rows:
+            stored_hash = r.get("file_hash", "")
+            if stored_hash and stored_hash != expected_hash:
+                # Content drifted since we last embedded — re-embed.
+                return None
+            vec = r.get("dense_vector")
+            if vec is None:
+                return None
+            new_id = hashlib.sha256(
+                f"{new}:{r['start_line']}:{r['end_line']}:"
+                f"{_hash_text(r.get('chunk_text', ''))}".encode(),
+            ).hexdigest()[:32]
+            records.append(ChunkRecord(
+                id=new_id,
+                source=new,
+                parent_dir=new_parent,
+                chunk_index=int(r.get("chunk_index", 0)),
+                start_line=int(r.get("start_line", 0)),
+                end_line=int(r.get("end_line", 0)),
+                chunk_text=r.get("chunk_text", ""),
+                dense_vector=vec,
+                content_type=r.get("content_type", ""),
+                file_hash=expected_hash,
+                is_dir=bool(r.get("is_dir", False)),
+                embed_status=r.get("embed_status", "complete"),
+                metadata=r.get("metadata", {}) or {},
+                account_id=r.get("account_id", "stashbase"),
+            ))
+        per_store_records.append((store, records))
+        total += len(records)
+
+    if total == 0:
+        return None
+
+    # All rows validated — commit the copy + drop the old source.
+    for store, records in per_store_records:
+        store.insert_chunks(records)
+    for _pk, _emb, store in svc.all_stores():
+        try:
+            store.delete_by_source(old)
+        except Exception:
+            pass
+    return total
 
 
 def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
@@ -592,6 +698,7 @@ def op_search(svc: StashbaseStore, args: dict) -> dict:
     _require(args, "query")
     query = args["query"].strip()
     space = args.get("space")
+    explicit_prefix = args.get("path_prefix")
     top_k_raw = int(args.get("top_k", 10))
     top_k = max(1, min(200, top_k_raw))
     if not query:
@@ -601,8 +708,16 @@ def op_search(svc: StashbaseStore, args: dict) -> dict:
         return {"hits": []}
 
     # Path filter: MFS's _make_filter applies `source like "<prefix>%"`.
-    # Passing `"cs183b/"` constrains to that space; None means whole library.
-    path_filter = (space.rstrip("/") + "/") if space else None
+    # `path_prefix` wins when provided — it's more specific than the
+    # space-derived prefix (e.g. "cs183b/transcripts/" vs "cs183b/").
+    # Otherwise fall back to space-only scoping; both omitted = whole
+    # library.
+    if explicit_prefix:
+        path_filter = explicit_prefix if explicit_prefix.endswith("/") else explicit_prefix.rstrip("/") + "/"
+    elif space:
+        path_filter = space.rstrip("/") + "/"
+    else:
+        path_filter = None
 
     # Collect per-collection hits, each list ranked by score desc.
     # MFS's hybrid_search already returns sorted hits.
@@ -767,6 +882,14 @@ def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
     """Content-hash diff: catches external edits the name-set diff misses.
 
     ``args.space`` optional; whole library if omitted.
+
+    Pairs deleted+added entries with matching content hash and reports
+    them as ``renamed`` instead so the Node syncIndex can route them
+    through ``op_rename`` (which skips re-embedding when the content is
+    unchanged — see fast-path in ``op_rename``). Only 1:1 hash matches
+    are treated as renames; ambiguous N:M cases stay in
+    deleted/added so the user-visible diff doesn't silently mis-attribute
+    moves.
     """
     scanner = _make_scanner()
     space = args.get("space")
@@ -782,9 +905,17 @@ def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
             continue
 
     added, modified, unchanged = [], [], []
+    added_hashes: dict[str, str] = {}
     for rel, f in on_disk.items():
         if rel not in indexed:
             added.append(rel)
+            try:
+                added_hashes[rel] = scanner.compute_file_hash(f.path)
+            except OSError:
+                # If we can't hash a fresh file, it stays in `added`
+                # without a hash entry — rename detection just won't
+                # pair it. Reconcile will index it normally.
+                pass
             continue
         try:
             disk_hash = scanner.compute_file_hash(f.path)
@@ -797,10 +928,38 @@ def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
             unchanged.append(rel)
     deleted = [rel for rel in indexed if rel not in on_disk]
 
+    # Pair adds and deletes that share a content hash. Only handle 1:1
+    # matches — if two added files share a hash with two deleted files,
+    # we can't tell who renamed to who, so leave them in the buckets.
+    renamed: list[dict[str, str]] = []
+    if added_hashes and deleted:
+        deleted_hashes: dict[str, str] = {}
+        for rel in deleted:
+            deleted_hashes[rel] = indexed[rel]
+        added_by_hash: dict[str, list[str]] = {}
+        for rel, h in added_hashes.items():
+            added_by_hash.setdefault(h, []).append(rel)
+        deleted_by_hash: dict[str, list[str]] = {}
+        for rel, h in deleted_hashes.items():
+            deleted_by_hash.setdefault(h, []).append(rel)
+        consumed_added: set[str] = set()
+        consumed_deleted: set[str] = set()
+        for h, adds in added_by_hash.items():
+            dels = deleted_by_hash.get(h, [])
+            if len(adds) == 1 and len(dels) == 1:
+                renamed.append({"old": dels[0], "new": adds[0], "file_hash": h})
+                consumed_added.add(adds[0])
+                consumed_deleted.add(dels[0])
+        if consumed_added:
+            added = [a for a in added if a not in consumed_added]
+        if consumed_deleted:
+            deleted = [d for d in deleted if d not in consumed_deleted]
+
     return {
         "added": added,
         "modified": modified,
         "deleted": deleted,
+        "renamed": renamed,
         "unchanged_count": len(unchanged),
     }
 

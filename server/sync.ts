@@ -33,6 +33,12 @@ export interface SyncResult {
   added: string[];
   modified: string[];
   removed: string[];
+  /** Files the daemon's scan_diff matched by content hash to a
+   *  previously-indexed (now-deleted) path. Each entry is the NEW
+   *  space-relative path. Routed through `indexer.renameFile`, which the
+   *  daemon fast-paths to reuse cached embeddings — no embedding tokens
+   *  spent for these. */
+  renamed: string[];
   failed: { name: string; error: string }[];
 }
 
@@ -51,9 +57,39 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
   const diff = await indexer.syncDiff(space);
   const failed: { name: string; error: string }[] = [];
 
-  if (diff.added.length === 0 && diff.modified.length === 0 && diff.deleted.length === 0) {
+  if (
+    diff.added.length === 0 && diff.modified.length === 0 &&
+    diff.deleted.length === 0 && diff.renamed.length === 0
+  ) {
     log.info('index up to date');
-    return { added: [], modified: [], removed: [], failed: [] };
+    return { added: [], modified: [], removed: [], renamed: [], failed: [] };
+  }
+
+  // Renames first — they consume rows the deletes would otherwise wipe
+  // (we already filtered the paired deletes out of `diff.deleted` in
+  // scan_diff, but doing renames before deletes keeps the daemon's
+  // collection state monotonic).
+  const renamedDone: string[] = [];
+  if (diff.renamed.length) {
+    log.info(`renaming ${diff.renamed.length} file(s) (hash match, no re-embed)`);
+    for (const r of diff.renamed) {
+      const spaceRel = fromKbRel(r.new);
+      if (spaceRel == null) {
+        failed.push({ name: r.new, error: 'rename target not under current space' });
+        continue;
+      }
+      const content = readText(spaceRel);
+      if (content == null) {
+        failed.push({ name: r.new, error: 'read returned null on rename target' });
+        continue;
+      }
+      try {
+        await indexer.renameFile(r.old, r.new, content);
+        renamedDone.push(r.new);
+      } catch (err: any) {
+        failed.push({ name: r.new, error: errorMessage(err) });
+      }
+    }
   }
 
   if (diff.deleted.length) {
@@ -83,12 +119,14 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
   log.info(
     `done. added=${addedDone.length}/${diff.added.length} ` +
       `modified=${modifiedDone.length}/${diff.modified.length} ` +
+      `renamed=${renamedDone.length}/${diff.renamed.length} ` +
       `removed=${diff.deleted.length} failed=${failed.length}`,
   );
   return {
     added: addedDone.map((p) => fromKbRel(p) ?? p),
     modified: modifiedDone.map((p) => fromKbRel(p) ?? p),
     removed: diff.deleted.map((p) => fromKbRel(p) ?? p),
+    renamed: renamedDone.map((p) => fromKbRel(p) ?? p),
     failed,
   };
 }
@@ -104,7 +142,7 @@ export async function syncNewFiles(indexer: Indexer, space: string): Promise<Syn
   const status = await indexer.status(space);
   if (status.pending.length === 0 && status.orphaned.length === 0) {
     log.info('index up to date (name-only check)');
-    return { added: [], modified: [], removed: [], failed: [] };
+    return { added: [], modified: [], removed: [], renamed: [], failed: [] };
   }
 
   const failed: { name: string; error: string }[] = [];
@@ -133,6 +171,7 @@ export async function syncNewFiles(indexer: Indexer, space: string): Promise<Syn
     added: addedDone.map((p) => fromKbRel(p) ?? p),
     modified: [],
     removed: status.orphaned.map((p) => fromKbRel(p) ?? p),
+    renamed: [],
     failed,
   };
 }

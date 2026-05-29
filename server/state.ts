@@ -36,6 +36,32 @@ const log = logger('state');
 /** Single indexer instance shared across every route. */
 export const indexer: Indexer = new MfsIndexer();
 
+/** Most recent snapshot-import result per space, keyed by kbRoot-
+ *  relative space name. Populated by `maybeImportSnapshot`, consumed by
+ *  `/api/index-status` so the UI can show a banner the first time the
+ *  user opens a space whose snapshot's embedder doesn't match the
+ *  library's current provider. Cleared on successful re-import or
+ *  manual dismissal. */
+export interface SnapshotImportWarning {
+  /** Total chunks the daemon skipped because their provider key
+   *  didn't match anything bound for this space. */
+  skipped: number;
+  /** Per-provider chunk counts as reported by the daemon. */
+  details: { provider: string; chunks: number }[];
+  /** ISO timestamp so the UI can tell whether the warning is fresh. */
+  at: string;
+}
+const snapshotWarnings = new Map<string, SnapshotImportWarning>();
+export function getSnapshotWarning(space: string): SnapshotImportWarning | null {
+  return snapshotWarnings.get(space) ?? null;
+}
+export function clearSnapshotWarning(space: string): void {
+  snapshotWarnings.delete(space);
+}
+function recordSnapshotWarning(space: string, warning: SnapshotImportWarning): void {
+  snapshotWarnings.set(space, warning);
+}
+
 /** Resolve the library-wide runtime embedder config. Returns null when
  *  the configured provider can't be used right now (openai without a
  *  key), so the caller can fall back to local. */
@@ -119,6 +145,9 @@ async function maybeImportSnapshot(spaceAbs: string, spaceName: string): Promise
     }>('import_space', { space: spaceName, in_path: snapshot });
     if (res.imported > 0) {
       log.info(`snapshot import ${spaceName}: ${res.imported} chunk(s)`);
+      // A successful import supersedes any prior warning we'd surfaced
+      // for this space (e.g. the user switched embedder to match).
+      clearSnapshotWarning(spaceName);
     }
     if (res.skipped > 0) {
       const summary = res.skipped_providers
@@ -128,6 +157,14 @@ async function maybeImportSnapshot(spaceAbs: string, spaceName: string): Promise
         `snapshot import ${spaceName}: skipped ${res.skipped} chunk(s) — ${summary}. ` +
           `Switch the library's embedder to match (or re-export with the current provider).`,
       );
+      // Stash for the UI to surface — see /api/index-status, which
+      // injects this into the response so the renderer banner can
+      // appear without a separate poll.
+      recordSnapshotWarning(spaceName, {
+        skipped: res.skipped,
+        details: res.skipped_providers.map((p) => ({ provider: p.provider_key, chunks: p.chunks })),
+        at: new Date().toISOString(),
+      });
     }
   } catch (err) {
     log.warn(`snapshot import ${spaceName} failed: ${errorMessage(err)}`);
