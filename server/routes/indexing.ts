@@ -13,6 +13,12 @@ import { errorMessage, logger } from '../log.ts';
 import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, toKbRel } from '../space.ts';
 import { syncIndex } from '../sync.ts';
 import { syncSkillsToCli } from '../skills.ts';
+import { mirrorRulesToCli } from '../stashbase-md.ts';
+import {
+  isReservedMetadataFile,
+  setFileMetadataEntry,
+  type FileMetadata,
+} from '../metadata.ts';
 import { derivedPathsForPdf, getInFlightPdfs, maybeConvertPdf, pdfPathForDerivedRel } from '../pdf.ts';
 import { clearRecord, listByStatus, readAll as readPdfStatus } from '../pdf-status.ts';
 import { getFsChangeCounter } from '../watcher.ts';
@@ -24,6 +30,7 @@ import {
   getLibraryInfo,
   getLibraryOverview,
   getResolvedRules,
+  getSpaceInfoFull,
   getSpaceRules,
   setLibraryOverview,
   setSpaceRules,
@@ -320,8 +327,8 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Library overview (STASHBASE.md at kbRoot). The chrome-strip button in
-  // the renderer GETs this as a regular markdown blob; MCP forwards
+  // Library 目录 (<kbRoot>/.stashbase/space-metadata.md). The LibraryPanel
+  // in the renderer GETs this as a regular markdown blob; MCP forwards
   // both reads and writes here so the daemon shares one source of truth.
   app.get('/api/library/overview', (_req, res) => {
     res.json({ content: getLibraryOverview() });
@@ -343,6 +350,46 @@ export function mount(app: express.Express): void {
   app.get('/api/library/info', async (_req, res) => {
     try {
       res.json(await getLibraryInfo());
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Structured facts for ONE space + that space's slice of the library
+  // 目录. Powers MCP's `space_info` tool — the per-space follow-up to
+  // `library_info`.
+  app.get('/api/library/space-info', async (req, res) => {
+    try {
+      const space = typeof req.query.space === 'string' ? req.query.space.trim() : '';
+      if (!space) return res.status(400).json({ error: 'space required' });
+      res.json(await getSpaceInfoFull(space));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Read/write one file's section of `<space>/file-metadata.md` — the
+  // agent-maintained metadata sidecar kept out of the user's file.
+  // Powers MCP's `set_file_metadata`. `path` is kbRoot-relative; the
+  // first segment is the space, the rest the space-relative file path.
+  // Passing an empty `metadata` object removes the section.
+  app.post('/api/library/file-metadata', (req, res) => {
+    try {
+      const kbRel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+      const metadata = req.body?.metadata;
+      if (!kbRel) return res.status(400).json({ error: 'path required' });
+      if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+        return res.status(400).json({ error: 'metadata (object) required' });
+      }
+      const split = splitSpacePath(kbRel);
+      if (!split) {
+        return res.status(400).json({ error: 'path must include a space segment, e.g. "cs183b/note.md"' });
+      }
+      if (isReservedMetadataFile(kbRel)) {
+        return res.status(400).json({ error: 'cannot set metadata on a reserved metadata file' });
+      }
+      setFileMetadataEntry(split.space, split.spaceRel, metadata as FileMetadata);
+      res.json({ ok: true, path: kbRel });
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -568,13 +615,31 @@ export function mount(app: express.Express): void {
       return res.status(400).json({ error: 'cli must be "claude" or "codex"' });
     }
     try {
-      res.json(syncSkillsToCli(cur, cli));
+      const result = syncSkillsToCli(cur, cli);
+      // Same trigger mirrors the merged STASHBASE.md rules into the
+      // space's CLAUDE.md / AGENTS.md so a CLI agent reads them too.
+      try { mirrorRulesToCli(cur); }
+      catch (err: unknown) { log.warn(`mirror rules failed: ${errorMessage(err)}`); }
+      res.json(result);
     } catch (err: unknown) {
       sendError(res, err);
     }
     // Mark log as used (currently silent on the happy path).
     void log;
   });
+}
+
+/** Split a kbRoot-relative path into `{space, spaceRel}`. Returns null
+ *  when there's no space-relative remainder (i.e. the path is a bare
+ *  space name with no file under it). */
+function splitSpacePath(kbRel: string): { space: string; spaceRel: string } | null {
+  const norm = kbRel.replace(/\\/g, '/').replace(/^\/+/, '');
+  const slash = norm.indexOf('/');
+  if (slash < 0) return null;
+  const space = norm.slice(0, slash);
+  const spaceRel = norm.slice(slash + 1).trim();
+  if (!space || !spaceRel) return null;
+  return { space, spaceRel };
 }
 
 // ---------- keyword search (ripgrep) ----------

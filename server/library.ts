@@ -1,11 +1,18 @@
 /**
- * Library-level metadata: `<kbRoot>/AGENT.md` — a single markdown file
- * the agent maintains as its working map of the library. Sits **outside**
- * every space, so it's not indexed (the daemon walks per-space dirs) and
- * doesn't show up in any sidebar; the UI surfaces it via a chrome-strip
- * button that opens it as a special read-only tab.
+ * Library-level metadata: `<kbRoot>/space-metadata.md` — a single
+ * markdown file the agent maintains as its working "目录" of the library
+ * (what each space is about, what changed recently). Lives at the KB root
+ * (NOT in `.stashbase/`) so it's **version-controllable** — it sits
+ * alongside the KB-level `STASHBASE.md` rules book. It's outside every
+ * space, so the daemon (which walks per-space dirs) never indexes it; the
+ * UI surfaces it via the LibraryPanel as a special library-kind tab.
  *
- * The agent updates the file via MCP's `update_library_overview`; users
+ * Renamed from the legacy `<kbRoot>/AGENT.md` (which historically mixed
+ * "rules" and "目录" roles): STASHBASE.md is now the rules book, and this
+ * file is the 目录. `ensureLibraryOverview()` migrates an old AGENT.md to
+ * the new name once on boot.
+ *
+ * The agent updates the file via MCP's `update_space_metadata`; users
  * are expected to ask the agent to make changes rather than edit
  * directly (mirroring the CLAUDE.md pattern). The file is plain
  * markdown — no schema — so the agent has freedom to structure it
@@ -30,19 +37,27 @@ import { indexer } from './state.ts';
 
 const log = logger('library');
 
-const FILENAME = 'AGENT.md';
+/** `<kbRoot>/space-metadata.md` — the agent-maintained 目录 (version-
+ *  controlled, sibling of the KB-level STASHBASE.md). */
+const FILENAME = 'space-metadata.md';
+/** Legacy name migrated away from on boot (see `ensureLibraryOverview`). */
+const LEGACY_FILENAME = 'AGENT.md';
 const RULES_FILENAME = 'STASHBASE.md';
 
 const PLACEHOLDER = `# StashBase Library
 
 (Empty — ask your AI assistant to summarize your spaces here via the
-\`update_library_overview\` MCP tool. The assistant should describe
+\`update_space_metadata\` MCP tool. The assistant should describe
 each space's topic and contents so future searches can route
 intelligently.)
 `;
 
-function agentMdPath(): string {
+function spaceMetadataPath(): string {
   return path.join(getKbRoot(), FILENAME);
+}
+
+function legacyOverviewPath(): string {
+  return path.join(getKbRoot(), LEGACY_FILENAME);
 }
 
 function kbRulesPath(): string {
@@ -55,38 +70,47 @@ function spaceRulesPath(spaceName: string): string {
   return path.join(getKbRoot(), spaceName, RULES_FILENAME);
 }
 
-/** Read `<kbRoot>/AGENT.md`. Returns empty string if missing (callers
- *  decide whether to treat that as "no overview yet" or render a
+/** Read `<kbRoot>/space-metadata.md`. Returns empty string if missing
+ *  (callers decide whether to treat that as "no 目录 yet" or render a
  *  placeholder). */
 export function getLibraryOverview(): string {
   try {
-    return fs.readFileSync(agentMdPath(), 'utf8');
+    return fs.readFileSync(spaceMetadataPath(), 'utf8');
   } catch {
     return '';
   }
 }
 
-/** Overwrite `<kbRoot>/AGENT.md`. Atomic via `.tmp` + rename so a
- *  partial write doesn't leave the file half-baked if the process
- *  dies mid-write. */
+/** Overwrite `<kbRoot>/space-metadata.md`. Atomic via `.tmp` + rename so
+ *  a partial write doesn't leave the file half-baked if the process dies
+ *  mid-write. */
 export function setLibraryOverview(content: string): void {
-  const target = agentMdPath();
+  const target = spaceMetadataPath();
   const tmp = target + '.tmp';
   fs.writeFileSync(tmp, content, 'utf8');
   fs.renameSync(tmp, target);
 }
 
-/** Idempotent boot hook. Writes a placeholder so the agent has
- *  something to extend on its first read, and users opening the
- *  library tab see a "(Empty)" message instead of a 404. */
+/** Idempotent boot hook. (1) One-time migration: if the legacy
+ *  `<kbRoot>/AGENT.md` still exists and `space-metadata.md` doesn't, move
+ *  it (filename realigns with the design; content unchanged). (2) Writes
+ *  a placeholder so the agent has something to extend on its first read,
+ *  and users opening the library tab see a "(Empty)" message instead of a
+ *  404. */
 export function ensureLibraryOverview(): void {
-  const target = agentMdPath();
-  try {
-    fs.accessSync(target);
-    return;
-  } catch {
-    /* not present — fall through to create */
+  const target = spaceMetadataPath();
+  const legacy = legacyOverviewPath();
+  if (!fs.existsSync(target) && fs.existsSync(legacy)) {
+    try {
+      fs.renameSync(legacy, target);
+      log.info(`migrated ${LEGACY_FILENAME} → ${FILENAME}`);
+      return;
+    } catch (err: unknown) {
+      log.warn(`failed to migrate ${legacy} → ${target}: ${errorMessage(err)}`);
+      // fall through — try to seed a placeholder so the UI isn't blank
+    }
   }
+  if (fs.existsSync(target)) return;
   try {
     setLibraryOverview(PLACEHOLDER);
     log.info(`wrote placeholder ${FILENAME}`);
@@ -135,12 +159,55 @@ export interface SpaceInfo {
 }
 
 export interface LibraryInfo {
-  /** `<kbRoot>/AGENT.md` content (agent-maintained narrative). */
+  /** `<kbRoot>/space-metadata.md` content (agent-maintained 目录). */
   overview: string;
   /** KB-level maintenance rules from `<kbRoot>/STASHBASE.md`. */
   rules: string;
   /** Per-space structured facts. */
   spaces: SpaceInfo[];
+}
+
+/** `SpaceInfo` plus the slice of the library 目录 that talks about this
+ *  space. Returned by the `space_info` MCP tool so an agent can dig into
+ *  one space without re-reading the whole library payload. */
+export interface SpaceInfoFull extends SpaceInfo {
+  /** The `## <spaceName>` section of `<kbRoot>/space-metadata.md`
+   *  (heading line + body, up to the next `##`), or empty string when
+   *  the 目录 has no section for this space. */
+  overview_section: string;
+}
+
+/** Structured facts for ONE space: provider, file count, a sample of
+ *  file paths + their leading headings, and the resolved rules. Asks the
+ *  daemon for the indexed file set, then peeks the filesystem for
+ *  headings. Validates the space exists first. */
+export async function getSpaceInfo(spaceName: string): Promise<SpaceInfo> {
+  requireSpaceExistsByName(spaceName);
+  const root = getKbRoot();
+  const provider = getEmbedderProvider();
+  let files: string[] = [];
+  try {
+    const r = await indexer.listFiles(spaceName);
+    files = Object.keys(r).sort();
+  } catch (err) {
+    log.warn(`space_info: list ${spaceName} failed: ${errorMessage(err)}`);
+  }
+  const sample_files = files.slice(0, 8);
+  const sample_headings = collectHeadings(root, sample_files);
+  return {
+    name: spaceName,
+    provider,
+    file_count: files.length,
+    sample_files,
+    sample_headings,
+    rules: getResolvedRules(spaceName),
+  };
+}
+
+/** `getSpaceInfo` plus the matching slice of the library 目录. */
+export async function getSpaceInfoFull(spaceName: string): Promise<SpaceInfoFull> {
+  const info = await getSpaceInfo(spaceName);
+  return { ...info, overview_section: extractOverviewSection(getLibraryOverview(), spaceName) };
 }
 
 /** Build the library-info payload by asking the daemon for indexed
@@ -149,29 +216,32 @@ export interface LibraryInfo {
 export async function getLibraryInfo(): Promise<LibraryInfo> {
   const overview = getLibraryOverview();
   const rules = getKbRules();
-  const root = getKbRoot();
-  const provider = getEmbedderProvider();
   const spaces: SpaceInfo[] = [];
   for (const name of listKnownSpaces()) {
-    let files: string[] = [];
-    try {
-      const r = await indexer.listFiles(name);
-      files = Object.keys(r).sort();
-    } catch (err) {
-      log.warn(`library_info: list ${name} failed: ${errorMessage(err)}`);
-    }
-    const sample_files = files.slice(0, 8);
-    const sample_headings = collectHeadings(root, sample_files);
-    spaces.push({
-      name,
-      provider,
-      file_count: files.length,
-      sample_files,
-      sample_headings,
-      rules: getResolvedRules(name),
-    });
+    spaces.push(await getSpaceInfo(name));
   }
   return { overview, rules, spaces };
+}
+
+/** Return the `## <spaceName>` section of the 目录 markdown: from that
+ *  heading line up to (but not including) the next `##` of equal-or-
+ *  shallower depth, or end of doc. Empty string when no such section.
+ *  Heading match is exact on the trimmed text (so `## cs183b` matches
+ *  the space `cs183b` but `## cs183b-archive` does not). */
+function extractOverviewSection(overview: string, spaceName: string): string {
+  if (!overview) return '';
+  const lines = overview.split('\n');
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^##\s+(.+?)\s*$/);
+    if (m && m[1].trim() === spaceName) { start = i; break; }
+  }
+  if (start < 0) return '';
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^#{1,2}\s+/.test(lines[i])) { end = i; break; }
+  }
+  return lines.slice(start, end).join('\n').trim();
 }
 
 /** First H1/H2 line per file, capped at 15 across the input set.

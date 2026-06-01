@@ -319,8 +319,8 @@ export const api = {
   /** Read `<kbRoot>/STASHBASE.md` — the KB-level rules book. Powers
    *  the LibraryPanel's "open KB rules" row. */
   getKbRules: () => getJson<{ content: string }>('/api/library/rules'),
-  /** Read `<kbRoot>/AGENT.md` — the agent-maintained library overview.
-   *  Powers the "View library" chrome-strip button. */
+  /** Read `<kbRoot>/.stashbase/space-metadata.md` — the agent-maintained
+   *  library 目录. Powers the LibraryPanel's overview row. */
   getLibraryOverview: () => getJson<{ content: string }>('/api/library/overview'),
   /** Run `git clone <url>` into `<kbRoot>/<name>`, returning the
    *  absolute path of the freshly-cloned working tree. `name`

@@ -57,10 +57,17 @@ import {
   ensureLibraryOverview,
   getLibraryInfo,
   getResolvedRules,
+  getSpaceInfoFull,
   setLibraryOverview,
   setSpaceRules,
   type LibraryInfo,
+  type SpaceInfoFull,
 } from '../server/library.ts';
+import {
+  isReservedMetadataFile,
+  setFileMetadataEntry,
+  type FileMetadata,
+} from '../server/metadata.ts';
 import { syncIndex } from '../server/sync.ts';
 
 // Idempotent migrations. Safe to run from both the web server and MCP —
@@ -278,6 +285,24 @@ async function libraryInfoViaWeb(): Promise<LibraryInfo> {
   return r.json() as Promise<LibraryInfo>;
 }
 
+async function spaceInfoViaWeb(space: string): Promise<SpaceInfoFull> {
+  const r = await fetch(`${WEB_BASE}/api/library/space-info?space=${encodeURIComponent(space)}`);
+  if (!r.ok) throw new Error(`web /api/library/space-info failed: ${r.status}`);
+  return r.json() as Promise<SpaceInfoFull>;
+}
+
+async function setFileMetadataViaWeb(kbRel: string, metadata: FileMetadata): Promise<void> {
+  const r = await fetch(`${WEB_BASE}/api/library/file-metadata`, {
+    method: 'POST',
+    headers: webHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ path: kbRel, metadata }),
+  });
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({})) as { error?: string };
+    throw new Error(j.error ?? `web /api/library/file-metadata failed: ${r.status}`);
+  }
+}
+
 async function updateLibraryOverviewViaWeb(content: string): Promise<void> {
   const r = await fetch(`${WEB_BASE}/api/library/overview`, {
     method: 'POST',
@@ -344,6 +369,19 @@ async function recentFilesViaWeb(space: string | undefined, limit: number): Prom
 
 function encodeKbPath(p: string): string {
   return p.split('/').map(encodeURIComponent).join('/');
+}
+
+/** Split a kbRoot-relative path into `{space, spaceRel}`; null when there
+ *  is no space-relative remainder (bare space name). Mirrors the route
+ *  helper in `routes/indexing.ts`. */
+function splitSpacePath(kbRel: string): { space: string; spaceRel: string } | null {
+  const norm = kbRel.replace(/\\/g, '/').replace(/^\/+/, '');
+  const slash = norm.indexOf('/');
+  if (slash < 0) return null;
+  const space = norm.slice(0, slash);
+  const spaceRel = norm.slice(slash + 1).trim();
+  if (!space || !spaceRel) return null;
+  return { space, spaceRel };
 }
 
 /** Same kbRoot-containment check as `isInsideKbRoot`, with the
@@ -441,21 +479,40 @@ const BUILTIN_TOOLS = [
       name: 'library_info',
       description:
         'Get a one-shot map of the StashBase library: a free-form ' +
-        '`overview` (the contents of `<kbRoot>/AGENT.md`, an ' +
-        'agent-maintained markdown file that should describe what each ' +
+        '`overview` (the contents of `<kbRoot>/.stashbase/space-metadata.md`, ' +
+        'an agent-maintained markdown 目录 that should describe what each ' +
         'space contains) plus structured facts per space (name, ' +
         'embedder provider, file count, a sample of file paths and ' +
         'headings). **Call this first** when starting a new conversation ' +
         'so you can decide which space(s) `search_kb` should target. If ' +
         '`overview` is empty or out of date relative to what you find ' +
-        'during a session, update it via `update_library_overview`.',
+        'during a session, update it via `update_space_metadata`.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     },
     {
-      name: 'update_library_overview',
+      name: 'space_info',
       description:
-        'Overwrite the entire `<kbRoot>/AGENT.md` library overview with ' +
-        'new markdown content. Call this after you have learned ' +
+        'Structured facts about ONE space (provider, file count, sample files + headings) ' +
+        'plus that space\'s section of the library 目录. Use after `library_info` to dig ' +
+        'into a specific space before `search_kb`. Returns `{name, provider, file_count, ' +
+        'sample_files, sample_headings, rules, overview_section}` — `overview_section` is ' +
+        'the `## <space>` slice of the agent-maintained 目录, empty when none exists.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          space: {
+            type: 'string',
+            description: 'Space name (kbRoot-relative folder, e.g. "cs183b" or "work/research").',
+          },
+        },
+        required: ['space'],
+      },
+    },
+    {
+      name: 'update_space_metadata',
+      description:
+        'Overwrite the entire `<kbRoot>/.stashbase/space-metadata.md` 目录 ' +
+        'with new markdown content. Call this after you have learned ' +
         'something new about the library (a new space exists, a topic ' +
         'in a space turned out to be different from your prior ' +
         'understanding, etc.). Keep it concise — this file is read at ' +
@@ -467,7 +524,7 @@ const BUILTIN_TOOLS = [
         properties: {
           content: {
             type: 'string',
-            description: 'Full markdown content to write to AGENT.md.',
+            description: 'Full markdown content to write to space-metadata.md.',
           },
         },
         required: ['content'],
@@ -531,7 +588,11 @@ const BUILTIN_TOOLS = [
         'immediately. Default `overwrite=false` returns an error if the target ' +
         'exists; pass `overwrite=true` to replace user content. Intended for ' +
         'markdown / HTML notes; binary formats can be written but won\'t enter the ' +
-        'index. The first path segment is the space name (must be an existing space).',
+        'index. The first path segment is the space name (must be an existing space). ' +
+        'When you CREATE a new derived file (e.g. a generated summary), mark it with ' +
+        '`generated_by: stashbase-agent` in its Markdown YAML front-matter (or an HTML ' +
+        '`<meta name="generated_by" content="stashbase-agent">`) so users can later ' +
+        'bulk-identify and clean up agent-generated output.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -546,6 +607,34 @@ const BUILTIN_TOOLS = [
           },
         },
         required: ['path', 'content'],
+      },
+    },
+    {
+      name: 'set_file_metadata',
+      description:
+        'Set the agent-maintained metadata for one file, stored in ' +
+        '`<space>/file-metadata.md` — a sidecar kept OUT of the user\'s file so you ' +
+        'never edit their content. `path` is kbRoot-relative (e.g. "cs183b/note.md"); ' +
+        'its first segment is the space. `metadata` is an object of arbitrary keys; it ' +
+        'REPLACES that file\'s whole section (not a merge), and passing an empty object ' +
+        '`{}` removes the section. This metadata is merged into the file\'s chunks at ' +
+        'index time, but any metadata the user wrote INSIDE the file (front-matter / ' +
+        '`<meta>`) still wins. For metadata you derived for a NEW file you generated, ' +
+        'include `generated_by: stashbase-agent` so users can bulk-identify agent output.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'kbRoot-relative file path (e.g. "cs183b/note.md"). First segment is the space.',
+          },
+          metadata: {
+            type: 'object',
+            description: 'Metadata key/value object. Empty object removes the file\'s section.',
+            additionalProperties: true,
+          },
+        },
+        required: ['path', 'metadata'],
       },
     },
     {
@@ -714,11 +803,29 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     };
   }
 
-  if (req.params.name === 'update_library_overview') {
+  if (req.params.name === 'space_info') {
+    if (!space) throw new Error('`space` is required');
+    const info = await tryWebElseEmbedded(
+      'space_info',
+      () => spaceInfoViaWeb(space),
+      async () => {
+        // Embedded path needs the daemon up + spaces bound so the
+        // per-space file count is accurate.
+        const { ready } = getEmbedded();
+        await ready;
+        return getSpaceInfoFull(space);
+      },
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify(info, null, 2) }],
+    };
+  }
+
+  if (req.params.name === 'update_space_metadata') {
     const content = typeof args.content === 'string' ? args.content : '';
     if (!content) throw new Error('`content` is required');
     await tryWebElseEmbedded(
-      'update_library_overview',
+      'update_space_metadata',
       () => updateLibraryOverviewViaWeb(content),
       async () => { setLibraryOverview(content); },
     );
@@ -803,6 +910,28 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           await indexer.upsertFile(kbRel, content);
         }
       },
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel }, null, 2) }],
+    };
+  }
+
+  if (req.params.name === 'set_file_metadata') {
+    const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
+    const metadata = args.metadata;
+    if (!kbRel) throw new Error('`path` is required');
+    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+      throw new Error('`metadata` (object) is required');
+    }
+    const split = splitSpacePath(kbRel);
+    if (!split) throw new Error('`path` must include a space segment, e.g. "cs183b/note.md"');
+    if (isReservedMetadataFile(kbRel)) {
+      throw new Error('cannot set metadata on a reserved metadata file');
+    }
+    await tryWebElseEmbedded(
+      'set_file_metadata',
+      () => setFileMetadataViaWeb(kbRel, metadata as FileMetadata),
+      async () => { setFileMetadataEntry(split.space, split.spaceRel, metadata as FileMetadata); },
     );
     return {
       content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel }, null, 2) }],

@@ -127,7 +127,7 @@ export async function setKbRoot(absPath: string, opts: { allowNonEmpty?: boolean
   if (fs.existsSync(root) && !opts.allowNonEmpty) {
     if (!fs.statSync(root).isDirectory()) throw new Error('path is not a directory');
     const entries = fs.readdirSync(root);
-    const selfEntries = new Set(['.DS_Store', '.stashbase', 'STASHBASE.md', 'AGENT.md']);
+    const selfEntries = new Set(['.DS_Store', '.stashbase', 'STASHBASE.md', 'AGENT.md', 'space-metadata.md']);
     if (entries.some((name) => !selfEntries.has(name))) {
       const err = new Error('directory is not empty');
       (err as any).code = 'NON_EMPTY';
@@ -602,15 +602,18 @@ function ensureSpaceMetadata(spaceRoot: string): void {
       mode: 0o600,
     });
   }
-  // NOTE: deliberately do NOT auto-create `<spaceRoot>/STASHBASE.md`
-  // here. Per build-map 08-maintenance #01, the space-level rules
-  // file is **optional** ("可选模板" — only generated when the user
-  // explicitly opts in during space creation). Auto-creating it on
-  // every space made the file tree noisy and silently wrote content
-  // the user never asked for. When the user wants per-space rules
-  // they can either start typing in the LibraryPanel's per-space row
-  // (clicking opens an empty tab and `setSpaceRules` writes on save)
-  // or have an agent write via `PUT /api/spaces/:name/rules`.
+  // Auto-create an **empty** `<spaceRoot>/STASHBASE.md` by default
+  // (user request, reversing the earlier "opt-in only" stance). Empty =
+  // 0-byte on purpose: zero-byte notes are never indexed (see
+  // `files.ts` FileEntry.size), so this adds no search noise and writes
+  // no content the user didn't ask for — it's just a placeholder the
+  // user or an agent fills in when the space needs its own rules. It's
+  // reachable from the LibraryPanel per-space row and shows in the tree
+  // as an empty file. Mirrors `ensureKbMetadata` for the KB root.
+  const rules = path.join(spaceRoot, 'STASHBASE.md');
+  if (!fs.existsSync(rules)) {
+    fs.writeFileSync(rules, '', 'utf8');
+  }
 }
 
 function ensureKbMetadata(root: string): void {

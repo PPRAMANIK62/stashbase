@@ -12,10 +12,12 @@
  * file extension stays `.html` — only what we send to the indexer is
  * rewritten.
  */
-import { createHash } from 'node:crypto';
+import { blake3 } from '@noble/hashes/blake3.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import path from 'node:path';
 import { analyzeHtml } from './html.ts';
 import { detectFormat } from './format.ts';
+import { resolveFileMetadata, isReservedMetadataFile } from './metadata.ts';
 import { logger, errorMessage } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import type {
@@ -32,16 +34,19 @@ const log = logger('index');
  *  the daemon expects. HTML gets pre-flattened to markdown-shaped
  *  plaintext so MFS's markdown chunker respects heading boundaries.
  *
- *  `fileHash` is **always sha256 of the ORIGINAL on-disk content**, not
+ *  `fileHash` is **always BLAKE3 of the ORIGINAL on-disk content**, not
  *  the chunked text — it has to match the hash MFS Scanner computes
- *  during scan_diff, otherwise an HTML file would forever look
- *  "modified" against the index. */
+ *  during scan_diff (we patch the scanner to BLAKE3 too — see
+ *  `python/stashbase_daemon.py:_patch_scanner_blake3`), otherwise an HTML
+ *  file would forever look "modified" against the index. BLAKE3(content
+ *  as UTF-8) here equals the daemon's BLAKE3 of the raw file bytes for
+ *  any UTF-8 file — the same invariant SHA256 relied on. */
 function prepareForIndex(filePath: string, content: string): {
   text: string;
   ext: string;
   fileHash: string;
 } {
-  const fileHash = createHash('sha256').update(content, 'utf8').digest('hex');
+  const fileHash = bytesToHex(blake3(new TextEncoder().encode(content)));
   const format = detectFormat(filePath);
   if (format === 'html') {
     const { plaintext } = analyzeHtml(content);
@@ -165,6 +170,10 @@ export class MfsIndexer implements Indexer {
   }
 
   async upsertFile(filePath: string, content: string): Promise<void> {
+    // Reserved agent metadata files (space-root file-metadata.md, KB-root
+    // space-metadata.md) are version-controlled plain files but must not
+    // be indexed — their YAML / 目录 prose would surface as bogus hits.
+    if (isReservedMetadataFile(filePath)) return;
     const { text, ext, fileHash } = prepareForIndex(filePath, content);
     // Temporarily mark not-indexed while we re-embed so an in-flight
     // status() during a re-embed doesn't claim the file is up to date.
@@ -175,8 +184,11 @@ export class MfsIndexer implements Indexer {
       return;
     }
     const t0 = Date.now();
+    // File-level metadata (user front-matter / HTML <meta> + the agent's
+    // file-metadata.md sidecar) rides along so every chunk carries it.
+    const metadata = resolveFileMetadata(filePath, content);
     const res = await getDaemon().call<{ chunks: number; embed_ms: number; total_ms: number }>(
-      'upsert', { path: filePath, content: text, ext, file_hash: fileHash },
+      'upsert', { path: filePath, content: text, ext, file_hash: fileHash, metadata },
     );
     if (res.chunks > 0) this.noteIndexed(filePath);
     log.info(
@@ -210,8 +222,11 @@ export class MfsIndexer implements Indexer {
   async renameFile(oldPath: string, newPath: string, content: string): Promise<void> {
     const { text, ext, fileHash } = prepareForIndex(newPath, content);
     const t0 = Date.now();
+    // Metadata only matters on the re-embed fallback (content changed);
+    // the hash-match fast path copies existing rows, metadata included.
+    const metadata = resolveFileMetadata(newPath, content);
     const res = await getDaemon().call<{ chunks: number; embed_ms: number }>(
-      'rename', { old: oldPath, new: newPath, content: text, ext, file_hash: fileHash },
+      'rename', { old: oldPath, new: newPath, content: text, ext, file_hash: fileHash, metadata },
     );
     this.noteUnindexed(oldPath);
     if (res.chunks > 0) this.noteIndexed(newPath);

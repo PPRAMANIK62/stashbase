@@ -79,8 +79,10 @@ if (kbRootReadyAtBoot) {
   // recent entries. On a true first launch we skip this until the
   // picker persists the user's chosen root.
   ensureKbRoot();
-  // Seed `<kbRoot>/AGENT.md` with a placeholder if absent so the agent
-  // has something to extend on its first read. Idempotent.
+  // Migrate any legacy `<kbRoot>/AGENT.md` into
+  // `<kbRoot>/.stashbase/space-metadata.md`, then seed a placeholder if
+  // absent so the agent has something to extend on its first read.
+  // Idempotent.
   ensureLibraryOverview();
   // Configure the daemon with kbRoot + bind every known space found
   // under it so MCP / cross-space search sees them without waiting for

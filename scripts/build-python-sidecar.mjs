@@ -60,6 +60,8 @@ execFileSync(
     'mfs.ingest.chunker',
     '--hidden-import',
     'mfs.ingest.scanner',
+    '--hidden-import',
+    'blake3',
     '--copy-metadata',
     'milvus-lite',
     '--copy-metadata',

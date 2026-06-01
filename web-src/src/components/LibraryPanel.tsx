@@ -6,7 +6,7 @@ import { useApp } from '../store/AppContext';
  * The "library" sidebar view — a file list scoped to the KB root.
  * Currently surfaces three classes of library-level markdown:
  *
- *   - AGENT.md            — agent-maintained library overview
+ *   - space-metadata.md   — agent-maintained library 目录 (in .stashbase/)
  *   - STASHBASE.md        — KB-level rules book
  *   - <space>/STASHBASE.md — per-space rules book (one row per known
  *                            space)
@@ -47,11 +47,11 @@ export function LibraryPanel() {
       <div className="library-file-list">
         <button
           type="button"
-          className={'library-file-row' + (activeName === 'AGENT.md' ? ' selected' : '')}
+          className={'library-file-row' + (activeName === 'space-metadata.md' ? ' selected' : '')}
           onClick={() => { void actions.openLibraryOverview(); }}
-          title="Agent-maintained library overview"
+          title="Agent-maintained library 目录 (.stashbase/space-metadata.md)"
         >
-          AGENT.md
+          space-metadata.md
         </button>
         <button
           type="button"

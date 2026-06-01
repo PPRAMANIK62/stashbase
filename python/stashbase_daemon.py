@@ -78,7 +78,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import hashlib
 import json
 import os
 import sys
@@ -87,6 +86,12 @@ import traceback
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+# Content + chunk-id hashing. BLAKE3 is ~3-5x SHA256 and streaming-friendly
+# — matters for reconcile over large PDFs / videos. The Node side
+# (indexer.mfs.ts) and mfs's Scanner (patched below) must use the SAME
+# algorithm, or scan_diff would see every file as modified.
+from blake3 import blake3
 
 # Defer all heavy imports until after stdout is unbuffered + greeting
 # is printed, so the Node side can tell quickly whether Python even
@@ -230,6 +235,41 @@ def _patch_inverted_index_skip() -> None:
 
     _add_index.__stashbase_patched__ = True  # type: ignore[attr-defined]
     IndexParams.add_index = _add_index
+
+
+def _patch_scanner_blake3() -> None:
+    """Make MFS's ``Scanner.compute_file_hash`` use BLAKE3, not SHA256.
+
+    ``scan_diff`` compares a stored ``file_hash`` (which the Node side now
+    computes with BLAKE3) against ``scanner.compute_file_hash(path)``
+    recomputed from disk. The two MUST use the same algorithm or every
+    file would forever look "modified". MFS upstream hard-codes SHA256
+    (``mfs/ingest/scanner.py``), so we override the method to stream the
+    raw bytes through BLAKE3 instead — same 64-hex-char output width, so
+    the stored-hash column is unaffected. Idempotent via a sentinel.
+
+    Migration: existing rows carry SHA256 hashes; after this patch the
+    next *full* content reconcile (manual ``/api/sync``) sees them as
+    mismatched and re-embeds, replacing them with BLAKE3. The boot-time
+    name-only sync leaves them untouched, so queries keep working on the
+    old vectors until then. See build-map 04-indexing.
+    """
+    try:
+        from mfs.ingest.scanner import Scanner  # type: ignore
+    except ImportError:
+        return
+    if getattr(Scanner.compute_file_hash, "__stashbase_blake3__", False):
+        return
+
+    def compute_file_hash(self, path) -> str:  # noqa: ANN001
+        h = blake3()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 16), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    compute_file_hash.__stashbase_blake3__ = True  # type: ignore[attr-defined]
+    Scanner.compute_file_hash = compute_file_hash
 
 
 ## Snapshot file format version. Bumped when the on-disk layout or
@@ -450,7 +490,7 @@ class StashbaseStore:
 # ---------------------------------------------------------------- ops
 
 def _hash_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+    return blake3(text.encode("utf-8", errors="replace")).hexdigest()
 
 
 def _require(args: dict, *keys: str) -> None:
@@ -490,6 +530,12 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
     path = args["path"]
     content = args["content"]
     ext = args.get("ext", ".md")
+    # File-level metadata (user front-matter / HTML <meta> + the agent's
+    # file-metadata.md sidecar), resolved Node-side. Used as the base for
+    # every chunk's metadata; per-chunk keys (e.g. heading_text) win.
+    file_metadata = args.get("metadata") or {}
+    if not isinstance(file_metadata, dict):
+        file_metadata = {}
     embedder, store = svc.store_for_path(path)
     chunks = _chunk(path, content, ext)
     file_hash = args.get("file_hash") or _hash_text(content)
@@ -518,7 +564,7 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
     records = []
     for i, (ch, vec) in enumerate(zip(chunks, vectors)):
         records.append(ChunkRecord(
-            id=hashlib.sha256(
+            id=blake3(
                 f"{path}:{ch.start_line}:{ch.end_line}:{_hash_text(ch.text)}".encode(),
             ).hexdigest()[:32],
             source=path,
@@ -532,7 +578,7 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
             file_hash=file_hash,
             is_dir=False,
             embed_status="complete",
-            metadata=ch.metadata or {},
+            metadata={**file_metadata, **(ch.metadata or {})},
             account_id="stashbase",
         ))
     store.insert_chunks(records)
@@ -599,6 +645,7 @@ def op_rename(svc: StashbaseStore, args: dict) -> dict:
         "content": args["content"],
         "ext": args.get("ext", ".md"),
         "file_hash": arg_hash,
+        "metadata": args.get("metadata") or {},
     })
 
 
@@ -645,7 +692,7 @@ def _try_rename_without_reembed(
             vec = r.get("dense_vector")
             if vec is None:
                 return None
-            new_id = hashlib.sha256(
+            new_id = blake3(
                 f"{new}:{r['start_line']}:{r['end_line']}:"
                 f"{_hash_text(r.get('chunk_text', ''))}".encode(),
             ).hexdigest()[:32]
@@ -827,6 +874,12 @@ def op_list(svc: StashbaseStore, args: dict) -> dict:
     return {"files": out}
 
 
+# Agent-maintained metadata files kept at the space / KB root for version
+# control (out of `.stashbase/`) but excluded from indexing — see
+# `_walk_disk` and the Node-side `metadata.ts:isReservedMetadataFile`.
+_RESERVED_METADATA_FILES = {"file-metadata.md", "space-metadata.md"}
+
+
 def _make_scanner():
     """Configure an MFS Scanner for our space layout.
 
@@ -834,9 +887,11 @@ def _make_scanner():
       - `.html` / `.htm` aren't in `INDEXED_EXTENSIONS`, inject via
         `IndexingConfig.include_extensions`
       - `.stashbase/` is our sidecar dir and must be skipped
+      - `compute_file_hash` is patched to BLAKE3 (see _patch_scanner_blake3)
     """
     from mfs.config import Config, IndexingConfig
     from mfs.ingest.scanner import Scanner
+    _patch_scanner_blake3()
     config = Config(indexing=IndexingConfig(include_extensions=[".html", ".htm"]))
     return Scanner(config, extra_excludes=[".stashbase/", ".stashbase"])
 
@@ -875,6 +930,12 @@ def _walk_disk(root: Path, rel_prefix: str = "") -> dict:
     on_disk = {}
     for full_rel, rel_local, f in raw:
         if _under_bundle(rel_local, note_stems):
+            continue
+        # Reserved agent metadata files live at the space / KB root and are
+        # version-controlled, but must never be indexed (their YAML / 目录
+        # prose would surface as bogus hits). Mirrors the Node-side guard
+        # in `indexer.mfs.ts:upsertFile`. See build-map 02-storage.
+        if rel_local.rsplit("/", 1)[-1] in _RESERVED_METADATA_FILES:
             continue
         try:
             if f.path.stat().st_size == 0:

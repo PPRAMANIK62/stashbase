@@ -831,12 +831,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({
         type: 'FILE_OPEN',
         body: {
-          // Display name matches the actual on-disk file
-          // (<kbRoot>/AGENT.md per `server/library.ts:FILENAME`).
-          // STASHBASE.md (KB + per-space) is reserved for the
-          // separate rules-book role and opens via `openKbRules` /
-          // `openSpaceRules`.
-          name: 'AGENT.md',
+          // Display name matches the actual on-disk file basename
+          // (<kbRoot>/.stashbase/space-metadata.md per
+          // `server/library.ts:FILENAME`). STASHBASE.md (KB + per-space)
+          // is reserved for the separate rules-book role and opens via
+          // `openKbRules` / `openSpaceRules`.
+          name: 'space-metadata.md',
           format: 'md',
           content: r.content,
           headings: [],
