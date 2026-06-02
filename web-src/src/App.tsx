@@ -11,7 +11,7 @@ interface ElectronBridge {
   openExternal?: (url: string) => Promise<boolean>;
   configureMcp?: (client: string) => Promise<unknown>;
   onCaptureCreated?: (handler: (capture: CapturePayload) => void) => (() => void);
-  onCaptureError?: (handler: (error: string) => void) => (() => void);
+  onCaptureError?: (handler: (error: CaptureErrorPayload) => void) => (() => void);
   onFullscreenChange?: (handler: (isFullScreen: boolean) => void) => (() => void);
 }
 
@@ -24,6 +24,13 @@ interface CapturePayload {
   height?: number;
   sourceTitle?: string;
   filename?: string;
+}
+
+interface CaptureErrorPayload {
+  kind?: 'permission' | 'capture-failed' | string;
+  title?: string;
+  message?: string;
+  detail?: string;
 }
 import { Welcome } from './components/Welcome';
 import { Sidebar } from './components/Sidebar';
@@ -38,7 +45,7 @@ import { Toasts } from './components/Toasts';
 import { TerminalPane } from './components/TerminalPane';
 import { TerminalToggleButton } from './components/TerminalToggleButton';
 import { SettingsButton } from './components/SettingsButton';
-import { SettingsPortal } from './components/SettingsModal';
+import { SettingsPortal, openSettings } from './components/SettingsModal';
 import { HomeIcon, SidebarLeftIcon } from './icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppProvider, useApp } from './store/AppContext';
@@ -121,14 +128,27 @@ function AppBody() {
         actions.toast(`Saved ${file.name}${suffix}.`, { level: 'success' });
       } catch (err) {
         console.warn('[capture] save failed:', err);
-        actions.toast('Screenshot captured, but saving failed.', { level: 'error' });
+        actions.toast('Screenshot captured, but it could not be saved.', { level: 'error' });
       }
     }
   }, [actions, state.activeFolder, state.space, state.welcomeVisible]);
   useEffect(() => {
     const bridge = (window as { electron?: ElectronBridge }).electron;
     return bridge?.onCaptureError?.((error) => {
-      actions.toast(`Screenshot failed: ${error}`, { level: 'error' });
+      if (error.detail) console.warn('[capture] failed:', error.detail);
+      const isPermission = error.kind === 'permission';
+      actions.toast(
+        error.message || (isPermission
+          ? 'Turn on Screen Recording for StashBase, then restart the app.'
+          : 'Screenshot did not finish. Try again.'),
+        {
+          level: isPermission ? 'warning' : 'error',
+          ttl: isPermission ? null : undefined,
+          action: isPermission
+            ? { label: 'Open settings', onClick: () => openSettings('capture') }
+            : undefined,
+        },
+      );
     });
   }, [actions]);
   useEffect(() => {

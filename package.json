@@ -57,6 +57,7 @@
     "productName": "StashBase",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "icon": "build/icon",
+    "electronDist": "node_modules/electron/dist",
     "afterPack": "scripts/after-pack-unsigned.cjs",
     "directories": {
       "output": "release"
@@ -177,7 +178,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
-    "electron": "^42.0.1",
+    "electron": "^39.8.8",
     "electron-builder": "^26.0.12",
     "esbuild": "^0.28.0",
     "http-proxy-middleware": "^4.0.0",

@@ -14,11 +14,13 @@ import { EmbeddingPanel } from './settings/EmbeddingPanel';
 import { McpClientsPanel } from './settings/McpClientsPanel';
 import { ChatCliPanel } from './settings/ChatCliPanel';
 import { LibraryPanel } from './settings/LibraryPanel';
+import { CapturePanel } from './settings/CapturePanel';
 
-export type SettingsSection = 'library' | 'embedding' | 'mcp' | 'chat-cli';
+export type SettingsSection = 'library' | 'embedding' | 'mcp' | 'chat-cli' | 'capture';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
   { id: 'library', label: 'Library', render: () => <LibraryPanel /> },
+  { id: 'capture', label: 'Capture', render: () => <CapturePanel /> },
   { id: 'embedding', label: 'Embedding', render: () => <EmbeddingPanel /> },
   { id: 'mcp', label: 'MCP', render: () => <McpClientsPanel /> },
   { id: 'chat-cli', label: 'Chat CLI', render: () => <ChatCliPanel /> },

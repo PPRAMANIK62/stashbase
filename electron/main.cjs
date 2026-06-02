@@ -9,7 +9,7 @@
  * The renderer is sandboxed; all main → renderer surfaces are exposed
  * through the narrow IPC bridge in preload.cjs.
  */
-const { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, Menu, desktopCapturer, dialog, globalShortcut, ipcMain, screen, session, shell, systemPreferences } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -51,6 +51,14 @@ const mainWindows = new Set();
 let lastMainWindow = null;
 let floatingBallWindow = null;
 let capturePickerWindow = null;
+const registeredCaptureShortcuts = new Set();
+
+const APP_CONFIG_FILE = path.join(os.homedir(), '.stashbase', 'config.json');
+const DEFAULT_CAPTURE_SHORTCUTS = {
+  screen: 'CommandOrControl+Shift+1',
+  window: 'CommandOrControl+Shift+2',
+  region: 'CommandOrControl+Shift+3',
+};
 
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -71,6 +79,35 @@ function readJsonObject(file) {
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+}
+
+function readAppConfig() {
+  const cfg = readJsonObject(APP_CONFIG_FILE);
+  return cfg && typeof cfg === 'object' ? cfg : {};
+}
+
+function writeAppConfig(cfg) {
+  fs.mkdirSync(path.dirname(APP_CONFIG_FILE), { recursive: true });
+  fs.writeFileSync(APP_CONFIG_FILE, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+  try { fs.chmodSync(APP_CONFIG_FILE, 0o600); } catch { /* best-effort */ }
+}
+
+function getCaptureShortcuts() {
+  const cfg = readAppConfig();
+  const raw = cfg.captureShortcuts && typeof cfg.captureShortcuts === 'object'
+    ? cfg.captureShortcuts
+    : {};
+  return {
+    screen: typeof raw.screen === 'string' && raw.screen.trim() ? raw.screen.trim() : DEFAULT_CAPTURE_SHORTCUTS.screen,
+    window: typeof raw.window === 'string' && raw.window.trim() ? raw.window.trim() : DEFAULT_CAPTURE_SHORTCUTS.window,
+    region: typeof raw.region === 'string' && raw.region.trim() ? raw.region.trim() : DEFAULT_CAPTURE_SHORTCUTS.region,
+  };
+}
+
+function saveCaptureShortcuts(shortcuts) {
+  const cfg = readAppConfig();
+  cfg.captureShortcuts = shortcuts;
+  writeAppConfig(cfg);
 }
 
 function writeMcpWrapper() {
@@ -427,9 +464,183 @@ function emitCaptureError(error) {
   return true;
 }
 
+function getScreenPermission() {
+  if (process.platform !== 'darwin') {
+    return {
+      platform: process.platform,
+      status: 'granted',
+      needsGuide: false,
+      canOpenSettings: false,
+    };
+  }
+  let status = 'unknown';
+  try {
+    status = systemPreferences.getMediaAccessStatus('screen');
+  } catch {
+    status = 'unknown';
+  }
+  return {
+    platform: 'darwin',
+    status,
+    needsGuide: status !== 'granted',
+    canOpenSettings: true,
+  };
+}
+
+function screenPermissionHint() {
+  if (process.platform !== 'darwin') return '';
+  const permission = getScreenPermission();
+  if (permission.status === 'granted') return '';
+  return ' Grant Screen Recording permission in macOS System Settings, then restart StashBase.';
+}
+
+async function openScreenPermissionSettings() {
+  if (process.platform !== 'darwin') return false;
+  const before = getScreenPermission();
+  const primed = before.needsGuide ? await primeScreenRecordingPermission() : undefined;
+  await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  return {
+    ok: true,
+    opened: true,
+    primed,
+    permission: getScreenPermission(),
+  };
+}
+
+async function primeScreenRecordingPermission() {
+  if (process.platform !== 'darwin') {
+    return { ok: true, permission: getScreenPermission() };
+  }
+  try {
+    await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1, height: 1 },
+    });
+    return { ok: true, permission: getScreenPermission() };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err && typeof err.message === 'string' ? err.message : String(err),
+      permission: getScreenPermission(),
+    };
+  }
+}
+
 function captureFilename(mode) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   return `screenshot-${mode}-${stamp}.png`;
+}
+
+function normalizeShortcutAction(action) {
+  return action === 'screen' || action === 'window' || action === 'region' ? action : null;
+}
+
+function shortcutEntries(shortcuts = getCaptureShortcuts()) {
+  return [
+    ['screen', shortcuts.screen],
+    ['window', shortcuts.window],
+    ['region', shortcuts.region],
+  ];
+}
+
+function validateCaptureShortcuts(shortcuts) {
+  const seen = new Map();
+  for (const [action, accelerator] of shortcutEntries(shortcuts)) {
+    if (typeof accelerator !== 'string' || !accelerator.trim()) {
+      return { ok: false, error: `${action} shortcut is required.` };
+    }
+    const key = accelerator.trim().toLowerCase();
+    if (seen.has(key)) {
+      return { ok: false, error: `${action} shortcut duplicates ${seen.get(key)}.` };
+    }
+    seen.set(key, action);
+  }
+  return { ok: true };
+}
+
+function unregisterCaptureShortcuts() {
+  for (const accelerator of registeredCaptureShortcuts) {
+    try { globalShortcut.unregister(accelerator); } catch { /* best-effort */ }
+  }
+  registeredCaptureShortcuts.clear();
+}
+
+function runShortcutCapture(action) {
+  if (action === 'screen') {
+    void safeRunCapture({ mode: 'screen' });
+  } else if (action === 'window') {
+    createCapturePickerWindow();
+  } else if (action === 'region') {
+    void safeRunCapture({ mode: 'region' });
+  }
+}
+
+function registerCaptureShortcuts(shortcuts = getCaptureShortcuts()) {
+  unregisterCaptureShortcuts();
+  const failures = [];
+  const validation = validateCaptureShortcuts(shortcuts);
+  if (!validation.ok) return { ok: false, shortcuts, failures: [{ action: 'all', accelerator: '', error: validation.error }] };
+  for (const [action, accelerator] of shortcutEntries(shortcuts)) {
+    const registered = globalShortcut.register(accelerator, () => runShortcutCapture(action));
+    if (registered) registeredCaptureShortcuts.add(accelerator);
+    else failures.push({ action, accelerator, error: 'Shortcut is unavailable or already used by another app.' });
+  }
+  return { ok: failures.length === 0, shortcuts, failures };
+}
+
+function getCaptureSettings() {
+  const shortcuts = getCaptureShortcuts();
+  return {
+    permission: getScreenPermission(),
+    identity: {
+      appName: app.getName(),
+      isPackaged: app.isPackaged,
+      executablePath: process.execPath,
+      appPath: app.getAppPath(),
+    },
+    shortcuts,
+    defaults: DEFAULT_CAPTURE_SHORTCUTS,
+    registration: {
+      registered: Array.from(registeredCaptureShortcuts),
+    },
+  };
+}
+
+function updateCaptureShortcut(action, accelerator) {
+  const key = normalizeShortcutAction(action);
+  if (!key) return { ok: false, error: 'Invalid capture shortcut.' };
+  const next = { ...getCaptureShortcuts(), [key]: String(accelerator || '').trim() };
+  const validation = validateCaptureShortcuts(next);
+  if (!validation.ok) return { ok: false, error: validation.error, settings: getCaptureSettings() };
+  saveCaptureShortcuts(next);
+  const registration = registerCaptureShortcuts(next);
+  return { ok: registration.ok, error: registration.failures[0]?.error, settings: getCaptureSettings(), failures: registration.failures };
+}
+
+function resetCaptureShortcuts() {
+  saveCaptureShortcuts(DEFAULT_CAPTURE_SHORTCUTS);
+  const registration = registerCaptureShortcuts(DEFAULT_CAPTURE_SHORTCUTS);
+  return { ok: registration.ok, settings: getCaptureSettings(), failures: registration.failures };
+}
+
+function configureDisplayMediaRequests() {
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    if (permission === 'display-capture') {
+      callback(true);
+      return;
+    }
+    callback(false);
+  });
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    void desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1, height: 1 },
+    }).then((sources) => {
+      callback({ video: sources[0] });
+    }).catch(() => {
+      callback({});
+    });
+  }, { useSystemPicker: false });
 }
 
 function internalCaptureSourceIds() {
@@ -657,9 +868,26 @@ async function safeRunCapture(request = {}, event) {
   try {
     return await runCapture(request, event);
   } catch (err) {
-    const error = err && typeof err.message === 'string' ? err.message : String(err);
+    const detail = err && typeof err.message === 'string' ? err.message : String(err);
+    const permission = getScreenPermission();
+    const needsPermission = permission.needsGuide || /permission|denied|not.?allowed|access/i.test(detail);
+    const error = needsPermission
+      ? {
+          kind: 'permission',
+          title: 'Screen Recording is off',
+          message: 'Turn on Screen Recording for StashBase, then restart the app.',
+          detail,
+          permission,
+        }
+      : {
+          kind: 'capture-failed',
+          title: 'Screenshot did not finish',
+          message: 'Try again, or choose a different capture mode.',
+          detail,
+          permission,
+        };
     emitCaptureError(error);
-    return { ok: false, error };
+    return { ok: false, error: detail, kind: error.kind };
   }
 }
 
@@ -954,6 +1182,16 @@ ipcMain.handle('capture:capture', async (event, request = {}) => {
   return safeRunCapture(request, event);
 });
 
+ipcMain.handle('capture:getSettings', async () => getCaptureSettings());
+
+ipcMain.handle('capture:setShortcut', async (_event, payload = {}) => {
+  return updateCaptureShortcut(payload.action, payload.accelerator);
+});
+
+ipcMain.handle('capture:resetShortcuts', async () => resetCaptureShortcuts());
+
+ipcMain.handle('capture:openScreenPermissionSettings', async () => openScreenPermissionSettings());
+
 ipcMain.handle('floating:getBounds', () => {
   if (!floatingBallWindow || floatingBallWindow.isDestroyed()) return null;
   return floatingBallWindow.getBounds();
@@ -974,6 +1212,7 @@ ipcMain.on('floating:captureMenu', () => {
 });
 
 app.whenReady().then(async () => {
+  configureDisplayMediaRequests();
   // Refresh the MCP wrapper on every launch so the most recently-opened
   // app owns it. Without this, a wrapper written by an earlier `pnpm
   // dev` run still points at a vanished `node_modules/.bin/tsx`, and
@@ -989,6 +1228,7 @@ app.whenReady().then(async () => {
   }
   const win = await createWindow();
   if (win) createFloatingBallWindow();
+  registerCaptureShortcuts();
 });
 
 app.on('activate', () => {
@@ -1013,6 +1253,7 @@ app.on('window-all-closed', () => {
 // Hard 4 s ceiling so a stuck server can't pin the Electron quit.
 let quitting = false;
 app.on('will-quit', (event) => {
+  unregisterCaptureShortcuts();
   if (quitting) return;
   if (!serverProc || serverProc.killed) return;
   event.preventDefault();

@@ -30,6 +30,26 @@ contextBridge.exposeInMainWorld('electron', {
   openSpaceWindow: (name) => ipcRenderer.invoke('window:openSpace', name),
   listCaptureWindows: () => ipcRenderer.invoke('capture:listWindows'),
   capture: (request) => ipcRenderer.invoke('capture:capture', request),
+  getCaptureSettings: () => ipcRenderer.invoke('capture:getSettings'),
+  setCaptureShortcut: (payload) => ipcRenderer.invoke('capture:setShortcut', payload),
+  resetCaptureShortcuts: () => ipcRenderer.invoke('capture:resetShortcuts'),
+  primeScreenRecordingPermission: async () => {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      return { ok: false, error: 'Screen capture is not available in this renderer.' };
+    }
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err && typeof err.message === 'string' ? err.message : String(err) };
+    } finally {
+      if (stream) {
+        for (const track of stream.getTracks()) track.stop();
+      }
+    }
+  },
+  openScreenPermissionSettings: () => ipcRenderer.invoke('capture:openScreenPermissionSettings'),
   onCaptureCreated: (handler) => {
     const wrapped = (_event, capture) => {
       if (capture && typeof capture === 'object') handler(capture);
@@ -39,7 +59,8 @@ contextBridge.exposeInMainWorld('electron', {
   },
   onCaptureError: (handler) => {
     const wrapped = (_event, error) => {
-      if (typeof error === 'string' && error) handler(error);
+      if (typeof error === 'string' && error) handler({ kind: 'capture-failed', message: error, detail: error });
+      else if (error && typeof error === 'object') handler(error);
     };
     ipcRenderer.on('capture:error', wrapped);
     return () => ipcRenderer.removeListener('capture:error', wrapped);
