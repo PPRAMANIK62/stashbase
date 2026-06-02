@@ -5,12 +5,13 @@
  *   1. **In-file** (item 03) — metadata the *user* wrote inside the file:
  *      Markdown YAML front-matter, or HTML `<head>` `<meta>` / `<title>`.
  *      Authoritative, because the user typed it.
- *   2. **`<space>/.stashbase/file-metadata.md`** (item 02) — metadata the *agent*
+ *   2. **`<space>/file-metadata.md`** (item 02) — metadata the *agent*
  *      extracted or supplemented, kept out of the user's file so the
  *      agent never edits user content. One `## <space-rel-path>` section
- *      per file, each holding a fenced ```yaml block. It lives in the
- *      hidden sidecar and is excluded from indexing so its YAML never
- *      pollutes search.
+ *      per file, each holding a fenced ```yaml block. Lives at the space
+ *      root (not in `.stashbase/`) so it rides along under git / cloud
+ *      sync and stays user-visible; explicitly excluded from indexing so
+ *      its YAML never pollutes search.
  *
  * `resolveFileMetadata()` merges the two with **in-file winning** (the
  * user is authoritative) and hands the result to the indexer, which
@@ -40,14 +41,19 @@ const FILE_METADATA_NAME = 'file-metadata.md';
 const SPACE_METADATA_NAME = 'space-metadata.md';
 
 /** These agent-maintained metadata files must never enter the index —
- *  their YAML / 目录 prose would surface as bogus search hits. The exact
- *  sidecar paths are skipped, plus legacy top-level `file-metadata.md`
- *  while old spaces migrate. */
+ *  their YAML / 目录 prose would surface as bogus search hits. Skips the
+ *  canonical space-root `<space>/file-metadata.md`, the KB-root
+ *  `space-metadata.md`, and the legacy `<space>/.stashbase/file-metadata.md`
+ *  location while old spaces migrate back out. */
 export function isReservedMetadataFile(kbRelPath: string): boolean {
   const parts = kbRelPath.split('/').filter(Boolean);
+  // Canonical: <space>/file-metadata.md (space root).
+  if (parts.length === 2 && parts[1] === FILE_METADATA_NAME) return true;
+  // Legacy: <space>/.stashbase/file-metadata.md.
   if (parts.length >= 3 && parts[1] === '.stashbase' && parts[2] === FILE_METADATA_NAME) return true;
+  // KB-root 目录.
   if (parts.length >= 2 && parts[0] === '.stashbase' && parts[1] === SPACE_METADATA_NAME) return true;
-  return parts.length === 2 && parts[1] === FILE_METADATA_NAME;
+  return false;
 }
 
 function isPlainObject(v: unknown): v is FileMetadata {
@@ -110,13 +116,17 @@ function extractHtmlMeta(html: string): FileMetadata {
 
 // ── Agent metadata sidecar (item 02) ────────────────────────────────
 
-/** `<kbRoot>/<space>/.stashbase/file-metadata.md`. */
+/** `<kbRoot>/<space>/file-metadata.md` — at the space root (NOT in
+ *  `.stashbase/`) so it rides along with the space under git / cloud
+ *  sync and stays user-visible. See architecture §3.1 / §3.4. */
 function fileMetadataPath(spaceName: string): string {
-  return path.join(getKbRoot(), spaceName, '.stashbase', FILE_METADATA_NAME);
+  return path.join(getKbRoot(), spaceName, FILE_METADATA_NAME);
 }
 
+/** Earlier builds parked the sidecar inside `.stashbase/`; migrate any
+ *  such file back out to the space root on first read. */
 function legacyFileMetadataPath(spaceName: string): string {
-  return path.join(getKbRoot(), spaceName, FILE_METADATA_NAME);
+  return path.join(getKbRoot(), spaceName, '.stashbase', FILE_METADATA_NAME);
 }
 
 function migrateLegacyFileMetadata(spaceName: string): void {

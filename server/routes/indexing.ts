@@ -13,6 +13,7 @@ import { errorMessage, logger } from '../log.ts';
 import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, toKbRel } from '../space.ts';
 import { syncIndex } from '../sync.ts';
 import { syncSkillsToCli } from '../skills.ts';
+import { extractEmbeddedResources } from '../resources.ts';
 import { mirrorRulesToCli } from '../stashbase-md.ts';
 import {
   isReservedMetadataFile,
@@ -368,7 +369,7 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Read/write one file's section of `<space>/.stashbase/file-metadata.md`
+  // Read/write one file's section of `<space>/file-metadata.md`
   // — the agent-maintained metadata sidecar kept out of the user's file.
   // Powers MCP's `set_file_metadata`. `path` is kbRoot-relative; the
   // first segment is the space, the rest the space-relative file path.
@@ -497,12 +498,32 @@ export function mount(app: express.Express): void {
         return res.status(409).json({ error: 'file exists (pass overwrite=true to replace)', code: 'EXISTS' });
       }
       fs.mkdirSync(path.dirname(abs), { recursive: true });
+      // Pipeline §4.2 steps 2-3: extract inline `data:` resources into
+      // the note's `<stem>_files/` bundle and rewrite refs before write,
+      // so agent/editor-authored notes don't bake in base64 images.
+      let finalContent = content;
+      try {
+        const extracted = extractEmbeddedResources(rel, content);
+        if (extracted.assets.length > 0) {
+          finalContent = extracted.content;
+          for (const a of extracted.assets) {
+            const assetAbs = path.resolve(getKbRoot(), a.path);
+            if (!isInsideKbRoot(assetAbs)) continue;
+            fs.mkdirSync(path.dirname(assetAbs), { recursive: true });
+            noteSelfWrite(assetAbs);
+            fs.writeFileSync(assetAbs, a.bytes);
+          }
+          log.info(`write ${rel}: extracted ${extracted.assets.length} embedded resource(s)`);
+        }
+      } catch (err: unknown) {
+        log.warn(`write ${rel}: resource extraction failed: ${errorMessage(err)}`);
+      }
       // Mark before write so the watcher swallows the resulting fs
       // event — we've already upserted below; another sync would just
       // be a wasted scan_diff round-trip.
       noteSelfWrite(abs);
-      fs.writeFileSync(abs, content);
-      try { await indexer.upsertFile(rel, content); }
+      fs.writeFileSync(abs, finalContent);
+      try { await indexer.upsertFile(rel, finalContent); }
       catch (err) { log.warn(`upsert ${rel} failed after write: ${errorMessage(err)}`); }
       res.json({ path: rel });
     } catch (err: unknown) {
@@ -576,9 +597,11 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Export the current space's chunks to a portable Parquet snapshot
-  // at `<space>/.stashbase/snapshot.parquet`. Downstream consumers
-  // auto-import on bind (see `maybeImportSnapshot` in state.ts).
+  // Export the current space's embeddings to a portable snapshot at
+  // `<space>/.stashbase/snapshot.parquet` (a pure {text_hash,
+  // dense_vector} cache) plus a `snapshot.meta.json` descriptor.
+  // Downstream consumers prime the cache on bind and reuse vectors
+  // during reindex (see `maybeImportSnapshot` in state.ts).
   app.post('/api/space/export-snapshot', async (_req, res) => {
     try {
       const cur = getCurrentSpace();
@@ -588,13 +611,28 @@ export function mount(app: express.Express): void {
       const outPath = path.join(cur, '.stashbase', 'snapshot.parquet');
       const result = await getDaemon().call<{
         path: string;
+        vectors: number;
         chunks: number;
-        providers: { provider: string; dim: number; chunks: number }[];
+        version: number;
+        embedder: { provider: string; model: string | null; dim: number };
       }>('export_space', { space: spaceName, out_path: outPath });
+      // The Parquet holds only vectors; the human-readable descriptor
+      // (embedder identity, counts, timestamp) lives in a sibling JSON so
+      // import can validate the embedder without decoding any vectors.
+      const metaPath = path.join(cur, '.stashbase', 'snapshot.meta.json');
+      const meta = {
+        version: result.version,
+        space: spaceName,
+        embedder: result.embedder,
+        vectors: result.vectors,
+        chunks: result.chunks,
+        exported_at: new Date().toISOString(),
+      };
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
       log.info(
-        `snapshot export ${spaceName}: ${result.chunks} chunk(s) → ${result.path}`,
+        `snapshot export ${spaceName}: ${result.vectors} vector(s) from ${result.chunks} chunk(s) → ${result.path}`,
       );
-      res.json(result);
+      res.json({ ...result, meta: metaPath });
     } catch (err: unknown) {
       sendError(res, err);
     }

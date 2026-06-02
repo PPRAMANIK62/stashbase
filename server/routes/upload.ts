@@ -20,9 +20,11 @@ import {
   pathExists,
   sanitizeFilename,
   saveBytes,
+  saveText,
 } from '../files.ts';
 import { errorMessage, logger } from '../log.ts';
 import { getCurrentSpace, toKbRel } from '../space.ts';
+import { extractEmbeddedResources } from '../resources.ts';
 import { maybeConvertPdf } from '../pdf.ts';
 import { indexer } from '../state.ts';
 
@@ -72,7 +74,23 @@ export function mount(app: express.Express): void {
         saveBytes(name, f.buffer);
         out.push({ file: name });
         if (detectFormat(name)) {
-          toIndex.push({ name, text: f.buffer.toString('utf8') });
+          let text = f.buffer.toString('utf8');
+          // Pipeline §4.2 steps 2-3: pull inline `data:` images out into
+          // the note's `<stem>_files/` bundle and rewrite the refs, so a
+          // standalone HTML/Markdown drop doesn't carry megabytes of
+          // base64 (and the images become real, previewable assets).
+          try {
+            const { content, assets } = extractEmbeddedResources(name, text);
+            if (assets.length > 0) {
+              text = content;
+              saveText(name, text);
+              for (const a of assets) saveBytes(a.path, a.bytes);
+              log.info(`upload: extracted ${assets.length} embedded resource(s) from ${name}`);
+            }
+          } catch (err: unknown) {
+            log.warn(`upload: resource extraction failed for ${name}: ${errorMessage(err)}`);
+          }
+          toIndex.push({ name, text });
         } else if (spaceAbs && /\.pdf$/i.test(name)) {
           // PDFs run through the pymupdf / marker pipeline so the
           // user gets a readable note + image bundle they can preview
@@ -98,62 +116,65 @@ export function mount(app: express.Express): void {
   });
 }
 
-/** Compute the on-disk paths for a batch up front so notes that would
- *  clash with an existing file get a `-2` / `-3` suffix and their
- *  attached `<stem>_files/` bundle is renamed in lockstep. */
+/** Compute the on-disk paths for a batch up front so any top-level file
+ *  that would clash with an existing file gets a `-2` / `-3` suffix —
+ *  a drag means "add this", so we keep both rather than silently
+ *  overwriting (which `saveBytes` would otherwise do for non-note
+ *  files). Notes additionally reserve against their `<stem>_files/`
+ *  bundle and carry it along when renamed. Files dropped inside a
+ *  subfolder keep their layout verbatim. */
 function computeFinalNames(
   files: Express.Multer.File[],
   paths: string[],
   prefix: string,
 ): string[] {
-  // Step 1: collect top-level notes in this drop and reserve a
-  // non-colliding stem for each one. "Top-level" = no folder
-  // separator in the relPath (so it lives directly at the drop
-  // target, alongside its `<stem>_files/` bundle if any).
-  const stemRenames = new Map<string, string>(); // origStem → finalStem
-  const reserved = new Set<string>();
   function relForFile(idx: number): string {
     const f = files[idx];
     return paths[idx] && paths[idx].length ? paths[idx] : f.originalname;
   }
+
+  const NOTE_EXT = /\.(md|markdown|html|htm)$/i;
+  // Step 1: reserve a non-colliding name for every TOP-LEVEL file (any
+  // type). "Top-level" = no folder separator (so it lives directly at
+  // the drop target, alongside its `<stem>_files/` bundle if it's a
+  // note). Bundle members (rel contains `/`) are handled in step 2.
+  const reserved = new Set<string>();             // finalName (stem+ext) taken this batch
+  const finalByIndex = new Map<number, string>(); // idx → final top-level name
+  const noteStemRenames = new Map<string, string>(); // note origStem → finalStem (for bundles)
   for (let i = 0; i < files.length; i++) {
     const rel = relForFile(i);
     if (rel.includes('/')) continue;
-    const m = rel.match(/^(.+)\.(md|markdown|html|htm)$/i);
-    if (!m) continue;
-    const origStem = m[1];
-    const ext = rel.slice(origStem.length); // includes leading dot
+    const isNote = NOTE_EXT.test(rel);
+    const dot = rel.lastIndexOf('.');
+    const origStem = dot > 0 ? rel.slice(0, dot) : rel;
+    const ext = dot > 0 ? rel.slice(dot) : ''; // includes leading dot, '' if none
     let finalStem = origStem;
     let n = 2;
     while (
       pathExists(prefix + finalStem + ext)
-      || pathExists(prefix + finalStem + '_files')
       || reserved.has(finalStem + ext)
+      || (isNote && pathExists(prefix + finalStem + '_files'))
     ) {
       finalStem = `${origStem}-${n}`;
       n++;
     }
-    if (finalStem !== origStem) stemRenames.set(origStem, finalStem);
     reserved.add(finalStem + ext);
+    finalByIndex.set(i, finalStem + ext);
+    if (isNote && finalStem !== origStem) noteStemRenames.set(origStem, finalStem);
   }
-  // Step 2: rewrite every file's path. Note files use the chosen
-  // final stem; bundle files under `<origStem>_files/...` rewrite
-  // their top segment to track the same renumbered stem.
+  // Step 2: rewrite every file's path. Top-level files use their
+  // reserved final name; bundle files under a renamed note's
+  // `<stem>_files/...` track the renumbered stem.
   return files.map((_, i) => {
     const rel = relForFile(i);
     const segments = rel.split('/');
     if (segments.length === 1) {
-      const m = rel.match(/^(.+)\.(md|markdown|html|htm)$/i);
-      if (m && stemRenames.has(m[1])) {
-        const ext = rel.slice(m[1].length);
-        return sanitizeFilename(prefix + stemRenames.get(m[1])! + ext);
-      }
-      return sanitizeFilename(prefix + rel);
+      return sanitizeFilename(prefix + (finalByIndex.get(i) ?? rel));
     }
     const top = segments[0];
     const bm = top.match(/^(.+)_files$/);
-    if (bm && stemRenames.has(bm[1])) {
-      segments[0] = stemRenames.get(bm[1])! + '_files';
+    if (bm && noteStemRenames.has(bm[1])) {
+      segments[0] = noteStemRenames.get(bm[1])! + '_files';
       return sanitizeFilename(prefix + segments.join('/'));
     }
     return sanitizeFilename(prefix + rel);

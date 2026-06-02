@@ -180,7 +180,7 @@ export class MfsIndexer implements Indexer {
   }
 
   async upsertFile(filePath: string, content: string): Promise<void> {
-    // Reserved agent metadata files (`<space>/.stashbase/file-metadata.md`,
+    // Reserved agent metadata files (`<space>/file-metadata.md`,
     // `<kbRoot>/.stashbase/space-metadata.md`) must not be indexed — their
     // YAML / 目录 prose would surface as bogus hits.
     if (isReservedMetadataFile(filePath)) return;
@@ -201,7 +201,7 @@ export class MfsIndexer implements Indexer {
       }
       const t0 = Date.now();
       // File-level metadata (user front-matter / HTML <meta> + the agent's
-      // `.stashbase/file-metadata.md` sidecar) rides along so every chunk carries it.
+      // `<space>/file-metadata.md` sidecar) rides along so every chunk carries it.
       const metadata = resolveFileMetadata(filePath, content);
       const res = await getDaemon().call<{ chunks: number; embed_ms: number; total_ms: number }>(
         'upsert', { path: filePath, content: text, ext, file_hash: fileHash, metadata },
@@ -262,7 +262,7 @@ export class MfsIndexer implements Indexer {
     updateIndexOp(queueId, 'in-progress');
     markFilePending(newPath);
     try {
-      const res = await getDaemon().call<{ chunks: number; embed_ms: number }>(
+      const res = await getDaemon().call<{ chunks: number; embed_ms: number; fast_path?: boolean }>(
         'rename', { old: oldPath, new: newPath, content: text, ext, file_hash: fileHash, metadata },
       );
       this.noteUnindexed(oldPath);
@@ -270,8 +270,12 @@ export class MfsIndexer implements Indexer {
       markFileDeleted(oldPath);
       markFileIndexed(newPath, statForKbRel(newPath), fileHash);
       updateIndexOp(queueId, 'done');
+      // Fast path reuses the cached vectors (embed_ms == 0); only the
+      // fallback actually re-embeds. Log which one ran so a slow rename
+      // is distinguishable from a copied one.
+      const how = res.fast_path ? 'copied' : 're-embedded';
       log.info(
-        `rename ${oldPath} → ${newPath}: re-embedded ${res.chunks} chunks ` +
+        `rename ${oldPath} → ${newPath}: ${how} ${res.chunks} chunks ` +
           `(embed ${fmtMs(res.embed_ms)}, wall ${fmtMs(Date.now() - t0)})`,
       );
     } catch (err: unknown) {
@@ -297,7 +301,7 @@ export class MfsIndexer implements Indexer {
       return { path: newP, content: text, ext, file_hash: fileHash };
     });
     const t0 = Date.now();
-    const res = await getDaemon().call<{ files: number; chunks: number }>(
+    const res = await getDaemon().call<{ files: number; chunks: number; fast_path_files?: number }>(
       'rename_prefix', { old: oldPrefix, new: newPrefix, files: payload },
     );
     for (const f of files) {
@@ -309,9 +313,11 @@ export class MfsIndexer implements Indexer {
       const { fileHash } = prepareForIndex(next, f.content);
       markFileIndexed(next, statForKbRel(next), fileHash);
     }
+    const fast = res.fast_path_files ?? 0;
     log.info(
       `rename_prefix ${oldPrefix} → ${newPrefix}: ` +
-        `${res.files} files, ${res.chunks} chunks (wall ${fmtMs(Date.now() - t0)})`,
+        `${res.files} files (${fast} copied, ${res.files - fast} re-embedded), ` +
+        `${res.chunks} chunks (wall ${fmtMs(Date.now() - t0)})`,
     );
   }
 
