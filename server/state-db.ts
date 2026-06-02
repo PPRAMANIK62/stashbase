@@ -253,6 +253,30 @@ export function markFileDeleted(pathKey: string): void {
   upsertFileState(pathKey, { status: 'deleted' });
 }
 
+/** Drop every row for a deleted space across all three state tables
+ *  (`files`, `pdf_conversions`, `index_queue`). Without this, removing a
+ *  space leaves orphan rows behind — most visibly a stale
+ *  `pdf_conversions` record, which makes `discoverNewPdfs` skip
+ *  auto-conversion for a later same-named PDF (it sees a "record" and
+ *  assumes the PDF was already handled). `space` is the kbRoot-relative
+ *  space name (its rows are `space` itself or `space/...`). Prefix match
+ *  via `substr` avoids LIKE wildcard escaping on arbitrary space names. */
+export function deleteSpaceState(space: string): void {
+  const name = space.replace(/\/+$/, '');
+  if (!name) return;
+  const prefix = name + '/';
+  const args = { name, prefix, plen: prefix.length };
+  const db = getStateDb();
+  const sweep = db.transaction(() => {
+    for (const table of ['files', 'pdf_conversions', 'index_queue']) {
+      db.prepare(
+        `DELETE FROM ${table} WHERE path = @name OR substr(path, 1, @plen) = @prefix`,
+      ).run(args);
+    }
+  });
+  sweep();
+}
+
 export function markFileFailed(pathKey: string, error: string): void {
   upsertFileState(pathKey, { status: 'failed', lastError: error });
 }

@@ -6,9 +6,8 @@ import {
   type FolderImportPreview,
   type ImportFolderMode,
 } from '../api';
-import { CubeLogoIcon, FolderIcon, GitCloneIcon, NewFolderIcon } from '../icons';
+import { CubeLogoIcon, FolderIcon, NewFolderIcon } from '../icons';
 import { useApp } from '../store/AppContext';
-import { CloneRepoModal } from './CloneRepoModal';
 import { ModalShell } from './ModalShell';
 import { openSettings } from './SettingsModal';
 
@@ -40,14 +39,14 @@ function prettifyHome(abs: string, home: string): string {
  *     under kbRoot and opens it.
  *   - **Open space**: dropdown of existing direct-child folders under
  *     kbRoot; click to open.
- *   - **Clone repo**: name defaults to repo name, user can override.
+ *   - **Import folder**: native picker to bring an existing folder
+ *     (e.g. a repo you cloned yourself) in as a space.
  *
  * No folder picker — names alone make the kbRoot invariant trivial to
  * enforce and skip a system dialog round-trip.
  */
 export function Welcome() {
   const { state, actions, dispatch } = useApp();
-  const [cloneOpen, setCloneOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [openOpen, setOpenOpen] = useState(false);
   const [importSource, setImportSource] = useState<string | null>(null);
@@ -108,17 +107,6 @@ export function Welcome() {
             </span>
             <span className="welcome-action-label">New space</span>
           </button>
-          <button
-            className="welcome-action"
-            type="button"
-            onClick={() => setCloneOpen(true)}
-            title="Clone a git repo (HTTPS or SSH) as a new space"
-          >
-            <span className="welcome-action-icon">
-              <GitCloneIcon />
-            </span>
-            <span className="welcome-action-label">Clone repo</span>
-          </button>
           <ImportFolderButton onPicked={setImportSource} />
         </div>
 
@@ -175,7 +163,6 @@ export function Welcome() {
           <div className="welcome-err">{state.welcomeError}</div>
         )}
       </div>
-      {cloneOpen && <CloneRepoModal onClose={() => setCloneOpen(false)} />}
       {importSource && (
         <ImportFolderModal
           source={importSource}
@@ -590,7 +577,7 @@ function NewSpaceModal({
  *  recently-opened ones first then the rest alphabetically. Includes
  *  everything in the library — folders the user created via Finder
  *  but never opened still show up. Empty state nudges toward
- *  New / Clone. */
+ *  New space / Import folder. */
 function OpenSpaceModal({
   kbRoot,
   homeDir,
@@ -674,7 +661,7 @@ function OpenSpaceModal({
         <div className="modal-hint">Loading…</div>
       ) : names.length === 0 ? (
         <div className="modal-hint">
-          No spaces yet — use <strong>New space</strong> or <strong>Clone repo</strong> to create one.
+          No spaces yet — use <strong>New space</strong> or <strong>Import folder</strong> to create one.
         </div>
       ) : (
         <div className="welcome-open-list">

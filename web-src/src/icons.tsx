@@ -247,15 +247,3 @@ export function LibraryIcon({ className }: IconProps) {
     </svg>
   );
 }
-
-/** "Clone into a tray" — used on the Welcome screen alongside Open /
- *  New as the third primary action. Mirrors VS Code's repo-clone card. */
-export function GitCloneIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
-      <path d="M12 4 V14" />
-      <polyline points="8 11 12 15 16 11" />
-      <path d="M4 18 V19 A2 2 0 0 0 6 21 H18 A2 2 0 0 0 20 19 V18" />
-    </svg>
-  );
-}

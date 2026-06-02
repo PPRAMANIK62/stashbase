@@ -1,6 +1,6 @@
 /**
- * Space-management routes: open / create the active space, list recent
- * spaces, and clone a git repo as the starting point of a new space.
+ * Space-management routes: open / create the active space and list
+ * recent spaces.
  *
  * These are the only data routes that work BEFORE a space is open —
  * they live outside the `requireSpace` prefix gate. The `onSwitch`
@@ -8,7 +8,6 @@
  * to bind the indexer and kick off the background sync.
  */
 import express from 'express';
-import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,12 +29,12 @@ import {
   setKbRoot,
   validateSpaceName,
   writeSpaceConfig,
-  pruneStashbasePerMachineState,
 } from '../space.ts';
 import { errorMessage } from '../log.ts';
 import { sendError } from '../http.ts';
 import { indexer } from '../state.ts';
 import { switchSpaceMcpServers } from '../mcp-host.ts';
+import { deleteSpaceState } from '../state-db.ts';
 import {
   importFolderAsSpace,
   previewFolderImport,
@@ -170,6 +169,13 @@ export function mount(app: express.Express): void {
         throw err;
       }
       replaceCurrentSpacePath(oldPath, newPath);
+      // Drop the old prefix's state.db rows. `renamePathPrefix` already
+      // re-embedded the chunks under the new prefix; the per-file /
+      // pdf-conversion / queue rows under the old name are now orphans
+      // (reconcile repopulates the new prefix on next open). Without
+      // this, a stale pdf_conversions row could mislead a future space
+      // that reuses the old name — same hazard as delete.
+      deleteSpaceState(oldName);
       res.json({ name: newName, path: newPath });
     } catch (err: unknown) {
       res.status(400).json({ error: errorMessage(err) });
@@ -183,9 +189,18 @@ export function mount(app: express.Express): void {
     const target = path.join(getKbRoot(), name);
     try {
       if (!fs.existsSync(target)) return res.status(404).json({ error: 'space not found' });
-      fs.rmSync(target, { recursive: true, force: true });
+      // Tear down live runtime bound to this space FIRST (kills the
+      // terminal PTY, stops per-space MCP servers, detaches the fs
+      // watcher via onClose) so the watcher isn't still bound when the
+      // directory vanishes under it.
       clearSpacePath(target);
+      fs.rmSync(target, { recursive: true, force: true });
+      // Clear derived state: vector-store chunks + the three state.db
+      // tables. Without the state.db sweep, orphan rows survive the
+      // delete — most visibly a stale pdf_conversions record that makes
+      // a later same-named PDF skip auto-conversion (see deleteSpaceState).
       await indexer.deletePathPrefix(name);
+      deleteSpaceState(name);
       res.json({});
     } catch (err: unknown) {
       res.status(400).json({ error: errorMessage(err) });
@@ -235,50 +250,6 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Clone a remote git repo into <kbRoot>/<name>, then return the
-  // absolute working-tree path. UI follows up with POST /api/space to
-  // actually open it. We block here until git exits so the caller can
-  // flip "Cloning…" → "Opening…" in one step. `name` is optional; if
-  // omitted we derive it from the URL.
-  app.post('/api/git/clone', async (req, res) => {
-    const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
-    const rawName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
-    if (!url) return res.status(400).json({ error: 'url required' });
-    // Whitelist schemes — refuse `file://` / `javascript:` / `--upload-pack=...`
-    // and anything else that could escape into a git option or local file read.
-    if (!/^(https?:\/\/|git@[\w.-]+:|ssh:\/\/|git:\/\/)/.test(url)) {
-      return res.status(400).json({ error: 'url must be http(s) / ssh / git scheme' });
-    }
-    const name = rawName || inferRepoName(url);
-    if (!name) return res.status(400).json({ error: 'could not derive repo name from url' });
-    const nameErr = validateSpaceName(name);
-    if (nameErr) return res.status(400).json({ error: nameErr });
-    const root = getKbRoot();
-    try { fs.mkdirSync(root, { recursive: true }); } catch { /* surface below if it still isn't a dir */ }
-    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
-      return res.status(400).json({ error: 'library root is not a directory' });
-    }
-    const dest = path.join(root, name);
-    if (fs.existsSync(dest)) {
-      return res.status(409).json({ error: `space "${name}" already exists` });
-    }
-    try {
-      await spawnGitClone(url, dest, root);
-      // Selective cleanup of the upstream `.stashbase/` directory.
-      // Per-machine internal state (`config.json`, `store/`, legacy `mfs/`, `cache/`)
-      // must never travel with a clone — they'd inherit the previous
-      // user's embedder provider + Milvus collection dim, blocking a
-      // fresh user without a key. The **portable** pieces stay:
-      //   - `snapshot.parquet` — the exported chunk index that lets
-      //     the new user skip re-embedding (auto-imported on bind)
-      //   - any future portable artefacts the maintainer ships
-      // `.git/` and other dotdirs are user content and stay.
-      pruneStashbasePerMachineState(path.join(dest, '.stashbase'));
-      res.json({ path: dest });
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
-  });
 }
 
 function collectIndexableFilesForRename(
@@ -320,33 +291,3 @@ function walkSpace(
   }
 }
 
-/** `https://github.com/user/repo.git` / `git@github.com:user/repo.git`
- *  / `ssh://git@host/path/repo` → `repo`. Returns null when the tail
- *  segment looks empty / weird (we'd rather fail loudly than clone into
- *  some surprise directory). */
-function inferRepoName(url: string): string | null {
-  const trimmed = url.replace(/\/+$/, '').replace(/\.git$/, '');
-  const m = trimmed.match(/[/:]([A-Za-z0-9._-]+)$/);
-  return m ? m[1] : null;
-}
-
-/** Spawn `git clone -- <url> <dest>`. The `--` guards against URLs
- *  that start with `-` being parsed as git options. We capture stderr
- *  so the rejection message tells the user what git actually
- *  complained about, not a generic "exit 128". */
-function spawnGitClone(url: string, dest: string, cwd: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = childProcess.spawn('git', ['clone', '--', url, dest], {
-      cwd,
-      stdio: ['ignore', 'ignore', 'pipe'],
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, // never block on auth prompt
-    });
-    let stderr = '';
-    proc.stderr.on('data', (b) => { stderr += b.toString(); });
-    proc.on('error', (err) => reject(new Error(`git: ${err.message}`)));
-    proc.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(stderr.trim() || `git exited with code ${code}`));
-    });
-  });
-}

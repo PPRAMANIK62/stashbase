@@ -1,6 +1,6 @@
 # StashBase
 
-**Stash your knowledge. Agents maintain it.**
+**Turn what you save into persistent memory.**
 
 [![Website](https://img.shields.io/badge/website-stashbase.ai-0a66c2.svg)](https://stashbase.ai)
 [![Status](https://img.shields.io/badge/status-early%20alpha-orange.svg)](#)
@@ -11,13 +11,13 @@
 
 > ⭐ **If this idea interests you, drop a star.** Every item on the [build map](https://stashbase.ai/build-map/) ships with detailed design — easy to pick up if you'd like to contribute.
 
-StashBase is an agent-native, local-first knowledge base — built for personal context that compounds over time and stays portable across AI tools.
+StashBase is a local-first knowledge base that turns documents, screenshots, and AI artifacts into persistent memory for you and your AI.
 
-🤖 **Agent-native:** Agents organize and maintain the KB per rules in `STASHBASE.md`. The same KB is exposed via MCP to both built-in Claude Code / Codex and any external MCP-compatible client — Claude Desktop, ChatGPT Desktop, and more.
+📥 **Capture what matters:** Import documents, folders, and AI artifacts — or capture anything you've seen with a screenshot.
 
-💾 **Local-first & user-owned:** Plain HTML / Markdown / PDF files on your disk, fully portable. The accumulated context is your asset.
+🤖 **Agent-native:** Agents organize and maintain your memory, making it searchable and reusable across AI clients.
 
-🎨 **Native HTML:** Native HTML rendering inside the app, plus a PDF → HTML pipeline that turns fixed-layout, read-only PDFs into pages agents can edit, maintain, and retrieve.
+💾 **Local-first & user-owned:** Your original files stay on your disk in open formats. No vendor lock-in. Your memory remains portable and under your control.
 
 ---
 
@@ -39,11 +39,15 @@ brew install --cask liliu-z/stashbase/stashbase
 
 Once the app is running:
 
-1. On the Welcome screen, hit **Clone repo** and paste `https://github.com/0-bingwu-0/stashbase-cs183b` — Stanford CS183B's 20 startup lectures (Sam Altman, …) with a pre-built index. (V1: public GitHub repos only — no token / OAuth management.)
+1. Grab the starter into your library, then open it — Stanford CS183B's 20 startup lectures (Sam Altman, …) with a pre-built index:
+   ```bash
+   git clone https://github.com/0-bingwu-0/stashbase-cs183b ~/Documents/StashBase/cs183b
+   ```
+   On the Welcome screen hit **Open space** → `cs183b` (it's already under your library root). Any repo works this way: clone it (or `git clone` anywhere and use **Import folder**) — StashBase indexes the files; the git relationship stays yours.
 2. Open **Settings → MCP** (gear in the top-right corner), click **Connector** for your AI client, restart that client, then ask `@stashbase what's the best time to start a startup?`.
 3. Then bring your own notes: hit **New space** on the Welcome screen and drag your `.md` / `.html` / `.pdf` files onto the app — StashBase indexes them in the background.
 
-**Embeddings.** StashBase asks for an OpenAI API key on first launch — used **only for embeddings** (no chat completions). The default `text-embedding-3-small` is only $0.02 per 1M tokens. [Create a key.](https://platform.openai.com/api-keys) No API key? Pick the built-in local model (`bge-m3` ONNX) in the same modal — fully offline, no account, slower on long files.
+**Embeddings.** StashBase asks for an OpenAI API key on first launch — used **only for embeddings** (no chat completions). `text-embedding-3-small` is only $0.02 per 1M tokens. [Create a key.](https://platform.openai.com/api-keys) Without a key, files still save and preview — indexing and search stay off until you add one.
 
 ---
 
@@ -51,7 +55,7 @@ Once the app is running:
 
 Most AI tools treat knowledge as temporary context — uploaded files, copied notes, chat history. But personal knowledge accumulates over years: papers, transcripts, notes, drafts, fragments spread across folders and apps.
 
-StashBase is built for that accumulation layer. Files live as plain HTML / Markdown / PDF on your disk; a local indexer keeps them retrievable through hybrid (semantic + keyword) search; the whole KB is exposed via MCP to any AI client.
+StashBase is built for that accumulation layer — the persistent memory beneath your AI work. You decide what to keep (drag in a file, save an agent's output, screenshot something you've read); the things you've seen and saved stay yours. Files live as plain HTML / Markdown / PDF on your disk; a local indexer keeps them retrievable through hybrid (semantic + keyword) search; the whole KB is exposed via MCP to any AI client.
 
 ```text
 research paper
@@ -123,7 +127,7 @@ Indexing runs locally via [mfs](https://github.com/zilliztech/mfs) + [Milvus Lit
 
 ### Embedder
 
-OpenAI `text-embedding-3-small` (recommended) or local `bge-m3` ONNX (no API key, fully offline). Switching embedders creates a **new active collection**; old collections are archived (not deleted) so a switch is reversible.
+OpenAI `text-embedding-3-small` — the single, fixed embedder in V1 (no provider switching). The whole library lives in one Milvus collection. Without an API key, indexing and search are disabled; files still save and preview.
 
 ### Search
 
@@ -366,6 +370,7 @@ Early alpha. macOS arm64 is the supported platform today; Windows / Linux are po
 * **Two-layer MCP** — KB MCP server shipped; chat-panel-only "UI MCP server" (open file in viewer / read selection / render diff) being built
 * **`STASHBASE.md` schema** — V1 stays freeform natural language; precise schema deferred to a separate RFC
 * **Snapshot.parquet portable export** — design specified; explicit export action being wired up
+* **Screenshot capture** — capture anything you've seen as an image, OCR'd into indexed text; positioning set, design and implementation upcoming
 
 ### Post-V1
 
