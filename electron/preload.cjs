@@ -28,6 +28,27 @@ contextBridge.exposeInMainWorld('electron', {
    *  launch and package install no longer modify client configs. */
   configureMcp: (client) => ipcRenderer.invoke('mcp:configure', client),
   openSpaceWindow: (name) => ipcRenderer.invoke('window:openSpace', name),
+  listCaptureWindows: () => ipcRenderer.invoke('capture:listWindows'),
+  capture: (request) => ipcRenderer.invoke('capture:capture', request),
+  onCaptureCreated: (handler) => {
+    const wrapped = (_event, capture) => {
+      if (capture && typeof capture === 'object') handler(capture);
+    };
+    ipcRenderer.on('capture:created', wrapped);
+    return () => ipcRenderer.removeListener('capture:created', wrapped);
+  },
+  onCaptureError: (handler) => {
+    const wrapped = (_event, error) => {
+      if (typeof error === 'string' && error) handler(error);
+    };
+    ipcRenderer.on('capture:error', wrapped);
+    return () => ipcRenderer.removeListener('capture:error', wrapped);
+  },
+  showCaptureMenu: () => ipcRenderer.send('floating:captureMenu'),
+  getFloatingBounds: () => ipcRenderer.invoke('floating:getBounds'),
+  setFloatingPosition: (point) => ipcRenderer.invoke('floating:setPosition', point),
+  selectCaptureRegion: (rect) => ipcRenderer.send('capture:region-selected', rect),
+  cancelCaptureRegion: () => ipcRenderer.send('capture:region-cancel'),
   /** Subscribe to fullscreen-state pushes. macOS green-button fullscreen
    *  hides traffic lights; the renderer uses this to toggle the body
    *  class that controls the chrome-strip left padding. */

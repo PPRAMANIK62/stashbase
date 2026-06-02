@@ -189,7 +189,7 @@ export interface AppActions {
   renameFile: (oldName: string, newBaseName: string) => Promise<void>;
   renameFolder: (oldPath: string, newName: string) => Promise<void>;
   moveFile: (oldPath: string, targetDir: string) => Promise<void>;
-  upload: (items: { file: File; relPath: string }[], dir: string) => Promise<void>;
+  upload: (items: { file: File; relPath: string }[], dir: string) => Promise<boolean>;
 
   scheduleSave: () => void;
   flushSave: () => Promise<void>;
@@ -1270,7 +1270,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const upload = useCallback(async (
     items: { file: File; relPath: string }[],
     dir: string,
-  ) => {
+  ): Promise<boolean> => {
     if (dir) dispatch({ type: 'EXPAND_FOLDER', path: dir });
     try {
       const j = await api.upload(items, dir);
@@ -1289,9 +1289,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn('[upload] failed:', failed);
         toast(`${failed.length} file(s) failed to import. Check console for details.`, { level: 'error' });
       }
+      return failed.length === 0;
     } catch (e: unknown) {
       console.warn('[upload] request failed:', e);
       toast('Upload failed — see console.', { level: 'error' });
+      return false;
     }
   }, [loadFiles, refreshIndexState, selectFile, showAlert]);
 

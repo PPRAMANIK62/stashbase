@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline';">
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+    }
+
+    button {
+      width: 52px;
+      height: 52px;
+      border: 1px solid rgba(15, 23, 42, 0.18);
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.92);
+      color: white;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
+      cursor: grab;
+      display: grid;
+      place-items: center;
+      padding: 0;
+    }
+
+    button:active {
+      cursor: grabbing;
+    }
+
+    svg {
+      width: 24px;
+      height: 24px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <button id="capture" type="button" title="Screenshot">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3z"></path>
+      <circle cx="12" cy="13" r="3"></circle>
+    </svg>
+  </button>
+  <script>
+    const button = document.getElementById('capture');
+    let drag = null;
+    let moved = false;
+
+    button.addEventListener('pointerdown', async (event) => {
+      const bounds = await window.electron.getFloatingBounds();
+      if (!bounds) return;
+      moved = false;
+      drag = {
+        startX: event.screenX,
+        startY: event.screenY,
+        winX: bounds.x,
+        winY: bounds.y,
+      };
+      button.setPointerCapture(event.pointerId);
+    });
+
+    button.addEventListener('pointermove', (event) => {
+      if (!drag) return;
+      const dx = event.screenX - drag.startX;
+      const dy = event.screenY - drag.startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+      if (!moved) return;
+      window.electron.setFloatingPosition({
+        x: drag.winX + dx,
+        y: drag.winY + dy,
+      });
+    });
+
+    button.addEventListener('pointerup', () => {
+      if (!drag) return;
+      drag = null;
+      if (!moved) window.electron.showCaptureMenu();
+    });
+
+    button.addEventListener('pointercancel', () => {
+      drag = null;
+    });
+  </script>
+</body>
+</html>

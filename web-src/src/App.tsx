@@ -10,7 +10,20 @@ interface ElectronBridge {
   openFolderDialog?: (opts?: unknown) => Promise<string | null>;
   openExternal?: (url: string) => Promise<boolean>;
   configureMcp?: (client: string) => Promise<unknown>;
+  onCaptureCreated?: (handler: (capture: CapturePayload) => void) => (() => void);
+  onCaptureError?: (handler: (error: string) => void) => (() => void);
   onFullscreenChange?: (handler: (isFullScreen: boolean) => void) => (() => void);
+}
+
+interface CapturePayload {
+  ok?: boolean;
+  mode?: 'screen' | 'window' | 'region';
+  mime?: string;
+  dataUrl?: string;
+  width?: number;
+  height?: number;
+  sourceTitle?: string;
+  filename?: string;
 }
 import { Welcome } from './components/Welcome';
 import { Sidebar } from './components/Sidebar';
@@ -80,6 +93,44 @@ function AppBody() {
       document.body.classList.toggle('is-fullscreen', isFullScreen);
     });
   }, []);
+  useEffect(() => {
+    const bridge = (window as { electron?: ElectronBridge }).electron;
+    return bridge?.onCaptureCreated?.((capture) => {
+      void handleCaptureCreated(capture);
+    });
+
+    async function handleCaptureCreated(capture: CapturePayload) {
+      if (!capture.dataUrl || !capture.mime?.startsWith('image/')) return;
+      const sourceTitle = capture.sourceTitle || 'Screenshot';
+      setPreviewImage({ src: capture.dataUrl, alt: sourceTitle });
+
+      if (state.welcomeVisible || !state.space) {
+        actions.toast('Open a space to save this screenshot.', { level: 'warning' });
+        return;
+      }
+
+      try {
+        const file = await dataUrlToFile(
+          capture.dataUrl,
+          capture.filename || defaultCaptureFilename(capture.mode),
+          capture.mime,
+        );
+        const saved = await actions.upload([{ file, relPath: file.name }], state.activeFolder);
+        if (!saved) return;
+        const suffix = state.activeFolder ? ` to ${state.activeFolder}` : '';
+        actions.toast(`Saved ${file.name}${suffix}.`, { level: 'success' });
+      } catch (err) {
+        console.warn('[capture] save failed:', err);
+        actions.toast('Screenshot captured, but saving failed.', { level: 'error' });
+      }
+    }
+  }, [actions, state.activeFolder, state.space, state.welcomeVisible]);
+  useEffect(() => {
+    const bridge = (window as { electron?: ElectronBridge }).electron;
+    return bridge?.onCaptureError?.((error) => {
+      actions.toast(`Screenshot failed: ${error}`, { level: 'error' });
+    });
+  }, [actions]);
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       if (!e.data) return;
@@ -196,6 +247,17 @@ function AppBody() {
       <SettingsPortal />
     </>
   );
+}
+
+function defaultCaptureFilename(mode?: string): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `screenshot-${mode || 'capture'}-${stamp}.png`;
+}
+
+async function dataUrlToFile(dataUrl: string, filename: string, mime: string): Promise<File> {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return new File([blob], filename, { type: mime });
 }
 
 /** Vertical drag handle between the main pane and the terminal panel.

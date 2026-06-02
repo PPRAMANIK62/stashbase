@@ -6,10 +6,10 @@
  * inherited to this terminal so `tsx watch` rebuilds + diagnostics
  * surface naturally. Quitting the app kills the server.
  *
- * The renderer is sandboxed; the only main → renderer surface is the
- * folder-picker IPC exposed via preload.cjs.
+ * The renderer is sandboxed; all main → renderer surfaces are exposed
+ * through the narrow IPC bridge in preload.cjs.
  */
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, screen, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -47,6 +47,10 @@ const MCP_ENTRY = app.isPackaged
   : path.join(PROJECT_ROOT, 'mcp', 'server.ts');
 
 let serverProc = null;
+const mainWindows = new Set();
+let lastMainWindow = null;
+let floatingBallWindow = null;
+let capturePickerWindow = null;
 
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -397,6 +401,407 @@ function isAppUrl(rawUrl) {
   }
 }
 
+function getMainTargetWindow() {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && mainWindows.has(focused) && !focused.isDestroyed()) return focused;
+  if (lastMainWindow && mainWindows.has(lastMainWindow) && !lastMainWindow.isDestroyed()) return lastMainWindow;
+  for (const win of Array.from(mainWindows)) {
+    if (!win.isDestroyed()) return win;
+  }
+  return null;
+}
+
+function emitCaptureCreated(capture) {
+  const target = getMainTargetWindow();
+  if (!target) return false;
+  target.webContents.send('capture:created', capture);
+  if (target.isMinimized()) target.restore();
+  target.show();
+  return true;
+}
+
+function emitCaptureError(error) {
+  const target = getMainTargetWindow();
+  if (!target) return false;
+  target.webContents.send('capture:error', error);
+  return true;
+}
+
+function captureFilename(mode) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `screenshot-${mode}-${stamp}.png`;
+}
+
+function internalCaptureSourceIds() {
+  const ids = new Set();
+  for (const win of [floatingBallWindow, capturePickerWindow]) {
+    if (!win || win.isDestroyed()) continue;
+    try {
+      ids.add(win.getMediaSourceId());
+    } catch {
+      // Older Electron builds may not expose a source id for every
+      // BrowserWindow; in that case the source simply remains visible.
+    }
+  }
+  return ids;
+}
+
+function findSourceByDisplay(sources, display) {
+  const id = String(display.id);
+  return sources.find((source) => String(source.display_id) === id) || sources[0] || null;
+}
+
+async function captureDisplay(display) {
+  const scale = display.scaleFactor || 1;
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: {
+      width: Math.round(display.bounds.width * scale),
+      height: Math.round(display.bounds.height * scale),
+    },
+  });
+  const source = findSourceByDisplay(sources, display);
+  if (!source || source.thumbnail.isEmpty()) {
+    throw new Error('No screen capture source is available.');
+  }
+  return { image: source.thumbnail, source };
+}
+
+async function captureScreenAtCursor() {
+  const point = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(point);
+  const { image, source } = await captureDisplay(display);
+  const size = image.getSize();
+  return {
+    ok: true,
+    mode: 'screen',
+    mime: 'image/png',
+    dataUrl: image.toDataURL(),
+    width: size.width,
+    height: size.height,
+    sourceTitle: source.name || 'Screen',
+    filename: captureFilename('screen'),
+  };
+}
+
+async function captureWindowSource(sourceId) {
+  if (typeof sourceId !== 'string' || !sourceId) throw new Error('No window was selected.');
+  const sources = await desktopCapturer.getSources({
+    types: ['window'],
+    thumbnailSize: { width: 2400, height: 1800 },
+  });
+  const source = sources.find((item) => item.id === sourceId);
+  if (!source || source.thumbnail.isEmpty()) {
+    throw new Error('The selected window is no longer available.');
+  }
+  const size = source.thumbnail.getSize();
+  return {
+    ok: true,
+    mode: 'window',
+    mime: 'image/png',
+    dataUrl: source.thumbnail.toDataURL(),
+    width: size.width,
+    height: size.height,
+    sourceTitle: source.name || 'Window',
+    filename: captureFilename('window'),
+  };
+}
+
+async function listCaptureWindows() {
+  const internalIds = internalCaptureSourceIds();
+  const sources = await desktopCapturer.getSources({
+    types: ['window'],
+    thumbnailSize: { width: 320, height: 200 },
+  });
+  return sources
+    .filter((source) => source.id && source.name && !source.thumbnail.isEmpty() && !internalIds.has(source.id))
+    .map((source) => ({
+      id: source.id,
+      name: source.name,
+      thumbnail: source.thumbnail.toDataURL(),
+    }));
+}
+
+function hideFloatingBall() {
+  if (floatingBallWindow && !floatingBallWindow.isDestroyed()) floatingBallWindow.hide();
+}
+
+function showFloatingBall() {
+  if (floatingBallWindow && !floatingBallWindow.isDestroyed()) floatingBallWindow.showInactive();
+}
+
+async function withFloatingBallHidden(fn) {
+  hideFloatingBall();
+  await sleep(120);
+  try {
+    return await fn();
+  } finally {
+    showFloatingBall();
+  }
+}
+
+function createRegionOverlay(display) {
+  return new Promise((resolve) => {
+    const overlay = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      hasShadow: false,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    overlay.setAlwaysOnTop(true, 'screen-saver');
+    if (process.platform === 'darwin') overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+    let settled = false;
+    function settle(value) {
+      if (settled) return;
+      settled = true;
+      ipcMain.removeListener('capture:region-selected', onSelected);
+      ipcMain.removeListener('capture:region-cancel', onCancel);
+      if (overlay.isDestroyed()) {
+        resolve(value);
+        return;
+      }
+      overlay.once('closed', () => resolve(value));
+      overlay.close();
+    }
+    function onSelected(event, rect) {
+      if (event.sender !== overlay.webContents) return;
+      settle(rect && typeof rect === 'object' ? rect : null);
+    }
+    function onCancel(event) {
+      if (event.sender !== overlay.webContents) return;
+      settle(null);
+    }
+    ipcMain.on('capture:region-selected', onSelected);
+    ipcMain.on('capture:region-cancel', onCancel);
+    overlay.on('closed', () => settle(null));
+
+    overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(regionOverlayHtml())}`);
+  });
+}
+
+async function captureRegionAtCursor() {
+  const point = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(point);
+  const rect = await createRegionOverlay(display);
+  if (!rect) return null;
+  const x = Math.max(0, Number(rect.x) || 0);
+  const y = Math.max(0, Number(rect.y) || 0);
+  const width = Math.max(1, Number(rect.width) || 0);
+  const height = Math.max(1, Number(rect.height) || 0);
+  if (width < 4 || height < 4) return null;
+  await sleep(120);
+  const { image, source } = await captureDisplay(display);
+  const imageSize = image.getSize();
+  const scaleX = imageSize.width / display.bounds.width;
+  const scaleY = imageSize.height / display.bounds.height;
+  const cropped = image.crop({
+    x: Math.round(x * scaleX),
+    y: Math.round(y * scaleY),
+    width: Math.round(width * scaleX),
+    height: Math.round(height * scaleY),
+  });
+  const size = cropped.getSize();
+  return {
+    ok: true,
+    mode: 'region',
+    mime: 'image/png',
+    dataUrl: cropped.toDataURL(),
+    width: size.width,
+    height: size.height,
+    sourceTitle: source.name || 'Region',
+    filename: captureFilename('region'),
+  };
+}
+
+async function runCapture(request = {}, event) {
+  const mode = typeof request.mode === 'string' ? request.mode : 'screen';
+  let capture = null;
+  if (mode === 'screen') {
+    capture = await withFloatingBallHidden(() => captureScreenAtCursor());
+  } else if (mode === 'window') {
+    capture = await withFloatingBallHidden(() => captureWindowSource(request.sourceId));
+  } else if (mode === 'region') {
+    capture = await withFloatingBallHidden(() => captureRegionAtCursor());
+  } else {
+    throw new Error(`Unsupported capture mode: ${mode}`);
+  }
+  if (!capture) return { ok: false, canceled: true };
+  emitCaptureCreated(capture);
+  const senderWindow = event ? BrowserWindow.fromWebContents(event.sender) : null;
+  if (senderWindow && senderWindow !== getMainTargetWindow() && senderWindow !== floatingBallWindow && !senderWindow.isDestroyed()) {
+    senderWindow.close();
+  }
+  return { ok: true };
+}
+
+async function safeRunCapture(request = {}, event) {
+  try {
+    return await runCapture(request, event);
+  } catch (err) {
+    const error = err && typeof err.message === 'string' ? err.message : String(err);
+    emitCaptureError(error);
+    return { ok: false, error };
+  }
+}
+
+function showCaptureMenu() {
+  const menu = Menu.buildFromTemplate([
+    { label: 'Full screen screenshot', click: () => { void safeRunCapture({ mode: 'screen' }); } },
+    { label: 'Window screenshot', click: () => createCapturePickerWindow() },
+    { label: 'Region screenshot', click: () => { void safeRunCapture({ mode: 'region' }); } },
+  ]);
+  menu.popup({ window: floatingBallWindow || undefined });
+}
+
+function clampFloatingPosition(point) {
+  const bounds = floatingBallWindow && !floatingBallWindow.isDestroyed()
+    ? floatingBallWindow.getBounds()
+    : { width: 58, height: 58 };
+  const display = screen.getDisplayNearestPoint(point);
+  const area = display.workArea;
+  return {
+    x: Math.min(area.x + area.width - bounds.width, Math.max(area.x, point.x)),
+    y: Math.min(area.y + area.height - bounds.height, Math.max(area.y, point.y)),
+  };
+}
+
+function createFloatingBallWindow() {
+  if (floatingBallWindow && !floatingBallWindow.isDestroyed()) {
+    showFloatingBall();
+    return;
+  }
+  const display = screen.getPrimaryDisplay();
+  const x = display.workArea.x + display.workArea.width - 82;
+  const y = display.workArea.y + Math.round(display.workArea.height * 0.55);
+  floatingBallWindow = new BrowserWindow({
+    x,
+    y,
+    width: 58,
+    height: 58,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  floatingBallWindow.setAlwaysOnTop(true, 'floating');
+  if (process.platform === 'darwin') floatingBallWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  floatingBallWindow.loadFile(path.join(__dirname, 'floating-ball.html'));
+  floatingBallWindow.on('closed', () => { floatingBallWindow = null; });
+}
+
+function createCapturePickerWindow() {
+  if (capturePickerWindow && !capturePickerWindow.isDestroyed()) {
+    capturePickerWindow.focus();
+    return;
+  }
+  capturePickerWindow = new BrowserWindow({
+    width: 720,
+    height: 520,
+    minWidth: 520,
+    minHeight: 360,
+    title: 'Choose window',
+    backgroundColor: '#f8fafc',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  capturePickerWindow.loadFile(path.join(__dirname, 'capture-picker.html'));
+  capturePickerWindow.on('closed', () => { capturePickerWindow = null; });
+}
+
+function regionOverlayHtml() {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; cursor: crosshair; user-select: none; }
+    body { background: rgba(15, 23, 42, 0.22); }
+    #hint { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); padding: 8px 12px; border-radius: 8px; background: rgba(15, 23, 42, 0.86); color: white; font: 13px system-ui, sans-serif; }
+    #box { position: fixed; border: 2px solid #38bdf8; background: rgba(56, 189, 248, 0.16); box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.28); display: none; }
+  </style>
+</head>
+<body>
+  <div id="hint">Drag to select a screenshot region. Press Esc to cancel.</div>
+  <div id="box"></div>
+  <script>
+    const box = document.getElementById('box');
+    let start = null;
+    let current = null;
+    function rect() {
+      const x = Math.min(start.x, current.x);
+      const y = Math.min(start.y, current.y);
+      const width = Math.abs(current.x - start.x);
+      const height = Math.abs(current.y - start.y);
+      return { x, y, width, height };
+    }
+    function render() {
+      if (!start || !current) return;
+      const r = rect();
+      box.style.display = 'block';
+      box.style.left = r.x + 'px';
+      box.style.top = r.y + 'px';
+      box.style.width = r.width + 'px';
+      box.style.height = r.height + 'px';
+    }
+    window.addEventListener('pointerdown', (event) => {
+      start = { x: event.clientX, y: event.clientY };
+      current = start;
+      render();
+    });
+    window.addEventListener('pointermove', (event) => {
+      if (!start) return;
+      current = { x: event.clientX, y: event.clientY };
+      render();
+    });
+    window.addEventListener('pointerup', () => {
+      if (!start || !current) return window.electron.cancelCaptureRegion();
+      window.electron.selectCaptureRegion(rect());
+    });
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') window.electron.cancelCaptureRegion();
+    });
+  </script>
+</body>
+</html>`;
+}
+
 async function createWindow(initialSpace) {
   try {
     await ensureServer();
@@ -427,6 +832,19 @@ async function createWindow(initialSpace) {
       nodeIntegration: false,
       sandbox: false, // preload needs `require` for ipcRenderer
     },
+  });
+  mainWindows.add(win);
+  lastMainWindow = win;
+  win.on('focus', () => {
+    lastMainWindow = win;
+  });
+  win.on('closed', () => {
+    mainWindows.delete(win);
+    if (lastMainWindow === win) lastMainWindow = null;
+    if (mainWindows.size === 0) {
+      hideFloatingBall();
+      if (process.platform !== 'darwin') app.quit();
+    }
   });
 
   // External links → OS default browser. Anything else (popups,
@@ -473,6 +891,7 @@ async function createWindow(initialSpace) {
     ? `${SERVER_URL}/?space=${encodeURIComponent(initialSpace)}`
     : SERVER_URL;
   win.loadURL(url);
+  return win;
 }
 
 // Folder picker — invoked from the Clone modal (Open/New use the
@@ -524,11 +943,37 @@ ipcMain.handle('mcp:configure', async (_e, client) => {
 
 ipcMain.handle('window:openSpace', async (_e, name) => {
   if (typeof name !== 'string' || !name.trim()) return false;
-  await createWindow(name.trim());
+  const win = await createWindow(name.trim());
+  if (win) createFloatingBallWindow();
   return true;
 });
 
-app.whenReady().then(() => {
+ipcMain.handle('capture:listWindows', async () => listCaptureWindows());
+
+ipcMain.handle('capture:capture', async (event, request = {}) => {
+  return safeRunCapture(request, event);
+});
+
+ipcMain.handle('floating:getBounds', () => {
+  if (!floatingBallWindow || floatingBallWindow.isDestroyed()) return null;
+  return floatingBallWindow.getBounds();
+});
+
+ipcMain.handle('floating:setPosition', (_event, point) => {
+  if (!floatingBallWindow || floatingBallWindow.isDestroyed()) return false;
+  const x = Math.round(Number(point?.x));
+  const y = Math.round(Number(point?.y));
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const next = clampFloatingPosition({ x, y });
+  floatingBallWindow.setPosition(next.x, next.y, false);
+  return true;
+});
+
+ipcMain.on('floating:captureMenu', () => {
+  showCaptureMenu();
+});
+
+app.whenReady().then(async () => {
   // Refresh the MCP wrapper on every launch so the most recently-opened
   // app owns it. Without this, a wrapper written by an earlier `pnpm
   // dev` run still points at a vanished `node_modules/.bin/tsx`, and
@@ -542,11 +987,16 @@ app.whenReady().then(() => {
   } catch (err) {
     console.warn(`[electron] MCP wrapper refresh failed: ${err && err.message ? err.message : err}`);
   }
-  createWindow();
+  const win = await createWindow();
+  if (win) createFloatingBallWindow();
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (mainWindows.size === 0) {
+    void createWindow().then((win) => {
+      if (win) createFloatingBallWindow();
+    });
+  }
 });
 
 app.on('window-all-closed', () => {
