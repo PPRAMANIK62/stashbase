@@ -51,8 +51,6 @@ execFileSync(
     '--name',
     'stashbase-daemon',
     '--hidden-import',
-    'mfs.embedder.onnx',
-    '--hidden-import',
     'mfs.store',
     '--hidden-import',
     'mfs.config',
@@ -62,6 +60,16 @@ execFileSync(
     'mfs.ingest.scanner',
     '--hidden-import',
     'blake3',
+    // V1 is openai-only: the local ONNX embedder is never imported, so
+    // keep onnxruntime / tokenizers (+ the unused onnx embedder module)
+    // out of the bundle. Verified safe — `import mfs` and the submodules
+    // we use don't load them (see stashbase_daemon.py / requirements.txt).
+    '--exclude-module',
+    'onnxruntime',
+    '--exclude-module',
+    'tokenizers',
+    '--exclude-module',
+    'mfs.embedder.onnx',
     '--copy-metadata',
     'milvus-lite',
     '--copy-metadata',

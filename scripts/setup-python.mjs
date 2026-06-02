@@ -79,8 +79,8 @@ execFileSync(venvPy, ['-m', 'pip', 'install', '-r', REQS], { stdio: 'inherit' })
 const probeImports = `
 import sys
 try:
-    import mfs, onnxruntime, tokenizers, numpy
-    print(f'[setup:python] ok: mfs, onnxruntime ({onnxruntime.__version__}), tokenizers, numpy')
+    import mfs, openai, numpy
+    print(f'[setup:python] ok: mfs, openai ({openai.__version__}), numpy')
 except Exception as e:
     print(f'[setup:python] import probe failed: {e}', file=sys.stderr)
     sys.exit(1)
