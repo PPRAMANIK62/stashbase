@@ -58,16 +58,14 @@ export function CapturePanel() {
     setBusy('permission');
     setError(null);
     try {
-      const primed = settings?.permission.needsGuide
-        ? await bridge.primeScreenRecordingPermission?.()
-        : undefined;
+      // `openScreenPermissionSettings` primes the permission internally
+      // (a 1x1 desktopCapturer grab that fires the TCC prompt) before
+      // opening System Settings, so we don't prime a second time here.
       const result = await bridge.openScreenPermissionSettings();
       if (result.permission) {
         setSettings({ ...settings!, permission: result.permission });
       }
-      if (primed && !primed.ok) {
-        setError(primed.error || 'StashBase could not be added to Screen Recording automatically.');
-      } else if (result.primed && !result.primed.ok) {
+      if (result.primed && !result.primed.ok) {
         setError(result.primed.error || 'StashBase could not be added to Screen Recording automatically.');
       }
     } finally {
