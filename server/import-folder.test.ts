@@ -175,7 +175,7 @@ test('import refuses cyclic directory symlinks and rolls back the destination', 
   assert.equal(fs.existsSync(path.join(kbRoot, 'cyclic')), false);
 });
 
-test('import refuses sources that contain the library root', () => {
+test('import refuses sources that contain the KB root', () => {
   const parent = tmpDir('parent');
   const kbRoot = path.join(parent, 'StashBase');
   fs.mkdirSync(kbRoot);
@@ -183,7 +183,7 @@ test('import refuses sources that contain the library root', () => {
 
   assert.throws(
     () => previewFolderImport({ source: parent, kbRoot }),
-    /contains the library root/,
+    /contains the KB root/,
   );
 });
 
@@ -195,7 +195,7 @@ test('import refuses home, filesystem root, kb root, and sources already inside 
   for (const source of [os.homedir(), path.parse(kbRoot).root, kbRoot, inside]) {
     assert.throws(
       () => previewFolderImport({ source, kbRoot }),
-      /refusing|already inside the library/,
+      /refusing|already inside the knowledge base/,
     );
   }
 });

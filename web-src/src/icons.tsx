@@ -133,7 +133,7 @@ export function EditIcon({ className }: IconProps) {
 }
 
 export function PreviewIcon({ className }: IconProps) {
-  // Same open-book silhouette `LibraryIcon` used to use — the floating
+  // Same open-book silhouette `KbIcon` used to use — the floating
   // edit/read toggle was drawn with two geometric half-pages that read
   // as "two trapezoids", not a book. This shape is unambiguous.
   return (
@@ -230,12 +230,12 @@ export function HomeIcon({ className }: IconProps) {
   );
 }
 
-/** STASHBASE.md icon — sidebar row for the library-level overview.
+/** STASHBASE.md icon — sidebar row for the KB-level overview.
  *  Robot head: antenna + rounded head + two eyes + a mouth line. The
  *  bot motif maps directly to "the AI assistant maintains this file"
  *  — that's what STASHBASE.md is for, and a robot reads as that intent
  *  at any size, unlike a generic page or catalog glyph. */
-export function LibraryIcon({ className }: IconProps) {
+export function KbIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
       <line x1="12" y1="2" x2="12" y2="5" />

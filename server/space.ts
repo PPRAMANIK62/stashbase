@@ -29,7 +29,7 @@ const MAX_RECENT = 10;
 
 /** Default KB root: `~/Documents/StashBase/`. All spaces must live
  *  under this folder. Persisted in `config.json` so a future "change
- *  library location" UI can edit it; for now it's just the constant. */
+ *  KB location" UI can edit it; for now it's just the constant. */
 const DEFAULT_KB_ROOT = path.join(os.homedir(), 'Documents', 'StashBase');
 export const WINDOW_ID_HEADER = 'x-stashbase-window-id';
 
@@ -55,7 +55,7 @@ export interface SpaceConfigFile {
 }
 
 interface ConfigFile extends SpaceConfigFile {
-  /** Absolute path of the library root. All spaces must live under it.
+  /** Absolute path of the KB root. All spaces must live under it.
    *  Defaults to `~/Documents/StashBase/`; persisted so a future UI
    *  can rebase it without changing code. */
   kbRoot?: string;
@@ -65,7 +65,7 @@ interface ConfigFile extends SpaceConfigFile {
    *  `recentSpaces` on the next write. */
   recentVaults?: RecentSpace[];
   apiKey?: string;
-  /** Embedder provider is library-wide (one collection family per
+  /** Embedder provider is KB-wide (one collection family per
    *  provider on the daemon). `openaiKey` is a leftover from the very
    *  first global-config schema — its content moved into the top-level
    *  `apiKey` on read; we keep the type loose so legacy reads don't
@@ -97,7 +97,7 @@ function normalizeWindowId(windowId: string | null | undefined): string {
   return raw ? raw.slice(0, 128) : DEFAULT_WINDOW_ID;
 }
 
-// ---------- KB root (library folder) ----------
+// ---------- KB root (KB folder) ----------
 
 /** Absolute path of the KB root folder. Reads from config if set,
  *  otherwise the default `~/Documents/StashBase/`. Always returns a
@@ -242,7 +242,7 @@ export function isUnderRoot(absPath: string): boolean {
   const rel = path.relative(root, target);
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
   // Reject anything deeper than one segment — spaces are flat under
-  // the library root. Caller silently filters; the daemon/indexer
+  // the KB root. Caller silently filters; the daemon/indexer
   // depend on the one-segment invariant for O(1) routing.
   if (rel.includes(path.sep)) return false;
   return true;
@@ -261,16 +261,22 @@ export function isInsideKbRoot(absPath: string): boolean {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
-/** Validate a user-supplied space name. Names must be a single
- *  filesystem-safe segment (no slashes, no dots-only, no leading dot,
- *  no NUL). Returns null when valid, error message otherwise. */
+/** Validate a user-supplied space name. Names must be a single,
+ *  cross-platform-safe filename segment: no slashes, no dots-only, no
+ *  leading/trailing dot, none of the Windows/FAT-reserved chars
+ *  (`< > : " | ? *`), no control chars. Rejecting these here (not just
+ *  the macOS-illegal `/`) keeps spaces portable to Windows / git /
+ *  cloud sync — symmetric with `sanitizeFilename` on the upload path.
+ *  Returns null when valid, error message otherwise. */
 export function validateSpaceName(name: string): string | null {
   if (typeof name !== 'string' || !name.trim()) return 'name required';
   const n = name.trim();
   if (n === '.' || n === '..') return 'name cannot be "." or ".."';
   if (n.startsWith('.')) return 'name cannot start with "."';
+  if (n.endsWith('.')) return 'name cannot end with "."';
   if (n.includes('/') || n.includes('\\')) return 'name cannot contain slashes';
-  if (n.includes('\0')) return 'name cannot contain NUL';
+  // eslint-disable-next-line no-control-regex
+  if (/[<>:"|?*\u0000-\u001f]/.test(n)) return 'name cannot contain < > : " | ? * or control characters';
   if (n.length > 64) return 'name too long (max 64 chars)';
   return null;
 }
@@ -452,7 +458,7 @@ export function requireCurrentSpace(): string {
 /** Open a space at the given absolute path. Creates the directory if
  *  needed. Pushes to the recents list. Notifies switch listeners so
  *  cached resources can be reset. */
-export function setCurrentSpace(absPath: string): void {
+export function setCurrentSpace(absPath: string, opts?: { create?: boolean }): void {
   if (typeof absPath !== 'string' || !absPath) throw new Error('path required');
   // Expand a leading `~` so the welcome screen can accept `~/Notes`
   // without forcing the user to spell out their home directory.
@@ -469,13 +475,14 @@ export function setCurrentSpace(absPath: string): void {
   if (!isUnderRoot(normalized)) {
     throw new Error(`space must live under ${getKbRoot()}`);
   }
-  // Opening a brand-new folder is a valid flow (user picked a fresh
-  // location for a new knowledge base), but silently mkdir-ing an
-  // arbitrary path turns "I typo'd ~/Notess" into a ghost directory.
-  // Warn loudly when we create from scratch so it shows up in logs;
-  // existing dirs pass through silently.
+  // Creating a folder only happens on the explicit New-space flow
+  // (`opts.create`). Open / recent flows must NOT mkdir: a missing
+  // folder there means the space was deleted/moved out from under us,
+  // and silently re-creating it would resurrect an empty ghost space
+  // (and turn a typo'd `~/Notess` into a stray dir). Error instead.
   const existed = fs.existsSync(normalized);
   if (!existed) {
+    if (!opts?.create) throw new Error('space does not exist (it may have been moved or deleted)');
     fs.mkdirSync(normalized, { recursive: true });
     log.warn(`created new space directory: ${normalized}`);
   }
@@ -556,7 +563,7 @@ export function getActiveSpaces(): { windowId: string; path: string }[] {
 
 /** Returns recent spaces, most-recent first. Filters out paths that no
  *  longer exist on disk OR have drifted outside the KB root (e.g. a
- *  user moved the library folder externally) so the Welcome list only
+ *  user moved the KB folder externally) so the Welcome list only
  *  shows one-click-openable spaces. */
 export function getRecentSpaces(): RecentSpace[] {
   const all = readConfig().recentSpaces ?? [];
@@ -708,7 +715,7 @@ function ensureSpaceMetadata(spaceRoot: string): void {
   // `files.ts` FileEntry.size), so this adds no search noise and writes
   // no content the user didn't ask for — it's just a placeholder the
   // user or an agent fills in when the space needs its own rules. It's
-  // reachable from the LibraryPanel per-space row and shows in the tree
+  // reachable from the KbPanel per-space row and shows in the tree
   // as an empty file. Mirrors `ensureKbMetadata` for the KB root.
   const rules = path.join(spaceRoot, 'STASHBASE.md');
   if (!fs.existsSync(rules)) {

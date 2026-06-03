@@ -25,9 +25,17 @@ interface Migration {
   resolutions: Record<string, ConflictChoice>;
 }
 
-export function LibraryPanel() {
+/** Trim + drop a trailing slash so `/a/b` and `/a/b/` compare equal. */
+function normPath(p: string): string {
+  return p.trim().replace(/\/+$/, '');
+}
+
+export function StoragePanel() {
   const { actions } = useApp();
   const [kbRoot, setKbRoot] = useState('');
+  /** The persisted root — what's actually saved. Save is disabled while
+   *  the field still matches it (nothing to change). */
+  const [savedRoot, setSavedRoot] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -36,9 +44,11 @@ export function LibraryPanel() {
 
   useEffect(() => {
     void api.getKbRoot()
-      .then((r) => setKbRoot(r.path))
+      .then((r) => { setKbRoot(r.path); setSavedRoot(r.path); })
       .catch((err) => setError(errorMessage(err)));
   }, []);
+
+  const unchanged = normPath(kbRoot) === normPath(savedRoot);
 
   async function choose() {
     const bridge = (window as { electron?: ElectronBridge }).electron;
@@ -54,6 +64,7 @@ export function LibraryPanel() {
    *  and surface any leftover-original warnings from a move. */
   async function applySaved(path: string, warnings?: string[]) {
     setKbRoot(path);
+    setSavedRoot(path);
     actions.goHome();
     await actions.bootstrap();
     setSaved(true);
@@ -61,7 +72,7 @@ export function LibraryPanel() {
   }
 
   /** Switch the root without moving anything. The target may be
-   *  non-empty (a different existing library) — confirm that case. */
+   *  non-empty (a different existing knowledge base) — confirm that case. */
   async function plainSwitch(target: string, confirmNonEmpty = false) {
     setBusy(true);
     setError(null);
@@ -141,28 +152,33 @@ export function LibraryPanel() {
 
   return (
     <div className="settings-panel">
-      <div className="settings-section-title">Root folder</div>
-      <p className="settings-copy">
-        Spaces are the direct child folders inside this directory. When you change it, StashBase asks whether to move your existing spaces over or just switch and leave them where they are.
-      </p>
-      <div className="settings-field-row">
-        <input
-          className="settings-text-input"
-          value={kbRoot}
-          disabled={busy}
-          onChange={(e) => setKbRoot(e.target.value)}
-          spellCheck={false}
-        />
-        <button type="button" className="settings-secondary-btn" onClick={choose} disabled={busy}>
-          Browse
-        </button>
-        <button type="button" className="settings-primary-btn" onClick={() => { void save(); }} disabled={busy || !kbRoot.trim()}>
-          {busy ? 'Saving…' : 'Save'}
-        </button>
+      <div className="settings-section">
+        <div className="settings-section-title">Root folder</div>
+        <div className="settings-section-hint">
+          Each space is a folder directly inside this directory.
+        </div>
+        <div className="settings-field-row">
+          <input
+            className="settings-text-input"
+            value={kbRoot}
+            disabled={busy}
+            onChange={(e) => setKbRoot(e.target.value)}
+            spellCheck={false}
+          />
+          <button type="button" className="settings-secondary-btn" onClick={choose} disabled={busy}>
+            Browse
+          </button>
+          <button type="button" className="settings-primary-btn" onClick={() => { void save(); }} disabled={busy || !kbRoot.trim() || unchanged}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        <div className="settings-section-hint settings-hint-foot">
+          Changing it asks whether to move your existing spaces over, or just switch.
+        </div>
+        {saved && <div className="settings-ok">Root folder updated.</div>}
+        {notice && <div className="modal-warning">{notice}</div>}
+        {error && <div className="settings-error">{error}</div>}
       </div>
-      {saved && <div className="settings-ok">Root folder updated.</div>}
-      {notice && <div className="modal-warning">{notice}</div>}
-      {error && <div className="settings-error">{error}</div>}
 
       {migration && (
         <ModalShell wide onCancel={busy ? () => {} : () => setMigration(null)}>
@@ -170,7 +186,7 @@ export function LibraryPanel() {
             <>
               <h3>Move your spaces?</h3>
               <p className="modal-hint">
-                Your current library has {migration.spaces.length} space{migration.spaces.length === 1 ? '' : 's'}. Move them into the new location, or just switch and leave them where they are?
+                The current folder has {migration.spaces.length} space{migration.spaces.length === 1 ? '' : 's'}. Move them into the new location, or just switch and leave them where they are?
               </p>
               <div className="modal-actions">
                 <button type="button" className="modal-btn" onClick={() => setMigration(null)} disabled={busy}>

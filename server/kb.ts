@@ -1,14 +1,14 @@
 /**
- * Library-level metadata: `<kbRoot>/.stashbase/space-metadata.md` — a single
- * markdown file the agent maintains as its working "目录" of the library
+ * KB-level metadata: `<kbRoot>/.stashbase/space-metadata.md` — a single
+ * markdown file the agent maintains as its working "目录" of the knowledge base
  * (what each space is about, what changed recently). Lives in the KB
  * sidecar because it is agent-maintained derived metadata, not user
  * source content. It's outside every space, so the daemon never indexes it; the
- * UI surfaces it via the LibraryPanel as a special library-kind tab.
+ * UI surfaces it via the KbPanel as a special kb-kind tab.
  *
  * Renamed from the legacy `<kbRoot>/AGENT.md` (which historically mixed
  * "rules" and "目录" roles): STASHBASE.md is now the rules book, and this
- * file is the 目录. `ensureLibraryOverview()` migrates old root-level
+ * file is the 目录. `ensureKbOverview()` migrates old root-level
  * AGENT.md / space-metadata.md files to the new sidecar path once on boot.
  *
  * The agent updates the file via MCP's `update_space_metadata`; users
@@ -19,7 +19,7 @@
  *
  * Structured per-space facts (file count, provider, sample headings)
  * are derived on demand from the indexer + filesystem; they're not
- * stored. The agent reads them via `library_info` together with the
+ * stored. The agent reads them via `kb_info` together with the
  * overview narrative.
  */
 import fs from 'node:fs';
@@ -34,17 +34,17 @@ import {
 } from './space.ts';
 import { indexer } from './state.ts';
 
-const log = logger('library');
+const log = logger('kb');
 
 /** `<kbRoot>/.stashbase/space-metadata.md` — the agent-maintained 目录. */
 const FILENAME = 'space-metadata.md';
 /** Transitional root-level name from the first rename implementation. */
 const ROOT_FILENAME = 'space-metadata.md';
-/** Legacy name migrated away from on boot (see `ensureLibraryOverview`). */
+/** Legacy name migrated away from on boot (see `ensureKbOverview`). */
 const LEGACY_FILENAME = 'AGENT.md';
 const RULES_FILENAME = 'STASHBASE.md';
 
-const PLACEHOLDER = `# StashBase Library
+const PLACEHOLDER = `# StashBase Knowledge Base
 
 (Empty — ask your AI assistant to summarize your spaces here via the
 \`update_space_metadata\` MCP tool. The assistant should describe
@@ -77,7 +77,7 @@ function spaceRulesPath(spaceName: string): string {
 /** Read `<kbRoot>/.stashbase/space-metadata.md`. Returns empty string if missing
  *  (callers decide whether to treat that as "no 目录 yet" or render a
  *  placeholder). */
-export function getLibraryOverview(): string {
+export function getKbOverview(): string {
   try {
     return fs.readFileSync(spaceMetadataPath(), 'utf8');
   } catch {
@@ -88,7 +88,7 @@ export function getLibraryOverview(): string {
 /** Overwrite `<kbRoot>/.stashbase/space-metadata.md`. Atomic via `.tmp` + rename so
  *  a partial write doesn't leave the file half-baked if the process dies
  *  mid-write. */
-export function setLibraryOverview(content: string): void {
+export function setKbOverview(content: string): void {
   const target = spaceMetadataPath();
   const tmp = target + '.tmp';
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -101,9 +101,9 @@ export function setLibraryOverview(content: string): void {
  *  exists and sidecar `space-metadata.md` doesn't, move it (filename /
  *  location realigns with the design; content unchanged). (2) Writes
  *  a placeholder so the agent has something to extend on its first read,
- *  and users opening the library tab see a "(Empty)" message instead of a
+ *  and users opening the KB tab see a "(Empty)" message instead of a
  *  404. */
-export function ensureLibraryOverview(): void {
+export function ensureKbOverview(): void {
   const target = spaceMetadataPath();
   const legacy = [rootSpaceMetadataPath(), legacyOverviewPath()].find((candidate) => fs.existsSync(candidate));
   if (!fs.existsSync(target) && legacy) {
@@ -119,7 +119,7 @@ export function ensureLibraryOverview(): void {
   }
   if (fs.existsSync(target)) return;
   try {
-    setLibraryOverview(PLACEHOLDER);
+    setKbOverview(PLACEHOLDER);
     log.info(`wrote placeholder ${FILENAME}`);
   } catch (err: unknown) {
     log.warn(`failed to write placeholder ${target}: ${errorMessage(err)}`);
@@ -165,7 +165,7 @@ export interface SpaceInfo {
   rules: string;
 }
 
-export interface LibraryInfo {
+export interface KbInfo {
   /** `<kbRoot>/.stashbase/space-metadata.md` content (agent-maintained 目录). */
   overview: string;
   /** KB-level maintenance rules from `<kbRoot>/STASHBASE.md`. */
@@ -174,9 +174,9 @@ export interface LibraryInfo {
   spaces: SpaceInfo[];
 }
 
-/** `SpaceInfo` plus the slice of the library 目录 that talks about this
+/** `SpaceInfo` plus the slice of the KB 目录 that talks about this
  *  space. Returned by the `space_info` MCP tool so an agent can dig into
- *  one space without re-reading the whole library payload. */
+ *  one space without re-reading the whole knowledge base payload. */
 export interface SpaceInfoFull extends SpaceInfo {
   /** The `## <spaceName>` section of `<kbRoot>/.stashbase/space-metadata.md`
    *  (heading line + body, up to the next `##`), or empty string when
@@ -211,17 +211,17 @@ export async function getSpaceInfo(spaceName: string): Promise<SpaceInfo> {
   };
 }
 
-/** `getSpaceInfo` plus the matching slice of the library 目录. */
+/** `getSpaceInfo` plus the matching slice of the KB 目录. */
 export async function getSpaceInfoFull(spaceName: string): Promise<SpaceInfoFull> {
   const info = await getSpaceInfo(spaceName);
-  return { ...info, overview_section: extractOverviewSection(getLibraryOverview(), spaceName) };
+  return { ...info, overview_section: extractOverviewSection(getKbOverview(), spaceName) };
 }
 
-/** Build the library-info payload by asking the daemon for indexed
+/** Build the KB-info payload by asking the daemon for indexed
  *  files per space, plus filesystem peek for headings. Cheap enough
  *  to compute on demand — typical libraries are O(100s of files). */
-export async function getLibraryInfo(): Promise<LibraryInfo> {
-  const overview = getLibraryOverview();
+export async function getKbInfo(): Promise<KbInfo> {
+  const overview = getKbOverview();
   const rules = getKbRules();
   const spaces: SpaceInfo[] = [];
   for (const name of listKnownSpaces()) {

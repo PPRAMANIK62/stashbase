@@ -16,6 +16,11 @@ export interface FolderImportPreview {
   requiresConfirmation: boolean;
   warnings: string[];
   hasSnapshot: boolean;
+  /** A space with this name already exists under kbRoot. Import refuses
+   *  to merge into an existing space (unlike New space, which opens it),
+   *  so the UI surfaces this up-front instead of letting the user click
+   *  through to a `SPACE_EXISTS` error. */
+  nameTaken: boolean;
 }
 
 export interface ImportFolderOptions {
@@ -71,6 +76,7 @@ export function previewFolderImport(
     requiresConfirmation: stats.entryCount > CONFIRM_ENTRY_LIMIT,
     warnings,
     hasSnapshot: fileExists(path.join(source, '.stashbase', 'snapshot.parquet')),
+    nameTaken: dirExists(destination),
   };
 }
 
@@ -85,7 +91,7 @@ export function importFolderAsSpace(opts: ImportFolderOptions): ImportFolderResu
   }
 
   fs.mkdirSync(path.dirname(preview.destination), { recursive: true });
-  if (!dirExists(path.dirname(preview.destination))) throw new Error('library root is not a directory');
+  if (!dirExists(path.dirname(preview.destination))) throw new Error('knowledge base root is not a directory');
   if (fs.existsSync(preview.destination)) {
     const err = new Error(`space "${preview.name}" already exists`);
     (err as any).code = 'SPACE_EXISTS';
@@ -142,14 +148,14 @@ function assertImportableSource(source: string, kbRoot: string): void {
   const isInsideKb = source === kbRoot
     || (relFromRoot !== '' && !relFromRoot.startsWith('..') && !path.isAbsolute(relFromRoot));
   if (isInsideKb) {
-    throw new Error('source is already inside the library; use Open space');
+    throw new Error('source is already inside the knowledge base; use Open space');
   }
   const relRootFromSource = path.relative(source, kbRoot);
   const containsKbRoot = relRootFromSource !== ''
     && !relRootFromSource.startsWith('..')
     && !path.isAbsolute(relRootFromSource);
   if (containsKbRoot) {
-    throw new Error('source contains the library root; choose a more specific folder');
+    throw new Error('source contains the KB root; choose a more specific folder');
   }
 }
 
@@ -202,7 +208,7 @@ function buildWarnings(
     warnings.push(`Large folder (${SCAN_ENTRY_CAP.toLocaleString()}+ items); the count below is approximate and importing may take a while.`);
   }
   if (entryCount > 0) {
-    warnings.push('Importing copies this existing folder into your StashBase library.');
+    warnings.push('Importing copies this existing folder into your StashBase knowledge base.');
   }
   warnings.push(`Destination will be ${path.join(kbRoot, name)}.`);
   return warnings;

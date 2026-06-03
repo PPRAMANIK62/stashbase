@@ -79,7 +79,7 @@ export interface Indexer {
   ): Promise<void>;
 
   /** Hybrid search. `space?` scopes to one space (its kbRoot-relative
-   *  dirname); omitted = whole library. `pathPrefix?` further narrows
+   *  dirname); omitted = whole knowledge base. `pathPrefix?` further narrows
    *  to chunks whose `source` starts with that prefix — useful when an
    *  agent wants to ask "only inside cs183b/transcripts/". When both
    *  are passed, `pathPrefix` takes precedence (it's more specific).
@@ -87,19 +87,19 @@ export interface Indexer {
    *  `fileName` kbRoot-relative. */
   search(query: string, topK: number, space?: string, pathPrefix?: string): Promise<SearchHit[]>;
 
-  /** Walk the library and compute the content-hash diff against the
-   *  index. `space?` scopes the walk; omitted = whole library. Paths
+  /** Walk the knowledge base and compute the content-hash diff against the
+   *  index. `space?` scopes the walk; omitted = whole knowledge base. Paths
    *  in the returned lists are kbRoot-relative. */
   syncDiff(space?: string): Promise<SyncDiff>;
 
   /** Lightweight progress check — name-set diff only, no hashing.
-   *  `space?` scopes; omitted = whole library. */
+   *  `space?` scopes; omitted = whole knowledge base. */
   status(space?: string): Promise<IndexStatus>;
 
   /** Every file present in the index, keyed by kbRoot-relative path with
    *  its stored content hash as value. `space?` scopes to one space;
-   *  omitted = whole library. Used by `/api/library/files`, MCP
-   *  `list_files`, and the library overview info aggregator — without
+   *  omitted = whole knowledge base. Used by `/api/kb/files`, MCP
+   *  `list_files`, and the KB overview info aggregator — without
    *  this method, those reach around the interface and call the daemon
    *  directly. */
   listFiles(space?: string): Promise<Record<string, string>>;

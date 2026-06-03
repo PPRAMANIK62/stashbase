@@ -13,13 +13,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { EmbeddingPanel } from './settings/EmbeddingPanel';
 import { McpClientsPanel } from './settings/McpClientsPanel';
-import { LibraryPanel } from './settings/LibraryPanel';
+import { StoragePanel } from './settings/StoragePanel';
 import { CapturePanel } from './settings/CapturePanel';
 
-export type SettingsSection = 'library' | 'embedding' | 'mcp' | 'capture';
+export type SettingsSection = 'storage' | 'embedding' | 'mcp' | 'capture';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
-  { id: 'library', label: 'Library', render: () => <LibraryPanel /> },
+  { id: 'storage', label: 'Storage', render: () => <StoragePanel /> },
   { id: 'capture', label: 'Capture', render: () => <CapturePanel /> },
   { id: 'embedding', label: 'Embedding', render: () => <EmbeddingPanel /> },
   { id: 'mcp', label: 'MCP', render: () => <McpClientsPanel /> },
@@ -30,7 +30,7 @@ interface OpenDetail {
 }
 
 /** Fire from anywhere to open the Settings modal. Optional `section`
- *  picks the initial pane (default: library). */
+ *  picks the initial pane (default: storage). */
 export function openSettings(section?: SettingsSection): void {
   window.dispatchEvent(
     new CustomEvent<OpenDetail>('stashbase-open-settings', { detail: { section } }),
@@ -41,7 +41,7 @@ export function openSettings(section?: SettingsSection): void {
  *  renders the modal when triggered. */
 export function SettingsPortal() {
   const [open, setOpen] = useState(false);
-  const [section, setSection] = useState<SettingsSection>('library');
+  const [section, setSection] = useState<SettingsSection>('storage');
 
   useEffect(() => {
     function onOpen(e: Event) {

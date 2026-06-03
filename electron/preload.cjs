@@ -31,8 +31,6 @@ contextBridge.exposeInMainWorld('electron', {
   listCaptureWindows: () => ipcRenderer.invoke('capture:listWindows'),
   capture: (request) => ipcRenderer.invoke('capture:capture', request),
   getCaptureSettings: () => ipcRenderer.invoke('capture:getSettings'),
-  setCaptureShortcut: (payload) => ipcRenderer.invoke('capture:setShortcut', payload),
-  resetCaptureShortcuts: () => ipcRenderer.invoke('capture:resetShortcuts'),
   primeScreenRecordingPermission: async () => {
     if (!navigator.mediaDevices?.getDisplayMedia) {
       return { ok: false, error: 'Screen capture is not available in this renderer.' };

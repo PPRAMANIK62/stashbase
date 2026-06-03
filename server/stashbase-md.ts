@@ -33,7 +33,7 @@ import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
 import { noteSelfWrite } from './watcher.ts';
 import { getKbRoot } from './space.ts';
-import { getResolvedRules } from './library.ts';
+import { getResolvedRules } from './kb.ts';
 
 const log = logger('stashbase-md');
 

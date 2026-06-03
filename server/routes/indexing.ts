@@ -28,14 +28,14 @@ import { clearSnapshotWarning, getSnapshotWarning, indexer } from '../state.ts';
 import { noteSelfWrite } from '../watcher.ts';
 import {
   getKbRules,
-  getLibraryInfo,
-  getLibraryOverview,
+  getKbInfo,
+  getKbOverview,
   getResolvedRules,
   getSpaceInfoFull,
   getSpaceRules,
-  setLibraryOverview,
+  setKbOverview,
   setSpaceRules,
-} from '../library.ts';
+} from '../kb.ts';
 import { sendError } from '../http.ts';
 
 const log = logger('routes/indexing');
@@ -246,15 +246,15 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // --- Library-scoped endpoints (powered by the same single daemon) ---
+  // --- KB-scoped endpoints (powered by the same single daemon) ---
   //
   // These are the cross-space surface used by MCP. They speak in
   // kbRoot-relative paths and accept an optional `space` filter so an
-  // AI client can search the whole library by default, or narrow to one
+  // AI client can search the whole knowledge base by default, or narrow to one
   // space when needed. Kept separate from the sidebar-facing /api/search
   // / /api/index-status / /api/files routes (which are space-scoped and
   // return space-relative paths the UI consumes directly).
-  app.post('/api/library/search', async (req, res) => {
+  app.post('/api/kb/search', async (req, res) => {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
       const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
@@ -265,7 +265,7 @@ export function mount(app: express.Express): void {
       if (!query) return res.status(400).json({ error: 'query required' });
       // Same PDF-derived rewrite as /api/search, but against kb-root
       // since MCP callers (external AI clients) receive kbRoot-relative
-      // paths and operate library-wide.
+      // paths and operate KB-wide.
       const kbRoot = getKbRoot();
       const hits = (await indexer.search(query, topK, space, pathPrefix)).map((h) => {
         const remapped = pdfPathForDerivedRel(h.fileName, kbRoot);
@@ -277,7 +277,7 @@ export function mount(app: express.Express): void {
     }
   });
 
-  app.get('/api/library/index-status', async (req, res) => {
+  app.get('/api/kb/index-status', async (req, res) => {
     try {
       const space = typeof req.query.space === 'string' && req.query.space.trim()
         ? req.query.space.trim() : undefined;
@@ -315,9 +315,9 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // List indexed paths across the library (paths only — rich metadata
+  // List indexed paths across the knowledge base (paths only — rich metadata
   // would require a filesystem walk per space and bloats the response).
-  app.get('/api/library/files', async (req, res) => {
+  app.get('/api/kb/files', async (req, res) => {
     try {
       const space = typeof req.query.space === 'string' && req.query.space.trim()
         ? req.query.space.trim() : undefined;
@@ -328,29 +328,29 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Library 目录 (<kbRoot>/.stashbase/space-metadata.md). The LibraryPanel
+  // KB 目录 (<kbRoot>/.stashbase/space-metadata.md). The KbPanel
   // in the renderer GETs this as a regular markdown blob; MCP forwards
   // both reads and writes here so the daemon shares one source of truth.
-  app.get('/api/library/overview', (_req, res) => {
-    res.json({ content: getLibraryOverview() });
+  app.get('/api/kb/overview', (_req, res) => {
+    res.json({ content: getKbOverview() });
   });
 
-  app.post('/api/library/overview', (req, res) => {
+  app.post('/api/kb/overview', (req, res) => {
     const content = typeof req.body?.content === 'string' ? req.body.content : '';
     try {
-      setLibraryOverview(content);
+      setKbOverview(content);
       res.json({ ok: true });
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
 
-  // Library info = overview + per-space structured facts. Powers MCP's
-  // `library_info` tool — Claude reads this when deciding which space
+  // KB info = overview + per-space structured facts. Powers MCP's
+  // `kb_info` tool — Claude reads this when deciding which space
   // to search.
-  app.get('/api/library/info', async (_req, res) => {
+  app.get('/api/kb/info', async (_req, res) => {
     try {
-      res.json(await getLibraryInfo());
+      res.json(await getKbInfo());
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -358,8 +358,8 @@ export function mount(app: express.Express): void {
 
   // Structured facts for ONE space + that space's slice of the library
   // 目录. Powers MCP's `space_info` tool — the per-space follow-up to
-  // `library_info`.
-  app.get('/api/library/space-info', async (req, res) => {
+  // `kb_info`.
+  app.get('/api/kb/space-info', async (req, res) => {
     try {
       const space = typeof req.query.space === 'string' ? req.query.space.trim() : '';
       if (!space) return res.status(400).json({ error: 'space required' });
@@ -374,7 +374,7 @@ export function mount(app: express.Express): void {
   // Powers MCP's `set_file_metadata`. `path` is kbRoot-relative; the
   // first segment is the space, the rest the space-relative file path.
   // Passing an empty `metadata` object removes the section.
-  app.post('/api/library/file-metadata', (req, res) => {
+  app.post('/api/kb/file-metadata', (req, res) => {
     try {
       const kbRel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
       const metadata = req.body?.metadata;
@@ -408,9 +408,9 @@ export function mount(app: express.Express): void {
   });
 
   // Raw KB-level STASHBASE.md content (no per-space concatenation).
-  // Separate from `/api/rules` so the LibraryPanel can show each
+  // Separate from `/api/rules` so the KbPanel can show each
   // rules file as its own openable tab.
-  app.get('/api/library/rules', (_req, res) => {
+  app.get('/api/kb/rules', (_req, res) => {
     try {
       res.json({ content: getKbRules() });
     } catch (err: unknown) {
@@ -439,7 +439,7 @@ export function mount(app: express.Express): void {
   // Read any file under kbRoot by kbRoot-relative path. Powers MCP's
   // `get_file` so an AI client can fetch a file outside the currently
   // open space. Refuses anything escaping the root.
-  app.get('/api/library/file/*', (req, res) => {
+  app.get('/api/kb/file/*', (req, res) => {
     try {
       const rel = (req.params as any)[0] as string;
       if (!rel) return res.status(400).json({ error: 'path required' });
@@ -459,7 +459,7 @@ export function mount(app: express.Express): void {
   // hidden dotdirs skipped), returns paths + mtime in ms. Caps at
   // `limit` (default 20, max 200) so a giant KB doesn't blow the
   // response. Optional `space` query scopes to one space.
-  app.get('/api/library/recent-files', (req, res) => {
+  app.get('/api/kb/recent-files', (req, res) => {
     try {
       const space = typeof req.query.space === 'string' && req.query.space.trim()
         ? req.query.space.trim() : undefined;
@@ -483,7 +483,7 @@ export function mount(app: express.Express): void {
   // explicit overwrite" rule. Indexes the file synchronously so a
   // follow-up `search_kb` sees it immediately. Creates parent
   // directories as needed.
-  app.put('/api/library/file/*', async (req, res) => {
+  app.put('/api/kb/file/*', async (req, res) => {
     try {
       const rel = (req.params as any)[0] as string;
       if (!rel) return res.status(400).json({ error: 'path required' });
@@ -535,7 +535,7 @@ export function mount(app: express.Express): void {
   // Mirrors the `/api/files/*` DELETE pattern: respond as soon as the
   // file is off disk, fire the index cleanup async (a stale chunk for
   // a few seconds is harmless and the next sync sweeps it anyway).
-  app.delete('/api/library/file/*', (req, res) => {
+  app.delete('/api/kb/file/*', (req, res) => {
     try {
       const rel = (req.params as any)[0] as string;
       if (!rel) return res.status(400).json({ error: 'path required' });
@@ -560,7 +560,7 @@ export function mount(app: express.Express): void {
   // dialog). MCP callers can `update_index` after if they edited links
   // by hand. Refuses if target exists; rolls disk rename back if the
   // indexer rename fails so caller state stays consistent.
-  app.patch('/api/library/file/*', async (req, res) => {
+  app.patch('/api/kb/file/*', async (req, res) => {
     try {
       const oldRel = (req.params as any)[0] as string;
       const newRel = typeof req.body?.new_path === 'string' ? req.body.new_path.trim() : '';

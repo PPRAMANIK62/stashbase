@@ -354,31 +354,4 @@
       color: var(--accent);
     }
 
-    /* Uninstall surfaces on card hover only — keeps the picker quiet
-     * when the user is just browsing, but the action is one click
-     * away when they want it. */
-    .cli-uninstall {
-      visibility: hidden;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--muted);
-      font: inherit;
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .agent-choice:hover .cli-uninstall,
-    .cli-uninstall:disabled {
-      visibility: visible;
-    }
-    .cli-uninstall:hover:not(:disabled) {
-      color: #b91c1c;
-      border-color: rgba(220, 38, 38, 0.4);
-      background: rgba(220, 38, 38, 0.05);
-    }
-    .cli-uninstall:disabled {
-      cursor: progress;
-      opacity: 0.7;
-    }
 

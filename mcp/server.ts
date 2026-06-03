@@ -4,7 +4,7 @@
  *
  * Four tools: `search_kb` / `list_files` / `get_file` / `index_status`.
  *
- * All tools default to the **whole library** under
+ * All tools default to the **whole knowledge base** under
  * `~/Documents/StashBase/` and accept an optional `space` argument to
  * scope to one space (e.g. `space: "cs183b"`). Paths are kbRoot-relative
  * (`cs183b/lecture-01.md`).
@@ -13,11 +13,11 @@
  *   1. If the StashBase desktop app is running and serving on :8090,
  *      **forward over HTTP** — its single Python sidecar holds the
  *      embedding models and Milvus file lock. We hit dedicated
- *      `/api/library/*` endpoints that operate on kbRoot-relative paths.
+ *      `/api/kb/*` endpoints that operate on kbRoot-relative paths.
  *   2. If :8090 isn't answering, fall back to an **embedded MfsIndexer**
  *      that spawns its own daemon, configured with kbRoot from
  *      `~/.stashbase/config.json` and pre-binding every space under it
- *      so cross-library search works without the app open.
+ *      so cross-KB search works without the app open.
  *
  * Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
  *   {
@@ -53,15 +53,15 @@ import {
 } from '../server/space.ts';
 import { getDaemon } from '../server/mfs-daemon.ts';
 import {
-  ensureLibraryOverview,
-  getLibraryInfo,
+  ensureKbOverview,
+  getKbInfo,
   getResolvedRules,
   getSpaceInfoFull,
-  setLibraryOverview,
+  setKbOverview,
   setSpaceRules,
-  type LibraryInfo,
+  type KbInfo,
   type SpaceInfoFull,
-} from '../server/library.ts';
+} from '../server/kb.ts';
 import {
   isReservedMetadataFile,
   setFileMetadataEntry,
@@ -74,7 +74,7 @@ import { syncIndex } from '../server/sync.ts';
 migrateLegacyEmbedderConfig();
 if (!needsKbRootPicker()) {
   ensureKbRoot();
-  ensureLibraryOverview();
+  ensureKbOverview();
 }
 
 function parsePortArg(argv: string[], fallback: number): number {
@@ -102,7 +102,7 @@ function getEmbedded(): { indexer: MfsIndexer; ready: Promise<void> } {
   embedded = inst;
   embeddedReady = (async () => {
     // Configure the daemon with kbRoot, then bind every known space so
-    // cross-library search works without the user having to "open" each
+    // cross-KB search works without the user having to "open" each
     // one in some session that doesn't exist (MCP runs headless).
     const daemon = getDaemon();
     daemon.configure({ kbRoot: getKbRoot() });
@@ -254,100 +254,100 @@ async function searchViaWeb(
   const body: Record<string, unknown> = { query, top_k: topK };
   if (space) body.space = space;
   if (pathPrefix) body.path_prefix = pathPrefix;
-  const r = await fetch(`${WEB_BASE}/api/library/search`, {
+  const r = await fetch(`${WEB_BASE}/api/kb/search`, {
     method: 'POST',
     headers: webHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`web /api/library/search failed: ${r.status}`);
+  if (!r.ok) throw new Error(`web /api/kb/search failed: ${r.status}`);
   const j = await r.json() as { hits: unknown[] };
   return j.hits;
 }
 
 async function statusViaWeb(space: string | undefined): Promise<unknown> {
-  const url = space ? `${WEB_BASE}/api/library/index-status?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/library/index-status`;
+  const url = space ? `${WEB_BASE}/api/kb/index-status?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/kb/index-status`;
   const r = await fetch(url);
-  if (!r.ok) throw new Error(`web /api/library/index-status failed: ${r.status}`);
+  if (!r.ok) throw new Error(`web /api/kb/index-status failed: ${r.status}`);
   return r.json();
 }
 
 async function listFilesViaWeb(space: string | undefined): Promise<string[]> {
-  const url = space ? `${WEB_BASE}/api/library/files?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/library/files`;
+  const url = space ? `${WEB_BASE}/api/kb/files?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/kb/files`;
   const r = await fetch(url);
-  if (!r.ok) throw new Error(`web /api/library/files failed: ${r.status}`);
+  if (!r.ok) throw new Error(`web /api/kb/files failed: ${r.status}`);
   const j = await r.json() as { files: string[] };
   return j.files;
 }
 
-async function libraryInfoViaWeb(): Promise<LibraryInfo> {
-  const r = await fetch(`${WEB_BASE}/api/library/info`);
-  if (!r.ok) throw new Error(`web /api/library/info failed: ${r.status}`);
-  return r.json() as Promise<LibraryInfo>;
+async function kbInfoViaWeb(): Promise<KbInfo> {
+  const r = await fetch(`${WEB_BASE}/api/kb/info`);
+  if (!r.ok) throw new Error(`web /api/kb/info failed: ${r.status}`);
+  return r.json() as Promise<KbInfo>;
 }
 
 async function spaceInfoViaWeb(space: string): Promise<SpaceInfoFull> {
-  const r = await fetch(`${WEB_BASE}/api/library/space-info?space=${encodeURIComponent(space)}`);
-  if (!r.ok) throw new Error(`web /api/library/space-info failed: ${r.status}`);
+  const r = await fetch(`${WEB_BASE}/api/kb/space-info?space=${encodeURIComponent(space)}`);
+  if (!r.ok) throw new Error(`web /api/kb/space-info failed: ${r.status}`);
   return r.json() as Promise<SpaceInfoFull>;
 }
 
 async function setFileMetadataViaWeb(kbRel: string, metadata: FileMetadata): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/library/file-metadata`, {
+  const r = await fetch(`${WEB_BASE}/api/kb/file-metadata`, {
     method: 'POST',
     headers: webHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ path: kbRel, metadata }),
   });
   if (!r.ok) {
     const j = await r.json().catch(() => ({})) as { error?: string };
-    throw new Error(j.error ?? `web /api/library/file-metadata failed: ${r.status}`);
+    throw new Error(j.error ?? `web /api/kb/file-metadata failed: ${r.status}`);
   }
 }
 
-async function updateLibraryOverviewViaWeb(content: string): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/library/overview`, {
+async function updateKbOverviewViaWeb(content: string): Promise<void> {
+  const r = await fetch(`${WEB_BASE}/api/kb/overview`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ content }),
   });
-  if (!r.ok) throw new Error(`web /api/library/overview failed: ${r.status}`);
+  if (!r.ok) throw new Error(`web /api/kb/overview failed: ${r.status}`);
 }
 
 async function getFileViaWeb(kbRel: string): Promise<string | null> {
-  const r = await fetch(`${WEB_BASE}/api/library/file/${encodeKbPath(kbRel)}`);
+  const r = await fetch(`${WEB_BASE}/api/kb/file/${encodeKbPath(kbRel)}`);
   if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`web /api/library/file/${kbRel} failed: ${r.status}`);
+  if (!r.ok) throw new Error(`web /api/kb/file/${kbRel} failed: ${r.status}`);
   const j = await r.json() as { content: string };
   return j.content;
 }
 
 async function writeFileViaWeb(kbRel: string, content: string, overwrite: boolean): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/library/file/${encodeKbPath(kbRel)}`, {
+  const r = await fetch(`${WEB_BASE}/api/kb/file/${encodeKbPath(kbRel)}`, {
     method: 'PUT',
     headers: webHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ content, overwrite }),
   });
   if (r.status === 409) throw new Error(`file exists: ${kbRel} (pass overwrite=true to replace)`);
-  if (!r.ok) throw new Error(`web PUT /api/library/file/${kbRel} failed: ${r.status}`);
+  if (!r.ok) throw new Error(`web PUT /api/kb/file/${kbRel} failed: ${r.status}`);
 }
 
 async function deleteFileViaWeb(kbRel: string): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/library/file/${encodeKbPath(kbRel)}`, {
+  const r = await fetch(`${WEB_BASE}/api/kb/file/${encodeKbPath(kbRel)}`, {
     method: 'DELETE',
     headers: webHeaders(),
   });
   if (r.status === 404) throw new Error(`file not found: ${kbRel}`);
-  if (!r.ok) throw new Error(`web DELETE /api/library/file/${kbRel} failed: ${r.status}`);
+  if (!r.ok) throw new Error(`web DELETE /api/kb/file/${kbRel} failed: ${r.status}`);
 }
 
 async function renameFileViaWeb(oldRel: string, newRel: string): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/library/file/${encodeKbPath(oldRel)}`, {
+  const r = await fetch(`${WEB_BASE}/api/kb/file/${encodeKbPath(oldRel)}`, {
     method: 'PATCH',
     headers: webHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ new_path: newRel }),
   });
   if (r.status === 404) throw new Error(`file not found: ${oldRel}`);
   if (r.status === 409) throw new Error(`target exists: ${newRel}`);
-  if (!r.ok) throw new Error(`web PATCH /api/library/file/${oldRel} failed: ${r.status}`);
+  if (!r.ok) throw new Error(`web PATCH /api/kb/file/${oldRel} failed: ${r.status}`);
 }
 
 async function syncViaWeb(space: string | undefined): Promise<unknown> {
@@ -361,8 +361,8 @@ async function recentFilesViaWeb(space: string | undefined, limit: number): Prom
   const qs = new URLSearchParams();
   if (space) qs.set('space', space);
   qs.set('limit', String(limit));
-  const r = await fetch(`${WEB_BASE}/api/library/recent-files?${qs.toString()}`);
-  if (!r.ok) throw new Error(`web /api/library/recent-files failed: ${r.status}`);
+  const r = await fetch(`${WEB_BASE}/api/kb/recent-files?${qs.toString()}`);
+  if (!r.ok) throw new Error(`web /api/kb/recent-files failed: ${r.status}`);
   const j = await r.json() as { files: unknown[] };
   return j.files;
 }
@@ -406,7 +406,7 @@ const BUILTIN_TOOLS = [
       name: 'search_kb',
       description:
         'Hybrid (vector + full-text) search over the local Markdown / HTML knowledge base. ' +
-        'Searches the **whole library** by default — every space under ~/Documents/StashBase/ ' +
+        'Searches the **whole knowledge base** by default — every space under ~/Documents/StashBase/ ' +
         '— and scopes to one space when `space` is provided (e.g. "cs183b" or "work/research"). ' +
         'For finer control, `path_prefix` restricts hits to chunks whose kbRoot-relative source ' +
         'starts with that prefix (e.g. "cs183b/transcripts/" to search only lecture transcripts). ' +
@@ -421,7 +421,7 @@ const BUILTIN_TOOLS = [
             type: 'string',
             description:
               'Optional space name (kbRoot-relative path of a folder under ~/Documents/StashBase/, ' +
-              'e.g. "cs183b"). Omit to search the whole library.',
+              'e.g. "cs183b"). Omit to search the whole knowledge base.',
           },
           path_prefix: {
             type: 'string',
@@ -444,14 +444,14 @@ const BUILTIN_TOOLS = [
       name: 'list_files',
       description:
         'List every indexed file in the knowledge base (paths only — for content, use ' +
-        '`get_file`). Defaults to the whole library; pass `space` to scope. Returns ' +
+        '`get_file`). Defaults to the whole knowledge base; pass `space` to scope. Returns ' +
         'kbRoot-relative POSIX paths sorted alphabetically.',
       inputSchema: {
         type: 'object',
         properties: {
           space: {
             type: 'string',
-            description: 'Optional space name; omit to list across the whole library.',
+            description: 'Optional space name; omit to list across the whole knowledge base.',
           },
         },
       },
@@ -476,9 +476,9 @@ const BUILTIN_TOOLS = [
       },
     },
     {
-      name: 'library_info',
+      name: 'kb_info',
       description:
-        'Get a one-shot map of the StashBase library: a free-form ' +
+        'Get a one-shot map of the StashBase knowledge base: a free-form ' +
         '`overview` (the contents of `<kbRoot>/.stashbase/space-metadata.md`, ' +
         'an agent-maintained markdown 目录 that should describe what each ' +
         'space contains) plus structured facts per space (name, ' +
@@ -493,7 +493,7 @@ const BUILTIN_TOOLS = [
       name: 'space_info',
       description:
         'Structured facts about ONE space (provider, file count, sample files + headings) ' +
-        'plus that space\'s section of the library 目录. Use after `library_info` to dig ' +
+        'plus that space\'s section of the KB 目录. Use after `kb_info` to dig ' +
         'into a specific space before `search_kb`. Returns `{name, provider, file_count, ' +
         'sample_files, sample_headings, rules, overview_section}` — `overview_section` is ' +
         'the `## <space>` slice of the agent-maintained 目录, empty when none exists.',
@@ -513,7 +513,7 @@ const BUILTIN_TOOLS = [
       description:
         'Overwrite the entire `<kbRoot>/.stashbase/space-metadata.md` 目录 ' +
         'with new markdown content. Call this after you have learned ' +
-        'something new about the library (a new space exists, a topic ' +
+        'something new about the knowledge base (a new space exists, a topic ' +
         'in a space turned out to be different from your prior ' +
         'understanding, etc.). Keep it concise — this file is read at ' +
         'the start of every conversation, not searched. Structure ' +
@@ -562,7 +562,7 @@ const BUILTIN_TOOLS = [
       description:
         'Check whether the index has caught up with the files on disk. Returns ' +
         '`{total, indexed, pendingCount, pending, upToDate, snapshotWarning, ' +
-        'recentlyIndexed}` for the **whole library** by default, or for one `space` ' +
+        'recentlyIndexed}` for the **whole knowledge base** by default, or for one `space` ' +
         'when scoped. `pending` is the full list of kbRoot-relative paths still ' +
         'waiting to be indexed. `recentlyIndexed` is the top-10 indexed files ' +
         'sorted by on-disk mtime — useful for "did my recent edits get embedded ' +
@@ -574,7 +574,7 @@ const BUILTIN_TOOLS = [
         properties: {
           space: {
             type: 'string',
-            description: 'Optional space name; omit to check the whole library.',
+            description: 'Optional space name; omit to check the whole knowledge base.',
           },
         },
       },
@@ -691,7 +691,7 @@ const BUILTIN_TOOLS = [
     {
       name: 'recent_files',
       description:
-        'List indexable files (markdown / HTML) in the library sorted by on-disk mtime, ' +
+        'List indexable files (markdown / HTML) in the knowledge base sorted by on-disk mtime, ' +
         'most recently modified first. Cheap fs walk — no daemon involved. Use to answer ' +
         '"what did the user / I just touch?" or to prime the agent\'s context with the ' +
         'most relevant recent material. Each entry is `{path, mtime_ms}` with `path` ' +
@@ -701,7 +701,7 @@ const BUILTIN_TOOLS = [
         properties: {
           space: {
             type: 'string',
-            description: 'Optional space name; omit to walk the whole library.',
+            description: 'Optional space name; omit to walk the whole knowledge base.',
           },
           limit: {
             type: 'integer',
@@ -786,16 +786,16 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     };
   }
 
-  if (req.params.name === 'library_info') {
+  if (req.params.name === 'kb_info') {
     const info = await tryWebElseEmbedded(
-      'library_info',
-      () => libraryInfoViaWeb(),
+      'kb_info',
+      () => kbInfoViaWeb(),
       async () => {
         // Embedded path needs the daemon up + spaces bound so the
         // per-space file counts in the info payload are accurate.
         const { ready } = getEmbedded();
         await ready;
-        return getLibraryInfo();
+        return getKbInfo();
       },
     );
     return {
@@ -826,8 +826,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (!content) throw new Error('`content` is required');
     await tryWebElseEmbedded(
       'update_space_metadata',
-      () => updateLibraryOverviewViaWeb(content),
-      async () => { setLibraryOverview(content); },
+      () => updateKbOverviewViaWeb(content),
+      async () => { setKbOverview(content); },
     );
     return {
       content: [{ type: 'text', text: JSON.stringify({ ok: true }, null, 2) }],
@@ -998,7 +998,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'update_index') {
     // No-scope = reconcile every known space — matches the design
     // contract that an external agent can ship "update everything"
-    // without knowing the library layout. Each space runs through
+    // without knowing the knowledge-base layout. Each space runs through
     // /api/sync (web path) or syncIndex (embedded path) independently
     // so a failure in one doesn't poison the others; failures land in
     // each sub-result's `failed` field, not a top-level error.

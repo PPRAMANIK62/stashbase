@@ -10,7 +10,7 @@ import {
 import { useApp } from '../store/AppContext';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
-import { LibraryPanel } from './LibraryPanel';
+import { KbPanel } from './KbPanel';
 import { ModalShell } from './ModalShell';
 import { Outline } from './Outline';
 import { SearchPanel } from './SearchPanel';
@@ -28,7 +28,7 @@ interface ElectronBridge {
  *   - Files   → SnapshotWarning, space header, file tree, outline
  *   - Search  → search input + ≈/= toggle + result list (see
  *               `SearchPanel.tsx`)
- *   - Library → KB-root file list (STASHBASE.md + future root docs)
+ *   - kb → KB-root file list (STASHBASE.md + future root docs)
  *
  * Each panel keeps its own state when hidden — flipping back doesn't
  * blow away tree expansion or the active query.
@@ -40,7 +40,7 @@ export function Sidebar() {
       <ActivityBar />
       <div className="sidebar-panel">
         {state.activeSidebarView === 'search' ? <SearchPanel />
-          : state.activeSidebarView === 'library' ? <LibraryPanel />
+          : state.activeSidebarView === 'kb' ? <KbPanel />
           : <FilesPanel />}
       </div>
     </aside>
@@ -185,7 +185,7 @@ function SpaceMenu() {
     try {
       if (modal.kind === 'new') {
         setSpaces((currentSpaces) => currentSpaces.includes(name) ? currentSpaces : [...currentSpaces, name].sort());
-        await actions.openSpaceByName(name);
+        await actions.openSpaceByName(name, { create: true });
       } else if (modal.kind === 'rename') {
         setSpaces((currentSpaces) => currentSpaces.map((v) => (v === current ? name : v)).sort());
         await api.renameSpace(current, name);
@@ -408,7 +408,7 @@ function NewNoteButton() {
 
 /** One-time banner shown above the file tree when the active space's
  *  most recent snapshot import skipped chunks because their provider
- *  key didn't match the library's current embedder. Most users will
+ *  key didn't match the knowledge base's current embedder. Most users will
  *  see this exactly once (after cloning a starter space whose snapshot
  *  was exported with a different embedder). The banner offers a quick
  *  link to the embedder settings + a dismiss button. */
@@ -427,7 +427,7 @@ function SnapshotWarningBanner() {
         </div>
         <div className="snapshot-warning-msg">
           Skipped {w.skipped} chunk{w.skipped === 1 ? '' : 's'} ({detail}).
-          Switch the library's embedder to match — or re-export the snapshot.
+          Switch the knowledge base's embedder to match — or re-export the snapshot.
         </div>
       </div>
       <button

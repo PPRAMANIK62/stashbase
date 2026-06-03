@@ -1,8 +1,7 @@
 /**
- * Confirmation for removing the global OpenAI key. If the library is
- * still configured as `openai`, embed / search calls will start
- * failing until the user adds a key back or switches the provider to
- * Local. Existing vectors stay valid.
+ * Confirmation for removing the global OpenAI key. V1 is OpenAI-only,
+ * so without a key indexing and search stop until the user adds one
+ * back. The existing index is left untouched — nothing is deleted.
  */
 import { useState } from 'react';
 import { errorMessage } from '../../api';
@@ -31,9 +30,8 @@ export function RemoveKeyModal({
     <ModalShell onCancel={onCancel}>
       <h3>Remove API key?</h3>
       <p className="modal-hint">
-        If the library is still set to OpenAI, embed / search will fail
-        until you add a key back or switch to Local. Existing vectors
-        are kept as-is.
+        Indexing and search stop until you add a key back. Your existing
+        index is kept — nothing is deleted.
       </p>
       {error && <div className="modal-error">{error}</div>}
       <div className="modal-actions">

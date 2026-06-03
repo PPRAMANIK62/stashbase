@@ -1481,140 +1481,21 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 11.5px;
       color: var(--accent);
+      white-space: nowrap;
     }
 
-    /* Radio-style list (used by the Capture panel). Each row is
-     * button-shaped, full-width, with the check rendered on the
-     * right for the current item. */
-    .settings-radio-list {
-      display: flex;
-      flex-direction: column;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    .settings-radio-row {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 14px;
-      background: transparent;
-      border: 0;
-      cursor: pointer;
-      font: inherit;
-      color: var(--fg);
-      text-align: left;
-    }
-
-    .settings-radio-row + .settings-radio-row {
-      border-top: 1px solid var(--border);
-    }
-
-    .settings-radio-row:hover {
-      background: var(--hover);
-    }
-
-    .settings-radio-row.current {
-      background: rgba(8, 145, 178, 0.05);
-    }
-
-    .settings-radio-text {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
-
-    .settings-radio-name {
-      font-size: 13px;
-      font-weight: 500;
-    }
-
-    .settings-radio-detail {
-      font-size: 11.5px;
-      color: var(--muted);
-      line-height: 1.4;
-    }
-
-    .settings-radio-check {
-      width: 14px;
-      height: 14px;
-      color: var(--accent);
-      flex-shrink: 0;
-    }
-
-    /* Chat agent picker: a compact card row that replaces the stacked
-     * radio list — a binary / few-way choice reads better side by side.
-     * Robust to a third option later (cards just wrap). */
-    .agent-choice-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .agent-choice {
-      flex: 1 1 150px;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      padding: 12px 14px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: #fff;
-      cursor: pointer;
-      text-align: left;
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-      transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
-    }
-
-    .agent-choice:hover {
-      border-color: #b9bdc4;
-      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
-    }
-
-    .agent-choice.current {
-      border-color: var(--accent);
-      background: rgba(8, 145, 178, 0.05);
-    }
-
-    .agent-choice-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .agent-choice-name {
-      font-size: 13.5px;
-      font-weight: 600;
-      color: var(--fg);
-    }
-
-    .agent-choice-check {
-      width: 15px;
-      height: 15px;
-      color: var(--accent);
-      flex-shrink: 0;
-    }
-
-    .agent-choice-vendor {
-      font-size: 11.5px;
-      color: var(--muted);
-    }
-
-    .agent-choice-uninstall {
-      align-self: flex-start;
-      margin-top: 6px;
-    }
 
     .settings-actions-row {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+    }
+
+    /* A hint that trails *below* the action row (secondary detail —
+     * privacy note, storage location, …). Sits at the bottom. */
+    .settings-hint-foot {
+      margin-top: 14px;
+      margin-bottom: 0;
     }
 
     /* KB-root migration: per-conflict resolver. One row per colliding
@@ -1687,74 +1568,12 @@
       gap: 10px;
     }
 
-    .capture-permission-card {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px;
-      background: #fff;
-    }
+    /* Screen-recording status — a coloured, bold state word leading an
+     * otherwise-muted hint line (no heavy card; matches the flat style
+     * of the other settings tabs). */
+    .capture-state-ok { color: var(--accent); font-weight: 600; }
+    .capture-state-warn { color: #b45309; font-weight: 600; }
 
-    .capture-permission-card.ok {
-      border-color: rgba(4, 120, 87, 0.28);
-      background: rgba(4, 120, 87, 0.04);
-    }
-
-    .capture-permission-card.needs-attention {
-      border-color: rgba(217, 119, 6, 0.28);
-      background: rgba(217, 119, 6, 0.05);
-    }
-
-    .capture-permission-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--fg);
-      margin-bottom: 2px;
-    }
-
-    .capture-permission-detail {
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.45;
-    }
-
-    .capture-shortcut-list {
-      display: flex;
-      flex-direction: column;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-      background: #fff;
-      margin-bottom: 10px;
-    }
-
-    .capture-shortcut-row {
-      display: grid;
-      grid-template-columns: minmax(140px, 1fr) minmax(210px, 1.3fr) auto;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-    }
-
-    .capture-shortcut-row + .capture-shortcut-row {
-      border-top: 1px solid var(--border);
-    }
-
-    .capture-shortcut-label {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
-    }
-
-    .capture-shortcut-input {
-      height: 32px;
-    }
-
-    .settings-copy,
     .settings-note,
     .settings-ok,
     .settings-error {
@@ -1763,7 +1582,6 @@
       margin: 0;
     }
 
-    .settings-copy,
     .settings-note {
       color: var(--muted);
     }
@@ -1803,6 +1621,7 @@
       font-size: 12px;
       cursor: pointer;
       white-space: nowrap;
+      transition: background 0.12s, border-color 0.12s, filter 0.12s;
     }
 
     .settings-primary-btn {
@@ -1810,11 +1629,29 @@
       background: var(--accent);
       color: #fff;
     }
+    .settings-primary-btn:hover:not(:disabled) {
+      filter: brightness(0.96);
+    }
 
     .settings-secondary-btn {
       border: 1px solid var(--border);
       background: #fff;
       color: var(--fg);
+    }
+    .settings-secondary-btn:hover:not(:disabled) {
+      background: var(--hover);
+      border-color: #b9bdc4;
+    }
+
+    /* Destructive secondary (e.g. Remove key) — red text/border, red
+     * wash on hover. Matches the accent/red palette used elsewhere. */
+    .settings-secondary-btn.danger {
+      color: #b91c1c;
+      border-color: rgba(220, 38, 38, 0.3);
+    }
+    .settings-secondary-btn.danger:hover:not(:disabled) {
+      background: rgba(220, 38, 38, 0.06);
+      border-color: rgba(220, 38, 38, 0.45);
     }
 
     .settings-primary-btn:disabled,

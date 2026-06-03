@@ -1,4 +1,4 @@
-import { FilesViewIcon, LibraryIcon, SearchIcon } from '../icons';
+import { FilesViewIcon, KbIcon, SearchIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 
 /**
@@ -7,7 +7,7 @@ import { useApp } from '../store/AppContext';
  *
  *   - files   → space-scoped tree + outline
  *   - search  → search input + result list
- *   - library → KB-root file list (currently STASHBASE.md only)
+ *   - kb → KB-root file list (currently STASHBASE.md only)
  *
  * Exactly one icon is "active" at a time — the active state is bound
  * to `state.activeSidebarView`, NOT to whatever happens to be focused
@@ -42,19 +42,19 @@ export function ActivityBar() {
         <SearchIcon />
       </ActivityIcon>
       <ActivityIcon
-        active={state.activeSidebarView === 'library'}
-        controls="sidebar-panel-library"
-        label="Library (STASHBASE.md)"
+        active={state.activeSidebarView === 'kb'}
+        controls="sidebar-panel-kb"
+        label="Knowledge base (STASHBASE.md)"
         onClick={() => {
-          dispatch({ type: 'SIDEBAR_VIEW', view: 'library' });
+          dispatch({ type: 'SIDEBAR_VIEW', view: 'kb' });
           // Auto-open the KB-root overview in the main pane so the
           // user lands on content immediately, not on an empty
-          // selection. The LibraryPanel row also reflects this as
+          // selection. The KbPanel row also reflects this as
           // its "selected" highlight.
-          void actions.openLibraryOverview();
+          void actions.openKbOverview();
         }}
       >
-        <LibraryIcon />
+        <KbIcon />
       </ActivityIcon>
     </nav>
   );

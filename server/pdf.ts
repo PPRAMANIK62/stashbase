@@ -94,7 +94,7 @@ export function derivedPathsForPdf(pdfAbsPath: string): { notePath: string; bund
  *  app-derived note (which they can't open anyway because it's
  *  hidden in the sidebar). `baseAbs` is the root the relative path
  *  resolves against (space root for /api/search, kb root for
- *  /api/library/search). */
+ *  /api/kb/search). */
 export function pdfPathForDerivedRel(noteRel: string, baseAbs: string): string | null {
   const m = noteRel.match(/^(.*\/)?\.([^/]+)\.(md|markdown|html|htm)$/i);
   if (!m) return null;

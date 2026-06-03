@@ -46,8 +46,8 @@ export function KeyModal({
       <h3>{mode === 'change' ? 'Change API key' : 'OpenAI API key'}</h3>
       <p className="modal-hint">
         {mode === 'change'
-          ? 'Replaces the stored OpenAI key. Existing vectors stay valid — no re-embed.'
-          : <>Used for embedding only. Stored in <code>~/.stashbase/config.json</code> with owner-only permissions.</>}
+          ? 'Replaces your OpenAI key. The embedder is unchanged, so the existing index stays valid — no re-indexing.'
+          : 'Used only for embeddings — never for chat or completions.'}
       </p>
       <input
         ref={inputRef}

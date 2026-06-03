@@ -49,10 +49,10 @@ export interface OpenFile {
    *  PdfPreview dispatches OUTLINE_HEADINGS once pdfjs `getOutline()`
    *  returns. */
   headings: Heading[];
-  /** `'library'` for the `<kbRoot>/STASHBASE.md` special tab — read-only,
+  /** `'kb'` for the `<kbRoot>/STASHBASE.md` special tab — read-only,
    *  no edit button, no save path. Default (omitted) means a regular
    *  per-space file. */
-  kind?: 'space' | 'library';
+  kind?: 'space' | 'kb';
 }
 
 export interface CtxMenu {
@@ -232,7 +232,7 @@ export interface State {
    *  input + result list (input visible only in this view).
    *  Persisted to localStorage via the AppProvider so the user lands
    *  back where they left off. */
-  activeSidebarView: 'files' | 'search' | 'library';
+  activeSidebarView: 'files' | 'search' | 'kb';
   /** Sidebar search input. Empty = blank search panel; non-empty =
    *  run search in whichever mode `searchMode` selects. */
   filterQuery: string;
@@ -407,7 +407,7 @@ export type Action =
   | { type: 'SEARCH_KEYWORD'; result: KeywordSearchResult }
   | { type: 'SEARCH_CLEAR' }
   | { type: 'SEARCH_MODE'; mode: 'semantic' | 'keyword' }
-  | { type: 'SIDEBAR_VIEW'; view: 'files' | 'search' | 'library' }
+  | { type: 'SIDEBAR_VIEW'; view: 'files' | 'search' | 'kb' }
   | { type: 'SEARCH_CASE_STRICT'; strict: boolean }
   | { type: 'SEARCH_WHOLE_WORD'; on: boolean }
   | { type: 'SNAPSHOT_WARNING'; warning: SnapshotWarning | null }
@@ -514,7 +514,7 @@ export function reducer(s: State, a: Action): State {
         format: a.body.format,
         content: a.body.content,
         headings: a.body.headings ?? [],
-        // Carried through for the library-overview tab so MainPane
+        // Carried through for the kb-overview tab so MainPane
         // can hide the edit button and the save path can skip it.
         ...((a.body as any).kind ? { kind: (a.body as any).kind } : {}),
       };

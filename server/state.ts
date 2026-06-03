@@ -190,7 +190,7 @@ async function maybeImportSnapshot(spaceAbs: string, spaceName: string): Promise
       log.warn(
         `snapshot ${spaceName}: embedder mismatch (snapshot ${JSON.stringify(res.got)} ` +
           `vs current ${JSON.stringify(res.expected)}) — re-embedding. ` +
-          `Switch the library's embedder to match, or re-export.`,
+          `Switch the knowledge base's embedder to match, or re-export.`,
       );
       const got = res.got ?? meta.embedder ?? {};
       recordSnapshotWarning(spaceName, {

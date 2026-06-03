@@ -65,6 +65,10 @@ export function mount(app: express.Express): void {
     const rawName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     const rawPath = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
     if (!rawName && !rawPath) return res.status(400).json({ error: 'name or path required' });
+    // `create:true` (New-space flow) lets the server mkdir a missing
+    // folder. Open / recent flows omit it, so opening a name whose folder
+    // is gone errors instead of resurrecting an empty dir.
+    const create = req.body?.create === true;
     let target = rawPath;
     if (rawName) {
       const bad = validateSpaceName(rawName);
@@ -72,7 +76,7 @@ export function mount(app: express.Express): void {
       target = path.join(getKbRoot(), rawName);
     }
     try {
-      setCurrentSpace(target);
+      setCurrentSpace(target, { create });
       const spaceRoot = getCurrentSpace()!;
       res.json({ current: { path: spaceRoot, name: getSpaceName() } });
     } catch (err: unknown) {
@@ -80,7 +84,7 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Library root: the folder all spaces must live under as direct
+  // KB root: the folder all spaces must live under as direct
   // children. Surfaced to the renderer so it can render the home-
   // relative form (`~/Documents/StashBase`) in copy.
   app.get('/api/kb-root', (_req, res) => {

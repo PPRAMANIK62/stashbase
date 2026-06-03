@@ -57,6 +57,9 @@ export interface FolderImportPreview {
   requiresConfirmation: boolean;
   warnings: string[];
   hasSnapshot: boolean;
+  /** A space with this name already exists — Import refuses (won't merge);
+   *  the modal surfaces it and disables the import button. */
+  nameTaken: boolean;
 }
 
 export interface FolderImportResult {
@@ -109,7 +112,7 @@ export interface IndexStatus {
    *  for non-indexable files / empty dirs that don't move `pending`. */
   treeVersion?: number;
   /** Non-null when this space's most recent snapshot import skipped
-   *  chunks because their provider key didn't match the library's
+   *  chunks because their provider key didn't match the knowledge base's
    *  current embedder. The renderer surfaces this as a dismissible
    *  banner with a link to switch embedders. */
   snapshotWarning?: SnapshotWarning | null;
@@ -299,10 +302,13 @@ export const api = {
   // Space ---------------------------------------------------------
   getSpace: () => getJson<SpaceState>('/api/space'),
   openSpace: (path: string) => send<SpaceState>('POST', '/api/space', { path }),
-  /** Open a space by name (single segment under the library root).
+  /** Open a space by name (single segment under the KB root).
    *  Preferred over `openSpace(path)` for new flows now that spaces
-   *  are flat. */
-  openSpaceByName: (name: string) => send<SpaceState>('POST', '/api/space', { name }),
+   *  are flat. `create:true` makes the server mkdir a missing folder
+   *  (New-space flow); without it, opening a non-existent name errors
+   *  rather than resurrecting a since-deleted space as an empty dir. */
+  openSpaceByName: (name: string, opts?: { create?: boolean }) =>
+    send<SpaceState>('POST', '/api/space', { name, create: opts?.create }),
   /** Absolute path of the KB root. All spaces live under it as direct
    *  children; the renderer uses this to display the home-relative
    *  form (`~/Documents/StashBase`) in copy. */
@@ -350,11 +356,11 @@ export const api = {
     send<{ ok: true }>('PUT', '/api/spaces/' + encodeURIComponent(name) + '/rules', { content }),
   getResolvedRules: () => getJson<{ space: string | null; content: string }>('/api/rules'),
   /** Read `<kbRoot>/STASHBASE.md` — the KB-level rules book. Powers
-   *  the LibraryPanel's "open KB rules" row. */
-  getKbRules: () => getJson<{ content: string }>('/api/library/rules'),
+   *  the KbPanel's "open KB rules" row. */
+  getKbRules: () => getJson<{ content: string }>('/api/kb/rules'),
   /** Read `<kbRoot>/.stashbase/space-metadata.md` — the agent-maintained
-   *  library 目录. Powers the LibraryPanel's overview row. */
-  getLibraryOverview: () => getJson<{ content: string }>('/api/library/overview'),
+   *  KB 目录. Powers the KbPanel's overview row. */
+  getKbOverview: () => getJson<{ content: string }>('/api/kb/overview'),
   /** Copy a local folder into kbRoot as a new space. `source` is an
    *  absolute path; the renderer obtains it from
    *  `window.electron.openFolderDialog` (Electron-only). `name`
@@ -516,7 +522,7 @@ export const api = {
   /** Rotate the global OpenAI key without touching the provider choice. */
   changeApiKey: (openaiKey: string) =>
     send<{ hasKey: true }>('PUT', '/api/embedder/key', { openaiKey }),
-  /** Clear the global OpenAI key. If the library is on OpenAI, embed /
+  /** Clear the global OpenAI key. If the knowledge base is on OpenAI, embed /
    *  search will fail until a key is added back or the provider is
    *  switched to Local. */
   removeApiKey: () =>

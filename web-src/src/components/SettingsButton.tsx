@@ -1,6 +1,6 @@
 /**
  * Chrome-row gear button. One click opens the unified Settings modal
- * (Library / Capture / Embedding / MCP). The modal itself lives in
+ * (Storage / Capture / Embedding / MCP). The modal itself lives in
  * `SettingsModal.tsx` and is mounted via `<SettingsPortal />` at the
  * app root.
  */

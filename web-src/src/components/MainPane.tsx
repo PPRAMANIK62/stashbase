@@ -119,7 +119,7 @@ export function MainPane() {
         </div>
       )}
       <FindBar />
-      {cur && cur.kind !== 'library' && cur.format !== 'pdf' && (
+      {cur && cur.kind !== 'kb' && cur.format !== 'pdf' && (
         <div className={'main-floating-actions' + (editMode ? ' editing' : '')}>
           {editMode && saveStatus.text && (
             <span className={'save-status' + (saveStatus.cls ? ' ' + saveStatus.cls : '')}>

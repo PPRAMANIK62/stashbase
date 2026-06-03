@@ -30,9 +30,27 @@ function prettifyHome(abs: string, home: string): string {
   return abs;
 }
 
+/** Client-side mirror of the server's `validateSpaceName` — same
+ *  cross-platform-safe rules (no slashes, no leading/trailing dot, none
+ *  of `< > : " | ? *` or control chars), for instant feedback without a
+ *  round-trip. The server re-validates; this just avoids the obvious
+ *  mistakes. Returns an error message, or null when the name is OK. */
+function spaceNameError(n: string): string | null {
+  if (!n) return 'Name required';
+  if (n === '.' || n === '..' || n.startsWith('.') || n.endsWith('.')) {
+    return 'Name cannot start or end with "."';
+  }
+  // eslint-disable-next-line no-control-regex
+  if (/[/\\<>:"|?*\u0000-\u001f]/.test(n)) {
+    return 'Name cannot contain / \\ < > : " | ? * or control characters';
+  }
+  if (n.length > 64) return 'Name too long (max 64 chars)';
+  return null;
+}
+
 /**
  * Landing overlay shown when no space is open (or after the user
- * explicitly goes home). Spaces are flat under the library root
+ * explicitly goes home). Spaces are flat under the KB root
  * (`~/Documents/StashBase/` by default) and are identified by name.
  *
  *   - **New space**: text input for a name; server creates the folder
@@ -42,8 +60,9 @@ function prettifyHome(abs: string, home: string): string {
  *   - **Import folder**: native picker to bring an existing folder
  *     (e.g. a repo you cloned yourself) in as a space.
  *
- * No folder picker — names alone make the kbRoot invariant trivial to
- * enforce and skip a system dialog round-trip.
+ * New / Open work by name (no system dialog — a single-segment name
+ * makes the kbRoot invariant trivial to enforce); Import folder is the
+ * exception and uses the native folder picker for a disk path.
  */
 export function Welcome() {
   const { state, actions, dispatch } = useApp();
@@ -88,7 +107,7 @@ export function Welcome() {
             className="welcome-action"
             type="button"
             onClick={() => setOpenOpen(true)}
-            title="Open an existing space in your library"
+            title="Open an existing space in your knowledge base"
           >
             <span className="welcome-action-icon">
               <FolderIcon />
@@ -99,7 +118,7 @@ export function Welcome() {
             className="welcome-action"
             type="button"
             onClick={() => setNewOpen(true)}
-            title="Create a new space in your library"
+            title="Create a new space in your knowledge base"
           >
             <span className="welcome-action-icon">
               <NewFolderIcon />
@@ -148,7 +167,7 @@ export function Welcome() {
                     type="button"
                     className="welcome-recent-pill"
                     title={name}
-                    onClick={() => { void actions.openSpace(r.path); }}
+                    onClick={() => { void actions.openSpace(r.path).catch((e) => dispatch({ type: 'WELCOME_ERROR', error: errorMessage(e) })); }}
                   >
                     {name}
                   </button>
@@ -311,7 +330,7 @@ function ImportFolderButton({ onPicked }: { onPicked: (path: string) => void }) 
       type="button"
       onClick={onClick}
       disabled={busy}
-      title="Copy an existing folder on your disk into the library as a new space"
+      title="Copy an existing folder on your disk into the knowledge base as a new space"
     >
       <span className="welcome-action-icon">
         <FolderIcon />
@@ -353,6 +372,11 @@ function ImportFolderModal({
   // to show the cleanup notice and let the user open it deliberately.
   const [doneName, setDoneName] = useState<string | null>(null);
   const previewSeq = useRef(0);
+  // Debounce re-previews while the user types the name. A preview scans
+  // the source tree (up to the 50k cap); firing one per keystroke would
+  // re-scan the whole folder on every character. Only destination /
+  // collision depend on the name — debounce keeps it cheap.
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -369,35 +393,40 @@ function ImportFolderModal({
         if (!cancelled && seq === previewSeq.current) setError(errorMessage(err));
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    };
   }, [source]);
 
-  async function refreshName(nextName: string) {
+  function refreshName(nextName: string) {
     setName(nextName);
-    const seq = ++previewSeq.current;
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
     if (!nextName.trim()) {
       setPreview(null);
       setError(null);
       return;
     }
-    try {
-      const p = await api.previewImportFolder(source, nextName);
-      if (seq !== previewSeq.current) return;
-      setPreview(p);
-      setError(null);
-    } catch (err) {
-      if (seq !== previewSeq.current) return;
-      setError(errorMessage(err));
-    }
+    refreshTimer.current = setTimeout(() => {
+      const seq = ++previewSeq.current;
+      void (async () => {
+        try {
+          const p = await api.previewImportFolder(source, nextName);
+          if (seq !== previewSeq.current) return;
+          setPreview(p);
+          setError(null);
+        } catch (err) {
+          if (seq !== previewSeq.current) return;
+          setError(errorMessage(err));
+        }
+      })();
+    }, 250);
   }
 
   async function submit() {
     const n = name.trim();
-    if (!n) { setError('Name required'); return; }
-    if (n.includes('/') || n.includes('\\') || n.startsWith('.')) {
-      setError('Name cannot contain slashes or start with "."');
-      return;
-    }
+    const nameErr = spaceNameError(n);
+    if (nameErr) { setError(nameErr); return; }
     setBusy(true);
     setError(null);
     try {
@@ -415,8 +444,10 @@ function ImportFolderModal({
         setBusy(false);
         return;
       }
-      onClose();
+      // Open first, THEN close — so a failed open shows the error in this
+      // modal (which stays up) instead of vanishing behind Welcome.
       await actions.openSpaceByName(result.name);
+      onClose();
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);
@@ -427,9 +458,9 @@ function ImportFolderModal({
   const destinationDisplay = preview ? prettifyHome(preview.destination, homeDir) : '';
   const importActionMessage = mode === 'move'
     ? 'The original folder will be removed after the move.'
-    : 'Importing copies this existing folder into your StashBase library.';
+    : 'Importing copies this existing folder into your StashBase knowledge base.';
   const serverWarnings = (preview?.warnings ?? []).filter((w) =>
-    w !== 'Importing copies this existing folder into your StashBase library.' &&
+    w !== 'Importing copies this existing folder into your StashBase knowledge base.' &&
     // Destination is already shown (prettified) above — drop the server's
     // duplicate absolute-path "Destination will be …" line.
     !w.startsWith('Destination will be'),
@@ -474,6 +505,9 @@ function ImportFolderModal({
           </div>
           {preview.exists && mode === 'move' && <div>{importActionMessage}</div>}
           {preview.hasSnapshot && <div>Snapshot found; StashBase will import it when the space opens.</div>}
+          {preview.nameTaken && (
+            <div className="modal-import-warn">A space named “{name.trim()}” already exists — pick another name (Import won’t merge into it).</div>
+          )}
           {serverWarnings.map((w) => <div key={w}>{w}</div>)}
         </div>
       )}
@@ -486,14 +520,14 @@ function ImportFolderModal({
           <button
             type="button"
             className="modal-btn primary"
-            onClick={() => { onClose(); void actions.openSpaceByName(doneName); }}
+            onClick={() => { void actions.openSpaceByName(doneName).then(onClose).catch((e) => setError(errorMessage(e))); }}
           >Open space</button>
         ) : (
           <button
             type="button"
             className="modal-btn primary"
             onClick={() => { void submit(); }}
-            disabled={busy || !preview || !name.trim()}
+            disabled={busy || !preview || !name.trim() || preview.nameTaken}
           >{busy ? 'Importing…' : mode === 'move' ? 'Move into StashBase' : 'Copy into StashBase'}</button>
         )}
       </div>
@@ -522,15 +556,14 @@ function NewSpaceModal({
 
   async function submit() {
     const n = name.trim();
-    if (!n) { setError('Name required'); return; }
-    if (n.includes('/') || n.includes('\\') || n.startsWith('.')) {
-      setError('Name cannot contain slashes or start with "."');
-      return;
-    }
+    const nameErr = spaceNameError(n);
+    if (nameErr) { setError(nameErr); return; }
     setBusy(true);
     setError(null);
     try {
-      await actions.openSpaceByName(n);
+      // create:true — New space mkdir's the folder if missing (and opens
+      // it if a same-named one already exists: create-or-open).
+      await actions.openSpaceByName(n, { create: true });
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -582,7 +615,7 @@ function NewSpaceModal({
 
 /** "Open space" modal: list of direct-child folders under kbRoot,
  *  recently-opened ones first then the rest alphabetically. Includes
- *  everything in the library — folders the user created via Finder
+ *  everything in the knowledge base — folders the user created via Finder
  *  but never opened still show up. Empty state nudges toward
  *  New space / Import folder. */
 function OpenSpaceModal({
@@ -596,10 +629,9 @@ function OpenSpaceModal({
 }) {
   const { actions } = useApp();
   const [names, setNames] = useState<string[] | null>(null);
-  // Re-fetched on mount instead of read from AppContext: `state.recent`
-  // is captured at bootstrap and never refreshed after opens (`goHome`
-  // reuses `stateRef.current.recent`), so it would skew this modal's
-  // ordering after the user has opened any new space.
+  // This modal fetches its own fresh `recent` on mount (below) rather
+  // than reading `state.recent` — it needs the available-space list and
+  // recents together to build its ordering, current as of open time.
   const [recentNames, setRecentNames] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

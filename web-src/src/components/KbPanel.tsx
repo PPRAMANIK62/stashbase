@@ -3,24 +3,24 @@ import { api, errorMessage } from '../api';
 import { useApp } from '../store/AppContext';
 
 /**
- * The "library" sidebar view — a file list scoped to the KB root.
- * Currently surfaces three classes of library-level markdown:
+ * The KB sidebar view — a file list scoped to the KB root.
+ * Currently surfaces three classes of KB-level markdown:
  *
- *   - space-metadata.md   — agent-maintained library 目录 (in .stashbase/)
+ *   - space-metadata.md   — agent-maintained KB 目录 (in .stashbase/)
  *   - STASHBASE.md        — KB-level rules book
  *   - <space>/STASHBASE.md — per-space rules book (one row per known
  *                            space)
  *
  * Clicking a row opens the file in the main pane via the existing
- * library-kind tab path. The row matching whatever is currently
+ * kb-kind tab path. The row matching whatever is currently
  * focused in the main pane gets the selected highlight; tabs dedupe
  * by name, so re-clicking the same row just activates the existing
  * tab.
  */
-export function LibraryPanel() {
+export function KbPanel() {
   const { state, actions } = useApp();
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
-  const activeName = activeTab?.file?.kind === 'library' ? activeTab.file.name : null;
+  const activeName = activeTab?.file?.kind === 'kb' ? activeTab.file.name : null;
 
   const [spaces, setSpaces] = useState<string[]>([]);
   const [spacesError, setSpacesError] = useState<string | null>(null);
@@ -42,20 +42,20 @@ export function LibraryPanel() {
   }, [state.space]);
 
   return (
-    <div className="library-panel" id="sidebar-panel-library" role="tabpanel">
-      <div className="library-panel-head">Knowledge base root</div>
-      <div className="library-file-list">
+    <div className="kb-panel" id="sidebar-panel-kb" role="tabpanel">
+      <div className="kb-panel-head">Knowledge base root</div>
+      <div className="kb-file-list">
         <button
           type="button"
-          className={'library-file-row' + (activeName === 'space-metadata.md' ? ' selected' : '')}
-          onClick={() => { void actions.openLibraryOverview(); }}
-          title="Agent-maintained library 目录 (.stashbase/space-metadata.md)"
+          className={'kb-file-row' + (activeName === 'space-metadata.md' ? ' selected' : '')}
+          onClick={() => { void actions.openKbOverview(); }}
+          title="Agent-maintained KB 目录 (.stashbase/space-metadata.md)"
         >
           space-metadata.md
         </button>
         <button
           type="button"
-          className={'library-file-row' + (activeName === 'STASHBASE.md' ? ' selected' : '')}
+          className={'kb-file-row' + (activeName === 'STASHBASE.md' ? ' selected' : '')}
           onClick={() => { void actions.openKbRules(); }}
           title="KB-level maintenance rules"
         >
@@ -63,13 +63,13 @@ export function LibraryPanel() {
         </button>
       </div>
 
-      <div className="library-panel-head">Per-space rules</div>
-      <div className="library-file-list">
+      <div className="kb-panel-head">Per-space rules</div>
+      <div className="kb-file-list">
         {spacesError && (
-          <div className="library-file-empty">{spacesError}</div>
+          <div className="kb-file-empty">{spacesError}</div>
         )}
         {!spacesError && spaces.length === 0 && (
-          <div className="library-file-empty">No spaces yet</div>
+          <div className="kb-file-empty">No spaces yet</div>
         )}
         {spaces.map((name) => {
           const tabName = `${name}/STASHBASE.md`;
@@ -77,11 +77,11 @@ export function LibraryPanel() {
             <button
               key={name}
               type="button"
-              className={'library-file-row' + (activeName === tabName ? ' selected' : '')}
+              className={'kb-file-row' + (activeName === tabName ? ' selected' : '')}
               onClick={() => { void actions.openSpaceRules(name); }}
               title={`Rules for the "${name}" space`}
             >
-              <span className="library-file-prefix">{name}/</span>
+              <span className="kb-file-prefix">{name}/</span>
               <span>STASHBASE.md</span>
             </button>
           );

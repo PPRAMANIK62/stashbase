@@ -37,7 +37,7 @@ export type FileMetadata = Record<string, unknown>;
 
 /** Space sidecar agent metadata file. */
 const FILE_METADATA_NAME = 'file-metadata.md';
-/** KB-root agent 目录 (kept in sync with `library.ts:FILENAME`). */
+/** KB-root agent 目录 (kept in sync with `kb.ts:FILENAME`). */
 const SPACE_METADATA_NAME = 'space-metadata.md';
 
 /** These agent-maintained metadata files must never enter the index —

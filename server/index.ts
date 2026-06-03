@@ -35,7 +35,7 @@ import {
   needsKbRootPicker,
 } from './space.ts';
 import { bootBindAllSpaces } from './state.ts';
-import { ensureLibraryOverview } from './library.ts';
+import { ensureKbOverview } from './kb.ts';
 import { logger } from './log.ts';
 import { startWatcher, stopWatcher } from './watcher.ts';
 import { indexer } from './state.ts';
@@ -84,7 +84,7 @@ if (kbRootReadyAtBoot) {
   // `<kbRoot>/.stashbase/space-metadata.md`, then seed a placeholder if
   // absent so the agent has something to extend on its first read.
   // Idempotent.
-  ensureLibraryOverview();
+  ensureKbOverview();
   // Configure the daemon with kbRoot + bind every known space found
   // under it so MCP / cross-space search sees them without waiting for
   // the user to open each one. Fire-and-forget — the server starts
@@ -299,7 +299,7 @@ onKbRootChange(async () => {
   killActiveTerminal();
   await indexer.close();
   closeStateDb();
-  ensureLibraryOverview();
+  ensureKbOverview();
   await bootBindAllSpaces();
   startWatcher(indexer);
 });

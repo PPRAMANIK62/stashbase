@@ -20,37 +20,10 @@ interface ElectronBridge {
   configureMcp?: (client: McpClientId) => Promise<McpConfigureResult>;
 }
 
-const MCP_CLIENTS: {
-  id: McpClientId;
-  name: string;
-  detail: string;
-  restart: string;
-}[] = [
-  {
-    id: 'claude-code',
-    name: 'Claude Code',
-    detail: 'Adds @stashbase to Claude Code via ~/.claude.json.',
-    restart: 'Restart Claude Code after connecting.',
-  },
-  {
-    id: 'codex-cli',
-    name: 'Codex CLI',
-    detail: 'Adds stashbase to ~/.codex/config.toml.',
-    restart: 'Restart Codex CLI after connecting.',
-  },
-  {
-    id: 'claude-desktop',
-    name: 'Claude Desktop',
-    detail: 'Adds @stashbase to Claude Desktop config.',
-    restart: 'Restart Claude Desktop after connecting.',
-  },
-];
-
-// Other clients that can't be auto-connected — listed by name only; users
-// paste the config below into whatever each one's MCP settings happen to be.
-const OTHER_CLIENTS = [
-  'ChatGPT', 'Cursor', 'Gemini CLI', 'VS Code', 'Cline',
-  'Windsurf', 'Qwen Code', 'Roo Code', 'Cherry Studio', 'Void',
+const MCP_CLIENTS: { id: McpClientId; name: string }[] = [
+  { id: 'claude-code', name: 'Claude Code' },
+  { id: 'codex-cli', name: 'Codex CLI' },
+  { id: 'claude-desktop', name: 'Claude Desktop' },
 ];
 
 export function McpClientsPanel() {
@@ -125,15 +98,14 @@ export function McpClientsPanel() {
     <div className="settings-section">
       <div className="settings-section-title">MCP clients</div>
       <div className="settings-section-hint">
-        Connect StashBase as <code>@stashbase</code> for the AI tools below.
+        Click Connect to add StashBase to a tool’s MCP config, then restart the tool.
       </div>
       <div className="mcp-client-list">
         {MCP_CLIENTS.map((client) => (
           <div className="mcp-client-row" key={client.id}>
-            <span className="mcp-client-text">
+            <span className="mcp-client-label">
+              <span className={'mcp-status-dot' + (connected[client.id] ? ' on' : '')} />
               <span className="mcp-client-name">{client.name}</span>
-              <span className="mcp-client-detail">{client.detail}</span>
-              <span className="mcp-client-restart">{client.restart}</span>
             </span>
             <button
               type="button"
@@ -157,8 +129,7 @@ export function McpClientsPanel() {
 
       <div className="mcp-other">
         <div className="settings-section-hint">
-          For any other MCP client ({OTHER_CLIENTS.join(', ')}, …), paste this
-          configuration into its MCP settings:
+          For any other AI tool, paste this configuration into its MCP settings:
         </div>
         <div className="mcp-config-preview">
           <div className="mcp-config-preview-head">
