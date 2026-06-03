@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, ApiError, errorMessage } from '../../api';
+import { api, setKbRootConfirming, errorMessage } from '../../api';
 import { useApp } from '../../store/AppContext';
 import { ModalShell } from '../ModalShell';
 
@@ -41,6 +41,10 @@ export function StoragePanel() {
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [migration, setMigration] = useState<Migration | null>(null);
+  /** Errors raised while the migration modal is open — shown *inside* it.
+   *  The panel-level `error` sits behind the modal veil, so a failure
+   *  there would be invisible until the modal closed. */
+  const [migrationError, setMigrationError] = useState<string | null>(null);
 
   useEffect(() => {
     void api.getKbRoot()
@@ -73,20 +77,14 @@ export function StoragePanel() {
 
   /** Switch the root without moving anything. The target may be
    *  non-empty (a different existing knowledge base) — confirm that case. */
-  async function plainSwitch(target: string, confirmNonEmpty = false) {
+  async function plainSwitch(target: string) {
     setBusy(true);
     setError(null);
     setSaved(false);
     try {
-      const r = await api.setKbRoot(target, { confirmNonEmpty });
-      await applySaved(r.path);
+      const r = await setKbRootConfirming(target, actions.confirm);
+      if (r) await applySaved(r.path); // null → user declined the non-empty confirm
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409 && !confirmNonEmpty) {
-        setBusy(false);
-        const ok = await actions.confirm('That directory is not empty. Use it as the root folder anyway?');
-        if (ok) void plainSwitch(target, true);
-        return;
-      }
       setError(errorMessage(err));
     } finally {
       setBusy(false);
@@ -115,6 +113,7 @@ export function StoragePanel() {
     // non-destructive "keep both".
     const resolutions: Record<string, ConflictChoice> = {};
     for (const c of preview.collisions) resolutions[c] = 'rename';
+    setMigrationError(null);
     setMigration({
       step: 'choose',
       target: next,
@@ -133,14 +132,16 @@ export function StoragePanel() {
       return [{ name, action: choice }];
     });
     setBusy(true);
-    setError(null);
+    setMigrationError(null);
     setSaved(false);
     try {
       const r = await api.setKbRoot(m.target, { migrate });
       setMigration(null);
       await applySaved(r.path, r.warnings);
     } catch (err) {
-      setError(errorMessage(err));
+      // Surface inside the modal — it stays open so the user can retry or
+      // adjust their conflict choices without losing them.
+      setMigrationError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -206,7 +207,7 @@ export function StoragePanel() {
                   disabled={busy}
                   onClick={() => {
                     if (migration.collisions.length === 0) void runMigration(migration);
-                    else setMigration({ ...migration, step: 'conflicts' });
+                    else { setMigrationError(null); setMigration({ ...migration, step: 'conflicts' }); }
                   }}
                 >
                   Move them
@@ -259,7 +260,7 @@ export function StoragePanel() {
                 <button
                   type="button"
                   className="modal-btn"
-                  onClick={() => setMigration({ ...migration, step: 'choose' })}
+                  onClick={() => { setMigrationError(null); setMigration({ ...migration, step: 'choose' }); }}
                   disabled={busy}
                 >
                   Back
@@ -275,6 +276,7 @@ export function StoragePanel() {
               </div>
             </>
           )}
+          {migrationError && <div className="modal-error">{migrationError}</div>}
         </ModalShell>
       )}
     </div>

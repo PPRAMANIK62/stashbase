@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   api,
-  ApiError,
+  setKbRootConfirming,
   errorMessage,
   type FolderImportPreview,
   type ImportFolderMode,
@@ -243,22 +243,17 @@ function KbRootPickerModal({
     if (picked) setPath(picked);
   }
 
-  async function submit(confirmNonEmpty = false) {
+  async function submit() {
     const p = path.trim();
     if (!p) { setError('Path required'); return; }
     setBusy(true);
     setError(null);
     try {
-      const r = await api.setKbRoot(p, { confirmNonEmpty });
-      onSaved(r.path);
+      const r = await setKbRootConfirming(p, actions.confirm);
+      if (r) onSaved(r.path); // null → user declined the non-empty confirm
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409 && !confirmNonEmpty) {
-        setBusy(false);
-        const ok = await actions.confirm('That directory is not empty. Use it as the root folder anyway?');
-        if (ok) void submit(true);
-        return;
-      }
       setError(errorMessage(err));
+    } finally {
       setBusy(false);
     }
   }
@@ -378,26 +373,37 @@ function ImportFolderModal({
   // collision depend on the name — debounce keeps it cheap.
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  // One preview path for both the initial scan and every re-preview as
+  // the user edits the name. `nameArg === undefined` is the initial call:
+  // the server derives the name from the source basename and we adopt it.
+  // A monotonic seq guards against a slow earlier scan overwriting a
+  // newer one (and against a late response landing after unmount, since
+  // the cleanup below bumps the seq).
+  const runPreview = useCallback((nameArg?: string) => {
     const seq = ++previewSeq.current;
-    setPreview(null);
-    setError(null);
     void (async () => {
       try {
-        const p = await api.previewImportFolder(source);
-        if (cancelled || seq !== previewSeq.current) return;
+        const p = await api.previewImportFolder(source, nameArg);
+        if (seq !== previewSeq.current) return;
         setPreview(p);
-        setName(p.name);
+        setError(null);
+        if (nameArg === undefined) setName(p.name);
       } catch (err) {
-        if (!cancelled && seq === previewSeq.current) setError(errorMessage(err));
+        if (seq !== previewSeq.current) return;
+        setError(errorMessage(err));
       }
     })();
+  }, [source]);
+
+  useEffect(() => {
+    setPreview(null);
+    setError(null);
+    runPreview();
     return () => {
-      cancelled = true;
+      previewSeq.current++; // invalidate any in-flight preview on unmount / source change
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
-  }, [source]);
+  }, [source, runPreview]);
 
   function refreshName(nextName: string) {
     setName(nextName);
@@ -407,20 +413,10 @@ function ImportFolderModal({
       setError(null);
       return;
     }
-    refreshTimer.current = setTimeout(() => {
-      const seq = ++previewSeq.current;
-      void (async () => {
-        try {
-          const p = await api.previewImportFolder(source, nextName);
-          if (seq !== previewSeq.current) return;
-          setPreview(p);
-          setError(null);
-        } catch (err) {
-          if (seq !== previewSeq.current) return;
-          setError(errorMessage(err));
-        }
-      })();
-    }, 250);
+    // Debounce: a preview re-scans the source tree (up to the 50k cap),
+    // so firing one per keystroke would re-walk the whole folder each
+    // time. Only destination / collision depend on the name.
+    refreshTimer.current = setTimeout(() => runPreview(nextName), 250);
   }
 
   async function submit() {

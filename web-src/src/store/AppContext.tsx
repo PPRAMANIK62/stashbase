@@ -1311,25 +1311,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [loadFiles, refreshIndexState, showAlert]);
 
-  const finishOpenSpace = useCallback(async () => {
-    // Load files BEFORE hiding the welcome overlay so the sidebar
-    // doesn't briefly flash "NOTES" with an empty tree behind the
-    // overlay's fade-out.
+  // Clear every piece of UI state scoped to the previous space. Shared
+  // by finishOpenSpace (switching *in*) and goHome (switching *out*) so
+  // the two can't drift. Each action targets a disjoint state slice, so
+  // call order doesn't matter. Note the server kills every PTY on a
+  // space switch (onSwitch → killActiveTerminal); TERMINAL_TABS_RESET
+  // drops our tab list to match so we don't render orphan xterms.
+  const resetSpaceScopedState = useCallback(() => {
     dispatch({ type: 'TABS_RESET' });
-    dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
-    dispatch({ type: 'NAV_RESET' });
-    // Server kills every PTY on space switch (onSwitch →
-    // killActiveTerminal). Drop our tab list to match so we don't
-    // render orphan xterms pointing at the old cwd.
     dispatch({ type: 'TERMINAL_TABS_RESET' });
-    // Prior space's search hits + manual ordering are stale.
     dispatch({ type: 'FILTER', q: '' });
     dispatch({ type: 'SEARCH_CLEAR' });
     dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
+  }, []);
+
+  const finishOpenSpace = useCallback(async () => {
+    resetSpaceScopedState();
+    dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
+    dispatch({ type: 'NAV_RESET' });
     void refreshIndexState();
+    // Load files BEFORE hiding the welcome overlay so the sidebar doesn't
+    // briefly flash "NOTES" with an empty tree behind the overlay's fade.
     await Promise.all([loadFiles(), loadFileOrder()]);
     dispatch({ type: 'WELCOME_HIDE' });
-  }, [loadFiles, loadFileOrder, refreshIndexState]);
+  }, [loadFiles, loadFileOrder, refreshIndexState, resetSpaceScopedState]);
 
   // These THROW on failure — callers decide how to surface it. Welcome's
   // fire-and-forget callers (recent pills) `.catch` into WELCOME_ERROR;
@@ -1347,12 +1352,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [finishOpenSpace]);
 
   const goHome = useCallback(() => {
-    dispatch({ type: 'TABS_RESET' });
-    dispatch({ type: 'TERMINAL_TABS_RESET' });
-    dispatch({ type: 'FILTER', q: '' });
-    dispatch({ type: 'SEARCH_CLEAR' });
+    resetSpaceScopedState();
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: '' });
-    dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
     // Show immediately with the in-memory list (snappy), then refresh from
     // the server: a space just created via New / Import won't be in the
     // stale `state.recent` captured at bootstrap, so without this the
@@ -1361,7 +1362,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void api.getSpace()
       .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
       .catch(() => { /* keep the in-memory list if the refresh fails */ });
-  }, []);
+  }, [resetSpaceScopedState]);
 
   const bootstrap = useCallback(async () => {
     try {

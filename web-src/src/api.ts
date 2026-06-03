@@ -529,6 +529,31 @@ export const api = {
     send<{ hasKey: false }>('DELETE', '/api/embedder/key'),
 };
 
+/** Set the KB root, transparently handling the "directory is not empty"
+ *  guard: the server rejects a populated target with 409 unless
+ *  `confirmNonEmpty` is set, so on 409 we ask the user and, if they
+ *  agree, retry with the flag. Returns the server result, or `null` when
+ *  the user declines the confirmation. Other errors propagate.
+ *
+ *  Shared by the first-run root picker (Welcome) and Settings → Storage,
+ *  which otherwise hand-rolled the same 409 dance. Callers own their own
+ *  busy / error UI and what to do with a successful result. */
+export async function setKbRootConfirming(
+  path: string,
+  confirm: (message: string) => Promise<boolean>,
+): Promise<{ path: string; warnings?: string[] } | null> {
+  try {
+    return await api.setKbRoot(path, { confirmNonEmpty: false });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) {
+      const ok = await confirm('That directory is not empty. Use it as the root folder anyway?');
+      if (!ok) return null;
+      return await api.setKbRoot(path, { confirmNonEmpty: true });
+    }
+    throw err;
+  }
+}
+
 /** Asset URL for HTML files (used by the preview iframe so relative
  *  references inside the page — `<img src="X_files/figure.png">` —
  *  resolve correctly). Caller passes a space-relative path.
