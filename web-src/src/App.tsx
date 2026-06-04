@@ -312,10 +312,25 @@ function defaultCaptureFilename(mode?: string): string {
   return `screenshot-${mode || 'capture'}-${stamp}.png`;
 }
 
-async function dataUrlToFile(dataUrl: string, filename: string, mime: string): Promise<File> {
-  const response = await fetch(dataUrl);
-  const blob = await response.blob();
-  return new File([blob], filename, { type: mime });
+/** Decode a `data:` URL into a File. Decodes the base64 (or percent-
+ *  encoded) payload directly rather than `fetch(dataUrl)` — the app's CSP
+ *  `connect-src 'self'` blocks data: fetches, which made every capture /
+ *  clipboard import throw "Could not save". Synchronous; callers `await`
+ *  it harmlessly. */
+function dataUrlToFile(dataUrl: string, filename: string, mime: string): File {
+  const comma = dataUrl.indexOf(',');
+  const header = comma >= 0 ? dataUrl.slice(0, comma) : '';
+  const payload = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  if (header.includes(';base64')) {
+    const bin = atob(payload);
+    const buf = new ArrayBuffer(bin.length);
+    const view = new Uint8Array(buf);
+    for (let i = 0; i < bin.length; i++) view[i] = bin.charCodeAt(i);
+    return new File([buf], filename, { type: mime });
+  }
+  // Non-base64 data URL: hand the decoded text straight to File (UTF-8
+  // encoded by the Blob constructor).
+  return new File([decodeURIComponent(payload)], filename, { type: mime });
 }
 
 /** Vertical drag handle on the sidebar's right edge (between the side
