@@ -118,28 +118,52 @@
       flex: 1;
       min-height: 0;
       display: grid;
+      /* Anchor for the absolutely-positioned `.sidebar-splitter`, which
+       * straddles the sidebar/main boundary without taking a grid track. */
+      position: relative;
       /* Four columns always — sidebar | main | splitter | terminal.
-       * Closed sidebar / terminal collapse their tracks to 0 instead
-       * of structurally adding/removing columns, so CSS can transition
-       * the widths smoothly. The transition applies on toggles in both
-       * directions (sidebar collapse, terminal open/close).
+       * Closed terminal collapses its track to 0 instead of structurally
+       * adding/removing columns, so CSS can transition the width smoothly.
        *
-       * Sidebar = 324px = 44px ActivityBar + 280px panel content (the
-       * legacy panel width is preserved — the rail was added next to
-       * it, not carved out of it). */
-      grid-template-columns: 324px 1fr 0 0;
+       * Sidebar column = 44px ActivityBar rail + the user-resizable panel
+       * (`--sidebar-width`, driven from `state.sidebarWidth`). When the
+       * panel is collapsed the column shrinks to the bare 44px rail — the
+       * rail itself never disappears (VSCode semantics). */
+      grid-template-columns: calc(44px + var(--sidebar-width, 280px)) 1fr 0 0;
       /* Explicit single-row track so .sidebar fills the height instead
-       * of shrinking to its content — the Outline pane lives at the
-       * bottom of the sidebar and depends on the column being tall. */
+       * of shrinking to its content — the file list grows into the full
+       * column height and depends on the column being tall. */
       grid-template-rows: minmax(0, 1fr);
       transition: grid-template-columns 220ms ease;
     }
 
-    /* Sidebar hidden via toggle — main pane takes the whole width.
-     * Keep the sidebar mounted (preserves selection / scroll / search
-     * state); shrinking the column to 0 + sidebar's own overflow:hidden
-     * is enough to make it invisible without unmounting. */
+    /* Panel collapsed — only the 44px activity rail remains. Keep the
+     * sidebar mounted (preserves selection / scroll / search state);
+     * shrinking the column + sidebar's own overflow:hidden hides the
+     * panel without unmounting. */
     .app.sidebar-collapsed {
-      grid-template-columns: 0 1fr 0 0;
+      grid-template-columns: 44px 1fr 0 0;
+    }
+
+    /* Drag handle on the sidebar's right edge. Absolutely positioned at
+     * `left: calc(44px + var(--sidebar-width))` (set inline by React) so
+     * it tracks the panel's right border without consuming a grid track.
+     * 6px wide, centered on the seam via the negative margin. */
+    .sidebar-splitter {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      margin-left: -3px;
+      z-index: 5;
+      cursor: col-resize;
+      /* Transparent by default so it reads as the existing 1px border;
+       * the seam itself is drawn by `.sidebar`'s border-right. */
+      background: transparent;
+      transition: background .12s;
+    }
+    .sidebar-splitter:hover,
+    .sidebar-splitter:active {
+      background: var(--accent);
     }
 

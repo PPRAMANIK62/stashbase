@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { api, type TerminalClisResponse } from '../api';
-import { TerminalIcon } from '../icons';
+import { ChatIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import type { TerminalTab } from '../store/state';
 
@@ -50,7 +50,7 @@ export function TerminalToggleButton() {
       title={state.terminalOpen ? `Hide ${label}` : `Open ${label}`}
       onClick={toggle}
     >
-      <TerminalIcon />
+      <ChatIcon />
     </button>
   );
 }

@@ -26,6 +26,14 @@ export interface SaveStatus {
   cls: '' | 'saved' | 'error';
 }
 
+/** Sidebar side-panel resize bounds (px), shared by the reducer and the
+ *  drag handle. The 44px activity rail is *not* part of this — it always
+ *  stays visible. Dragging the panel narrower than `COLLAPSE_AT`
+ *  collapses it (rail-only); between that and `MIN` it snaps to `MIN`. */
+export const SIDEBAR_MIN_WIDTH = 170;
+export const SIDEBAR_MAX_WIDTH = 520;
+export const SIDEBAR_COLLAPSE_AT = 100;
+
 /** One chat tab in the right-side terminal panel. The tab's `cli` is
  *  locked at creation time so starting a new tab with a different agent
  *  doesn't restart open conversations. */
@@ -191,8 +199,13 @@ export interface State {
    *  toggle) override it. `''` = SPACE root is the focused row. */
   selectedPath: string;
   spaceCollapsed: boolean;
-  /** True hides the whole sidebar pane (Cmd+B equivalent in VSCode). */
+  /** True hides the resizable side panel, leaving only the 44px activity
+   *  rail visible (VSCode-style — the rail itself never collapses). */
   sidebarCollapsed: boolean;
+  /** Width (px) of the resizable side panel — the part right of the
+   *  44px activity rail. User-resizable via the drag handle on the
+   *  sidebar's right edge; clamped to [SIDEBAR_MIN_WIDTH, MAX]. */
+  sidebarWidth: number;
   /** True opens the right-side terminal panel. */
   terminalOpen: boolean;
   /** Terminal panel width in pixels — user-resizable via drag handle. */
@@ -317,6 +330,7 @@ export const initialState: State = {
   selectedPath: '',
   spaceCollapsed: false,
   sidebarCollapsed: false,
+  sidebarWidth: 280,
   terminalOpen: false,
   terminalWidth: 480,
   terminalCli: 'claude',
@@ -379,6 +393,8 @@ export type Action =
   | { type: 'EXPAND_ALL_FOLDERS'; paths: string[] }
   | { type: 'SPACE_FOLD_TOGGLE' }
   | { type: 'SIDEBAR_FOLD_TOGGLE' }
+  | { type: 'SIDEBAR_SET_COLLAPSED'; collapsed: boolean }
+  | { type: 'SIDEBAR_WIDTH'; width: number }
   | { type: 'TERMINAL_TOGGLE' }
   | { type: 'TERMINAL_WIDTH'; width: number }
   | { type: 'TERMINAL_CLIS'; current: string; clis: State['terminalClis'] }
@@ -620,6 +636,13 @@ export function reducer(s: State, a: Action): State {
       return { ...s, spaceCollapsed: !s.spaceCollapsed };
     case 'SIDEBAR_FOLD_TOGGLE':
       return { ...s, sidebarCollapsed: !s.sidebarCollapsed };
+    case 'SIDEBAR_SET_COLLAPSED':
+      return { ...s, sidebarCollapsed: a.collapsed };
+    case 'SIDEBAR_WIDTH':
+      // Snap into [MIN, MAX]. Dragging below MIN is what triggers a
+      // collapse, but that decision lives in the drag handler (it has
+      // the raw cursor delta); here we just keep the stored width sane.
+      return { ...s, sidebarWidth: Math.max(SIDEBAR_MIN_WIDTH, Math.min(a.width, SIDEBAR_MAX_WIDTH)) };
     case 'TERMINAL_TOGGLE':
       return { ...s, terminalOpen: !s.terminalOpen };
     case 'TERMINAL_WIDTH':

@@ -167,7 +167,7 @@ export function CopyIcon({ className }: IconProps) {
  *  panel runs whatever CLI the user picked (Claude / Codex / …), so
  *  the icon stays brand-neutral. `currentColor` lets it pick up the
  *  chip's state color (muted at rest, accent when active). */
-export function TerminalIcon({ className }: IconProps) {
+export function ChatIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
       <path d="M4 5 H20 A2 2 0 0 1 22 7 V15 A2 2 0 0 1 20 17 H12 L7 21 V17 H4 A2 2 0 0 1 2 15 V7 A2 2 0 0 1 4 5 Z" />
@@ -234,9 +234,9 @@ export function CubeLogoIcon({ className }: IconProps) {
  *  losing tab/nav state to a full page reload. */
 export function HomeIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.8} {...stroke}>
-      <path d="M3 11 L12 3 L21 11" />
-      <path d="M5 10 V20 A1 1 0 0 0 6 21 H18 A1 1 0 0 0 19 20 V10" />
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M9 22V12h6v10" />
     </svg>
   );
 }

@@ -44,11 +44,11 @@ import { AlertConfirmModal } from './components/AlertConfirmModal';
 import { Toasts } from './components/Toasts';
 import { TerminalPane } from './components/TerminalPane';
 import { TerminalToggleButton } from './components/TerminalToggleButton';
-import { SettingsButton } from './components/SettingsButton';
 import { SettingsPortal, openSettings } from './components/SettingsModal';
-import { HomeIcon, SidebarLeftIcon } from './icons';
+import { HomeIcon } from './icons';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppProvider, useApp } from './store/AppContext';
+import { SIDEBAR_COLLAPSE_AT, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from './store/state';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 
 /**
@@ -71,7 +71,7 @@ export function App() {
 
 function AppBody() {
   const veilHot = useGlobalDragDrop();
-  const { state, actions, dispatch } = useApp();
+  const { state, actions } = useApp();
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   // Mount the terminal panel lazily on first open and then NEVER
   // unmount it — collapsing the panel just hides the column via CSS,
@@ -207,19 +207,13 @@ function AppBody() {
        *  In Electron it doubles as the macOS `hiddenInset` drag region;
        *  the centered space name plays the role VSCode's titlebar fills
        *  (workspace identity), and the embedder picker sits at the
-       *  right. Sidebar toggle on the left mirrors VSCode's panel-left
-       *  control. Pulled out of the file header (`.main-head`) so file
-       *  controls and app controls stop sharing the same row. */}
+       *  right. The sidebar has no explicit toggle button — it's
+       *  resized (and collapsed) by dragging its right edge, à la
+       *  VSCode; the activity rail always stays visible. Pulled out of
+       *  the file header (`.main-head`) so file controls and app
+       *  controls stop sharing the same row. */}
       <div className="app-chrome">
         <div className="app-chrome-left">
-          {!state.welcomeVisible && (
-            <button
-              className="icon-btn"
-              type="button"
-              title={state.sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-              onClick={() => dispatch({ type: 'SIDEBAR_FOLD_TOGGLE' })}
-            ><SidebarLeftIcon /></button>
-          )}
           {!state.welcomeVisible && (
             <button
               className="icon-btn"
@@ -234,7 +228,6 @@ function AppBody() {
         )}
         <div className="app-chrome-right">
           {!state.welcomeVisible && <TerminalToggleButton />}
-          {!state.welcomeVisible && <SettingsButton />}
         </div>
       </div>
       <div
@@ -243,9 +236,13 @@ function AppBody() {
           + (state.sidebarCollapsed ? ' sidebar-collapsed' : '')
           + (state.terminalOpen ? ' terminal-open' : '')
         }
-        style={{ '--terminal-width': `${state.terminalWidth}px` } as CSSProperties}
+        style={{
+          '--terminal-width': `${state.terminalWidth}px`,
+          '--sidebar-width': `${state.sidebarWidth}px`,
+        } as CSSProperties}
       >
         <Sidebar />
+        {!state.welcomeVisible && !state.sidebarCollapsed && <SidebarSplitter />}
         <MainPane />
         {terminalMounted && <TerminalSplitter />}
         {terminalMounted && <TerminalPane />}
@@ -278,6 +275,48 @@ async function dataUrlToFile(dataUrl: string, filename: string, mime: string): P
   const response = await fetch(dataUrl);
   const blob = await response.blob();
   return new File([blob], filename, { type: mime });
+}
+
+/** Vertical drag handle on the sidebar's right edge (between the side
+ *  panel and the main pane). Drags the panel width within
+ *  [MIN, MAX]; dragging narrower than COLLAPSE_AT collapses it to the
+ *  rail-only state — the 44px activity rail itself never goes away.
+ *  Positioned absolutely so it doesn't perturb the `.app` grid tracks;
+ *  pointer-capture keeps the drag alive once the cursor crosses into
+ *  the main pane. */
+function SidebarSplitter() {
+  const { state, dispatch } = useApp();
+  const startRef = useRef<{ x: number; w: number } | null>(null);
+
+  function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    startRef.current = { x: e.clientX, w: state.sidebarWidth };
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  }
+  function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const start = startRef.current;
+    if (!start) return;
+    // Dragging right grows the panel (it sits on the left).
+    const next = start.w + (e.clientX - start.x);
+    if (next < SIDEBAR_COLLAPSE_AT) {
+      dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: true });
+      return;
+    }
+    // The reducer clamps to [MIN, MAX]; we just snap the floor so the
+    // panel doesn't visually dip below MIN before the collapse kicks in.
+    dispatch({ type: 'SIDEBAR_WIDTH', width: Math.max(next, SIDEBAR_MIN_WIDTH) });
+  }
+  function onPointerUp() { startRef.current = null; }
+
+  return (
+    <div
+      className="sidebar-splitter"
+      style={{ left: `calc(44px + var(--sidebar-width, ${SIDEBAR_MAX_WIDTH}px))` }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    />
+  );
 }
 
 /** Vertical drag handle between the main pane and the terminal panel.
