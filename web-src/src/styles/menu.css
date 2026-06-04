@@ -1,0 +1,107 @@
+/* The shared popup-menu primitive (`<Menu>`). One look for every menu:
+ * the sidebar `⋯` / new-note button pickers and the file-tree right-click
+ * context menu all render through it. Positioning lives in the component
+ * (position: fixed + viewport clamp); this file is purely the skin.
+ *
+ * The metrics deliberately track a native macOS menu — tight rows, a
+ * right-aligned shortcut column, hairline separators — so a custom-drawn
+ * menu reads as system-native rather than web-cheap. */
+
+.menu {
+  z-index: 100;
+  min-width: 180px;
+  padding: 5px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.14),
+    0 2px 6px rgba(0, 0, 0, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12.5px;
+  color: var(--fg);
+  /* Hidden until the layout effect clamps it into place, then faded in by
+   * `.ready`. Prevents a one-frame flash at the unclamped (0,0) position. */
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+}
+
+.menu.ready {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition:
+    opacity 0.09s ease-out,
+    transform 0.09s ease-out;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Hover and keyboard focus share one highlight so arrow-key nav reads the
+ * same as the mouse. `:focus` (not just `:focus-visible`) because we move
+ * focus programmatically on open and on arrow keys. */
+.menu-item:hover:not(:disabled),
+.menu-item:focus {
+  background: var(--hover);
+  outline: none;
+}
+
+.menu-item.danger {
+  color: #b91c1c;
+}
+
+.menu-item.danger:hover:not(:disabled),
+.menu-item.danger:focus {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.menu-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.menu-item-label {
+  white-space: nowrap;
+}
+
+.menu-item-detail {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.menu-item-shortcut {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}

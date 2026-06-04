@@ -225,6 +225,13 @@
       width: 18px;
       height: 18px;
     }
+    /* The pencil glyph's artwork fills nearly its whole 24×24 viewBox,
+     * while the open-book preview glyph leaves more margin — so at equal
+     * SVG sizes the pencil reads ~30% larger. Scale it down to match the
+     * preview's optical size (scales from center; layout box unchanged). */
+    .edit-toggle .icon-edit {
+      transform: scale(0.85);
+    }
 
     /* Two icons live inside the toggle; CSS picks which one shows
      * based on whether `.editing` is on the button (mirrors React's
@@ -843,46 +850,6 @@
 
     .drop-veil.hot {
       display: flex;
-    }
-
-    /* Right-click menu on file rows in the sidebar — minimal Rename /
-     Delete affordance (parallels what VS Code shows but trimmed to
-     the two universally useful actions). Floats at cursor position,
-     dismisses on click-outside or Escape. */
-    .ctx-menu {
-      position: fixed;
-      z-index: 100;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
-      padding: 4px 0;
-      min-width: 160px;
-      font-size: 13px;
-      color: var(--fg);
-    }
-
-    .ctx-menu[hidden] {
-      display: none;
-    }
-
-    .ctx-item {
-      padding: 6px 14px;
-      cursor: pointer;
-      user-select: none;
-      white-space: nowrap;
-    }
-
-    .ctx-item:hover {
-      background: var(--hover);
-    }
-
-    .ctx-item.danger {
-      color: #b91c1c;
-    }
-
-    .ctx-item.danger:hover {
-      background: #fee2e2;
     }
 
     /* Viewers sit in the single grid cell of .main-body and fill it with

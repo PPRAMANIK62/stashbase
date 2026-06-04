@@ -11,6 +11,7 @@ import { useApp } from '../store/AppContext';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { KbPanel } from './KbPanel';
+import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { SearchPanel } from './SearchPanel';
 import { api, errorMessage } from '../api';
@@ -150,12 +151,19 @@ function FilesPanel() {
 
 function SpaceMenu() {
   const { state, actions } = useApp();
-  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [modal, setModal] = useState<null | { kind: 'new' | 'rename' | 'switch'; name: string }>(null);
   const [spaces, setSpaces] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const current = state.space || '';
+
+  function toggle() {
+    if (anchor) { setAnchor(null); return; }
+    const r = buttonRef.current?.getBoundingClientRect();
+    if (r) setAnchor(r);
+  }
 
   async function loadSpaces() {
     try {
@@ -167,7 +175,6 @@ function SpaceMenu() {
   }
 
   function openModal(kind: 'new' | 'rename' | 'switch') {
-    setOpen(false);
     setError(null);
     if (kind === 'switch') void loadSpaces();
     setModal({ kind, name: kind === 'rename' ? current : '' });
@@ -215,7 +222,6 @@ function SpaceMenu() {
   }
 
   async function deleteCurrent() {
-    setOpen(false);
     if (!current) return;
     const ok = await actions.confirm(`Delete space "${current}" and everything inside it?`);
     if (!ok) return;
@@ -232,35 +238,31 @@ function SpaceMenu() {
   }
 
   async function openCurrentInNewWindow() {
-    setOpen(false);
     if (!current) return;
     const bridge = (window as { electron?: ElectronBridge }).electron;
     const ok = await bridge?.openSpaceWindow?.(current);
     if (!ok) await actions.alert('New window is only available in the desktop app.');
   }
 
+  const items: MenuItem[] = [
+    { label: 'Switch space', onSelect: () => openModal('switch') },
+    { label: 'Open in new window', disabled: !current, onSelect: () => { void openCurrentInNewWindow(); } },
+    { label: 'New space', onSelect: () => openModal('new') },
+    { label: 'Rename space', disabled: !current, onSelect: () => openModal('rename') },
+    { separator: true },
+    { label: 'Delete space', danger: true, disabled: !current, onSelect: () => { void deleteCurrent(); } },
+  ];
+
   return (
     <>
-      <span className="space-menu-wrap">
-        <button
-          className="icon-btn"
-          type="button"
-          title="Space actions"
-          onClick={() => setOpen((v) => !v)}
-        >⋯</button>
-        {open && (
-          <>
-            <div className="embedder-backdrop" onClick={() => setOpen(false)} />
-            <div className="space-menu" role="menu">
-              <button type="button" onClick={() => openModal('switch')}>Switch space</button>
-              <button type="button" onClick={() => { void openCurrentInNewWindow(); }} disabled={!current}>Open in new window</button>
-              <button type="button" onClick={() => openModal('new')}>New space</button>
-              <button type="button" onClick={() => openModal('rename')} disabled={!current}>Rename space</button>
-              <button type="button" className="danger" onClick={() => { void deleteCurrent(); }} disabled={!current}>Delete space</button>
-            </div>
-          </>
-        )}
-      </span>
+      <button
+        ref={buttonRef}
+        className="icon-btn"
+        type="button"
+        title="Space actions"
+        onClick={toggle}
+      >⋯</button>
+      {anchor && <Menu anchor={{ rect: anchor }} items={items} onClose={() => setAnchor(null)} />}
       {modal && (
         <ModalShell onCancel={busy ? () => {} : () => setModal(null)}>
           <h3>{modal.kind === 'new' ? 'New space' : modal.kind === 'rename' ? 'Rename space' : 'Switch space'}</h3>
@@ -319,38 +321,25 @@ function SpaceMenu() {
  *  for content meant to outlive a chat session — but Markdown stays
  *  one click away for quick drafts. Format is decided at create time,
  *  not via a setting; the picker enforces an explicit choice every
- *  time without making either option feel hidden.
- *
- *  The popover uses `position: fixed` with coords measured off the
- *  button — sidebar containers further up the tree have `overflow:
- *  hidden` and would otherwise clip an absolutely-positioned menu
- *  rendered inside them. Fixed lets the menu float over the whole
- *  viewport instead. */
+ *  time without making either option feel hidden. The shared `<Menu>`
+ *  handles the viewport-aware positioning (the sidebar's `overflow:
+ *  hidden` ancestors would otherwise clip an in-tree popover). */
 function NewNoteButton() {
   const { state, actions } = useApp();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const target = state.activeFolder || state.space || 'space root';
 
   function toggle() {
-    if (menuOpen) { setMenuOpen(false); return; }
+    if (anchor) { setAnchor(null); return; }
     const r = buttonRef.current?.getBoundingClientRect();
-    if (!r) return;
-    // Anchor the menu's LEFT edge to the button's left edge so it
-    // grows RIGHTWARD into the main pane area. Anchoring right-edge
-    // to button-right makes the menu bleed off the viewport's left
-    // edge whenever the sidebar is narrower than the menu's min-width
-    // (the menu's 220 px ends up at x ≈ -30, clipping "H"/"M").
-    // position:fixed escapes sidebar overflow either way.
-    setPos({ top: r.bottom + 4, left: r.left });
-    setMenuOpen(true);
+    if (r) setAnchor(r);
   }
 
-  function create(format: 'html' | 'md') {
-    setMenuOpen(false);
-    void actions.newNote(format);
-  }
+  const items: MenuItem[] = [
+    { label: 'HTML note', detail: 'richer structure · default', onSelect: () => void actions.newNote('html') },
+    { label: 'Markdown note', detail: 'quick draft', onSelect: () => void actions.newNote('md') },
+  ];
 
   return (
     <>
@@ -361,45 +350,7 @@ function NewNoteButton() {
         title={'New note in ' + target}
         onClick={toggle}
       ><NewFileIcon /></button>
-      {menuOpen && pos && (
-        <>
-          <div className="embedder-backdrop" onClick={() => setMenuOpen(false)} />
-          <div
-            className="embedder-menu"
-            role="menu"
-            style={{
-              position: 'fixed',
-              top: pos.top,
-              left: pos.left,
-              // Explicit `auto` because `.embedder-menu` sets `right: 0`
-              // at the class level; we need it cleared so `left` wins.
-              right: 'auto',
-              minWidth: 200,
-            }}
-          >
-            <button
-              type="button"
-              className="embedder-menu-item"
-              onClick={() => create('html')}
-            >
-              <span className="embedder-menu-text">
-                <span className="embedder-menu-name">HTML note</span>
-                <span className="embedder-menu-detail">richer structure · default</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className="embedder-menu-item"
-              onClick={() => create('md')}
-            >
-              <span className="embedder-menu-text">
-                <span className="embedder-menu-name">Markdown note</span>
-                <span className="embedder-menu-detail">quick draft</span>
-              </span>
-            </button>
-          </div>
-        </>
-      )}
+      {anchor && <Menu anchor={{ rect: anchor }} items={items} onClose={() => setAnchor(null)} minWidth={200} />}
     </>
   );
 }
