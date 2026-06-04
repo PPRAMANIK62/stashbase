@@ -1,20 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  GlobalWorkerOptions,
+  PDFWorker,
   getDocument,
   type PDFDocumentProxy,
   type PDFPageProxy,
 } from 'pdfjs-dist';
-// `?url` import gives Vite a stable URL for the worker bundle. The
-// worker runs in its own scope and is required by pdfjs to off-load
-// page rendering.
-// eslint-disable-next-line import/no-unresolved
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+// Load the worker via Vite's `?worker` so we can wrap it with the
+// Map-upsert polyfill pdfjs 5.7 needs but Electron's V8 lacks (see
+// `lib/pdfWorker.ts` / `lib/pdfPolyfill.ts`). `?worker` bundles the
+// worker for both dev and the packaged build, unlike a bare `?url`.
+import PdfWorker from '../lib/pdfWorker?worker';
 import { api, assetUrl, type PdfStatusEntry } from '../api';
 import { useApp } from '../store/AppContext';
 
-GlobalWorkerOptions.workerSrc = workerSrc;
+// Polyfill the main-thread scope too — render() calls getOrInsertComputed
+// synchronously before it ever talks to the worker.
+import '../lib/pdfPolyfill';
+
+// One shared worker for the viewer. `workerPort` (vs `workerSrc`) lets us
+// hand pdfjs our polyfill-wrapped worker instance.
+GlobalWorkerOptions.workerPort = new PdfWorker();
 
 /**
  * PDF viewer built on pdfjs-dist's programmatic API. Renders every
@@ -461,25 +467,36 @@ function PdfPage({
     if (!visible) return;
     let cancelled = false;
     let pageProxy: PDFPageProxy | null = null;
+    let renderTask: ReturnType<PDFPageProxy['render']> | null = null;
     void doc.getPage(pageIndex + 1).then((page) => {
       if (cancelled) return;
       pageProxy = page;
-      const viewport = page.getViewport({ scale });
       const canvas = canvasRef.current;
       if (!canvas) return;
+      // Canonical pdfjs HiDPI pattern: size the backing store by the
+      // device pixel ratio, keep the CSS box at logical size, and let a
+      // `transform` matrix scale the drawing up.
+      const viewport = page.getViewport({ scale });
       const ratio = window.devicePixelRatio || 1;
-      canvas.width = viewport.width * ratio;
-      canvas.height = viewport.height * ratio;
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
-      const renderTask = page.render({
+      canvas.width = Math.floor(viewport.width * ratio);
+      canvas.height = Math.floor(viewport.height * ratio);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+      renderTask = page.render({
         canvas,
-        viewport: page.getViewport({ scale: scale * ratio }),
+        viewport,
+        transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined,
       });
-      renderTask.promise.catch(() => { /* destroyed mid-render */ });
+      renderTask.promise.catch((err: unknown) => {
+        // Cancels (tab switch / scroll-out) reject with
+        // RenderingCancelledException — expected, ignore. Surface the rest.
+        if ((err as { name?: string })?.name === 'RenderingCancelledException') return;
+        console.error(`[pdf] page ${pageIndex + 1} render failed:`, err);
+      });
     });
     return () => {
       cancelled = true;
+      if (renderTask) renderTask.cancel();
       if (pageProxy) pageProxy.cleanup();
     };
   }, [doc, pageIndex, scale, visible]);
