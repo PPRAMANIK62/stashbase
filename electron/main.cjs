@@ -575,8 +575,23 @@ function hideFloatingBall() {
   if (floatingBallWindow && !floatingBallWindow.isDestroyed()) floatingBallWindow.hide();
 }
 
+function keepFloatingBallAboveApps() {
+  if (!floatingBallWindow || floatingBallWindow.isDestroyed()) return;
+  floatingBallWindow.setAlwaysOnTop(true, process.platform === 'darwin' ? 'screen-saver' : 'floating');
+  if (process.platform === 'darwin') {
+    floatingBallWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
+    });
+  }
+  try { floatingBallWindow.moveTop(); } catch { /* best-effort */ }
+}
+
 function showFloatingBall() {
-  if (floatingBallWindow && !floatingBallWindow.isDestroyed()) floatingBallWindow.showInactive();
+  if (!floatingBallWindow || floatingBallWindow.isDestroyed()) return;
+  keepFloatingBallAboveApps();
+  floatingBallWindow.showInactive();
+  keepFloatingBallAboveApps();
 }
 
 async function withFloatingBallHidden(fn) {
@@ -730,6 +745,7 @@ async function safeRunCapture(request = {}, event) {
 }
 
 function showCaptureMenu() {
+  keepFloatingBallAboveApps();
   const menu = Menu.buildFromTemplate([
     { label: 'Full screen screenshot', click: () => { void safeRunCapture({ mode: 'screen' }); } },
     { label: 'Window screenshot', click: () => createCapturePickerWindow() },
@@ -780,9 +796,9 @@ function createFloatingBallWindow() {
       sandbox: false,
     },
   });
-  floatingBallWindow.setAlwaysOnTop(true, 'floating');
-  if (process.platform === 'darwin') floatingBallWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  keepFloatingBallAboveApps();
   floatingBallWindow.loadFile(path.join(__dirname, 'floating-ball.html'));
+  floatingBallWindow.once('ready-to-show', () => showFloatingBall());
   floatingBallWindow.on('closed', () => { floatingBallWindow = null; });
 }
 
