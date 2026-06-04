@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { FILE_MIME } from '../dragMime';
 import { useApp } from '../store/AppContext';
-
-const FILE_MIME = 'application/x-stashbase-file';
 
 /**
  * Window-level drag/drop coordinator.

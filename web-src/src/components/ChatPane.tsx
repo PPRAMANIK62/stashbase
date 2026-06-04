@@ -18,6 +18,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { api, getWindowId, type Agent, type AgentsResponse } from '../api';
+import { FILE_MIME } from '../dragMime';
 import { ChevronDownIcon, CheckIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import type { ChatTab } from '../store/state';
@@ -414,7 +415,7 @@ function XtermView({
     // `/level1 <path>` in one motion.
     function onDragOver(e: DragEvent) {
       if (!e.dataTransfer) return;
-      if (!e.dataTransfer.types.includes('application/x-stashbase-file')) return;
+      if (!e.dataTransfer.types.includes(FILE_MIME)) return;
       e.preventDefault();
       e.stopPropagation();
       // Sidebar's drag source sets `effectAllowed = 'move'`. The
@@ -427,7 +428,7 @@ function XtermView({
     }
     function onDrop(e: DragEvent) {
       if (!e.dataTransfer) return;
-      const path = e.dataTransfer.getData('application/x-stashbase-file');
+      const path = e.dataTransfer.getData(FILE_MIME);
       if (!path) return;
       e.preventDefault();
       e.stopPropagation();

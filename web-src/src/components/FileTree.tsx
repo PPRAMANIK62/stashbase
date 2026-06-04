@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
 import { ChevronDownIcon, ClaudeIcon, CodexIcon, InfoIcon, StashBaseIcon } from '../icons';
 import type { FileMeta, FolderMeta } from '../api';
+import { FILE_MIME, FOLDER_MIME } from '../dragMime';
 import { useApp } from '../store/AppContext';
 import { RenameInput, useRenameTarget } from './RenameInput';
-
-const FILE_MIME = 'application/x-stashbase-file';
-const FOLDER_MIME = 'application/x-stashbase-folder';
-// Mirror of the source row's parent path during a drag, so drop
-// targets can verify same-parent before accepting a reorder. Read at
-// drop time so we don't need to (a)wait the dataTransfer parse.
-const REORDER_PARENT_MIME = 'application/x-stashbase-parent';
 
 /** Where in a row the cursor is during dragover — drives the drop
  *  indicator + the action the drop triggers. `into` is folder-only

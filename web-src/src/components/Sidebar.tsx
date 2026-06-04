@@ -16,9 +16,9 @@ import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { SearchPanel } from './SearchPanel';
 import { api, errorMessage } from '../api';
+import { FILE_MIME } from '../dragMime';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 
-const FILE_MIME = 'application/x-stashbase-file';
 interface ElectronBridge {
   openSpaceWindow?: (name: string) => Promise<boolean>;
 }
