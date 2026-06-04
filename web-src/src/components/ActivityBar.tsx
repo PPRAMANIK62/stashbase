@@ -12,8 +12,9 @@ import { openSettings } from './SettingsModal';
  * Exactly one icon is "active" at a time — the active state is bound
  * to `state.activeSidebarView`, NOT to whatever happens to be focused
  * in the main pane, so the bar always reads as "what view am I in".
- * Default on first open is `files`; the choice is persisted to
- * localStorage by the AppProvider.
+ * Not persisted across launches — the AppProvider always boots into
+ * `files` (the tree is the canonical landing surface; search is a task
+ * the user enters on purpose, not a state to restore).
  */
 export function ActivityBar() {
   const { state, dispatch, actions } = useApp();

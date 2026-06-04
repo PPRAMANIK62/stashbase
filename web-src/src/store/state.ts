@@ -231,10 +231,9 @@ export interface State {
   syncRunning: boolean;
 
   /** Which sidebar view is active. `'files'` shows the file tree +
-   *  banners; `'search'` shows the search
-   *  input + result list (input visible only in this view).
-   *  Persisted to localStorage via the AppProvider so the user lands
-   *  back where they left off. */
+   *  banners; `'search'` shows the search input + result list (input
+   *  visible only in this view). Not persisted — `initialState` and the
+   *  AppProvider always boot into `'files'` on launch. */
   activeSidebarView: 'files' | 'search';
   /** Sidebar search input. Empty = blank search panel; non-empty =
    *  run search in whichever mode `searchMode` selects. */
