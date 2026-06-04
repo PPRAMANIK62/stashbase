@@ -17,6 +17,12 @@ import { useApp } from '../store/AppContext';
  * correct. The view never auto-upscales (Fit caps at 100%) — upscaling
  * a raster only blurs it; the user can still zoom past 100% by hand.
  *
+ * "100%" is **device-pixel-accurate**, not 1-image-px-per-CSS-px: the
+ * baseline width is `naturalWidth / devicePixelRatio`, so one image pixel
+ * maps to one physical pixel. On a Retina screen a 2× screenshot then
+ * shows at the logical size it was captured at (not doubled) and stays
+ * pin-sharp.
+ *
  * If OCR failed for this image, a small banner offers Retry — the image
  * still renders (it's the user-facing file), only its searchable text is
  * missing. Failure state comes from `state.conversionFailures` (fed by
@@ -36,6 +42,9 @@ export function ImagePreview({ name }: { name: string }) {
   const [retryError, setRetryError] = useState<string | null>(null);
   const alt = name.split('/').pop() ?? name;
   const failure = state.conversionFailures.find((f) => f.path === name);
+  // Device pixel ratio: the baseline (100%) maps one image pixel to one
+  // physical pixel, so a Retina screenshot shows at captured size + sharp.
+  const dpr = window.devicePixelRatio || 1;
 
   // Reset to actual size whenever the open file changes.
   useEffect(() => {
@@ -65,7 +74,8 @@ export function ImagePreview({ name }: { name: string }) {
     // auto-upscaling a raster just blurs it.
     const availW = el.clientWidth - 48;
     const availH = el.clientHeight - 48;
-    return clampScale(Math.min(1, availW / natural.w, availH / natural.h));
+    // Baseline width is natural/dpr, so compare against that.
+    return clampScale(Math.min(1, (availW * dpr) / natural.w, (availH * dpr) / natural.h));
   }
 
   async function onRetry() {
@@ -81,7 +91,7 @@ export function ImagePreview({ name }: { name: string }) {
     }
   }
 
-  const displayW = natural ? Math.round(natural.w * scale) : undefined;
+  const displayW = natural ? Math.round((natural.w / dpr) * scale) : undefined;
 
   return (
     <div className="image-preview">
