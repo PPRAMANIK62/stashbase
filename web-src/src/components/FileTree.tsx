@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
-import { ChevronDownIcon } from '../icons';
+import { BotIcon, CatalogIcon, ChevronDownIcon } from '../icons';
 import type { FileMeta, FolderMeta } from '../api';
 import { useApp } from '../store/AppContext';
 import { RenameInput, useRenameTarget } from './RenameInput';
@@ -351,14 +351,25 @@ function FileRow({
   const renaming = useRenameTarget(path, 'file');
   const [dropEdge, setDropEdge] = useState<DropEdge>(null);
 
+  const basename = path.split('/').pop() ?? path;
+  // Agent-maintained meta files get their own glyphs instead of the
+  // format icon: STASHBASE.md (the rules book) → robot head, the
+  // *-metadata.md catalogs → 目录 glyph. Both render in the neutral
+  // muted tint (via `.meta-file`) so they read as system files, not
+  // amber notes — matching the KB-root list in the sidebar.
+  const metaIcon =
+    basename === 'STASHBASE.md' ? <BotIcon />
+    : (basename === 'file-metadata.md' || basename === 'space-metadata.md') ? <CatalogIcon />
+    : null;
+
   const rowClass =
     `tree-row file format-${format}` +
+    (metaIcon ? ' meta-file' : '') +
     (isActive ? ' active' : '') +
     (isPending ? ' not-indexed' : '') +
     (dropEdge === 'above' ? ' drop-edge-above' : '') +
     (dropEdge === 'below' ? ' drop-edge-below' : '');
 
-  const basename = path.split('/').pop() ?? path;
   const display = displayName(basename);
   const extMatch = basename.match(/\.(md|markdown|html|htm)$/i);
   const ext = extMatch ? extMatch[0] : '';
@@ -460,7 +471,7 @@ function FileRow({
       }}
       onContextMenu={onContextMenu}
     >
-      <span className="icon"><FileTypeIcon format={format} /></span>
+      <span className="icon">{metaIcon ?? <FileTypeIcon format={format} />}</span>
       {renaming ? (
         <RenameInput
           initialBasename={ext ? basename.slice(0, -ext.length) : basename}

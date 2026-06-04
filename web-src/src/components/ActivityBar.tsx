@@ -1,14 +1,13 @@
-import { FilesViewIcon, KbIcon, SearchIcon, SettingsIcon } from '../icons';
+import { FilesViewIcon, SearchIcon, SettingsIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { openSettings } from './SettingsModal';
 
 /**
  * Narrow left rail (à la VS Code / Obsidian) holding one icon per
- * sidebar view. Three mutually-exclusive views:
+ * sidebar view. Two mutually-exclusive views:
  *
- *   - files   → space-scoped tree
+ *   - files   → KB-root files + space-scoped tree
  *   - search  → search input + result list
- *   - kb → KB-root file list (currently STASHBASE.md only)
  *
  * Exactly one icon is "active" at a time — the active state is bound
  * to `state.activeSidebarView`, NOT to whatever happens to be focused
@@ -22,9 +21,9 @@ export function ActivityBar() {
   /** VSCode rail semantics: clicking the *active* view toggles the
    *  panel collapsed; clicking another view (or any view while
    *  collapsed) opens it on that view. `after` runs the view's
-   *  side effect (focus search, open KB overview) only when we land
-   *  on it — never on a collapse. */
-  function selectView(view: 'files' | 'search' | 'kb', after?: () => void) {
+   *  side effect (e.g. focus search) only when we land on it — never
+   *  on a collapse. */
+  function selectView(view: 'files' | 'search', after?: () => void) {
     if (!state.sidebarCollapsed && state.activeSidebarView === view) {
       dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: true });
       return;
@@ -54,17 +53,6 @@ export function ActivityBar() {
         onClick={() => selectView('search', () => actions.focusSearch())}
       >
         <SearchIcon />
-      </ActivityIcon>
-      <ActivityIcon
-        active={!state.sidebarCollapsed && state.activeSidebarView === 'kb'}
-        controls="sidebar-panel-kb"
-        label="Knowledge base (STASHBASE.md)"
-        // Auto-open the KB-root overview in the main pane so the user
-        // lands on content immediately, not on an empty selection. The
-        // KbPanel row also reflects this as its "selected" highlight.
-        onClick={() => selectView('kb', () => { void actions.openKbOverview(); })}
-      >
-        <KbIcon />
       </ActivityIcon>
       {/* Settings pinned to the bottom of the rail, VSCode-style. The
           spacer above (margin-top:auto on this button) pushes it down

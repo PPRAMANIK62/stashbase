@@ -1,4 +1,6 @@
 import {
+  BotIcon,
+  CatalogIcon,
   ChevronDownIcon,
   CollapseAllIcon,
   ExpandAllIcon,
@@ -10,7 +12,6 @@ import {
 import { useApp } from '../store/AppContext';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
-import { KbPanel } from './KbPanel';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { SearchPanel } from './SearchPanel';
@@ -24,11 +25,12 @@ interface ElectronBridge {
 
 /**
  * Left rail composition. The activity bar (narrow icon column on the
- * far left) toggles between three mutually-exclusive side panels:
- *   - Files   → SnapshotWarning, space header, file tree
+ * far left) toggles between two mutually-exclusive side panels:
+ *   - Files   → a KNOWLEDGE BASE section (KB-root STASHBASE.md +
+ *               space-metadata.md), then the SnapshotWarning, the SPACE
+ *               header, and the file tree
  *   - Search  → search input + ≈/= toggle + result list (see
  *               `SearchPanel.tsx`)
- *   - kb → KB-root file list (STASHBASE.md + future root docs)
  *
  * Each panel keeps its own state when hidden — flipping back doesn't
  * blow away tree expansion or the active query.
@@ -39,17 +41,57 @@ export function Sidebar() {
     <aside className="sidebar">
       <ActivityBar />
       <div className="sidebar-panel">
-        {state.activeSidebarView === 'search' ? <SearchPanel />
-          : state.activeSidebarView === 'kb' ? <KbPanel />
-          : <FilesPanel />}
+        {state.activeSidebarView === 'search' ? <SearchPanel /> : <FilesPanel />}
       </div>
     </aside>
   );
 }
 
-/** The current sidebar content minus the search input and the
- *  STASHBASE.md row — owns the snapshot-warning banner, the space header
- *  (with the 4 action buttons), the file tree. */
+/** KB-root governance files pinned at the top of the Files panel —
+ *  STASHBASE.md (the rules book) + space-metadata.md (the agent-
+ *  maintained 目录). These are KB-scope (the same in every window /
+ *  space), so they sit above the per-space tree as a scope label, not
+ *  inside it. Per-space STASHBASE.md / file-metadata.md live in the
+ *  tree below, where they physically are. */
+function KbSection() {
+  const { state, actions } = useApp();
+  const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
+  const activeKbName = activeTab?.file?.kind === 'kb' ? activeTab.file.name : null;
+
+  return (
+    <>
+      <div className="panel-section-head">
+        <span className="panel-section-title">Knowledge base</span>
+      </div>
+      <div className="kb-file-list">
+        <button
+          type="button"
+          className={'kb-file-row' + (activeKbName === 'STASHBASE.md' ? ' selected' : '')}
+          onClick={() => { void actions.openKbRules(); }}
+          title="KB-level maintenance rules (STASHBASE.md)"
+        >
+          <span className="kb-file-icon"><BotIcon /></span>
+          <span className="kb-file-label">STASHBASE.md</span>
+        </button>
+        <button
+          type="button"
+          className={'kb-file-row' + (activeKbName === 'space-metadata.md' ? ' selected' : '')}
+          onClick={() => { void actions.openKbOverview(); }}
+          title="Agent-maintained KB 目录 (.stashbase/space-metadata.md)"
+        >
+          <span className="kb-file-icon"><CatalogIcon /></span>
+          <span className="kb-file-label">space-metadata.md</span>
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** The current sidebar content minus the search input — owns the
+ *  KNOWLEDGE BASE section, the snapshot-warning banner, a VSCode-style
+ *  two-tier SPACE header (a "SPACE" section row with the space-actions ⋯
+ *  above the folder row: current space name + the 4 file-action
+ *  buttons), and the file tree. */
 function FilesPanel() {
   const { state, actions, dispatch } = useApp();
   const [sideHeadDrop, setSideHeadDrop] = useState(false);
@@ -77,7 +119,17 @@ function FilesPanel() {
 
   return (
     <div className="files-panel" id="sidebar-panel-files" role="tabpanel">
+      <KbSection />
       <SnapshotWarningBanner />
+      {/* VSCode-style two-tier header: a section-title row ("SPACE" +
+          space-actions ⋯, mirroring EXPLORER) above the folder row
+          (current space name + file actions). */}
+      <div className="panel-section-head">
+        <span className="panel-section-title">SPACE</span>
+        <div className="side-actions">
+          <SpaceMenu />
+        </div>
+      </div>
       <div
         id="sideHead"
         className={
@@ -111,7 +163,6 @@ function FilesPanel() {
           >{(state.space || 'notes').toUpperCase()}</span>
         </span>
         <div className="side-actions">
-          <SpaceMenu />
           <NewNoteButton />
           <button
             className="icon-btn"

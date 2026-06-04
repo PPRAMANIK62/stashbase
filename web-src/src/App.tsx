@@ -242,7 +242,7 @@ function AppBody() {
         } as CSSProperties}
       >
         <Sidebar />
-        {!state.welcomeVisible && !state.sidebarCollapsed && <SidebarSplitter />}
+        {!state.welcomeVisible && <SidebarSplitter />}
         <MainPane />
         {chatMounted && <ChatSplitter />}
         {chatMounted && <ChatPane />}
@@ -278,39 +278,81 @@ async function dataUrlToFile(dataUrl: string, filename: string, mime: string): P
 }
 
 /** Vertical drag handle on the sidebar's right edge (between the side
- *  panel and the main pane). Drags the panel width within
- *  [MIN, MAX]; dragging narrower than COLLAPSE_AT collapses it to the
- *  rail-only state — the 44px activity rail itself never goes away.
- *  Positioned absolutely so it doesn't perturb the `.app` grid tracks;
- *  pointer-capture keeps the drag alive once the cursor crosses into
- *  the main pane. */
+ *  panel and the main pane). Drags the panel width within [MIN, MAX];
+ *  dragging narrower than COLLAPSE_AT collapses it to the rail-only
+ *  state — the 44px activity rail itself never goes away. Stays mounted
+ *  while collapsed (pinned to the rail's right edge at 44px) so the user
+ *  can grab it and drag the panel back open. Positioned absolutely so it
+ *  doesn't perturb the `.app` grid tracks; pointer-capture keeps the
+ *  drag alive once the cursor crosses into the main pane. */
 function SidebarSplitter() {
   const { state, dispatch } = useApp();
-  const startRef = useRef<{ x: number; w: number } | null>(null);
+  // `w` is the panel width at drag start. `done` ends the gesture after a
+  // collapse or a re-open snap so each grab does exactly one thing —
+  // resize, OR collapse, OR re-open. Mixing them is what produced the
+  // min-width "gap": there's a hard discontinuity between collapsed (0)
+  // and the 200px floor, so you can't smoothly drag *across* it. Instead
+  // we snap: pull a collapsed panel right past a few px → it pops open at
+  // its remembered width; pull an open panel below COLLAPSE_AT → it snaps
+  // shut. Re-grab to do the next thing.
+  const startRef = useRef<{ x: number; w: number; collapsed: boolean; done: boolean } | null>(null);
+  // The `.app` grid animates `grid-template-columns` (220ms) for smooth
+  // collapse/expand toggles — but during a live drag that lag makes the
+  // panel edge trail the splitter, opening a blank gap. We drop the
+  // transition for the duration of the drag via this class.
+  const appRef = useRef<HTMLElement | null>(null);
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    startRef.current = { x: e.clientX, w: state.sidebarWidth };
+    startRef.current = {
+      x: e.clientX,
+      w: state.sidebarWidth,
+      collapsed: state.sidebarCollapsed,
+      done: false,
+    };
+    appRef.current = e.currentTarget.parentElement as HTMLElement | null;
+    appRef.current?.classList.add('sidebar-dragging');
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   }
   function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     const start = startRef.current;
-    if (!start) return;
-    // Dragging right grows the panel (it sits on the left).
-    const next = start.w + (e.clientX - start.x);
-    if (next < SIDEBAR_COLLAPSE_AT) {
-      dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: true });
+    if (!start || start.done) return;
+    const dx = e.clientX - start.x;
+    if (start.collapsed) {
+      // Collapsed: a small rightward pull re-opens at the remembered
+      // width (state.sidebarWidth survives a collapse untouched). One
+      // discrete snap — we don't track width during the same gesture,
+      // which is what avoided the min-width gap.
+      if (dx > 6) {
+        dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: false });
+        start.done = true;
+      }
       return;
     }
-    // The reducer clamps to [MIN, MAX]; we just snap the floor so the
-    // panel doesn't visually dip below MIN before the collapse kicks in.
+    // Open: track width; pulling narrower than COLLAPSE_AT snaps shut.
+    const next = start.w + dx;
+    if (next < SIDEBAR_COLLAPSE_AT) {
+      dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: true });
+      start.done = true;
+      return;
+    }
+    // The reducer clamps to [MIN, MAX]; we snap the floor so the panel
+    // doesn't visually dip below MIN before the collapse kicks in.
     dispatch({ type: 'SIDEBAR_WIDTH', width: Math.max(next, SIDEBAR_MIN_WIDTH) });
   }
-  function onPointerUp() { startRef.current = null; }
+  function onPointerUp() {
+    startRef.current = null;
+    appRef.current?.classList.remove('sidebar-dragging');
+    appRef.current = null;
+  }
 
   return (
     <div
       className="sidebar-splitter"
-      style={{ left: `calc(44px + var(--sidebar-width, ${SIDEBAR_MAX_WIDTH}px))` }}
+      style={{
+        left: state.sidebarCollapsed
+          ? '44px'
+          : `calc(44px + var(--sidebar-width, ${SIDEBAR_MAX_WIDTH}px))`,
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

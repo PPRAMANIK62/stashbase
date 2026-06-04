@@ -30,7 +30,7 @@ export interface SaveStatus {
  *  drag handle. The 44px activity rail is *not* part of this — it always
  *  stays visible. Dragging the panel narrower than `COLLAPSE_AT`
  *  collapses it (rail-only); between that and `MIN` it snaps to `MIN`. */
-export const SIDEBAR_MIN_WIDTH = 170;
+export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 520;
 export const SIDEBAR_COLLAPSE_AT = 100;
 
@@ -234,7 +234,7 @@ export interface State {
    *  input + result list (input visible only in this view).
    *  Persisted to localStorage via the AppProvider so the user lands
    *  back where they left off. */
-  activeSidebarView: 'files' | 'search' | 'kb';
+  activeSidebarView: 'files' | 'search';
   /** Sidebar search input. Empty = blank search panel; non-empty =
    *  run search in whichever mode `searchMode` selects. */
   filterQuery: string;
@@ -410,7 +410,7 @@ export type Action =
   | { type: 'SEARCH_KEYWORD'; result: KeywordSearchResult }
   | { type: 'SEARCH_CLEAR' }
   | { type: 'SEARCH_MODE'; mode: 'semantic' | 'keyword' }
-  | { type: 'SIDEBAR_VIEW'; view: 'files' | 'search' | 'kb' }
+  | { type: 'SIDEBAR_VIEW'; view: 'files' | 'search' }
   | { type: 'SEARCH_CASE_STRICT'; strict: boolean }
   | { type: 'SEARCH_WHOLE_WORD'; on: boolean }
   | { type: 'SNAPSHOT_WARNING'; warning: SnapshotWarning | null }

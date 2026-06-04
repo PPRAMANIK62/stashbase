@@ -343,16 +343,12 @@ export const api = {
       '/api/spaces/' + encodeURIComponent(name) + '/config',
       config,
     ),
-  getSpaceRules: (name: string) =>
-    getJson<{ name: string; content: string }>('/api/spaces/' + encodeURIComponent(name) + '/rules'),
-  putSpaceRules: (name: string, content: string) =>
-    send<{ ok: true }>('PUT', '/api/spaces/' + encodeURIComponent(name) + '/rules', { content }),
   getResolvedRules: () => getJson<{ space: string | null; content: string }>('/api/rules'),
-  /** Read `<kbRoot>/STASHBASE.md` — the KB-level rules book. Powers
-   *  the KbPanel's "open KB rules" row. */
+  /** Read `<kbRoot>/STASHBASE.md` — the KB-level rules book. Powers the
+   *  Knowledge base section's "STASHBASE.md" row. */
   getKbRules: () => getJson<{ content: string }>('/api/kb/rules'),
   /** Read `<kbRoot>/.stashbase/space-metadata.md` — the agent-maintained
-   *  KB 目录. Powers the KbPanel's overview row. */
+   *  KB 目录. Powers the Knowledge base section's "space-metadata.md" row. */
   getKbOverview: () => getJson<{ content: string }>('/api/kb/overview'),
   /** Copy a local folder into kbRoot as a new space. `source` is an
    *  absolute path; the renderer obtains it from

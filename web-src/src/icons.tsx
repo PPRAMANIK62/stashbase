@@ -107,18 +107,15 @@ export function FileGenericIcon({ className }: IconProps) {
  *  outline) so the folded corners read cleanly; the back doc only
  *  draws the edges that aren't occluded by the front. */
 export function FilesViewIcon({ className }: IconProps) {
+  // Lucide `file-text` — same document frame as `NewFileIcon` so the
+  // two read as a family; three text rows say "file listing".
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
-      {/* Back document — top edge, folded corner diagonal, right side,
-          rounded bottom-right corner, short visible bottom segment. */}
-      <path d="M9 3 h7 l4 4 v9 a2 2 0 0 1 -2 2 h-1" />
-      {/* Back document's folded corner crease. */}
-      <polyline points="16 3 16 7 20 7" />
-      {/* Front document — full outline with the diagonal folded edge
-          closing the path. */}
-      <path d="M13 7 H5 a2 2 0 0 0 -2 2 V19 a2 2 0 0 0 2 2 H15 a2 2 0 0 0 2 -2 V11 Z" />
-      {/* Front document's folded corner crease. */}
-      <polyline points="13 7 13 11 17 11" />
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="16" y2="17" />
+      <line x1="8" y1="9" x2="10" y2="9" />
     </svg>
   );
 }
@@ -133,9 +130,9 @@ export function EditIcon({ className }: IconProps) {
 }
 
 export function PreviewIcon({ className }: IconProps) {
-  // Same open-book silhouette `KbIcon` used to use — the floating
-  // edit/read toggle was drawn with two geometric half-pages that read
-  // as "two trapezoids", not a book. This shape is unambiguous.
+  // Open-book silhouette for the floating edit/read toggle. Earlier it
+  // was drawn with two geometric half-pages that read as "two
+  // trapezoids", not a book; this shape is unambiguous.
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={1.7} {...stroke}>
       <path d="M3 5 C7 4 9 4 12 6 C15 4 17 4 21 5 V19 C17 18 15 18 12 20 C9 18 7 18 3 19 Z" />
@@ -148,6 +145,36 @@ export function CheckIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2.2} {...stroke}>
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+/** Robot head — the file glyph for STASHBASE.md (the rules book the
+ *  agent maintains). antenna + rounded head + two eyes + mouth line. */
+export function BotIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+      <line x1="12" y1="2" x2="12" y2="5" />
+      <circle cx="12" cy="2" r="0.8" fill="currentColor" stroke="none" />
+      <rect x="4" y="5" width="16" height="14" rx="3" />
+      <circle cx="9" cy="11" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="11" r="1.2" fill="currentColor" stroke="none" />
+      <line x1="9" y1="15.5" x2="15" y2="15.5" />
+    </svg>
+  );
+}
+
+/** Table-of-contents / 目录 glyph for space-metadata.md (the
+ *  agent-maintained catalog of spaces): bullets + lines. */
+export function CatalogIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.7} {...stroke}>
+      <circle cx="5" cy="6" r="1" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="18" r="1" fill="currentColor" stroke="none" />
+      <line x1="9" y1="6" x2="20" y2="6" />
+      <line x1="9" y1="12" x2="20" y2="12" />
+      <line x1="9" y1="18" x2="20" y2="18" />
     </svg>
   );
 }
@@ -237,24 +264,6 @@ export function HomeIcon({ className }: IconProps) {
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
       <path d="M9 22V12h6v10" />
-    </svg>
-  );
-}
-
-/** STASHBASE.md icon — sidebar row for the KB-level overview.
- *  Robot head: antenna + rounded head + two eyes + a mouth line. The
- *  bot motif maps directly to "the AI assistant maintains this file"
- *  — that's what STASHBASE.md is for, and a robot reads as that intent
- *  at any size, unlike a generic page or catalog glyph. */
-export function KbIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
-      <line x1="12" y1="2" x2="12" y2="5" />
-      <circle cx="12" cy="2" r="0.8" fill="currentColor" stroke="none" />
-      <rect x="4" y="5" width="16" height="14" rx="3" />
-      <circle cx="9" cy="11" r="1.2" fill="currentColor" stroke="none" />
-      <circle cx="15" cy="11" r="1.2" fill="currentColor" stroke="none" />
-      <line x1="9" y1="15.5" x2="15" y2="15.5" />
     </svg>
   );
 }

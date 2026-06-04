@@ -115,16 +115,13 @@ export interface AppActions {
    *  "Open in New Tab" command. */
   openInNewTab: (name: string) => Promise<void>;
   newTab: () => Promise<void>;
-  /** Open `<kbRoot>/STASHBASE.md` (the agent-maintained KB overview)
-   *  in a new tab. Read-only — no save / edit. */
+  /** Open `<kbRoot>/.stashbase/space-metadata.md` (the agent-maintained
+   *  KB 目录) as a kb-kind tab. */
   openKbOverview: () => Promise<void>;
   /** Open `<kbRoot>/STASHBASE.md` (KB-level rules book) as a
    *  kb-kind tab. Same one-tab-only / activate-if-open rule
    *  as `openKbOverview`. */
   openKbRules: () => Promise<void>;
-  /** Open `<space>/STASHBASE.md` (per-space rules) as a library-
-   *  kind tab. `name` is the space name. */
-  openSpaceRules: (name: string) => Promise<void>;
   closeTab: (id: string) => Promise<void>;
   /** Close whichever tab is currently active. Convenience for keyboard
    *  shortcuts (`⌘W`) and UI buttons that don't have a tab id handy. */
@@ -252,11 +249,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Always boot into the Files view. Earlier we persisted the last
   // sidebar view to localStorage so reload would land back where the
   // user was, but the "what's in this space" tree is the canonical
-  // landing surface — search / kb are tasks the user enters on
-  // purpose, not states to be restored. Resetting on launch matches
-  // user expectation ("打开应用默认选中文件") and side-steps the case
-  // where a stale `search` / `kb` value persists past the user
-  // remembering they ever picked it.
+  // landing surface — search is a task the user enters on purpose, not
+  // a state to be restored. Resetting on launch matches user
+  // expectation ("打开应用默认选中文件") and side-steps the case where a
+  // stale `search` value persists past the user remembering they ever
+  // picked it.
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -791,7 +788,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // stacking a duplicate — repeated clicks on the chrome button
       // shouldn't spawn endless tabs of the same overview file.
       const s = stateRef.current;
-      const existing = s.tabs.find((t) => t.file?.kind === 'kb');
+      const existing = s.tabs.find((t) => t.file?.kind === 'kb' && t.file?.name === 'space-metadata.md');
       if (existing) {
         if (existing.id !== s.activeTabId) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
         return;
@@ -803,9 +800,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         body: {
           // Display name matches the actual on-disk file basename
           // (<kbRoot>/.stashbase/space-metadata.md per
-          // `server/kb.ts:FILENAME`). STASHBASE.md (KB + per-space)
-          // is reserved for the separate rules-book role and opens via
-          // `openKbRules` / `openSpaceRules`.
+          // `server/kb.ts:FILENAME`). STASHBASE.md is reserved for the
+          // separate rules-book role and opens via `openKbRules`.
           name: 'space-metadata.md',
           format: 'md',
           content: r.content,
@@ -821,11 +817,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [flushSave, showAlert]);
 
-  /** Shared between `openKbRules` and `openSpaceRules` — fetch some
-   *  markdown, open it as a kb-kind tab whose name matches the
-   *  on-disk filename (so the user reads "STASHBASE.md" or
-   *  "<space>/STASHBASE.md" exactly, no aliasing). Tab dedup is by
-   *  `name` since both rule files coexist in the same kind. */
+  /** Open some markdown as a kb-kind tab whose name matches the on-disk
+   *  filename (so the user reads "STASHBASE.md" exactly, no aliasing).
+   *  Tab dedup is by `name` since the KB-scope files coexist in the
+   *  same kind. */
   const openKbFile = useCallback(async (name: string, fetcher: () => Promise<{ content: string }>) => {
     try {
       const s = stateRef.current;
@@ -854,10 +849,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openKbRules = useCallback(async () => {
     await openKbFile('STASHBASE.md', () => api.getKbRules());
-  }, [openKbFile]);
-
-  const openSpaceRules = useCallback(async (name: string) => {
-    await openKbFile(`${name}/STASHBASE.md`, () => api.getSpaceRules(name));
   }, [openKbFile]);
 
   const closeTab = useCallback(async (id: string) => {
@@ -1358,7 +1349,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
     dismissSnapshotWarning,
-    selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbOverview, openKbRules, openSpaceRules, closeTab, closeActiveTab, activateTab,
+    selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbOverview, openKbRules, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     consumePendingHighlight,
     resolveCascadePrompt,
@@ -1376,7 +1367,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
     dismissSnapshotWarning,
-    selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbOverview, openKbRules, openSpaceRules, closeTab, closeActiveTab, activateTab,
+    selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbOverview, openKbRules, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     consumePendingHighlight,
     resolveCascadePrompt,

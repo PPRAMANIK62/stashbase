@@ -121,8 +121,8 @@
       /* Anchor for the absolutely-positioned `.sidebar-splitter`, which
        * straddles the sidebar/main boundary without taking a grid track. */
       position: relative;
-      /* Four columns always — sidebar | main | splitter | terminal.
-       * Closed terminal collapses its track to 0 instead of structurally
+      /* Four columns always — sidebar | main | splitter | chat.
+       * Closed chat panel collapses its track to 0 instead of structurally
        * adding/removing columns, so CSS can transition the width smoothly.
        *
        * Sidebar column = 44px ActivityBar rail + the user-resizable panel
@@ -137,6 +137,13 @@
       transition: grid-template-columns 220ms ease;
     }
 
+    /* While dragging the sidebar splitter, the column must track the
+     * cursor instantly — the 220ms ease would otherwise lag behind the
+     * (instantly-positioned) splitter and open a blank gap. */
+    .app.sidebar-dragging {
+      transition: none;
+    }
+
     /* Panel collapsed — only the 44px activity rail remains. Keep the
      * sidebar mounted (preserves selection / scroll / search state);
      * shrinking the column + sidebar's own overflow:hidden hides the
@@ -148,7 +155,9 @@
     /* Drag handle on the sidebar's right edge. Absolutely positioned at
      * `left: calc(44px + var(--sidebar-width))` (set inline by React) so
      * it tracks the panel's right border without consuming a grid track.
-     * 6px wide, centered on the seam via the negative margin. */
+     * The element is a wide-ish (6px) invisible hit area; the visible
+     * cue is a thin 1px line drawn by `::after`, so hovering shows a
+     * crisp seam highlight rather than a fat colored band. */
     .sidebar-splitter {
       position: absolute;
       top: 0;
@@ -157,13 +166,21 @@
       margin-left: -3px;
       z-index: 5;
       cursor: col-resize;
-      /* Transparent by default so it reads as the existing 1px border;
-       * the seam itself is drawn by `.sidebar`'s border-right. */
+      background: transparent;
+    }
+    .sidebar-splitter::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
       background: transparent;
       transition: background .12s;
     }
-    .sidebar-splitter:hover,
-    .sidebar-splitter:active {
+    .sidebar-splitter:hover::after,
+    .sidebar-splitter:active::after {
       background: var(--accent);
     }
 

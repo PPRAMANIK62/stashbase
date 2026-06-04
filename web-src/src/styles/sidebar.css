@@ -618,11 +618,37 @@
     }
 
     /* Second row: space label + VSCode-style action toolbar. */
+    /* Top tier of the VSCode-style two-row header: a quiet section label
+     * ("SPACE") on the left + the space-actions ⋯ on the right. The
+     * folder row (.side-head) with the current space name + file-action
+     * icons sits directly below it. */
+    .panel-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 8px 2px 12px;
+      gap: 6px;
+      min-height: 30px;
+    }
+
+    .panel-section-title {
+      flex: 1;
+      min-width: 0;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .side-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 4px 8px 2px 12px;
+      padding: 2px 8px 2px 12px;
       gap: 6px;
     }
 
@@ -668,11 +694,15 @@
       display: none;
     }
 
+    /* The current space name — the prominent row, brighter than the
+     * muted "SPACE" section label above it (mirrors VSCode's workspace
+     * name reading stronger than the EXPLORER header). */
     .folder-label {
       font-size: 11px;
       font-weight: 600;
       letter-spacing: .04em;
       text-transform: uppercase;
+      color: var(--fg);
       flex: 1;
       min-width: 0;
       white-space: nowrap;
@@ -936,6 +966,14 @@
       height: 12px;
     }
 
+    /* Flex-center the glyph so it sits on the row's vertical midline.
+     * Without this the span is inline and the SVG rides the text
+     * baseline (looks high) — same treatment as `.kb-file-icon`. */
+    .tree-row .icon {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
     .tree-row .icon svg {
       width: 16px;
       height: 16px;
@@ -956,6 +994,13 @@
 
     .tree-row.file.format-html .icon svg {
       color: #0891b2;
+    }
+
+    /* Agent-maintained meta files (STASHBASE.md, *-metadata.md) carry a
+     * bot / 目录 glyph and stay neutral muted — they're system files, not
+     * amber notes. Placed after `.format-md` so it wins on equal specificity. */
+    .tree-row.file.meta-file .icon svg {
+      color: var(--muted);
     }
 
     .tree-row .label {
@@ -1073,45 +1118,30 @@
       text-overflow: ellipsis;
     }
 
-    /* Library panel — KB-root file list. Two sections:
-     *   1. Knowledge base root (AGENT.md + STASHBASE.md)
-     *   2. Per-space rules (one row per known space, prefixed with
-     *      its name in muted text so the eye reads
-     *      "<space>/STASHBASE.md" as a path)
-     * Visually mirrors the file tree row style so the user reads it
-     * as "same kind of thing, different scope". The small head
-     * label clarifies that scope without taking a full header bar. */
-    .kb-panel {
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      flex: 1;
-      overflow: auto;
-    }
-    .kb-panel-head {
-      padding: 10px 14px 6px;
-      font-size: 11px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--muted);
-      font-weight: 600;
-    }
+    /* KNOWLEDGE BASE section — the two KB-root governance files
+     * (STASHBASE.md + space-metadata.md) pinned at the top of the Files
+     * panel under a `.panel-section-head` "Knowledge base" label. Rows
+     * mirror the file-tree row metrics exactly (3px rhythm, 16px icon,
+     * 12px indent aligning the icon with the SPACE header's chevron) so
+     * the two sections read as one tidy list. Per-space rules are NOT
+     * here — they live in the tree below, where they physically are. */
     .kb-file-list {
-      padding: 0 6px 6px;
+      padding: 0;
     }
     .kb-file-row {
       appearance: none;
       display: flex;
-      align-items: baseline;
+      align-items: center;
+      gap: 4px;
       width: 100%;
       text-align: left;
-      padding: 6px 10px;
+      padding: 3px 8px 3px 12px;
       border: 0;
+      border-left: 2px solid transparent;
       background: transparent;
       color: var(--fg);
       font: inherit;
       font-size: 13px;
-      border-radius: 4px;
       cursor: pointer;
     }
     .kb-file-row:hover {
@@ -1119,16 +1149,23 @@
     }
     .kb-file-row.selected {
       background: var(--active);
-      color: var(--fg);
-      font-weight: 600;
+      border-left-color: var(--accent);
+      font-weight: 500;
     }
-    .kb-file-prefix {
-      color: var(--muted);
-      margin-right: 1px;
+    .kb-file-icon {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
     }
-    .kb-file-empty {
-      padding: 4px 10px 6px;
-      font-size: 12px;
+    .kb-file-icon svg {
+      width: 16px;
+      height: 16px;
       color: var(--muted);
-      font-style: italic;
+    }
+    .kb-file-label {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
