@@ -24,17 +24,46 @@ export function useGlobalDragDrop(): boolean {
   const [veilHot, setVeilHot] = useState(false);
   const { actions } = useApp();
   const dragDepth = useRef(0);
+  const hotRef = useRef(false);
   const dropTargetFolder = useRef('');
 
   useEffect(() => {
+    function clearDropHighlights() {
+      for (const r of document.querySelectorAll('.tree-row.folder.drop-target')) {
+        r.classList.remove('drop-target');
+      }
+      document.getElementById('sideHead')?.classList.remove('drop-target');
+    }
+    // Single hard-reset path for the veil. The enter/leave depth counter
+    // can strand (OS file drags don't always balance enter/leave —
+    // dropping into an iframe, releasing outside the window, or pressing
+    // Esc can leave the count > 0 with no `drop` firing on window), so we
+    // also call this from the `dragend` and `mousemove` safety nets below.
+    function hideVeil() {
+      dragDepth.current = 0;
+      hotRef.current = false;
+      setVeilHot(false);
+      clearDropHighlights();
+    }
     function onDragEnter(e: DragEvent) {
       if (!e.dataTransfer?.types.includes('Files')) return;
       dragDepth.current += 1;
+      hotRef.current = true;
       setVeilHot(true);
     }
     function onDragLeave() {
       dragDepth.current = Math.max(0, dragDepth.current - 1);
-      if (dragDepth.current === 0) setVeilHot(false);
+      if (dragDepth.current === 0) hideVeil();
+    }
+    // Safety nets so a mis-counted drag can't strand the veil. A real
+    // HTML5 drag suppresses `mousemove`, so the first normal pointer move
+    // after a drag means the gesture is over — if the veil is still up,
+    // it's stuck; clear it. `dragend` covers cancelled internal drags.
+    function onDragEnd() {
+      if (hotRef.current) hideVeil();
+    }
+    function onMouseMove() {
+      if (hotRef.current) hideVeil();
     }
     function onDragOver(e: DragEvent) {
       e.preventDefault();
@@ -54,12 +83,7 @@ export function useGlobalDragDrop(): boolean {
     }
     async function onDrop(e: DragEvent) {
       e.preventDefault();
-      dragDepth.current = 0;
-      setVeilHot(false);
-      for (const r of document.querySelectorAll('.tree-row.folder.drop-target')) {
-        r.classList.remove('drop-target');
-      }
-      document.getElementById('sideHead')?.classList.remove('drop-target');
+      hideVeil();
 
       const targetDir = dropTargetFolder.current;
       dropTargetFolder.current = '';
@@ -88,11 +112,15 @@ export function useGlobalDragDrop(): boolean {
     window.addEventListener('dragleave', onDragLeave);
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('drop', onDrop);
+    window.addEventListener('dragend', onDragEnd);
+    window.addEventListener('mousemove', onMouseMove);
     return () => {
       window.removeEventListener('dragenter', onDragEnter);
       window.removeEventListener('dragleave', onDragLeave);
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('drop', onDrop);
+      window.removeEventListener('dragend', onDragEnd);
+      window.removeEventListener('mousemove', onMouseMove);
     };
   }, [actions]);
 
