@@ -28,12 +28,6 @@ export interface FolderMeta {
   path: string;
 }
 
-export interface Heading {
-  level: number;
-  text: string;
-  id: string;
-}
-
 export interface SpaceState {
   current: string | null;
   recent: { path: string; openedAt: string }[];
@@ -82,7 +76,6 @@ export interface FileBody {
   name: string;
   format: FileFormat;
   content: string;
-  headings?: Heading[];
 }
 
 export interface IndexStatus {

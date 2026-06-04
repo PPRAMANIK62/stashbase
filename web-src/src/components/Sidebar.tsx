@@ -12,7 +12,6 @@ import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { KbPanel } from './KbPanel';
 import { ModalShell } from './ModalShell';
-import { Outline } from './Outline';
 import { SearchPanel } from './SearchPanel';
 import { api, errorMessage } from '../api';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
@@ -25,7 +24,7 @@ interface ElectronBridge {
 /**
  * Left rail composition. The activity bar (narrow icon column on the
  * far left) toggles between three mutually-exclusive side panels:
- *   - Files   → SnapshotWarning, space header, file tree, outline
+ *   - Files   → SnapshotWarning, space header, file tree
  *   - Search  → search input + ≈/= toggle + result list (see
  *               `SearchPanel.tsx`)
  *   - kb → KB-root file list (STASHBASE.md + future root docs)
@@ -49,7 +48,7 @@ export function Sidebar() {
 
 /** The current sidebar content minus the search input and the
  *  STASHBASE.md row — owns the snapshot-warning banner, the space header
- *  (with the 4 action buttons), the file tree, and the outline. */
+ *  (with the 4 action buttons), the file tree. */
 function FilesPanel() {
   const { state, actions, dispatch } = useApp();
   const [sideHeadDrop, setSideHeadDrop] = useState(false);
@@ -145,7 +144,6 @@ function FilesPanel() {
         )}
         <FileTree />
       </div>
-      <Outline />
     </div>
   );
 }

@@ -140,16 +140,10 @@ export function mount(app: express.Express): void {
       if (!format) return res.status(415).json({ error: 'unsupported format' });
       const content = readText(name);
       if (content == null) return res.status(404).json({ error: 'not found' });
-      if (format === 'html') {
-        // Return raw HTML in `content` (what the editor needs to show);
-        // headings come from analyzeHtml so the sidebar outline still
-        // works. The preview iframe loads its prepared version via the
-        // `/asset/*` route — keeping injected ids + bootstrap script out
-        // of the bytes that round-trip through the editor (otherwise
-        // autosave would silently rewrite the file to include them).
-        const { headings } = analyzeHtml(content);
-        return res.json({ name, format, content, headings });
-      }
+      // Raw HTML in `content` (what the editor needs); the preview iframe
+      // loads its prepared version via `/asset/*` — keeping injected ids +
+      // bootstrap script out of the bytes that round-trip through the
+      // editor (otherwise autosave would rewrite the file to include them).
       res.json({ name, format, content });
     } catch (err: unknown) {
       sendError(res, err);
@@ -348,7 +342,7 @@ export function mount(app: express.Express): void {
   // `<img src="X_files/figure.png">` resolve to other files in the
   // same `_files/` bundle (arxiv "Save Page As Complete" layout). HTML
   // responses go through `analyzeHtml` so the prepared bytes carry the
-  // scroll-bootstrap script + heading ids the sidebar outline needs.
+  // scroll-bootstrap script + heading ids for in-doc anchor scrolling.
   app.get('/asset/*', (req, res) => {
     const rel = (req.params as any)[0] as string;
     const abs = resolveAsset(rel);

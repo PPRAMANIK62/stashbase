@@ -4,19 +4,18 @@
       border-right: 1px solid var(--border);
       /* Row layout: 44px ActivityBar rail on the left, the active
        * sidebar-panel filling the rest. The panel itself owns the
-       * vertical stack (header / list / outline). */
+       * vertical stack (header / list). */
       display: flex;
       flex-direction: row;
       min-width: 0;
       min-height: 0;
       /* Explicit height so the inner `.file-list { flex: 1 }` knows how
        * much to grow into — without it, .sidebar would shrink to
-       * content size and the Outline panel would stop being pinned to
-       * the bottom. */
+       * content size and the file list would no longer fill the column. */
       height: 100%;
       position: relative;
-      /* Clip content as the grid column animates between 324px and 0
-       * on toggle — without this, file names visually spill into the
+      /* Clip content as the grid column resizes / collapses to the bare
+       * 44px rail — without this, file names visually spill into the
        * main pane mid-transition. */
       overflow: hidden;
     }
@@ -68,13 +67,18 @@
       background: var(--accent);
       border-radius: 0 2px 2px 0;
     }
+    /* Push the settings gear to the bottom of the rail (VSCode-style),
+     * keeping the view toggles grouped at the top. */
+    .activity-bar-btn-bottom {
+      margin-top: auto;
+    }
     .activity-bar-btn svg {
       width: 18px;
       height: 18px;
     }
 
     /* The right-hand 280px column of the sidebar. Owns the vertical
-     * stack: header / file-list / outline (or search/library
+     * stack: header / file-list (or search/kb
      * equivalents). `.activity-bar` is sibling on the left; this is
      * the panel that swaps content based on `state.activeSidebarView`. */
     .sidebar-panel {
@@ -986,67 +990,6 @@
       padding: 0 0 8px;
     }
 
-    /* Bottom Outline section — VSCode-style collapsible. Header bar always
-   * visible; body (heading list) shown when expanded. When expanded the
-   * section caps at ~40vh so the file tree above stays usable. */
-    .outline-section {
-      border-top: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      max-height: 40vh;
-      min-height: 28px;
-    }
-
-    .outline-section.collapsed {
-      max-height: 28px;
-    }
-
-    .outline-head {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      cursor: pointer;
-      user-select: none;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--muted);
-      flex-shrink: 0;
-    }
-
-    .outline-head:hover {
-      color: var(--fg);
-    }
-
-    .outline-chev {
-      width: 16px;
-      height: 16px;
-      display: grid;
-      place-items: center;
-      transition: transform .12s;
-    }
-
-    .outline-section.collapsed .outline-chev {
-      transform: rotate(-90deg);
-    }
-
-    .outline-chev svg {
-      width: 14px;
-      height: 14px;
-    }
-
-    .outline-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0 0 8px;
-    }
-
-    .outline-section.collapsed .outline-body {
-      display: none;
-    }
 
     /* Tree rows. Indent is set inline per node depth.
    * Folder rows toggle expand/collapse; file rows open the file. */
@@ -1265,54 +1208,6 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-
-    /* Outline view — heading list of the currently-open document. */
-    .outline-item {
-      padding: 5px 16px;
-      cursor: pointer;
-      font-size: 13px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      border-left: 2px solid transparent;
-    }
-
-    .outline-item:hover {
-      background: var(--hover);
-    }
-
-    .outline-item.level-1 {
-      font-weight: 500;
-    }
-
-    .outline-item.level-2 {
-      padding-left: 28px;
-      font-size: 12.5px;
-    }
-
-    .outline-item.level-3 {
-      padding-left: 40px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .outline-item.level-4 {
-      padding-left: 52px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .outline-item.level-5 {
-      padding-left: 64px;
-      font-size: 11.5px;
-      color: var(--muted);
-    }
-
-    .outline-item.level-6 {
-      padding-left: 76px;
-      font-size: 11.5px;
-      color: var(--muted);
     }
 
     /* Library panel — KB-root file list. Two sections:

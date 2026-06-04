@@ -109,7 +109,6 @@
     body.is-electron button,
     body.is-electron input,
     body.is-electron .tree-row,
-    body.is-electron .outline-item,
     body.is-electron a,
     body.is-electron strong {
       -webkit-app-region: no-drag;

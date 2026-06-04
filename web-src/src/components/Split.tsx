@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { assetBaseUrl } from '../api';
-import { extractHeadings, renderMarkdown, withScrollBootstrap } from '../markdown';
+import { renderMarkdown, withScrollBootstrap } from '../markdown';
 import { useApp } from '../store/AppContext';
 import { CodeEditor } from './CodeEditor';
 
@@ -28,9 +28,7 @@ function readStoredOrientation(): SplitOrientation {
 /**
  * Two-pane source+preview for both MD and HTML. Edits debounce-update
  * the right pane (~80ms — below perceptual threshold but spares
- * re-renders on every keystroke). MD edits also push live heading
- * extraction into the store so the Outline reflects the in-progress
- * buffer without waiting for autosave.
+ * re-renders on every keystroke).
  *
  * Initial content for the editor comes from the open file's "last
  * saved" baseline. The editor owns the live buffer thereafter; preview
@@ -97,9 +95,6 @@ export function Split({
     if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => setPreviewSource(doc), 80);
     actions.scheduleSave();
-    if (format === 'md') {
-      actions.setOutlineHeadings(extractHeadings(doc));
-    }
   }
 
   const applyPendingScroll = useCallback(() => {

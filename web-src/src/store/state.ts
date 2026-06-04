@@ -14,7 +14,6 @@ import type {
   FileBody,
   FileMeta,
   FolderMeta,
-  Heading,
   KeywordSearchResult,
   PdfFailure,
   SearchHit,
@@ -45,10 +44,6 @@ export interface OpenFile {
   /** Last on-disk content — diff target for the autosave path. Empty
    *  string for PDF (binary file; PdfPreview loads it directly). */
   content: string;
-  /** Server-supplied for HTML; live-extracted for MD (see Outline);
-   *  PdfPreview dispatches OUTLINE_HEADINGS once pdfjs `getOutline()`
-   *  returns. */
-  headings: Heading[];
   /** `'kb'` for the `<kbRoot>/STASHBASE.md` special tab — read-only,
    *  no edit button, no save path. Default (omitted) means a regular
    *  per-space file. */
@@ -228,7 +223,7 @@ export interface State {
   syncRunning: boolean;
 
   /** Which sidebar view is active. `'files'` shows the file tree +
-   *  library row + outline + banners; `'search'` shows the search
+   *  banners; `'search'` shows the search
    *  input + result list (input visible only in this view).
    *  Persisted to localStorage via the AppProvider so the user lands
    *  back where they left off. */
@@ -378,7 +373,6 @@ export type Action =
   /** Close every open tab — used on space switch / "go home". */
   | { type: 'TABS_RESET' }
   | { type: 'EDIT_MODE'; on: boolean }
-  | { type: 'OUTLINE_HEADINGS'; headings: Heading[] }
   | { type: 'TOGGLE_FOLDER'; path: string }
   | { type: 'EXPAND_FOLDER'; path: string }
   | { type: 'COLLAPSE_ALL_FOLDERS' }
@@ -513,7 +507,6 @@ export function reducer(s: State, a: Action): State {
         name: a.body.name,
         format: a.body.format,
         content: a.body.content,
-        headings: a.body.headings ?? [],
         // Carried through for the kb-overview tab so MainPane
         // can hide the edit button and the save path can skip it.
         ...((a.body as any).kind ? { kind: (a.body as any).kind } : {}),
@@ -605,11 +598,6 @@ export function reducer(s: State, a: Action): State {
         // shouldn't kick their in-progress changes out of the tab.
         ...(a.on && tab.preview ? { preview: false } : {}),
       });
-    }
-    case 'OUTLINE_HEADINGS': {
-      const tab = getActiveTab(s);
-      if (!tab?.file) return s;
-      return patchActiveTab(s, { file: { ...tab.file, headings: a.headings } });
     }
     case 'TOGGLE_FOLDER': {
       const next = new Set(s.expanded);

@@ -8,10 +8,10 @@ import { makeIframeFindController } from './findIframe';
  * Read-only MD preview. Renders the markdown to a self-contained HTML
  * document and feeds it to the iframe via `srcDoc`. Sandbox is
  * `allow-same-origin` (no scripts) so the parent can hash-nav into it
- * for outline clicks AND directly intercept `<a>` / `<img>` events.
+ * for in-doc anchor links AND directly intercept `<a>` / `<img>` events.
  *
  * The iframe id `previewFrame` is shared with HtmlPreview and the
- * split-edit iframe — outline clicks pick whichever exists.
+ * split-edit iframe — anchor scrolls pick whichever exists.
  */
 export function MarkdownPreview({ name, content }: { name: string; content: string }) {
   const { state, actions, activeTab } = useApp();

@@ -11,7 +11,7 @@ import {
 // page rendering.
 // eslint-disable-next-line import/no-unresolved
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { api, assetUrl, type Heading, type PdfStatusEntry } from '../api';
+import { api, assetUrl, type PdfStatusEntry } from '../api';
 import { useApp } from '../store/AppContext';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
@@ -24,15 +24,12 @@ GlobalWorkerOptions.workerSrc = workerSrc;
  * within one viewport of) the visible area — bundle size win on
  * large papers.
  *
- * Three things this component is responsible for, none of which the
+ * Two things this component is responsible for, neither of which the
  * out-of-the-box pdfjs viewer.html gives us cleanly:
- *   1. Outline extraction → dispatched into the shared `cur.headings`
- *      slot so the existing Outline panel works without a per-format
- *      fork.
- *   2. Failure banner sourced from `state.db` so users see
+ *   1. Failure banner sourced from `state.db` so users see
  *      "conversion failed, click to retry" in-context, not buried in
  *      a separate failure list.
- *   3. Chunk text search — when a search hit on a PDF-derived HTML
+ *   2. Chunk text search — when a search hit on a PDF-derived HTML
  *      file co-opens the PDF, we call into the find controller with
  *      the chunk text so the PDF jumps to the same passage.
  */
@@ -73,7 +70,6 @@ export function PdfPreview({ name }: { name: string }) {
         if (cancelled) { void pdf.destroy(); return; }
         setDoc(pdf);
         setNumPages(pdf.numPages);
-        void extractOutline(pdf, actions.setOutlineHeadings);
         // Sample page 1 size for placeholder heights — see pageMetrics.
         void pdf.getPage(1).then((p) => {
           if (cancelled) return;
@@ -502,31 +498,3 @@ function PdfPage({
   );
 }
 
-/** Pull the PDF's outline (if any) and dispatch as headings so the
- *  existing Outline panel renders entries without a per-format fork. */
-async function extractOutline(
-  pdf: PDFDocumentProxy,
-  setHeadings: (h: Heading[]) => void,
-): Promise<void> {
-  try {
-    const outline = await pdf.getOutline();
-    if (!outline || outline.length === 0) { setHeadings([]); return; }
-    const items: Heading[] = [];
-    let counter = 0;
-    const walk = (entries: Array<{ title: string; items: typeof outline }>, level: number) => {
-      for (const e of entries) {
-        if (!e?.title) continue;
-        // `id` stays format-neutral — Outline.tsx already keys on it
-        // for React; the PDF scroll-to-anchor handler matches by the
-        // counter-derived suffix to find the right outline entry.
-        items.push({ level: Math.min(level, 6) as Heading['level'], text: e.title, id: `pdf-h-${counter}` });
-        counter++;
-        if (e.items && e.items.length) walk(e.items as never, level + 1);
-      }
-    };
-    walk(outline as never, 1);
-    setHeadings(items);
-  } catch {
-    setHeadings([]);
-  }
-}

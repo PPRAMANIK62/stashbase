@@ -23,7 +23,6 @@ import {
   api,
   ApiError,
   getWindowId,
-  type Heading,
 } from '../api';
 import {
   getActiveTab,
@@ -194,7 +193,6 @@ export interface AppActions {
   scheduleSave: () => void;
   flushSave: () => Promise<void>;
 
-  setOutlineHeadings: (headings: Heading[]) => void;
   registerEditor: (h: EditorHandle | null) => void;
   /** Sidebar SearchBox registers its input element on mount so
    *  `focusSearch` can reach it without a DOM query. Same shape as
@@ -456,7 +454,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (body.content === tab.file.content) return;
       dispatch({
         type: 'FILE_PATCH',
-        patch: { content: body.content, headings: body.headings ?? [] },
+        patch: { content: body.content },
       });
     } catch {
       /* swallow — sidebar will reflect a delete on the next poll */
@@ -663,7 +661,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // `/asset/*` directly. We synthesize a FileBody so the rest of
       // the tab / nav / save-status machinery treats it like any
       // other open file.
-      body = { name, format: 'pdf' as const, content: '', headings: [] };
+      body = { name, format: 'pdf' as const, content: '' };
     } else {
       try {
         body = await api.getFile(name);
@@ -839,7 +837,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: 'space-metadata.md',
           format: 'md',
           content: r.content,
-          headings: [],
           // Marks the tab as kb-scope: MainPane hides the edit
           // button and the save path is short-circuited for this kind.
           kind: 'kb',
@@ -873,7 +870,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name,
           format: 'md',
           content: r.content,
-          headings: [],
           kind: 'kb',
         } as any,
         newTab: true,
@@ -913,7 +909,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Un-collapse the sidebar first if hidden — focusing an invisible
     // input is technically valid but reads as "nothing happened".
     if (s.sidebarCollapsed) {
-      dispatch({ type: 'SIDEBAR_FOLD_TOGGLE' });
+      dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: false });
     }
     // Make sure the search view is the active sidebar panel. The
     // input only renders in the Search panel — without this, hitting
@@ -1087,10 +1083,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'EDIT_MODE', on: true });
     }
   }, [flushSave]);
-
-  const setOutlineHeadings = useCallback((headings: Heading[]) => {
-    dispatch({ type: 'OUTLINE_HEADINGS', headings });
-  }, []);
 
   const registerEditor = useCallback((h: EditorHandle | null) => {
     editorRef.current = h;
@@ -1405,7 +1397,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     newNote, newFolder, deleteFile, deleteFolder,
     renameFile, renameFolder, moveFile, upload,
     scheduleSave, flushSave,
-    setOutlineHeadings, registerEditor,
+    registerEditor,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindWholeWord, findNext, findPrev,
@@ -1423,7 +1415,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     newNote, newFolder, deleteFile, deleteFolder,
     renameFile, renameFolder, moveFile, upload,
     scheduleSave, flushSave,
-    setOutlineHeadings, registerEditor,
+    registerEditor,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindWholeWord, findNext, findPrev,

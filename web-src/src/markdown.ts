@@ -3,7 +3,7 @@
  * legacy `editor-src/code-editor.js:renderMarkdown` so visual parity
  * is preserved across the migration.
  *
- * Headings get stable `id="h-N"` attributes so the sidebar outline can
+ * Headings get stable `id="h-N"` attributes so in-doc anchor links can
  * scroll-to via fragment nav. Styles are inlined because the iframe is
  * sandboxed and wouldn't inherit the host page's CSS anyway.
  */
@@ -111,23 +111,6 @@ img { max-width: 100%; height: auto; border-radius: 3px; }
 img[data-stashbase-previewable="true"] { cursor: zoom-in; }
 hr { border: 0; border-top: 1px solid rgb(233, 233, 231); margin: 1em 0; }
 `;
-
-/** Extract H1-H6 headings from a markdown source — used to populate
- *  the Outline panel live as the user edits. Same regex shape the old
- *  inline JS used; the sidebar reads from this every render in MD edit
- *  mode. */
-export function extractHeadings(md: string): { level: number; text: string; id: string }[] {
-  const items: { level: number; text: string; id: string }[] = [];
-  const taken = new Map<string, number>();
-  for (const line of md.split('\n')) {
-    const m = line.match(/^(#{1,6})\s+(.+?)\s*$/);
-    if (m) {
-      const text = m[2];
-      items.push({ level: m[1].length, text, id: nextSlug(text, taken) });
-    }
-  }
-  return items;
-}
 
 /** Append the same postMessage scroll / external-link listener
  *  `server/html.ts` injects into prepared HTML, so edit-mode previews

@@ -1,5 +1,5 @@
 /**
- * HTML → viewer-ready markup + outline + indexable plaintext.
+ * HTML → viewer-ready markup + section headings + indexable plaintext.
  *
  * One lightweight tokenizer pass walks heading blocks in document order:
  *   - heading elements (h1..h6) become section boundaries AND get a
@@ -99,7 +99,7 @@ function addScrollBootstrap(html: string): string {
   // `allow-same-origin`. That lets dynamic HTML render while preventing
   // the document from escaping its sandbox, but it also means the parent
   // cannot set `location.hash` directly or reach the DOM for find-in-page.
-  // This tiny trusted listener gives the sidebar outline a safe scroll
+  // This tiny trusted listener gives in-doc anchor links a safe scroll
   // target, runs the in-iframe half of the Cmd+F find bar (parent posts
   // queries, iframe paints highlights via CSS Custom Highlights), and
   // forwards external link clicks so a YouTube/GitHub/etc link doesn't
