@@ -21,11 +21,54 @@ export type FileFormat = 'md' | 'html';
 export type ViewerFormat = FileFormat | 'pdf' | 'image';
 
 /** Recognised note extensions and how the rest of the pipeline should
- *  treat them. Adding a format = one line here + a chunker + a viewer. */
-const NOTE_FORMATS: Array<{ pattern: RegExp; format: FileFormat }> = [
-  { pattern: /\.(md|markdown)$/i, format: 'md' },
-  { pattern: /\.(html|htm)$/i, format: 'html' },
+ *  treat them. Adding a format = one line here + a chunker + a viewer —
+ *  every note / derived-note / bundle regex elsewhere derives from this
+ *  list (via `NOTE_EXTS` and the `isNoteName` / `matchNoteStem` /
+ *  `matchDerivedNote` helpers), so the extension set has a single home. */
+const NOTE_FORMATS: Array<{ exts: string[]; format: FileFormat }> = [
+  { exts: ['md', 'markdown'], format: 'md' },
+  { exts: ['html', 'htm'], format: 'html' },
 ];
+
+/** Every note extension (no leading dot), e.g. `['md','markdown','html','htm']`.
+ *  Single source for the alternation baked into the regexes below. */
+export const NOTE_EXTS: readonly string[] = NOTE_FORMATS.flatMap((f) => f.exts);
+
+const NOTE_EXT_ALT = NOTE_EXTS.join('|');
+const NOTE_EXT_RE = new RegExp(`\\.(${NOTE_EXT_ALT})$`, 'i');
+/** `<dir>/.<stem>.<noteExt>` — an app-derived hidden note (dot-prefixed). */
+const DERIVED_NOTE_RE = new RegExp(`^(.*/)?\\.([^/]+)\\.(${NOTE_EXT_ALT})$`, 'i');
+/** `<dir>/<stem>.<noteExt>` — a visible note, captured for bundle naming. */
+const NOTE_STEM_RE = new RegExp(`^(.*/)?([^/]+)\\.(${NOTE_EXT_ALT})$`, 'i');
+
+/** True when `name` ends in a note extension (= the indexer would pick it
+ *  up). Same set as `detectFormat(name) !== null`; use this for boolean
+ *  "is it a note?" checks so the extension set isn't re-spelled. */
+export function isNoteName(name: string): boolean {
+  return NOTE_EXT_RE.test(name);
+}
+
+/** True when a path/basename has the app-derived hidden-note shape
+ *  (`.<stem>.md` etc). Used by search remap/drop and the sidebar hide
+ *  rule so a hidden derived note never leaks. */
+export function isDerivedNoteName(pathOrName: string): boolean {
+  return DERIVED_NOTE_RE.test(pathOrName);
+}
+
+/** Split a derived-note relative path into `{ dir, stem }` (dir keeps its
+ *  trailing slash, or is `''` at the root), or null if the shape doesn't
+ *  match. */
+export function matchDerivedNote(rel: string): { dir: string; stem: string } | null {
+  const m = rel.replace(/\\/g, '/').match(DERIVED_NOTE_RE);
+  return m ? { dir: m[1] ?? '', stem: m[2] } : null;
+}
+
+/** Split a (visible) note relative path into `{ dir, stem }` for deriving
+ *  the `<stem>_files/` bundle name, or null if it isn't a note. */
+export function matchNoteStem(rel: string): { dir: string; stem: string } | null {
+  const m = rel.replace(/\\/g, '/').match(NOTE_STEM_RE);
+  return m ? { dir: m[1] ?? '', stem: m[2] } : null;
+}
 
 /** Image extensions we OCR + view. Deliberately narrow for V1
  *  (png / jpg / jpeg / webp) — the OCR pipeline and viewer are tested
@@ -50,9 +93,14 @@ export function isImageFile(name: string): boolean {
  *  order. `.pdf` first since it's the oldest / most common case. */
 export const DERIVED_SOURCE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'webp'] as const;
 
+const NOTE_FORMAT_RES: Array<{ re: RegExp; format: FileFormat }> = NOTE_FORMATS.map((f) => ({
+  re: new RegExp(`\\.(${f.exts.join('|')})$`, 'i'),
+  format: f.format,
+}));
+
 export function detectFormat(name: string): FileFormat | null {
-  for (const { pattern, format } of NOTE_FORMATS) {
-    if (pattern.test(name)) return format;
+  for (const { re, format } of NOTE_FORMAT_RES) {
+    if (re.test(name)) return format;
   }
   return null;
 }

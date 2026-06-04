@@ -24,6 +24,7 @@ import {
   sanitizeFilename,
   saveText,
 } from '../files.ts';
+import { isNoteName } from '../format.ts';
 import { readFileOrder, setFolderOrder } from '../file-order.ts';
 import { cascadeRenameLinks, planRenameLinks, type RenameEntry } from '../links.ts';
 import { getCurrentSpace, toKbRel } from '../space.ts';
@@ -93,7 +94,7 @@ export function mount(app: express.Express): void {
         // Honour an extension the caller already typed; otherwise
         // attach the format-derived one. Both .md and .html count
         // as recognised extensions.
-        const hasExt = /\.(md|markdown|html|htm)$/i.test(requestedName);
+        const hasExt = isNoteName(requestedName);
         const base = hasExt ? requestedName : requestedName + ext;
         // Silently scrub characters that break cross-platform sync —
         // user keeps the original title in the file's first heading.

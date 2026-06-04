@@ -36,10 +36,12 @@ import { indexer } from './state.ts';
 
 const log = logger('kb');
 
-/** `<kbRoot>/.stashbase/space-metadata.md` — the agent-maintained 目录. */
-const FILENAME = 'space-metadata.md';
-/** Transitional root-level name from the first rename implementation. */
-const ROOT_FILENAME = 'space-metadata.md';
+// The agent-maintained 目录 lives at `<kbRoot>/.stashbase/space-metadata.md`.
+// The *filename* is the same in both the current sidecar location and the
+// transitional root location migrated away from on boot — the only
+// distinction is the directory (`.stashbase/` vs the KB root), so there's
+// one filename constant and two explicit path builders below.
+const METADATA_FILENAME = 'space-metadata.md';
 /** Legacy name migrated away from on boot (see `ensureKbOverview`). */
 const LEGACY_FILENAME = 'AGENT.md';
 const RULES_FILENAME = 'STASHBASE.md';
@@ -52,12 +54,14 @@ each space's topic and contents so future searches can route
 intelligently.)
 `;
 
+/** Current location: `<kbRoot>/.stashbase/space-metadata.md`. */
 function spaceMetadataPath(): string {
-  return path.join(getKbRoot(), '.stashbase', FILENAME);
+  return path.join(getKbRoot(), '.stashbase', METADATA_FILENAME);
 }
 
+/** Transitional root location migrated FROM on boot: `<kbRoot>/space-metadata.md`. */
 function rootSpaceMetadataPath(): string {
-  return path.join(getKbRoot(), ROOT_FILENAME);
+  return path.join(getKbRoot(), METADATA_FILENAME);
 }
 
 function legacyOverviewPath(): string {
@@ -110,7 +114,7 @@ export function ensureKbOverview(): void {
     try {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.renameSync(legacy, target);
-      log.info(`migrated ${path.basename(legacy)} → .stashbase/${FILENAME}`);
+      log.info(`migrated ${path.basename(legacy)} → .stashbase/${METADATA_FILENAME}`);
       return;
     } catch (err: unknown) {
       log.warn(`failed to migrate ${legacy} → ${target}: ${errorMessage(err)}`);
@@ -120,7 +124,7 @@ export function ensureKbOverview(): void {
   if (fs.existsSync(target)) return;
   try {
     setKbOverview(PLACEHOLDER);
-    log.info(`wrote placeholder ${FILENAME}`);
+    log.info(`wrote placeholder ${METADATA_FILENAME}`);
   } catch (err: unknown) {
     log.warn(`failed to write placeholder ${target}: ${errorMessage(err)}`);
   }

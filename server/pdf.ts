@@ -24,21 +24,13 @@
  * heavier; ML-backed quality ceiling).
  */
 import { spawn } from 'node:child_process';
-import fs, { existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { logger } from './log.ts';
-import {
-  hasRecord,
-  listByStatus,
-  markDone,
-  markFailed,
-  markInFlight,
-} from './pdf-status.ts';
-import { DERIVED_SOURCE_EXTS } from './format.ts';
+import { listByStatus } from './pdf-status.ts';
+import { DERIVED_SOURCE_EXTS, isDerivedNoteName, matchDerivedNote } from './format.ts';
 import { extractorSpawn } from './python-host.ts';
-import { fromKbRel, toKbRel } from './space.ts';
-
-const log = logger('pdf');
+import { fromKbRel } from './space.ts';
+import { discoverNewSources, maybeConvert, type ConversionSpec } from './conversion.ts';
 
 export interface ConvertResult {
   /** Absolute path of the written `.<stem>.md` (dot-prefixed app-
@@ -73,24 +65,11 @@ export function derivedPathsForPdf(pdfAbsPath: string): { notePath: string; bund
  *  the root the relative path resolves against (space root for
  *  /api/search, kb root for /api/kb/search). Probes `DERIVED_SOURCE_EXTS`
  *  in order and returns the first source present. */
-/** Shape of an app-derived hidden note: `<dir>/.<stem>.md|markdown|html|htm`. */
-const DERIVED_NOTE_RE = /^(.*\/)?\.([^/]+)\.(md|markdown|html|htm)$/i;
-
-/** True when a relative path has the app-derived hidden-note shape. The
- *  search routes use it to DROP an orphaned derived note from results
- *  when its source binary is gone (`originalForDerivedNote` → null) — a
- *  hidden `.md` must never surface as a clickable hit. */
-export function isAppDerivedNotePath(rel: string): boolean {
-  return DERIVED_NOTE_RE.test(rel);
-}
-
 export function originalForDerivedNote(noteRel: string, baseAbs: string): string | null {
-  const m = noteRel.match(DERIVED_NOTE_RE);
+  const m = matchDerivedNote(noteRel);
   if (!m) return null;
-  const dir = m[1] ?? '';
-  const stem = m[2];
   for (const ext of DERIVED_SOURCE_EXTS) {
-    const candidateRel = `${dir}${stem}.${ext}`;
+    const candidateRel = `${m.dir}${m.stem}.${ext}`;
     if (existsSync(path.join(baseAbs, candidateRel))) return candidateRel;
   }
   return null;
@@ -112,7 +91,7 @@ export function originalForDerivedNote(noteRel: string, baseAbs: string): string
 export function displayPathForHit(rel: string, baseAbs: string): string | null {
   const source = originalForDerivedNote(rel, baseAbs);
   if (source) return source;
-  if (isAppDerivedNotePath(rel)) return null;
+  if (isDerivedNoteName(rel)) return null;
   return rel;
 }
 
@@ -162,107 +141,24 @@ export function getInFlightPdfs(): string[] {
   return out;
 }
 
-/** Fire-and-forget wrapper used by the upload route. Skips silently
- *  if the target note already exists (re-drop of the same PDF). On
- *  success / failure persists the outcome to `state.db` so
- *  the UI can surface "Conversion failed" + a Retry button, even
- *  after app restart. `spaceRelative` is what we expose to clients
- *  via the in-flight list — same path shape the rest of the API
- *  uses. */
+/** Conversion spec wiring PDFs into the shared `conversion.ts` plumbing. */
+const PDF_SPEC: ConversionSpec = {
+  kind: 'pdf_extract',
+  matches: (name) => /\.pdf$/i.test(name),
+  derivedNote: (abs) => derivedPathsForPdf(abs).notePath,
+  convert: convertPdf,
+};
+
+/** Fire-and-forget convert used by the upload route. Skips if the note
+ *  already exists; persists in-flight → done/failed to `state.db` so the
+ *  UI can show "Converting…" and a Retry banner even after restart. */
 export function maybeConvertPdf(pdfAbsPath: string, spaceRelative: string): void {
-  const { notePath } = derivedPathsForPdf(pdfAbsPath);
-  if (existsSync(notePath)) {
-    log.info(`skipped ${pdfAbsPath} — ${path.basename(notePath)} already present`);
-    return;
-  }
-  let kbRel: string;
-  try {
-    kbRel = toKbRel(spaceRelative);
-  } catch {
-    // No current space — shouldn't happen at upload time, but if it
-    // does we still run the conversion; just skip status tracking.
-    log.warn(`conversion without space context, status tracking skipped: ${pdfAbsPath}`);
-    runConvert(pdfAbsPath, null);
-    return;
-  }
-  runConvert(pdfAbsPath, kbRel);
+  maybeConvert(pdfAbsPath, spaceRelative, PDF_SPEC);
 }
 
-/** Recursively walk `spaceAbs` for `.pdf` files that have no status
- *  record yet and queue them for conversion. Called from reconcile so
- *  that PDFs dropped in via git checkout / external copy / `mv` from
- *  outside StashBase still get auto-converted on the next open of the
- *  space — without re-attempting any PDF that's already succeeded,
- *  failed, or was cancelled (those have a record, so we skip).
- *
- *  Also "back-fills" a `done` record for PDFs whose sibling note already
- *  exists on disk (e.g. cloned from a repo where conversion was done
- *  upstream). That keeps the JSON map in sync with reality and prevents
- *  this discovery from re-firing on every reconcile. */
+/** Reconcile hook: convert any untracked `.pdf` under the space (dropped
+ *  in via git checkout / external copy / `mv`), back-filling a `done`
+ *  record when the sibling note already exists. */
 export function discoverNewPdfs(spaceAbs: string): void {
-  walkPdfs(spaceAbs, '', (rel, abs) => {
-    let kbRel: string;
-    try { kbRel = toKbRel(rel); }
-    catch { return; }
-    if (hasRecord(kbRel)) return;
-    const { notePath } = derivedPathsForPdf(abs);
-    if (existsSync(notePath)) {
-      // Already converted upstream — record it so we don't keep
-      // re-checking on every reconcile.
-      markDone(kbRel);
-      return;
-    }
-    log.info(`reconcile: queueing untracked PDF ${rel}`);
-    runConvert(abs, kbRel);
-  });
-}
-
-function walkPdfs(dir: string, prefix: string, fn: (rel: string, full: string) => void): void {
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-  catch { return; }
-  for (const e of entries) {
-    // Skip hidden / sidecar / git plumbing / bundle dirs.
-    if (e.name.startsWith('.')) continue;
-    if (e.isDirectory() && e.name.endsWith('_files')) continue;
-    const full = path.join(dir, e.name);
-    const rel = prefix ? `${prefix}/${e.name}` : e.name;
-    if (e.isDirectory()) {
-      walkPdfs(full, rel, fn);
-    } else if (e.isFile() && /\.pdf$/i.test(e.name)) {
-      fn(rel, full);
-    }
-  }
-}
-
-function runConvert(pdfAbsPath: string, kbRel: string | null): void {
-  const { notePath } = derivedPathsForPdf(pdfAbsPath);
-  log.info(`converting ${pdfAbsPath} → ${path.basename(notePath)} …`);
-  if (kbRel) markInFlight(kbRel);
-  const t0 = Date.now();
-  // MIN_VISIBLE_MS keeps the in-flight indicator visible long enough
-  // for a 500ms-poll client to pick it up even on sub-second pymupdf
-  // runs.
-  const MIN_VISIBLE_MS = 800;
-  convertPdf(pdfAbsPath).then(
-    (res) => {
-      log.info(
-        `converted in ${Date.now() - t0}ms: ` +
-          `${path.basename(res.notePath)} + ${path.basename(res.bundleDir)}/`,
-      );
-      if (kbRel) {
-        const elapsed = Date.now() - t0;
-        const wait = Math.max(0, MIN_VISIBLE_MS - elapsed);
-        setTimeout(() => markDone(kbRel), wait);
-      }
-    },
-    (err: Error) => {
-      log.warn(`conversion failed for ${pdfAbsPath}: ${err.message}`);
-      if (kbRel) {
-        const elapsed = Date.now() - t0;
-        const wait = Math.max(0, MIN_VISIBLE_MS - elapsed);
-        setTimeout(() => markFailed(kbRel, err.message), wait);
-      }
-    },
-  );
+  discoverNewSources(spaceAbs, PDF_SPEC);
 }

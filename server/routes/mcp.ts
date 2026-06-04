@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { currentWindowId } from '../space.ts';
 import { callSpaceMcpTool, listSpaceMcpTools } from '../mcp-host.ts';
+import { sendError } from '../http.ts';
 
 const APP_ROOT = process.env.STASHBASE_APP_ROOT
   ? path.resolve(process.env.STASHBASE_APP_ROOT)
@@ -18,8 +19,7 @@ export function mount(app: express.Express): void {
     try {
       res.json({ tools: await listSpaceMcpTools(currentWindowId()) });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(400).json({ error: message });
+      sendError(res, err);
     }
   });
 
@@ -32,8 +32,7 @@ export function mount(app: express.Express): void {
       if (!name) return res.status(400).json({ error: 'name required' });
       res.json({ result: await callSpaceMcpTool(currentWindowId(), name, args) });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(400).json({ error: message });
+      sendError(res, err);
     }
   });
 
@@ -50,8 +49,7 @@ export function mount(app: express.Express): void {
         config: getStandardMcpJson(wrapper),
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(400).json({ error: message });
+      sendError(res, err);
     }
   });
 
@@ -60,8 +58,7 @@ export function mount(app: express.Express): void {
     try {
       res.json({ ok: true, ...configureMcpClient(client) });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(400).json({ ok: false, error: message });
+      sendError(res, err);
     }
   });
 
@@ -70,8 +67,7 @@ export function mount(app: express.Express): void {
     try {
       res.json({ ok: true, ...disconnectMcpClient(client) });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(400).json({ ok: false, error: message });
+      sendError(res, err);
     }
   });
 }

@@ -20,7 +20,7 @@ import { decodeEntities } from './html.ts';
 import { errorCode, errorMessage, logger } from './log.ts';
 
 const log = logger('files');
-import { detectFormat, detectViewerFormat, isImageFile, type FileFormat, type ViewerFormat } from './format.ts';
+import { detectFormat, detectViewerFormat, isDerivedNoteName, isImageFile, matchNoteStem, type FileFormat, type ViewerFormat } from './format.ts';
 
 export { detectFormat, type FileFormat } from './format.ts';
 
@@ -216,11 +216,10 @@ export function deleteFile(relPath: string): boolean {
 /** Map a note's space-relative path to its `<stem>_files/` sibling
  *  bundle dir. Returns null when the path isn't a recognised note. */
 function bundleDirSibling(noteRel: string): string | null {
-  const base = path.posix.basename(noteRel);
-  const m = base.match(/^(.+)\.(md|markdown|html|htm)$/i);
+  const m = matchNoteStem(path.posix.basename(noteRel));
   if (!m) return null;
   const dir = path.posix.dirname(noteRel);
-  const bundle = `${m[1]}_files`;
+  const bundle = `${m.stem}_files`;
   return dir === '.' ? bundle : `${dir}/${bundle}`;
 }
 
@@ -516,7 +515,7 @@ function walk(
     // hides them — and that's exactly what "dot-prefix = system
     // artifact" should mean.
     if (e.isFile() && e.name.startsWith('.')) {
-      if (/^\.(.+)\.(md|markdown|html|htm)$/i.test(e.name)) continue;
+      if (isDerivedNoteName(e.name)) continue;
     }
     if (e.isDirectory() && e.name.endsWith('_files')) {
       const stem = e.name.slice(0, -'_files'.length);

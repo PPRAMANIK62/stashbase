@@ -78,8 +78,12 @@ export function moveDirectory(source: string, destination: string): { warning?: 
   try {
     fs.rmSync(source, { recursive: true, force: false });
   } catch {
+    // The copy succeeded, so ${destination} is the complete, authoritative
+    // copy. The source delete failed partway, so ${source} may now be
+    // partially emptied — redundant either way and safe to remove by hand;
+    // we don't retry here to avoid thrashing a half-deleted tree.
     return {
-      warning: `Moved into ${destination}, but the original at ${source} could not be fully removed. Please delete it manually.`,
+      warning: `Copied into ${destination} (that copy is complete). The original at ${source} couldn't be fully removed and may be partially deleted — it's now redundant; delete it manually.`,
     };
   }
   return {};

@@ -18,15 +18,10 @@
  * the in-flight list cover images for free.
  */
 import { spawn } from 'node:child_process';
-import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
 import { isImageFile } from './format.ts';
-import { logger } from './log.ts';
-import { hasRecord, markDone, markFailed, markInFlight } from './pdf-status.ts';
 import { extractorSpawn } from './python-host.ts';
-import { toKbRel } from './space.ts';
-
-const log = logger('image');
+import { discoverNewSources, maybeConvert, type ConversionSpec } from './conversion.ts';
 
 /** Dot-prefixed derived note path (`.<stem>.md`) for an image — same
  *  hidden-sibling layout PDFs use, minus the image bundle. */
@@ -58,85 +53,25 @@ export function convertImage(imageAbsPath: string): Promise<{ notePath: string }
   });
 }
 
-/** Fire-and-forget wrapper used by the upload route. Skips silently if
- *  the target note already exists (re-drop of the same image). Persists
- *  the outcome to `state.db` (shared with PDFs) so the UI can surface
- *  in-flight / failed status. `spaceRelative` is the path shape the rest
- *  of the API uses. */
+/** Conversion spec wiring images into the shared `conversion.ts` plumbing.
+ *  Unlike PDFs there's no image bundle — OCR yields only the text note. */
+const IMAGE_SPEC: ConversionSpec = {
+  kind: 'ocr_extract',
+  matches: isImageFile,
+  derivedNote: derivedNotePathForImage,
+  convert: convertImage,
+};
+
+/** Fire-and-forget OCR used by the upload route. Skips if the note
+ *  already exists; persists in-flight → done/failed to `state.db`
+ *  (shared with PDFs) so the UI can show status. */
 export function maybeConvertImage(imageAbsPath: string, spaceRelative: string): void {
-  const notePath = derivedNotePathForImage(imageAbsPath);
-  if (existsSync(notePath)) {
-    log.info(`skipped ${imageAbsPath} — ${path.basename(notePath)} already present`);
-    return;
-  }
-  let kbRel: string | null = null;
-  try {
-    kbRel = toKbRel(spaceRelative);
-  } catch {
-    log.warn(`OCR without space context, status tracking skipped: ${imageAbsPath}`);
-  }
-  runConvert(imageAbsPath, kbRel);
+  maybeConvert(imageAbsPath, spaceRelative, IMAGE_SPEC);
 }
 
-/** Recursively walk `spaceAbs` for image files with no status record and
- *  OCR them. Called from reconcile so images added out-of-band (git
- *  checkout, external copy, `mv`) get OCR'd on the next open of the
- *  space — without re-attempting any image that already has a record or
- *  whose sibling note is already on disk. Mirrors `discoverNewPdfs`. */
+/** Reconcile hook: OCR any untracked image under the space (added via git
+ *  checkout / external copy / `mv`), back-filling a `done` record when the
+ *  sibling note already exists. */
 export function discoverNewImages(spaceAbs: string): void {
-  walkImages(spaceAbs, '', (rel, abs) => {
-    let kbRel: string;
-    try { kbRel = toKbRel(rel); }
-    catch { return; }
-    if (hasRecord(kbRel)) return;
-    if (existsSync(derivedNotePathForImage(abs))) {
-      markDone(kbRel);
-      return;
-    }
-    log.info(`reconcile: queueing untracked image ${rel}`);
-    runConvert(abs, kbRel);
-  });
-}
-
-function walkImages(dir: string, prefix: string, fn: (rel: string, full: string) => void): void {
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-  catch { return; }
-  for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
-    if (e.isDirectory() && e.name.endsWith('_files')) continue;
-    const full = path.join(dir, e.name);
-    const rel = prefix ? `${prefix}/${e.name}` : e.name;
-    if (e.isDirectory()) {
-      walkImages(full, rel, fn);
-    } else if (e.isFile() && isImageFile(e.name)) {
-      fn(rel, full);
-    }
-  }
-}
-
-function runConvert(imageAbsPath: string, kbRel: string | null): void {
-  const notePath = derivedNotePathForImage(imageAbsPath);
-  log.info(`OCR ${imageAbsPath} → ${path.basename(notePath)} …`);
-  if (kbRel) markInFlight(kbRel);
-  const t0 = Date.now();
-  // Keep the in-flight indicator visible long enough for a 500ms-poll
-  // client to catch even a sub-second OCR run (mirrors pdf.ts).
-  const MIN_VISIBLE_MS = 800;
-  convertImage(imageAbsPath).then(
-    () => {
-      log.info(`OCR'd in ${Date.now() - t0}ms: ${path.basename(notePath)}`);
-      if (kbRel) {
-        const wait = Math.max(0, MIN_VISIBLE_MS - (Date.now() - t0));
-        setTimeout(() => markDone(kbRel), wait);
-      }
-    },
-    (err: Error) => {
-      log.warn(`OCR failed for ${imageAbsPath}: ${err.message}`);
-      if (kbRel) {
-        const wait = Math.max(0, MIN_VISIBLE_MS - (Date.now() - t0));
-        setTimeout(() => markFailed(kbRel, err.message), wait);
-      }
-    },
-  );
+  discoverNewSources(spaceAbs, IMAGE_SPEC);
 }

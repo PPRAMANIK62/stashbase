@@ -22,7 +22,7 @@ import {
   saveBytes,
   saveText,
 } from '../files.ts';
-import { isImageFile } from '../format.ts';
+import { isImageFile, isNoteName } from '../format.ts';
 import { errorMessage, logger } from '../log.ts';
 import { getCurrentSpace, runWithWindowId, toKbRel, WINDOW_ID_HEADER } from '../space.ts';
 import { extractEmbeddedResources } from '../resources.ts';
@@ -134,8 +134,16 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
       }
     }
   })();
-  for (const { abs, rel } of toConvertPdf) maybeConvertPdf(abs, rel);
-  for (const { abs, rel } of toOcrImage) maybeConvertImage(abs, rel);
+  // Kick off conversions fire-and-forget. They handle their own async
+  // failures internally; guard only against a synchronous throw at
+  // kickoff (the response is already sent, so it'd otherwise be an
+  // unhandled error) — same discipline as the index loop above.
+  for (const { abs, rel } of toConvertPdf) {
+    try { maybeConvertPdf(abs, rel); } catch (err: unknown) { log.warn(`upload: pdf convert kickoff failed for ${rel}: ${errorMessage(err)}`); }
+  }
+  for (const { abs, rel } of toOcrImage) {
+    try { maybeConvertImage(abs, rel); } catch (err: unknown) { log.warn(`upload: image OCR kickoff failed for ${rel}: ${errorMessage(err)}`); }
+  }
 }
 
 /** Compute the on-disk paths for a batch up front so any top-level file
@@ -155,7 +163,6 @@ function computeFinalNames(
     return paths[idx] && paths[idx].length ? paths[idx] : f.originalname;
   }
 
-  const NOTE_EXT = /\.(md|markdown|html|htm)$/i;
   // Step 1: reserve a non-colliding name for every TOP-LEVEL file (any
   // type). "Top-level" = no folder separator (so it lives directly at
   // the drop target, alongside its `<stem>_files/` bundle if it's a
@@ -166,7 +173,7 @@ function computeFinalNames(
   for (let i = 0; i < files.length; i++) {
     const rel = relForFile(i);
     if (rel.includes('/')) continue;
-    const isNote = NOTE_EXT.test(rel);
+    const isNote = isNoteName(rel);
     const dot = rel.lastIndexOf('.');
     const origStem = dot > 0 ? rel.slice(0, dot) : rel;
     const ext = dot > 0 ? rel.slice(dot) : ''; // includes leading dot, '' if none

@@ -20,9 +20,10 @@ import {
   setFileMetadataEntry,
   type FileMetadata,
 } from '../metadata.ts';
+import { HIDDEN_DOT_DIRS } from '../files.ts';
 import { derivedPathsForPdf, displayPathForHit, getInFlightPdfs, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
-import { isImageFile } from '../format.ts';
+import { isImageFile, isNoteName } from '../format.ts';
 import { clearRecord, listByStatus, readAll as readPdfStatus } from '../pdf-status.ts';
 import { getFsChangeCounter } from '../watcher.ts';
 import { getDaemon } from '../mfs-daemon.ts';
@@ -41,6 +42,17 @@ import {
 import { sendError } from '../http.ts';
 
 const log = logger('routes/indexing');
+
+/** True when a kbRoot-relative path dips into an internal hidden
+ *  directory (`.stashbase` config/secrets, `.git`, OS junk). The
+ *  MCP-facing `/api/kb/file/*` routes refuse these so an external client
+ *  can't read per-space config / secrets or other internals — the
+ *  space-scoped `/api/files/*` surface already hides them via the tree
+ *  walk; this brings the KB-wide surface in line. (`..`/root-escape is
+ *  caught separately by `isInsideKbRoot`.) */
+function dipsIntoHiddenKbDir(rel: string): boolean {
+  return rel.replace(/\\/g, '/').split('/').some((seg) => HIDDEN_DOT_DIRS.has(seg));
+}
 
 export function mount(app: express.Express): void {
   // Trigger a space sync manually — useful after external edits / file
@@ -468,6 +480,7 @@ export function mount(app: express.Express): void {
     try {
       const rel = (req.params as any)[0] as string;
       if (!rel) return res.status(400).json({ error: 'path required' });
+      if (dipsIntoHiddenKbDir(rel)) return res.status(400).json({ error: 'path is inside an internal directory' });
       const abs = path.resolve(getKbRoot(), rel);
       if (!isInsideKbRoot(abs)) return res.status(400).json({ error: 'path escapes kbRoot' });
       const content = fs.readFileSync(abs, 'utf8');
@@ -512,6 +525,7 @@ export function mount(app: express.Express): void {
     try {
       const rel = (req.params as any)[0] as string;
       if (!rel) return res.status(400).json({ error: 'path required' });
+      if (dipsIntoHiddenKbDir(rel)) return res.status(400).json({ error: 'path is inside an internal directory' });
       const content = (req.body ?? {}).content;
       if (typeof content !== 'string') {
         return res.status(400).json({ error: 'content (string) required' });
@@ -685,8 +699,6 @@ export function mount(app: express.Express): void {
     } catch (err: unknown) {
       sendError(res, err);
     }
-    // Mark log as used (currently silent on the happy path).
-    void log;
   });
 }
 
@@ -861,11 +873,6 @@ interface RecentFile {
 /** Hidden directories we never descend into. Mirrors
  *  `server/files.ts:HIDDEN_DOT_DIRS` plus `_files/` bundles which are
  *  attachments, not user-authored content. */
-const RECENT_WALK_SKIP = new Set([
-  '.stashbase', '.git', '.DS_Store', '.Trashes',
-  '.Spotlight-V100', '.fseventsd', '.AppleDouble', '.TemporaryItems',
-]);
-const RECENT_WALK_INDEXABLE = /\.(md|markdown|html|htm)$/i;
 const RECENT_WALK_MAX_ENTRIES = 5000;
 
 function walkForRecent(start: string, kbRoot: string): RecentFile[] {
@@ -877,7 +884,7 @@ function walkForRecent(start: string, kbRoot: string): RecentFile[] {
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
     catch { continue; }
     for (const e of entries) {
-      if (e.name.startsWith('.') && RECENT_WALK_SKIP.has(e.name)) continue;
+      if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
       if (e.name.endsWith('_files')) continue;
       const abs = path.join(dir, e.name);
       if (e.isDirectory()) {
@@ -885,7 +892,7 @@ function walkForRecent(start: string, kbRoot: string): RecentFile[] {
         continue;
       }
       if (!e.isFile()) continue;
-      if (!RECENT_WALK_INDEXABLE.test(e.name)) continue;
+      if (!isNoteName(e.name)) continue;
       let st: fs.Stats;
       try { st = fs.statSync(abs); } catch { continue; }
       const rel = path.relative(kbRoot, abs).split(path.sep).join('/');

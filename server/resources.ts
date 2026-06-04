@@ -25,7 +25,7 @@
  */
 import { blake3 } from '@noble/hashes/blake3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { detectFormat } from './format.ts';
+import { detectFormat, matchNoteStem } from './format.ts';
 
 export interface ExtractedAsset {
   /** Path in the SAME convention as the note path passed in (a sibling
@@ -95,10 +95,9 @@ function decodeDataUri(uri: string): { bytes: Buffer; ext: string } | null {
  *  directory prefix (same convention as the input), the visible bundle
  *  dir name (`<stem>_files`), and the in-note relative ref prefix. */
 function bundleFor(notePath: string): { dirPrefix: string; bundleName: string } | null {
-  const norm = notePath.replace(/\\/g, '/');
-  const m = norm.match(/^(.*\/)?([^/]+)\.(md|markdown|html|htm)$/i);
+  const m = matchNoteStem(notePath);
   if (!m) return null;
-  return { dirPrefix: m[1] ?? '', bundleName: `${m[2]}_files` };
+  return { dirPrefix: m.dir, bundleName: `${m.stem}_files` };
 }
 
 /**

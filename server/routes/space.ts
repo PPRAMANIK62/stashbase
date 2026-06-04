@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { detectFormat, getSpaceName, HIDDEN_DOT_DIRS } from '../files.ts';
+import { matchNoteStem } from '../format.ts';
 import {
   clearSpacePath,
   getCurrentSpace,
@@ -300,8 +301,8 @@ function walkSpace(
   const noteStems = new Set<string>();
   for (const e of entries) {
     if (!e.isFile()) continue;
-    const m = e.name.match(/^(.+)\.(md|markdown|html|htm)$/i);
-    if (m) noteStems.add(m[1]);
+    const m = matchNoteStem(e.name);
+    if (m) noteStems.add(m.stem);
   }
   for (const e of entries) {
     if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
