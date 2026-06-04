@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, assetUrl, errorMessage } from '../api';
 import { useApp } from '../store/AppContext';
-import { ImageLightbox } from './ImageLightbox';
 
 /**
  * In-pane viewer for a standalone image file. The image binary is
@@ -9,25 +8,65 @@ import { ImageLightbox } from './ImageLightbox';
  * searchable text lives in the hidden `.<stem>.md` OCR note that
  * `ocr_extract.py` writes alongside it.
  *
- * Mirrors PdfPreview's "binary file, no edit mode" shape but far
- * simpler — no pdfjs, no chunk-highlight find controller (a search hit
- * on an image's OCR note just opens the image; there's no in-image text
- * layer to jump within). Click the image to open the shared
- * ImageLightbox for zoom / pan.
+ * Defaults to **actual size (100%)** — for a screenshot that's the size
+ * it was captured at, which is usually the most comfortable read — and
+ * scrolls when the image is larger than the pane. A small zoom bar
+ * (− / % / + / Fit) plus ⌘/Ctrl-scroll (and trackpad pinch) adjust the
+ * scale. We size the image via an explicit CSS width rather than a
+ * transform so the browser resamples crisply and the scroll bounds stay
+ * correct. The view never auto-upscales (Fit caps at 100%) — upscaling
+ * a raster only blurs it; the user can still zoom past 100% by hand.
  *
  * If OCR failed for this image, a small banner offers Retry — the image
  * still renders (it's the user-facing file), only its searchable text is
  * missing. Failure state comes from `state.conversionFailures` (fed by
  * the index-status poll), the same list that drives PdfPreview's banner.
  */
+const MIN_SCALE = 0.1;
+const MAX_SCALE = 8;
+const clampScale = (v: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
+
 export function ImagePreview({ name }: { name: string }) {
   const { state } = useApp();
   const src = useMemo(() => assetUrl(name), [name]);
-  const [zoomed, setZoomed] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [scale, setScale] = useState(1);
   const [retryBusy, setRetryBusy] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const alt = name.split('/').pop() ?? name;
   const failure = state.conversionFailures.find((f) => f.path === name);
+
+  // Reset to actual size whenever the open file changes.
+  useEffect(() => {
+    setNatural(null);
+    setScale(1);
+  }, [src]);
+
+  // Native wheel listener (passive:false) so ⌘/Ctrl-scroll — and trackpad
+  // pinch, which the browser delivers as a ctrlKey wheel event — can zoom
+  // without the page also scrolling. Plain scroll stays as pan.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      setScale((s) => clampScale(s * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  function fitScale(): number {
+    const el = scrollRef.current;
+    if (!el || !natural) return 1;
+    // Fit the whole image in the scroll viewport, but never above 100% —
+    // auto-upscaling a raster just blurs it.
+    const availW = el.clientWidth - 48;
+    const availH = el.clientHeight - 48;
+    return clampScale(Math.min(1, availW / natural.w, availH / natural.h));
+  }
 
   async function onRetry() {
     setRetryBusy(true);
@@ -41,6 +80,8 @@ export function ImagePreview({ name }: { name: string }) {
       setRetryBusy(false);
     }
   }
+
+  const displayW = natural ? Math.round(natural.w * scale) : undefined;
 
   return (
     <div className="image-preview">
@@ -61,15 +102,30 @@ export function ImagePreview({ name }: { name: string }) {
           </button>
         </div>
       )}
-      <img
-        className="image-preview-img"
-        src={src}
-        alt={alt}
-        draggable={false}
-        onClick={() => setZoomed(true)}
-        title="Click to zoom"
-      />
-      {zoomed && <ImageLightbox src={src} alt={alt} onClose={() => setZoomed(false)} />}
+      <div className="image-preview-scroll" ref={scrollRef}>
+        <div className="image-preview-stage">
+          <img
+            className="image-preview-img"
+            src={src}
+            alt={alt}
+            draggable={false}
+            style={displayW != null ? { width: displayW } : undefined}
+            onLoad={(e) =>
+              setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+            }
+          />
+        </div>
+      </div>
+      {natural && (
+        <div className="image-zoom-bar">
+          <button type="button" title="Zoom out" onClick={() => setScale((s) => clampScale(s / 1.25))}>−</button>
+          <button type="button" className="image-zoom-pct" title="Actual size (100%)" onClick={() => setScale(1)}>
+            {Math.round(scale * 100)}%
+          </button>
+          <button type="button" title="Zoom in" onClick={() => setScale((s) => clampScale(s * 1.25))}>+</button>
+          <button type="button" title="Fit to pane" onClick={() => setScale(fitScale())}>Fit</button>
+        </div>
+      )}
     </div>
   );
 }
