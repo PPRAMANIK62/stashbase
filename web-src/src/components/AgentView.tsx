@@ -242,27 +242,33 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     setBlocks((bs) => [...bs, { kind: 'user', id: nextId(), text, attachments: atts.length ? atts : undefined }]);
     setTurnActive(true);
     openKind.current = null;
-    // Attached files live in the space (cwd); list their paths so the
-    // agent knows to read them. Kept out of the displayed header text —
-    // the header renders them as chips instead.
-    const wire = atts.length
-      ? `${text}${text ? '\n\n' : ''}Attached files (in this space):\n${atts.map((a) => `- ${a.path}`).join('\n')}`
-      : text;
+    // Build the wire prompt: the user's text, plus context lines the agent
+    // resolves with Read. The file currently open in the viewer rides along
+    // as ambient context (like Cursor's "current file"); explicit
+    // attachments (temp uploads = absolute, sidebar files = space-relative)
+    // are listed too. Both kept out of the displayed header — chips show
+    // the attachments; the composer chip signals the active file.
+    const ctx: string[] = [];
+    if (activeFile && !atts.some((a) => a.path === activeFile)) {
+      ctx.push(`Current file (open in the viewer): ${activeFile}`);
+    }
+    if (atts.length) {
+      ctx.push(`Attached files (read these):\n${atts.map((a) => `- ${a.path}`).join('\n')}`);
+    }
+    const wire = ctx.length ? `${text}${text ? '\n\n' : ''}${ctx.join('\n\n')}` : text;
     ws.send(JSON.stringify({ t: 'prompt', text: wire }));
     setAttachments([]);
   }
 
-  /** Upload OS files (dropped from Finder or picked via `+`) into the
-   *  current space, then add an attachment chip per file. The agent reads
-   *  them by the server-authoritative path (it de-dups colliding names). */
+  /** Attach OS files (dropped from Finder or picked via `+`) as transient
+   *  context: they're written to a temp dir OUTSIDE the space (so they
+   *  never enter the KB / file tree / index) and referenced by absolute
+   *  path, which the agent reads. */
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
     setUploading(true);
     try {
-      const items = files.map((file) => ({ file, relPath: file.name }));
-      const result = await api.upload(items, state.activeFolder);
-      await actions.loadFiles();
-      void actions.refreshIndexState();
+      const result = await api.attachFiles(files);
       // `result.files` is 1:1 with `files` (server preserves order); pull
       // image dimensions off the original File for the chip label.
       const entries = result.files ?? [];
@@ -270,15 +276,15 @@ export function AgentView({ active, title }: { active: boolean; title: string })
       let failed = 0;
       for (let i = 0; i < entries.length; i++) {
         const r = entries[i];
-        if (r.error) { failed++; continue; }
+        if (r.error || !r.path) { failed++; continue; }
         const orig = files[i];
         const dims = orig && orig.type.startsWith('image/') ? await readImageDims(orig) : undefined;
-        added.push({ path: r.file, name: baseName(r.file), dims });
+        added.push({ path: r.path, name: r.name, dims });
       }
       if (added.length) setAttachments((a) => mergeAttachments(a, added));
-      if (failed) actions.toast(`${failed} file(s) failed to upload.`, { level: 'error' });
+      if (failed) actions.toast(`${failed} file(s) failed to attach.`, { level: 'error' });
     } catch {
-      actions.toast('Upload failed.', { level: 'error' });
+      actions.toast('Attach failed.', { level: 'error' });
     } finally {
       setUploading(false);
     }
@@ -325,7 +331,8 @@ export function AgentView({ active, title }: { active: boolean; title: string })
   }
 
   // The document the user is currently looking at — shown as a context
-  // chip in the composer (display-only in Phase 1).
+  // chip in the composer and sent along as ambient context on each
+  // message (see `send`), unless it's already an explicit attachment.
   const activeFile = getActiveTab(state)?.file?.name ?? null;
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
@@ -337,9 +344,11 @@ export function AgentView({ active, title }: { active: boolean; title: string })
   }
 
   // Drag files anywhere onto the panel to attach them as context: OS files
-  // (Finder screenshots / PDFs) upload into the space; sidebar files
-  // (FILE_MIME) reference their existing path. We preventDefault on any
-  // file drag so the browser doesn't navigate to the dropped file.
+  // (Finder screenshots / PDFs) become transient attachments (temp dir,
+  // NOT the space); sidebar files (FILE_MIME) reference their existing
+  // path. `stopPropagation` is load-bearing: it stops the event before it
+  // reaches the window-level `useGlobalDragDrop` listener, which would
+  // otherwise *also* fire and import the file into the space.
   function dropKinds(dt: DataTransfer): { os: boolean; kb: boolean } {
     return { os: dt.types.includes('Files'), kb: dt.types.includes(FILE_MIME) };
   }
@@ -347,6 +356,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     const { os, kb } = dropKinds(e.dataTransfer);
     if (!os && !kb) return;
     e.preventDefault();
+    e.stopPropagation();
     // The sidebar drag source sets effectAllowed='move'; match it so the
     // drop isn't silently cancelled (OS files accept 'copy').
     e.dataTransfer.dropEffect = kb && !os ? 'move' : 'copy';
@@ -361,6 +371,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     const { os, kb } = dropKinds(e.dataTransfer);
     if (!os && !kb) return;
     e.preventDefault();
+    e.stopPropagation();
     setDragOver(false);
     if (phase !== 'live') return;
     const osFiles = Array.from(e.dataTransfer.files ?? []);

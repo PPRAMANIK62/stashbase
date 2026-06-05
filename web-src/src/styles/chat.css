@@ -194,11 +194,38 @@
      * See design-docs/chat-panel.md.
      * =================================================================== */
     .agent-view {
+      position: relative;
       flex: 1;
       min-height: 0;
       display: flex;
       flex-direction: column;
       background: var(--pane);
+    }
+    /* Drag-files-here overlay — shown while a file drag hovers the panel.
+     * `pointer-events: none` so it never steals the drop or flickers the
+     * dragenter/leave tracking; the panel's own handlers take the drop. */
+    .agent-drop-overlay {
+      position: absolute;
+      inset: 6px;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--accent) 7%, transparent);
+      backdrop-filter: blur(1.5px);
+      -webkit-backdrop-filter: blur(1.5px);
+    }
+    .agent-drop-card {
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--fg);
     }
     /* Header row — session title + history / new-chat actions */
     .agent-head {

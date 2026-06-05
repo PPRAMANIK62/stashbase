@@ -44,8 +44,16 @@ export function useGlobalDragDrop(): boolean {
       setVeilHot(false);
       clearDropHighlights();
     }
+    // The chat panel (AgentView) manages its own file drops — files
+    // dropped there are transient context, NOT KB imports. So the global
+    // coordinator (which imports into the space) sits out over that
+    // region: no veil, no folder-highlight, no upload.
+    function inChatPanel(e: DragEvent): boolean {
+      return e.target instanceof Element && !!e.target.closest('.agent-view');
+    }
     function onDragEnter(e: DragEvent) {
       if (!e.dataTransfer?.types.includes('Files')) return;
+      if (inChatPanel(e)) return;
       dragDepth.current += 1;
       hotRef.current = true;
       setVeilHot(true);
@@ -65,6 +73,7 @@ export function useGlobalDragDrop(): boolean {
       if (hotRef.current) hideVeil();
     }
     function onDragOver(e: DragEvent) {
+      if (inChatPanel(e)) return; // panel handles its own dragover
       e.preventDefault();
       const tgt = e.target instanceof Element ? e.target : null;
       const folderEl = tgt?.closest('.tree-row.folder') as HTMLElement | null;
@@ -81,6 +90,7 @@ export function useGlobalDragDrop(): boolean {
       dropTargetFolder.current = newTarget;
     }
     async function onDrop(e: DragEvent) {
+      if (inChatPanel(e)) { hideVeil(); return; } // panel handles its own drop
       e.preventDefault();
       hideVeil();
 

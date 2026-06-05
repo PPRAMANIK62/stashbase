@@ -430,6 +430,18 @@ export const api = {
     return parseJsonOrThrow<UploadResult>(r);
   },
 
+  /** Attach files as transient chat context — written to a throwaway OS
+   *  temp dir (NOT the space) and returned as absolute paths the agent
+   *  reads. Used by the composer `+` and panel drag-drop. */
+  attachFiles: async (
+    files: File[],
+  ): Promise<{ files: { name: string; path?: string; error?: string }[] }> => {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    const r = await fetch('/api/agent/attach', { method: 'POST', body: fd, headers: requestHeaders() });
+    return parseJsonOrThrow(r);
+  },
+
   // Sync / search / status --------------------------------------
   sync: () => send<SyncResult>('POST', '/api/sync'),
   search: (query: string, top_k = 8) =>
