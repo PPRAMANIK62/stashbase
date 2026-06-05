@@ -21,7 +21,7 @@
  */
 import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
-import { hasRecord, listByStatus, markDone, markFailed, markInFlight } from './conversion-status.ts';
+import { clearRecord, hasRecord, listByStatus, markDone, markFailed, markInFlight } from './conversion-status.ts';
 import { fromKbRel, toKbRel } from './space.ts';
 import { logger } from './log.ts';
 
@@ -42,15 +42,28 @@ export interface ConversionSpec {
   convert: (absPath: string) => Promise<unknown>;
 }
 
+/** kbRels with a conversion promise currently pending *in this process*.
+ *  This is the ground truth behind the `in-flight` status: a row is only
+ *  legitimately in-flight while it's in this set. An `in-flight` row that
+ *  isn't (see `reclaimInterruptedConversions`) is a corpse from a crashed
+ *  or restarted process — its subprocess was our child and died with us,
+ *  so its done/failed transition can never fire on its own. */
+const liveConversions = new Set<string>();
+
 /** Run a conversion fire-and-forget, persisting in-flight → done/failed
  *  to `state.db` (when a `kbRel` is known) so the UI can track it. */
 function runConversion(absPath: string, kbRel: string | null, spec: ConversionSpec): void {
   log.info(`${spec.kind}: ${absPath} → ${path.basename(spec.derivedNote(absPath))} …`);
-  if (kbRel) markInFlight(kbRel);
+  if (kbRel) { markInFlight(kbRel); liveConversions.add(kbRel); }
   const t0 = Date.now();
+  // Stay "live" until the exact tick we write done/failed — not when the
+  // promise settles. The terminal write is deferred up to MIN_VISIBLE_MS,
+  // and during that gap the row is still `in-flight` on disk; dropping it
+  // from the live set early would let a concurrent reconcile reclaim a row
+  // that's about to be finalized (or stomp a freshly re-queued retry).
   const settle = (fn: () => void) => {
     if (!kbRel) return;
-    setTimeout(fn, Math.max(0, MIN_VISIBLE_MS - (Date.now() - t0)));
+    setTimeout(() => { liveConversions.delete(kbRel); fn(); }, Math.max(0, MIN_VISIBLE_MS - (Date.now() - t0)));
   };
   spec.convert(absPath).then(
     () => {
@@ -62,6 +75,23 @@ function runConversion(absPath: string, kbRel: string | null, spec: ConversionSp
       settle(() => markFailed(kbRel!, err.message));
     },
   );
+}
+
+/** Reclaim `in-flight` rows orphaned by a crash/restart: any in-flight
+ *  record with no live promise in this process (see `liveConversions`)
+ *  can never settle on its own, so clearing it lets the reconcile walk
+ *  that follows (`discoverNewSources`) re-decide idempotently — back-fill
+ *  `done` if the derived note actually landed before the crash, re-queue
+ *  the conversion if it didn't, or drop it entirely if the source is gone.
+ *  Without this a half-finished conversion sticks the sidebar on
+ *  "Converting…" forever. Safe to call on every reconcile: genuinely
+ *  running conversions are in `liveConversions` and so are never touched. */
+export function reclaimInterruptedConversions(): void {
+  for (const { path: kbRel } of listByStatus('in-flight')) {
+    if (liveConversions.has(kbRel)) continue;
+    log.info(`reclaiming interrupted conversion: ${kbRel}`);
+    clearRecord(kbRel);
+  }
 }
 
 /** Fire-and-forget convert used by the upload route. Skips silently if

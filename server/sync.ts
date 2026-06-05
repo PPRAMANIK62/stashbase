@@ -21,6 +21,7 @@
  * space prefix before handing names to `files.ts:readText` (which
  * still operates space-relative).
  */
+import { reclaimInterruptedConversions } from './conversion.ts';
 import { readText } from './files.ts';
 import { discoverNewImages } from './image.ts';
 import { discoverNewPdfs } from './pdf.ts';
@@ -52,6 +53,10 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
   // ocr_extract) writes the derived .md to disk and the fs.watch
   // debounce will catch it on its next tick. We just want the queueing
   // to start so the user sees pendingConversions populate.
+  // Reclaim any in-flight conversions orphaned by a prior crash/restart
+  // first, so the discovery walk below can re-decide them (finish, re-
+  // queue, or drop) instead of seeing a stuck record and skipping.
+  reclaimInterruptedConversions();
   const cur = getCurrentSpace();
   if (cur) { discoverNewPdfs(cur); discoverNewImages(cur); }
 
@@ -137,6 +142,9 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
 export async function syncNewFiles(indexer: Indexer, space: string): Promise<SyncResult> {
   // Same rationale as syncIndex: queue untracked PDFs / images first so
   // the sidebar's "Converting…" indicator shows up on space open.
+  // Same reclaim-then-discover order as syncIndex (see there): clear
+  // crash-orphaned in-flight rows before the discovery walk re-decides.
+  reclaimInterruptedConversions();
   const cur = getCurrentSpace();
   if (cur) { discoverNewPdfs(cur); discoverNewImages(cur); }
 
