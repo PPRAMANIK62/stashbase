@@ -52,6 +52,20 @@ function SearchBox() {
     return () => actions.registerSearchInput(null);
   }, [actions]);
 
+  // Keep results fresh against the current content. This fires on mount
+  // (returning to Search after a view switch — the Sidebar mounts/
+  // unmounts SearchPanel) AND whenever the content changes underneath
+  // while Search stays open: a new/removed note (`files`) or a finished
+  // screenshot/PDF conversion (`pendingConversions` — its OCR text only
+  // becomes searchable once conversion completes, which also reloads
+  // `files`). Without this the user must edit the query to see new
+  // matches, since results live in the store and aren't otherwise
+  // refetched.
+  useEffect(() => {
+    if (state.filterQuery.trim()) void actions.runSearch(state.filterQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.files, state.pendingConversions]);
+
   function onChange(value: string) {
     dispatch({ type: 'FILTER', q: value });
     if (debounce.current) clearTimeout(debounce.current);
