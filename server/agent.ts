@@ -19,6 +19,7 @@
  *     { t: "close" }
  *   server → client:
  *     { t: "ready" }                                   // SDK session up
+ *     { t: "session-id", id }                          // SDK session_id (for history/resume)
  *     { t: "turn-start" }                              // prompt accepted
  *     { t: "text", delta }                             // streaming assistant text
  *     { t: "thinking", delta }                         // streaming thinking
@@ -102,8 +103,11 @@ class AgentSession {
   private q: Query | null = null;
   private pending = new Map<string, Pending>();
   private closed = false;
+  /** The SDK session_id, captured from the init message. Sent to the
+   *  client so the history dropdown can mark this session active. */
+  private sessionId: string | null = null;
 
-  constructor(private ws: WebSocket, readonly windowId: string, private effort?: EffortLevel) {
+  constructor(private ws: WebSocket, readonly windowId: string, private effort?: EffortLevel, private resume?: string) {
     ws.on('message', (raw) => this.onMessage(String(raw)));
     ws.on('close', () => this.dispose());
     ws.on('error', () => this.dispose());
@@ -123,6 +127,11 @@ class AgentSession {
           cwd,
           includePartialMessages: true,
           permissionMode: 'default',
+          // Resuming a past session loads its conversation history so the
+          // user can continue it. The transcript itself is rendered from
+          // getSessionMessages on the client; `resume` only primes the SDK
+          // to append to the same session_id rather than start a new one.
+          ...(this.resume ? { resume: this.resume } : {}),
           // Thinking depth (low … max). The SDK has no live setter for this
           // (unlike permissionMode), so it's fixed for the session's lifetime
           // — the renderer reconnects to change it. Omit → SDK default ('high').
@@ -164,6 +173,14 @@ class AgentSession {
   }
 
   private onSdkMessage(msg: SDKMessage): void {
+    // Every SDK message carries the session_id; capture + surface it the
+    // first time we see one (the init `system` message) so the history
+    // dropdown can mark the live session active and resume targets it.
+    const sid = (msg as { session_id?: unknown }).session_id;
+    if (!this.sessionId && typeof sid === 'string' && sid) {
+      this.sessionId = sid;
+      this.send({ t: 'session-id', id: sid });
+    }
     switch (msg.type) {
       case 'stream_event': {
         // Partial deltas → typewriter streaming for text + thinking.
@@ -325,8 +342,8 @@ function stringifyToolResult(content: unknown): string {
  *  them all down (the SDK cwd is then meaningless). */
 const sessions = new Set<AgentSession>();
 
-export function attachAgentWebSocket(ws: WebSocket, windowId = 'default', effort?: string): void {
-  const session = new AgentSession(ws, windowId, effort as EffortLevel | undefined);
+export function attachAgentWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string): void {
+  const session = new AgentSession(ws, windowId, effort as EffortLevel | undefined, resume);
   sessions.add(session);
   ws.on('close', () => { sessions.delete(session); });
 }

@@ -11,7 +11,7 @@
  * Codex shows a "Coming soon" placeholder (CodexView).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, getWindowId } from '../api';
+import { api, getWindowId, type SessionInfo } from '../api';
 import { FILE_MIME } from '../dragMime';
 import { renderMarkdownInline } from '../markdown';
 import { useApp } from '../store/AppContext';
@@ -19,7 +19,7 @@ import { getActiveTab, type ChatTab } from '../store/state';
 import {
   ChevronDownIcon, ClaudeIcon, HistoryIcon, PlusIcon, NewChatIcon, FileGenericIcon, CodeIcon,
   HandIcon, ClipboardListIcon, BoltIcon, CheckIcon, DumbbellIcon, SlashSquareIcon,
-  ArrowUpIcon,
+  ArrowUpIcon, EditIcon, TrashIcon,
 } from '../icons';
 
 // ----- permission modes (composer "Modes" dropdown) ----------------------
@@ -73,6 +73,7 @@ type Block =
 
 type ServerEvent =
   | { t: 'ready' }
+  | { t: 'session-id'; id: string }
   | { t: 'turn-start' }
   | { t: 'text'; delta: string }
   | { t: 'thinking'; delta: string }
@@ -109,6 +110,13 @@ export function AgentView({ active, title }: { active: boolean; title: string })
   // value without resubscribing on every change.
   const [effort, setEffort] = useState<EffortLevel>('high');
   const effortRef = useRef<EffortLevel>('high');
+  // The live session's SDK id (from the `session-id` event) — lets the
+  // History dropdown mark the current session active. `resumeIdRef` holds
+  // a session id to resume on the next connect; it rides the connect URL
+  // (like effort) and is consumed-and-cleared there.
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const resumeIdRef = useRef<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   // Which streaming block kind is currently "open" (so consecutive text
@@ -117,7 +125,14 @@ export function AgentView({ active, title }: { active: boolean; title: string })
 
   useEffect(() => {
     readyRef.current = false;
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent?windowId=${encodeURIComponent(getWindowId())}&effort=${effortRef.current}`;
+    // Consume-and-clear the resume id: it belongs to this one connection,
+    // so a later reconnect (Retry / effort change) starts fresh instead of
+    // re-resuming.
+    const resume = resumeIdRef.current;
+    resumeIdRef.current = null;
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent`
+      + `?windowId=${encodeURIComponent(getWindowId())}&effort=${effortRef.current}`
+      + (resume ? `&resume=${encodeURIComponent(resume)}` : '');
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -151,7 +166,31 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     setBlocks([]);
     setFatal(null);
     setTurnActive(false);
+    setCurrentSessionId(null);
     openKind.current = null;
+    setPhase('connecting');
+    setNonce((n) => n + 1);
+  }
+
+  /** Open a past session from the History dropdown: paint its transcript,
+   *  then reconnect with `resume` so the SDK appends to it and the user can
+   *  keep chatting. Unlike `reconnect`, blocks are pre-populated (not
+   *  cleared) with the replayed history. */
+  async function resumeSession(id: string) {
+    setHistoryOpen(false);
+    let hist: Block[] = [];
+    try {
+      hist = (await api.getSessionMessages(id)) as Block[];
+    } catch {
+      actions.toast('Could not load that session.', { level: 'error' });
+      return;
+    }
+    setBlocks(hist);
+    setFatal(null);
+    setTurnActive(false);
+    setCurrentSessionId(id);
+    openKind.current = null;
+    resumeIdRef.current = id;
     setPhase('connecting');
     setNonce((n) => n + 1);
   }
@@ -165,6 +204,9 @@ export function AgentView({ active, title }: { active: boolean; title: string })
         // user had picked a non-default mode, re-apply it so a reconnect
         // (Retry / effort change) doesn't silently reset it.
         if (mode !== 'default') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode }));
+        break;
+      case 'session-id':
+        setCurrentSessionId(ev.id);
         break;
       case 'turn-start':
         openKind.current = null;
@@ -397,9 +439,14 @@ export function AgentView({ active, title }: { active: boolean; title: string })
       <div className="agent-head">
         <span className="agent-head-title">{title}</span>
         <div className="agent-head-actions">
-          <button type="button" className="agent-head-btn" title="History (coming soon)" disabled>
-            <HistoryIcon />
-          </button>
+          <HistoryMenu
+            open={historyOpen}
+            currentSessionId={currentSessionId}
+            onToggle={() => setHistoryOpen((o) => !o)}
+            onClose={() => setHistoryOpen(false)}
+            onResume={resumeSession}
+            onActiveDeleted={reconnect}
+          />
           <button type="button" className="agent-head-btn" title="New Claude chat" onClick={newChat}>
             <NewChatIcon />
           </button>
@@ -436,6 +483,168 @@ export function AgentView({ active, title }: { active: boolean; title: string })
         onSend={send}
         onStop={stop}
       />
+    </div>
+  );
+}
+
+// ----- history dropdown --------------------------------------------------
+
+/** Compact relative time for a session row (`31m`, `3h`, `2d`, else a
+ *  date). Matches the terse style of the reference picker. */
+function relTime(ms: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (s < 60) return 'now';
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  if (s < 86400 * 7) return `${Math.floor(s / 86400)}d`;
+  return new Date(ms).toLocaleDateString();
+}
+
+/** The History button + its dropdown: lists all local Claude Code sessions
+ *  (newest first), with client-side search, and per-row open (click) /
+ *  rename (pencil) / delete (trash). Local only — no Web tab. Reuses the
+ *  ModeMenu outside-click convention. */
+function HistoryMenu({
+  open, currentSessionId, onToggle, onClose, onResume, onActiveDeleted,
+}: {
+  open: boolean;
+  currentSessionId: string | null;
+  onToggle: () => void;
+  onClose: () => void;
+  onResume: (id: string) => void;
+  onActiveDeleted: () => void;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+
+  async function refresh() {
+    setLoading(true);
+    try { setSessions(await api.listSessions()); }
+    catch { setSessions([]); }
+    finally { setLoading(false); }
+  }
+
+  // Load (refresh) the list each time the dropdown opens; reset transient
+  // search / edit state on close.
+  useEffect(() => {
+    if (open) { void refresh(); }
+    else { setQ(''); setEditingId(null); }
+  }, [open]);
+
+  // Close on outside click (same pattern as ModeMenu).
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open, onClose]);
+
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return needle ? sessions.filter((s) => s.title.toLowerCase().includes(needle)) : sessions;
+  }, [sessions, q]);
+
+  async function commitRename(id: string) {
+    const title = editText.trim();
+    setEditingId(null);
+    if (!title) return;
+    try {
+      const updated = await api.renameSession(id, title);
+      setSessions((ss) => ss.map((s) => (s.id === id ? updated : s)));
+    } catch { /* leave list as-is */ }
+  }
+
+  async function remove(id: string) {
+    try { await api.deleteSession(id); } catch { return; }
+    setSessions((ss) => ss.filter((s) => s.id !== id));
+    if (id === currentSessionId) onActiveDeleted();
+  }
+
+  return (
+    <div className="agent-history-wrap" ref={wrapRef}>
+      <button
+        type="button"
+        className="agent-head-btn"
+        title="Chat history"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <HistoryIcon />
+      </button>
+      {open && (
+        <div className="agent-history-menu" role="menu">
+          <div className="agent-history-search">
+            <input
+              type="text"
+              autoFocus
+              placeholder="Search sessions…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+          <div className="agent-history-list">
+            {loading && <div className="agent-history-empty">Loading…</div>}
+            {!loading && shown.length === 0 && (
+              <div className="agent-history-empty">{q ? 'No matches.' : 'No sessions yet.'}</div>
+            )}
+            {!loading && shown.map((s) => (
+              <div
+                key={s.id}
+                className={'agent-history-row' + (s.id === currentSessionId ? ' active' : '')}
+              >
+                {editingId === s.id ? (
+                  <input
+                    className="agent-history-rename"
+                    autoFocus
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); void commitRename(s.id); }
+                      else if (e.key === 'Escape') setEditingId(null);
+                    }}
+                    onBlur={() => void commitRename(s.id)}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="agent-history-open"
+                    title={s.title}
+                    onClick={() => onResume(s.id)}
+                  >
+                    <span className="agent-history-title">{s.title}</span>
+                    <span className="agent-history-time">{relTime(s.lastModified)}</span>
+                  </button>
+                )}
+                <div className="agent-history-row-actions">
+                  <button
+                    type="button"
+                    className="agent-history-act"
+                    title="Rename"
+                    onClick={() => { setEditingId(s.id); setEditText(s.title); }}
+                  >
+                    <EditIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className="agent-history-act"
+                    title="Delete"
+                    onClick={() => void remove(s.id)}
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

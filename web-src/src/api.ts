@@ -79,6 +79,25 @@ export interface FileBody {
   content: string;
 }
 
+/** A local Claude Code session, as listed in the chat panel's History
+ *  dropdown. Backed by the Agent SDK's transcript store. */
+export interface SessionInfo {
+  id: string;
+  title: string;
+  lastModified: number;
+  cwd?: string;
+  gitBranch?: string;
+}
+
+/** One block of a session's replayed transcript. Structurally a subset of
+ *  AgentView's `Block` (history tools are always settled), so it drops
+ *  straight into `setBlocks`. */
+export type SessionBlock =
+  | { kind: 'user'; id: string; text: string }
+  | { kind: 'assistant'; id: string; text: string }
+  | { kind: 'thinking'; id: string; text: string }
+  | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
+
 export interface IndexStatus {
   total: number;
   indexed: number;
@@ -523,6 +542,17 @@ export const api = {
    *  switched to Local. */
   removeApiKey: () =>
     send<{ hasKey: false }>('DELETE', '/api/embedder/key'),
+
+  // Claude sessions (chat-panel History dropdown) ----------------
+  /** All local Claude Code sessions, newest first. */
+  listSessions: () => getJson<SessionInfo[]>('/api/agent/sessions'),
+  /** A session's transcript as renderable blocks (for resume replay). */
+  getSessionMessages: (id: string) =>
+    getJson<SessionBlock[]>('/api/agent/sessions/' + encodeURIComponent(id) + '/messages'),
+  renameSession: (id: string, title: string) =>
+    send<SessionInfo>('PATCH', '/api/agent/sessions/' + encodeURIComponent(id), { title }),
+  deleteSession: (id: string) =>
+    send<Record<string, never>>('DELETE', '/api/agent/sessions/' + encodeURIComponent(id)),
 };
 
 /** Set the KB root, transparently handling the "directory is not empty"

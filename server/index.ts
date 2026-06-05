@@ -46,9 +46,11 @@ import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountFilesRoutes } from './routes/files.ts';
 import { mount as mountFoldersRoutes } from './routes/folders.ts';
 import { mount as mountUploadRoutes } from './routes/upload.ts';
+import { mount as mountAttachRoutes } from './routes/attach.ts';
 import { mount as mountIndexingRoutes } from './routes/indexing.ts';
 import { mount as mountTerminalRoutes } from './routes/terminal.ts';
 import { mount as mountMcpRoutes } from './routes/mcp.ts';
+import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 
 const log = logger('server');
 
@@ -207,9 +209,11 @@ mountEmbedderRoutes(app);
 mountFilesRoutes(app);
 mountFoldersRoutes(app);
 mountUploadRoutes(app);
+mountAttachRoutes(app);
 mountIndexingRoutes(app);
 mountTerminalRoutes(app);
 mountMcpRoutes(app);
+mountSessionsRoutes(app); // global (no requireSpace) — lists all local sessions
 
 // Renderer error sink. The root `ErrorBoundary` POSTs render-time
 // exceptions here so they appear in the same server log developers
@@ -271,7 +275,7 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // existing http.Server with Vite's HMR proxy.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
-  attachAgentWebSocket(ws, windowIdOf(req), effortOf(req));
+  attachAgentWebSocket(ws, windowIdOf(req), effortOf(req), resumeOf(req));
 });
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {
@@ -291,6 +295,19 @@ function effortOf(req: import('node:http').IncomingMessage): string | undefined 
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
     const e = u.searchParams.get('effort');
     return ['low', 'medium', 'high', 'xhigh', 'max'].includes(e ?? '') ? e! : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Read a session id to resume off the WS URL. Set by the history
+ *  dropdown when the user opens a past session; the SDK then appends to
+ *  that session rather than starting a fresh one. */
+function resumeOf(req: import('node:http').IncomingMessage): string | undefined {
+  try {
+    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
+    const id = u.searchParams.get('resume');
+    return id && id.trim() ? id.trim() : undefined;
   } catch {
     return undefined;
   }

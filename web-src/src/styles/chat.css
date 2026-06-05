@@ -260,6 +260,106 @@
     .agent-head-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-head-btn:disabled { opacity: 0.4; cursor: default; }
 
+    /* History dropdown — anchored to the head button, opening downward
+     * (mirrors .agent-mode-menu, which opens upward from the composer). */
+    .agent-history-wrap { position: relative; display: inline-flex; }
+    .agent-history-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      z-index: 20;
+      width: 320px;
+      max-width: calc(100vw - 24px);
+      padding: 6px;
+      background: var(--pane);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    }
+    .agent-history-search { padding: 2px 2px 6px; }
+    .agent-history-search input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 9px;
+      font-size: 13px;
+      color: var(--fg);
+      background: var(--hover);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      outline: none;
+    }
+    .agent-history-search input::placeholder { color: var(--muted); }
+    .agent-history-list { max-height: 320px; overflow-y: auto; }
+    .agent-history-empty { padding: 14px 8px; text-align: center; color: var(--muted); font-size: 12.5px; }
+    /* Row = the open button (fills width) + hover-revealed actions. */
+    .agent-history-row {
+      position: relative;
+      display: flex;
+      align-items: center;
+      border-radius: 7px;
+    }
+    .agent-history-row:hover { background: var(--hover); }
+    .agent-history-row.active { background: var(--active); }
+    .agent-history-open {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 7px 9px;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      color: var(--fg);
+    }
+    .agent-history-title {
+      flex: 1;
+      min-width: 0;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .agent-history-time { flex-shrink: 0; font-size: 11.5px; color: var(--muted); }
+    .agent-history-rename {
+      flex: 1;
+      min-width: 0;
+      margin: 4px 6px;
+      padding: 4px 7px;
+      font-size: 13px;
+      color: var(--fg);
+      background: var(--bg);
+      border: 1px solid var(--accent, var(--border));
+      border-radius: 6px;
+      outline: none;
+    }
+    /* Time and actions share the one right-hand slot: time shows at rest,
+     * hover swaps it for edit/delete (toggling `display` so neither
+     * reserves the other's space — time stays flush-right at rest). */
+    .agent-history-row-actions {
+      display: none;
+      gap: 1px;
+      flex-shrink: 0;
+      padding-right: 5px;
+    }
+    .agent-history-row:hover .agent-history-time { display: none; }
+    .agent-history-row:hover .agent-history-row-actions { display: flex; }
+    .agent-history-act {
+      width: 24px;
+      height: 24px;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 5px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .agent-history-act svg { width: 15px; height: 15px; }
+    .agent-history-act:hover { background: var(--border); color: var(--fg); }
+
     .agent-messages {
       flex: 1;
       min-height: 0;
