@@ -26,10 +26,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { listByStatus } from './pdf-status.ts';
 import { isDerivedNoteName, matchDerivedNote } from './format.ts';
 import { extractorSpawn } from './python-host.ts';
-import { fromKbRel } from './space.ts';
 import { discoverNewSources, maybeConvert, type ConversionSpec } from './conversion.ts';
 
 export interface ConvertResult {
@@ -119,25 +117,6 @@ export function convertPdf(pdfAbsPath: string): Promise<ConvertResult> {
       }
     });
   });
-}
-
-/** Space-relative paths of PDFs whose conversion is currently in
- *  progress, scoped to the current space. The /api/index-status route
- *  reads this so the sidebar can render a "Converting…" indicator
- *  and auto-reload once the entry disappears (= the new note has
- *  landed on disk).
- *
- *  Backed by `<KB>/.stashbase/state.db` (KB-wide) — we filter
- *  to the current space here so the sidebar's space-relative view
- *  stays correct. */
-export function getInFlightPdfs(): string[] {
-  const out: string[] = [];
-  for (const { path: kbRel } of listByStatus('in-flight')) {
-    const spaceRel = fromKbRel(kbRel);
-    if (spaceRel != null) out.push(spaceRel);
-  }
-  out.sort();
-  return out;
 }
 
 /** Conversion spec wiring PDFs into the shared `conversion.ts` plumbing. */

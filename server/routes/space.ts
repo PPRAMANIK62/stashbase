@@ -199,7 +199,7 @@ export function mount(app: express.Express): void {
       // re-embedded the chunks under the new prefix; the per-file /
       // pdf-conversion / queue rows under the old name are now orphans
       // (reconcile repopulates the new prefix on next open). Without
-      // this, a stale pdf_conversions row could mislead a future space
+      // this, a stale conversions row could mislead a future space
       // that reuses the old name — same hazard as delete.
       deleteSpaceState(oldName);
       res.json({ name: newName, path: newPath });
@@ -223,7 +223,7 @@ export function mount(app: express.Express): void {
       fs.rmSync(target, { recursive: true, force: true });
       // Clear derived state: vector-store chunks + the three state.db
       // tables. Without the state.db sweep, orphan rows survive the
-      // delete — most visibly a stale pdf_conversions record that makes
+      // delete — most visibly a stale conversions record that makes
       // a later same-named PDF skip auto-conversion (see deleteSpaceState).
       await indexer.deletePathPrefix(name);
       deleteSpaceState(name);

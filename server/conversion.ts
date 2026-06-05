@@ -16,13 +16,13 @@
  * Everything else (status tracking, the min-visible timer, the
  * skip-if-note-present guard, the reconcile walk) is identical and lives
  * here so `pdf.ts` / `image.ts` stay thin. Conversion status is persisted
- * to `state.db` via `pdf-status.ts` (shared store) so the sidebar's
+ * to `state.db` via `conversion-status.ts` (shared store) so the sidebar's
  * "Converting…" indicator and the Retry banner cover both kinds.
  */
 import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
-import { hasRecord, markDone, markFailed, markInFlight } from './pdf-status.ts';
-import { toKbRel } from './space.ts';
+import { hasRecord, listByStatus, markDone, markFailed, markInFlight } from './conversion-status.ts';
+import { fromKbRel, toKbRel } from './space.ts';
 import { logger } from './log.ts';
 
 const log = logger('conversion');
@@ -97,6 +97,22 @@ export function discoverNewSources(spaceAbs: string, spec: ConversionSpec): void
     log.info(`reconcile: queueing untracked ${spec.kind} source ${rel}`);
     runConversion(abs, kbRel, spec);
   });
+}
+
+/** Space-relative paths of every source (PDF or image) whose conversion is
+ *  currently in-flight, scoped to the current space. The /api/index-status
+ *  route reads this so the sidebar can render a "Converting…" indicator and
+ *  auto-reload once the entry disappears (= the derived note has landed on
+ *  disk). Backed by the KB-wide `conversions` table; we filter to the
+ *  current space here so the sidebar's space-relative view stays correct. */
+export function getInFlightConversions(): string[] {
+  const out: string[] = [];
+  for (const { path: kbRel } of listByStatus('in-flight')) {
+    const spaceRel = fromKbRel(kbRel);
+    if (spaceRel != null) out.push(spaceRel);
+  }
+  out.sort();
+  return out;
 }
 
 function walkSources(

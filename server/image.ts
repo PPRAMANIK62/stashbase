@@ -14,7 +14,7 @@
  * via `files.ts walk()`'s sibling-bound rule, but still indexed).
  *
  * Conversion status reuses the same `state.db`-backed store as PDFs
- * (`pdf-status.ts`, keyed by path) so the "Converting…" indicator and
+ * (`conversion-status.ts`, keyed by path) so the "Converting…" indicator and
  * the in-flight list cover images for free.
  */
 import { spawn } from 'node:child_process';

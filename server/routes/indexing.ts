@@ -17,10 +17,11 @@ import {
   type FileMetadata,
 } from '../metadata.ts';
 import { HIDDEN_DOT_DIRS } from '../files.ts';
-import { derivedPathsForPdf, displayPathForHit, getInFlightPdfs, maybeConvertPdf } from '../pdf.ts';
+import { derivedPathsForPdf, displayPathForHit, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
+import { getInFlightConversions } from '../conversion.ts';
 import { isImageFile, isNoteName, isUnstructuredSource } from '../format.ts';
-import { clearRecord, listByStatus, readAll as readPdfStatus } from '../pdf-status.ts';
+import { clearRecord, listByStatus, readAll as readConversionStatus } from '../conversion-status.ts';
 import { getFsChangeCounter } from '../watcher.ts';
 import { getDaemon } from '../mfs-daemon.ts';
 import { clearSnapshotWarning, getSnapshotWarning, indexer } from '../state.ts';
@@ -190,7 +191,7 @@ export function mount(app: express.Express): void {
         ...status,
         pending,
         orphaned,
-        pendingConversions: getInFlightPdfs(),
+        pendingConversions: getInFlightConversions(),
         conversionFailures,
         treeVersion: getFsChangeCounter(),
         // Surface any unresolved snapshot-import warning for the
@@ -220,7 +221,7 @@ export function mount(app: express.Express): void {
   // PDF's status).
   app.get('/api/pdf/status', (_req, res) => {
     try {
-      res.json({ entries: readPdfStatus() });
+      res.json({ entries: readConversionStatus() });
     } catch (err: unknown) {
       sendError(res, err);
     }

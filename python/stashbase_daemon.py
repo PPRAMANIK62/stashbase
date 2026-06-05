@@ -836,7 +836,7 @@ def op_search(svc: StashbaseStore, args: dict) -> dict:
     query = args["query"].strip()
     space = args.get("space")
     explicit_prefix = args.get("path_prefix")
-    top_k_raw = int(args.get("top_k", 10))
+    top_k_raw = int(args.get("top_k", 8))
     top_k = max(1, min(200, top_k_raw))
     if not query:
         return {"hits": []}
