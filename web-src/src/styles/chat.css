@@ -10,17 +10,29 @@
       grid-template-columns: 44px 1fr 6px var(--chat-width, 480px);
     }
 
+    /* Match the sidebar's drag handle (globals.css `.sidebar-splitter`):
+     * a 6px transparent hit area whose only visible cue is a crisp 2px
+     * line drawn by `::after` on hover/active — not a fat colored band. */
     .chat-splitter {
       grid-column: 3;
       grid-row: 1;
+      position: relative;
       cursor: col-resize;
-      background: var(--border);
-      opacity: 0.5;
-      transition: opacity .12s, background .12s;
+      background: transparent;
     }
-    .chat-splitter:hover,
-    .chat-splitter:active {
-      opacity: 1;
+    .chat-splitter::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      background: transparent;
+      transition: background .12s;
+    }
+    .chat-splitter:hover::after,
+    .chat-splitter:active::after {
       background: var(--accent);
     }
 
@@ -284,7 +296,6 @@
       align-items: center;
       gap: 8px;
       padding: 6px 8px 6px 12px;
-      border-bottom: 1px solid var(--border);
     }
     .agent-head-title {
       flex: 1;
@@ -349,12 +360,6 @@
       width: 64px;
       height: 50px;
       image-rendering: pixelated;
-    }
-    .agent-hero-tip {
-      color: var(--muted);
-      font-size: 12.5px;
-      line-height: 1.5;
-      max-width: 260px;
     }
     .agent-empty,
     .agent-ended {
@@ -627,7 +632,6 @@
     /* Composer */
     .agent-composer {
       position: relative;
-      border-top: 1px solid var(--border);
       padding: 8px;
       background: var(--pane);
     }
@@ -650,14 +654,27 @@
       font-size: 13px;
       line-height: 1.5;
       color: var(--fg);
-      max-height: 200px;
-      padding: 0 2px;
+      /* Grow with content natively (Chromium 123+, Electron 30+): taller
+       * only when the text wraps, up to the max. `rows={1}` is the fallback
+       * height if field-sizing is ever unavailable. The min-height floors
+       * the empty input a touch taller than the button row below it (the
+       * 28px send button) so the composer isn't top-light. */
+      field-sizing: content;
+      min-height: 36px;
+      max-height: 160px;
+      padding: 6px 2px 0;
     }
-    /* Action bar under the textarea: + / slash / context chip … mode / send */
+    /* Action bar under the textarea: + / slash / context chip … mode / send.
+     * A full-width rule separates it from the input — the negative side
+     * margins bleed past the box's 8px padding so the line spans edge to
+     * edge, then the matching padding restores the content inset. */
     .agent-composer-bar {
       display: flex;
       align-items: center;
       gap: 5px;
+      margin: 0 -8px;
+      padding: 6px 8px 0;
+      border-top: 1px solid var(--border);
     }
     .agent-bar-spacer { flex: 1; }
     .agent-bar-btn {
@@ -674,23 +691,41 @@
       line-height: 1;
     }
     .agent-bar-btn svg { width: 16px; height: 16px; }
-    .agent-bar-btn.slash { font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+    /* Slash-command button: the rounded-square-with-slash glyph IS the box
+     * (drawn by SlashSquareIcon), not a CSS border — so this is a plain
+     * icon button like `+`. Slightly larger icon to match the `+`'s weight. */
+    .agent-bar-btn.slash svg { width: 18px; height: 18px; }
     .agent-bar-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-bar-btn:disabled { opacity: 0.5; cursor: default; }
+    /* Slash keeps a hover even while it's a disabled placeholder — a light
+     * wash behind the glyph so it reads as a button. */
+    .agent-bar-btn.slash:hover {
+      opacity: 1;
+      background: var(--hover);
+      color: var(--fg);
+    }
+    /* Thin vertical rule separating the action cluster from the context chip. */
+    .agent-bar-divider {
+      width: 1px;
+      align-self: stretch;
+      margin: 3px 3px;
+      background: var(--border);
+    }
+    /* Borderless context chip — just a file glyph + name, VSCode-style. */
     .agent-ctx-chip {
       display: inline-flex;
       align-items: center;
       gap: 4px;
       max-width: 180px;
-      padding: 2px 8px 2px 5px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
       color: var(--muted);
       font-size: 11.5px;
     }
     .agent-ctx-icon { width: 13px; height: 13px; flex-shrink: 0; }
     .agent-ctx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .agent-mode-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       border: 0;
       background: transparent;
       color: var(--muted);
@@ -701,22 +736,108 @@
       cursor: pointer;
       white-space: nowrap;
     }
+    .agent-mode-icon { width: 14px; height: 14px; flex-shrink: 0; }
+    .agent-mode-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-mode-btn:disabled { cursor: default; }
+
+    /* "Modes" dropdown — opens upward from the mode button. */
+    .agent-mode-wrap { position: relative; display: inline-flex; }
+    .agent-mode-menu {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 6px);
+      z-index: 20;
+      width: 320px;
+      max-width: calc(100vw - 24px);
+      padding: 6px;
+      background: var(--pane);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    }
+    .agent-mode-menu-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .agent-mode-opt {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      width: 100%;
+      padding: 8px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      color: var(--fg);
+    }
+    .agent-mode-opt:hover { background: var(--hover); }
+    .agent-mode-opt.active { background: var(--active); }
+    .agent-mode-opt-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; color: var(--muted); }
+    .agent-mode-opt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+    .agent-mode-opt-title { font-size: 13px; font-weight: 500; }
+    .agent-mode-opt-desc { font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+    .agent-mode-opt-check { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+
+    /* Effort footer — icon + label on the left, a 5-notch slider on the
+     * right. Separated from the mode list by a hairline. */
+    .agent-effort {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      padding: 10px 8px 4px;
+      border-top: 1px solid var(--border);
+    }
+    .agent-effort-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
+    .agent-effort-label { flex: 1; font-size: 12.5px; color: var(--fg); }
+    .agent-effort-level { color: var(--muted); }
+    .agent-effort-track { display: flex; align-items: center; gap: 7px; padding: 4px 2px; }
+    .agent-effort-notch {
+      width: 8px;
+      height: 8px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: var(--border);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background .12s;
+    }
+    .agent-effort-notch.on { background: var(--accent); }
+    .agent-effort-notch.max.on { background: #a855f7; }
+    /* The current level is a larger knob with a ring, like a slider handle. */
+    .agent-effort-notch.cur {
+      width: 14px;
+      height: 14px;
+      background: var(--bg);
+      border: 2px solid var(--accent);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .agent-effort-notch.max.cur { border-color: #a855f7; }
+    /* Neutral send button — subtle surface + border, not a filled accent
+     * (matches the VSCode composer). Goes accent only on hover-when-ready. */
     .agent-send {
       flex-shrink: 0;
       width: 28px;
       height: 28px;
-      border: 0;
+      border: 1px solid var(--border);
       border-radius: 8px;
-      background: var(--accent);
-      color: #fff;
+      background: var(--active);
+      color: var(--fg);
       font-size: 15px;
       cursor: pointer;
       display: grid;
       place-items: center;
     }
+    .agent-send:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
     .agent-send:disabled { opacity: 0.4; cursor: default; }
-    .agent-send.stop { background: #e45649; font-size: 11px; }
+    .agent-send.stop { background: #e45649; border-color: #e45649; color: #fff; font-size: 11px; }
 
     /* @-mention popup */
     .agent-mention {

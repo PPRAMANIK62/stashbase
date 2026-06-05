@@ -17,8 +17,33 @@ import { renderMarkdownInline } from '../markdown';
 import { useApp } from '../store/AppContext';
 import { getActiveTab, type ChatTab } from '../store/state';
 import {
-  ChevronDownIcon, ClaudeIcon, HistoryIcon, PlusIcon, FileGenericIcon,
+  ChevronDownIcon, ClaudeIcon, HistoryIcon, PlusIcon, NewChatIcon, FileGenericIcon, CodeIcon,
+  HandIcon, ClipboardListIcon, BoltIcon, CheckIcon, DumbbellIcon, SlashSquareIcon,
 } from '../icons';
+
+// ----- permission modes (composer "Modes" dropdown) ----------------------
+
+/** The permission modes we expose, mapped 1:1 to the Agent SDK's
+ *  `permissionMode`. Switching one sends `{ t: 'set-mode' }` → the server
+ *  calls `query.setPermissionMode` live (see server/agent.ts). We omit the
+ *  SDK's dangerous `bypassPermissions` / `dontAsk`. */
+type PermMode = 'default' | 'acceptEdits' | 'plan' | 'auto';
+
+const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon }[] = [
+  { id: 'default', label: 'Ask before edits', desc: 'Claude will ask for approval before making each edit', Icon: HandIcon },
+  { id: 'acceptEdits', label: 'Edit automatically', desc: 'Claude will apply edits without asking each time', Icon: CodeIcon },
+  { id: 'plan', label: 'Plan mode', desc: 'Claude will explore and present a plan before editing', Icon: ClipboardListIcon },
+  { id: 'auto', label: 'Auto mode', desc: 'Claude automatically chooses the best permission mode for each task', Icon: BoltIcon },
+];
+
+/** Thinking effort, mapped 1:1 to the SDK's `effort` option (low … max,
+ *  default 'high'). Unlike permission mode there's no live setter, so
+ *  effort is fixed per session — changing it reconnects (see AgentView). */
+type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+const EFFORTS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+const EFFORT_LABEL: Record<EffortLevel, string> = {
+  low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-High', max: 'Max',
+};
 
 // ----- block model -------------------------------------------------------
 
@@ -70,6 +95,14 @@ export function AgentView({ active, title }: { active: boolean; title: string })
   const [phase, setPhase] = useState<'connecting' | 'live' | 'closed'>('connecting');
   const [fatal, setFatal] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  // Permission mode for this session — drives the composer's Modes
+  // dropdown. Switching it sends `set-mode` so the SDK applies it live.
+  const [mode, setMode] = useState<PermMode>('default');
+  // Thinking effort — fixed per session (no live SDK setter), so it rides
+  // the connect URL. `effortRef` lets the connect effect read the latest
+  // value without resubscribing on every change.
+  const [effort, setEffort] = useState<EffortLevel>('high');
+  const effortRef = useRef<EffortLevel>('high');
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   // Which streaming block kind is currently "open" (so consecutive text
@@ -78,7 +111,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
 
   useEffect(() => {
     readyRef.current = false;
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent?windowId=${encodeURIComponent(getWindowId())}`;
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent?windowId=${encodeURIComponent(getWindowId())}&effort=${effortRef.current}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -122,6 +155,10 @@ export function AgentView({ active, title }: { active: boolean; title: string })
       case 'ready':
         readyRef.current = true;
         setPhase('live');
+        // A fresh session always starts at permissionMode 'default'; if the
+        // user had picked a non-default mode, re-apply it so a reconnect
+        // (Retry / effort change) doesn't silently reset it.
+        if (mode !== 'default') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode }));
         break;
       case 'turn-start':
         openKind.current = null;
@@ -205,11 +242,27 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     wsRef.current?.send(JSON.stringify({ t: 'interrupt' }));
   }
 
+  /** Switch permission mode and tell the server to apply it live. */
+  function changeMode(m: PermMode) {
+    setMode(m);
+    wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: m }));
+  }
+
+  /** Change thinking effort. The SDK fixes effort at session construction
+   *  (no live setter), so we apply it by reconnecting — but only when the
+   *  chat is still empty, so we never discard a real conversation. With
+   *  history present it takes effect on the next new chat. */
+  function changeEffort(level: EffortLevel) {
+    setEffort(level);
+    effortRef.current = level;
+    if (blocks.length === 0) reconnect();
+  }
+
   /** Spawn a fresh Claude chat tab (the in-panel `+`, mirroring the
    *  chrome launcher). */
   function newChat() {
     const same = state.chatTabs.filter((t) => t.agent === 'claude');
-    const tabTitle = same.length === 0 ? 'Claude Code' : `Claude Code ${same.length + 1}`;
+    const tabTitle = same.length === 0 ? 'Untitled' : `Untitled ${same.length + 1}`;
     const tab: ChatTab = { id: crypto.randomUUID(), agent: 'claude', title: tabTitle, mode: 'agent' };
     dispatch({ type: 'CHAT_TAB_NEW', tab });
   }
@@ -235,7 +288,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
             <HistoryIcon />
           </button>
           <button type="button" className="agent-head-btn" title="New Claude chat" onClick={newChat}>
-            <PlusIcon />
+            <NewChatIcon />
           </button>
         </div>
       </div>
@@ -259,22 +312,16 @@ export function AgentView({ active, title }: { active: boolean; title: string })
         turnActive={turnActive}
         active={active}
         activeFile={activeFile}
+        mode={mode}
+        onSetMode={changeMode}
+        effort={effort}
+        onSetEffort={changeEffort}
         onSend={send}
         onStop={stop}
       />
     </div>
   );
 }
-
-/** Rotating hint shown in the empty state. StashBase-flavored — points at
- *  features that actually exist (drag, @, diffs). */
-const TIPS = [
-  'Drag a file from the sidebar to have Claude work on it',
-  'Type @ to reference any file in your KB',
-  'Claude works in your current space — changes land on disk',
-  'You get a diff to approve before any file is written',
-  'Enter to send, Shift+Enter for a new line',
-];
 
 // ----- message list ------------------------------------------------------
 
@@ -309,14 +356,8 @@ function MessageList({
   );
 }
 
-/** Empty-state hero: Claude Code wordmark, a pixel mascot, and a tip
- *  that rotates every few seconds. */
+/** Empty-state hero: Claude Code wordmark + a pixel mascot. */
 function Hero() {
-  const [tip, setTip] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTip((t) => (t + 1) % TIPS.length), 6000);
-    return () => clearInterval(id);
-  }, []);
   return (
     <div className="agent-hero">
       <div className="agent-hero-wordmark">
@@ -324,7 +365,6 @@ function Hero() {
         <span className="agent-hero-name">Claude Code</span>
       </div>
       <PixelMascot />
-      <div className="agent-hero-tip">{TIPS[tip]}</div>
     </div>
   );
 }
@@ -512,13 +552,114 @@ const clip = (s: string) => (s.length > 4000 ? s.slice(0, 4000) + '\n…(truncat
 
 // ----- composer ----------------------------------------------------------
 
+/** The composer's "Modes" control: a button showing the active mode that
+ *  opens a dropdown to switch permission mode (Ask / Edit auto / Plan /
+ *  Auto). The active mode gets a check; ⇧+Tab cycles (handled in the
+ *  composer's keydown). */
+function ModeMenu({
+  mode, effort, open, disabled, wrapRef, onToggle, onPick, onSetEffort,
+}: {
+  mode: PermMode;
+  effort: EffortLevel;
+  open: boolean;
+  disabled: boolean;
+  wrapRef: React.RefObject<HTMLDivElement | null>;
+  onToggle: () => void;
+  onPick: (m: PermMode) => void;
+  onSetEffort: (level: EffortLevel) => void;
+}) {
+  const active = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const ActiveIcon = active.Icon;
+  return (
+    <div className="agent-mode-wrap" ref={wrapRef}>
+      {open && (
+        <div className="agent-mode-menu" role="menu">
+          <div className="agent-mode-menu-head">
+            <span>Modes</span>
+          </div>
+          {MODES.map((m) => {
+            const Icon = m.Icon;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={m.id === mode}
+                className={'agent-mode-opt' + (m.id === mode ? ' active' : '')}
+                onClick={() => onPick(m.id)}
+              >
+                <Icon className="agent-mode-opt-icon" />
+                <span className="agent-mode-opt-text">
+                  <span className="agent-mode-opt-title">{m.label}</span>
+                  <span className="agent-mode-opt-desc">{m.desc}</span>
+                </span>
+                {m.id === mode && <CheckIcon className="agent-mode-opt-check" />}
+              </button>
+            );
+          })}
+          <EffortBar effort={effort} onSet={onSetEffort} />
+        </div>
+      )}
+      <button
+        type="button"
+        className="agent-mode-btn"
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Permission mode (⇧+Tab)"
+        onClick={onToggle}
+      >
+        <ActiveIcon className="agent-mode-icon" />
+        {active.label}
+      </button>
+    </div>
+  );
+}
+
+/** Effort (thinking depth) slider in the Modes dropdown footer. Five
+ *  notches (low … max); click one to set. The fill runs up to the current
+ *  level, with the top "max" notch tinted to read as the ceiling. */
+function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLevel) => void }) {
+  const cur = EFFORTS.indexOf(effort);
+  return (
+    <div className="agent-effort">
+      <DumbbellIcon className="agent-effort-icon" />
+      <span className="agent-effort-label">
+        Effort <span className="agent-effort-level">({EFFORT_LABEL[effort]})</span>
+      </span>
+      <div className="agent-effort-track" role="group" aria-label="Effort">
+        {EFFORTS.map((lv, i) => (
+          <button
+            key={lv}
+            type="button"
+            className={
+              'agent-effort-notch'
+              + (i <= cur ? ' on' : '')
+              + (lv === effort ? ' cur' : '')
+              + (lv === 'max' ? ' max' : '')
+            }
+            aria-label={EFFORT_LABEL[lv]}
+            aria-pressed={lv === effort}
+            title={EFFORT_LABEL[lv]}
+            onClick={() => onSet(lv)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Composer({
-  disabled, turnActive, active, activeFile, onSend, onStop,
+  disabled, turnActive, active, activeFile, mode, onSetMode, effort, onSetEffort, onSend, onStop,
 }: {
   disabled: boolean;
   turnActive: boolean;
   active: boolean;
   activeFile: string | null;
+  mode: PermMode;
+  onSetMode: (mode: PermMode) => void;
+  effort: EffortLevel;
+  onSetEffort: (level: EffortLevel) => void;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
@@ -526,17 +667,27 @@ function Composer({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const { state } = useApp();
   const [mention, setMention] = useState<{ q: string; from: number } | null>(null);
+  const [modeOpen, setModeOpen] = useState(false);
+  const modeWrapRef = useRef<HTMLDivElement>(null);
 
   // Focus when this tab becomes active.
   useEffect(() => { if (active) taRef.current?.focus(); }, [active]);
 
-  function autosize() {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+  // Close the Modes dropdown on an outside click.
+  useEffect(() => {
+    if (!modeOpen) return;
+    function onDown(e: MouseEvent) {
+      if (!modeWrapRef.current?.contains(e.target as Node)) setModeOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [modeOpen]);
+
+  /** Cycle to the next permission mode (⇧+Tab in the composer). */
+  function cycleMode() {
+    const i = MODES.findIndex((m) => m.id === mode);
+    onSetMode(MODES[(i + 1) % MODES.length].id);
   }
-  useEffect(autosize, [text]);
 
   const suggestions = useMemo(() => {
     if (!mention) return [];
@@ -580,6 +731,12 @@ function Composer({
       pickMention(suggestions[0].name);
       return;
     }
+    // ⇧+Tab cycles the permission mode (matches the dropdown's hint).
+    if (e.key === 'Tab' && e.shiftKey && !disabled) {
+      e.preventDefault();
+      cycleMode();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       submit();
@@ -616,7 +773,7 @@ function Composer({
           ref={taRef}
           className="agent-input"
           rows={1}
-          placeholder={disabled ? 'Connecting…' : 'Message Claude   (Enter to send, Shift+Enter for newline, @ to mention a file)'}
+          placeholder={disabled ? 'Connecting…' : 'Message Claude…'}
           value={text}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
@@ -626,17 +783,29 @@ function Composer({
           <button type="button" className="agent-bar-btn" title="Add context (coming soon)" disabled>
             <PlusIcon />
           </button>
-          <button type="button" className="agent-bar-btn slash" title="Slash commands (coming soon)" disabled>/</button>
+          <button type="button" className="agent-bar-btn slash" title="Slash commands (coming soon)" disabled>
+            <SlashSquareIcon />
+          </button>
           {activeFile && (
-            <span className="agent-ctx-chip" title={activeFile}>
-              <FileGenericIcon className="agent-ctx-icon" />
-              <span className="agent-ctx-name">{baseName(activeFile)}</span>
-            </span>
+            <>
+              <span className="agent-bar-divider" />
+              <span className="agent-ctx-chip" title={activeFile}>
+                <FileGenericIcon className="agent-ctx-icon" />
+                <span className="agent-ctx-name">{baseName(activeFile)}</span>
+              </span>
+            </>
           )}
           <span className="agent-bar-spacer" />
-          <button type="button" className="agent-mode-btn" title="Permission mode (coming soon)" disabled>
-            Edit automatically
-          </button>
+          <ModeMenu
+            mode={mode}
+            effort={effort}
+            open={modeOpen}
+            disabled={disabled}
+            wrapRef={modeWrapRef}
+            onToggle={() => setModeOpen((o) => !o)}
+            onPick={(m) => { onSetMode(m); setModeOpen(false); }}
+            onSetEffort={onSetEffort}
+          />
           {turnActive ? (
             <button type="button" className="agent-send stop" title="Stop" onClick={onStop}>■</button>
           ) : (

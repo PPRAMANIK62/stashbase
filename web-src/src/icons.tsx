@@ -30,13 +30,13 @@ export function ChevronDownIcon({ className }: IconProps) {
   );
 }
 
-/** Clock with a counter-clockwise hint — "history" / past sessions. */
+/** History / past sessions — a clean clock (Lucide `clock`), matching
+ *  the VSCode chat panel's history glyph. */
 export function HistoryIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <path d="M3 3v5h5" />
-      <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
-      <path d="M12 7v5l3 2" />
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15.5 14" />
     </svg>
   );
 }
@@ -47,6 +47,87 @@ export function PlusIcon({ className }: IconProps) {
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
+/** Chat bubble with a plus — "new chat" (Lucide `message-square-plus`),
+ *  matching the VSCode chat panel's new-conversation glyph. */
+export function NewChatIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <line x1="9" y1="10" x2="15" y2="10" />
+      <line x1="12" y1="7" x2="12" y2="13" />
+    </svg>
+  );
+}
+
+/** `</>` — code / edit-mode glyph for the composer mode button. */
+export function CodeIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
+    </svg>
+  );
+}
+
+/** Rounded square with a slash — the slash-command button glyph (the box
+ *  is part of the icon, not a CSS border). */
+export function SlashSquareIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <line x1="14" y1="7.5" x2="10" y2="16.5" />
+    </svg>
+  );
+}
+
+/** Raised palm — "ask / stop before each edit" permission mode. */
+export function HandIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2" />
+      <path d="M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2" />
+      <path d="M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8" />
+      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+    </svg>
+  );
+}
+
+/** Clipboard with list lines — "plan mode" (explore then present a plan). */
+export function ClipboardListIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="M12 11h4" />
+      <path d="M12 16h4" />
+      <path d="M8 11h.01" />
+      <path d="M8 16h.01" />
+    </svg>
+  );
+}
+
+/** Dumbbell — "effort" (thinking depth) control in the Modes dropdown. */
+export function DumbbellIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M6 7v10" />
+      <path d="M18 7v10" />
+      <path d="M3 9.5v5" />
+      <path d="M21 9.5v5" />
+      <line x1="6" y1="12" x2="18" y2="12" />
+    </svg>
+  );
+}
+
+/** Lightning bolt — "auto mode" (model picks the permission mode). */
+export function BoltIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
   );
 }

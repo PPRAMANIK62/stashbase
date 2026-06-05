@@ -14,6 +14,7 @@
  *   client → server:
  *     { t: "prompt", text }
  *     { t: "permission-reply", id, allow, always? }
+ *     { t: "set-mode", mode }                           // switch permission mode live
  *     { t: "interrupt" }
  *     { t: "close" }
  *   server → client:
@@ -37,6 +38,8 @@ import {
   type SDKUserMessage,
   type PermissionResult,
   type PermissionUpdate,
+  type PermissionMode,
+  type EffortLevel,
 } from '@anthropic-ai/claude-agent-sdk';
 import { logger, errorMessage } from './log.ts';
 import { getCurrentSpace, runWithWindowId } from './space.ts';
@@ -100,7 +103,7 @@ class AgentSession {
   private pending = new Map<string, Pending>();
   private closed = false;
 
-  constructor(private ws: WebSocket, readonly windowId: string) {
+  constructor(private ws: WebSocket, readonly windowId: string, private effort?: EffortLevel) {
     ws.on('message', (raw) => this.onMessage(String(raw)));
     ws.on('close', () => this.dispose());
     ws.on('error', () => this.dispose());
@@ -120,6 +123,10 @@ class AgentSession {
           cwd,
           includePartialMessages: true,
           permissionMode: 'default',
+          // Thinking depth (low … max). The SDK has no live setter for this
+          // (unlike permissionMode), so it's fixed for the session's lifetime
+          // — the renderer reconnects to change it. Omit → SDK default ('high').
+          ...(this.effort ? { effort: this.effort } : {}),
           // Load the user's global config + the space's project/local
           // settings so the panel sees the same CLAUDE.md, skills, and
           // MCP servers the terminal Claude does (incl. StashBase's KB
@@ -259,6 +266,19 @@ class AgentSession {
         }
         break;
       }
+      case 'set-mode': {
+        // Live permission-mode switch from the composer's Modes dropdown.
+        // 'default' = ask before edits, 'acceptEdits' = auto-apply edits
+        // (Bash still prompts via canUseTool), 'plan' = read-only planning,
+        // 'auto' = model classifier decides. We don't expose the dangerous
+        // 'bypassPermissions' / 'dontAsk'.
+        const allowed: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'auto'];
+        const mode = msg.mode as PermissionMode;
+        if (allowed.includes(mode)) {
+          void this.q?.setPermissionMode(mode).catch((err) => log.debug(errorMessage(err)));
+        }
+        break;
+      }
       case 'interrupt':
         void this.q?.interrupt().catch(() => { /* not streaming yet */ });
         break;
@@ -305,8 +325,8 @@ function stringifyToolResult(content: unknown): string {
  *  them all down (the SDK cwd is then meaningless). */
 const sessions = new Set<AgentSession>();
 
-export function attachAgentWebSocket(ws: WebSocket, windowId = 'default'): void {
-  const session = new AgentSession(ws, windowId);
+export function attachAgentWebSocket(ws: WebSocket, windowId = 'default', effort?: string): void {
+  const session = new AgentSession(ws, windowId, effort as EffortLevel | undefined);
   sessions.add(session);
   ws.on('close', () => { sessions.delete(session); });
 }

@@ -283,7 +283,7 @@ termWss.on('connection', (ws, req) => {
 // but the SDK-backed agent session (see server/agent.ts) instead of a PTY.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
-  attachAgentWebSocket(ws, windowIdOf(req));
+  attachAgentWebSocket(ws, windowIdOf(req), effortOf(req));
 });
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {
@@ -292,6 +292,19 @@ function windowIdOf(req: import('node:http').IncomingMessage): string {
     return u.searchParams.get('windowId') || 'default';
   } catch {
     return 'default';
+  }
+}
+
+/** Read the agent session's thinking effort off the WS URL. Effort is
+ *  fixed per session (no live SDK setter), so the renderer encodes it in
+ *  the connect URL and reconnects to change it. */
+function effortOf(req: import('node:http').IncomingMessage): string | undefined {
+  try {
+    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
+    const e = u.searchParams.get('effort');
+    return ['low', 'medium', 'high', 'xhigh', 'max'].includes(e ?? '') ? e! : undefined;
+  } catch {
+    return undefined;
   }
 }
 

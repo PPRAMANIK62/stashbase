@@ -44,11 +44,13 @@ export function ChatLaunchButtons() {
 
   function launch(agentId: string, label: string, mode: ChatTab['mode']) {
     if (!state.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
-    // Always spawn a fresh window. Title disambiguates duplicates of the
-    // same agent — the first gets the bare label, copies append " 2",
-    // " 3", … (mirrors the chat panel's `+` button).
+    // Always spawn a fresh window. Structured Claude chats open as
+    // "Untitled" (a real title can come from the conversation later); the
+    // Codex terminal keeps its agent label. Duplicates append " 2", " 3", …
+    // (mirrors the chat panel's `+` button).
+    const base = mode === 'agent' ? 'Untitled' : label;
     const sameAgent = state.chatTabs.filter((t) => t.agent === agentId);
-    const title = sameAgent.length === 0 ? label : `${label} ${sameAgent.length + 1}`;
+    const title = sameAgent.length === 0 ? base : `${base} ${sameAgent.length + 1}`;
     const tab: ChatTab = { id: crypto.randomUUID(), agent: agentId, title, mode };
     dispatch({ type: 'CHAT_TAB_NEW', tab });
     // Remember which agent we just opened so the panel's split button
