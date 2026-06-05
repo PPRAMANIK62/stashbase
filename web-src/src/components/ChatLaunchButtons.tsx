@@ -17,12 +17,12 @@ import type { ChatTab } from '../store/state';
 
 /** Agents that get their own chrome launcher, in left→right display
  *  order. Each pairs an agent id with its brand glyph; the label feeds
- *  the hover title and the spawned tab's name. `mode` picks the render:
- *  Claude gets the structured SDK panel, Codex stays the raw terminal
- *  (see design-docs/chat-panel.md). */
+ *  the hover title and the spawned tab's name. Claude opens the
+ *  structured SDK panel; Codex opens a "Coming soon" placeholder until
+ *  its panel is built (see design-docs/chat-panel.md). */
 const LAUNCHERS = [
-  { id: 'claude', label: 'Claude Code', Icon: ClaudeIcon, mode: 'agent' as const },
-  { id: 'codex', label: 'Codex', Icon: CodexIcon, mode: 'terminal' as const },
+  { id: 'claude', label: 'Claude Code', Icon: ClaudeIcon },
+  { id: 'codex', label: 'Codex', Icon: CodexIcon },
 ];
 
 export function ChatLaunchButtons() {
@@ -42,16 +42,15 @@ export function ChatLaunchButtons() {
 
   const activeTab = state.chatTabs.find((t) => t.id === state.activeChatTabId);
 
-  function launch(agentId: string, label: string, mode: ChatTab['mode']) {
+  function launch(agentId: string) {
     if (!state.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
-    // Always spawn a fresh window. Structured Claude chats open as
-    // "Untitled" (a real title can come from the conversation later); the
-    // Codex terminal keeps its agent label. Duplicates append " 2", " 3", …
+    // Always spawn a fresh window, titled "Untitled" — a real title can
+    // come from the conversation later. Duplicates append " 2", " 3", …
     // (mirrors the chat panel's `+` button).
-    const base = mode === 'agent' ? 'Untitled' : label;
+    const base = 'Untitled';
     const sameAgent = state.chatTabs.filter((t) => t.agent === agentId);
     const title = sameAgent.length === 0 ? base : `${base} ${sameAgent.length + 1}`;
-    const tab: ChatTab = { id: crypto.randomUUID(), agent: agentId, title, mode };
+    const tab: ChatTab = { id: crypto.randomUUID(), agent: agentId, title };
     dispatch({ type: 'CHAT_TAB_NEW', tab });
     // Remember which agent we just opened so the panel's split button
     // defaults to it. Persisted best-effort.
@@ -63,7 +62,7 @@ export function ChatLaunchButtons() {
 
   return (
     <div className="chat-launchers">
-      {LAUNCHERS.map(({ id, label, Icon, mode }) => {
+      {LAUNCHERS.map(({ id, label, Icon }) => {
         const showing = state.chatOpen && activeTab?.agent === id;
         return (
           <button
@@ -71,7 +70,7 @@ export function ChatLaunchButtons() {
             className={'icon-btn chat-launch' + (showing ? ' active' : '')}
             type="button"
             title={`New ${label} chat`}
-            onClick={() => launch(id, label, mode)}
+            onClick={() => launch(id)}
           >
             <Icon />
           </button>

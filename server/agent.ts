@@ -331,8 +331,8 @@ export function attachAgentWebSocket(ws: WebSocket, windowId = 'default', effort
   ws.on('close', () => { sessions.delete(session); });
 }
 
-/** Kill every live agent session (optionally for one window). Mirrors
- *  `killActiveTerminal` — called on space switch / close. */
+/** Kill every live agent session (optionally for one window). Called on
+ *  space switch / close — the session's cwd no longer makes sense. */
 export function killActiveAgent(windowId?: string): void {
   for (const session of [...sessions]) {
     if (!windowId || session.windowId === windowId) {

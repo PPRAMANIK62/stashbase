@@ -41,13 +41,9 @@ export interface ChatTab {
   id: string;
   /** Agent id the tab runs (`claude` / `codex` / …). */
   agent: string;
-  /** Display name in the tab strip. Default: `"<CLI label>"` (plus a
+  /** Display name in the tab strip. Default: `"Untitled"` (plus a
    *  `" N"` suffix on duplicates). */
   title: string;
-  /** How the tab is rendered. `'terminal'` is the raw PTY + xterm;
-   *  `'agent'` is the structured SDK-backed chat panel. V1: Claude →
-   *  `'agent'`, Codex → `'terminal'`. */
-  mode: 'terminal' | 'agent';
 }
 
 export interface OpenFile {
@@ -217,9 +213,9 @@ export interface State {
   agent: string;
   /** Catalog of available agents from the server, populated on demand. */
   agents: Agent[];
-  /** Active chat tabs. Each tab owns its own PTY + xterm instance so
-   *  switching tabs preserves scrollback. Cursor-style — a `+` button
-   *  in the tab strip spawns a new one against the default agent. */
+  /** Active chat tabs. Each tab owns its own agent session so switching
+   *  tabs preserves that conversation. Cursor-style — the chrome
+   *  launchers / in-panel `+` spawn new ones. */
   chatTabs: ChatTab[];
   /** Id of the currently-visible tab. `null` only when `chatTabs`
    *  is empty (panel closed or just initialised). */
@@ -685,8 +681,8 @@ export function reducer(s: State, a: Action): State {
       return { ...s, activeChatTabId: a.id };
     case 'CHAT_TABS_RESET':
       // Wipes ALL tabs — called on space switch (the server kills every
-      // PTY in that flow; the frontend has to drop its tab list too or
-      // we'd render dead xterms pointing at the old cwd).
+      // agent session in that flow; the frontend drops its tab list too
+      // or we'd render panels bound to the old space).
       return { ...s, chatTabs: [], activeChatTabId: null };
     case 'ACTIVE_FOLDER':
       // Semantically "make this folder the user's current target" —

@@ -41,6 +41,19 @@ export function HistoryIcon({ className }: IconProps) {
   );
 }
 
+/** Up arrow — the composer send button. An SVG (not the "↑" glyph, which
+ *  renders thin and baseline-low); slim + tall, stroke matched to
+ *  SlashSquareIcon's visual weight. Symmetric in x about 12 so grid
+ *  centring lands it dead-centre. */
+export function ArrowUpIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.8} {...stroke}>
+      <line x1="12" y1="20" x2="12" y2="4.5" />
+      <polyline points="7 9.5 12 4.5 17 9.5" />
+    </svg>
+  );
+}
+
 /** Plain plus — new chat / add. */
 export function PlusIcon({ className }: IconProps) {
   return (
@@ -74,12 +87,14 @@ export function CodeIcon({ className }: IconProps) {
 }
 
 /** Rounded square with a slash — the slash-command button glyph (the box
- *  is part of the icon, not a CSS border). */
+ *  is part of the icon, not a CSS border). The square nearly fills the
+ *  viewBox so a hover background sized to the button reads as the box
+ *  filling in, not an off-centre halo around a small glyph. */
 export function SlashSquareIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <rect x="3" y="3" width="18" height="18" rx="5" />
-      <line x1="14" y1="7.5" x2="10" y2="16.5" />
+    <svg className={className} viewBox="0 0 20 20" strokeWidth={1.4} {...stroke}>
+      <rect x="1.5" y="1.5" width="17" height="17" rx="4.5" />
+      <line x1="11.5" y1="6" x2="8.5" y2="14" />
     </svg>
   );
 }

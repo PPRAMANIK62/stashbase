@@ -1,14 +1,14 @@
 /**
- * Structured chat view for a Claude (`mode: 'agent'`) tab — the
- * VSCode-extension-style panel. Connects to `/ws/agent` (SDK-backed,
+ * Structured chat view for a Claude tab — the VSCode-extension-style
+ * panel. Connects to `/ws/agent` (SDK-backed,
  * see server/agent.ts) and renders the event stream as ordered blocks:
  * user / assistant bubbles, collapsible thinking, tool cards with
  * inline diffs + approve/reject, and error notices. A composer at the
  * bottom sends prompts, stops a running turn, takes dropped files, and
  * `@`-mentions KB files.
  *
- * This is Phase 1 of design-docs/chat-panel.md. Codex stays on the raw
- * terminal (ChatTabBody); only Claude routes here.
+ * This is Phase 1 of design-docs/chat-panel.md. Only Claude routes here;
+ * Codex shows a "Coming soon" placeholder (CodexView).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getWindowId } from '../api';
@@ -19,6 +19,7 @@ import { getActiveTab, type ChatTab } from '../store/state';
 import {
   ChevronDownIcon, ClaudeIcon, HistoryIcon, PlusIcon, NewChatIcon, FileGenericIcon, CodeIcon,
   HandIcon, ClipboardListIcon, BoltIcon, CheckIcon, DumbbellIcon, SlashSquareIcon,
+  ArrowUpIcon,
 } from '../icons';
 
 // ----- permission modes (composer "Modes" dropdown) ----------------------
@@ -263,7 +264,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
   function newChat() {
     const same = state.chatTabs.filter((t) => t.agent === 'claude');
     const tabTitle = same.length === 0 ? 'Untitled' : `Untitled ${same.length + 1}`;
-    const tab: ChatTab = { id: crypto.randomUUID(), agent: 'claude', title: tabTitle, mode: 'agent' };
+    const tab: ChatTab = { id: crypto.randomUUID(), agent: 'claude', title: tabTitle };
     dispatch({ type: 'CHAT_TAB_NEW', tab });
   }
 
@@ -809,7 +810,7 @@ function Composer({
           {turnActive ? (
             <button type="button" className="agent-send stop" title="Stop" onClick={onStop}>■</button>
           ) : (
-            <button type="button" className="agent-send" title="Send" disabled={disabled || !text.trim()} onClick={submit}>↑</button>
+            <button type="button" className="agent-send" title="Send" disabled={disabled || !text.trim()} onClick={submit}><ArrowUpIcon /></button>
           )}
         </div>
       </div>

@@ -20,31 +20,34 @@
       cursor: col-resize;
       background: transparent;
     }
+    /* This line is the panel's only left divider: a 1px `--border` seam at
+     * rest (the panel itself has no border-left), brightening to a 2px accent
+     * on hover/active. Pinned flush to the panel edge (right: 0) so there's
+     * a single line, not a splitter line + a separate panel border. */
     .chat-splitter::after {
       content: '';
       position: absolute;
       top: 0;
       bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 2px;
-      background: transparent;
-      transition: background .12s;
+      right: 0;
+      width: 1px;
+      background: var(--border);
+      transition: background .12s, width .12s;
     }
     .chat-splitter:hover::after,
     .chat-splitter:active::after {
+      width: 2px;
       background: var(--accent);
     }
 
     /* Outer container — fills the 4th grid track. Holds the chat-tab
-     * strip + a body that overlays one xterm per tab. */
+     * strip + a body that overlays one agent panel per tab. */
     .chat-pane-shell {
       grid-column: 4;
       grid-row: 1;
       min-width: 0;
       overflow: hidden;
       background: var(--pane);
-      border-left: 1px solid var(--border);
       display: flex;
       flex-direction: column;
     }
@@ -101,6 +104,11 @@
       font-weight: 500;
       padding-bottom: 5px;
     }
+    .chat-tab-icon {
+      width: 13px;
+      height: 13px;
+      flex-shrink: 0;
+    }
     .chat-tab-label {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -130,8 +138,8 @@
     }
 
     /* Body — relative anchor for the absolutely-positioned tab panes
-     * below. Inactive panes stay mounted (preserving scrollback +
-     * PTY) but render off-screen via `visibility: hidden`. */
+     * below. Inactive panes stay mounted (preserving each session's
+     * state) but render off-screen via `visibility: hidden`. */
     .chat-tabs-body {
       position: relative;
       flex: 1;
@@ -150,9 +158,8 @@
       pointer-events: auto;
     }
 
-    /* `.chat-pane` is now the inside of one tab body, not the
-     * grid container. Holds either the xterm host or the install /
-     * progress card. */
+    /* `.chat-pane` is the inside of one tab body (not the grid
+     * container); `.status` is the empty-state "no active chat" notice. */
     .chat-pane {
       flex: 1;
       min-height: 0;
@@ -160,107 +167,10 @@
       display: flex;
       flex-direction: column;
     }
-    .chat-pane.xterm-host {
-      padding: 8px 4px 4px 8px;
-    }
-    /* xterm's own root needs to fill the host so the FitAddon can
-     * compute cols/rows from the actual painted dimensions. */
-    .chat-pane .xterm,
-    .chat-pane .xterm-viewport,
-    .chat-pane .xterm-screen {
-      width: 100%;
-      height: 100%;
-    }
-    .chat-pane .xterm-viewport {
-      background: var(--pane) !important;
-    }
-
     .chat-pane.status {
       padding: 16px 18px;
       color: var(--muted);
       font-size: 12px;
-    }
-
-    .install-card,
-    .install-progress {
-      padding: 18px 18px 14px;
-      overflow-y: auto;
-      gap: 10px;
-    }
-    .install-card-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--fg);
-    }
-    .install-card-hint {
-      font-size: 12.5px;
-      color: var(--muted);
-      line-height: 1.5;
-      margin: 0;
-    }
-    .install-card-hint code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 12px;
-      background: var(--hover);
-      padding: 1px 5px;
-      border-radius: 3px;
-    }
-    .install-card-cmd {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--hover);
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 12px;
-    }
-    .install-card-cmd code {
-      flex: 1;
-      min-width: 0;
-      overflow: auto;
-      white-space: nowrap;
-    }
-    .install-card-copy {
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--fg);
-      padding: 3px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font: inherit;
-      font-size: 11px;
-    }
-    .install-card-copy:hover {
-      background: var(--hover);
-    }
-    .install-card-log {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 11.5px;
-      background: var(--hover);
-      color: var(--fg);
-      border: 1px solid var(--border);
-      padding: 10px 12px;
-      border-radius: 6px;
-      max-height: 240px;
-      overflow: auto;
-      white-space: pre-wrap;
-      margin: 4px 0 0;
-    }
-    .install-card-log.live {
-      flex: 1;
-      max-height: none;
-    }
-    .install-card-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .install-card-foot {
-      font-size: 11px;
-      color: var(--muted);
-      margin: 0;
-      line-height: 1.5;
     }
 
     /* Chrome-row chat launchers — one brand-icon button per agent
@@ -280,7 +190,7 @@
 
     /* ===================================================================
      * Structured agent panel (AgentView) — Phase 1 of the VSCode-style
-     * Claude chat. Rendered for `mode: 'agent'` tabs in place of xterm.
+     * Claude chat. The Codex placeholder (CodexView) reuses these styles.
      * See design-docs/chat-panel.md.
      * =================================================================== */
     .agent-view {
@@ -311,6 +221,7 @@
       width: 26px;
       height: 26px;
       border: 0;
+      padding: 0; /* see .agent-bar-btn — kill UA button padding so the icon centres */
       background: transparent;
       color: var(--muted);
       border-radius: 6px;
@@ -318,7 +229,7 @@
       display: grid;
       place-items: center;
     }
-    .agent-head-btn svg { width: 15px; height: 15px; }
+    .agent-head-btn svg { width: 16px; height: 16px; }
     .agent-head-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-head-btn:disabled { opacity: 0.4; cursor: default; }
 
@@ -360,6 +271,31 @@
       width: 64px;
       height: 50px;
       image-rendering: pixelated;
+    }
+    /* "Coming soon" placeholder (Codex panel stub) */
+    .agent-coming-soon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      max-width: 280px;
+    }
+    .agent-coming-soon-pill {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--hover);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 10px;
+    }
+    .agent-coming-soon-note {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--muted);
     }
     .agent-empty,
     .agent-ended {
@@ -681,9 +617,14 @@
       width: 26px;
       height: 26px;
       border: 0;
+      /* padding:0 is load-bearing: a <button>'s UA default padding (1px 6px)
+       * shrinks the grid content box below the icon width, and the overflow
+       * aligns right instead of centring — the glyph then sits ~1-2px right of
+       * centre. Zeroing padding lets `place-items: center` actually centre. */
+      padding: 0;
       border-radius: 6px;
       background: transparent;
-      color: var(--muted);
+      color: var(--fg);
       cursor: pointer;
       display: grid;
       place-items: center;
@@ -691,19 +632,14 @@
       line-height: 1;
     }
     .agent-bar-btn svg { width: 16px; height: 16px; }
-    /* Slash-command button: the rounded-square-with-slash glyph IS the box
-     * (drawn by SlashSquareIcon), not a CSS border — so this is a plain
-     * icon button like `+`. Slightly larger icon to match the `+`'s weight. */
+    /* The rounded-square-with-slash glyph; 18px reads as a framed box inside
+     * the 26px button's hover background. */
     .agent-bar-btn.slash svg { width: 18px; height: 18px; }
     .agent-bar-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-bar-btn:disabled { opacity: 0.5; cursor: default; }
-    /* Slash keeps a hover even while it's a disabled placeholder — a light
-     * wash behind the glyph so it reads as a button. */
-    .agent-bar-btn.slash:hover {
-      opacity: 1;
-      background: var(--hover);
-      color: var(--fg);
-    }
+    /* Slash keeps its hover box even while it's a disabled placeholder — the
+     * glyph lifts from dim to solid and the framing box fills in. */
+    .agent-bar-btn.slash:hover { opacity: 1; background: var(--hover); color: var(--fg); }
     /* Thin vertical rule separating the action cluster from the context chip. */
     .agent-bar-divider {
       width: 1px;
@@ -827,6 +763,7 @@
       width: 28px;
       height: 28px;
       border: 1px solid var(--border);
+      padding: 0; /* see .agent-bar-btn — kill UA button padding so the arrow centres */
       border-radius: 8px;
       background: var(--active);
       color: var(--fg);
@@ -835,6 +772,7 @@
       display: grid;
       place-items: center;
     }
+    .agent-send svg { width: 18px; height: 18px; }
     .agent-send:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
     .agent-send:disabled { opacity: 0.4; cursor: default; }
     .agent-send.stop { background: #e45649; border-color: #e45649; color: #fff; font-size: 11px; }

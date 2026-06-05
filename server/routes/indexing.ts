@@ -1,8 +1,6 @@
 /**
- * Indexing-related routes: hybrid search, manual full sync, the
- * lightweight status poll the UI uses to grey out pending files, and
- * the skills-sync route that mirrors `skills/<name>/SKILL.md` into the
- * active CLI's per-project prompt dir.
+ * Indexing-related routes: hybrid search, manual full sync, and the
+ * lightweight status poll the UI uses to grey out pending files.
  */
 import express from 'express';
 import { execFile } from 'node:child_process';
@@ -12,9 +10,7 @@ import { rgPath } from '@vscode/ripgrep';
 import { errorMessage, logger } from '../log.ts';
 import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, toKbRel } from '../space.ts';
 import { syncIndex } from '../sync.ts';
-import { syncSkillsToCli } from '../skills.ts';
 import { extractEmbeddedResources } from '../resources.ts';
-import { mirrorRulesToCli } from '../stashbase-md.ts';
 import {
   isReservedMetadataFile,
   setFileMetadataEntry,
@@ -672,30 +668,6 @@ export function mount(app: express.Express): void {
         `snapshot export ${spaceName}: ${result.vectors} vector(s) from ${result.chunks} chunk(s) → ${result.path}`,
       );
       res.json({ ...result, meta: metaPath });
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
-  });
-
-  // Mirror `skills/<name>/SKILL.md` into the active CLI's per-project
-  // prompt directory (Claude Code's `.claude/commands/` or Codex's
-  // `.codex/prompts/`). The renderer fires this on terminal panel
-  // open / CLI switch so the user can author commands once under
-  // `skills/` and have them appear for whichever CLI they pick.
-  app.post('/api/skills/sync', (req, res) => {
-    const cur = getCurrentSpace();
-    if (!cur) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
-    const cli = req.body?.cli;
-    if (cli !== 'claude' && cli !== 'codex') {
-      return res.status(400).json({ error: 'cli must be "claude" or "codex"' });
-    }
-    try {
-      const result = syncSkillsToCli(cur, cli);
-      // Same trigger mirrors the merged STASHBASE.md rules into the
-      // space's CLAUDE.md / AGENTS.md so a CLI agent reads them too.
-      try { mirrorRulesToCli(cur); }
-      catch (err: unknown) { log.warn(`mirror rules failed: ${errorMessage(err)}`); }
-      res.json(result);
     } catch (err: unknown) {
       sendError(res, err);
     }

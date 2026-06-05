@@ -366,15 +366,6 @@ export const api = {
       mode: opts.mode ?? 'copy',
       confirmExisting: opts.confirmExisting === true,
     }),
-  /** Mirror this space's `skills/<name>/SKILL.md` into the active
-   *  CLI's per-project prompt dir (`.claude/commands` / `.codex/prompts`).
-   *  Renderer fires this on chat panel open / agent switch. */
-  syncSkills: (cli: 'claude' | 'codex') =>
-    send<{ synced: string[]; skipped: string[] }>(
-      'POST',
-      '/api/skills/sync',
-      { cli },
-    ),
   /** Manual sidebar ordering — full map of `parentPath → child basenames`. */
   getFileOrder: () => getJson<Record<string, string[]>>('/api/file-order'),
   /** Update one folder's ordered list. `parentPath` `""` = space root. */
@@ -479,13 +470,13 @@ export const api = {
     send<Record<string, never>>('POST', '/api/embedder/validate', { openaiKey }),
 
   // Agents (chat-panel CLIs) -----------------------------------
-  // Server routes stay under `/api/terminal/*` — they manage CLIs that
-  // run inside a PTY; the renderer just calls them "agents".
+  // Server routes stay under `/api/terminal/*` for historical reasons;
+  // the renderer just calls them "agents". `listAgents` populates the
+  // launcher registry / installed-state; `setAgent` records the last-used
+  // agent so the panel defaults to it.
   listAgents: () => getJson<AgentsResponse>('/api/terminal/clis'),
   setAgent: (id: string) =>
     send<{ current: string }>('PUT', '/api/terminal/cli', { id }),
-  checkAgent: (id: string) =>
-    getJson<{ installed: boolean }>('/api/terminal/check/' + encodeURIComponent(id)),
   mcpStatus: () =>
     getJson<{ clients: Record<string, boolean>; command: string; config: unknown }>('/api/mcp/status'),
   listMcpTools: () =>

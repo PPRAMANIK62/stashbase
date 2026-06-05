@@ -22,10 +22,6 @@ import { fileURLToPath } from 'node:url';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { WebSocketServer } from 'ws';
 import {
-  attachTerminalWebSocket,
-  killActiveTerminal,
-} from './terminal.ts';
-import {
   attachAgentWebSocket,
   killActiveAgent,
 } from './agent.ts';
@@ -270,17 +266,9 @@ server.on('error', (err: NodeJS.ErrnoException) => {
   process.exit(1);
 });
 
-// Single-terminal WebSocket. The renderer connects here, the server
-// spawns a PTY, and the two stream stdin/stdout for one shell. See
-// `server/terminal.ts` for the protocol + lifecycle. `noServer: true`
-// because we share the existing http.Server with Vite's HMR proxy.
-const termWss = new WebSocketServer({ noServer: true });
-termWss.on('connection', (ws, req) => {
-  attachTerminalWebSocket(ws, windowIdOf(req));
-});
-
-// Parallel bridge for the structured chat panel — same noServer sharing,
-// but the SDK-backed agent session (see server/agent.ts) instead of a PTY.
+// WebSocket bridge for the structured chat panel — the SDK-backed agent
+// session (see server/agent.ts). `noServer: true` because we share the
+// existing http.Server with Vite's HMR proxy.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
   attachAgentWebSocket(ws, windowIdOf(req), effortOf(req));
@@ -308,23 +296,20 @@ function effortOf(req: import('node:http').IncomingMessage): string | undefined 
   }
 }
 
-// Tear the terminal down when the user switches spaces — that session
-// was bound to the old cwd; the renderer will reconnect for the new
-// space when the user opens the panel again.
+// Tear the agent session down when the user switches spaces — it was
+// bound to the old cwd; the renderer reconnects for the new space when
+// the user opens the panel again.
 onSwitch((newRoot, windowId) => {
-  killActiveTerminal(windowId);
   killActiveAgent(windowId);
   switchSpaceMcpServers(windowId, newRoot);
 });
 onClose((_oldRoot, windowId) => {
-  killActiveTerminal(windowId);
   killActiveAgent(windowId);
   stopSpaceMcpServers(windowId);
 });
 onKbRootChange(async () => {
   stopWatcher();
   stopSpaceMcpServers();
-  killActiveTerminal();
   killActiveAgent();
   await indexer.close();
   closeStateDb();
@@ -333,13 +318,13 @@ onKbRootChange(async () => {
   startWatcher(indexer);
 });
 
-// Hook WebSocket upgrades. `/ws/terminal` goes to our pty bridge;
+// Hook WebSocket upgrades. `/ws/agent` goes to our agent-session bridge;
 // everything else (Vite HMR in dev) falls through to the existing
 // proxy upgrade handler.
 server.on('upgrade', (req, socket, head) => {
   // Same origin gate as the HTTP middleware — a webpage shouldn't be
-  // able to open a WebSocket to our terminal bridge any more than it
-  // can hit our HTTP routes. Missing Origin is allowed for non-browser
+  // able to open a WebSocket to our agent bridge any more than it can
+  // hit our HTTP routes. Missing Origin is allowed for non-browser
   // tools (browsers always send it on WS upgrade).
   const origin = req.headers.origin;
   if (origin && !ALLOWED_ORIGINS.has(origin)) {
@@ -347,12 +332,6 @@ server.on('upgrade', (req, socket, head) => {
     return;
   }
   const url = req.url ?? '';
-  if (url.startsWith('/ws/terminal')) {
-    termWss.handleUpgrade(req, socket, head, (ws) => {
-      termWss.emit('connection', ws, req);
-    });
-    return;
-  }
   if (url.startsWith('/ws/agent')) {
     agentWss.handleUpgrade(req, socket, head, (ws) => {
       agentWss.emit('connection', ws, req);
@@ -389,7 +368,6 @@ async function shutdown(reason: string): Promise<void> {
   try { server.close(); } catch { /* already gone */ }
   try { stopWatcher(); } catch { /* swallow */ }
   try { stopSpaceMcpServers(); } catch { /* swallow */ }
-  try { killActiveTerminal(); } catch { /* swallow */ }
   try { closeStateDb(); } catch { /* swallow */ }
   // Hard ceiling: if the indexer's close ladder can't unstick the
   // Python child in 4 s, exit anyway. The daemon's own kill ladder

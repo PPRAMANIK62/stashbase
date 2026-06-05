@@ -79,12 +79,10 @@ function AppBody() {
   const [clipboardOffer, setClipboardOffer] = useState<ClipboardOffer | null>(null);
   // Mount the chat panel lazily on first open and then NEVER
   // unmount it — collapsing the panel just hides the column via CSS,
-  // the underlying xterm + WebSocket + PTY stay alive. Killing the
-  // session on every collapse would lose Claude Code's chat history,
-  // any in-flight agent run, the shell's cwd / aliases, etc. The
-  // explicit "Start new session" item in the agent picker dropdown is
-  // how the user restarts (it makes `XtermView`'s effect re-run + tear
-  // down the old session cleanly).
+  // the underlying agent WebSocket sessions stay alive. Killing them
+  // on every collapse would lose Claude Code's chat history and any
+  // in-flight agent run. The in-panel "new chat" `+` is how the user
+  // starts a fresh session.
   const [chatMounted, setChatMounted] = useState(state.chatOpen);
   useEffect(() => {
     if (state.chatOpen) setChatMounted(true);

@@ -1261,9 +1261,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Clear every piece of UI state scoped to the previous space. Shared
   // by finishOpenSpace (switching *in*) and goHome (switching *out*) so
   // the two can't drift. Each action targets a disjoint state slice, so
-  // call order doesn't matter. Note the server kills every PTY on a
-  // space switch (onSwitch → killActiveTerminal); CHAT_TABS_RESET
-  // drops our tab list to match so we don't render orphan xterms.
+  // call order doesn't matter. Note the server kills every agent session
+  // on a space switch (onSwitch → killActiveAgent); CHAT_TABS_RESET drops
+  // our tab list to match so we don't render orphan panels.
   const resetSpaceScopedState = useCallback(() => {
     dispatch({ type: 'TABS_RESET' });
     dispatch({ type: 'CHAT_TABS_RESET' });
