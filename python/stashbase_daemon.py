@@ -139,6 +139,12 @@ class _OpenAIEmbedder:
         "text-embedding-ada-002": 1536,
     }
 
+    # OpenAI's embedding endpoint enforces a request-level token ceiling
+    # (300k for text-embedding-3* at time of writing). Keep a margin and
+    # batch locally so one big space cannot take the daemon down.
+    _MAX_REQUEST_TOKENS = 250_000
+    _MAX_BATCH_ITEMS = 128
+
     def __init__(self, *, model: str, api_key: str, dimension: int | None = None,
                  timeout: float = 60.0, max_retries: int = 3, base_delay: float = 1.5) -> None:
         import openai
@@ -150,6 +156,38 @@ class _OpenAIEmbedder:
         self._base_delay = base_delay
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        out: list[list[float]] = []
+        batch: list[str] = []
+        batch_tokens = 0
+        for text in texts:
+            est = self._estimate_tokens(text)
+            if est > self._MAX_REQUEST_TOKENS:
+                raise ValueError(
+                    f"single embedding input is too large "
+                    f"(estimated {est:,} tokens > {self._MAX_REQUEST_TOKENS:,})",
+                )
+            if batch and (
+                batch_tokens + est > self._MAX_REQUEST_TOKENS
+                or len(batch) >= self._MAX_BATCH_ITEMS
+            ):
+                out.extend(self._embed_batch(batch))
+                batch = []
+                batch_tokens = 0
+            batch.append(text)
+            batch_tokens += est
+        if batch:
+            out.extend(self._embed_batch(batch))
+        return out
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        # Conservative language-agnostic approximation. English averages
+        # ~4 chars/token; CJK is denser, so 3 chars/token leaves margin.
+        return max(1, (len(text) + 2) // 3)
+
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         transient = (
             self._openai.APITimeoutError,
             self._openai.APIConnectionError,
@@ -274,6 +312,34 @@ def _patch_scanner_blake3() -> None:
 ## the cache, only embedding the misses. v2 (self-contained chunk rows)
 ## snapshots are rejected — re-export with this build.
 SNAPSHOT_VERSION = 3
+
+INDEX_EXCLUDED_DIRS = {
+    ".cache",
+    ".git",
+    ".hg",
+    ".next",
+    ".nuxt",
+    ".output",
+    ".parcel-cache",
+    ".pnpm-store",
+    ".stashbase",
+    ".svelte-kit",
+    ".turbo",
+    ".venv",
+    ".vite",
+    ".yarn",
+    "__pycache__",
+    "bower_components",
+    "build",
+    "coverage",
+    "DerivedData",
+    "dist",
+    "node_modules",
+    "out",
+    "target",
+    "vendor",
+}
+MAX_INDEXABLE_BYTES = 2 * 1024 * 1024
 
 
 def _collection_name(dim: int) -> str:
@@ -534,6 +600,11 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
     _require(args, "path", "content")
     path = args["path"]
     content = args["content"]
+    if len(content.encode("utf-8", errors="replace")) > MAX_INDEXABLE_BYTES:
+        raise ValueError(
+            f"file is too large to index ({len(content):,} chars; "
+            f"limit {MAX_INDEXABLE_BYTES:,} bytes)",
+        )
     ext = args.get("ext", ".md")
     # File-level metadata (user front-matter / HTML <meta> + the agent's
     # file-metadata.md sidecar), resolved Node-side. Used as the base for
@@ -925,14 +996,19 @@ def _make_scanner():
     Two tweaks over MFS defaults:
       - `.html` / `.htm` aren't in `INDEXED_EXTENSIONS`, inject via
         `IndexingConfig.include_extensions`
-      - `.stashbase/` is our sidecar dir and must be skipped
+      - generated/dependency/source-control dirs are skipped so a root
+        pointed at a code checkout does not flood the indexer
       - `compute_file_hash` is patched to BLAKE3 (see _patch_scanner_blake3)
     """
     from mfs.config import Config, IndexingConfig
     from mfs.ingest.scanner import Scanner
     _patch_scanner_blake3()
     config = Config(indexing=IndexingConfig(include_extensions=[".html", ".htm"]))
-    return Scanner(config, extra_excludes=[".stashbase/", ".stashbase"])
+    extra = []
+    for name in sorted(INDEX_EXCLUDED_DIRS):
+        extra.append(name)
+        extra.append(f"{name}/")
+    return Scanner(config, extra_excludes=extra)
 
 
 def _walk_disk(root: Path, rel_prefix: str = "") -> dict:
@@ -968,6 +1044,8 @@ def _walk_disk(root: Path, rel_prefix: str = "") -> dict:
 
     on_disk = {}
     for full_rel, rel_local, f in raw:
+        if _has_excluded_segment(rel_local):
+            continue
         if _under_bundle(rel_local, note_stems):
             continue
         # Reserved agent metadata files must never be indexed (their YAML
@@ -976,12 +1054,17 @@ def _walk_disk(root: Path, rel_prefix: str = "") -> dict:
         if _is_reserved_metadata_path(rel_local):
             continue
         try:
-            if f.path.stat().st_size == 0:
+            size = f.path.stat().st_size
+            if size == 0 or size > MAX_INDEXABLE_BYTES:
                 continue
         except OSError:
             continue
         on_disk[full_rel] = f
     return on_disk
+
+
+def _has_excluded_segment(rel: str) -> bool:
+    return any(seg in INDEX_EXCLUDED_DIRS for seg in rel.split("/") if seg)
 
 
 def _under_bundle(rel: str, note_stems: set) -> bool:

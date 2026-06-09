@@ -29,7 +29,7 @@ export function AlertConfirmModal() {
   const ok = () => actions.resolveModal(true);
 
   return (
-    <ModalShell onCancel={cancel}>
+    <ModalShell onCancel={cancel} top>
       <p className="modal-hint">{state.modal.message}</p>
       <div className="modal-actions">
         {isConfirm && (

@@ -317,11 +317,16 @@ export const api = {
   openSpace: (path: string) => send<SpaceState>('POST', '/api/space', { path }),
   /** Open a space by name (single segment under the KB root).
    *  Preferred over `openSpace(path)` for new flows now that spaces
-   *  are flat. `create:true` makes the server mkdir a missing folder
-   *  (New-space flow); without it, opening a non-existent name errors
+   *  are flat. `create:true` makes the server mkdir a missing folder;
+   *  `exclusiveCreate:true` makes existing spaces a 409 conflict. Without
+   *  create, opening a non-existent name errors
    *  rather than resurrecting a since-deleted space as an empty dir. */
-  openSpaceByName: (name: string, opts?: { create?: boolean }) =>
-    send<SpaceState>('POST', '/api/space', { name, create: opts?.create }),
+  openSpaceByName: (name: string, opts?: { create?: boolean; exclusiveCreate?: boolean }) =>
+    send<SpaceState>('POST', '/api/space', {
+      name,
+      create: opts?.create,
+      exclusiveCreate: opts?.exclusiveCreate,
+    }),
   /** Absolute path of the KB root. All spaces live under it as direct
    *  children; the renderer uses this to display the home-relative
    *  form (`~/Documents/StashBase`) in copy. */

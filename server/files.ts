@@ -21,6 +21,7 @@ import { errorCode, errorMessage, logger } from './log.ts';
 
 const log = logger('files');
 import { detectFormat, detectViewerFormat, isDerivedNoteName, isImageFile, matchNoteStem, type FileFormat, type ViewerFormat } from './format.ts';
+import { isIndexExcludedDirName } from './indexable.ts';
 
 export { detectFormat, type FileFormat } from './format.ts';
 
@@ -501,6 +502,7 @@ function walk(
     // prefix is the user's content (`.claude` / `.codex` / `.vscode` /
     // `.github` / `.obsidian`, …) and shows through.
     if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
+    if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
     // Always hide app-derived dot-prefixed notes (`.<name>.md` /
     // `.html`) and their bundle dirs — these are PDF converter
     // outputs (or other future derived content). The unconditional

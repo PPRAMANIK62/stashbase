@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from './html.ts';
 import { detectFormat } from './format.ts';
+import { contentSizeError, shouldIndexKbRel } from './indexable.ts';
 import { resolveFileMetadata, isReservedMetadataFile } from './metadata.ts';
 import { logger, errorMessage } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
@@ -186,6 +187,19 @@ export class MfsIndexer implements Indexer {
     // `<kbRoot>/.stashbase/space-metadata.md`) must not be indexed — their
     // YAML / 目录 prose would surface as bogus hits.
     if (isReservedMetadataFile(filePath)) return;
+    if (!shouldIndexKbRel(filePath)) {
+      this.noteUnindexed(filePath);
+      await getDaemon().call('delete', { path: filePath });
+      log.info(`upsert ${filePath}: skipped by index rules`);
+      return;
+    }
+    const tooLarge = contentSizeError(content);
+    if (tooLarge) {
+      this.noteUnindexed(filePath);
+      await getDaemon().call('delete', { path: filePath });
+      log.warn(`upsert ${filePath}: ${tooLarge}`);
+      return;
+    }
     const { text, ext, fileHash } = prepareForIndex(filePath, content);
     // Mark not-indexed while we re-embed so an in-flight status() during
     // a re-embed doesn't claim the file is up to date.

@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { detectFormat, getSpaceName, HIDDEN_DOT_DIRS } from '../files.ts';
+import { indexableFileSizeError, isIndexExcludedDirName, shouldIndexFilePath } from '../indexable.ts';
 import { matchNoteStem } from '../format.ts';
 import {
   clearSpacePath,
@@ -70,6 +71,7 @@ export function mount(app: express.Express): void {
     // folder. Open / recent flows omit it, so opening a name whose folder
     // is gone errors instead of resurrecting an empty dir.
     const create = req.body?.create === true;
+    const exclusiveCreate = req.body?.exclusiveCreate === true;
     let target = rawPath;
     if (rawName) {
       const bad = validateSpaceName(rawName);
@@ -77,10 +79,13 @@ export function mount(app: express.Express): void {
       target = path.join(getKbRoot(), rawName);
     }
     try {
-      setCurrentSpace(target, { create });
+      setCurrentSpace(target, { create, exclusiveCreate });
       const spaceRoot = getCurrentSpace()!;
       res.json({ current: { path: spaceRoot, name: getSpaceName() } });
     } catch (err: unknown) {
+      if ((err as any)?.code === 'SPACE_EXISTS') {
+        return res.status(409).json({ error: errorMessage(err), code: 'SPACE_EXISTS' });
+      }
       res.status(400).json({ error: errorMessage(err) });
     }
   });
@@ -284,7 +289,8 @@ function collectIndexableFilesForRename(
 ): Array<{ path: string; content: string }> {
   const files: Array<{ path: string; content: string }> = [];
   walkSpace(spaceRoot, '', (rel, full, ent) => {
-    if (!ent.isFile() || !detectFormat(ent.name)) return;
+    if (!ent.isFile() || !detectFormat(ent.name) || !shouldIndexFilePath(rel)) return;
+    if (indexableFileSizeError(full)) return;
     const oldPath = rel ? `${oldSpaceName}/${rel}` : oldSpaceName;
     files.push({ path: oldPath, content: fs.readFileSync(full, 'utf8') });
   });
@@ -306,6 +312,7 @@ function walkSpace(
   }
   for (const e of entries) {
     if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
+    if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
     if (e.isDirectory() && e.name.endsWith('_files')) {
       const stem = e.name.slice(0, -'_files'.length);
       if (noteStems.has(stem)) continue;
@@ -316,4 +323,3 @@ function walkSpace(
     if (e.isDirectory()) walkSpace(full, rel, fn);
   }
 }
-

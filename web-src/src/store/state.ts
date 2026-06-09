@@ -360,6 +360,7 @@ export const initialState: State = {
 export type Action =
   | { type: 'WELCOME_HIDE' }
   | { type: 'WELCOME_SHOW'; recent: State['recent']; homeDir?: string; error?: string | null }
+  | { type: 'RECENT_LOADED'; recent: State['recent']; homeDir?: string }
   | { type: 'WELCOME_ERROR'; error: string }
   | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; space: string }
   | { type: 'FILE_ORDER_LOADED'; order: Record<string, string[]> }
@@ -503,6 +504,12 @@ export function reducer(s: State, a: Action): State {
         recent: a.recent,
         homeDir: a.homeDir ?? s.homeDir,
         welcomeError: a.error ?? null,
+      };
+    case 'RECENT_LOADED':
+      return {
+        ...s,
+        recent: a.recent,
+        homeDir: a.homeDir ?? s.homeDir,
       };
     case 'WELCOME_ERROR':
       return { ...s, welcomeError: a.error };

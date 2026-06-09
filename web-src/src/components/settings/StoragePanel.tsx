@@ -94,6 +94,7 @@ export function StoragePanel() {
   async function save() {
     const next = kbRoot.trim();
     if (!next) { setError('Path required'); return; }
+    setBusy(true);
     setError(null);
     setNotice(null);
     setSaved(false);
@@ -102,6 +103,7 @@ export function StoragePanel() {
       preview = await api.kbRootMigrationPreview(next);
     } catch (err) {
       setError(errorMessage(err));
+      setBusy(false);
       return;
     }
     // Same folder, or nothing to bring along → just switch.
@@ -121,6 +123,7 @@ export function StoragePanel() {
       collisions: preview.collisions,
       resolutions,
     });
+    setBusy(false);
   }
 
   async function runMigration(m: Migration) {

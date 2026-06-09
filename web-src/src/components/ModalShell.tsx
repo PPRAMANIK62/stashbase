@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Shared backdrop + card wrapper for every modal in the app. Click on
@@ -19,14 +20,16 @@ import { type ReactNode } from 'react';
 export function ModalShell({
   onCancel,
   wide,
+  top,
   children,
 }: {
   onCancel: () => void;
   wide?: boolean;
+  top?: boolean;
   children: ReactNode;
 }) {
-  return (
-    <div className="modal-veil" onClick={onCancel}>
+  const node = (
+    <div className={'modal-veil' + (top ? ' top' : '')} onClick={onCancel}>
       <div
         className={'modal-card' + (wide ? ' wide' : '')}
         onClick={(e) => e.stopPropagation()}
@@ -35,4 +38,5 @@ export function ModalShell({
       </div>
     </div>
   );
+  return createPortal(node, document.body);
 }

@@ -241,7 +241,7 @@ function SpaceMenu() {
     try {
       if (modal.kind === 'new') {
         setSpaces((currentSpaces) => currentSpaces.includes(name) ? currentSpaces : [...currentSpaces, name].sort());
-        await actions.openSpaceByName(name, { create: true });
+        await actions.openSpaceByName(name, { create: true, exclusiveCreate: true });
       } else if (modal.kind === 'rename') {
         setSpaces((currentSpaces) => currentSpaces.map((v) => (v === current ? name : v)).sort());
         await api.renameSpace(current, name);

@@ -29,6 +29,7 @@ import { discoverNewVideos } from './video.ts';
 import { fromKbRel, getCurrentSpace } from './space.ts';
 import type { Indexer } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
+import { shouldIndexFilePath } from './indexable.ts';
 
 const log = logger('sync');
 
@@ -199,6 +200,10 @@ async function indexOne(
     // happen when sync is scoped to one space, but guard so we don't
     // wedge on a cross-space surprise.
     failed.push({ name: kbRel, error: 'path not under current space' });
+    return false;
+  }
+  if (!shouldIndexFilePath(spaceRel)) {
+    try { await indexer.deleteFile(kbRel); } catch { /* best-effort stale cleanup */ }
     return false;
   }
   const content = readText(spaceRel);

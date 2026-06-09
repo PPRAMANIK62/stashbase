@@ -87,6 +87,13 @@ export function Welcome() {
     })();
   }, [dispatch]);
 
+  useEffect(() => {
+    if (!state.welcomeVisible) return;
+    void api.getSpace()
+      .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
+      .catch(() => { /* keep the current welcome state */ });
+  }, [dispatch, state.welcomeVisible]);
+
   if (!state.welcomeVisible) return null;
 
   return (
@@ -167,7 +174,14 @@ export function Welcome() {
                     type="button"
                     className="welcome-recent-pill"
                     title={name}
-                    onClick={() => { void actions.openSpace(r.path).catch((e) => dispatch({ type: 'WELCOME_ERROR', error: errorMessage(e) })); }}
+                    onClick={() => {
+                      void actions.openSpace(r.path).catch((e) => {
+                        dispatch({ type: 'WELCOME_ERROR', error: errorMessage(e) });
+                        void api.getSpace()
+                          .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir, error: errorMessage(e) }))
+                          .catch(() => { /* keep the original open error */ });
+                      });
+                    }}
                   >
                     {name}
                   </button>
@@ -210,6 +224,14 @@ export function Welcome() {
           kbRoot={kbRoot}
           homeDir={state.homeDir ?? ''}
           onClose={() => setOpenOpen(false)}
+          onNewSpace={() => {
+            setOpenOpen(false);
+            setNewOpen(true);
+          }}
+          onImportFolder={(path) => {
+            setOpenOpen(false);
+            setImportSource(path);
+          }}
         />
       )}
     </div>
@@ -557,9 +579,7 @@ function NewSpaceModal({
     setBusy(true);
     setError(null);
     try {
-      // create:true — New space mkdir's the folder if missing (and opens
-      // it if a same-named one already exists: create-or-open).
-      await actions.openSpaceByName(n, { create: true });
+      await actions.openSpaceByName(n, { create: true, exclusiveCreate: true });
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -618,10 +638,14 @@ function OpenSpaceModal({
   kbRoot,
   homeDir,
   onClose,
+  onNewSpace,
+  onImportFolder,
 }: {
   kbRoot: string;
   homeDir: string;
   onClose: () => void;
+  onNewSpace: () => void;
+  onImportFolder: (path: string) => void;
 }) {
   const { actions } = useApp();
   const [names, setNames] = useState<string[] | null>(null);
@@ -632,29 +656,39 @@ function OpenSpaceModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rootDisplay = kbRoot ? prettifyHome(kbRoot, homeDir) : '~/Documents/StashBase';
+  const bridge = useMemo<ElectronBridge | undefined>(
+    () => (window as { electron?: ElectronBridge }).electron,
+    [],
+  );
+
+  const loadSpaces = useCallback(async () => {
+    try {
+      const [avail, spaceState] = await Promise.all([
+        api.listAvailableSpaces(),
+        api.getSpace(),
+      ]);
+      setNames(avail.names);
+      // RecentSpace paths are absolute; under the flat invariant
+      // the last segment is the space name. Server returns them
+      // most-recent-first already.
+      setRecentNames(
+        (spaceState.recent ?? [])
+          .map((r) => r.path.split('/').filter(Boolean).pop() || '')
+          .filter(Boolean),
+      );
+      setError(null);
+    } catch (err) {
+      setError(errorMessage(err));
+      setNames([]);
+    }
+  }, []);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const [avail, spaceState] = await Promise.all([
-          api.listAvailableSpaces(),
-          api.getSpace(),
-        ]);
-        setNames(avail.names);
-        // RecentSpace paths are absolute; under the flat invariant
-        // the last segment is the space name. Server returns them
-        // most-recent-first already.
-        setRecentNames(
-          (spaceState.recent ?? [])
-            .map((r) => r.path.split('/').filter(Boolean).pop() || '')
-            .filter(Boolean),
-        );
-      } catch (err) {
-        setError(errorMessage(err));
-        setNames([]);
-      }
-    })();
-  }, []);
+    void loadSpaces();
+    const onFocus = () => { void loadSpaces(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [loadSpaces]);
 
   // Recently-opened first (freshest at top), then everything else
   // alphabetically.
@@ -686,6 +720,24 @@ function OpenSpaceModal({
     }
   }
 
+  async function importFolder() {
+    if (busy || typeof bridge?.openFolderDialog !== 'function') return;
+    setBusy(true);
+    setError(null);
+    try {
+      const picked = await bridge.openFolderDialog({
+        title: 'Import folder as space',
+        buttonLabel: 'Choose Folder',
+        allowCreateDirectory: false,
+      });
+      if (picked) onImportFolder(picked);
+      else setBusy(false);
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  }
+
   return (
     <ModalShell onCancel={busy ? () => { /* swallow during open */ } : onClose}>
       <h3>Open space</h3>
@@ -695,8 +747,20 @@ function OpenSpaceModal({
       {names === null ? (
         <div className="modal-hint">Loading…</div>
       ) : names.length === 0 ? (
-        <div className="modal-hint">
-          No spaces yet — use <strong>New space</strong> or <strong>Import folder</strong> to create one.
+        <div className="welcome-open-empty">
+          <div className="modal-hint">
+            No spaces yet.
+          </div>
+          <div className="modal-actions welcome-open-empty-actions">
+            <button type="button" className="modal-btn primary" onClick={onNewSpace} disabled={busy}>
+              New space
+            </button>
+            {typeof bridge?.openFolderDialog === 'function' && (
+              <button type="button" className="modal-btn" onClick={() => { void importFolder(); }} disabled={busy}>
+                Import folder
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="welcome-open-list">

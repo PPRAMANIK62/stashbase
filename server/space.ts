@@ -312,7 +312,7 @@ function listSpaceNamesUnder(root: string): string[] {
   try { entries = fs.readdirSync(root, { withFileTypes: true }); }
   catch { return []; }
   return entries
-    .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && validateSpaceName(e.name) == null)
     .map((e) => e.name)
     .sort();
 }
@@ -458,7 +458,7 @@ export function requireCurrentSpace(): string {
 /** Open a space at the given absolute path. Creates the directory if
  *  needed. Pushes to the recents list. Notifies switch listeners so
  *  cached resources can be reset. */
-export function setCurrentSpace(absPath: string, opts?: { create?: boolean }): void {
+export function setCurrentSpace(absPath: string, opts?: { create?: boolean; exclusiveCreate?: boolean }): void {
   if (typeof absPath !== 'string' || !absPath) throw new Error('path required');
   // Expand a leading `~` so the welcome screen can accept `~/Notes`
   // without forcing the user to spell out their home directory.
@@ -481,6 +481,11 @@ export function setCurrentSpace(absPath: string, opts?: { create?: boolean }): v
   // and silently re-creating it would resurrect an empty ghost space
   // (and turn a typo'd `~/Notess` into a stray dir). Error instead.
   const existed = fs.existsSync(normalized);
+  if (existed && opts?.create && opts.exclusiveCreate) {
+    const err = new Error(`space "${path.basename(normalized)}" already exists`);
+    (err as any).code = 'SPACE_EXISTS';
+    throw err;
+  }
   if (!existed) {
     if (!opts?.create) throw new Error('space does not exist (it may have been moved or deleted)');
     fs.mkdirSync(normalized, { recursive: true });

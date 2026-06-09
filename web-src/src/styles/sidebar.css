@@ -148,6 +148,10 @@
       z-index: 100;
     }
 
+    .modal-veil.top {
+      z-index: 10000;
+    }
+
     .modal-card {
       background: var(--bg);
       border: 1px solid var(--border);

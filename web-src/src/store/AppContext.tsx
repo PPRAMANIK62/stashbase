@@ -81,7 +81,7 @@ export interface AppActions {
   /** Open a space by name — single segment under the KB root.
    *  Preferred over `openSpace(path)` for new UI flows now that
    *  spaces are flat. */
-  openSpaceByName: (name: string, opts?: { create?: boolean }) => Promise<void>;
+  openSpaceByName: (name: string, opts?: { create?: boolean; exclusiveCreate?: boolean }) => Promise<void>;
   goHome: () => void;
 
   loadFiles: () => Promise<void>;
@@ -1313,6 +1313,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'WELCOME_HIDE' });
   }, [loadFiles, loadFileOrder, refreshIndexState, resetSpaceScopedState]);
 
+  const refreshRecent = useCallback(async () => {
+    const j = await api.getSpace();
+    dispatch({ type: 'RECENT_LOADED', recent: j.recent ?? [], homeDir: j.homeDir });
+  }, []);
+
   // These THROW on failure — callers decide how to surface it. Welcome's
   // fire-and-forget callers (recent pills) `.catch` into WELCOME_ERROR;
   // the New/Open/Import modals and the Sidebar space menu catch in-place
@@ -1320,13 +1325,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // which made every caller's catch dead code and hid in-space failures.)
   const openSpace = useCallback(async (path: string) => {
     await api.openSpace(path);
+    void refreshRecent().catch((err) => {
+      console.warn('[recent] refresh after open failed:', err);
+    });
     await finishOpenSpace();
-  }, [finishOpenSpace]);
+  }, [finishOpenSpace, refreshRecent]);
 
-  const openSpaceByName = useCallback(async (name: string, opts?: { create?: boolean }) => {
+  const openSpaceByName = useCallback(async (name: string, opts?: { create?: boolean; exclusiveCreate?: boolean }) => {
     await api.openSpaceByName(name, opts);
+    void refreshRecent().catch((err) => {
+      console.warn('[recent] refresh after open failed:', err);
+    });
     await finishOpenSpace();
-  }, [finishOpenSpace]);
+  }, [finishOpenSpace, refreshRecent]);
 
   const goHome = useCallback(() => {
     resetSpaceScopedState();
