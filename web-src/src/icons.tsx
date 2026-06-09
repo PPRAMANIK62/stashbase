@@ -368,35 +368,42 @@ export function SettingsIcon({ className }: IconProps) {
  *  buttons in the rail (region still → OCR); video understanding sits below. */
 export function RegionCaptureIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <path d="M6 2v14a2 2 0 0 0 2 2h14" />
-      <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+      <path d="M7 3v12a2 2 0 0 0 2 2h12" />
+      <path d="M17 21V9a2 2 0 0 0-2-2H3" />
     </svg>
   );
 }
 
-/** Start a visual capture — viewfinder corner marks framing two text lines:
- *  "grab the text out of the frame". Conveys capturing textual information
- *  from video rather than recording the video itself. Pairs with StopIcon
- *  as the capture⇄stop transport metaphor. */
+/** Start a visual capture — viewfinder corner marks framing the classic
+ *  record symbol (ring + filled dot): "frame this region and capture it".
+ *  The brackets carry the screen-capture metaphor, the record dot the
+ *  start-recording affordance. Pairs with StopIcon as the capture⇄stop
+ *  transport metaphor. */
 export function RecordIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <path d="M9 4 H6 A2 2 0 0 0 4 6 V9" />
-      <path d="M15 4 H18 A2 2 0 0 1 20 6 V9" />
-      <path d="M9 20 H6 A2 2 0 0 1 4 18 V15" />
-      <path d="M15 20 H18 A2 2 0 0 0 20 18 V15" />
-      <line x1="8" y1="11" x2="16" y2="11" />
-      <line x1="8" y1="14" x2="13" y2="14" />
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+      <path d="M8 3 H5 A2 2 0 0 0 3 5 V8" />
+      <path d="M16 3 H19 A2 2 0 0 1 21 5 V8" />
+      <path d="M8 21 H5 A2 2 0 0 1 3 19 V16" />
+      <path d="M16 21 H19 A2 2 0 0 0 21 19 V16" />
+      <circle cx="12" cy="12" r="5.5" />
+      <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
     </svg>
   );
 }
 
-/** Stop the active recording — a filled rounded square. */
+/** Stop the active capture — a filled square wrapped in the same viewfinder
+ *  corner marks as RecordIcon, so the capture⇄stop toggle stays inside one
+ *  consistent frame. */
 export function StopIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" stroke="none">
-      <rect x="6" y="6" width="12" height="12" rx="2.5" />
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+      <path d="M8 3 H5 A2 2 0 0 0 3 5 V8" />
+      <path d="M16 3 H19 A2 2 0 0 1 21 5 V8" />
+      <path d="M8 21 H5 A2 2 0 0 1 3 19 V16" />
+      <path d="M16 21 H19 A2 2 0 0 0 21 19 V16" />
+      <rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor" stroke="none" />
     </svg>
   );
 }
