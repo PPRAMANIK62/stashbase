@@ -77,6 +77,29 @@ function runConversion(absPath: string, kbRel: string | null, spec: ConversionSp
   );
 }
 
+/** Run an arbitrary background job under the same in-flight tracking the
+ *  file converters use, keyed to `kbRel` so it surfaces in the sidebar's
+ *  "Converting…" banner (`getInFlightConversions`). Unlike `runConversion`
+ *  there's no source file on disk — used by the recording pipeline, where
+ *  the video is processed from a temp file and only a note lands in the
+ *  space. On failure we `clearRecord` rather than `markFailed`: there's no
+ *  re-runnable source, so the Retry affordance would be a dead end. */
+export function runBackgroundConversion(kbRel: string, work: () => Promise<void>): Promise<void> {
+  markInFlight(kbRel);
+  liveConversions.add(kbRel);
+  const t0 = Date.now();
+  const settle = (fn: () => void) => {
+    setTimeout(() => { liveConversions.delete(kbRel); fn(); }, Math.max(0, MIN_VISIBLE_MS - (Date.now() - t0)));
+  };
+  return work().then(
+    () => { settle(() => markDone(kbRel)); },
+    (err: Error) => {
+      log.warn(`background conversion failed for ${kbRel}: ${err.message}`);
+      settle(() => clearRecord(kbRel));
+    },
+  );
+}
+
 /** Reclaim `in-flight` rows orphaned by a crash/restart: any in-flight
  *  record with no live promise in this process (see `liveConversions`)
  *  can never settle on its own, so clearing it lets the reconcile walk

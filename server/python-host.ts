@@ -53,7 +53,7 @@ export function pythonScript(name: string): string {
  *
  *  Returns the command + full arg list ready for `child_process.spawn`. */
 export function extractorSpawn(
-  mode: 'pdf' | 'ocr',
+  mode: 'pdf' | 'ocr' | 'video',
   scriptName: string,
   args: string[],
 ): { cmd: string; args: string[] } {

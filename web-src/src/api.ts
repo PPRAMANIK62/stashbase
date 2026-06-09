@@ -449,6 +449,21 @@ export const api = {
     return parseJsonOrThrow<UploadResult>(r);
   },
 
+  /** Ingest a screen recording: the webm is OCR'd into a VISIBLE
+   *  `recording-<ts>.md` note and then discarded (not stored in the KB).
+   *  Returns the planned note path; OCR runs in the background and the
+   *  note appears via the "Converting…" banner → file watch. */
+  recordVideo: async (
+    file: File,
+    dir = '',
+  ): Promise<{ ok?: boolean; file?: string; error?: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (dir) fd.append('dir', dir);
+    const r = await fetch('/api/recording', { method: 'POST', body: fd, headers: requestHeaders() });
+    return parseJsonOrThrow(r);
+  },
+
   /** Attach files as transient chat context — written to a throwaway OS
    *  temp dir (NOT the space) and returned as absolute paths the agent
    *  reads. Used by the composer `+` and panel drag-drop. */

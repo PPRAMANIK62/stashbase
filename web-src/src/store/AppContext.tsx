@@ -181,6 +181,7 @@ export interface AppActions {
   renameFolder: (oldPath: string, newName: string) => Promise<void>;
   moveFile: (oldPath: string, targetDir: string) => Promise<void>;
   upload: (items: { file: File; relPath: string }[], dir: string) => Promise<boolean>;
+  recordVideo: (file: File, dir: string) => Promise<boolean>;
 
   scheduleSave: () => void;
   flushSave: () => Promise<void>;
@@ -1244,6 +1245,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [loadFiles, refreshIndexState, selectFile, showAlert]);
 
+  /** Send a screen recording for OCR. The webm is NOT stored — it's
+   *  transcribed into a visible `recording-<ts>.md` note in the background
+   *  (the "Converting…" banner tracks it; the note appears when done).
+   *  Mirrors `upload`'s lost-binding self-heal. */
+  const recordVideo = useCallback(async (file: File, dir: string): Promise<boolean> => {
+    try {
+      let j = await api.recordVideo(file, dir);
+      if (/no space open/i.test(j.error || '') && stateRef.current.space) {
+        try {
+          await api.openSpaceByName(stateRef.current.space);
+          j = await api.recordVideo(file, dir);
+        } catch (e: unknown) {
+          console.warn('[recordVideo] rebind failed:', e);
+        }
+      }
+      if (j.error) {
+        toast(`Recording failed: ${j.error}`, { level: 'error' });
+        return false;
+      }
+      // Poll now so the "Converting…" banner shows the pending note.
+      void refreshIndexState();
+      return true;
+    } catch (e: unknown) {
+      console.warn('[recordVideo] request failed:', e);
+      toast('Recording failed — see console.', { level: 'error' });
+      return false;
+    }
+  }, [refreshIndexState]);
+
   const runSync = useCallback(async () => {
     if (stateRef.current.syncRunning) return;
     dispatch({ type: 'SYNC_RUNNING', running: true });
@@ -1349,7 +1379,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast, dismissToast,
     toggleEditMode,
     newNote, newFolder, deleteFile, deleteFolder,
-    renameFile, renameFolder, moveFile, upload,
+    renameFile, renameFolder, moveFile, upload, recordVideo,
     scheduleSave, flushSave,
     registerEditor,
     registerSearchInput, focusSearch,
@@ -1366,7 +1396,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     showAlert, askConfirm, resolveModal, toast, dismissToast,
     toggleEditMode,
     newNote, newFolder, deleteFile, deleteFolder,
-    renameFile, renameFolder, moveFile, upload,
+    renameFile, renameFolder, moveFile, upload, recordVideo,
     scheduleSave, flushSave,
     registerEditor,
     registerSearchInput, focusSearch,

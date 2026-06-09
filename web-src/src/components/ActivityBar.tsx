@@ -1,6 +1,20 @@
-import { FilesViewIcon, SearchIcon, SettingsIcon } from '../icons';
+import { useEffect, useState } from 'react';
+import { FilesViewIcon, RecordIcon, RegionCaptureIcon, SearchIcon, SettingsIcon, StopIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { openSettings } from './SettingsModal';
+
+interface CaptureBridge {
+  /** Region screenshot → image saved + OCR'd (same path as other images). */
+  capture?: (request: { mode: string }) => Promise<unknown>;
+  /** Start screen recording → Gemini video understanding → note. */
+  startWindowRecording?: () => void;
+  stopRecording?: () => void;
+  onRecordingState?: (handler: (recording: boolean) => void) => (() => void);
+}
+
+function captureBridge(): CaptureBridge | undefined {
+  return (window as { electron?: CaptureBridge }).electron;
+}
 
 /**
  * Narrow left rail (à la VS Code / Obsidian) holding one icon per
@@ -18,6 +32,24 @@ import { openSettings } from './SettingsModal';
  */
 export function ActivityBar() {
   const { state, dispatch, actions } = useApp();
+
+  // Screen recording trigger (desktop app only). The button doubles as
+  // the stop control while recording — main pushes the state so it stays
+  // in sync no matter how recording was started or stopped (e.g. the
+  // macOS recording indicator).
+  const [recording, setRecording] = useState(false);
+  const isElectron = !!captureBridge();
+  useEffect(() => captureBridge()?.onRecordingState?.(setRecording), []);
+
+  function captureRegion() {
+    void captureBridge()?.capture?.({ mode: 'region' });
+  }
+
+  function toggleRecording() {
+    const bridge = captureBridge();
+    if (recording) bridge?.stopRecording?.();
+    else bridge?.startWindowRecording?.();
+  }
 
   /** VSCode rail semantics: clicking the *active* view toggles the
    *  panel collapsed; clicking another view (or any view while
@@ -55,6 +87,29 @@ export function ActivityBar() {
       >
         <SearchIcon />
       </ActivityIcon>
+      {/* Capture group — desktop only. Region screenshot (still → OCR) on
+          top, video understanding (recording → Gemini) below. */}
+      {isElectron && (
+        <>
+          <button
+            type="button"
+            className="activity-bar-btn"
+            onClick={captureRegion}
+            title="Region screenshot"
+          >
+            <RegionCaptureIcon />
+          </button>
+          <button
+            type="button"
+            className={'activity-bar-btn' + (recording ? ' recording' : '')}
+            onClick={toggleRecording}
+            title={recording ? 'Stop recording' : 'Record screen (video understanding)'}
+            aria-pressed={recording}
+          >
+            {recording ? <StopIcon /> : <RecordIcon />}
+          </button>
+        </>
+      )}
       {/* Settings pinned to the bottom of the rail, VSCode-style. The
           spacer above (margin-top:auto on this button) pushes it down
           so view toggles stay grouped at the top. */}

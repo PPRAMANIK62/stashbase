@@ -79,6 +79,41 @@ contextBridge.exposeInMainWorld('electron', {
    *  re-offered on the next focus. */
   markClipboardHandled: (hash) => ipcRenderer.send('clipboard:markHandled', hash),
   showCaptureMenu: () => ipcRenderer.send('floating:captureMenu'),
+  /** Floating ball's default click: open the picker to record a window. */
+  startWindowRecording: () => ipcRenderer.send('floating:startWindowRecording'),
+  /** Picker hands the chosen window id over to start recording it. */
+  recordWindow: (sourceId) => ipcRenderer.invoke('recorder:recordWindow', sourceId),
+  /** Stop an in-progress screen recording (the floating ball doubles as
+   *  the stop button while recording). */
+  stopRecording: () => ipcRenderer.send('floating:stopRecording'),
+  /** Sidebar record button subscribes to recording-state pushes so it can
+   *  swap the record icon for a red stop square. */
+  onRecordingState: (handler) => {
+    const wrapped = (_event, recording) => handler(Boolean(recording));
+    ipcRenderer.on('recording:state', wrapped);
+    return () => ipcRenderer.removeListener('recording:state', wrapped);
+  },
+  // --- Recorder window only (electron/recorder.html) ------------------
+  /** Main hands the recorder window a desktop source id to start on. */
+  onRecorderStart: (handler) => {
+    const wrapped = (_event, sourceId) => handler(sourceId);
+    ipcRenderer.on('recorder:start', wrapped);
+    return () => ipcRenderer.removeListener('recorder:start', wrapped);
+  },
+  /** Main asks the recorder window to stop and package the clip. */
+  onRecorderStop: (handler) => {
+    const wrapped = () => handler();
+    ipcRenderer.on('recorder:stop', wrapped);
+    return () => ipcRenderer.removeListener('recorder:stop', wrapped);
+  },
+  /** Recorder window (macOS 15+): a source was picked, recording began. */
+  recorderStarted: () => ipcRenderer.send('recorder:started'),
+  /** Recorder window (macOS 15+): the user dismissed the system picker. */
+  recorderCanceled: () => ipcRenderer.send('recorder:canceled'),
+  /** Recorder window hands the finished clip (data URL) back to main. */
+  recorderResult: (payload) => ipcRenderer.send('recorder:result', payload),
+  /** Recorder window reports a getUserMedia / getDisplayMedia / MediaRecorder failure. */
+  recorderError: (message) => ipcRenderer.send('recorder:error', message),
   getFloatingBounds: () => ipcRenderer.invoke('floating:getBounds'),
   setFloatingPosition: (point) => ipcRenderer.invoke('floating:setPosition', point),
   selectCaptureRegion: (rect) => ipcRenderer.send('capture:region-selected', rect),

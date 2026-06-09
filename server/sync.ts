@@ -25,6 +25,7 @@ import { reclaimInterruptedConversions } from './conversion.ts';
 import { readText } from './files.ts';
 import { discoverNewImages } from './image.ts';
 import { discoverNewPdfs } from './pdf.ts';
+import { discoverNewVideos } from './video.ts';
 import { fromKbRel, getCurrentSpace } from './space.ts';
 import type { Indexer } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
@@ -58,7 +59,7 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
   // queue, or drop) instead of seeing a stuck record and skipping.
   reclaimInterruptedConversions();
   const cur = getCurrentSpace();
-  if (cur) { discoverNewPdfs(cur); discoverNewImages(cur); }
+  if (cur) { discoverNewPdfs(cur); discoverNewImages(cur); discoverNewVideos(cur); }
 
   const diff = await indexer.syncDiff(space);
   const failed: { name: string; error: string }[] = [];
@@ -146,7 +147,7 @@ export async function syncNewFiles(indexer: Indexer, space: string): Promise<Syn
   // crash-orphaned in-flight rows before the discovery walk re-decides.
   reclaimInterruptedConversions();
   const cur = getCurrentSpace();
-  if (cur) { discoverNewPdfs(cur); discoverNewImages(cur); }
+  if (cur) { discoverNewPdfs(cur); discoverNewImages(cur); discoverNewVideos(cur); }
 
   const status = await indexer.status(space);
   if (status.pending.length === 0 && status.orphaned.length === 0) {

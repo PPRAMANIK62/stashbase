@@ -22,12 +22,13 @@ import {
   saveBytes,
   saveText,
 } from '../files.ts';
-import { isImageFile, isNoteName } from '../format.ts';
+import { isImageFile, isNoteName, isVideoFile } from '../format.ts';
 import { errorMessage, logger } from '../log.ts';
 import { getCurrentSpace, runWithWindowId, toKbRel, WINDOW_ID_HEADER } from '../space.ts';
 import { extractEmbeddedResources } from '../resources.ts';
 import { maybeConvertImage } from '../image.ts';
 import { maybeConvertPdf } from '../pdf.ts';
+import { maybeConvertVideo } from '../video.ts';
 import { indexer } from '../state.ts';
 
 const log = logger('routes/upload');
@@ -78,6 +79,7 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
   const toIndex: { name: string; text: string }[] = [];
   const toConvertPdf: { abs: string; rel: string }[] = [];
   const toOcrImage: { abs: string; rel: string }[] = [];
+  const toOcrVideo: { abs: string; rel: string }[] = [];
   const spaceAbs = getCurrentSpace();
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
@@ -117,6 +119,11 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
         // photo becomes a hidden `.<sourceBasename>.md` note the watcher picks
         // up and indexes — mirrors the PDF path, minus the bundle.
         toOcrImage.push({ abs: path.join(spaceAbs, name), rel: name });
+      } else if (spaceAbs && isVideoFile(name)) {
+        // Videos (screen recordings) run through frame-sampling OCR so the
+        // on-screen text becomes a hidden `.<sourceBasename>.md` note —
+        // same sidecar pattern as images, minus per-frame artifacts.
+        toOcrVideo.push({ abs: path.join(spaceAbs, name), rel: name });
       }
     } catch (err: unknown) {
       log.warn(`upload: save failed for ${name}: ${errorMessage(err)}`);
@@ -143,6 +150,9 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
   }
   for (const { abs, rel } of toOcrImage) {
     try { maybeConvertImage(abs, rel); } catch (err: unknown) { log.warn(`upload: image OCR kickoff failed for ${rel}: ${errorMessage(err)}`); }
+  }
+  for (const { abs, rel } of toOcrVideo) {
+    try { maybeConvertVideo(abs, rel); } catch (err: unknown) { log.warn(`upload: video OCR kickoff failed for ${rel}: ${errorMessage(err)}`); }
   }
 }
 

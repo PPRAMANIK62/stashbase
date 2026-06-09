@@ -15,6 +15,7 @@
  *   6. Vite dev-only proxy (last — it swallows /everything/)
  *   7. `listen` + WebSocket upgrade handler
  */
+import './load-env.ts'; // MUST be first — populates process.env from .env before any env reads
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -46,6 +47,7 @@ import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountFilesRoutes } from './routes/files.ts';
 import { mount as mountFoldersRoutes } from './routes/folders.ts';
 import { mount as mountUploadRoutes } from './routes/upload.ts';
+import { mount as mountRecordingRoutes } from './routes/recording.ts';
 import { mount as mountAttachRoutes } from './routes/attach.ts';
 import { mount as mountIndexingRoutes } from './routes/indexing.ts';
 import { mount as mountTerminalRoutes } from './routes/terminal.ts';
@@ -209,6 +211,7 @@ mountEmbedderRoutes(app);
 mountFilesRoutes(app);
 mountFoldersRoutes(app);
 mountUploadRoutes(app);
+mountRecordingRoutes(app);
 mountAttachRoutes(app);
 mountIndexingRoutes(app);
 mountTerminalRoutes(app);

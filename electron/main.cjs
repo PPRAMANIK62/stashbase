@@ -52,6 +52,18 @@ const mainWindows = new Set();
 let lastMainWindow = null;
 let floatingBallWindow = null;
 let capturePickerWindow = null;
+let recorderWindow = null;
+let recordingActive = false;
+let recordingPending = false;
+
+// macOS 15+ (Darwin 24+) has the system source picker, which getDisplayMedia
+// can raise via `useSystemPicker` — the only chooser that lists fullscreen
+// apps. Below that we fall back to our own desktopCapturer-based picker.
+function supportsSystemPicker() {
+  if (process.platform !== 'darwin') return false;
+  const major = parseInt(os.release().split('.')[0], 10);
+  return Number.isFinite(major) && major >= 24;
+}
 
 const APP_CONFIG_FILE = path.join(os.homedir(), '.stashbase', 'config.json');
 
@@ -525,28 +537,48 @@ function getCaptureSettings() {
 }
 
 function configureDisplayMediaRequests() {
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     if (permission === 'display-capture') {
+      callback(true);
+      return;
+    }
+    // The recorder window's getUserMedia desktop-capture request surfaces
+    // as a 'media' permission; grant it only for that window.
+    if (
+      permission === 'media' &&
+      recorderWindow &&
+      !recorderWindow.isDestroyed() &&
+      webContents === recorderWindow.webContents
+    ) {
       callback(true);
       return;
     }
     callback(false);
   });
+  // On macOS 15+ the recorder uses getDisplayMedia + the system picker
+  // (`useSystemPicker: true`), so the handler isn't invoked for recording.
+  // On older macOS the handler runs as a fallback (only used to prime the
+  // screen-recording TCC prompt) and auto-grants the primary screen.
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
     void desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: { width: 1, height: 1 },
     }).then((sources) => {
-      callback({ video: sources[0] });
+      callback(sources[0] ? { video: sources[0] } : {});
     }).catch(() => {
       callback({});
     });
-  }, { useSystemPicker: false });
+  }, { useSystemPicker: supportsSystemPicker() });
 }
 
 function internalCaptureSourceIds() {
   const ids = new Set();
-  for (const win of [floatingBallWindow, capturePickerWindow]) {
+  // Exclude StashBase's own windows from the picker — the main window(s),
+  // the picker itself, the recorder, and the (legacy) floating ball.
+  // Recording StashBase itself is never the intent and just clutters the
+  // list (e.g. the main window titled after the current chat).
+  const own = [floatingBallWindow, capturePickerWindow, recorderWindow, ...mainWindows];
+  for (const win of own) {
     if (!win || win.isDestroyed()) continue;
     try {
       ids.add(win.getMediaSourceId());
@@ -626,11 +658,16 @@ async function listCaptureWindows() {
     thumbnailSize: { width: 320, height: 200 },
   });
   return sources
-    .filter((source) => source.id && source.name && !source.thumbnail.isEmpty() && !internalIds.has(source.id))
+    .filter((source) => source.id && source.name && !internalIds.has(source.id))
     .map((source) => ({
       id: source.id,
       name: source.name,
-      thumbnail: source.thumbnail.toDataURL(),
+      // Some windows occasionally report an empty static thumbnail; keep
+      // them listed (the picker shows a placeholder) rather than dropping
+      // them. Fullscreen apps are a separate story — they live on their
+      // own Space and aren't enumerated here at all (use macOS 15's system
+      // picker for those).
+      thumbnail: source.thumbnail.isEmpty() ? '' : source.thumbnail.toDataURL(),
     }));
 }
 
@@ -780,31 +817,163 @@ async function runCapture(request = {}, event) {
   return { ok: true };
 }
 
+// Turn a raw capture/recording failure into the structured error the
+// renderer's toast understands — permission problems get the "open
+// settings" affordance, everything else is a generic retry.
+function classifyCaptureError(detail) {
+  const permission = getScreenPermission();
+  const needsPermission = permission.needsGuide || /permission|denied|not.?allowed|access/i.test(detail);
+  return needsPermission
+    ? {
+        kind: 'permission',
+        title: 'Screen Recording is off',
+        message: 'Turn on Screen Recording for StashBase, then restart the app.',
+        detail,
+        permission,
+      }
+    : {
+        kind: 'capture-failed',
+        title: 'Capture did not finish',
+        message: 'Try again, or choose a different capture mode.',
+        detail,
+        permission,
+      };
+}
+
 async function safeRunCapture(request = {}, event) {
   try {
     return await runCapture(request, event);
   } catch (err) {
     const detail = err && typeof err.message === 'string' ? err.message : String(err);
-    const permission = getScreenPermission();
-    const needsPermission = permission.needsGuide || /permission|denied|not.?allowed|access/i.test(detail);
-    const error = needsPermission
-      ? {
-          kind: 'permission',
-          title: 'Screen Recording is off',
-          message: 'Turn on Screen Recording for StashBase, then restart the app.',
-          detail,
-          permission,
-        }
-      : {
-          kind: 'capture-failed',
-          title: 'Screenshot did not finish',
-          message: 'Try again, or choose a different capture mode.',
-          detail,
-          permission,
-        };
+    const error = classifyCaptureError(detail);
     emitCaptureError(error);
     return { ok: false, error: detail, kind: error.kind };
   }
+}
+
+// --- Screen recording --------------------------------------------------
+// Unlike screenshots (a still desktopCapturer thumbnail grabbed in this
+// process), recording needs MediaRecorder, which only exists in a
+// renderer. So a hidden recorder window (electron/recorder.html) does the
+// getUserMedia + MediaRecorder work; main just picks the display, starts
+// it, and on stop forwards the webm to the main window via the same
+// `capture:created` path screenshots use.
+
+function recordingFilename() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `recording-${stamp}.webm`;
+}
+
+
+// Broadcast recording state to the sidebar record button in every open
+// main window, so it stays in sync however recording was started or
+// stopped (ball is gone; the rail button is the control now).
+function emitRecordingState(recording) {
+  for (const win of mainWindows) {
+    if (!win.isDestroyed()) win.webContents.send('recording:state', Boolean(recording));
+  }
+}
+
+function createRecorderWindow() {
+  const win = new BrowserWindow({
+    width: 200,
+    height: 120,
+    show: false,
+    frame: false,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      // Keep timers / MediaRecorder running while the window is hidden.
+      backgroundThrottling: false,
+    },
+  });
+  win.loadFile(path.join(__dirname, 'recorder.html'));
+  // If the recorder window dies without delivering a clip (crash, quit),
+  // don't leave the ball stuck in its red stop state.
+  win.on('closed', () => {
+    if (recorderWindow === win) {
+      recorderWindow = null;
+      if (recordingActive) {
+        recordingActive = false;
+        emitRecordingState(false);
+      }
+    }
+  });
+  return win;
+}
+
+// Entry point from the floating ball / menu. macOS 15+ goes straight to
+// the system picker (it can list fullscreen apps); older macOS opens our
+// own windows-only picker.
+function beginRecording() {
+  if (recordingActive || recordingPending) return;
+  if (supportsSystemPicker()) startRecordingSystemPicker();
+  else createCapturePickerWindow('record');
+}
+
+// macOS 15+ path: getDisplayMedia raises the system picker. We don't pass
+// a source id — the picker is what lets the user choose a screen / window /
+// fullscreen app. The UI only flips to "recording" on the `recorder:started`
+// ack, so dismissing the picker leaves no stuck red ball (`recordingPending`
+// guards re-entry meanwhile).
+function startRecordingSystemPicker() {
+  recordingPending = true;
+  recorderWindow = createRecorderWindow();
+  const trigger = () => {
+    if (recorderWindow && !recorderWindow.isDestroyed()) {
+      // `true` injects a user gesture; getDisplayMedia needs transient
+      // activation, which the floating-ball click (a different renderer)
+      // doesn't provide to this window.
+      recorderWindow.webContents
+        .executeJavaScript('window.startCapture && window.startCapture()', true)
+        .catch(() => {});
+    }
+  };
+  if (recorderWindow.webContents.isLoading()) {
+    recorderWindow.webContents.once('did-finish-load', trigger);
+  } else {
+    trigger();
+  }
+}
+
+// Older-macOS path: a source was chosen in our own picker. Spin up the
+// recorder window for that window id (getUserMedia's `chromeMediaSource:
+// 'desktop'`). No silent fallback — a missing id is an error.
+function startRecording(sourceId) {
+  if (recordingActive) return;
+  if (!sourceId) {
+    emitCaptureError(classifyCaptureError('No capture source was selected.'));
+    return;
+  }
+  recordingActive = true;
+  emitRecordingState(true);
+  recorderWindow = createRecorderWindow();
+  const send = () => {
+    if (recorderWindow && !recorderWindow.isDestroyed()) {
+      recorderWindow.webContents.send('recorder:start', sourceId);
+    }
+  };
+  if (recorderWindow.webContents.isLoading()) {
+    recorderWindow.webContents.once('did-finish-load', send);
+  } else {
+    send();
+  }
+}
+
+function stopScreenRecording() {
+  if (!recordingActive || !recorderWindow || recorderWindow.isDestroyed()) return;
+  recorderWindow.webContents.send('recorder:stop');
+}
+
+function finishScreenRecording() {
+  recordingActive = false;
+  recordingPending = false;
+  emitRecordingState(false);
+  if (recorderWindow && !recorderWindow.isDestroyed()) recorderWindow.close();
+  recorderWindow = null;
 }
 
 function showCaptureMenu() {
@@ -813,6 +982,8 @@ function showCaptureMenu() {
     { label: 'Full screen screenshot', click: () => { void safeRunCapture({ mode: 'screen' }); } },
     { label: 'Window screenshot', click: () => createCapturePickerWindow() },
     { label: 'Region screenshot', click: () => { void safeRunCapture({ mode: 'region' }); } },
+    { type: 'separator' },
+    { label: 'Record…', click: () => beginRecording() },
   ]);
   menu.popup({ window: floatingBallWindow || undefined });
 }
@@ -860,12 +1031,17 @@ function createFloatingBallWindow() {
     },
   });
   keepFloatingBallAboveApps();
+  // Keep the ball out of screen recordings (it would otherwise show up
+  // when recording a whole screen). NSWindowSharingNone on macOS.
+  try { floatingBallWindow.setContentProtection(true); } catch { /* best-effort */ }
   floatingBallWindow.loadFile(path.join(__dirname, 'floating-ball.html'));
   floatingBallWindow.once('ready-to-show', () => showFloatingBall());
   floatingBallWindow.on('closed', () => { floatingBallWindow = null; });
 }
 
-function createCapturePickerWindow() {
+// `mode === 'record'` loads the picker in window-recording mode (it then
+// starts a recording on pick instead of taking a screenshot).
+function createCapturePickerWindow(mode) {
   if (capturePickerWindow && !capturePickerWindow.isDestroyed()) {
     capturePickerWindow.focus();
     return;
@@ -886,7 +1062,10 @@ function createCapturePickerWindow() {
       sandbox: false,
     },
   });
-  capturePickerWindow.loadFile(path.join(__dirname, 'capture-picker.html'));
+  capturePickerWindow.loadFile(
+    path.join(__dirname, 'capture-picker.html'),
+    mode === 'record' ? { hash: 'record' } : undefined,
+  );
   capturePickerWindow.on('closed', () => { capturePickerWindow = null; });
 }
 
@@ -1089,8 +1268,7 @@ ipcMain.handle('mcp:configure', async (_e, client) => {
 
 ipcMain.handle('window:openSpace', async (_e, name) => {
   if (typeof name !== 'string' || !name.trim()) return false;
-  const win = await createWindow(name.trim());
-  if (win) createFloatingBallWindow();
+  await createWindow(name.trim());
   return true;
 });
 
@@ -1138,6 +1316,72 @@ ipcMain.on('floating:captureMenu', () => {
   showCaptureMenu();
 });
 
+// Floating-ball default action: start recording (system picker on macOS
+// 15+, our own windows-only picker below that).
+ipcMain.on('floating:startWindowRecording', () => {
+  beginRecording();
+});
+
+// Older-macOS picker handed us the chosen window — start recording it and
+// dismiss the picker (the floating ball is now the stop control).
+ipcMain.handle('recorder:recordWindow', (event, sourceId) => {
+  if (typeof sourceId !== 'string' || !sourceId) return { ok: false, error: 'Nothing was selected.' };
+  if (recordingActive) return { ok: false, error: 'A recording is already in progress.' };
+  startRecording(sourceId);
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (senderWindow && senderWindow === capturePickerWindow && !senderWindow.isDestroyed()) {
+    senderWindow.close();
+  }
+  return { ok: true };
+});
+
+// macOS 15+ path: the user picked a source in the system picker, recording
+// is live — flip the UI into its recording state now.
+ipcMain.on('recorder:started', (event) => {
+  if (recorderWindow && event.sender !== recorderWindow.webContents) return;
+  recordingPending = false;
+  recordingActive = true;
+  emitRecordingState(true);
+});
+
+// macOS 15+ path: the user dismissed the system picker — tear down quietly.
+ipcMain.on('recorder:canceled', (event) => {
+  if (recorderWindow && event.sender !== recorderWindow.webContents) return;
+  recordingPending = false;
+  if (recorderWindow && !recorderWindow.isDestroyed()) recorderWindow.close();
+  recorderWindow = null;
+});
+
+ipcMain.on('floating:stopRecording', () => {
+  stopScreenRecording();
+});
+
+// Recorder window handed back a finished clip — forward it to the main
+// window on the same `capture:created` path screenshots use, so it gets
+// saved into the active space.
+ipcMain.on('recorder:result', (event, payload) => {
+  if (recorderWindow && event.sender !== recorderWindow.webContents) return;
+  finishScreenRecording();
+  if (!payload || typeof payload.dataUrl !== 'string') {
+    emitCaptureError(classifyCaptureError('Recording produced no data.'));
+    return;
+  }
+  emitCaptureCreated({
+    ok: true,
+    mode: 'recording',
+    mime: typeof payload.mime === 'string' ? payload.mime : 'video/webm',
+    dataUrl: payload.dataUrl,
+    sourceTitle: 'Screen recording',
+    filename: recordingFilename(),
+  });
+});
+
+ipcMain.on('recorder:error', (event, message) => {
+  if (recorderWindow && event.sender !== recorderWindow.webContents) return;
+  finishScreenRecording();
+  emitCaptureError(classifyCaptureError(typeof message === 'string' ? message : String(message)));
+});
+
 app.whenReady().then(async () => {
   configureDisplayMediaRequests();
   // Refresh the MCP wrapper on every launch so the most recently-opened
@@ -1153,15 +1397,12 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.warn(`[electron] MCP wrapper refresh failed: ${err && err.message ? err.message : err}`);
   }
-  const win = await createWindow();
-  if (win) createFloatingBallWindow();
+  await createWindow();
 });
 
 app.on('activate', () => {
   if (mainWindows.size === 0) {
-    void createWindow().then((win) => {
-      if (win) createFloatingBallWindow();
-    });
+    void createWindow();
   }
 });
 

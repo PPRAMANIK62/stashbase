@@ -42,19 +42,40 @@
       height: 24px;
       pointer-events: none;
     }
+
+    /* While recording, the ball turns into a red stop button. */
+    button.is-recording {
+      background: rgba(220, 38, 38, 0.95);
+      border-color: rgba(220, 38, 38, 0.6);
+      box-shadow: 0 12px 30px rgba(220, 38, 38, 0.35);
+    }
+
+    .icon-stop { display: none; }
+    button.is-recording .icon-camera { display: none; }
+    button.is-recording .icon-stop { display: block; }
   </style>
 </head>
 <body>
-  <button id="capture" type="button" title="Screenshot">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3z"></path>
-      <circle cx="12" cy="13" r="3"></circle>
+  <button id="capture" type="button" title="Record a window">
+    <svg class="icon-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="2" y="6" width="14" height="12" rx="2"></rect>
+      <path d="M16 10l5-3v10l-5-3z"></path>
+    </svg>
+    <svg class="icon-stop" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+      <rect x="7" y="7" width="10" height="10" rx="2"></rect>
     </svg>
   </button>
   <script>
     const button = document.getElementById('capture');
     let drag = null;
     let moved = false;
+    let recording = false;
+
+    window.electron.onRecordingState((isRecording) => {
+      recording = isRecording;
+      button.classList.toggle('is-recording', isRecording);
+      button.title = isRecording ? 'Stop recording' : 'Record a window';
+    });
 
     button.addEventListener('pointerdown', async (event) => {
       const bounds = await window.electron.getFloatingBounds();
@@ -84,7 +105,11 @@
     button.addEventListener('pointerup', () => {
       if (!drag) return;
       drag = null;
-      if (!moved) window.electron.showCaptureMenu();
+      if (moved) return;
+      // A plain click stops the active recording, or starts a new window
+      // recording when idle (opens the window picker).
+      if (recording) window.electron.stopRecording();
+      else window.electron.startWindowRecording();
     });
 
     button.addEventListener('pointercancel', () => {

@@ -67,6 +67,19 @@
       background: var(--accent);
       border-radius: 0 2px 2px 0;
     }
+    /* Recording: the record button turns red and softly pulses while a
+     * capture is in progress. */
+    .activity-bar-btn.recording {
+      color: #dc2626;
+      animation: activity-rec-pulse 1.6s ease-in-out infinite;
+    }
+    .activity-bar-btn.recording:hover {
+      color: #dc2626;
+    }
+    @keyframes activity-rec-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
     /* Push the settings gear to the bottom of the rail (VSCode-style),
      * keeping the view toggles grouped at the top. */
     .activity-bar-btn-bottom {

@@ -11,8 +11,9 @@ the individual scripts via the venv interpreter, so this entry only
 matters for the packaged binary.
 
 Usage:
-    stashbase-extract pdf  <pdf>   <out_note> <bundle_dir> [--converter ...]
-    stashbase-extract ocr  <image> <out_note>
+    stashbase-extract pdf   <pdf>   <out_note> <bundle_dir> [--converter ...]
+    stashbase-extract ocr   <image> <out_note>
+    stashbase-extract video <video> <out_note> [fps] [diff_threshold]
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import sys
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: stashbase-extract <pdf|ocr> ...", file=sys.stderr)
+        print("usage: stashbase-extract <pdf|ocr|video> ...", file=sys.stderr)
         return 2
     mode, rest = sys.argv[1], sys.argv[2:]
     if mode == "pdf":
@@ -35,6 +36,11 @@ def main() -> int:
 
         sys.argv = ["ocr_extract", *rest]
         return ocr_extract.main()
+    if mode == "video":
+        import ocr_video
+
+        sys.argv = ["ocr_video", *rest]
+        return ocr_video.main()
     print(f"[extract] unknown mode: {mode}", file=sys.stderr)
     return 2
 

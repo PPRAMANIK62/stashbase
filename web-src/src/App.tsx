@@ -19,7 +19,7 @@ interface ElectronBridge {
 
 interface CapturePayload {
   ok?: boolean;
-  mode?: 'screen' | 'window' | 'region';
+  mode?: 'screen' | 'window' | 'region' | 'recording';
   mime?: string;
   dataUrl?: string;
   width?: number;
@@ -109,12 +109,19 @@ function AppBody() {
     });
 
     async function handleCaptureCreated(capture: CapturePayload) {
-      if (!capture.dataUrl || !capture.mime?.startsWith('image/')) return;
-      const sourceTitle = capture.sourceTitle || 'Screenshot';
-      setPreviewImage({ src: capture.dataUrl, alt: sourceTitle });
+      const isImage = capture.mime?.startsWith('image/');
+      const isVideo = capture.mime?.startsWith('video/');
+      if (!capture.dataUrl || (!isImage && !isVideo)) return;
+      const sourceTitle = capture.sourceTitle || (isVideo ? 'Recording' : 'Screenshot');
+      // Only stills get the lightbox preview; a recording can't be shown
+      // in the image viewer, it just gets processed.
+      if (isImage) setPreviewImage({ src: capture.dataUrl, alt: sourceTitle });
 
       if (state.welcomeVisible || !state.space) {
-        actions.toast('Open a space to save this screenshot.', { level: 'warning' });
+        actions.toast(
+          isVideo ? 'Open a space to save this recording.' : 'Open a space to save this screenshot.',
+          { level: 'warning' },
+        );
         return;
       }
 
@@ -122,15 +129,26 @@ function AppBody() {
         const file = await dataUrlToFile(
           capture.dataUrl,
           capture.filename || defaultCaptureFilename(capture.mode),
-          capture.mime,
+          capture.mime ?? 'application/octet-stream',
         );
+        if (isVideo) {
+          // Recordings aren't stored as video — OCR'd into a visible note,
+          // the webm is discarded server-side. The note shows up via the
+          // "Converting…" banner when its text is ready.
+          const ok = await actions.recordVideo(file, state.activeFolder);
+          if (ok) actions.toast('Recording captured — extracting text…', { level: 'info' });
+          return;
+        }
         const saved = await actions.upload([{ file, relPath: file.name }], state.activeFolder);
         if (!saved) return;
         const suffix = state.activeFolder ? ` to ${state.activeFolder}` : '';
         actions.toast(`Saved ${file.name}${suffix}.`, { level: 'success' });
       } catch (err) {
         console.warn('[capture] save failed:', err);
-        actions.toast('Screenshot captured, but it could not be saved.', { level: 'error' });
+        actions.toast(
+          isVideo ? 'Recording captured, but it could not be processed.' : 'Screenshot captured, but it could not be saved.',
+          { level: 'error' },
+        );
       }
     }
   }, [actions, state.activeFolder, state.space, state.welcomeVisible]);
@@ -307,6 +325,7 @@ function AppBody() {
 
 function defaultCaptureFilename(mode?: string): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  if (mode === 'recording') return `recording-${stamp}.webm`;
   return `screenshot-${mode || 'capture'}-${stamp}.png`;
 }
 

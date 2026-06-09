@@ -364,6 +364,43 @@ export function SettingsIcon({ className }: IconProps) {
   );
 }
 
+/** Region screenshot — crop marks (Lucide `crop`). Top of the two capture
+ *  buttons in the rail (region still → OCR); video understanding sits below. */
+export function RegionCaptureIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+      <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+    </svg>
+  );
+}
+
+/** Start a visual capture — viewfinder corner marks framing two text lines:
+ *  "grab the text out of the frame". Conveys capturing textual information
+ *  from video rather than recording the video itself. Pairs with StopIcon
+ *  as the capture⇄stop transport metaphor. */
+export function RecordIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M9 4 H6 A2 2 0 0 0 4 6 V9" />
+      <path d="M15 4 H18 A2 2 0 0 1 20 6 V9" />
+      <path d="M9 20 H6 A2 2 0 0 1 4 18 V15" />
+      <path d="M15 20 H18 A2 2 0 0 0 20 18 V15" />
+      <line x1="8" y1="11" x2="16" y2="11" />
+      <line x1="8" y1="14" x2="13" y2="14" />
+    </svg>
+  );
+}
+
+/** Stop the active recording — a filled rounded square. */
+export function StopIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <rect x="6" y="6" width="12" height="12" rx="2.5" />
+    </svg>
+  );
+}
+
 export function ArrowLeftIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={1.8} {...stroke}>

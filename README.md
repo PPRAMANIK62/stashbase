@@ -207,6 +207,8 @@ pnpm dist:mac
 pnpm dist:win
 ```
 
+Optional runtime/debug knobs (log level, recording-debug bundles, PDF converter, …) are documented in [.env.example](.env.example). They're plain shell env vars — nothing is auto-loaded; export what you need, e.g. `STASHBASE_LOG=debug pnpm dev`.
+
 ## Publishing
 
 `dist:brew` is the one-command publishing flow: build the macOS package, upload the current version's files in `release/` to this repository's GitHub Release, then publish the Homebrew cask update.
