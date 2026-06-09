@@ -47,6 +47,19 @@
       const [track] = stream.getVideoTracks();
       if (track) track.addEventListener('ended', () => stop());
 
+      // Hand main what we know about the capture target (whole screen vs a
+      // window, and the pixel size) so it can label the floating indicator
+      // with which display is being recorded. Best-effort; absent fields
+      // just yield a generic indicator.
+      try {
+        const s = track && track.getSettings ? track.getSettings() : {};
+        window.electron.recorderMeta({
+          displaySurface: s.displaySurface || '',
+          width: s.width || 0,
+          height: s.height || 0,
+        });
+      } catch (_) { /* metadata is optional */ }
+
       const mime = pickMime();
       try {
         // High bitrate on purpose: OCR needs crisp text, and at 2fps

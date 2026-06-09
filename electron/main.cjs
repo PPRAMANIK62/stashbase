@@ -52,6 +52,14 @@ const mainWindows = new Set();
 let lastMainWindow = null;
 let capturePickerWindow = null;
 let recorderWindow = null;
+let recordingIndicatorWindow = null;
+// Four thin edge strips (top/bottom/left/right) forming the recording frame.
+// Thin windows float over fullscreen Spaces like the pill does; a single
+// screen-sized window gets ordered *under* the fullscreen app instead.
+let recordingBorderWindows = [];
+// Human label for the recording indicator pill — "right screen", "a window",
+// etc. Set from the recorder's capture metadata; '' = generic (just "REC").
+let recordingTargetLabel = '';
 let recordingActive = false;
 let recordingPending = false;
 
@@ -573,10 +581,10 @@ function configureDisplayMediaRequests() {
 function internalCaptureSourceIds() {
   const ids = new Set();
   // Exclude StashBase's own windows from the picker — the main window(s),
-  // the picker itself, the recorder, and the (legacy) floating ball.
+  // the picker itself, the recorder, and the recording indicator pill.
   // Recording StashBase itself is never the intent and just clutters the
   // list (e.g. the main window titled after the current chat).
-  const own = [capturePickerWindow, recorderWindow, ...mainWindows];
+  const own = [capturePickerWindow, recorderWindow, recordingIndicatorWindow, ...recordingBorderWindows, ...mainWindows];
   for (const win of own) {
     if (!win || win.isDestroyed()) continue;
     try {
@@ -841,11 +849,324 @@ function recordingFilename() {
 
 // Broadcast recording state to the sidebar record button in every open
 // main window, so it stays in sync however recording was started or
-// stopped (ball is gone; the rail button is the control now).
+// stopped (ball is gone; the rail button is the control now). Also the
+// single hook that raises / tears down the floating indicator — every
+// start / finish / crash path funnels through here, so the overlay's
+// lifetime tracks `recordingActive` exactly.
 function emitRecordingState(recording) {
+  if (recording) { showRecordingBorder(); showRecordingIndicator(); }
+  else { closeRecordingIndicator(); closeRecordingBorder(); }
   for (const win of mainWindows) {
     if (!win.isDestroyed()) win.webContents.send('recording:state', Boolean(recording));
   }
+}
+
+// Thickness of each edge strip (the coloured edge line + its inward glow).
+const BORDER_STRIP = 18;
+
+// Rects for the four edge strips covering a display's bounds. Top/bottom span
+// the full width; left/right fill the gap between them.
+function borderStripRects(b) {
+  return {
+    top: { x: b.x, y: b.y, width: b.width, height: BORDER_STRIP },
+    bottom: { x: b.x, y: b.y + b.height - BORDER_STRIP, width: b.width, height: BORDER_STRIP },
+    left: { x: b.x, y: b.y + BORDER_STRIP, width: BORDER_STRIP, height: b.height - 2 * BORDER_STRIP },
+    right: { x: b.x + b.width - BORDER_STRIP, y: b.y + BORDER_STRIP, width: BORDER_STRIP, height: b.height - 2 * BORDER_STRIP },
+  };
+}
+
+// A glowing frame around the recorded display, paired with the pill's caption.
+// Built from four THIN edge windows rather than one screen-sized window: a
+// full-screen window joins a fullscreen app's Space *under* the app (hidden),
+// whereas thin auxiliary windows float over it like the pill. Like the pill
+// they `canJoinAllSpaces` (so also visible on the desktop — the caption is
+// what disambiguates a window capture), are click-through and content-protected.
+function showRecordingBorder() {
+  if (recordingBorderWindows.length) return;
+  const rects = borderStripRects(screen.getPrimaryDisplay().bounds);
+  recordingBorderWindows = ['top', 'bottom', 'left', 'right'].map((edge) => createBorderStrip(rects[edge], edge));
+}
+
+function createBorderStrip(rect, edge) {
+  const win = new BrowserWindow({
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: false,
+    hasShadow: false,
+    // Hidden until "join all Spaces" is set, so showing it doesn't yank the
+    // user out of the fullscreen window they're recording (see the pill).
+    show: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  win.setAlwaysOnTop(true, 'screen-saver');
+  if (process.platform === 'darwin') win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setIgnoreMouseEvents(true);
+  win.setContentProtection(true);
+  win.on('closed', () => {
+    recordingBorderWindows = recordingBorderWindows.filter((w) => w !== win);
+  });
+  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(borderStripHtml(edge))}`);
+  win.showInactive();
+  return win;
+}
+
+function closeRecordingBorder() {
+  for (const win of recordingBorderWindows) {
+    if (win && !win.isDestroyed()) win.close();
+  }
+  recordingBorderWindows = [];
+}
+
+// Move the frame to cover a specific display (the matched recording target).
+function positionBorderOnDisplay(display) {
+  if (recordingBorderWindows.length !== 4) return;
+  const rects = borderStripRects(display.bounds);
+  ['top', 'bottom', 'left', 'right'].forEach((edge, i) => {
+    const win = recordingBorderWindows[i];
+    if (win && !win.isDestroyed()) win.setBounds(rects[edge]);
+  });
+}
+
+function borderStripHtml(edge) {
+  // Glow fades inward from the screen edge; a solid line sits on the edge.
+  const fade = { top: 'to bottom', bottom: 'to top', left: 'to right', right: 'to left' }[edge];
+  const horizontal = edge === 'top' || edge === 'bottom';
+  const line = horizontal
+    ? `left: 0; right: 0; height: 3px; ${edge}: 0;`
+    : `top: 0; bottom: 0; width: 3px; ${edge}: 0;`;
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    .glow { position: fixed; inset: 0;
+      background: linear-gradient(${fade}, rgba(239, 68, 68, 0.5), rgba(239, 68, 68, 0));
+      animation: breathe 1.8s ease-in-out infinite; }
+    .line { position: fixed; ${line} background: rgba(239, 68, 68, 0.95);
+      animation: breathe 1.8s ease-in-out infinite; }
+    @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  </style>
+</head>
+<body><div class="glow"></div><div class="line"></div></body>
+</html>`;
+}
+
+// A small always-on-top pill that stays visible across every Space —
+// including other apps' fullscreen Spaces, where macOS hides its own
+// menu-bar recording glyph and our rail button is on an unreachable
+// window. So while recording you always have one persistent "REC + timer
+// + Stop" cue no matter where you've swiped. `setContentProtection(true)`
+// keeps the pill visible to the user but excluded from the capture itself,
+// so it never bleeds into the recorded video.
+function showRecordingIndicator() {
+  if (recordingIndicatorWindow && !recordingIndicatorWindow.isDestroyed()) return;
+  // Wide enough for the longest pill ("REC · 0:00 · right screen · Stop");
+  // the pill itself is inline and centred, so extra width is just slack.
+  const width = 300;
+  const height = 44;
+  const area = screen.getPrimaryDisplay().workArea;
+  const win = new BrowserWindow({
+    width,
+    height,
+    x: Math.round(area.x + (area.width - width) / 2),
+    y: area.y + 12,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    // Don't steal focus from / yank the user out of the Space they're in
+    // when the pill appears or is clicked through.
+    focusable: false,
+    // Created hidden so "join all Spaces" is set before it's shown — else
+    // macOS switches the user from the fullscreen window being recorded
+    // back to the Space the pill first appears on.
+    show: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  win.setAlwaysOnTop(true, 'screen-saver');
+  if (process.platform === 'darwin') win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Visible to the eye, invisible to screen capture — so the indicator
+  // doesn't end up baked into the recording it's announcing.
+  win.setContentProtection(true);
+  win.on('closed', () => {
+    if (recordingIndicatorWindow === win) recordingIndicatorWindow = null;
+  });
+  // The capture target's metadata may already have arrived (older path sets
+  // the pill up before the recorder loads; system path the other way round),
+  // so push whatever label we have once the pill's DOM is ready.
+  win.webContents.once('did-finish-load', () => {
+    if (recordingTargetLabel && !win.isDestroyed()) win.webContents.send('recording:label', recordingTargetLabel);
+  });
+  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(recordingIndicatorHtml())}`);
+  // showInactive: join the current Space without activating / switching to it.
+  win.showInactive();
+  recordingIndicatorWindow = win;
+}
+
+function closeRecordingIndicator() {
+  if (recordingIndicatorWindow && !recordingIndicatorWindow.isDestroyed()) {
+    recordingIndicatorWindow.close();
+  }
+  recordingIndicatorWindow = null;
+  recordingTargetLabel = '';
+}
+
+// Resolve the recorder's capture metadata into (a) a human label for the
+// pill and (b) the physical display being recorded, if we can pin it down.
+// Whole-screen capture reports its pixel size, which we match against each
+// display's native resolution; with ≥2 displays we add a left/middle/right
+// word so the pill says *which* screen. A window capture has no single
+// screen, so it's just labelled "a window".
+function describeRecordingTarget(meta) {
+  const surface = meta && typeof meta.displaySurface === 'string' ? meta.displaySurface : '';
+  // The pill floats over every Space (it must, to stay visible over fullscreen
+  // windows — macOS couples that with "all Spaces"), so it can appear on the
+  // desktop while a *window* is what's being recorded. The label states the
+  // subject ("a window") so the pill never reads as "this Space is recording".
+  if (surface === 'window') return { label: 'Recording a window', display: null };
+  const w = meta && Number(meta.width);
+  const h = meta && Number(meta.height);
+  const displays = screen.getAllDisplays();
+  let best = null;
+  let bestErr = Infinity;
+  if (w && h) {
+    for (const d of displays) {
+      const pw = Math.round(d.size.width * d.scaleFactor);
+      const ph = Math.round(d.size.height * d.scaleFactor);
+      const err = Math.abs(pw - w) + Math.abs(ph - h);
+      if (err < bestErr) { bestErr = err; best = d; }
+    }
+  }
+  // `displaySurface === 'monitor'` means the target IS some display, so trust
+  // the closest resolution match unconditionally (HiDPI rounding shouldn't
+  // strand the pill on the primary screen). An unknown surface only counts
+  // as a screen on a tight match — otherwise it's most likely a window
+  // (e.g. the older getUserMedia path, which only ever records windows).
+  const match = surface === 'monitor' ? best : (best && bestErr <= (w + h) * 0.05 ? best : null);
+  if (!match) return { label: 'Recording a window', display: null };
+  if (displays.length < 2) return { label: 'Recording the screen', display: match };
+  return { label: `Recording the ${displayPositionWord(match, displays)} screen`, display: match };
+}
+
+// Left / middle / right by horizontal position among the displays. Matches
+// how users name monitors ("the right screen"), which the menu-bar glyph
+// and OS picker never tell them.
+function displayPositionWord(display, displays) {
+  const byX = [...displays].sort((a, b) => a.bounds.x - b.bounds.x);
+  const i = byX.findIndex((d) => d.id === display.id);
+  if (i === 0) return 'left';
+  if (i === byX.length - 1) return 'right';
+  return 'middle';
+}
+
+function positionIndicatorOnDisplay(display) {
+  if (!recordingIndicatorWindow || recordingIndicatorWindow.isDestroyed()) return;
+  const [width] = recordingIndicatorWindow.getSize();
+  const area = display.workArea;
+  recordingIndicatorWindow.setPosition(Math.round(area.x + (area.width - width) / 2), area.y + 12);
+}
+
+function recordingIndicatorHtml() {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
+      font: 13px -apple-system, system-ui, sans-serif; user-select: none; cursor: default; }
+    /* The pill body is the drag handle so the user can reposition it; the
+       Stop button opts out of the drag region so its click registers. */
+    .pill { -webkit-app-region: drag; display: inline-flex; align-items: center; gap: 8px;
+      height: 28px; margin: 6px; padding: 0 6px 0 12px; border-radius: 999px;
+      background: rgba(17, 24, 39, 0.92); color: #fff;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.32); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #ef4444;
+      flex: none; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.78); } }
+    .loc { white-space: nowrap; }
+    .time { font-variant-numeric: tabular-nums; letter-spacing: 0.3px; min-width: 34px;
+      color: rgba(255,255,255,0.62); }
+    .time::before { content: "·"; margin-right: 7px; color: rgba(255,255,255,0.32); }
+    .stop { -webkit-app-region: no-drag; margin-left: 2px; display: flex; align-items: center;
+      gap: 5px; height: 20px; padding: 0 9px; border: 0; border-radius: 999px;
+      background: rgba(255,255,255,0.14); color: #fff; font: inherit; font-size: 12px;
+      cursor: pointer; }
+    .stop:hover { background: rgba(239, 68, 68, 0.9); }
+    .stop b { width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
+  </style>
+</head>
+<body>
+  <div class="pill">
+    <span class="dot"></span>
+    <span class="loc" id="loc">Recording…</span>
+    <span class="time" id="t">0:00</span>
+    <button class="stop" id="stop" type="button"><b></b>Stop</button>
+  </div>
+  <script>
+    const started = Date.now();
+    const t = document.getElementById('t');
+    function tick() {
+      const s = Math.floor((Date.now() - started) / 1000);
+      const m = Math.floor(s / 60);
+      t.textContent = m + ':' + String(s % 60).padStart(2, '0');
+    }
+    tick();
+    setInterval(tick, 1000);
+    // The subject ("Recording a window" / "Recording the right screen") so the
+    // pill states what's captured, never implying the Space it floats over is.
+    const loc = document.getElementById('loc');
+    // Report the pill's real content width so main shrinks the window to fit —
+    // no truncated label, no oversized transparent click-catcher.
+    const pill = document.querySelector('.pill');
+    function reportSize() {
+      requestAnimationFrame(() => {
+        window.electron.setIndicatorSize({ width: Math.ceil(pill.getBoundingClientRect().width) + 14 });
+      });
+    }
+    window.electron.onRecordingLabel((label) => {
+      loc.textContent = label || 'Recording…';
+      reportSize();
+    });
+    reportSize();
+    document.getElementById('stop').addEventListener('click', () => {
+      window.electron.stopRecording();
+    });
+  </script>
+</body>
+</html>`;
 }
 
 function createRecorderWindow() {
@@ -1245,6 +1566,39 @@ ipcMain.on('recorder:canceled', (event) => {
 
 ipcMain.on('capture:stopRecording', () => {
   stopScreenRecording();
+});
+
+// Pill measured its content — shrink the window to fit so the label never
+// truncates and the transparent window isn't a wider-than-needed click-catcher.
+// Preserve the current centre so it stays put on whatever display it's on.
+ipcMain.on('recording:indicator-size', (event, size) => {
+  if (!recordingIndicatorWindow || recordingIndicatorWindow.isDestroyed()) return;
+  if (event.sender !== recordingIndicatorWindow.webContents) return;
+  const w = Math.round(size && Number(size.width));
+  if (!w || w < 80) return;
+  const clamped = Math.min(640, w);
+  const b = recordingIndicatorWindow.getBounds();
+  const centerX = b.x + b.width / 2;
+  recordingIndicatorWindow.setBounds({
+    x: Math.round(centerX - clamped / 2),
+    y: b.y,
+    width: clamped,
+    height: b.height,
+  });
+});
+
+// Recorder reported what it's capturing — label the indicator pill with the
+// recorded display (and move it onto that screen) so the user can tell which
+// screen is live even when the pill floats over other Spaces / monitors.
+ipcMain.on('recorder:meta', (event, meta) => {
+  if (recorderWindow && event.sender !== recorderWindow.webContents) return;
+  const { label, display } = describeRecordingTarget(meta && typeof meta === 'object' ? meta : {});
+  recordingTargetLabel = label;
+  if (recordingIndicatorWindow && !recordingIndicatorWindow.isDestroyed()) {
+    if (display) positionIndicatorOnDisplay(display);
+    recordingIndicatorWindow.webContents.send('recording:label', label);
+  }
+  if (display) positionBorderOnDisplay(display);
 });
 
 // Recorder window handed back a finished clip — forward it to the main

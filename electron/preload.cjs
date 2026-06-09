@@ -109,10 +109,24 @@ contextBridge.exposeInMainWorld('electron', {
   recorderStarted: () => ipcRenderer.send('recorder:started'),
   /** Recorder window (macOS 15+): the user dismissed the system picker. */
   recorderCanceled: () => ipcRenderer.send('recorder:canceled'),
+  /** Recorder window reports the capture target (screen vs window + pixel
+   *  size) so main can label the floating indicator with which display is
+   *  being recorded. */
+  recorderMeta: (meta) => ipcRenderer.send('recorder:meta', meta),
   /** Recorder window hands the finished clip (data URL) back to main. */
   recorderResult: (payload) => ipcRenderer.send('recorder:result', payload),
   /** Recorder window reports a getUserMedia / getDisplayMedia / MediaRecorder failure. */
   recorderError: (message) => ipcRenderer.send('recorder:error', message),
+  /** Recording-indicator pill reports its measured content width so main can
+   *  shrink the window to fit (no truncated label, no oversized click-catcher). */
+  setIndicatorSize: (size) => ipcRenderer.send('recording:indicator-size', size),
+  /** Recording-indicator pill subscribes to which-display-am-I-recording
+   *  label updates (e.g. "right screen", "a window"). */
+  onRecordingLabel: (handler) => {
+    const wrapped = (_event, label) => handler(typeof label === 'string' ? label : '');
+    ipcRenderer.on('recording:label', wrapped);
+    return () => ipcRenderer.removeListener('recording:label', wrapped);
+  },
   selectCaptureRegion: (rect) => ipcRenderer.send('capture:region-selected', rect),
   cancelCaptureRegion: () => ipcRenderer.send('capture:region-cancel'),
   /** Subscribe to fullscreen-state pushes. macOS green-button fullscreen
