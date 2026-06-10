@@ -267,6 +267,12 @@ function FolderRow({
   function onDragLeave() { setDropEdge(null); }
 
   function onDrop(e: DragEvent<HTMLDivElement>) {
+    // External OS file drops bubble to the window importer, which
+    // targets this folder via `closest('.tree-row.folder')`. Swallowing
+    // them here (unconditional stopPropagation) made drops onto a folder
+    // row fail. Only internal move/reorder drags are handled below.
+    const t = e.dataTransfer.types;
+    if (!t.includes(FILE_MIME) && !t.includes(FOLDER_MIME)) return;
     e.preventDefault();
     e.stopPropagation();
     const edge = dropEdge;
@@ -425,6 +431,12 @@ function FileRow({
   function onDragLeave() { setDropEdge(null); }
 
   function onDrop(e: DragEvent<HTMLDivElement>) {
+    // External OS file drops aren't ours — let them bubble to the
+    // window-level importer (`useGlobalDragDrop`). Unconditionally
+    // stopping propagation here is what made a drop landing on a file
+    // row silently fail. Only internal reorder drags are handled below.
+    const t = e.dataTransfer.types;
+    if (!t.includes(FILE_MIME) && !t.includes(FOLDER_MIME)) return;
     e.preventDefault();
     e.stopPropagation();
     const edge = dropEdge;

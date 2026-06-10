@@ -117,12 +117,22 @@ export function useGlobalDragDrop(): boolean {
       if (collected.length) await actions.upload(collected, targetDir);
     }
 
+    async function onIframeDrop(e: Event) {
+      const { entries } = (e as CustomEvent<{ entries: FileSystemEntry[] }>).detail;
+      hideVeil();
+      const collected: { file: File; relPath: string }[] = [];
+      for (const entry of entries) await walkEntry(entry, '', collected);
+      if (collected.length) await actions.upload(collected, dropTargetFolder.current);
+      dropTargetFolder.current = '';
+    }
+
     window.addEventListener('dragenter', onDragEnter);
     window.addEventListener('dragleave', onDragLeave);
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('drop', onDrop);
     window.addEventListener('dragend', onDragEnd);
     window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('stashbase:iframe-drop', onIframeDrop);
     return () => {
       window.removeEventListener('dragenter', onDragEnter);
       window.removeEventListener('dragleave', onDragLeave);
@@ -130,6 +140,7 @@ export function useGlobalDragDrop(): boolean {
       window.removeEventListener('drop', onDrop);
       window.removeEventListener('dragend', onDragEnd);
       window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('stashbase:iframe-drop', onIframeDrop);
     };
   }, [actions]);
 
