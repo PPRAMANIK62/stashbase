@@ -25,7 +25,7 @@ import { runBackgroundConversion } from '../conversion.ts';
 import { sanitizeFilename, saveText } from '../files.ts';
 import { analyzeVideoWithGemini, geminiConfigured } from '../gemini-video.ts';
 import { errorMessage, logger } from '../log.ts';
-import { getCurrentSpace, runWithWindowId, toKbRel, WINDOW_ID_HEADER } from '../space.ts';
+import { getCurrentSpace, getGeminiKey, runWithWindowId, setGeminiKey, toKbRel, WINDOW_ID_HEADER } from '../space.ts';
 import { indexer } from '../state.ts';
 import { runVideoOcr } from '../video.ts';
 
@@ -43,6 +43,23 @@ export function mount(app: express.Express): void {
     // Re-bind the window context dropped by multer's body parsing (same
     // reason as the upload route) so space-scoped lookups resolve.
     await runWithWindowId(req.header(WINDOW_ID_HEADER), () => handleRecording(req, res));
+  });
+
+  // Gemini key management — GET (configured?), PUT (set), DELETE (remove).
+  app.get('/api/gemini/key', (_req, res) => {
+    res.json({ hasKey: geminiConfigured() });
+  });
+
+  app.put('/api/gemini/key', (req, res) => {
+    const key = typeof req.body?.geminiKey === 'string' ? req.body.geminiKey.trim() : '';
+    if (!key) { res.status(400).json({ error: 'geminiKey required' }); return; }
+    setGeminiKey(key);
+    res.json({ hasKey: true });
+  });
+
+  app.delete('/api/gemini/key', (_req, res) => {
+    setGeminiKey(undefined);
+    res.json({ hasKey: false });
   });
 }
 

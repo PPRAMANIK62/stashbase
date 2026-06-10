@@ -65,6 +65,9 @@ interface ConfigFile extends SpaceConfigFile {
    *  `recentSpaces` on the next write. */
   recentVaults?: RecentSpace[];
   apiKey?: string;
+  /** Gemini API key for video analysis in the recording pipeline. When
+   *  absent, recording falls back to local frame-OCR. */
+  geminiKey?: string;
   /** Embedder provider is KB-wide (one collection family per
    *  provider on the daemon). `openaiKey` is a leftover from the very
    *  first global-config schema — its content moved into the top-level
@@ -767,6 +770,20 @@ export function setApiKey(key: string | undefined): void {
   const cfg = readConfig();
   if (key && key.trim()) cfg.apiKey = key.trim();
   else delete cfg.apiKey;
+  writeConfig(cfg);
+}
+
+/** Returns the user's stored Gemini API key, or undefined if none. */
+export function getGeminiKey(): string | undefined {
+  const k = readConfig().geminiKey;
+  return k && typeof k === 'string' && k.trim() ? k : undefined;
+}
+
+/** Persist (or clear, when `key` is falsy) the user's Gemini key. */
+export function setGeminiKey(key: string | undefined): void {
+  const cfg = readConfig();
+  if (key && key.trim()) cfg.geminiKey = key.trim();
+  else delete cfg.geminiKey;
   writeConfig(cfg);
 }
 

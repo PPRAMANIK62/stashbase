@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { api, errorMessage } from '../../api';
 
 interface CapturePermission {
   platform: string;
@@ -33,8 +34,44 @@ export function CapturePanel() {
   const [busy, setBusy] = useState<'permission' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Gemini key state
+  const [geminiHasKey, setGeminiHasKey] = useState<boolean | null>(null);
+  const [geminiAddKey, setGeminiAddKey] = useState('');
+  const [geminiAddBusy, setGeminiAddBusy] = useState(false);
+  const [geminiAddError, setGeminiAddError] = useState<string | null>(null);
+  const [geminiRemoveBusy, setGeminiRemoveBusy] = useState(false);
+
   useEffect(() => {
     void load();
+    void api.getGeminiKey()
+      .then((r) => setGeminiHasKey(r.hasKey))
+      .catch(() => setGeminiHasKey(false));
+  }, []);
+
+  const geminiAddSubmit = useCallback(async () => {
+    const trimmed = geminiAddKey.trim();
+    if (!trimmed) { setGeminiAddError('Key required'); return; }
+    setGeminiAddBusy(true);
+    setGeminiAddError(null);
+    try {
+      await api.setGeminiKey(trimmed);
+      setGeminiAddKey('');
+      setGeminiHasKey(true);
+    } catch (err: unknown) {
+      setGeminiAddError(errorMessage(err));
+    } finally {
+      setGeminiAddBusy(false);
+    }
+  }, [geminiAddKey]);
+
+  const geminiRemove = useCallback(async () => {
+    setGeminiRemoveBusy(true);
+    try {
+      await api.removeGeminiKey();
+      setGeminiHasKey(false);
+    } finally {
+      setGeminiRemoveBusy(false);
+    }
   }, []);
 
   async function load() {
@@ -119,6 +156,52 @@ export function CapturePanel() {
           </>
         )}
         {error && <div className="settings-error">{error}</div>}
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">Gemini API key</div>
+        <div className="settings-section-hint">
+          When set, recordings are analyzed with Gemini's video understanding for
+          better layout and multi-column extraction. Without a key, StashBase falls
+          back to local frame-OCR.
+        </div>
+        {geminiHasKey ? (
+          <div className="settings-actions-row">
+            <button
+              type="button"
+              className="settings-secondary-btn danger"
+              disabled={geminiRemoveBusy}
+              onClick={() => { void geminiRemove(); }}
+            >{geminiRemoveBusy ? 'Removing…' : 'Remove key…'}</button>
+          </div>
+        ) : (
+          <>
+            <div className="settings-field-row">
+              <input
+                type="password"
+                className="settings-text-input"
+                placeholder="AIza…"
+                autoComplete="off"
+                spellCheck={false}
+                value={geminiAddKey}
+                disabled={geminiAddBusy}
+                onChange={(e) => { setGeminiAddKey(e.target.value); setGeminiAddError(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void geminiAddSubmit(); } }}
+              />
+              <button
+                type="button"
+                className="settings-primary-btn"
+                onClick={() => { void geminiAddSubmit(); }}
+                disabled={geminiAddBusy || !geminiAddKey.trim()}
+              >{geminiAddBusy ? 'Saving…' : 'Add key'}</button>
+            </div>
+            {geminiAddError && <div className="settings-error">{geminiAddError}</div>}
+          </>
+        )}
+        <div className="settings-section-hint settings-hint-foot">
+          Stored locally in <code>~/.stashbase/config.json</code>. Recordings are
+          uploaded to Google for analysis — opt in only if that's acceptable.
+        </div>
       </div>
     </div>
   );

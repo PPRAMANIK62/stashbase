@@ -563,6 +563,13 @@ export const api = {
   removeApiKey: () =>
     send<{ hasKey: false }>('DELETE', '/api/embedder/key'),
 
+  // Gemini key (for video analysis in the recording pipeline) --------
+  getGeminiKey: () => getJson<{ hasKey: boolean }>('/api/gemini/key'),
+  setGeminiKey: (geminiKey: string) =>
+    send<{ hasKey: true }>('PUT', '/api/gemini/key', { geminiKey }),
+  removeGeminiKey: () =>
+    send<{ hasKey: false }>('DELETE', '/api/gemini/key'),
+
   // Claude sessions (chat-panel History dropdown) ----------------
   /** All local Claude Code sessions, newest first. */
   listSessions: () => getJson<SessionInfo[]>('/api/agent/sessions'),

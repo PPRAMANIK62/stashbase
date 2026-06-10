@@ -12,13 +12,16 @@
  * plain `curl`: resumable Files upload → poll until ACTIVE → generateContent
  * → delete the uploaded file.
  *
- * Opt-in: needs `GEMINI_API_KEY` (or `GOOGLE_API_KEY`). When unset, the
- * recording route falls back to local frame-OCR. Model override:
- * `GEMINI_VIDEO_MODEL` (default flash). Privacy: this uploads the recording
- * to Google — a deliberate departure from the otherwise local-first path.
+ * Opt-in: key is configured in Settings → Capture (stored in
+ * `~/.stashbase/config.json`). Falls back to `GEMINI_API_KEY` / `GOOGLE_API_KEY`
+ * env vars for backward compatibility. When absent, the recording route falls
+ * back to local frame-OCR. Model override: `GEMINI_VIDEO_MODEL` (default flash).
+ * Privacy: this uploads the recording to Google — a deliberate departure from
+ * the otherwise local-first path.
  */
 import { readFile } from 'node:fs/promises';
 import { logger } from './log.ts';
+import { getGeminiKey } from './space.ts';
 
 const log = logger('gemini-video');
 const BASE = 'https://generativelanguage.googleapis.com';
@@ -40,7 +43,7 @@ Output only the Markdown note — no preamble and no surrounding code fence.`;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function apiKey(): string | undefined {
-  return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
+  return getGeminiKey() || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
 }
 
 /** True when a Gemini key is configured — the recording route uses this to
