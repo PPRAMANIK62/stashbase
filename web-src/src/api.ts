@@ -50,6 +50,8 @@ export interface FolderImportPreview {
   entryCount: number;
   totalBytes: number;
   requiresConfirmation: boolean;
+  requiresLargeImportConfirmation: boolean;
+  largeImportReason?: string;
   warnings: string[];
   hasSnapshot: boolean;
   /** A space with this name already exists — Import refuses (won't merge);
@@ -382,13 +384,19 @@ export const api = {
     send<FolderImportPreview>('POST', '/api/space/import-folder/preview', { source, name }),
   importFolder: (
     source: string,
-    opts: { name?: string; mode?: ImportFolderMode; confirmExisting?: boolean } = {},
+    opts: {
+      name?: string;
+      mode?: ImportFolderMode;
+      confirmExisting?: boolean;
+      confirmLargeImport?: boolean;
+    } = {},
   ) =>
     send<FolderImportResult>('POST', '/api/space/import-folder', {
       source,
       name: opts.name ?? '',
       mode: opts.mode ?? 'copy',
       confirmExisting: opts.confirmExisting === true,
+      confirmLargeImport: opts.confirmLargeImport === true,
     }),
   /** Manual sidebar ordering — full map of `parentPath → child basenames`. */
   getFileOrder: () => getJson<Record<string, string[]>>('/api/file-order'),

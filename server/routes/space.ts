@@ -262,17 +262,22 @@ export function mount(app: express.Express): void {
       }
       const mode: ImportFolderMode = rawMode === 'move' ? 'move' : 'copy';
       const confirmExisting = req.body?.confirmExisting === true;
+      const confirmLargeImport = req.body?.confirmLargeImport === true;
       const result = importFolderAsSpace({
         source,
         name,
         mode,
         confirmExisting,
+        confirmLargeImport,
         kbRoot: getKbRoot(),
       });
       res.json(result);
     } catch (err: unknown) {
       if ((err as any)?.code === 'CONFIRM_EXISTING') {
         return res.status(409).json({ error: errorMessage(err), code: 'CONFIRM_EXISTING' });
+      }
+      if ((err as any)?.code === 'CONFIRM_LARGE_IMPORT') {
+        return res.status(409).json({ error: errorMessage(err), code: 'CONFIRM_LARGE_IMPORT' });
       }
       if ((err as any)?.code === 'SPACE_EXISTS') {
         return res.status(409).json({ error: errorMessage(err), code: 'SPACE_EXISTS' });

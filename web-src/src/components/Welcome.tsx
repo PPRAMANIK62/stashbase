@@ -73,26 +73,62 @@ export function Welcome() {
   const [rootPickerOpen, setRootPickerOpen] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
 
+  const refreshKbRoot = useCallback(async () => {
+    const r = await api.getKbRoot();
+    setKbRoot(r.path);
+    if (r.needsPicker) setRootPickerOpen(true);
+    return r.path;
+  }, []);
+
   // Fetch kbRoot so copy can show `~/Documents/StashBase` as the
   // container path in the hints below the action buttons.
   useEffect(() => {
     void (async () => {
       try {
-        const r = await api.getKbRoot();
-        setKbRoot(r.path);
-        if (r.needsPicker) setRootPickerOpen(true);
+        await refreshKbRoot();
       } catch (err) {
         dispatch({ type: 'WELCOME_ERROR', error: errorMessage(err) });
       }
     })();
-  }, [dispatch]);
+  }, [dispatch, refreshKbRoot]);
 
   useEffect(() => {
     if (!state.welcomeVisible) return;
-    void api.getSpace()
-      .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
+    void Promise.all([api.getSpace(), refreshKbRoot()])
+      .then(([j]) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
       .catch(() => { /* keep the current welcome state */ });
-  }, [dispatch, state.welcomeVisible]);
+  }, [dispatch, refreshKbRoot, state.welcomeVisible]);
+
+  function openOpenSpaceModal() {
+    void refreshKbRoot().catch((err) => {
+      dispatch({ type: 'WELCOME_ERROR', error: errorMessage(err) });
+    });
+    setOpenOpen(true);
+  }
+
+  function openNewSpaceModal() {
+    void refreshKbRoot().catch((err) => {
+      dispatch({ type: 'WELCOME_ERROR', error: errorMessage(err) });
+    });
+    setNewOpen(true);
+  }
+
+  function openRecent(path: string) {
+    void actions.openSpace(path).catch((e) => {
+      const msg = errorMessage(e);
+      // Remove the failed entry immediately so a stale/deleted path
+      // doesn't remain clickable if the server refresh also fails.
+      dispatch({
+        type: 'WELCOME_SHOW',
+        recent: state.recent.filter((r) => r.path !== path),
+        homeDir: state.homeDir,
+        error: msg,
+      });
+      void api.getSpace()
+        .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir, error: msg }))
+        .catch(() => { /* keep the optimistic removal + original open error */ });
+    });
+  }
 
   if (!state.welcomeVisible) return null;
 
@@ -113,7 +149,7 @@ export function Welcome() {
           <button
             className="welcome-action"
             type="button"
-            onClick={() => setOpenOpen(true)}
+            onClick={openOpenSpaceModal}
             title="Open an existing space in your knowledge base"
           >
             <span className="welcome-action-icon">
@@ -124,7 +160,7 @@ export function Welcome() {
           <button
             className="welcome-action"
             type="button"
-            onClick={() => setNewOpen(true)}
+            onClick={openNewSpaceModal}
             title="Create a new space in your knowledge base"
           >
             <span className="welcome-action-icon">
@@ -174,14 +210,7 @@ export function Welcome() {
                     type="button"
                     className="welcome-recent-pill"
                     title={name}
-                    onClick={() => {
-                      void actions.openSpace(r.path).catch((e) => {
-                        dispatch({ type: 'WELCOME_ERROR', error: errorMessage(e) });
-                        void api.getSpace()
-                          .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir, error: errorMessage(e) }))
-                          .catch(() => { /* keep the original open error */ });
-                      });
-                    }}
+                    onClick={() => openRecent(r.path)}
                   >
                     {name}
                   </button>
@@ -257,12 +286,19 @@ function KbRootPickerModal({
 
   async function browse() {
     const bridge = (window as { electron?: ElectronBridge }).electron;
-    const picked = await bridge?.openFolderDialog?.({
-      title: 'Choose root folder',
-      buttonLabel: 'Use as Root folder',
-      defaultPath: path || undefined,
-    });
-    if (picked) setPath(picked);
+    try {
+      const picked = await bridge?.openFolderDialog?.({
+        title: 'Choose root folder',
+        buttonLabel: 'Use as Root folder',
+        defaultPath: path || undefined,
+      });
+      if (picked) {
+        setPath(picked);
+        setError(null);
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    }
   }
 
   async function submit() {
@@ -382,6 +418,7 @@ function ImportFolderModal({
   const [preview, setPreview] = useState<FolderImportPreview | null>(null);
   const [name, setName] = useState('');
   const [mode, setMode] = useState<ImportFolderMode>('copy');
+  const [largeImportConfirmed, setLargeImportConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set once a move import finished but left the original behind (see
@@ -420,12 +457,17 @@ function ImportFolderModal({
   useEffect(() => {
     setPreview(null);
     setError(null);
+    setLargeImportConfirmed(false);
     runPreview();
     return () => {
       previewSeq.current++; // invalidate any in-flight preview on unmount / source change
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
   }, [source, runPreview]);
+
+  useEffect(() => {
+    if (!preview?.requiresLargeImportConfirmation) setLargeImportConfirmed(false);
+  }, [preview?.requiresLargeImportConfirmation]);
 
   function refreshName(nextName: string) {
     setName(nextName);
@@ -445,6 +487,10 @@ function ImportFolderModal({
     const n = name.trim();
     const nameErr = spaceNameError(n);
     if (nameErr) { setError(nameErr); return; }
+    if (preview?.requiresLargeImportConfirmation && !largeImportConfirmed) {
+      setError('This folder is large. Confirm that you want to import it before continuing.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -452,6 +498,7 @@ function ImportFolderModal({
         name: n,
         mode,
         confirmExisting: true,
+        confirmLargeImport: !preview?.requiresLargeImportConfirmation || largeImportConfirmed,
       });
       if (result.warning) {
         // Import succeeded but the original couldn't be removed. Keep the
@@ -462,9 +509,14 @@ function ImportFolderModal({
         setBusy(false);
         return;
       }
-      // Open first, THEN close — so a failed open shows the error in this
-      // modal (which stays up) instead of vanishing behind Welcome.
-      await actions.openSpaceByName(result.name);
+      try {
+        await actions.openSpaceByName(result.name);
+      } catch (openErr) {
+        setDoneName(result.name);
+        setError(`Imported "${result.name}", but it could not be opened: ${errorMessage(openErr)}`);
+        setBusy(false);
+        return;
+      }
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -479,13 +531,15 @@ function ImportFolderModal({
     : 'Importing copies this existing folder into your StashBase knowledge base.';
   const serverWarnings = (preview?.warnings ?? []).filter((w) =>
     w !== 'Importing copies this existing folder into your StashBase knowledge base.' &&
+    !w.startsWith('Large folder') &&
     // Destination is already shown (prettified) above — drop the server's
     // duplicate absolute-path "Destination will be …" line.
     !w.startsWith('Destination will be'),
   );
+  const needsLargeImportConfirmation = preview?.requiresLargeImportConfirmation === true;
 
   return (
-    <ModalShell onCancel={busy ? () => { /* swallow during import */ } : onClose}>
+    <ModalShell closeOnBackdrop={false} onCancel={busy ? () => { /* swallow during import */ } : onClose}>
       <h3>Import folder</h3>
       <p className="modal-hint">
         Imports <code>{sourceDisplay}</code> as a new space.
@@ -529,6 +583,24 @@ function ImportFolderModal({
           {serverWarnings.map((w) => <div key={w}>{w}</div>)}
         </div>
       )}
+      {needsLargeImportConfirmation && (
+        <div className="modal-warning">
+          <strong>Large folder selected</strong>
+          <div>
+            This folder contains {preview.largeImportReason ?? 'a large amount of data'}.
+            Importing may copy many files and take a long time.
+          </div>
+          <label className="modal-check">
+            <input
+              type="checkbox"
+              checked={largeImportConfirmed}
+              disabled={busy}
+              onChange={(e) => setLargeImportConfirmed(e.target.checked)}
+            />
+            <span>I understand and want to import this entire folder.</span>
+          </label>
+        </div>
+      )}
       {error && <div className={doneName ? 'modal-warning' : 'modal-error'}>{error}</div>}
       <div className="modal-actions">
         <button type="button" className="modal-btn" onClick={onClose} disabled={busy}>
@@ -545,7 +617,7 @@ function ImportFolderModal({
             type="button"
             className="modal-btn primary"
             onClick={() => { void submit(); }}
-            disabled={busy || !preview || !name.trim() || preview.nameTaken}
+            disabled={busy || !preview || !name.trim() || preview.nameTaken || (needsLargeImportConfirmation && !largeImportConfirmed)}
           >{busy ? 'Importing…' : mode === 'move' ? 'Move into StashBase' : 'Copy into StashBase'}</button>
         )}
       </div>
@@ -688,7 +760,7 @@ function OpenSpaceModal({
     const onFocus = () => { void loadSpaces(); };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [loadSpaces]);
+  }, [kbRoot, loadSpaces]);
 
   // Recently-opened first (freshest at top), then everything else
   // alphabetically.

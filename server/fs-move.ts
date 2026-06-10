@@ -16,46 +16,51 @@ import path from 'node:path';
  *  destination already exists, on a cyclic symlink, or on an
  *  unsupported entry type. Leaves a partial destination behind on
  *  failure — callers that need atomicity roll it back. */
-export function copyDirectoryDereferenced(source: string, destination: string): void {
-  if (fs.existsSync(destination)) throw new Error(`destination already exists: ${destination}`);
-  fs.mkdirSync(destination, { recursive: false });
-  const seen = new Set([fs.realpathSync(source)]);
-  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-    copyEntryDereferenced(
-      path.join(source, entry.name),
-      path.join(destination, entry.name),
-      seen,
-    );
-  }
+export interface CopyDirectoryOptions {
+  exclude?: (relPath: string, entry: fs.Dirent) => boolean;
 }
 
-function copyEntryDereferenced(
+export function copyDirectoryDereferenced(
   source: string,
   destination: string,
-  seenDirectories: Set<string>,
+  opts: CopyDirectoryOptions = {},
 ): void {
-  const stat = fs.statSync(source);
-  if (stat.isDirectory()) {
-    const real = fs.realpathSync(source);
-    if (seenDirectories.has(real)) throw new Error(`cyclic symlink detected: ${source}`);
-    seenDirectories.add(real);
-    fs.mkdirSync(destination, { mode: stat.mode });
-    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-      copyEntryDereferenced(
-        path.join(source, entry.name),
-        path.join(destination, entry.name),
-        seenDirectories,
-      );
+  if (fs.existsSync(destination)) throw new Error(`destination already exists: ${destination}`);
+  const sourceReal = fs.realpathSync(source);
+  const sourceStat = fs.statSync(source);
+  fs.mkdirSync(destination, { recursive: false, mode: sourceStat.mode });
+
+  const stack: Array<{ source: string; destination: string; rel: string; ancestors: Set<string> }> = [
+    { source, destination, rel: '', ancestors: new Set([sourceReal]) },
+  ];
+  while (stack.length > 0) {
+    const frame = stack.pop()!;
+    for (const entry of fs.readdirSync(frame.source, { withFileTypes: true })) {
+      const childRel = frame.rel ? `${frame.rel}/${entry.name}` : entry.name;
+      if (opts.exclude?.(childRel, entry)) continue;
+      const childSource = path.join(frame.source, entry.name);
+      const childDestination = path.join(frame.destination, entry.name);
+      const stat = fs.statSync(childSource);
+      if (stat.isDirectory()) {
+        const real = fs.realpathSync(childSource);
+        if (frame.ancestors.has(real)) throw new Error(`cyclic symlink detected: ${childSource}`);
+        fs.mkdirSync(childDestination, { mode: stat.mode });
+        stack.push({
+          source: childSource,
+          destination: childDestination,
+          rel: childRel,
+          ancestors: new Set([...frame.ancestors, real]),
+        });
+        continue;
+      }
+      if (stat.isFile()) {
+        fs.copyFileSync(childSource, childDestination, fs.constants.COPYFILE_EXCL);
+        fs.chmodSync(childDestination, stat.mode);
+        continue;
+      }
+      throw new Error(`unsupported filesystem entry: ${childSource}`);
     }
-    seenDirectories.delete(real);
-    return;
   }
-  if (stat.isFile()) {
-    fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
-    fs.chmodSync(destination, stat.mode);
-    return;
-  }
-  throw new Error(`unsupported filesystem entry: ${source}`);
 }
 
 /** Move a directory by safe copy + delete (cross-filesystem safe). The

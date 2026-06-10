@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { validateSpaceName, pruneStashbasePerMachineState } from './space.ts';
+import {
+  validateSpaceName,
+  pruneStashbasePerMachineState,
+  STASHBASE_PER_MACHINE_ENTRIES,
+} from './space.ts';
 import { copyDirectoryDereferenced } from './fs-move.ts';
 
 export type ImportFolderMode = 'copy' | 'move';
@@ -14,6 +18,8 @@ export interface FolderImportPreview {
   entryCount: number;
   totalBytes: number;
   requiresConfirmation: boolean;
+  requiresLargeImportConfirmation: boolean;
+  largeImportReason?: string;
   warnings: string[];
   hasSnapshot: boolean;
   /** A space with this name already exists under kbRoot. Import refuses
@@ -29,6 +35,7 @@ export interface ImportFolderOptions {
   name?: string;
   mode?: ImportFolderMode;
   confirmExisting?: boolean;
+  confirmLargeImport?: boolean;
 }
 
 export interface ImportFolderResult {
@@ -43,6 +50,8 @@ export interface ImportFolderResult {
 }
 
 const CONFIRM_ENTRY_LIMIT = 0;
+const LARGE_IMPORT_ENTRY_LIMIT = 10_000;
+const LARGE_IMPORT_BYTES = 1024 ** 3;
 /** Cap on how deep `scanFolder` walks before it stops counting. A
  *  preview is informational, not a manifest — without a bound, pointing
  *  the picker at a tens-of-GB tree would block the server on a full
@@ -64,7 +73,8 @@ export function previewFolderImport(
 
   const destination = path.join(kbRoot, name);
   const stats = scanFolder(source);
-  const warnings = buildWarnings(source, kbRoot, name, stats.entryCount, stats.truncated);
+  const largeImportReason = getLargeImportReason(stats.entryCount, stats.totalBytes, stats.truncated);
+  const warnings = buildWarnings(source, kbRoot, name, stats.entryCount, stats.totalBytes, stats.truncated);
 
   return {
     source,
@@ -74,6 +84,8 @@ export function previewFolderImport(
     entryCount: stats.entryCount,
     totalBytes: stats.totalBytes,
     requiresConfirmation: stats.entryCount > CONFIRM_ENTRY_LIMIT,
+    requiresLargeImportConfirmation: largeImportReason !== undefined,
+    largeImportReason,
     warnings,
     hasSnapshot: fileExists(path.join(source, '.stashbase', 'snapshot.parquet')),
     nameTaken: dirExists(destination),
@@ -89,6 +101,11 @@ export function importFolderAsSpace(opts: ImportFolderOptions): ImportFolderResu
     (err as any).code = 'CONFIRM_EXISTING';
     throw err;
   }
+  if (preview.requiresLargeImportConfirmation && opts.confirmLargeImport !== true) {
+    const err = new Error('large folder confirmation required before importing this folder');
+    (err as any).code = 'CONFIRM_LARGE_IMPORT';
+    throw err;
+  }
 
   fs.mkdirSync(path.dirname(preview.destination), { recursive: true });
   if (!dirExists(path.dirname(preview.destination))) throw new Error('knowledge base root is not a directory');
@@ -102,7 +119,9 @@ export function importFolderAsSpace(opts: ImportFolderOptions): ImportFolderResu
   // partial destination behind, so we roll it back. The source is still
   // untouched, so rolling back the destination is safe and complete.
   try {
-    copyDirectoryDereferenced(preview.source, preview.destination);
+    copyDirectoryDereferenced(preview.source, preview.destination, {
+      exclude: isImportExcludedEntry,
+    });
     pruneStashbasePerMachineState(path.join(preview.destination, '.stashbase'));
   } catch (err) {
     try { fs.rmSync(preview.destination, { recursive: true, force: true }); } catch { /* best-effort rollback */ }
@@ -159,6 +178,16 @@ function assertImportableSource(source: string, kbRoot: string): void {
   }
 }
 
+function isImportExcludedEntry(relPath: string, _entry: fs.Dirent): boolean {
+  const parts = relPath.split('/');
+  if (parts[0] !== '.stashbase') return false;
+  const entry = parts[1];
+  if (!entry) return false;
+  if (STASHBASE_PER_MACHINE_ENTRIES.includes(entry)) return true;
+  if (entry.startsWith('state.db-')) return true;
+  return entry === 'pdf-status.json' || entry === 'pdf-status.json.migrated';
+}
+
 function scanFolder(source: string): { entryCount: number; totalBytes: number; truncated: boolean } {
   let entryCount = 0;
   let totalBytes = 0;
@@ -171,6 +200,7 @@ function scanFolder(source: string): { entryCount: number; totalBytes: number; t
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
+      if (entryCount >= SCAN_ENTRY_CAP) return { entryCount, totalBytes, truncated: true };
       entryCount += 1;
       const full = path.join(dir, entry.name);
       try {
@@ -191,11 +221,19 @@ function scanFolder(source: string): { entryCount: number; totalBytes: number; t
   return { entryCount, totalBytes, truncated: false };
 }
 
+function getLargeImportReason(entryCount: number, totalBytes: number, truncated: boolean): string | undefined {
+  if (truncated) return `${SCAN_ENTRY_CAP.toLocaleString()}+ items`;
+  if (entryCount >= LARGE_IMPORT_ENTRY_LIMIT) return `${entryCount.toLocaleString()} items`;
+  if (totalBytes >= LARGE_IMPORT_BYTES) return formatBytes(totalBytes);
+  return undefined;
+}
+
 function buildWarnings(
   source: string,
   kbRoot: string,
   name: string,
   entryCount: number,
+  totalBytes: number,
   truncated: boolean,
 ): string[] {
   const warnings: string[] = [];
@@ -206,12 +244,26 @@ function buildWarnings(
   }
   if (truncated) {
     warnings.push(`Large folder (${SCAN_ENTRY_CAP.toLocaleString()}+ items); the count below is approximate and importing may take a while.`);
+  } else if (entryCount >= LARGE_IMPORT_ENTRY_LIMIT || totalBytes >= LARGE_IMPORT_BYTES) {
+    warnings.push(`Large folder (${entryCount.toLocaleString()} items, ${formatBytes(totalBytes)}); importing may take a while.`);
   }
   if (entryCount > 0) {
     warnings.push('Importing copies this existing folder into your StashBase knowledge base.');
   }
   warnings.push(`Destination will be ${path.join(kbRoot, name)}.`);
   return warnings;
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
 }
 
 function dirExists(p: string): boolean {

@@ -1342,14 +1342,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const goHome = useCallback(() => {
     resetSpaceScopedState();
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: '' });
-    // Show immediately with the in-memory list (snappy), then refresh from
-    // the server: a space just created via New / Import won't be in the
-    // stale `state.recent` captured at bootstrap, so without this the
-    // Welcome pills don't update until an app restart.
-    dispatch({ type: 'WELCOME_SHOW', recent: stateRef.current.recent });
+    // Recent entries can disappear or move outside kbRoot while a space
+    // is open. Show Welcome immediately, but wait for the server-filtered
+    // list before rendering pills so stale paths don't flash or stick.
+    dispatch({ type: 'WELCOME_SHOW', recent: [] });
     void api.getSpace()
       .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
-      .catch(() => { /* keep the in-memory list if the refresh fails */ });
+      .catch(() => { /* keep the empty list if the refresh fails */ });
   }, [resetSpaceScopedState]);
 
   const bootstrap = useCallback(async () => {

@@ -56,12 +56,19 @@ export function StoragePanel() {
 
   async function choose() {
     const bridge = (window as { electron?: ElectronBridge }).electron;
-    const picked = await bridge?.openFolderDialog?.({
-      title: 'Choose root folder',
-      buttonLabel: 'Use as Root folder',
-      defaultPath: kbRoot || undefined,
-    });
-    if (picked) setKbRoot(picked);
+    try {
+      const picked = await bridge?.openFolderDialog?.({
+        title: 'Choose root folder',
+        buttonLabel: 'Use as Root folder',
+        defaultPath: kbRoot || undefined,
+      });
+      if (picked) {
+        setKbRoot(picked);
+        setError(null);
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    }
   }
 
   /** Apply a successful switch: update the field, go home, re-bootstrap,

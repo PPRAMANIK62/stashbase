@@ -54,6 +54,37 @@ test('copy imports into a new space, dereferences symlinks, and leaves the sourc
   assert.equal(fs.existsSync(source), true);
 });
 
+test('copy preserves portable snapshots while skipping local stashbase state', () => {
+  const kbRoot = tmpDir('kb');
+  const source = tmpDir('source');
+  fs.mkdirSync(path.join(source, '.stashbase', 'store'), { recursive: true });
+  fs.mkdirSync(path.join(source, '.stashbase', 'cache'), { recursive: true });
+  fs.writeFileSync(path.join(source, '.stashbase', 'snapshot.parquet'), 'snapshot');
+  fs.writeFileSync(path.join(source, '.stashbase', 'snapshot.meta.json'), '{"version":3}\n');
+  fs.writeFileSync(path.join(source, '.stashbase', 'config.json'), '{}');
+  fs.writeFileSync(path.join(source, '.stashbase', 'state.db'), 'db');
+  fs.writeFileSync(path.join(source, '.stashbase', 'state.db-wal'), 'wal');
+  fs.writeFileSync(path.join(source, '.stashbase', 'store', 'milvus.db'), 'milvus');
+  fs.writeFileSync(path.join(source, '.stashbase', 'cache', 'tmp'), 'cache');
+
+  const result = importFolderAsSpace({
+    source,
+    kbRoot,
+    name: 'snapshot-space',
+    mode: 'copy',
+    confirmExisting: true,
+  });
+
+  const stash = path.join(result.path, '.stashbase');
+  assert.equal(fs.existsSync(path.join(stash, 'snapshot.parquet')), true);
+  assert.equal(fs.existsSync(path.join(stash, 'snapshot.meta.json')), true);
+  assert.equal(fs.existsSync(path.join(stash, 'config.json')), false);
+  assert.equal(fs.existsSync(path.join(stash, 'state.db')), false);
+  assert.equal(fs.existsSync(path.join(stash, 'state.db-wal')), false);
+  assert.equal(fs.existsSync(path.join(stash, 'store')), false);
+  assert.equal(fs.existsSync(path.join(stash, 'cache')), false);
+});
+
 test('preview counts a symlinked directory once', () => {
   const kbRoot = tmpDir('kb');
   const source = tmpDir('source');
@@ -138,6 +169,29 @@ test('import refuses non-empty source without confirmation', () => {
   assert.throws(
     () => importFolderAsSpace({ source, kbRoot, mode: 'copy', confirmExisting: false }),
     /confirmation required/,
+  );
+});
+
+test('preview marks very large sources and import requires explicit large confirmation', () => {
+  const kbRoot = tmpDir('kb');
+  const source = tmpDir('source');
+  const largeFile = path.join(source, 'large.bin');
+  fs.closeSync(fs.openSync(largeFile, 'w'));
+  fs.truncateSync(largeFile, 1024 ** 3 + 1);
+
+  const preview = previewFolderImport({ source, kbRoot, name: 'large-space' });
+
+  assert.equal(preview.requiresLargeImportConfirmation, true);
+  assert.match(preview.largeImportReason ?? '', /GB/);
+  assert.throws(
+    () => importFolderAsSpace({
+      source,
+      kbRoot,
+      name: 'large-space',
+      mode: 'copy',
+      confirmExisting: true,
+    }),
+    /large folder confirmation required/,
   );
 });
 
