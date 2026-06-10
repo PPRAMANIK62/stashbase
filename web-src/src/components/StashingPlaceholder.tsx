@@ -15,9 +15,6 @@ export function StashingPlaceholder() {
     <div className="stashing-placeholder">
       <StashBaseIcon className="stashing-placeholder-logo" />
       <div className="stashing-placeholder-title">Processing your recording…</div>
-      <div className="stashing-placeholder-sub">
-        The transcript will appear here when it's ready.
-      </div>
     </div>
   );
 }

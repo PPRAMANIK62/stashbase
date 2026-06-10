@@ -80,6 +80,12 @@
       0%, 100% { opacity: 1; }
       50% { opacity: 0.45; }
     }
+    /* Shared breathing pulse used by the stashing placeholder logo and
+     * tab / pill stashing marks. */
+    @keyframes stashing-pulse {
+      0%, 100% { opacity: 0.35; }
+      50% { opacity: 0.8; }
+    }
     /* Push the settings gear to the bottom of the rail (VSCode-style),
      * keeping the view toggles grouped at the top. */
     .activity-bar-btn-bottom {
@@ -849,53 +855,61 @@
      * steps(1, end) at 74% makes the wipe instantaneous.
      *
      */
+    /* 5 connected paths, proportional draw windows with ~3 % overlap so
+     * each stroke starts before the previous one finishes — simulates a
+     * single flowing pen rather than discrete segments. Draw 0–57%,
+     * hold 57–80%, fade 80–88%, reset 88–100%. 2.4 s cycle. */
     @keyframes s-draw-1 {
       0%   { stroke-dashoffset: 300; opacity: 0; animation-timing-function: ease-in-out; }
       5%   { opacity: 1; }
-      12%  { stroke-dashoffset: 0; }
-      82%  { stroke-dashoffset: 0; opacity: 1; }
-      90%  { stroke-dashoffset: 0; opacity: 0; }
-      91%  { stroke-dashoffset: 300; opacity: 0; }
+      15%  { stroke-dashoffset: 0; }
+      80%  { stroke-dashoffset: 0; opacity: 1; }
+      88%  { stroke-dashoffset: 0; opacity: 0; }
+      89%  { stroke-dashoffset: 300; opacity: 0; }
       100% { stroke-dashoffset: 300; opacity: 0; }
     }
     @keyframes s-draw-2 {
+      /* starts 3 % before path-1 ends → flows through shared point 92,158 */
       0%   { stroke-dashoffset: 400; opacity: 0; }
       12%  { stroke-dashoffset: 400; opacity: 0; animation-timing-function: ease-in-out; }
       17%  { opacity: 1; }
-      24%  { stroke-dashoffset: 0; }
-      82%  { stroke-dashoffset: 0; opacity: 1; }
-      90%  { stroke-dashoffset: 0; opacity: 0; }
-      91%  { stroke-dashoffset: 400; opacity: 0; }
+      32%  { stroke-dashoffset: 0; }
+      80%  { stroke-dashoffset: 0; opacity: 1; }
+      88%  { stroke-dashoffset: 0; opacity: 0; }
+      89%  { stroke-dashoffset: 400; opacity: 0; }
       100% { stroke-dashoffset: 400; opacity: 0; }
     }
     @keyframes s-draw-3 {
+      /* starts 3 % before path-2 ends → flows through shared point 420,158 */
       0%   { stroke-dashoffset: 190; opacity: 0; }
-      24%  { stroke-dashoffset: 190; opacity: 0; animation-timing-function: ease-in-out; }
-      29%  { opacity: 1; }
-      36%  { stroke-dashoffset: 0; }
-      82%  { stroke-dashoffset: 0; opacity: 1; }
-      90%  { stroke-dashoffset: 0; opacity: 0; }
-      91%  { stroke-dashoffset: 190; opacity: 0; }
+      29%  { stroke-dashoffset: 190; opacity: 0; animation-timing-function: ease-in-out; }
+      33%  { opacity: 1; }
+      41%  { stroke-dashoffset: 0; }
+      80%  { stroke-dashoffset: 0; opacity: 1; }
+      88%  { stroke-dashoffset: 0; opacity: 0; }
+      89%  { stroke-dashoffset: 190; opacity: 0; }
       100% { stroke-dashoffset: 190; opacity: 0; }
     }
     @keyframes s-draw-4 {
+      /* starts 3 % before path-3 ends → flows through shared point 420,342 */
       0%   { stroke-dashoffset: 200; opacity: 0; }
-      36%  { stroke-dashoffset: 200; opacity: 0; animation-timing-function: ease-in-out; }
-      41%  { opacity: 1; }
-      48%  { stroke-dashoffset: 0; }
-      82%  { stroke-dashoffset: 0; opacity: 1; }
-      90%  { stroke-dashoffset: 0; opacity: 0; }
-      91%  { stroke-dashoffset: 200; opacity: 0; }
+      38%  { stroke-dashoffset: 200; opacity: 0; animation-timing-function: ease-in-out; }
+      42%  { opacity: 1; }
+      50%  { stroke-dashoffset: 0; }
+      80%  { stroke-dashoffset: 0; opacity: 1; }
+      88%  { stroke-dashoffset: 0; opacity: 0; }
+      89%  { stroke-dashoffset: 200; opacity: 0; }
       100% { stroke-dashoffset: 200; opacity: 0; }
     }
     @keyframes s-draw-5 {
+      /* starts 3 % before path-4 ends → flows through shared point 256,436 */
       0%   { stroke-dashoffset: 100; opacity: 0; }
-      48%  { stroke-dashoffset: 100; opacity: 0; animation-timing-function: ease-in-out; }
-      53%  { opacity: 1; }
-      60%  { stroke-dashoffset: 0; }
-      82%  { stroke-dashoffset: 0; opacity: 1; }
-      90%  { stroke-dashoffset: 0; opacity: 0; }
-      91%  { stroke-dashoffset: 100; opacity: 0; }
+      47%  { stroke-dashoffset: 100; opacity: 0; animation-timing-function: ease-in-out; }
+      51%  { opacity: 1; }
+      57%  { stroke-dashoffset: 0; }
+      80%  { stroke-dashoffset: 0; opacity: 1; }
+      88%  { stroke-dashoffset: 0; opacity: 0; }
+      89%  { stroke-dashoffset: 100; opacity: 0; }
       100% { stroke-dashoffset: 100; opacity: 0; }
     }
     .stashing-pill-logo,
@@ -905,28 +919,33 @@
     }
     .stashing-pill-logo .s-cyan > path:nth-child(1),
     .stashing-list-logo .s-cyan > path:nth-child(1),
-    .tab-stashing-logo .s-cyan > path:nth-child(1) {
-      stroke-dasharray: 300; animation: s-draw-1 2s linear infinite;
+    .tab-stashing-logo .s-cyan > path:nth-child(1),
+    .stashing-placeholder-logo .s-cyan > path:nth-child(1) {
+      stroke-dasharray: 300; animation: s-draw-1 2.4s linear infinite;
     }
     .stashing-pill-logo .s-cyan > path:nth-child(2),
     .stashing-list-logo .s-cyan > path:nth-child(2),
-    .tab-stashing-logo .s-cyan > path:nth-child(2) {
-      stroke-dasharray: 400; animation: s-draw-2 2s linear infinite;
+    .tab-stashing-logo .s-cyan > path:nth-child(2),
+    .stashing-placeholder-logo .s-cyan > path:nth-child(2) {
+      stroke-dasharray: 400; animation: s-draw-2 2.4s linear infinite;
     }
     .stashing-pill-logo .s-cyan > path:nth-child(3),
     .stashing-list-logo .s-cyan > path:nth-child(3),
-    .tab-stashing-logo .s-cyan > path:nth-child(3) {
-      stroke-dasharray: 190; animation: s-draw-3 2s linear infinite;
+    .tab-stashing-logo .s-cyan > path:nth-child(3),
+    .stashing-placeholder-logo .s-cyan > path:nth-child(3) {
+      stroke-dasharray: 190; animation: s-draw-3 2.4s linear infinite;
     }
     .stashing-pill-logo .s-cyan > path:nth-child(4),
     .stashing-list-logo .s-cyan > path:nth-child(4),
-    .tab-stashing-logo .s-cyan > path:nth-child(4) {
-      stroke-dasharray: 200; animation: s-draw-4 2s linear infinite;
+    .tab-stashing-logo .s-cyan > path:nth-child(4),
+    .stashing-placeholder-logo .s-cyan > path:nth-child(4) {
+      stroke-dasharray: 200; animation: s-draw-4 2.4s linear infinite;
     }
     .stashing-pill-logo .s-cyan > path:nth-child(5),
     .stashing-list-logo .s-cyan > path:nth-child(5),
-    .tab-stashing-logo .s-cyan > path:nth-child(5) {
-      stroke-dasharray: 100; animation: s-draw-5 2s linear infinite;
+    .tab-stashing-logo .s-cyan > path:nth-child(5),
+    .stashing-placeholder-logo .s-cyan > path:nth-child(5) {
+      stroke-dasharray: 100; animation: s-draw-5 2.4s linear infinite;
     }
     /* Freeze paths fully assembled while hovering the pill. */
     .stashing-pill:hover .s-cyan > path {
@@ -937,7 +956,8 @@
     @media (prefers-reduced-motion: reduce) {
       .stashing-pill-logo .s-cyan > path,
       .stashing-list-logo .s-cyan > path,
-      .tab-stashing-logo .s-cyan > path {
+      .tab-stashing-logo .s-cyan > path,
+      .stashing-placeholder-logo .s-cyan > path {
         animation: none;
         stroke-dashoffset: 0;
         opacity: 0.7;
