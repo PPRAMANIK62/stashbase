@@ -77,6 +77,7 @@ function SearchBox() {
   }
 
   function flipMode() {
+    if (state.searchMode === 'keyword' && state.embedderHasKey === false) return;
     const next = state.searchMode === 'semantic' ? 'keyword' : 'semantic';
     dispatch({ type: 'SEARCH_MODE', mode: next });
     if (state.filterQuery.trim()) {
@@ -97,6 +98,7 @@ function SearchBox() {
   }
 
   const isKeyword = state.searchMode === 'keyword';
+  const semanticDisabled = state.embedderHasKey === false;
 
   return (
     <div className="side-search">
@@ -141,10 +143,15 @@ function SearchBox() {
         )}
         <button
           type="button"
-          className="side-search-mode-btn side-search-mode-flip"
+          className={'side-search-mode-btn side-search-mode-flip' + (semanticDisabled && isKeyword ? ' disabled' : '')}
           onClick={flipMode}
+          disabled={semanticDisabled && isKeyword}
           aria-label={isKeyword ? 'Switch to semantic search' : 'Switch to keyword search'}
-          title={isKeyword ? 'Keyword search · click for semantic' : 'Semantic search · click for keyword'}
+          title={
+            isKeyword
+              ? semanticDisabled ? 'Semantic search disabled until you add an OpenAI API key' : 'Keyword search · click for semantic'
+              : 'Semantic search disabled · click for keyword'
+          }
         >
           {isKeyword ? '=' : '≈'}
         </button>
@@ -157,6 +164,9 @@ function SearchResults({ query }: { query: string }) {
   const { state } = useApp();
   // A real failure (server / daemon error) — distinct from "no matches".
   if (state.searchError) {
+    if (state.searchError.startsWith('Semantic search is disabled')) {
+      return <div className="empty-list">{state.searchError}</div>;
+    }
     return <div className="empty-list search-failed">Search failed: {state.searchError}</div>;
   }
   if (state.searchMode === 'keyword') {

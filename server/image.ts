@@ -48,6 +48,12 @@ export function convertImage(imageAbsPath: string): Promise<{ notePath: string }
         resolve({ notePath });
       } else {
         const tail = stderr.trim().split('\n').slice(-3).join('\n');
+        if (/rapidocr_onnxruntime|No module named ['"]rapidocr/i.test(tail)) {
+          reject(new Error(
+            'OCR engine is not installed. Run `pnpm setup:python` and restart StashBase; the image still opens, but its text is not searchable yet.',
+          ));
+          return;
+        }
         reject(new Error(`ocr_extract exit ${code}: ${tail || '(no stderr)'}`));
       }
     });

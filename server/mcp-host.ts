@@ -24,8 +24,8 @@ interface ManagedServer {
 
 const byWindow = new Map<string, ManagedServer[]>();
 
-export function switchSpaceMcpServers(windowId: string, spaceRoot: string): void {
-  stopSpaceMcpServers(windowId);
+export async function switchSpaceMcpServers(windowId: string, spaceRoot: string): Promise<void> {
+  await stopSpaceMcpServers(windowId);
   const spaceName = path.relative(getKbRoot(), spaceRoot).split(path.sep).join('/');
   const cfg = resolveSpaceConfig(spaceName);
   const servers: ManagedServer[] = [];
@@ -67,16 +67,20 @@ export function switchSpaceMcpServers(windowId: string, spaceRoot: string): void
   }
 }
 
-export function stopSpaceMcpServers(windowId?: string): void {
+export async function stopSpaceMcpServers(windowId?: string): Promise<void> {
   const entries = windowId ? [[windowId, byWindow.get(windowId) ?? []] as const] : [...byWindow.entries()];
+  const closes: Promise<void>[] = [];
   for (const [id, servers] of entries) {
     for (const server of servers) {
-      server.client.close().catch((err) => {
-        log.warn(`${server.name}: close failed: ${errorMessage(err)}`);
-      });
+      closes.push(
+        server.client.close().catch((err) => {
+          log.warn(`${server.name}: close failed: ${errorMessage(err)}`);
+        }),
+      );
     }
     byWindow.delete(id);
   }
+  await Promise.all(closes);
 }
 
 export async function listSpaceMcpTools(windowId: string): Promise<HostedMcpTool[]> {

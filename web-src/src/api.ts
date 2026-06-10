@@ -373,9 +373,13 @@ export const api = {
   /** Read `<kbRoot>/STASHBASE.md` — the KB-level rules book. Powers the
    *  Knowledge base section's "STASHBASE.md" row. */
   getKbRules: () => getJson<{ content: string }>('/api/kb/rules'),
+  putKbRules: (content: string) =>
+    send<Record<string, never>>('POST', '/api/kb/rules', { content }),
   /** Read `<kbRoot>/.stashbase/space-metadata.md` — the agent-maintained
    *  KB 目录. Powers the Knowledge base section's "space-metadata.md" row. */
   getKbOverview: () => getJson<{ content: string }>('/api/kb/overview'),
+  putKbOverview: (content: string) =>
+    send<Record<string, never>>('POST', '/api/kb/overview', { content }),
   /** Copy a local folder into kbRoot as a new space. `source` is an
    *  absolute path; the renderer obtains it from
    *  `window.electron.openFolderDialog` (Electron-only). `name`
@@ -413,18 +417,18 @@ export const api = {
   createFolder: (path: string) =>
     send<{ path: string }>('POST', '/api/folders', { path }),
   deleteFile: (name: string) =>
-    send<Record<string, never>>('DELETE', '/api/files/' + encodePath(name)),
+    send<{ alreadyGone?: boolean }>('DELETE', '/api/files/' + encodePath(name)),
   /** Ask the server to reveal the file in the host OS file manager
    *  (Finder / Explorer / xdg-open on the file's directory). */
   revealFile: (name: string) =>
     send<Record<string, never>>('POST', '/api/reveal/' + encodePath(name)),
   deleteFolder: (path: string) =>
-    send<Record<string, never>>('DELETE', '/api/folders/' + encodePath(path)),
-  renameFile: (name: string, newName: string, opts: { cascade?: boolean } = {}) =>
-    send<{ name: string; linksUpdated?: number }>(
+    send<{ alreadyGone?: boolean }>('DELETE', '/api/folders/' + encodePath(path)),
+  renameFile: (name: string, newName: string, opts: { cascade?: boolean; asyncIndex?: boolean } = {}) =>
+    send<{ name: string; linksUpdated?: number; indexDeferred?: boolean; indexWarning?: string }>(
       'PATCH',
       '/api/files/' + encodePath(name),
-      { new_name: newName, cascade: opts.cascade ?? true },
+      { new_name: newName, cascade: opts.cascade ?? true, async_index: opts.asyncIndex === true },
     ),
   renameFolder: (path: string, newName: string, opts: { cascade?: boolean } = {}) =>
     send<{ path: string }>(

@@ -13,7 +13,7 @@ import {
   sanitizeFilename,
 } from '../files.ts';
 import { cascadeRenameLinks } from '../links.ts';
-import { toKbRel } from '../space.ts';
+import { getApiKey, toKbRel } from '../space.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
@@ -40,8 +40,8 @@ export function mount(app: express.Express): void {
       // confirm prompt to be the guardrail against "oops, I just
       // wiped a populated folder". Index cleanup fires async so we
       // can respond fast (same fire-and-forget pattern as file delete).
-      if (!deleteFolder(p)) return res.status(404).json({ error: 'not found' });
-      res.json({});
+      const removed = deleteFolder(p);
+      res.json({ alreadyGone: !removed });
       indexer.deletePathPrefix(toKbRel(p)).catch((err) => {
         log.warn(`delete_prefix: index cleanup failed for ${p}: ${errorMessage(err)}`);
       });
@@ -75,14 +75,18 @@ export function mount(app: express.Express): void {
       doDisk: () => renameFolder(oldPath, newPath),
       undoDisk: () => renameFolder(newPath, oldPath),
       doIndex: async () => {
-        // Cascade BEFORE the index call so files whose links we rewrite
-        // are embedded with their fresh content — saves a second round of
-        // embed for everything inside the renamed folder.
         const cascadeOn = req.body?.cascade !== false;
         const cascade = cascadeOn
           ? cascadeRenameLinks([{ kind: 'folder', old: oldPath, new: newPath }])
           : { updated: [], failed: [] };
 
+        if (!getApiKey()) {
+          log.info(`rename_folder: skipped index update for ${oldPath} -> ${newPath} because no OpenAI key is configured`);
+          return;
+        }
+        // Cascade BEFORE the index call so files whose links we rewrite
+        // are embedded with their fresh content — saves a second round of
+        // embed for everything inside the renamed folder.
         // Re-collect bodies from the new locations (cascade may have
         // rewritten some). renamePathPrefix's contract takes OLD-keyed
         // entries, so we map new → old names.

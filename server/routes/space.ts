@@ -163,7 +163,7 @@ export function mount(app: express.Express): void {
       writeSpaceConfig(name, req.body ?? {});
       for (const active of getActiveSpaces()) {
         if (path.basename(active.path) === name) {
-          switchSpaceMcpServers(active.windowId, active.path);
+          void switchSpaceMcpServers(active.windowId, active.path);
         }
       }
       res.json({

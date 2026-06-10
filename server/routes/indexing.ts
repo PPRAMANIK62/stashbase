@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { rgPath } from '@vscode/ripgrep';
 import { errorMessage, logger } from '../log.ts';
-import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, toKbRel } from '../space.ts';
+import { fromKbRel, getApiKey, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, toKbRel } from '../space.ts';
 import { syncIndex } from '../sync.ts';
 import { extractEmbeddedResources } from '../resources.ts';
 import {
@@ -35,6 +35,7 @@ import {
   getSpaceInfoFull,
   getSpaceRules,
   setKbOverview,
+  setKbRules,
   setSpaceRules,
 } from '../kb.ts';
 import { sendError } from '../http.ts';
@@ -79,6 +80,12 @@ export function mount(app: express.Express): void {
       const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
       const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
       if (!query) return res.status(400).json({ error: 'query required' });
+      if (!getApiKey()) {
+        return res.status(412).json({
+          error: 'semantic search is disabled until you add an OpenAI API key',
+          code: 'EMBEDDER_KEY_REQUIRED',
+        });
+      }
       const space = getCurrentSpaceName();
       const hits = await indexer.search(query, topK, space ?? undefined);
       const spaceRoot = getCurrentSpace();
@@ -457,6 +464,16 @@ export function mount(app: express.Express): void {
     }
   });
 
+  app.post('/api/kb/rules', (req, res) => {
+    const content = typeof req.body?.content === 'string' ? req.body.content : '';
+    try {
+      setKbRules(content);
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
   app.get('/api/spaces/:name/rules', (req, res) => {
     try {
       res.json({ name: req.params.name, content: getSpaceRules(req.params.name) });
@@ -625,6 +642,9 @@ export function mount(app: express.Express): void {
       noteSelfWrite(newAbs);
       fs.renameSync(oldAbs, newAbs);
       if (content !== null) {
+        if (!getApiKey()) {
+          return res.json({ path: newRel });
+        }
         try {
           await indexer.renameFile(oldRel, newRel, content);
         } catch (err) {

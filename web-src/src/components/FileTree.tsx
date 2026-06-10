@@ -129,6 +129,19 @@ function reorder(
   return [...without.slice(0, insertAt), dragName, ...without.slice(insertAt)];
 }
 
+function insertIntoOrder(
+  names: string[],
+  dragName: string,
+  dropName: string,
+  edge: 'above' | 'below',
+): string[] {
+  const without = names.filter((n) => n !== dragName);
+  const dropIdx = without.indexOf(dropName);
+  if (dropIdx < 0) return names;
+  const insertAt = edge === 'above' ? dropIdx : dropIdx + 1;
+  return [...without.slice(0, insertAt), dragName, ...without.slice(insertAt)];
+}
+
 function displayName(name: string): string {
   // Show the extension. Three viewer formats (md / html / pdf) coexist
   // — PDF-derived notes ship as a `paper.pdf` + `paper.html` pair, and
@@ -254,11 +267,10 @@ function FolderRow({
     const r = (e.clientY - rect.top) / rect.height;
     // Folder zones: 0–25% = above, 25–75% = into, 75–100% = below.
     let edge: DropEdge = r < 0.25 ? 'above' : r >= 0.75 ? 'below' : 'into';
-    // Reorder is same-parent only — cross-parent above/below isn't a
-    // supported operation. Demote to "into" (only valid for FILE drag;
-    // folder-into-folder isn't supported v1).
-    if ((edge === 'above' || edge === 'below') && dragSourceParent !== parent) {
-      edge = isFile ? 'into' : null;
+    // Above/below means "same level as this row" even when dragging a
+    // file across folders. Middle still means "move into this folder".
+    if ((edge === 'above' || edge === 'below') && dragSourceParent !== parent && isFolder) {
+      edge = null;
     }
     if (edge === 'into' && isFolder) edge = null;
     setDropEdge(edge);
@@ -277,8 +289,18 @@ function FolderRow({
       if (filePath) void actions.moveFile(filePath, node.path);
       return;
     }
-    // Reorder within the same parent.
-    if (dragSourceParent !== parent || !dragSourceName) return;
+    if (!dragSourceName) return;
+    if (dragSourceParent !== parent) {
+      const filePath = e.dataTransfer.getData(FILE_MIME);
+      if (!filePath || dragSourceKind !== 'file') return;
+      const slot = edge;
+      void (async () => {
+        await actions.moveFile(filePath, parent);
+        const next = insertIntoOrder(siblings, dragSourceName!, node.name, slot);
+        await actions.setFolderOrder(parent, next);
+      })();
+      return;
+    }
     const next = reorder(siblings, dragSourceName, node.name, edge);
     void actions.setFolderOrder(parent, next);
   }
@@ -306,7 +328,10 @@ function FolderRow({
           <RenameInput
             initialBasename={node.name}
             ext=""
-            onCommit={(newName) => { void actions.renameFolder(node.path, newName); }}
+            onCommit={(newName) => {
+              dispatch({ type: 'RENAMING', renaming: null });
+              void actions.renameFolder(node.path, newName);
+            }}
             onCancel={() => dispatch({ type: 'RENAMING', renaming: null })}
           />
         ) : (
@@ -403,16 +428,15 @@ function FileRow({
     if (!isFile && !isFolder) return;
     e.preventDefault();
     e.stopPropagation();
-    // File rows accept reorder only — never "into". Cross-parent
-    // reorder isn't supported (per design): show no indicator so the
-    // user doesn't think the drop will land somewhere it won't.
-    if (dragSourceParent !== parent) {
+    // File rows accept above/below only. For file drags across folders,
+    // above/below means "move to this row's parent at this level".
+    if (dragSourceParent !== parent && !isFile) {
       setDropEdge(null);
       e.dataTransfer.dropEffect = 'none';
       return;
     }
     // Self → skip.
-    if (dragSourceKind === 'file' && dragSourceName === basename) {
+    if (dragSourceParent === parent && dragSourceKind === 'file' && dragSourceName === basename) {
       setDropEdge(null);
       e.dataTransfer.dropEffect = 'none';
       return;
@@ -430,7 +454,18 @@ function FileRow({
     const edge = dropEdge;
     setDropEdge(null);
     if (!edge || edge === 'into') return;
-    if (dragSourceParent !== parent || !dragSourceName) return;
+    if (!dragSourceName) return;
+    if (dragSourceParent !== parent) {
+      const filePath = e.dataTransfer.getData(FILE_MIME);
+      if (!filePath || dragSourceKind !== 'file') return;
+      const slot = edge;
+      void (async () => {
+        await actions.moveFile(filePath, parent);
+        const next = insertIntoOrder(siblings, dragSourceName!, basename, slot);
+        await actions.setFolderOrder(parent, next);
+      })();
+      return;
+    }
     const next = reorder(siblings, dragSourceName, basename, edge);
     void actions.setFolderOrder(parent, next);
   }
@@ -484,7 +519,10 @@ function FileRow({
         <RenameInput
           initialBasename={ext ? basename.slice(0, -ext.length) : basename}
           ext={ext}
-          onCommit={(newBasename) => { void actions.renameFile(path, newBasename); }}
+          onCommit={(newBasename) => {
+            dispatch({ type: 'RENAMING', renaming: null });
+            void actions.renameFile(path, newBasename);
+          }}
           onCancel={() => dispatch({ type: 'RENAMING', renaming: null })}
         />
       ) : (
@@ -521,25 +559,30 @@ function NewFolderInput({ parentPath, depth }: { parentPath: string; depth: numb
   }
 
   return (
-    <input
-      ref={ref}
-      type="text"
-      className="tree-create-input"
-      placeholder="New folder name…"
-      style={{ marginLeft: depth * 14 + 6 }}
-      onKeyDown={(e) => {
-        // Skip while IME is composing — Chinese / Japanese / Korean
-        // users press Enter to pick a candidate, not to commit.
-        if (e.nativeEvent.isComposing) return;
-        if (e.key === 'Enter') { e.preventDefault(); commit(); }
-        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-      }}
-      onBlur={() => {
-        if (doneRef.current) return;
-        const name = ref.current?.value.trim() ?? '';
-        if (name) commit(); else cancel();
-      }}
-    />
+    <div
+      className="tree-row folder new-folder-row"
+      style={{ paddingLeft: depth * 14 + 26 }}
+    >
+      <span className="chev new-folder-spacer" aria-hidden="true" />
+      <input
+        ref={ref}
+        type="text"
+        className="tree-create-input"
+        placeholder="New folder name…"
+        onKeyDown={(e) => {
+          // Skip while IME is composing — Chinese / Japanese / Korean
+          // users press Enter to pick a candidate, not to commit.
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        }}
+        onBlur={() => {
+          if (doneRef.current) return;
+          const name = ref.current?.value.trim() ?? '';
+          if (name) commit(); else cancel();
+        }}
+      />
+    </div>
   );
 }
 

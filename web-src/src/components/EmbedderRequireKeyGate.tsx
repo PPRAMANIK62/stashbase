@@ -14,7 +14,7 @@ import { useApp } from '../store/AppContext';
 import { RequireApiKeyModal } from './embedder/RequireApiKeyModal';
 
 export function EmbedderRequireKeyGate() {
-  const { state: appState } = useApp();
+  const { state: appState, dispatch } = useApp();
   const space = appState.space;
   const [state, setState] = useState<EmbedderState | null>(null);
   const [open, setOpen] = useState(false);
@@ -26,6 +26,7 @@ export function EmbedderRequireKeyGate() {
       .then((s) => {
         if (cancelled) return;
         setState(s);
+        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: s.hasKey });
         setOpen(!s.hasKey);
       })
       .catch(() => { /* startup race with server boot — silent */ });
@@ -38,6 +39,7 @@ export function EmbedderRequireKeyGate() {
     <RequireApiKeyModal
       onSaved={() => {
         setState((s) => (s ? { ...s, hasKey: true } : s));
+        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
         setOpen(false);
       }}
       onLater={() => setOpen(false)}

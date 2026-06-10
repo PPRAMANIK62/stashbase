@@ -10,6 +10,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from '../html.ts';
+import { contentSizeError } from '../indexable.ts';
 import {
   createTextExclusive,
   deleteFile,
@@ -27,7 +28,7 @@ import {
 import { isNoteName } from '../format.ts';
 import { readFileOrder, setFolderOrder } from '../file-order.ts';
 import { cascadeRenameLinks, planRenameLinks, type RenameEntry } from '../links.ts';
-import { getCurrentSpace, toKbRel } from '../space.ts';
+import { getApiKey, getCurrentSpace, toKbRel } from '../space.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError, revealInOsFileManager } from '../http.ts';
@@ -200,8 +201,73 @@ export function mount(app: express.Express): void {
     // (MCP, scripts) get the safe behavior without needing to know
     // about the flag.
     const cascadeOn = req.body?.cascade !== false;
+    const asyncIndex = req.body?.async_index === true;
     let linksUpdated = 0;
 
+    const updateLinksAndIndex = async (): Promise<string | undefined> => {
+        // Cascade BEFORE the renamed file's own re-embed so any link
+        // rewrites in its body are picked up by the single upsert below.
+        let updated: Array<{ name: string; changes: number }> = [];
+        if (cascadeOn) {
+          const renames: RenameEntry[] = [{ kind: 'file', old: oldName, new: newName }];
+          const bundleEntry = bundleRenameEntry(oldName, newName, 'post');
+          if (bundleEntry) renames.push(bundleEntry);
+          const cascade = cascadeRenameLinks(renames);
+          linksUpdated = cascade.updated.length;
+          updated = cascade.updated;
+        }
+        if (!getApiKey()) {
+          log.info(`rename: skipped index update for ${oldName} -> ${newName} because no OpenAI key is configured`);
+          return 'Semantic index was not updated because no OpenAI API key is configured.';
+        }
+        const tooLarge = contentSizeError(content);
+        if (tooLarge) {
+          await indexer.deleteFile(toKbRel(oldName)).catch((err) => {
+            log.warn(`rename: failed to remove old index row for oversized file ${oldName}: ${errorMessage(err)}`);
+          });
+          log.warn(`rename: skipped index update for ${newName}: ${tooLarge}`);
+          return `${tooLarge}. The file moved, but semantic search will skip it until you split or reduce it and run sync.`;
+        }
+        if (updated.length) {
+          // Re-embed each external file whose links we rewrote. The
+          // renamed file itself gets re-embedded by `renameFile` below
+          // (which also cleans up its old-path row), so skip it here to
+          // avoid the wasted double-embed.
+          for (const u of updated) {
+            if (u.name === newName) continue;
+            const body = readText(u.name);
+            if (body == null) continue;
+            await indexer.upsertFile(toKbRel(u.name), body);
+          }
+        }
+        await indexer.renameFile(toKbRel(oldName), toKbRel(newName), content);
+        return undefined;
+    };
+
+    if (asyncIndex) {
+      try {
+        renameOnDisk(oldName, newName);
+      } catch (err: unknown) {
+        sendError(res, err);
+        return;
+      }
+      const warning = contentSizeError(content);
+      const noKey = !getApiKey();
+      res.json({
+        name: newName,
+        linksUpdated,
+        indexDeferred: !warning && !noKey,
+        indexWarning: warning
+          ? `${warning}. The file moved, but semantic search will skip it until you split or reduce it and run sync.`
+          : undefined,
+      });
+      updateLinksAndIndex().catch((err: unknown) => {
+        log.warn(`rename: background index update failed for ${oldName} -> ${newName}: ${errorMessage(err)}`);
+      });
+      return;
+    }
+
+    let indexWarning: string | undefined;
     await renameWithRollback({
       kind: 'file',
       from: oldName,
@@ -210,28 +276,9 @@ export function mount(app: express.Express): void {
       doDisk: () => renameOnDisk(oldName, newName),
       undoDisk: () => renameOnDisk(newName, oldName),
       doIndex: async () => {
-        // Cascade BEFORE the renamed file's own re-embed so any link
-        // rewrites in its body are picked up by the single upsert below.
-        if (cascadeOn) {
-          const renames: RenameEntry[] = [{ kind: 'file', old: oldName, new: newName }];
-          const bundleEntry = bundleRenameEntry(oldName, newName, 'post');
-          if (bundleEntry) renames.push(bundleEntry);
-          const cascade = cascadeRenameLinks(renames);
-          linksUpdated = cascade.updated.length;
-          // Re-embed each external file whose links we rewrote. The
-          // renamed file itself gets re-embedded by `renameFile` below
-          // (which also cleans up its old-path row), so skip it here to
-          // avoid the wasted double-embed.
-          for (const u of cascade.updated) {
-            if (u.name === newName) continue;
-            const body = readText(u.name);
-            if (body == null) continue;
-            await indexer.upsertFile(toKbRel(u.name), body);
-          }
-        }
-        await indexer.renameFile(toKbRel(oldName), toKbRel(newName), content);
+        indexWarning = await updateLinksAndIndex();
       },
-      okResponse: () => ({ name: newName, linksUpdated }),
+      okResponse: () => ({ name: newName, linksUpdated, indexWarning }),
     });
   });
 
@@ -240,14 +287,13 @@ export function mount(app: express.Express): void {
     const name = (req.params as any)[0] as string;
     try {
       const removed = deleteFile(name);
-      if (!removed) return res.status(404).json({ error: `file not found: ${name}` });
       // Respond as soon as the file is off disk. Milvus row cleanup is
       // fired async — if the daemon is busy (e.g. mid-embed of an
       // upload), waiting for the queue here would freeze the UI delete.
       // A stale chunk row pointing at a missing file for a few seconds
       // is harmless: search filters by file_name on read and the next
       // sync sweeps orphans.
-      res.json({});
+      res.json({ alreadyGone: !removed });
       indexer.deleteFile(toKbRel(name)).catch((err) => {
         log.warn(`delete: index cleanup failed for ${name}: ${errorMessage(err)}`);
       });

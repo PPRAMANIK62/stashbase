@@ -1,6 +1,7 @@
 /**
  * Auto-pops on space open when no OpenAI key is on file. V1 is
- * OpenAI-only, so without a key indexing and search are disabled. Two
+ * OpenAI-only, so without a key embedding/index updates and semantic
+ * search are disabled. Two
  * exits:
  *   • Save key — validates + persists via `/api/embedder/key`, daemon
  *     hot-swap, modal closes.
@@ -51,8 +52,9 @@ export function RequireApiKeyModal({
         for semantic search — typically a few cents per month for a few MB
         of notes. The key is used only for embedding — no chat or completion
         requests are sent. Stored in <code>~/.stashbase/config.json</code>
-        {' '}(owner-only). Until you add one, files still save and preview but
-        search stays off.
+        {' '}(owner-only). Until you add one, semantic search and automatic
+        embedding/index updates stay off. Keyword search, editing, preview,
+        and file operations still work.
       </p>
       <input
         ref={inputRef}

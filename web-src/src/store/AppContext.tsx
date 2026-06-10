@@ -246,18 +246,39 @@ function shallowEqualConversionFailures(
   );
 }
 
+const SIDEBAR_VIEW_STORAGE_KEY = 'stashbase.sidebarView';
+
+function readPersistedSidebarView(): State['activeSidebarView'] {
+  if (typeof window === 'undefined') return 'files';
+  try {
+    const raw = window.localStorage.getItem(SIDEBAR_VIEW_STORAGE_KEY);
+    return raw === 'search' || raw === 'files' ? raw : 'files';
+  } catch {
+    return 'files';
+  }
+}
+
+function initialStateWithPersistedSidebarView(base: State): State {
+  return { ...base, activeSidebarView: readPersistedSidebarView() };
+}
+
+function isSpaceFileTab(t: { file: State['tabs'][number]['file'] }, name: string): boolean {
+  return t.file?.name === name && (t.file.kind ?? 'space') === 'space';
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  // Always boot into the Files view. Earlier we persisted the last
-  // sidebar view to localStorage so reload would land back where the
-  // user was, but the "what's in this space" tree is the canonical
-  // landing surface — search is a task the user enters on purpose, not
-  // a state to be restored. Resetting on launch matches user
-  // expectation ("打开应用默认选中文件") and side-steps the case where a
-  // stale `search` value persists past the user remembering they ever
-  // picked it.
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, initialStateWithPersistedSidebarView);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_VIEW_STORAGE_KEY, state.activeSidebarView);
+    } catch {
+      // Storage can be unavailable in private/sandboxed contexts; the
+      // current session still works normally.
+    }
+  }, [state.activeSidebarView]);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -564,6 +585,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (myGen !== searchGen.current) return;
         dispatch({ type: 'SEARCH_KEYWORD', result });
       } else {
+        const embedder = await api.getEmbedder();
+        if (myGen !== searchGen.current) return;
+        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.hasKey });
+        if (!embedder.hasKey) {
+          dispatch({
+            type: 'SEARCH_ERROR',
+            error: 'Semantic search is disabled until you add an OpenAI API key. Switch to keyword search to search without embeddings.',
+          });
+          return;
+        }
         const { hits } = await api.search(q, 15);
         if (myGen !== searchGen.current) return;
         dispatch({ type: 'SEARCH_HITS', hits });
@@ -591,11 +622,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cur = getActiveTab(stateRef.current)?.file ?? null;
     const handle = editorRef.current;
     if (!cur || !handle) return;
-    // KB-overview tab is read-only — even if a CodeMirror handle
-    // is registered (edit button hidden but defense-in-depth), don't
-    // ever PUT it back to /api/files/STASHBASE.md (which would resolve
-    // inside the current space, not at kbRoot).
-    if (cur.kind === 'kb') return;
     const content = handle.getValue();
     if (content === cur.content) {
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
@@ -603,10 +629,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
     try {
-      await api.putFile(cur.name, content);
+      if (cur.kind === 'kb') {
+        if (cur.name === 'STASHBASE.md') await api.putKbRules(content);
+        else if (cur.name === 'space-metadata.md') await api.putKbOverview(content);
+        else throw new Error(`unknown KB file: ${cur.name}`);
+      } else {
+        await api.putFile(cur.name, content);
+      }
       dispatch({ type: 'FILE_PATCH', patch: { content } });
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
-      void loadFiles();
+      if (cur.kind !== 'kb') void loadFiles();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + msg, cls: 'error' } });
@@ -723,7 +755,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // concurrent poll / loadFiles could invalidate across the await.
     if (editorRef.current) await flushSave();
     const s = stateRef.current;
-    const existing = s.tabs.find((t) => t.file?.name === name);
+    const existing = s.tabs.find((t) => isSpaceFileTab(t, name));
     if (existing) {
       if (s.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
       return;
@@ -775,7 +807,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const openInNewTab = useCallback(async (name: string) => {
     if (editorRef.current) await flushSave();
     const s = stateRef.current;
-    const existing = s.tabs.find((t) => t.file?.name === name);
+    const existing = s.tabs.find((t) => isSpaceFileTab(t, name));
     if (existing) {
       if (s.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
       if (existing.preview) dispatch({ type: 'PROMOTE_TAB', id: existing.id });
@@ -789,8 +821,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'NEW_TAB' });
   }, [flushSave]);
 
-  /** Open some markdown as a kb-kind tab whose name matches the on-disk
-   *  filename (so the user reads "STASHBASE.md" exactly, no aliasing).
+  /** Open some markdown as an editable kb-kind tab whose name matches
+   *  the on-disk filename (so the user reads "STASHBASE.md" exactly).
    *  Tab dedup is by `name` since the KB-scope files coexist in the
    *  same kind. */
   const openKbFile = useCallback(async (name: string, fetcher: () => Promise<{ content: string }>) => {
@@ -1077,13 +1109,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
+    const before = stateRef.current;
+    const stale = before.tabs.filter((t) => isSpaceFileTab(t, name));
+    for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+    dispatch({
+      type: 'FILES_LOADED',
+      files: before.files.filter((f) => f.name !== name),
+      folders: before.folders,
+      space: before.space,
+    });
     try {
       await api.deleteFile(name);
-      // Close every tab that was showing the deleted file.
-      const stale = stateRef.current.tabs.filter((t) => t.file?.name === name);
-      for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       await loadFiles();
     } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 404) {
+        await loadFiles();
+        return;
+      }
+      await loadFiles();
       toast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [loadFiles, showAlert, askConfirm]);
@@ -1091,14 +1134,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteFolder = useCallback(async (path: string) => {
     if (!path) return;
     if (!(await askConfirm(`Delete folder "${path}" and everything inside?`))) return;
+    const before = stateRef.current;
+    const stale = before.tabs.filter(
+      (t) => t.file && t.file.name.startsWith(path + '/'),
+    );
+    for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+    const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    if (before.activeFolder === path || before.activeFolder.startsWith(path + '/')) {
+      dispatch({ type: 'ACTIVE_FOLDER', path: parent });
+    }
+    if (before.selectedPath === path || before.selectedPath.startsWith(path + '/')) {
+      dispatch({ type: 'SELECT_PATH', path: parent });
+    }
+    dispatch({
+      type: 'FILES_LOADED',
+      files: before.files.filter((f) => !f.name.startsWith(path + '/')),
+      folders: before.folders.filter((f) => f.path !== path && !f.path.startsWith(path + '/')),
+      space: before.space,
+    });
     try {
       await api.deleteFolder(path);
-      const stale = stateRef.current.tabs.filter(
-        (t) => t.file && t.file.name.startsWith(path + '/'),
-      );
-      for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       await loadFiles();
     } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 404) {
+        await loadFiles();
+        return;
+      }
+      await loadFiles();
       toast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [loadFiles, showAlert, askConfirm]);
@@ -1191,11 +1253,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cascade = await askCascadeForRename('file', oldPath, newPath);
     if (cascade === null) return;
     try {
-      const j = await api.renameFile(oldPath, newPath, { cascade });
+      const j = await api.renameFile(oldPath, newPath, { cascade, asyncIndex: true });
       const cur = getActiveTab(stateRef.current)?.file;
       if (cur?.name === oldPath) dispatch({ type: 'FILE_PATCH', patch: { name: j.name } });
       if (targetDir) dispatch({ type: 'EXPAND_FOLDER', path: targetDir });
       await loadFiles();
+      if (j.indexWarning) {
+        toast('Moved. ' + j.indexWarning, { level: 'warning' });
+      } else if (j.indexDeferred) {
+        toast('Moved. Updating semantic index in the background.', { level: 'info' });
+      }
     } catch (e: unknown) {
       toast('Move failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }

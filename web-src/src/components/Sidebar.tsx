@@ -184,14 +184,16 @@ function FilesPanel() {
       <div className={'file-list' + (state.spaceCollapsed ? ' collapsed' : '')}>
         {state.pendingConversions.length > 0 && (
           <div className="conversion-processing-banner">
-            {state.pendingConversions.map((p) => (
-              <div key={p} className="conversion-processing-row" title={p}>
-                <span className="conversion-processing-spinner" />
-                <span className="conversion-processing-label">
-                  Processing <strong>{p.split('/').pop()}</strong>…
-                </span>
-              </div>
-            ))}
+            <div className="conversion-processing-row" title={state.pendingConversions.join('\n')}>
+              <span className="conversion-processing-spinner" />
+              <span className="conversion-processing-label">
+                {state.pendingConversions.length === 1 ? (
+                  <>Processing <strong>{state.pendingConversions[0].split('/').pop()}</strong>…</>
+                ) : (
+                  <>Processing <strong>{state.pendingConversions.length}</strong> files…</>
+                )}
+              </span>
+            </div>
           </div>
         )}
         <FileTree />
@@ -227,6 +229,7 @@ function SpaceMenu() {
 
   function openModal(kind: 'new' | 'rename' | 'switch') {
     setError(null);
+    setAnchor(null);
     if (kind === 'switch') void loadSpaces();
     setModal({ kind, name: kind === 'rename' ? current : '' });
   }
@@ -315,7 +318,7 @@ function SpaceMenu() {
       >⋯</button>
       {anchor && <Menu anchor={{ rect: anchor }} items={items} onClose={() => setAnchor(null)} />}
       {modal && (
-        <ModalShell onCancel={busy ? () => {} : () => setModal(null)}>
+        <ModalShell top onCancel={busy ? () => {} : () => setModal(null)}>
           <h3>{modal.kind === 'new' ? 'New space' : modal.kind === 'rename' ? 'Rename space' : 'Switch space'}</h3>
           {modal.kind === 'switch' ? (
             spaces.length === 0 ? (
@@ -341,6 +344,7 @@ function SpaceMenu() {
               type="text"
               className="modal-input"
               autoFocus
+              onFocus={(e) => e.currentTarget.select()}
               spellCheck={false}
               value={modal.name}
               disabled={busy}

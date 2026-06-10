@@ -134,6 +134,13 @@ export function getKbRules(): string {
   try { return fs.readFileSync(kbRulesPath(), 'utf8'); } catch { return ''; }
 }
 
+export function setKbRules(content: string): void {
+  const target = kbRulesPath();
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target + '.tmp', content, 'utf8');
+  fs.renameSync(target + '.tmp', target);
+}
+
 export function getSpaceRules(spaceName: string): string {
   requireSpaceExistsByName(spaceName);
   try { return fs.readFileSync(spaceRulesPath(spaceName), 'utf8'); } catch { return ''; }

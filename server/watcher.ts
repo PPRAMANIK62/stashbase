@@ -77,6 +77,7 @@ export function noteSelfWrite(absPath: string): void {
 function bindToSpace(indexer: Indexer, root: string | null, windowId: string): void {
   if (root === watchedRoots.get(windowId)) return;
   closeWindow(windowId);
+  fsChangeCounter = 0;
   if (root) watchedRoots.set(windowId, root);
   if (!root) return;
   try {
