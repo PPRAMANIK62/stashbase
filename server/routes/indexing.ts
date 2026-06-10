@@ -17,6 +17,7 @@ import {
   type FileMetadata,
 } from '../metadata.ts';
 import { HIDDEN_DOT_DIRS } from '../files.ts';
+import { indexableFileSizeError } from '../indexable.ts';
 import { derivedPathsForPdf, displayPathForHit, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
 import { derivedNotePathForVideo, maybeConvertVideo } from '../video.ts';
@@ -163,15 +164,20 @@ export function mount(app: express.Express): void {
       const space = getCurrentSpaceName();
       const status = await indexer.status(space ?? undefined);
       // Convert kbRoot-relative paths back to space-relative for the UI.
-      // Drop `.pdf` and image files from `pending`: like PDFs, images are
-      // visible in the sidebar (listFiles surfaces them) but never enter
-      // the index themselves — only their hidden derived `.md` does.
-      // Keeping them in `pending` would make the sidebar permanently
-      // pulse "indexing…" on every unstructured (PDF / image) row.
+      // Drop files that can never be indexed from `pending` so the sidebar
+      // doesn't show a permanent "indexing…" pulse on them:
+      //   - PDFs / images: visible in sidebar but indexed only via their
+      //     hidden derived `.md` sidecar, not directly.
+      //   - Empty files (0 bytes): the daemon scanner will always see them
+      //     as "new" because nothing is ever stored in Milvus for them;
+      //     the pulse would run forever and never stop.
+      //   - Over-size files (> MAX_INDEXABLE_BYTES): same — they exceed the
+      //     embed limit and can never enter the index.
       const pending = status.pending
         .map((p) => fromKbRel(p))
         .filter((p): p is string => p != null)
-        .filter((p) => !isUnstructuredSource(p));
+        .filter((p) => !isUnstructuredSource(p))
+        .filter((p) => indexableFileSizeError(path.join(cur, p)) === null);
       const orphaned = status.orphaned
         .map((p) => fromKbRel(p))
         .filter((p): p is string => p != null);
