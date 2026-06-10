@@ -58,6 +58,10 @@ export function MarkdownPreview({ name, content }: { name: string; content: stri
       }
     }
 
+    function handleClick(e: Event) {
+      previewClickHandler(e, name);
+    }
+
     function attach() {
       const doc = iframe?.contentDocument;
       if (!doc || installedDoc === doc) return;
@@ -65,7 +69,7 @@ export function MarkdownPreview({ name, content }: { name: string; content: stri
       for (const img of Array.from(doc.images)) {
         img.dataset.stashbasePreviewable = 'true';
       }
-      doc.addEventListener('click', previewClickHandler);
+      doc.addEventListener('click', handleClick);
       doc.addEventListener('keydown', findKeyHandler);
       loadedHtmlRef.current = html;
       applyPendingScroll(doc);
@@ -83,7 +87,7 @@ export function MarkdownPreview({ name, content }: { name: string; content: stri
     if (iframe.contentDocument?.readyState === 'complete') attach();
     return () => {
       iframe.removeEventListener('load', attach);
-      installedDoc?.removeEventListener('click', previewClickHandler);
+      installedDoc?.removeEventListener('click', handleClick);
       installedDoc?.removeEventListener('keydown', findKeyHandler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,4 +207,3 @@ function applyChunkHighlight(doc: Document, raw: string): void {
     return;
   }
 }
-

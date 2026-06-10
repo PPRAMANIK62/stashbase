@@ -144,7 +144,11 @@ export function HtmlPreview({ name }: { name: string }) {
     window.addEventListener('message', onMessage);
 
     actions.registerFindController({
-      setQuery: (q, opts) => send('set', { query: q, wholeWord: opts.wholeWord }),
+      setQuery: (q, opts) => send('set', {
+        query: q,
+        wholeWord: opts.wholeWord,
+        caseSensitive: opts.caseSensitive,
+      }),
       next: () => send('next'),
       prev: () => send('prev'),
       close: () => { void send('close'); },

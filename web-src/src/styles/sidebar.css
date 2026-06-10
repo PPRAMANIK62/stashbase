@@ -540,7 +540,7 @@
     /* Search input + mode toggles. The activity bar already carries
      * the magnifier icon for the view itself, so the input has no
      * leading glyph — left padding is symmetric. Mode toggles
-     * (≈/= flip, plus Aa / ab when keyword) live on the right of the
+     * (≈/= flip, plus Aa / Word when keyword) live on the right of the
      * input row via the absolute-positioned `.side-search-mode`. */
     .side-search {
       position: relative;
@@ -550,7 +550,7 @@
     .side-search input {
       width: 100%;
       box-sizing: border-box;
-      padding: 6px 88px 6px 10px;
+      padding: 6px 112px 6px 10px;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--bg);
@@ -608,8 +608,8 @@
       border-color: var(--border);
       color: var(--fg);
     }
-    .side-search-mode-btn.ab-toggle {
-      text-decoration: underline;
+    .side-search-mode-btn.word-toggle {
+      min-width: 34px;
     }
     .side-search-mode-btn.side-search-mode-flip {
       font-size: 13px;

@@ -308,6 +308,7 @@ export interface State {
   find: {
     open: boolean;
     query: string;
+    caseSensitive: boolean;
     wholeWord: boolean;
     current: number;
     total: number;
@@ -358,7 +359,7 @@ export const initialState: State = {
   modal: null,
   toasts: [],
   newFolderInputOpen: false,
-  find: { open: false, query: '', wholeWord: false, current: 0, total: 0 },
+  find: { open: false, query: '', caseSensitive: false, wholeWord: false, current: 0, total: 0 },
 };
 
 export type Action =

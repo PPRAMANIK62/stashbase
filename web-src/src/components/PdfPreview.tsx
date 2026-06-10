@@ -11,7 +11,7 @@ import {
 // `lib/pdfWorker.ts` / `lib/pdfPolyfill.ts`). `?worker` bundles the
 // worker for both dev and the packaged build, unlike a bare `?url`.
 import PdfWorker from '../lib/pdfWorker?worker';
-import { api, assetUrl, type PdfStatusEntry } from '../api';
+import { api, assetUrl, errorMessage } from '../api';
 import { useApp } from '../store/AppContext';
 
 // Polyfill the main-thread scope too — render() calls getOrInsertComputed
@@ -111,7 +111,15 @@ function yRatioForIndex(p: FlatPage, idx: number): number {
   return Math.max(0, Math.min(1, yFromTop / p.viewport1x.height));
 }
 
-export function PdfPreview({ name }: { name: string }) {
+export function pdfConversionFailureMessage(raw: string): string {
+  return raw
+    .replace(/^pdf_extract exit \d+:\s*/i, '')
+    .replace(/^\[pdf_extract\]\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function PdfPreview({ name, showConversionBanner = true }: { name: string; showConversionBanner?: boolean }) {
   const { state, actions } = useApp();
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
@@ -120,8 +128,12 @@ export function PdfPreview({ name }: { name: string }) {
   const [numPages, setNumPages] = useState(0);
   const [scale, setScale] = useState(1.2);
   const [error, setError] = useState<string | null>(null);
-  const [pdfStatus, setPdfStatus] = useState<PdfStatusEntry | null>(null);
   const [retryBusy, setRetryBusy] = useState(false);
+  const [retryStarted, setRetryStarted] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const failure = state.conversionFailures.find((f) => f.path === name);
+  const failureMessage = failure ? pdfConversionFailureMessage(failure.lastError) : '';
+  const retryInProgress = retryBusy || retryStarted;
   // Sampled page 1 viewport at 1× scale. Used as the per-page
   // placeholder height so the lazy-rendered pages reserve the
   // correct layout slot up front — without this, scrolling to a
@@ -166,21 +178,9 @@ export function PdfPreview({ name }: { name: string }) {
     };
   }, [fileUrl, actions]);
 
-  // Poll PDF status on name change. Cheap (one JSON read) and only
-  // happens on open/Retry, not on every render.
   useEffect(() => {
-    let cancelled = false;
-    const spaceName = state.space;
-    if (!spaceName) { setPdfStatus(null); return; }
-    const kbName = `${spaceName}/${name}`;
-    void api.pdfStatus().then((r) => {
-      if (cancelled) return;
-      setPdfStatus(r.entries[kbName] ?? null);
-    }).catch(() => {
-      if (!cancelled) setPdfStatus(null);
-    });
-    return () => { cancelled = true; };
-  }, [name, state.space, retryBusy]);
+    if (!failure || state.pendingConversions.includes(name)) setRetryStarted(false);
+  }, [failure, name, state.pendingConversions]);
 
   // Search for the chunk text across pages and scroll directly to
   // the matched paragraph (not just the page top).
@@ -288,13 +288,13 @@ export function PdfPreview({ name }: { name: string }) {
       const desired = target.offsetTop + m.yRatio * rendered - root.clientHeight * 0.3;
       root.scrollTo({ top: Math.max(0, desired), behavior: 'smooth' });
     }
-    async function rebuild(query: string, wholeWord: boolean): Promise<void> {
+    async function rebuild(query: string, wholeWord: boolean, caseSensitive: boolean): Promise<void> {
       state.matches = [];
       state.current = 0;
       const needle = foldPdfText(query).trim();
       if (!needle) return;
       const re = wholeWord
-        ? new RegExp(`\\b${escapeRegExp(needle)}\\b`, 'gi')
+        ? new RegExp(`\\b${escapeRegExp(needle)}\\b`, caseSensitive ? 'g' : 'gi')
         : null;
       for (let i = 0; i < numPages; i++) {
         if (cancelled) return;
@@ -313,14 +313,14 @@ export function PdfPreview({ name }: { name: string }) {
               if (re.lastIndex === m.index) re.lastIndex += 1;
             }
           } else {
-            const needleLower = needle.toLowerCase();
-            const flatLower = flat.toLowerCase();
+            const needleCmp = caseSensitive ? needle : needle.toLowerCase();
+            const flatCmp = caseSensitive ? flat : flat.toLowerCase();
             let from = 0;
             while (true) {
-              const idx = flatLower.indexOf(needleLower, from);
+              const idx = flatCmp.indexOf(needleCmp, from);
               if (idx === -1) break;
               emit(idx);
-              from = idx + needleLower.length;
+              from = idx + needleCmp.length;
             }
           }
         } catch { /* skip page */ }
@@ -328,8 +328,8 @@ export function PdfPreview({ name }: { name: string }) {
     }
 
     actions.registerFindController({
-      setQuery: async (q, { wholeWord }) => {
-        await rebuild(q, wholeWord);
+      setQuery: async (q, { wholeWord, caseSensitive }) => {
+        await rebuild(q, wholeWord, caseSensitive);
         if (state.matches.length === 0) return { current: 0, total: 0 };
         scrollTo(state.matches[0]);
         return { current: 1, total: state.matches.length };
@@ -360,11 +360,13 @@ export function PdfPreview({ name }: { name: string }) {
 
   async function onRetry() {
     setRetryBusy(true);
+    setRetryError(null);
     try {
       await api.retryConversion(name);
+      setRetryStarted(true);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      setRetryError(errorMessage(err));
+      setRetryStarted(false);
     } finally {
       setRetryBusy(false);
     }
@@ -372,19 +374,20 @@ export function PdfPreview({ name }: { name: string }) {
 
   return (
     <div className="pdf-preview" ref={containerRef}>
-      {pdfStatus?.status === 'failed' && (
+      {showConversionBanner && failure && (
         <div className="pdf-failure-banner" role="status">
           <span className="pdf-failure-text">
-            Conversion failed
-            {pdfStatus.lastError ? `: ${pdfStatus.lastError}` : ''}.
+            PDF text extraction failed{failureMessage ? `: ${failureMessage}` : ''}. The original
+            PDF still opens normally.
+            {retryError ? ` (${retryError})` : ''}
           </span>
           <button
             type="button"
             className="pdf-failure-retry"
-            disabled={retryBusy}
+            disabled={retryInProgress}
             onClick={() => { void onRetry(); }}
           >
-            {retryBusy ? 'Retrying…' : 'Retry conversion'}
+            {retryInProgress ? 'Retrying…' : 'Retry conversion'}
           </button>
         </div>
       )}
@@ -453,6 +456,7 @@ function PdfPage({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [visible, setVisible] = useState(pageIndex < 2); // eager-render first 2 pages
+  const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -472,25 +476,43 @@ function PdfPage({
     let pageProxy: PDFPageProxy | null = null;
     let renderTask: ReturnType<PDFPageProxy['render']> | null = null;
     void doc.getPage(pageIndex + 1).then((page) => {
-      if (cancelled) return;
+      if (cancelled) {
+        page.cleanup();
+        return;
+      }
       pageProxy = page;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
       // Canonical pdfjs HiDPI pattern: size the backing store by the
       // device pixel ratio, keep the CSS box at logical size, and let a
       // `transform` matrix scale the drawing up.
       const viewport = page.getViewport({ scale });
       const ratio = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(viewport.width * ratio);
-      canvas.height = Math.floor(viewport.height * ratio);
-      canvas.style.width = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
+      const logicalWidth = Math.floor(viewport.width);
+      const logicalHeight = Math.floor(viewport.height);
+      const backingWidth = Math.floor(viewport.width * ratio);
+      const backingHeight = Math.floor(viewport.height * ratio);
+      const renderCanvas = document.createElement('canvas');
+      renderCanvas.width = backingWidth;
+      renderCanvas.height = backingHeight;
       renderTask = page.render({
-        canvas,
+        canvas: renderCanvas,
         viewport,
         transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined,
       });
-      renderTask.promise.catch((err: unknown) => {
+      renderTask.promise.then(() => {
+        if (cancelled) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+        // Resizing a visible canvas clears it immediately. Render the new
+        // zoom level offscreen first, then swap the finished bitmap in one
+        // frame so zooming does not flash white between old/new paints.
+        canvas.width = backingWidth;
+        canvas.height = backingHeight;
+        canvas.style.width = `${logicalWidth}px`;
+        canvas.style.height = `${logicalHeight}px`;
+        ctx.drawImage(renderCanvas, 0, 0);
+        setRenderedSize({ width: logicalWidth, height: logicalHeight });
+      }).catch((err: unknown) => {
         // Cancels (tab switch / scroll-out) reject with
         // RenderingCancelledException — expected, ignore. Surface the rest.
         if ((err as { name?: string })?.name === 'RenderingCancelledException') return;
@@ -504,12 +526,18 @@ function PdfPage({
     };
   }, [doc, pageIndex, scale, visible]);
 
+  const reservedHeight = renderedSize?.height ?? placeholderHeight;
+  const reservedWidth = renderedSize?.width;
+
   return (
     <div
       ref={rootRef}
       className="pdf-page-wrap"
       data-page={pageIndex + 1}
-      style={{ minHeight: placeholderHeight }}
+      style={{
+        minHeight: reservedHeight,
+        width: reservedWidth ? `${reservedWidth}px` : undefined,
+      }}
     >
       {visible ? <canvas ref={canvasRef} className="pdf-page-canvas" /> : (
         <div className="pdf-page-placeholder">Page {pageIndex + 1}</div>
@@ -517,4 +545,3 @@ function PdfPage({
     </div>
   );
 }
-

@@ -4,7 +4,7 @@ import { useApp } from '../store/AppContext';
 
 /**
  * The "search" sidebar view — owns the search input, the mode toggle
- * (≈ ↔ =) with conditional `Aa` / `ab` sub-filters when in keyword
+ * (≈ ↔ =) with conditional `Aa` / `Word` sub-filters when in keyword
  * mode, and the result list.
  *
  * Empty query → empty body (no "Recent searches" prompt yet — that's
@@ -35,7 +35,7 @@ export function SearchPanel() {
   );
 }
 
-/** Input + ≈/= mode flip + (keyword-only) Aa / ab sub-toggles. The
+/** Input + ≈/= mode flip + (keyword-only) Aa / Word sub-toggles. The
  *  mode flip swaps the icon based on current mode so the button
  *  doubles as a state indicator. */
 function SearchBox() {
@@ -131,13 +131,13 @@ function SearchBox() {
             </button>
             <button
               type="button"
-              className={'side-search-mode-btn ab-toggle' + (state.wholeWord ? ' active' : '')}
+              className={'side-search-mode-btn word-toggle' + (state.wholeWord ? ' active' : '')}
               onClick={toggleWholeWord}
               aria-label="Match whole word"
               aria-pressed={state.wholeWord}
-              title="Match Whole Word"
+              title="Whole word"
             >
-              ab
+              Word
             </button>
           </>
         )}
@@ -150,7 +150,7 @@ function SearchBox() {
           title={
             isKeyword
               ? semanticDisabled ? 'Semantic search disabled until you add an OpenAI API key' : 'Keyword search · click for semantic'
-              : 'Semantic search disabled · click for keyword'
+              : 'Semantic search · click for keyword'
           }
         >
           {isKeyword ? '=' : '≈'}

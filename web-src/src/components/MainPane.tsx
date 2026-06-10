@@ -6,7 +6,7 @@ import { HtmlPreview } from './HtmlPreview';
 import { ImagePreview } from './ImagePreview';
 import { MarkdownPreview } from './MarkdownPreview';
 import { PathBreadcrumb } from './PathBreadcrumb';
-import { PdfPreview } from './PdfPreview';
+import { PdfSourceSplit } from './PdfSourceSplit';
 import { Split } from './Split';
 import { TabStrip } from './TabStrip';
 
@@ -55,9 +55,10 @@ export function MainPane() {
         )}
         {cur && cur.format === 'pdf' && (
           // PDFs have no edit mode — the source is a binary file.
-          // Edit-toggle is hidden below; PdfPreview renders in both
-          // "preview" and "edit" states.
-          <PdfPreview name={cur.name} />
+          // Show the extracted markdown side-by-side with the original
+          // PDF so "Show original" keeps the searchable derived note in
+          // view instead of replacing it with the binary-only viewer.
+          <PdfSourceSplit name={cur.name} />
         )}
         {cur && cur.format === 'image' && (
           // Images, like PDFs, are binary — no edit mode.

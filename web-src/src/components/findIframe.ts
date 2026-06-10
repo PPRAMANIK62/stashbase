@@ -32,6 +32,7 @@ export function makeIframeFindController(
   let matches: Range[] = [];
   let cursor = -1; // index into `matches`, -1 = nothing selected
   let query = '';
+  let caseSensitive = false;
   let wholeWord = false;
 
   function recompute(): MatchInfo {
@@ -42,7 +43,7 @@ export function makeIframeFindController(
     if (!doc || !win) return clearAndReport(getWin());
     if (!query) return clearAndReport(win);
     ensureStyle(doc);
-    const re = buildRegex(query, wholeWord);
+    const re = buildRegex(query, wholeWord, caseSensitive);
     if (!re) return clearAndReport(win);
 
     // TreeWalker over text nodes, skipping <script> / <style> / hidden
@@ -100,61 +101,21 @@ export function makeIframeFindController(
   function scrollToCurrent(): void {
     const r = matches[cursor];
     if (!r) return;
-    // Range doesn't have scrollIntoView; use a temporary element at
-    // the start, scroll it, then drop. Cheaper than always wrapping
-    // the range in a <mark>.
-    const doc = getDoc();
-    if (!doc) return;
-    const probe = doc.createElement('span');
-    probe.setAttribute('data-stashbase-find-probe', '1');
-    try {
-      r.insertNode(probe);
-      probe.scrollIntoView({ behavior: 'auto', block: 'center' });
-    } catch { /* fall through */ }
-    finally {
-      // Re-merge text nodes that `insertNode` split so we don't leave
-      // the doc fragmented after repeated next/prev steps.
-      const parent = probe.parentNode;
-      probe.remove();
-      parent?.normalize();
-      // `normalize()` invalidates the existing Range offsets — rebuild
-      // matches against the merged text so the next step lands cleanly.
-      if (parent) refreshMatchesFor(doc);
-    }
-  }
-
-  // After normalize() the cached ranges still point to nodes, but
-  // offsets relative to the now-merged text are wrong. Re-walk and
-  // rebuild, preserving the cursor on the same logical match if we can
-  // find it again (otherwise reset to 0).
-  function refreshMatchesFor(_doc: Document): void {
     const win = getWin();
     if (!win) return;
-    const oldCursorRange = matches[cursor];
-    const oldText = oldCursorRange ? rangeText(oldCursorRange) : '';
-    const oldStartContainer = oldCursorRange?.startContainer;
-    // Re-execute the same query to rebuild the list. We can't call
-    // recompute() because it would re-paint + scroll; we just need
-    // fresh ranges.
-    const next: Range[] = [];
-    rebuild(next);
-    matches = next;
-    if (matches.length === 0) { cursor = -1; return; }
-    let newCursor = 0;
-    for (let i = 0; i < matches.length; i++) {
-      const r = matches[i];
-      if (r.startContainer === oldStartContainer && rangeText(r) === oldText) {
-        newCursor = i; break;
-      }
-    }
-    cursor = newCursor;
-    paint(win, matches, matches[cursor]);
+    const rect = firstVisibleRect(r);
+    if (!rect) return;
+    win.scrollBy({
+      top: rect.top + rect.height / 2 - win.innerHeight / 2,
+      left: rect.left + rect.width / 2 - win.innerWidth / 2,
+      behavior: 'auto',
+    });
   }
 
   function rebuild(out: Range[]): void {
     const doc = getDoc();
     if (!doc || !query) return;
-    const re = buildRegex(query, wholeWord);
+    const re = buildRegex(query, wholeWord, caseSensitive);
     if (!re) return;
     const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
       acceptNode(node: Node) {
@@ -186,6 +147,7 @@ export function makeIframeFindController(
     setQuery(q, opts) {
       query = q;
       wholeWord = opts.wholeWord;
+      caseSensitive = opts.caseSensitive;
       return recompute();
     },
     next() { return step(1); },
@@ -205,8 +167,11 @@ function clearAndReport(win: Window | null): MatchInfo {
   return { current: 0, total: 0 };
 }
 
-function rangeText(r: Range): string {
-  try { return r.toString(); } catch { return ''; }
+function firstVisibleRect(r: Range): DOMRect | null {
+  const rects = Array.from(r.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+  if (rects.length > 0) return rects[0];
+  const rect = r.getBoundingClientRect();
+  return rect.width > 0 || rect.height > 0 ? rect : null;
 }
 
 /** Inject highlight styles into the iframe doc once. Scoped to our two
@@ -219,7 +184,7 @@ function ensureStyle(doc: Document): void {
   style.id = STYLE_ID;
   style.textContent =
     `::highlight(${HL_ALL}) { background: #ffe082; color: inherit; }` +
-    `::highlight(${HL_CURRENT}) { background: #ff9800; color: #fff; }`;
+    `::highlight(${HL_CURRENT}) { background: #1a73e8; color: #fff; }`;
   doc.head.appendChild(style);
 }
 
@@ -240,12 +205,12 @@ function paint(win: Window, all: Range[], current: Range | null): void {
   else CSSNS.highlights.delete(HL_CURRENT);
 }
 
-function buildRegex(q: string, wholeWord: boolean): RegExp | null {
+function buildRegex(q: string, wholeWord: boolean, caseSensitive: boolean): RegExp | null {
   if (!q) return null;
   const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const body = wholeWord ? `(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])` : escaped;
   try {
-    return new RegExp(body, 'giu');
+    return new RegExp(body, caseSensitive ? 'gu' : 'giu');
   } catch {
     return null;
   }

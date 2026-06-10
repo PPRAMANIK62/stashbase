@@ -112,6 +112,7 @@ function addScrollBootstrap(html: string): string {
   var matches = [];
   var cursor = -1;
   var query = '';
+  var caseSensitive = false;
   var wholeWord = false;
 
   function ensureStyle() {
@@ -119,7 +120,7 @@ function addScrollBootstrap(html: string): string {
     var s = document.createElement('style');
     s.id = STYLE_ID;
     s.textContent = '::highlight(' + HL_ALL + ') { background: #ffe082; color: inherit; }' +
-                    '::highlight(' + HL_CUR + ') { background: #ff9800; color: #fff; }' +
+                    '::highlight(' + HL_CUR + ') { background: #1a73e8; color: #fff; }' +
                     '::highlight(stashbase-chunk) { background: rgba(46, 116, 230, 0.18); ' +
                     'box-shadow: 0 0 0 2px rgba(46, 116, 230, 0.45); border-radius: 2px; }';
     document.head.appendChild(s);
@@ -128,7 +129,7 @@ function addScrollBootstrap(html: string): string {
     if (!q) return null;
     var escaped = q.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
     var body = ww ? '(?<![\\\\p{L}\\\\p{N}_])' + escaped + '(?![\\\\p{L}\\\\p{N}_])' : escaped;
-    try { return new RegExp(body, 'giu'); } catch (_) { return null; }
+    try { return new RegExp(body, caseSensitive ? 'gu' : 'giu'); } catch (_) { return null; }
   }
   function rebuild() {
     matches = [];
@@ -173,25 +174,22 @@ function addScrollBootstrap(html: string): string {
   }
   function scrollToCurrent() {
     if (cursor < 0 || !matches[cursor]) return;
-    var probe = document.createElement('span');
-    probe.setAttribute('data-stashbase-find-probe', '1');
+    var rects = Array.prototype.slice.call(matches[cursor].getClientRects())
+      .filter(function(rect) { return rect.width > 0 && rect.height > 0; });
+    var rect = rects[0] || matches[cursor].getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) return;
     try {
-      matches[cursor].insertNode(probe);
-      probe.scrollIntoView({ behavior: 'auto', block: 'center' });
+      window.scrollBy({
+        top: rect.top + rect.height / 2 - window.innerHeight / 2,
+        left: rect.left + rect.width / 2 - window.innerWidth / 2,
+        behavior: 'auto'
+      });
     } catch (_) {}
-    var parent = probe.parentNode;
-    probe.remove();
-    if (parent) {
-      parent.normalize();
-      // normalize() invalidates the cached ranges — re-walk so the next
-      // step lands on the right node.
-      rebuild();
-      if (cursor >= matches.length) cursor = matches.length - 1;
-    }
   }
-  function setQuery(q, ww) {
+  function setQuery(q, ww, cs) {
     query = q || '';
     wholeWord = !!ww;
+    caseSensitive = !!cs;
     ensureStyle();
     rebuild();
     cursor = matches.length > 0 ? 0 : -1;
@@ -304,7 +302,7 @@ function addScrollBootstrap(html: string): string {
       return;
     }
     if (d.type === 'stashbase-find') {
-      if (d.op === 'set') setQuery(d.query || '', d.wholeWord);
+      if (d.op === 'set') setQuery(d.query || '', d.wholeWord, d.caseSensitive);
       else if (d.op === 'next') step(1);
       else if (d.op === 'prev') step(-1);
       else if (d.op === 'close') clearFind();
@@ -350,7 +348,24 @@ document.addEventListener('click', function(e) {
     return;
   }
   var raw = node.getAttribute('href');
-  if (!raw || raw.charAt(0) === '#') return;
+  if (!raw) return;
+  if (raw.charAt(0) === '#') {
+    var hashOnly = raw.slice(1);
+    if (!hashOnly) return;
+    try {
+      if (location.pathname.indexOf('/asset/') === 0) {
+        var currentEncoded = location.pathname.slice('/asset/'.length);
+        var currentDecoded = currentEncoded.split('/').map(decodeURIComponent).join('/');
+        e.preventDefault();
+        window.parent.postMessage({
+          type: 'stashbase-nav',
+          path: currentDecoded,
+          anchor: hashOnly
+        }, '*');
+      }
+    } catch (_) {}
+    return;
+  }
   try {
     var url = new URL(raw, document.baseURI);
     // Same-origin /asset/ links to .md / .html files = cross-file

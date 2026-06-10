@@ -123,11 +123,13 @@ hr { border: 0; border-top: 1px solid rgb(233, 233, 231); margin: 1em 0; }
 /** Append the same postMessage scroll / external-link listener
  *  `server/html.ts` injects into prepared HTML, so edit-mode previews
  *  behave like read-only ones. */
-export function withScrollBootstrap(html: string): string {
+export function withScrollBootstrap(html: string, currentPath = ''): string {
   // Mirrors `server/html.ts:addScrollBootstrap` (kept in sync by hand).
   // Used for edit-mode HTML preview where the source is a blob URL and
   // `server/html.ts` hasn't processed it.
+  const pathLiteral = JSON.stringify(currentPath);
   const script = `<script>
+var STASHBASE_CURRENT_PATH = ${pathLiteral};
 window.addEventListener("message", function(e) {
   if (!e || !e.data || e.data.type !== "stashbase-scroll") return;
   var el = document.getElementById(e.data.id);
@@ -151,7 +153,20 @@ document.addEventListener("click", function(e) {
     return;
   }
   var raw = node.getAttribute("href");
-  if (!raw || raw.charAt(0) === "#") return;
+  if (!raw) return;
+  if (raw.charAt(0) === "#") {
+    var hashOnly = raw.slice(1);
+    if (!hashOnly) return;
+    try {
+      if (!STASHBASE_CURRENT_PATH) return;
+      window.parent.postMessage({
+        type: "stashbase-nav",
+        path: STASHBASE_CURRENT_PATH,
+        anchor: hashOnly
+      }, "*");
+    } catch (_) {}
+    return;
+  }
   try {
     var url = new URL(raw, document.baseURI);
     if (url.origin === location.origin && url.pathname.indexOf("/asset/") === 0) {

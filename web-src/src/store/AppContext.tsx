@@ -66,8 +66,9 @@ export interface EditorHandle {
  *  Promise — the HTML preview path is async because it round-trips
  *  through postMessage to the sandboxed iframe. */
 export interface MatchInfo { current: number; total: number; }
+export interface FindOptions { wholeWord: boolean; caseSensitive: boolean; }
 export interface FindController {
-  setQuery: (query: string, opts: { wholeWord: boolean }) => MatchInfo | Promise<MatchInfo>;
+  setQuery: (query: string, opts: FindOptions) => MatchInfo | Promise<MatchInfo>;
   next: () => MatchInfo | Promise<MatchInfo>;
   prev: () => MatchInfo | Promise<MatchInfo>;
   /** Tear down highlights / decorations. Called when the bar closes
@@ -91,7 +92,11 @@ export interface AppActions {
    *  when the caller has just dispatched `SEARCH_MODE` and can't rely
    *  on `stateRef` reflecting that yet (it updates after commit, not
    *  in-line with the dispatch). Default reads from state. */
-  runSearch: (query: string, mode?: 'semantic' | 'keyword') => Promise<void>;
+  runSearch: (
+    query: string,
+    mode?: 'semantic' | 'keyword',
+    opts?: { caseStrict?: boolean; wholeWord?: boolean },
+  ) => Promise<void>;
   /** Clear the active space's snapshot-import warning. Fires
    *  `/api/snapshot-warning/dismiss` so the warning doesn't reappear
    *  the next time `/api/index-status` polls. */
@@ -206,6 +211,7 @@ export interface AppActions {
    *  highlighted. Also called implicitly on space switch / tab close. */
   closeFind: () => void;
   setFindQuery: (q: string) => void;
+  toggleFindCaseSensitive: () => void;
   toggleFindWholeWord: () => void;
   findNext: () => void;
   findPrev: () => void;
@@ -560,7 +566,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  caller that just dispatched `SEARCH_MODE` and synchronously calls
    *  `runSearch` would otherwise read the stale mode and fire the
    *  wrong API. Mode-toggle callers pass the new mode explicitly. */
-  const runSearch = useCallback(async (query: string, modeOverride?: 'semantic' | 'keyword') => {
+  const runSearch = useCallback(async (
+    query: string,
+    modeOverride?: 'semantic' | 'keyword',
+    opts?: { caseStrict?: boolean; wholeWord?: boolean },
+  ) => {
     const myGen = ++searchGen.current;
     const q = query.trim();
     if (!q) {
@@ -578,8 +588,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // wrong space in multi-window sessions.
         const s = stateRef.current;
         const result = await api.keywordSearch(q, {
-          caseStrict: s.caseStrict,
-          wholeWord: s.wholeWord,
+          caseStrict: opts?.caseStrict ?? s.caseStrict,
+          wholeWord: opts?.wholeWord ?? s.wholeWord,
           space: s.space || undefined,
         });
         if (myGen !== searchGen.current) return;
@@ -925,9 +935,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (prev && prev !== c) prev.close();
     findCtlRef.current = c;
     if (c) {
-      const { query, wholeWord, open } = stateRef.current.find;
+      const { query, wholeWord, caseSensitive, open } = stateRef.current.find;
       if (open && query) {
-        void applyMatchInfo(c.setQuery(query, { wholeWord }));
+        void applyMatchInfo(c.setQuery(query, { wholeWord, caseSensitive }));
       }
     }
   }, []);
@@ -948,7 +958,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'FIND_SET', patch: { current: 0, total: 0 } });
       return;
     }
-    void applyMatchInfo(ctl.setQuery(q, { wholeWord: stateRef.current.find.wholeWord }));
+    const { wholeWord, caseSensitive } = stateRef.current.find;
+    void applyMatchInfo(ctl.setQuery(q, { wholeWord, caseSensitive }));
+  }, []);
+
+  const toggleFindCaseSensitive = useCallback(() => {
+    const next = !stateRef.current.find.caseSensitive;
+    dispatch({ type: 'FIND_SET', patch: { caseSensitive: next } });
+    const ctl = findCtlRef.current;
+    if (!ctl) return;
+    const { query, wholeWord } = stateRef.current.find;
+    void applyMatchInfo(ctl.setQuery(query, { wholeWord, caseSensitive: next }));
   }, []);
 
   const toggleFindWholeWord = useCallback(() => {
@@ -956,7 +976,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'FIND_SET', patch: { wholeWord: next } });
     const ctl = findCtlRef.current;
     if (!ctl) return;
-    void applyMatchInfo(ctl.setQuery(stateRef.current.find.query, { wholeWord: next }));
+    const { query, caseSensitive } = stateRef.current.find;
+    void applyMatchInfo(ctl.setQuery(query, { wholeWord: next, caseSensitive }));
   }, []);
 
   const findNext = useCallback(() => {
@@ -1461,7 +1482,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     registerEditor,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
-    toggleFindWholeWord, findNext, findPrev,
+    toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   }), [
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
@@ -1478,7 +1499,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     registerEditor,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
-    toggleFindWholeWord, findNext, findPrev,
+    toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   ]);
 
   // Bootstrap + start polling on first mount.

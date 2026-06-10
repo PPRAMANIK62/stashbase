@@ -48,7 +48,7 @@ export function convertImage(imageAbsPath: string): Promise<{ notePath: string }
         resolve({ notePath });
       } else {
         const tail = stderr.trim().split('\n').slice(-3).join('\n');
-        if (/rapidocr_onnxruntime|No module named ['"]rapidocr/i.test(tail)) {
+        if (isMissingRapidOcrError(tail)) {
           reject(new Error(
             'OCR engine is not installed. Run `pnpm setup:python` and restart StashBase; the image still opens, but its text is not searchable yet.',
           ));
@@ -81,4 +81,10 @@ export function maybeConvertImage(imageAbsPath: string, spaceRelative: string): 
  *  sibling note already exists. */
 export function discoverNewImages(spaceAbs: string): void {
   discoverNewSources(spaceAbs, IMAGE_SPEC);
+}
+
+function isMissingRapidOcrError(message: string): boolean {
+  return /rapidocr_onnxruntime/i.test(message)
+    || /No module named ['"][^'"]*rapidocr/i.test(message)
+    || /OCR dependency rapidocr/i.test(message);
 }
