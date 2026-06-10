@@ -168,6 +168,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     setFatal(null);
     setTurnActive(false);
     setCurrentSessionId(null);
+    toolNamesRef.current.clear();
     openKind.current = null;
     setPhase('connecting');
     setNonce((n) => n + 1);
@@ -190,6 +191,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     setFatal(null);
     setTurnActive(false);
     setCurrentSessionId(id);
+    toolNamesRef.current.clear();
     openKind.current = null;
     resumeIdRef.current = id;
     setPhase('connecting');
@@ -229,9 +231,18 @@ export function AgentView({ active, title }: { active: boolean; title: string })
           b.kind === 'tool' && b.id === ev.id && b.status !== 'denied'
             ? { ...b, status: ev.isError ? 'error' : 'done', result: ev.content }
             : b));
-        if (!ev.isError && shouldRefreshAfterTool(toolNamesRef.current.get(ev.id))) {
-          void actions.loadFiles();
-          void actions.refreshIndexState();
+        if (!ev.isError) {
+          const toolName = toolNamesRef.current.get(ev.id);
+          if (shouldRefreshAfterTool(toolName)) {
+            const createdFile = fileInCurrentSpaceFromToolResult(toolName, ev.content, state.space);
+            void (async () => {
+              await actions.loadFiles();
+              void actions.refreshIndexState();
+              if (createdFile) await actions.selectFile(createdFile);
+            })().catch((err) => {
+              actions.toast(`Could not refresh files: ${errorText(err)}`, { level: 'error' });
+            });
+          }
         }
         toolNamesRef.current.delete(ev.id);
         break;
@@ -305,8 +316,13 @@ export function AgentView({ active, title }: { active: boolean; title: string })
       ctx.push(`Attached files (read these):\n${atts.map((a) => `- ${a.path}`).join('\n')}`);
     }
     const wire = ctx.length ? `${text}${text ? '\n\n' : ''}${ctx.join('\n\n')}` : text;
-    ws.send(JSON.stringify({ t: 'prompt', text: wire }));
-    setAttachments([]);
+    try {
+      ws.send(JSON.stringify({ t: 'prompt', text: wire }));
+      setAttachments([]);
+    } catch (err) {
+      setTurnActive(false);
+      setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not send message: ${errorText(err)}` }]);
+    }
   }
 
   /** Attach OS files (dropped from Finder or picked via `+`) as transient
@@ -502,8 +518,31 @@ export function AgentView({ active, title }: { active: boolean; title: string })
 
 function shouldRefreshAfterTool(name: string | undefined): boolean {
   if (!name) return false;
-  if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Bash'].includes(name)) return true;
+  if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name)) return true;
   return /^mcp__/.test(name) && /(write|delete|rename|update|set_|create|move)/i.test(name);
+}
+
+function fileInCurrentSpaceFromToolResult(toolName: string | undefined, content: string, space: string): string | null {
+  if (!toolName || !/write_file$/i.test(toolName) || !space) return null;
+  try {
+    const parsed = JSON.parse(content) as { path?: unknown; ok?: unknown };
+    if (parsed.ok !== true || typeof parsed.path !== 'string') return null;
+    const prefix = `${space}/`;
+    if (!parsed.path.startsWith(prefix)) return null;
+    const rel = parsed.path.slice(prefix.length);
+    return isSafeSpaceRelativePath(rel) ? rel : null;
+  } catch {
+    return null;
+  }
+}
+
+function isSafeSpaceRelativePath(path: string): boolean {
+  if (!path || path.startsWith('/') || path.includes('\\')) return false;
+  return path.split('/').every((part) => part.length > 0 && part !== '.' && part !== '..');
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // ----- history dropdown --------------------------------------------------
