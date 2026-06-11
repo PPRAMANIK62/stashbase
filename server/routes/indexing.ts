@@ -17,7 +17,7 @@ import {
   type FileMetadata,
 } from '../metadata.ts';
 import { HIDDEN_DOT_DIRS } from '../files.ts';
-import { indexableFileSizeError } from '../indexable.ts';
+import { hasNoExtractableText, indexableFileSizeError } from '../indexable.ts';
 import { derivedPathsForPdf, displayPathForHit, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
 import { derivedNotePathForVideo, maybeConvertVideo } from '../video.ts';
@@ -173,11 +173,16 @@ export function mount(app: express.Express): void {
       //     the pulse would run forever and never stop.
       //   - Over-size files (> MAX_INDEXABLE_BYTES): same — they exceed the
       //     embed limit and can never enter the index.
+      //   - Files with no extractable text (bundler-format HTML that is
+      //     one giant <script>, whitespace-only notes): non-empty on disk
+      //     but they chunk to nothing, so they never enter Milvus and
+      //     would pulse forever just like empty files.
       const pending = status.pending
         .map((p) => fromKbRel(p))
         .filter((p): p is string => p != null)
         .filter((p) => !isUnstructuredSource(p))
-        .filter((p) => indexableFileSizeError(path.join(cur, p)) === null);
+        .filter((p) => indexableFileSizeError(path.join(cur, p)) === null)
+        .filter((p) => !hasNoExtractableText(path.join(cur, p)));
       const orphaned = status.orphaned
         .map((p) => fromKbRel(p))
         .filter((p): p is string => p != null);

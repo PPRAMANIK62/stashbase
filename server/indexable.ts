@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { detectFormat } from './format.ts';
+import { analyzeHtml } from './html.ts';
 
 /** Directories that are usually generated, dependency caches, VCS state,
  *  or source-project internals. If a user accidentally points the KB root
@@ -69,6 +70,37 @@ export function indexableFileSizeError(absPath: string): string | null {
     return `file is too large to index (${formatBytes(st.size)} > ${formatBytes(MAX_INDEXABLE_BYTES)})`;
   }
   return null;
+}
+
+/** True when the file's *extractable* text is empty even though the
+ *  file itself is not — a bundler-format HTML that is one giant
+ *  `<script>` with no prose, or a whitespace-only note. Such files can
+ *  never produce chunks, so nothing is ever stored in Milvus for them
+ *  and the daemon's name-only `status` reports them pending forever.
+ *  Callers treat them like empty files: drop from the sidebar's pending
+ *  pulse, skip the futile embed round-trip.
+ *
+ *  Cached by (size, mtime): the status poll runs every 1.5s while the
+ *  sidebar pulses, and re-analyzing a 2MB HTML on each tick would be
+ *  wasted work. */
+const noTextCache = new Map<string, { size: number; mtimeMs: number; noText: boolean }>();
+
+export function hasNoExtractableText(absPath: string): boolean {
+  const format = detectFormat(absPath);
+  if (!format) return false;
+  let st: fs.Stats;
+  try { st = fs.statSync(absPath); } catch { return false; }
+  const hit = noTextCache.get(absPath);
+  if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs) return hit.noText;
+  let noText = false;
+  try {
+    const content = fs.readFileSync(absPath, 'utf8');
+    noText = format === 'html'
+      ? analyzeHtml(content).plaintext.length === 0
+      : content.trim().length === 0;
+  } catch { /* unreadable — let the indexing path surface the error */ }
+  noTextCache.set(absPath, { size: st.size, mtimeMs: st.mtimeMs, noText });
+  return noText;
 }
 
 export function contentSizeError(content: string): string | null {
