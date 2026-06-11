@@ -95,13 +95,13 @@ export function analyzeHtml(html: string): HtmlAnalysis {
 }
 
 function addScrollBootstrap(html: string): string {
-  // The iframe viewer uses `sandbox="allow-scripts"` without
-  // `allow-same-origin`. That lets dynamic HTML render while preventing
-  // the document from escaping its sandbox, but it also means the parent
-  // cannot set `location.hash` directly or reach the DOM for find-in-page.
-  // This tiny trusted listener gives in-doc anchor links a safe scroll
-  // target, runs the in-iframe half of the Cmd+F find bar (parent posts
-  // queries, iframe paints highlights via CSS Custom Highlights), and
+  // The iframe viewer uses `sandbox="allow-scripts allow-same-origin"`.
+  // `allow-same-origin` gives the page a real localhost origin so
+  // `URL.createObjectURL` produces `blob:http://localhost/…` (loadable as
+  // `<script src>`), but the parent window cannot reach the iframe DOM
+  // directly. This tiny trusted listener gives in-doc anchor links a safe
+  // scroll target, runs the in-iframe half of the Cmd+F find bar (parent
+  // posts queries, iframe paints highlights via CSS Custom Highlights), and
   // forwards external link clicks so a YouTube/GitHub/etc link doesn't
   // navigate the sandboxed iframe to a blank page.
   const script = `<script>

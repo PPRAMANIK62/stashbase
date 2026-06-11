@@ -131,11 +131,19 @@ const ALLOWED_ORIGINS = new Set([
 
 const CSP_PROD =
   "default-src 'self'; " +
-  "script-src 'self'; " +
+  // 'unsafe-inline' is needed for the scroll-bootstrap script injected by
+  // addScrollBootstrap and for bundler-format HTML loaders (user-uploaded
+  // self-contained apps). blob: lets those loaders load their own assets
+  // via <script src="blob:…"> ('self' does NOT match blob: for script-src).
+  // The iframe sandbox is the primary security boundary; CSP here is
+  // belt-and-suspenders for the main renderer.
+  "script-src 'self' 'unsafe-inline' blob:; " +
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: blob:; " +
   "font-src 'self' data:; " +
-  "connect-src 'self'; " +
+  // blob: needed so bundler-format HTML can fetch() their own blob: URLs
+  // (text/babel scripts are inlined via fetch before Babel transforms them).
+  "connect-src 'self' blob:; " +
   "frame-src 'self' blob: about:; " +
   "worker-src 'self' blob:; " +
   "object-src 'none'; " +
@@ -143,15 +151,14 @@ const CSP_PROD =
   "form-action 'none';";
 
 const CSP_DEV =
-  // Same as prod but allow inline + eval scripts and a slightly wider
-  // connect-src so Vite's HMR module shim and React Refresh work. Dev
-  // bundle never ships to users.
+  // Same as prod but allow eval for React Refresh / Vite HMR shim and
+  // WebSocket connect-src for HMR. Dev bundle never ships to users.
   "default-src 'self'; " +
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; " +
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: blob:; " +
   "font-src 'self' data:; " +
-  "connect-src 'self' ws: wss:; " +
+  "connect-src 'self' blob: ws: wss:; " +
   "frame-src 'self' blob: about:; " +
   "worker-src 'self' blob:; " +
   "object-src 'none'; " +
