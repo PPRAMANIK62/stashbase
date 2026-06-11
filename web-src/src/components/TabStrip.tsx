@@ -95,6 +95,9 @@ export function TabStrip() {
     onDragEnd();
   }
 
+  const openFileNames = state.tabs.flatMap((t) => (t.file ? [t.file.name] : []));
+  const ambiguousLabels = findAmbiguousTabLabels(openFileNames);
+
   return (
     <div className="tab-strip">
       <div
@@ -105,7 +108,7 @@ export function TabStrip() {
       >
         {state.tabs.map((t) => {
           const isActive = t.id === state.activeTabId;
-          const label = t.file ? displayBasename(t.file.name) : 'Untitled';
+          const label = t.file ? displayTabLabel(t.file.name, ambiguousLabels) : 'Untitled';
           const isDragging = dragId === t.id;
           // "stashing" = the file's still being converted into searchable
           // content. We mark it on its tab with the StashBase logo (a
@@ -179,7 +182,31 @@ export function TabStrip() {
   );
 }
 
-function displayBasename(path: string): string {
+function displayTabLabel(path: string, ambiguousLabels: Set<string>): string {
   const base = path.split('/').pop() ?? path;
-  return base.replace(/\.(md|markdown|html|htm)$/i, '');
+  const stem = base.replace(/\.(md|markdown|html|htm)$/i, '');
+  return ambiguousLabels.has(labelKey(path)) ? base : stem;
+}
+
+function findAmbiguousTabLabels(paths: string[]): Set<string> {
+  const counts = new Map<string, Set<string>>();
+  for (const p of paths) {
+    const base = p.split('/').pop() ?? p;
+    const m = base.match(/^(.+)\.(md|markdown|html|htm)$/i);
+    if (!m) continue;
+    const stemKey = m[1].toLowerCase();
+    const exts = counts.get(stemKey) ?? new Set<string>();
+    exts.add(m[2].toLowerCase());
+    counts.set(stemKey, exts);
+  }
+  const ambiguous = new Set<string>();
+  for (const [stemKey, exts] of counts) {
+    if (exts.size > 1) ambiguous.add(stemKey);
+  }
+  return ambiguous;
+}
+
+function labelKey(path: string): string {
+  const base = path.split('/').pop() ?? path;
+  return base.replace(/\.(md|markdown|html|htm)$/i, '').toLowerCase();
 }

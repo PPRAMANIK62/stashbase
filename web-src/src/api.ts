@@ -50,6 +50,8 @@ export interface FolderImportPreview {
   entryCount: number;
   totalBytes: number;
   requiresConfirmation: boolean;
+  requiresLargeImportConfirmation: boolean;
+  largeImportReason?: string;
   warnings: string[];
   hasSnapshot: boolean;
   /** A space with this name already exists — Import refuses (won't merge);
@@ -371,9 +373,13 @@ export const api = {
   /** Read `<kbRoot>/STASHBASE.md` — the KB-level rules book. Powers the
    *  Knowledge base section's "STASHBASE.md" row. */
   getKbRules: () => getJson<{ content: string }>('/api/kb/rules'),
+  putKbRules: (content: string) =>
+    send<Record<string, never>>('POST', '/api/kb/rules', { content }),
   /** Read `<kbRoot>/.stashbase/space-metadata.md` — the agent-maintained
    *  KB 目录. Powers the Knowledge base section's "space-metadata.md" row. */
   getKbOverview: () => getJson<{ content: string }>('/api/kb/overview'),
+  putKbOverview: (content: string) =>
+    send<Record<string, never>>('POST', '/api/kb/overview', { content }),
   /** Copy a local folder into kbRoot as a new space. `source` is an
    *  absolute path; the renderer obtains it from
    *  `window.electron.openFolderDialog` (Electron-only). `name`
@@ -382,13 +388,19 @@ export const api = {
     send<FolderImportPreview>('POST', '/api/space/import-folder/preview', { source, name }),
   importFolder: (
     source: string,
-    opts: { name?: string; mode?: ImportFolderMode; confirmExisting?: boolean } = {},
+    opts: {
+      name?: string;
+      mode?: ImportFolderMode;
+      confirmExisting?: boolean;
+      confirmLargeImport?: boolean;
+    } = {},
   ) =>
     send<FolderImportResult>('POST', '/api/space/import-folder', {
       source,
       name: opts.name ?? '',
       mode: opts.mode ?? 'copy',
       confirmExisting: opts.confirmExisting === true,
+      confirmLargeImport: opts.confirmLargeImport === true,
     }),
   /** Manual sidebar ordering — full map of `parentPath → child basenames`. */
   getFileOrder: () => getJson<Record<string, string[]>>('/api/file-order'),
@@ -405,18 +417,18 @@ export const api = {
   createFolder: (path: string) =>
     send<{ path: string }>('POST', '/api/folders', { path }),
   deleteFile: (name: string) =>
-    send<Record<string, never>>('DELETE', '/api/files/' + encodePath(name)),
+    send<{ alreadyGone?: boolean }>('DELETE', '/api/files/' + encodePath(name)),
   /** Ask the server to reveal the file in the host OS file manager
    *  (Finder / Explorer / xdg-open on the file's directory). */
   revealFile: (name: string) =>
     send<Record<string, never>>('POST', '/api/reveal/' + encodePath(name)),
   deleteFolder: (path: string) =>
-    send<Record<string, never>>('DELETE', '/api/folders/' + encodePath(path)),
-  renameFile: (name: string, newName: string, opts: { cascade?: boolean } = {}) =>
-    send<{ name: string; linksUpdated?: number }>(
+    send<{ alreadyGone?: boolean }>('DELETE', '/api/folders/' + encodePath(path)),
+  renameFile: (name: string, newName: string, opts: { cascade?: boolean; asyncIndex?: boolean } = {}) =>
+    send<{ name: string; linksUpdated?: number; indexDeferred?: boolean; indexWarning?: string }>(
       'PATCH',
       '/api/files/' + encodePath(name),
-      { new_name: newName, cascade: opts.cascade ?? true },
+      { new_name: newName, cascade: opts.cascade ?? true, async_index: opts.asyncIndex === true },
     ),
   renameFolder: (path: string, newName: string, opts: { cascade?: boolean } = {}) =>
     send<{ path: string }>(
@@ -599,7 +611,10 @@ export async function setKbRootConfirming(
     return await api.setKbRoot(path, { confirmNonEmpty: false });
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
-      const ok = await confirm('That directory is not empty. Use it as the root folder anyway?');
+      const ok = await confirm(
+        'That directory is not empty. StashBase will treat each direct child folder as a space, ' +
+        'and supported files inside opened spaces may be indexed. Use a dedicated StashBase folder unless this is already a knowledge base root. Continue?',
+      );
       if (!ok) return null;
       return await api.setKbRoot(path, { confirmNonEmpty: true });
     }

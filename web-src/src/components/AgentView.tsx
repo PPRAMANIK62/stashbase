@@ -119,6 +119,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
   const [historyOpen, setHistoryOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
+  const toolNamesRef = useRef<Map<string, string>>(new Map());
   // Which streaming block kind is currently "open" (so consecutive text
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
@@ -167,6 +168,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     setFatal(null);
     setTurnActive(false);
     setCurrentSessionId(null);
+    toolNamesRef.current.clear();
     openKind.current = null;
     setPhase('connecting');
     setNonce((n) => n + 1);
@@ -189,6 +191,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
     setFatal(null);
     setTurnActive(false);
     setCurrentSessionId(id);
+    toolNamesRef.current.clear();
     openKind.current = null;
     resumeIdRef.current = id;
     setPhase('connecting');
@@ -220,6 +223,7 @@ export function AgentView({ active, title }: { active: boolean; title: string })
         break;
       case 'tool':
         openKind.current = null;
+        toolNamesRef.current.set(ev.id, ev.name);
         setBlocks((bs) => [...bs, { kind: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running' }]);
         break;
       case 'tool-result':
@@ -227,6 +231,20 @@ export function AgentView({ active, title }: { active: boolean; title: string })
           b.kind === 'tool' && b.id === ev.id && b.status !== 'denied'
             ? { ...b, status: ev.isError ? 'error' : 'done', result: ev.content }
             : b));
+        if (!ev.isError) {
+          const toolName = toolNamesRef.current.get(ev.id);
+          if (shouldRefreshAfterTool(toolName)) {
+            const createdFile = fileInCurrentSpaceFromToolResult(toolName, ev.content, state.space);
+            void (async () => {
+              await actions.loadFiles();
+              void actions.refreshIndexState();
+              if (createdFile) await actions.selectFile(createdFile);
+            })().catch((err) => {
+              actions.toast(`Could not refresh files: ${errorText(err)}`, { level: 'error' });
+            });
+          }
+        }
+        toolNamesRef.current.delete(ev.id);
         break;
       case 'permission':
         openKind.current = null;
@@ -298,8 +316,13 @@ export function AgentView({ active, title }: { active: boolean; title: string })
       ctx.push(`Attached files (read these):\n${atts.map((a) => `- ${a.path}`).join('\n')}`);
     }
     const wire = ctx.length ? `${text}${text ? '\n\n' : ''}${ctx.join('\n\n')}` : text;
-    ws.send(JSON.stringify({ t: 'prompt', text: wire }));
-    setAttachments([]);
+    try {
+      ws.send(JSON.stringify({ t: 'prompt', text: wire }));
+      setAttachments([]);
+    } catch (err) {
+      setTurnActive(false);
+      setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not send message: ${errorText(err)}` }]);
+    }
   }
 
   /** Attach OS files (dropped from Finder or picked via `+`) as transient
@@ -465,9 +488,15 @@ export function AgentView({ active, title }: { active: boolean; title: string })
               <button type="button" className="agent-btn" onClick={reconnect}>Retry</button>
             </div>
           )
-          : <div className="agent-ended">Session ended. Reopen Claude from the top bar.</div>
+          : (
+            <div className="agent-ended">
+              <span>Session ended.</span>
+              <button type="button" className="agent-btn" onClick={reconnect}>Reconnect</button>
+            </div>
+          )
       )}
       <Composer
+        phase={phase}
         disabled={phase !== 'live'}
         turnActive={turnActive}
         active={active}
@@ -485,6 +514,35 @@ export function AgentView({ active, title }: { active: boolean; title: string })
       />
     </div>
   );
+}
+
+function shouldRefreshAfterTool(name: string | undefined): boolean {
+  if (!name) return false;
+  if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name)) return true;
+  return /^mcp__/.test(name) && /(write|delete|rename|update|set_|create|move)/i.test(name);
+}
+
+function fileInCurrentSpaceFromToolResult(toolName: string | undefined, content: string, space: string): string | null {
+  if (!toolName || !/write_file$/i.test(toolName) || !space) return null;
+  try {
+    const parsed = JSON.parse(content) as { path?: unknown; ok?: unknown };
+    if (parsed.ok !== true || typeof parsed.path !== 'string') return null;
+    const prefix = `${space}/`;
+    if (!parsed.path.startsWith(prefix)) return null;
+    const rel = parsed.path.slice(prefix.length);
+    return isSafeSpaceRelativePath(rel) ? rel : null;
+  } catch {
+    return null;
+  }
+}
+
+function isSafeSpaceRelativePath(path: string): boolean {
+  if (!path || path.startsWith('/') || path.includes('\\')) return false;
+  return path.split('/').every((part) => part.length > 0 && part !== '.' && part !== '..');
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // ----- history dropdown --------------------------------------------------
@@ -1082,9 +1140,10 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
 }
 
 function Composer({
-  disabled, turnActive, active, activeFile, mode, onSetMode, effort, onSetEffort,
+  phase, disabled, turnActive, active, activeFile, mode, onSetMode, effort, onSetEffort,
   attachments, uploading, onPickFiles, onRemoveAttachment, onSend, onStop,
 }: {
+  phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
   turnActive: boolean;
   active: boolean;
@@ -1136,6 +1195,14 @@ function Composer({
       .filter((f) => f.name.toLowerCase().includes(q))
       .slice(0, 8);
   }, [mention, state.files]);
+
+  const placeholder = phase === 'connecting'
+    ? 'Connecting…'
+    : phase === 'closed'
+      ? 'Reconnect to continue…'
+      : turnActive
+        ? 'Claude is working…'
+        : 'Message Claude…';
 
   function onChange(v: string, caret: number) {
     setText(v);
@@ -1221,7 +1288,7 @@ function Composer({
           ref={taRef}
           className="agent-input"
           rows={1}
-          placeholder={disabled ? 'Connecting…' : 'Message Claude…'}
+          placeholder={placeholder}
           value={text}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value, e.target.selectionStart)}

@@ -18,7 +18,7 @@ import { useApp } from '../store/AppContext';
  *                        also works from editor / sidebar focus.
  */
 export function FindBar() {
-  const { state, actions } = useApp();
+  const { state, actions, dispatch } = useApp();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Re-focus on every open transition — Cmd+F'ing while the bar is
@@ -35,9 +35,21 @@ export function FindBar() {
 
   if (!state.find.open) return null;
 
-  const { query, wholeWord, current, total } = state.find;
+  const { query, caseSensitive, wholeWord, current, total } = state.find;
   const hasQuery = query.length > 0;
   const noMatch = hasQuery && total === 0;
+
+  function searchAllFiles() {
+    const q = query.trim();
+    if (!q) return;
+    dispatch({ type: 'FILTER', q });
+    dispatch({ type: 'SEARCH_MODE', mode: 'keyword' });
+    dispatch({ type: 'SEARCH_CASE_STRICT', strict: caseSensitive });
+    dispatch({ type: 'SEARCH_WHOLE_WORD', on: wholeWord });
+    dispatch({ type: 'SIDEBAR_VIEW', view: 'search' });
+    dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: false });
+    void actions.runSearch(q, 'keyword', { caseStrict: caseSensitive, wholeWord });
+  }
 
   return (
     <div className="find-bar" role="search" aria-label="Find in document">
@@ -63,12 +75,30 @@ export function FindBar() {
       </span>
       <button
         type="button"
+        className={'find-toggle' + (caseSensitive ? ' on' : '')}
+        title="Match case"
+        aria-pressed={caseSensitive}
+        onClick={() => actions.toggleFindCaseSensitive()}
+      >
+        Aa
+      </button>
+      <button
+        type="button"
         className={'find-toggle' + (wholeWord ? ' on' : '')}
         title="Whole word"
         aria-pressed={wholeWord}
         onClick={() => actions.toggleFindWholeWord()}
       >
-        ab
+        Word
+      </button>
+      <button
+        type="button"
+        className="find-all-files"
+        title="Search all files"
+        disabled={!hasQuery}
+        onClick={searchAllFiles}
+      >
+        All files
       </button>
       <button
         type="button"

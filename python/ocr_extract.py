@@ -54,7 +54,15 @@ def extract_text(image_path: Path) -> str:
     """Run RapidOCR and return the recognised text, one region per line,
     in reading order as RapidOCR emits it. Empty string when nothing is
     found."""
-    from rapidocr_onnxruntime import RapidOCR  # type: ignore[import-not-found]
+    try:
+        from rapidocr_onnxruntime import RapidOCR  # type: ignore[import-not-found]
+    except ModuleNotFoundError as err:
+        if err.name == "rapidocr_onnxruntime":
+            raise RuntimeError(
+                "OCR dependency rapidocr_onnxruntime is missing. "
+                "Run `pnpm setup:python` from the StashBase project, then restart the app."
+            ) from err
+        raise
 
     engine = RapidOCR()
     result, _elapse = engine(load_image(image_path))

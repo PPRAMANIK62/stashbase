@@ -40,10 +40,12 @@ import { useApp, type MatchInfo } from '../store/AppContext';
  * mount time and never thereafter — CM owns the buffer.
  */
 export function CodeEditor({
+  name,
   initialContent,
   format,
   onChange,
 }: {
+  name: string;
   initialContent: string;
   format: 'md' | 'html';
   onChange?: (doc: string) => void;
@@ -75,11 +77,14 @@ export function CodeEditor({
     const host = hostRef.current;
     if (!host) return;
 
-    const lang = format === 'html' ? htmlLang() : mdLang();
+    const lang = format === 'html' ? htmlLang() : mdLang({ addKeymap: false });
     // Strip CM's built-in Cmd-F binding — we route Cmd+F to our own
     // FindBar component instead. Cmd-G / Shift-Cmd-G (find next/prev)
     // stay so the bar's hotkeys still work when focus is in the editor.
     const editorSearchKeymap = searchKeymap.filter((b) => b.key !== 'Mod-f');
+    const linkKeymap = format === 'md'
+      ? [{ key: 'Mod-k', run: insertMarkdownLink }]
+      : [{ key: 'Mod-k', run: insertHtmlLink }];
     const extensions = [
       lineNumbers(),
       foldGutter(),
@@ -93,7 +98,7 @@ export function CodeEditor({
       // though we never call openSearchPanel — our FindBar drives it
       // imperatively via setSearchQuery / findNext / findPrevious.
       search(),
-      keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...editorSearchKeymap]),
+      keymap.of([indentWithTab, ...linkKeymap, ...defaultKeymap, ...historyKeymap, ...editorSearchKeymap]),
       EditorView.theme({
         '&': { height: '100%', fontSize: '13px' },
         '.cm-scroller': {
@@ -129,7 +134,7 @@ export function CodeEditor({
       focus: () => view.focus(),
     });
     actions.registerFindController({
-      setQuery: (q, opts) => applyEditorQuery(view, q, opts.wholeWord),
+      setQuery: (q, opts) => applyEditorQuery(view, q, opts.wholeWord, opts.caseSensitive),
       next: () => { findNext(view); return matchInfoFor(view); },
       prev: () => { findPrevious(view); return matchInfoFor(view); },
       close: () => {
@@ -142,7 +147,7 @@ export function CodeEditor({
     // match update immediately.
     const snap = findAtMount.current;
     if (snap.open && snap.query) {
-      applyEditorQuery(view, snap.query, snap.wholeWord);
+      applyEditorQuery(view, snap.query, snap.wholeWord, snap.caseSensitive);
     }
     if (!renamingAtMountRef.current) view.focus();
 
@@ -155,7 +160,7 @@ export function CodeEditor({
   // Mount once per `{format}` change; initialContent and onChange are
   // captured via refs so they don't trigger re-mounts.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [format]);
+  }, [format, name]);
 
   // Re-focus the editor when an inline rename ends (commit or cancel).
   useEffect(() => {
@@ -192,10 +197,10 @@ export function CodeEditor({
 /** Push a new SearchQuery and land selection on the first match at or
  *  after the current cursor. Returns the post-jump match info so the
  *  find bar's counter reflects the visible "N of M". */
-function applyEditorQuery(view: EditorView, q: string, wholeWord: boolean): MatchInfo {
+function applyEditorQuery(view: EditorView, q: string, wholeWord: boolean, caseSensitive: boolean): MatchInfo {
   const query = new SearchQuery({
     search: q,
-    caseSensitive: false,
+    caseSensitive,
     regexp: false,
     wholeWord,
   });
@@ -222,4 +227,57 @@ function matchInfoFor(view: EditorView): MatchInfo {
     if (r.value.from === sel.from && r.value.to === sel.to) current = total;
   }
   return { current, total };
+}
+
+function insertMarkdownLink(view: EditorView): boolean {
+  const target = window.prompt('Link target: note.md, folder/note.md#heading, #heading, or https://...');
+  if (target == null) return true;
+  const href = target.trim();
+  if (!href) return true;
+  const sel = view.state.selection.main;
+  const selected = view.state.sliceDoc(sel.from, sel.to);
+  const text = selected || 'link text';
+  const inserted = `[${text}](${href})`;
+  const textFrom = sel.from + 1;
+  const textTo = textFrom + text.length;
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert: inserted },
+    selection: selected ? { anchor: sel.from + inserted.length } : { anchor: textFrom, head: textTo },
+  });
+  view.focus();
+  return true;
+}
+
+function insertHtmlLink(view: EditorView): boolean {
+  const target = window.prompt('Link target: note.md, folder/note.md#heading, #heading, or https://...');
+  if (target == null) return true;
+  const href = target.trim();
+  if (!href) return true;
+  const sel = view.state.selection.main;
+  const selected = view.state.sliceDoc(sel.from, sel.to);
+  const text = selected || 'link text';
+  const inserted = `<a href="${escapeHtmlAttr(href)}">${escapeHtmlText(text)}</a>`;
+  const textFrom = sel.from + `<a href="${escapeHtmlAttr(href)}">`.length;
+  const textTo = textFrom + escapeHtmlText(text).length;
+  view.dispatch({
+    changes: { from: sel.from, to: sel.to, insert: inserted },
+    selection: selected ? { anchor: sel.from + inserted.length } : { anchor: textFrom, head: textTo },
+  });
+  view.focus();
+  return true;
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }

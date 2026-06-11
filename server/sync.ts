@@ -150,6 +150,11 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
         failed.push({ name: r.new, error: `path not under synced space "${space}"` });
         continue;
       }
+      const tooLarge = indexableFileSizeError(path.join(getKbRoot(), r.new));
+      if (tooLarge) {
+        failed.push({ name: r.new, error: tooLarge });
+        continue;
+      }
       const content = readTextAtKbRel(r.new);
       if (content == null) {
         failed.push({ name: r.new, error: 'read returned null on rename target' });
@@ -271,6 +276,13 @@ async function indexOne(
   }
   if (!shouldIndexFilePath(spaceRel)) {
     try { await indexer.deleteFile(kbRel); } catch { /* best-effort stale cleanup */ }
+    return false;
+  }
+  const tooLarge = indexableFileSizeError(path.join(getKbRoot(), kbRel));
+  if (tooLarge) {
+    try { await indexer.deleteFile(kbRel); } catch { /* best-effort stale cleanup */ }
+    failed.push({ name: kbRel, error: tooLarge });
+    log.warn(`skipped ${kbRel}: ${tooLarge}`);
     return false;
   }
   const content = readTextAtKbRel(kbRel);

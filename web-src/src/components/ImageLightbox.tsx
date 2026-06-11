@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 
 interface ImageLightboxProps {
   src: string;
@@ -9,6 +9,7 @@ interface ImageLightboxProps {
 export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: number; x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -30,18 +31,41 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
+  // React's delegated wheel events are not reliable for blocking the
+  // browser's default scroll/zoom behavior in Electron. Match ImagePreview:
+  // bind a native passive:false listener directly to the stage.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      setScale((v) => {
+        const next = clamp(v * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+        if (next <= 1) {
+          setOffset({ x: 0, y: 0 });
+          dragRef.current = null;
+        }
+        return next;
+      });
+    }
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   function zoomBy(factor: number) {
-    setScale((v) => clamp(v * factor));
+    setScale((v) => {
+      const next = clamp(v * factor);
+      if (next <= 1) {
+        setOffset({ x: 0, y: 0 });
+        dragRef.current = null;
+      }
+      return next;
+    });
   }
 
   function reset() {
     setScale(1);
     setOffset({ x: 0, y: 0 });
-  }
-
-  function onWheel(e: WheelEvent) {
-    e.preventDefault();
-    zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12);
   }
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
@@ -74,8 +98,8 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
         <button type="button" onClick={onClose}>Close</button>
       </div>
       <div
+        ref={stageRef}
         className={'image-lightbox-stage' + (scale > 1 ? ' pannable' : '')}
-        onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

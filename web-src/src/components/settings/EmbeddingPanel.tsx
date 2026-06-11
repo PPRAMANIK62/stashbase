@@ -7,10 +7,12 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage, type EmbedderState } from '../../api';
+import { useApp } from '../../store/AppContext';
 import { KeyModal } from '../embedder/KeyModal';
 import { RemoveKeyModal } from '../embedder/RemoveKeyModal';
 
 export function EmbeddingPanel() {
+  const { state: appState, dispatch } = useApp();
   const [state, setState] = useState<EmbedderState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadNonce, setLoadNonce] = useState(0);
@@ -41,6 +43,7 @@ export function EmbeddingPanel() {
     await api.changeApiKey(key);
     setKeyEditOpen(false);
     setState((s) => (s ? { ...s, hasKey: true } : s));
+    dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
   }
 
   async function addKeySubmit() {
@@ -55,6 +58,7 @@ export function EmbeddingPanel() {
       await api.changeApiKey(trimmed);
       setAddKey('');
       setState((s) => (s ? { ...s, hasKey: true } : s));
+      dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
     } catch (err: unknown) {
       setAddError(errorMessage(err));
     } finally {
@@ -66,6 +70,13 @@ export function EmbeddingPanel() {
     await api.removeApiKey();
     setKeyRemoveOpen(false);
     setState((s) => (s ? { ...s, hasKey: false } : s));
+    dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: false });
+    if (appState.searchMode === 'semantic' && appState.filterQuery.trim()) {
+      dispatch({
+        type: 'SEARCH_ERROR',
+        error: 'Semantic search is disabled until you add an OpenAI API key. Switch to keyword search to search without embeddings.',
+      });
+    }
   }
 
   if (loadError) {

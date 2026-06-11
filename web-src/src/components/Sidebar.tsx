@@ -321,6 +321,7 @@ function SpaceMenu() {
 
   function openModal(kind: 'new' | 'rename' | 'switch') {
     setError(null);
+    setAnchor(null);
     if (kind === 'switch') void loadSpaces();
     setModal({ kind, name: kind === 'rename' ? current : '' });
   }
@@ -409,7 +410,7 @@ function SpaceMenu() {
       >⋯</button>
       {anchor && <Menu anchor={{ rect: anchor }} items={items} onClose={() => setAnchor(null)} />}
       {modal && (
-        <ModalShell onCancel={busy ? () => {} : () => setModal(null)}>
+        <ModalShell top onCancel={busy ? () => {} : () => setModal(null)}>
           <h3>{modal.kind === 'new' ? 'New space' : modal.kind === 'rename' ? 'Rename space' : 'Switch space'}</h3>
           {modal.kind === 'switch' ? (
             spaces.length === 0 ? (
@@ -435,6 +436,7 @@ function SpaceMenu() {
               type="text"
               className="modal-input"
               autoFocus
+              onFocus={(e) => e.currentTarget.select()}
               spellCheck={false}
               value={modal.name}
               disabled={busy}

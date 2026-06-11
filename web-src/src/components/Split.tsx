@@ -74,7 +74,7 @@ export function Split({
 
   const previewHtml = useMemo(() => {
     if (format === 'md') return injectAssetBase(renderMarkdown(previewSource), assetBaseUrl(name));
-    return injectAssetBase(withScrollBootstrap(previewSource), assetBaseUrl(name));
+    return injectAssetBase(withScrollBootstrap(previewSource, name), assetBaseUrl(name));
   }, [previewSource, format, name]);
 
   // HTML preview is driven by a blob URL so the live buffer can render
@@ -132,6 +132,10 @@ export function Split({
     if (!iframe) return;
     let installedDoc: Document | null = null;
 
+    function handleClick(e: Event) {
+      previewClickHandler(e, name);
+    }
+
     function attach() {
       const doc = iframe?.contentDocument;
       if (!doc || installedDoc === doc) return;
@@ -139,7 +143,7 @@ export function Split({
       for (const img of Array.from(doc.images)) {
         img.dataset.stashbasePreviewable = 'true';
       }
-      doc.addEventListener('click', previewClickHandler);
+      doc.addEventListener('click', handleClick);
       loadedHtmlRef.current = previewHtml;
       applyPendingScroll();
     }
@@ -148,7 +152,7 @@ export function Split({
     if (iframe.contentDocument?.readyState === 'complete') attach();
     return () => {
       iframe.removeEventListener('load', attach);
-      installedDoc?.removeEventListener('click', previewClickHandler);
+      installedDoc?.removeEventListener('click', handleClick);
     };
   }, [previewHtml, format, applyPendingScroll]);
 
@@ -217,6 +221,7 @@ export function Split({
           // Re-mount on file/format change so CM picks up the new
           // initial content cleanly without any state migration.
           key={`${name}|${format}`}
+          name={name}
           initialContent={initialContent}
           format={format}
           onChange={onEditorChange}

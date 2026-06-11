@@ -53,9 +53,9 @@ export interface OpenFile {
    *  string for binary files (PDF / image; the viewer loads them
    *  directly from `/asset/*`). */
   content: string;
-  /** `'kb'` for the `<kbRoot>/STASHBASE.md` special tab — read-only,
-   *  no edit button, no save path. Default (omitted) means a regular
-   *  per-space file. */
+  /** `'kb'` for Knowledge base files (`<kbRoot>/STASHBASE.md` and
+   *  `<kbRoot>/.stashbase/space-metadata.md`). Default (omitted)
+   *  means a regular per-space file. */
   kind?: 'space' | 'kb';
 }
 
@@ -232,8 +232,8 @@ export interface State {
 
   /** Which sidebar view is active. `'files'` shows the file tree +
    *  banners; `'search'` shows the search input + result list (input
-   *  visible only in this view). Not persisted — `initialState` and the
-   *  AppProvider always boot into `'files'` on launch. */
+   *  visible only in this view). AppProvider restores the last view from
+   *  localStorage on launch. */
   activeSidebarView: 'files' | 'search';
   /** Sidebar search input. Empty = blank search panel; non-empty =
    *  run search in whichever mode `searchMode` selects. */
@@ -264,6 +264,9 @@ export interface State {
    *  daemon error, not just "no matches"). Kept separate so the panel
    *  shows the error instead of a misleading empty "No matches". */
   searchError: string | null;
+  /** Global OpenAI key availability. `null` = not checked yet. Semantic
+   *  search is disabled when this is explicitly false. */
+  embedderHasKey: boolean | null;
 
   /** Non-null while the active space's most recent snapshot import
    *  surfaced a provider-mismatch warning. Cleared by user dismissal
@@ -305,6 +308,7 @@ export interface State {
   find: {
     open: boolean;
     query: string;
+    caseSensitive: boolean;
     wholeWord: boolean;
     current: number;
     total: number;
@@ -346,6 +350,7 @@ export const initialState: State = {
   keywordResult: null,
   searching: false,
   searchError: null,
+  embedderHasKey: null,
   snapshotWarning: null,
   conversionFailures: [],
   ctxMenu: null,
@@ -354,7 +359,7 @@ export const initialState: State = {
   modal: null,
   toasts: [],
   newFolderInputOpen: false,
-  find: { open: false, query: '', wholeWord: false, current: 0, total: 0 },
+  find: { open: false, query: '', caseSensitive: false, wholeWord: false, current: 0, total: 0 },
 };
 
 export type Action =
@@ -417,6 +422,7 @@ export type Action =
   | { type: 'SEARCH_ERROR'; error: string }
   | { type: 'SEARCH_CLEAR' }
   | { type: 'SEARCH_MODE'; mode: 'semantic' | 'keyword' }
+  | { type: 'EMBEDDER_KEY_STATE'; hasKey: boolean }
   | { type: 'SIDEBAR_VIEW'; view: 'files' | 'search' }
   | { type: 'SEARCH_CASE_STRICT'; strict: boolean }
   | { type: 'SEARCH_WHOLE_WORD'; on: boolean }
@@ -544,7 +550,7 @@ export function reducer(s: State, a: Action): State {
           ...s,
           tabs: [...s.tabs, tab],
           activeTabId: tab.id,
-          selectedPath: file.name,
+          selectedPath: file.kind === 'kb' ? s.selectedPath : file.name,
         };
       }
       return {
@@ -560,7 +566,7 @@ export function reducer(s: State, a: Action): State {
           // its existing preview/pinned status.
           ...(a.preview != null ? { preview: a.preview } : {}),
         }),
-        selectedPath: file.name,
+        selectedPath: file.kind === 'kb' ? s.selectedPath : file.name,
       };
     }
     case 'FILE_PATCH': {
@@ -721,6 +727,12 @@ export function reducer(s: State, a: Action): State {
       // Clear prior results so the renderer shows the new mode's empty
       // state immediately; runSearch will repopulate if a query is live.
       return { ...s, searchMode: a.mode, searchHits: null, keywordResult: null, searchError: null };
+    case 'EMBEDDER_KEY_STATE':
+      return {
+        ...s,
+        embedderHasKey: a.hasKey,
+        ...(a.hasKey ? {} : { searchHits: null }),
+      };
     case 'SIDEBAR_VIEW':
       return { ...s, activeSidebarView: a.view };
     case 'SEARCH_CASE_STRICT':

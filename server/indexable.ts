@@ -36,7 +36,7 @@ export const INDEX_EXCLUDED_DIRS = new Set<string>([
  *  Large books/PDF extracts should be split into separate notes; huge
  *  bundled HTML/Markdown usually indicates saved app output or source
  *  trees and can trip provider request limits. */
-export const MAX_INDEXABLE_BYTES = 2 * 1024 * 1024;
+export const MAX_INDEXABLE_BYTES = 600 * 1024;
 
 export function isIndexExcludedDirName(name: string): boolean {
   return INDEX_EXCLUDED_DIRS.has(name);

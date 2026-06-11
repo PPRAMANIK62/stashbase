@@ -20,12 +20,13 @@ import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { logger, errorMessage } from './log.ts';
 import { moveDirectory } from './fs-move.ts';
+import { isIndexExcludedDirName } from './indexable.ts';
 
 const log = logger('space');
 
 const CONFIG_DIR = path.join(os.homedir(), '.stashbase');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
-const MAX_RECENT = 10;
+const MAX_RECENT = 50;
 
 /** Default KB root: `~/Documents/StashBase/`. All spaces must live
  *  under this folder. Persisted in `config.json` so a future "change
@@ -149,11 +150,51 @@ export interface KbRootMigrationPreview {
  *  involve? Drives the migration dialog without touching anything. */
 export function previewKbRootMigration(targetPath: string): KbRootMigrationPreview {
   const oldRoot = getKbRoot();
-  const target = resolveRootPath(targetPath);
+  const target = validateKbRootTarget(targetPath);
   if (target === oldRoot) return { spaces: [], collisions: [], sameRoot: true };
   const spaces = listSpaceNamesUnder(oldRoot);
   const existing = new Set(listSpaceNamesUnder(target));
   return { spaces, collisions: spaces.filter((s) => existing.has(s)), sameRoot: false };
+}
+
+/** Validate a candidate KB root before any migration or config write.
+ *  Existing targets must be writable directories. Missing targets may be
+ *  created, but only as one final path segment under an existing writable
+ *  parent; this avoids turning typos like `/Volumes/Missing/StashBase`
+ *  into surprising recursive mkdir attempts. */
+export function validateKbRootTarget(absPath: string): string {
+  const root = resolveRootPath(absPath);
+  if (fs.existsSync(root)) {
+    let stat: fs.Stats;
+    try { stat = fs.statSync(root); } catch (err) { throwPathAccessError(root, err); }
+    if (!stat.isDirectory()) throw new Error('path is not a directory');
+    assertDirectoryAccess(root, 'directory');
+    return root;
+  }
+
+  const parent = path.dirname(root);
+  if (parent === root || !fs.existsSync(parent)) {
+    throw new Error('parent directory does not exist');
+  }
+  let parentStat: fs.Stats;
+  try { parentStat = fs.statSync(parent); } catch (err) { throwPathAccessError(parent, err); }
+  if (!parentStat.isDirectory()) throw new Error('parent path is not a directory');
+  assertDirectoryAccess(parent, 'parent directory');
+  return root;
+}
+
+function assertDirectoryAccess(dir: string, label: string): void {
+  try {
+    fs.accessSync(dir, fs.constants.R_OK | fs.constants.W_OK | fs.constants.X_OK);
+  } catch {
+    throw new Error(`${label} is not writable`);
+  }
+}
+
+function throwPathAccessError(target: string, err: unknown): never {
+  const code = (err as NodeJS.ErrnoException)?.code;
+  if (code === 'EACCES' || code === 'EPERM') throw new Error(`${target} is not accessible`);
+  throw err;
 }
 
 /** First free `"<base> N"` under `root` (N starts at 2), matching the
@@ -170,7 +211,7 @@ export async function setKbRoot(
   absPath: string,
   opts: { allowNonEmpty?: boolean; migrate?: MigrateEntry[] } = {},
 ): Promise<{ warnings: string[] }> {
-  const root = resolveRootPath(absPath);
+  const root = validateKbRootTarget(absPath);
   const oldRoot = getKbRoot();
   const migrate = opts.migrate ?? [];
   const migrating = migrate.length > 0;
@@ -189,6 +230,7 @@ export async function setKbRoot(
   }
   fs.mkdirSync(root, { recursive: true });
   if (!fs.statSync(root).isDirectory()) throw new Error('path is not a directory');
+  assertDirectoryAccess(root, 'directory');
 
   // Move spaces from the old root into the new one *before* switching —
   // `getKbRoot()` still points at the old root here, and each move is a
@@ -227,11 +269,13 @@ export async function setKbRoot(
     }
   }
   currentSpaces.clear();
-  await Promise.all(kbRootListeners.map(async (fn) => {
-    try { await fn(root); } catch (err) {
-      log.warn(`kbRoot listener threw: ${(err as any)?.message ?? err}`);
-    }
-  }));
+  for (const fn of kbRootListeners) {
+    void Promise.resolve()
+      .then(() => fn(root))
+      .catch((err) => {
+        log.warn(`kbRoot listener threw: ${(err as any)?.message ?? err}`);
+      });
+  }
   return { warnings };
 }
 
@@ -315,7 +359,11 @@ function listSpaceNamesUnder(root: string): string[] {
   try { entries = fs.readdirSync(root, { withFileTypes: true }); }
   catch { return []; }
   return entries
-    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && validateSpaceName(e.name) == null)
+    .filter((e) =>
+      e.isDirectory() &&
+      !e.name.startsWith('.') &&
+      !isIndexExcludedDirName(e.name) &&
+      validateSpaceName(e.name) == null)
     .map((e) => e.name)
     .sort();
 }

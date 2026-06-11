@@ -22,6 +22,7 @@ import {
 import {
   api,
   ApiError,
+  type SearchHit,
 } from '../api';
 import {
   getActiveTab,
@@ -59,6 +60,12 @@ export interface EditorHandle {
   focus: () => void;
 }
 
+const SEMANTIC_SEARCH_CANDIDATES = 30;
+const SEMANTIC_SEARCH_MAX_VISIBLE = 8;
+const SEMANTIC_MIN_TOP_RATIO = 0.8;
+const SEMANTIC_KNEE_DROP_RATIO = 0.18;
+const SEMANTIC_KNEE_TOP_RATIO = 0.88;
+
 /** Per-view find driver. Whichever view is currently rendered (CM
  *  editor, MD preview iframe, HTML preview iframe) registers one of
  *  these on mount so the global FindBar can drive search without
@@ -66,8 +73,9 @@ export interface EditorHandle {
  *  Promise — the HTML preview path is async because it round-trips
  *  through postMessage to the sandboxed iframe. */
 export interface MatchInfo { current: number; total: number; }
+export interface FindOptions { wholeWord: boolean; caseSensitive: boolean; }
 export interface FindController {
-  setQuery: (query: string, opts: { wholeWord: boolean }) => MatchInfo | Promise<MatchInfo>;
+  setQuery: (query: string, opts: FindOptions) => MatchInfo | Promise<MatchInfo>;
   next: () => MatchInfo | Promise<MatchInfo>;
   prev: () => MatchInfo | Promise<MatchInfo>;
   /** Tear down highlights / decorations. Called when the bar closes
@@ -91,7 +99,11 @@ export interface AppActions {
    *  when the caller has just dispatched `SEARCH_MODE` and can't rely
    *  on `stateRef` reflecting that yet (it updates after commit, not
    *  in-line with the dispatch). Default reads from state. */
-  runSearch: (query: string, mode?: 'semantic' | 'keyword') => Promise<void>;
+  runSearch: (
+    query: string,
+    mode?: 'semantic' | 'keyword',
+    opts?: { caseStrict?: boolean; wholeWord?: boolean },
+  ) => Promise<void>;
   /** Clear the active space's snapshot-import warning. Fires
    *  `/api/snapshot-warning/dismiss` so the warning doesn't reappear
    *  the next time `/api/index-status` polls. */
@@ -206,6 +218,7 @@ export interface AppActions {
    *  highlighted. Also called implicitly on space switch / tab close. */
   closeFind: () => void;
   setFindQuery: (q: string) => void;
+  toggleFindCaseSensitive: () => void;
   toggleFindWholeWord: () => void;
   findNext: () => void;
   findPrev: () => void;
@@ -246,18 +259,70 @@ function shallowEqualConversionFailures(
   );
 }
 
+function filterGuiSemanticHits(hits: SearchHit[]): SearchHit[] {
+  if (hits.length <= 1) return hits;
+  const top = hits[0]?.score ?? 0;
+  if (!Number.isFinite(top) || top <= 0) {
+    return hits.slice(0, SEMANTIC_SEARCH_MAX_VISIBLE);
+  }
+
+  let cutoff = Math.min(hits.length, SEMANTIC_SEARCH_MAX_VISIBLE);
+  for (let i = 1; i < hits.length; i++) {
+    const current = hits[i]?.score ?? 0;
+    const previous = hits[i - 1]?.score ?? top;
+    const topRatio = current / top;
+    const prevDrop = previous > 0 ? (previous - current) / previous : 0;
+
+    if (topRatio < SEMANTIC_MIN_TOP_RATIO) {
+      cutoff = Math.min(cutoff, i);
+      break;
+    }
+    if (i >= 2 && prevDrop >= SEMANTIC_KNEE_DROP_RATIO && topRatio < SEMANTIC_KNEE_TOP_RATIO) {
+      cutoff = Math.min(cutoff, i);
+      break;
+    }
+  }
+
+  return hits.slice(0, Math.max(1, cutoff));
+}
+
+function keywordFindCaseSensitive(query: string, caseStrict: boolean): boolean {
+  return caseStrict || query !== query.toLowerCase();
+}
+
+const SIDEBAR_VIEW_STORAGE_KEY = 'stashbase.sidebarView';
+
+function readPersistedSidebarView(): State['activeSidebarView'] {
+  if (typeof window === 'undefined') return 'files';
+  try {
+    const raw = window.localStorage.getItem(SIDEBAR_VIEW_STORAGE_KEY);
+    return raw === 'search' || raw === 'files' ? raw : 'files';
+  } catch {
+    return 'files';
+  }
+}
+
+function initialStateWithPersistedSidebarView(base: State): State {
+  return { ...base, activeSidebarView: readPersistedSidebarView() };
+}
+
+function isSpaceFileTab(t: { file: State['tabs'][number]['file'] }, name: string): boolean {
+  return t.file?.name === name && (t.file.kind ?? 'space') === 'space';
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  // Always boot into the Files view. Earlier we persisted the last
-  // sidebar view to localStorage so reload would land back where the
-  // user was, but the "what's in this space" tree is the canonical
-  // landing surface — search is a task the user enters on purpose, not
-  // a state to be restored. Resetting on launch matches user
-  // expectation ("打开应用默认选中文件") and side-steps the case where a
-  // stale `search` value persists past the user remembering they ever
-  // picked it.
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, initialStateWithPersistedSidebarView);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_VIEW_STORAGE_KEY, state.activeSidebarView);
+    } catch {
+      // Storage can be unavailable in private/sandboxed contexts; the
+      // current session still works normally.
+    }
+  }, [state.activeSidebarView]);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -567,7 +632,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  caller that just dispatched `SEARCH_MODE` and synchronously calls
    *  `runSearch` would otherwise read the stale mode and fire the
    *  wrong API. Mode-toggle callers pass the new mode explicitly. */
-  const runSearch = useCallback(async (query: string, modeOverride?: 'semantic' | 'keyword') => {
+  const runSearch = useCallback(async (
+    query: string,
+    modeOverride?: 'semantic' | 'keyword',
+    opts?: { caseStrict?: boolean; wholeWord?: boolean },
+  ) => {
     const myGen = ++searchGen.current;
     const q = query.trim();
     if (!q) {
@@ -585,16 +654,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // wrong space in multi-window sessions.
         const s = stateRef.current;
         const result = await api.keywordSearch(q, {
-          caseStrict: s.caseStrict,
-          wholeWord: s.wholeWord,
+          caseStrict: opts?.caseStrict ?? s.caseStrict,
+          wholeWord: opts?.wholeWord ?? s.wholeWord,
           space: s.space || undefined,
         });
         if (myGen !== searchGen.current) return;
         dispatch({ type: 'SEARCH_KEYWORD', result });
       } else {
-        const { hits } = await api.search(q, 15);
+        const embedder = await api.getEmbedder();
         if (myGen !== searchGen.current) return;
-        dispatch({ type: 'SEARCH_HITS', hits });
+        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.hasKey });
+        if (!embedder.hasKey) {
+          dispatch({
+            type: 'SEARCH_ERROR',
+            error: 'Semantic search is disabled until you add an OpenAI API key. Switch to keyword search to search without embeddings.',
+          });
+          return;
+        }
+        const { hits } = await api.search(q, SEMANTIC_SEARCH_CANDIDATES);
+        if (myGen !== searchGen.current) return;
+        dispatch({ type: 'SEARCH_HITS', hits: filterGuiSemanticHits(hits) });
       }
     } catch (err) {
       if (myGen !== searchGen.current) return;
@@ -619,11 +698,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cur = getActiveTab(stateRef.current)?.file ?? null;
     const handle = editorRef.current;
     if (!cur || !handle) return;
-    // KB-overview tab is read-only — even if a CodeMirror handle
-    // is registered (edit button hidden but defense-in-depth), don't
-    // ever PUT it back to /api/files/STASHBASE.md (which would resolve
-    // inside the current space, not at kbRoot).
-    if (cur.kind === 'kb') return;
     const content = handle.getValue();
     if (content === cur.content) {
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
@@ -631,10 +705,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
     try {
-      await api.putFile(cur.name, content);
+      if (cur.kind === 'kb') {
+        if (cur.name === 'STASHBASE.md') await api.putKbRules(content);
+        else if (cur.name === 'space-metadata.md') await api.putKbOverview(content);
+        else throw new Error(`unknown KB file: ${cur.name}`);
+      } else {
+        await api.putFile(cur.name, content);
+      }
       dispatch({ type: 'FILE_PATCH', patch: { content } });
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
-      void loadFiles();
+      if (cur.kind !== 'kb') void loadFiles();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + msg, cls: 'error' } });
@@ -763,7 +843,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // concurrent poll / loadFiles could invalidate across the await.
     if (editorRef.current) await flushSave();
     const s = stateRef.current;
-    const existing = s.tabs.find((t) => t.file?.name === name);
+    const existing = s.tabs.find((t) => isSpaceFileTab(t, name));
     if (existing) {
       if (s.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
       return;
@@ -803,7 +883,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // pending query and primes the new controller immediately —
     // matches show up without the user re-typing.
     if (hit.openFindBar && hit.chunkText) {
-      dispatch({ type: 'FIND_SET', patch: { query: hit.chunkText } });
+      const s = stateRef.current;
+      dispatch({
+        type: 'FIND_SET',
+        patch: {
+          query: hit.chunkText,
+          wholeWord: s.wholeWord,
+          caseSensitive: keywordFindCaseSensitive(hit.chunkText, s.caseStrict),
+        },
+      });
       dispatch({ type: 'FIND_OPEN' });
     }
   }, [selectFile]);
@@ -815,7 +903,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const openInNewTab = useCallback(async (name: string) => {
     if (editorRef.current) await flushSave();
     const s = stateRef.current;
-    const existing = s.tabs.find((t) => t.file?.name === name);
+    const existing = s.tabs.find((t) => isSpaceFileTab(t, name));
     if (existing) {
       if (s.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
       if (existing.preview) dispatch({ type: 'PROMOTE_TAB', id: existing.id });
@@ -829,8 +917,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'NEW_TAB' });
   }, [flushSave]);
 
-  /** Open some markdown as a kb-kind tab whose name matches the on-disk
-   *  filename (so the user reads "STASHBASE.md" exactly, no aliasing).
+  /** Open some markdown as an editable kb-kind tab whose name matches
+   *  the on-disk filename (so the user reads "STASHBASE.md" exactly).
    *  Tab dedup is by `name` since the KB-scope files coexist in the
    *  same kind. */
   const openKbFile = useCallback(async (name: string, fetcher: () => Promise<{ content: string }>) => {
@@ -933,9 +1021,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (prev && prev !== c) prev.close();
     findCtlRef.current = c;
     if (c) {
-      const { query, wholeWord, open } = stateRef.current.find;
+      const { query, wholeWord, caseSensitive, open } = stateRef.current.find;
       if (open && query) {
-        void applyMatchInfo(c.setQuery(query, { wholeWord }));
+        void applyMatchInfo(c.setQuery(query, { wholeWord, caseSensitive }));
       }
     }
   }, []);
@@ -956,7 +1044,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'FIND_SET', patch: { current: 0, total: 0 } });
       return;
     }
-    void applyMatchInfo(ctl.setQuery(q, { wholeWord: stateRef.current.find.wholeWord }));
+    const { wholeWord, caseSensitive } = stateRef.current.find;
+    void applyMatchInfo(ctl.setQuery(q, { wholeWord, caseSensitive }));
+  }, []);
+
+  const toggleFindCaseSensitive = useCallback(() => {
+    const next = !stateRef.current.find.caseSensitive;
+    dispatch({ type: 'FIND_SET', patch: { caseSensitive: next } });
+    const ctl = findCtlRef.current;
+    if (!ctl) return;
+    const { query, wholeWord } = stateRef.current.find;
+    void applyMatchInfo(ctl.setQuery(query, { wholeWord, caseSensitive: next }));
   }, []);
 
   const toggleFindWholeWord = useCallback(() => {
@@ -964,7 +1062,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'FIND_SET', patch: { wholeWord: next } });
     const ctl = findCtlRef.current;
     if (!ctl) return;
-    void applyMatchInfo(ctl.setQuery(stateRef.current.find.query, { wholeWord: next }));
+    const { query, caseSensitive } = stateRef.current.find;
+    void applyMatchInfo(ctl.setQuery(query, { wholeWord: next, caseSensitive }));
   }, []);
 
   const findNext = useCallback(() => {
@@ -1117,13 +1216,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
+    const before = stateRef.current;
+    const stale = before.tabs.filter((t) => isSpaceFileTab(t, name));
+    for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+    dispatch({
+      type: 'FILES_LOADED',
+      files: before.files.filter((f) => f.name !== name),
+      folders: before.folders,
+      space: before.space,
+    });
     try {
       await api.deleteFile(name);
-      // Close every tab that was showing the deleted file.
-      const stale = stateRef.current.tabs.filter((t) => t.file?.name === name);
-      for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       await loadFiles();
     } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 404) {
+        await loadFiles();
+        return;
+      }
+      await loadFiles();
       toast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [loadFiles, showAlert, askConfirm]);
@@ -1131,14 +1241,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteFolder = useCallback(async (path: string) => {
     if (!path) return;
     if (!(await askConfirm(`Delete folder "${path}" and everything inside?`))) return;
+    const before = stateRef.current;
+    const stale = before.tabs.filter(
+      (t) => t.file && t.file.name.startsWith(path + '/'),
+    );
+    for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+    const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    if (before.activeFolder === path || before.activeFolder.startsWith(path + '/')) {
+      dispatch({ type: 'ACTIVE_FOLDER', path: parent });
+    }
+    if (before.selectedPath === path || before.selectedPath.startsWith(path + '/')) {
+      dispatch({ type: 'SELECT_PATH', path: parent });
+    }
+    dispatch({
+      type: 'FILES_LOADED',
+      files: before.files.filter((f) => !f.name.startsWith(path + '/')),
+      folders: before.folders.filter((f) => f.path !== path && !f.path.startsWith(path + '/')),
+      space: before.space,
+    });
     try {
       await api.deleteFolder(path);
-      const stale = stateRef.current.tabs.filter(
-        (t) => t.file && t.file.name.startsWith(path + '/'),
-      );
-      for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       await loadFiles();
     } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 404) {
+        await loadFiles();
+        return;
+      }
+      await loadFiles();
       toast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
   }, [loadFiles, showAlert, askConfirm]);
@@ -1231,11 +1360,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cascade = await askCascadeForRename('file', oldPath, newPath);
     if (cascade === null) return;
     try {
-      const j = await api.renameFile(oldPath, newPath, { cascade });
+      const j = await api.renameFile(oldPath, newPath, { cascade, asyncIndex: true });
       const cur = getActiveTab(stateRef.current)?.file;
       if (cur?.name === oldPath) dispatch({ type: 'FILE_PATCH', patch: { name: j.name } });
       if (targetDir) dispatch({ type: 'EXPAND_FOLDER', path: targetDir });
       await loadFiles();
+      if (j.indexWarning) {
+        toast('Moved. ' + j.indexWarning, { level: 'warning' });
+      } else if (j.indexDeferred) {
+        toast('Moved. Updating semantic index in the background.', { level: 'info' });
+      }
     } catch (e: unknown) {
       toast('Move failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
@@ -1459,14 +1593,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const goHome = useCallback(() => {
     resetSpaceScopedState();
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: '' });
-    // Show immediately with the in-memory list (snappy), then refresh from
-    // the server: a space just created via New / Import won't be in the
-    // stale `state.recent` captured at bootstrap, so without this the
-    // Welcome pills don't update until an app restart.
-    dispatch({ type: 'WELCOME_SHOW', recent: stateRef.current.recent });
+    // Recent entries can disappear or move outside kbRoot while a space
+    // is open. Show Welcome immediately, but wait for the server-filtered
+    // list before rendering pills so stale paths don't flash or stick.
+    dispatch({ type: 'WELCOME_SHOW', recent: [] });
     void api.getSpace()
       .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
-      .catch(() => { /* keep the in-memory list if the refresh fails */ });
+      .catch(() => { /* keep the empty list if the refresh fails */ });
   }, [resetSpaceScopedState]);
 
   const bootstrap = useCallback(async () => {
@@ -1512,7 +1645,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     registerEditor,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
-    toggleFindWholeWord, findNext, findPrev,
+    toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   }), [
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
@@ -1529,7 +1662,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     registerEditor,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
-    toggleFindWholeWord, findNext, findPrev,
+    toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   ]);
 
   // Bootstrap + start polling on first mount.

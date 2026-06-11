@@ -48,6 +48,14 @@ export function getFsChangeCounter(): number {
   return fsChangeCounter;
 }
 
+/** Notify renderers that an app-initiated write changed the visible
+ *  file tree. Self-writes are deliberately ignored by fs.watch to
+ *  avoid redundant sync sweeps, so routes that create/delete files
+ *  themselves call this after the disk operation. */
+export function noteTreeChanged(): void {
+  fsChangeCounter++;
+}
+
 /** Wire one indexer's sync to fs.watch events on the current space.
  *  Re-binds whenever the user switches spaces. Safe to call multiple
  *  times (idempotent registration of the onSwitch listener — only do
@@ -77,6 +85,7 @@ export function noteSelfWrite(absPath: string): void {
 function bindToSpace(indexer: Indexer, root: string | null, windowId: string): void {
   if (root === watchedRoots.get(windowId)) return;
   closeWindow(windowId);
+  fsChangeCounter = 0;
   if (root) watchedRoots.set(windowId, root);
   if (!root) return;
   try {

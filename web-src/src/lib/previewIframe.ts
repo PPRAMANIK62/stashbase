@@ -29,7 +29,7 @@ export function injectAssetBase(html: string, baseHref: string): string {
  *  fired inside the iframe carry elements from the iframe's separate JS
  *  realm (the parent's `Element` constructor won't match even with
  *  `allow-same-origin`). */
-export function previewClickHandler(e: Event): void {
+export function previewClickHandler(e: Event, currentPath?: string): void {
   const target = e.target as (Element & { closest?: typeof Element.prototype.closest }) | null;
   if (!target || typeof target.closest !== 'function') return;
   const img = target.closest('img') as HTMLImageElement | null;
@@ -41,12 +41,19 @@ export function previewClickHandler(e: Event): void {
     return;
   }
   const anchor = target.closest('a') as HTMLAnchorElement | null;
-  if (anchor) forwardAnchorClick(anchor, e);
+  if (anchor) forwardAnchorClick(anchor, e, currentPath);
 }
 
-function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event): void {
+function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: string): void {
   const raw = anchor.getAttribute('href');
-  if (!raw || raw.startsWith('#')) return; // in-doc anchor → let the iframe handle it
+  if (!raw) return;
+  if (raw.startsWith('#')) {
+    const hash = raw.slice(1);
+    if (!currentPath || !hash) return; // in-doc anchor without app context → let iframe handle it
+    e.preventDefault();
+    window.postMessage({ type: 'stashbase-nav', path: currentPath, anchor: hash }, window.location.origin);
+    return;
+  }
   // `anchor.href` is browser-resolved against the iframe's `<base>`.
   let url: URL;
   try { url = new URL(anchor.href, window.location.href); } catch { return; }

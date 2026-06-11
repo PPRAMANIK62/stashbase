@@ -4,7 +4,7 @@ import { useApp } from '../store/AppContext';
 
 /**
  * The "search" sidebar view — owns the search input, the mode toggle
- * (≈ ↔ =) with conditional `Aa` / `ab` sub-filters when in keyword
+ * (≈ ↔ =) with conditional `Aa` / `Word` sub-filters when in keyword
  * mode, and the result list.
  *
  * Empty query → empty body (no "Recent searches" prompt yet — that's
@@ -35,7 +35,7 @@ export function SearchPanel() {
   );
 }
 
-/** Input + ≈/= mode flip + (keyword-only) Aa / ab sub-toggles. The
+/** Input + ≈/= mode flip + (keyword-only) Aa / Word sub-toggles. The
  *  mode flip swaps the icon based on current mode so the button
  *  doubles as a state indicator. */
 function SearchBox() {
@@ -77,6 +77,7 @@ function SearchBox() {
   }
 
   function flipMode() {
+    if (state.searchMode === 'keyword' && state.embedderHasKey === false) return;
     const next = state.searchMode === 'semantic' ? 'keyword' : 'semantic';
     dispatch({ type: 'SEARCH_MODE', mode: next });
     if (state.filterQuery.trim()) {
@@ -97,6 +98,7 @@ function SearchBox() {
   }
 
   const isKeyword = state.searchMode === 'keyword';
+  const semanticDisabled = state.embedderHasKey === false;
 
   return (
     <div className="side-search">
@@ -129,22 +131,27 @@ function SearchBox() {
             </button>
             <button
               type="button"
-              className={'side-search-mode-btn ab-toggle' + (state.wholeWord ? ' active' : '')}
+              className={'side-search-mode-btn word-toggle' + (state.wholeWord ? ' active' : '')}
               onClick={toggleWholeWord}
               aria-label="Match whole word"
               aria-pressed={state.wholeWord}
-              title="Match Whole Word"
+              title="Whole word"
             >
-              ab
+              Word
             </button>
           </>
         )}
         <button
           type="button"
-          className="side-search-mode-btn side-search-mode-flip"
+          className={'side-search-mode-btn side-search-mode-flip' + (semanticDisabled && isKeyword ? ' disabled' : '')}
           onClick={flipMode}
+          disabled={semanticDisabled && isKeyword}
           aria-label={isKeyword ? 'Switch to semantic search' : 'Switch to keyword search'}
-          title={isKeyword ? 'Keyword search · click for semantic' : 'Semantic search · click for keyword'}
+          title={
+            isKeyword
+              ? semanticDisabled ? 'Semantic search disabled until you add an OpenAI API key' : 'Keyword search · click for semantic'
+              : 'Semantic search · click for keyword'
+          }
         >
           {isKeyword ? '=' : '≈'}
         </button>
@@ -157,6 +164,9 @@ function SearchResults({ query }: { query: string }) {
   const { state } = useApp();
   // A real failure (server / daemon error) — distinct from "no matches".
   if (state.searchError) {
+    if (state.searchError.startsWith('Semantic search is disabled')) {
+      return <div className="empty-list">{state.searchError}</div>;
+    }
     return <div className="empty-list search-failed">Search failed: {state.searchError}</div>;
   }
   if (state.searchMode === 'keyword') {

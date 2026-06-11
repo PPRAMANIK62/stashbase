@@ -328,15 +328,15 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 // the user opens the panel again.
 onSwitch((newRoot, windowId) => {
   killActiveAgent(windowId);
-  switchSpaceMcpServers(windowId, newRoot);
+  void switchSpaceMcpServers(windowId, newRoot);
 });
 onClose((_oldRoot, windowId) => {
   killActiveAgent(windowId);
-  stopSpaceMcpServers(windowId);
+  void stopSpaceMcpServers(windowId);
 });
 onKbRootChange(async () => {
   stopWatcher();
-  stopSpaceMcpServers();
+  await stopSpaceMcpServers();
   killActiveAgent();
   await indexer.close();
   closeStateDb();
@@ -394,7 +394,7 @@ async function shutdown(reason: string): Promise<void> {
   // Stop accepting new connections immediately; in-flight ones drain.
   try { server.close(); } catch { /* already gone */ }
   try { stopWatcher(); } catch { /* swallow */ }
-  try { stopSpaceMcpServers(); } catch { /* swallow */ }
+  try { await stopSpaceMcpServers(); } catch { /* swallow */ }
   try { closeStateDb(); } catch { /* swallow */ }
   // Hard ceiling: if the indexer's close ladder can't unstick the
   // Python child in 4 s, exit anyway. The daemon's own kill ladder

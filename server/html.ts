@@ -112,6 +112,7 @@ function addScrollBootstrap(html: string): string {
   var matches = [];
   var cursor = -1;
   var query = '';
+  var caseSensitive = false;
   var wholeWord = false;
 
   function ensureStyle() {
@@ -119,7 +120,7 @@ function addScrollBootstrap(html: string): string {
     var s = document.createElement('style');
     s.id = STYLE_ID;
     s.textContent = '::highlight(' + HL_ALL + ') { background: #ffe082; color: inherit; }' +
-                    '::highlight(' + HL_CUR + ') { background: #ff9800; color: #fff; }' +
+                    '::highlight(' + HL_CUR + ') { background: #1a73e8; color: #fff; }' +
                     '::highlight(stashbase-chunk) { background: rgba(46, 116, 230, 0.18); ' +
                     'box-shadow: 0 0 0 2px rgba(46, 116, 230, 0.45); border-radius: 2px; }';
     document.head.appendChild(s);
@@ -128,7 +129,7 @@ function addScrollBootstrap(html: string): string {
     if (!q) return null;
     var escaped = q.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
     var body = ww ? '(?<![\\\\p{L}\\\\p{N}_])' + escaped + '(?![\\\\p{L}\\\\p{N}_])' : escaped;
-    try { return new RegExp(body, 'giu'); } catch (_) { return null; }
+    try { return new RegExp(body, caseSensitive ? 'gu' : 'giu'); } catch (_) { return null; }
   }
   function rebuild() {
     matches = [];
@@ -173,25 +174,22 @@ function addScrollBootstrap(html: string): string {
   }
   function scrollToCurrent() {
     if (cursor < 0 || !matches[cursor]) return;
-    var probe = document.createElement('span');
-    probe.setAttribute('data-stashbase-find-probe', '1');
+    var rects = Array.prototype.slice.call(matches[cursor].getClientRects())
+      .filter(function(rect) { return rect.width > 0 && rect.height > 0; });
+    var rect = rects[0] || matches[cursor].getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) return;
     try {
-      matches[cursor].insertNode(probe);
-      probe.scrollIntoView({ behavior: 'auto', block: 'center' });
+      window.scrollBy({
+        top: rect.top + rect.height / 2 - window.innerHeight / 2,
+        left: rect.left + rect.width / 2 - window.innerWidth / 2,
+        behavior: 'auto'
+      });
     } catch (_) {}
-    var parent = probe.parentNode;
-    probe.remove();
-    if (parent) {
-      parent.normalize();
-      // normalize() invalidates the cached ranges — re-walk so the next
-      // step lands on the right node.
-      rebuild();
-      if (cursor >= matches.length) cursor = matches.length - 1;
-    }
   }
-  function setQuery(q, ww) {
+  function setQuery(q, ww, cs) {
     query = q || '';
     wholeWord = !!ww;
+    caseSensitive = !!cs;
     ensureStyle();
     rebuild();
     cursor = matches.length > 0 ? 0 : -1;
@@ -230,53 +228,110 @@ function addScrollBootstrap(html: string): string {
     if (chunkHlTimer) { clearTimeout(chunkHlTimer); chunkHlTimer = null; }
     if (window.CSS && CSS.highlights) CSS.highlights.delete(HL_CHUNK);
   }
-  // Walk text nodes searching for the first occurrence of the needle,
-  // returning a Range that spans it (or null). Whitespace-collapsing
-  // is applied on both sides so chunk text that came through the
-  // markdown-style flattener still finds its rendered counterpart.
-  function findTextRange(needle) {
-    if (!needle) return null;
-    var norm = function(s) { return (s || '').replace(/\\s+/g, ' ').trim(); };
-    needle = norm(needle).slice(0, 80);
-    if (!needle) return null;
-    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-    var node;
-    while ((node = walker.nextNode())) {
-      var txt = norm(node.nodeValue);
-      var idx = txt.indexOf(needle);
-      if (idx >= 0) {
-        // Re-locate the substring in the unnormalised nodeValue so the
-        // Range offsets line up with on-page characters.
-        var raw = node.nodeValue;
-        var k = 0; var seen = 0; var start = -1;
-        while (k < raw.length && start < 0) {
-          var ws = /\\s/.test(raw[k]);
-          if (!ws || (seen > 0 && raw[k - 1] && !/\\s/.test(raw[k - 1]))) {
-            if (seen === idx) { start = k; break; }
-            seen++;
-          }
-          k++;
-        }
-        if (start < 0) start = 0;
-        var end = Math.min(raw.length, start + needle.length);
-        var r = document.createRange();
-        try {
-          r.setStart(node, start);
-          r.setEnd(node, end);
-          return r;
-        } catch (_) { /* fall through */ }
+  function normalizeChunkText(s) {
+    return (s || '')
+      .replace(/[‐-―−]/g, '-')
+      .replace(/[‘’]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/[  ​]/g, ' ')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  }
+  function cleanChunkText(s) {
+    var tick = String.fromCharCode(96);
+    return normalizeChunkText(s)
+      .replace(new RegExp(tick + tick + tick + '[\\\\s\\\\S]*?' + tick + tick + tick, 'g'), ' ')
+      .replace(new RegExp(tick + '([^' + tick + ']+)' + tick, 'g'), '$1')
+      .replace(/!\\[[^\\]]*\\]\\([^)]*\\)/g, ' ')
+      .replace(/\\[([^\\]]+)\\]\\([^)]*\\)/g, '$1')
+      .replace(/\\*\\*([^*]+)\\*\\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/(^|\\s)[*_]([^\\s*_][^*_]*?)[*_](?=\\s|$|[.,;:])/g, '$1$2')
+      .replace(/^#{1,6}\\s+/gm, '')
+      .replace(/^>\\s+/gm, '')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  }
+  function chunkAnchors(raw) {
+    var cleaned = cleanChunkText(raw);
+    if (!cleaned) return [];
+    var slice = 80;
+    var mid = Math.max(0, Math.floor(cleaned.length / 2) - Math.floor(slice / 2));
+    var tail = Math.max(0, cleaned.length - slice);
+    var minLen = Math.min(12, cleaned.length);
+    var seen = {};
+    return [cleaned.slice(0, slice), cleaned.slice(mid, mid + slice), cleaned.slice(tail)]
+      .map(normalizeChunkText)
+      .filter(function(anchor) {
+        if (anchor.length < minLen || seen[anchor]) return false;
+        seen[anchor] = true;
+        return true;
+      });
+  }
+  function charLengthAt(text, offset) {
+    var code = text.charCodeAt(offset);
+    return code >= 0xd800 && code <= 0xdbff && offset + 1 < text.length ? 2 : 1;
+  }
+  function flattenDocumentText() {
+    var text = '';
+    var points = [];
+    var lastWasSpace = true;
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n) {
+        var t = n.parentElement && n.parentElement.tagName;
+        if (t === 'SCRIPT' || t === 'STYLE' || t === 'NOSCRIPT') return NodeFilter.FILTER_REJECT;
+        if (!n.nodeValue) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
       }
+    });
+    for (var node = walker.nextNode(); node; node = walker.nextNode()) {
+      var raw = node.nodeValue || '';
+      for (var offset = 0; offset < raw.length;) {
+        var len = charLengthAt(raw, offset);
+        var ch = raw.slice(offset, offset + len);
+        if (/\\s/u.test(ch)) {
+          if (!lastWasSpace) {
+            text += ' ';
+            points.push({ node: node, offset: offset });
+            lastWasSpace = true;
+          }
+        } else {
+          text += ch;
+          points.push({ node: node, offset: offset });
+          lastWasSpace = false;
+        }
+        offset += len;
+      }
+    }
+    return { text: text.trim(), points: points };
+  }
+  function findTextRange(needle) {
+    var anchors = chunkAnchors(needle);
+    if (!anchors.length || !document.body) return null;
+    var flat = flattenDocumentText();
+    for (var i = 0; i < anchors.length; i++) {
+      var idx = flat.text.indexOf(anchors[i]);
+      if (idx < 0) continue;
+      var start = flat.points[idx];
+      var last = flat.points[idx + anchors[i].length - 1];
+      if (!start || !last) continue;
+      var r = document.createRange();
+      try {
+        r.setStart(start.node, start.offset);
+        r.setEnd(last.node, last.offset + charLengthAt(last.node.nodeValue || '', last.offset));
+        return r;
+      } catch (_) {}
     }
     return null;
   }
   function highlightChunk(text) {
     clearChunkHl();
-    if (!window.CSS || !CSS.highlights || typeof Highlight === 'undefined') return;
+    if (!window.CSS || !CSS.highlights || typeof Highlight === 'undefined') return false;
     var range = findTextRange(text);
-    if (!range) return;
+    if (!range) return false;
     try {
       CSS.highlights.set(HL_CHUNK, new Highlight(range));
-    } catch (_) { return; }
+    } catch (_) { return false; }
     // Use a probe so the smooth scroll lands centred even when the
     // match sits deep in a long block.
     var probe = document.createElement('span');
@@ -289,6 +344,7 @@ function addScrollBootstrap(html: string): string {
     // Auto-fade after 4s — long enough to register the location,
     // short enough not to fight a follow-up find.
     chunkHlTimer = setTimeout(clearChunkHl, 4000);
+    return true;
   }
 
   window.addEventListener('message', function(e) {
@@ -300,11 +356,18 @@ function addScrollBootstrap(html: string): string {
       return;
     }
     if (d.type === 'stashbase-chunk-highlight') {
-      highlightChunk(d.text || '');
+      var ok = highlightChunk(d.text || '');
+      try {
+        window.parent.postMessage({
+          type: 'stashbase-chunk-highlight-result',
+          reqId: d.reqId,
+          ok: ok
+        }, '*');
+      } catch (_) {}
       return;
     }
     if (d.type === 'stashbase-find') {
-      if (d.op === 'set') setQuery(d.query || '', d.wholeWord);
+      if (d.op === 'set') setQuery(d.query || '', d.wholeWord, d.caseSensitive);
       else if (d.op === 'next') step(1);
       else if (d.op === 'prev') step(-1);
       else if (d.op === 'close') clearFind();
@@ -350,7 +413,24 @@ document.addEventListener('click', function(e) {
     return;
   }
   var raw = node.getAttribute('href');
-  if (!raw || raw.charAt(0) === '#') return;
+  if (!raw) return;
+  if (raw.charAt(0) === '#') {
+    var hashOnly = raw.slice(1);
+    if (!hashOnly) return;
+    try {
+      if (location.pathname.indexOf('/asset/') === 0) {
+        var currentEncoded = location.pathname.slice('/asset/'.length);
+        var currentDecoded = currentEncoded.split('/').map(decodeURIComponent).join('/');
+        e.preventDefault();
+        window.parent.postMessage({
+          type: 'stashbase-nav',
+          path: currentDecoded,
+          anchor: hashOnly
+        }, '*');
+      }
+    } catch (_) {}
+    return;
+  }
   try {
     var url = new URL(raw, document.baseURI);
     // Same-origin /asset/ links to .md / .html files = cross-file

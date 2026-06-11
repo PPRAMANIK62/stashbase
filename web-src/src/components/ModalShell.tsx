@@ -19,17 +19,22 @@ import { createPortal } from 'react-dom';
  */
 export function ModalShell({
   onCancel,
+  closeOnBackdrop = true,
   wide,
   top,
   children,
 }: {
   onCancel: () => void;
+  closeOnBackdrop?: boolean;
   wide?: boolean;
   top?: boolean;
   children: ReactNode;
 }) {
   const node = (
-    <div className={'modal-veil' + (top ? ' top' : '')} onClick={onCancel}>
+    <div
+      className={'modal-veil' + (top ? ' top' : '')}
+      onClick={closeOnBackdrop ? onCancel : undefined}
+    >
       <div
         className={'modal-card' + (wide ? ' wide' : '')}
         onClick={(e) => e.stopPropagation()}
