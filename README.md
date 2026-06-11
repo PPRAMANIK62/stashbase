@@ -93,7 +93,7 @@ Indexing runs locally via [mfs](https://github.com/zilliztech/mfs) + [Milvus Lit
 
 ### When is content indexed?
 
-* App-internal writes (editor save, drag-and-drop, MCP `write_file`) → indexed immediately
+* App-internal writes (editor save, drag-and-drop) → indexed immediately; MCP `write_file` indexes in the background
 * External writes to the **open space** (other editors, git, scripts) → picked up live by a file watcher (debounced) and reconciled automatically
 * Other spaces → reconciled when you next open them. No library-wide background scanning — embedding spend stays predictable and visible
 * Agents writing via shell can call MCP `update_index` to sync any space explicitly
@@ -137,7 +137,7 @@ Hybrid retrieval: dense vector kNN + BM25, fused server-side via RRF in a single
 The tool surface covers both halves of a memory layer — using it and tending it:
 
 * **Read:** `search_kb`, `get_file`, `list_files`, `recent_files`
-* **Write:** `write_file`, `rename_file`, `delete_file`, `set_file_metadata` — writes index synchronously, searchable immediately
+* **Write:** `write_file`, `rename_file`, `delete_file`, `set_file_metadata` — writes index in the background; `index_status` tells you when search has caught up
 * **Orient & maintain:** `kb_info`, `space_info`, `get_rules`, `update_space_metadata`, `update_index`, `index_status`
 
 ---
