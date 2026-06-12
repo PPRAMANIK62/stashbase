@@ -4,6 +4,7 @@ import { renderMarkdown } from '../markdown';
 import { useApp } from '../store/AppContext';
 import { injectAssetBase, previewClickHandler } from '../lib/previewIframe';
 import { makeIframeFindController } from './findIframe';
+import { useIframeDropForward } from '../hooks/useIframeDropForward';
 
 /**
  * Read-only MD preview. Renders the markdown to a self-contained HTML
@@ -58,27 +59,6 @@ export function MarkdownPreview({ name, content }: { name: string; content: stri
       }
     }
 
-    function iframeDragOver(e: Event) {
-      const de = e as DragEvent;
-      if (de.dataTransfer?.types.includes('Files')) de.preventDefault();
-    }
-    function iframeDrop(e: Event) {
-      const de = e as DragEvent;
-      if (!de.dataTransfer?.types.includes('Files')) return;
-      de.preventDefault();
-      de.stopPropagation();
-      // Collect entries synchronously before any await — Chromium
-      // invalidates DataTransfer.items on the first await.
-      const entries: FileSystemEntry[] = [];
-      for (let i = 0; i < (de.dataTransfer.items?.length ?? 0); i++) {
-        const entry = de.dataTransfer.items[i].webkitGetAsEntry?.();
-        if (entry) entries.push(entry);
-      }
-      window.parent.dispatchEvent(
-        new CustomEvent('stashbase:iframe-drop', { detail: { entries } }),
-      );
-    }
-
     function handleClick(e: Event) {
       previewClickHandler(e, name);
     }
@@ -92,12 +72,6 @@ export function MarkdownPreview({ name, content }: { name: string; content: stri
       }
       doc.addEventListener('click', handleClick);
       doc.addEventListener('keydown', findKeyHandler);
-      // Forward OS-file drops to the parent window. The iframe captures
-      // drag events and they never reach window-level listeners, so we
-      // relay them via a custom event. Same-origin srcDoc means we can
-      // read dataTransfer.items directly here.
-      doc.addEventListener('dragover', iframeDragOver);
-      doc.addEventListener('drop', iframeDrop);
       loadedHtmlRef.current = html;
       applyPendingScroll(doc);
       // If the find bar is open across the content reload, re-paint
@@ -116,11 +90,12 @@ export function MarkdownPreview({ name, content }: { name: string; content: stri
       iframe.removeEventListener('load', attach);
       installedDoc?.removeEventListener('click', handleClick);
       installedDoc?.removeEventListener('keydown', findKeyHandler);
-      installedDoc?.removeEventListener('dragover', iframeDragOver);
-      installedDoc?.removeEventListener('drop', iframeDrop);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html]);
+
+  // OS-file drops over the preview relay out to useGlobalDragDrop.
+  useIframeDropForward(frameRef, html);
 
   // Register the find controller once per mount. Reads the live
   // contentDocument on each call so it survives srcDoc reloads

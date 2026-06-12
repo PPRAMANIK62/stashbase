@@ -92,7 +92,7 @@
     .find-toggle.on {
       color: var(--accent);
       border-color: var(--accent);
-      background: rgba(8, 145, 178, 0.08);
+      background: rgba(var(--accent-rgb), 0.08);
     }
     .find-toggle:hover, .find-step:hover, .find-close:hover, .find-all-files:hover:not(:disabled) {
       background: var(--hover);
@@ -1295,7 +1295,7 @@
       align-items: center;
       justify-content: center;
       border-radius: 8px;
-      background: rgba(8, 145, 178, 0.08);
+      background: rgba(var(--accent-rgb), 0.08);
       color: var(--accent);
     }
 
@@ -1316,10 +1316,10 @@
       gap: 14px;
       padding: 14px 16px;
       margin-bottom: 24px;
-      border: 1px solid rgba(8, 145, 178, 0.24);
+      border: 1px solid rgba(var(--accent-rgb), 0.24);
       border-radius: 8px;
-      background: rgba(8, 145, 178, 0.06);
-      box-shadow: 0 1px 2px rgba(8, 145, 178, 0.05);
+      background: rgba(var(--accent-rgb), 0.06);
+      box-shadow: 0 1px 2px rgba(var(--accent-rgb), 0.05);
     }
 
     .welcome-mcp-text {
@@ -1343,7 +1343,7 @@
 
     .welcome-mcp-btn {
       flex-shrink: 0;
-      border: 1px solid rgba(8, 145, 178, 0.35);
+      border: 1px solid rgba(var(--accent-rgb), 0.35);
       background: #fff;
       color: var(--accent);
       border-radius: 6px;
@@ -1356,8 +1356,8 @@
     }
 
     .welcome-mcp-btn:hover {
-      background: rgba(8, 145, 178, 0.08);
-      border-color: rgba(8, 145, 178, 0.5);
+      background: rgba(var(--accent-rgb), 0.08);
+      border-color: rgba(var(--accent-rgb), 0.5);
     }
 
     .welcome-recent {
@@ -1468,7 +1468,7 @@
 
     .welcome-open-row:hover:not(:disabled),
     .welcome-open-row.active:not(:disabled) {
-      background: rgba(8, 145, 178, 0.07);
+      background: rgba(var(--accent-rgb), 0.07);
     }
 
     .welcome-open-row:hover:not(:disabled)::after,
@@ -1511,7 +1511,7 @@
       margin-top: 14px;
       padding: 8px 12px;
       font-size: 12.5px;
-      color: #b91c1c;
+      color: var(--danger);
       background: #fef2f2;
       border: 1px solid #fecaca;
       border-radius: 6px;
@@ -1613,7 +1613,7 @@
     }
 
     .settings-nav-item.current {
-      background: rgba(8, 145, 178, 0.10);
+      background: rgba(var(--accent-rgb), 0.10);
       color: var(--accent);
       font-weight: 600;
     }
@@ -1720,13 +1720,13 @@
       color: var(--fg);
     }
     .migrate-choice.active {
-      background: rgba(8, 145, 178, 0.10);
+      background: rgba(var(--accent-rgb), 0.10);
       color: var(--accent);
       font-weight: 600;
     }
     .migrate-choice.overwrite.active {
       background: rgba(220, 38, 38, 0.10);
-      color: #b91c1c;
+      color: var(--danger);
     }
 
     .settings-panel {
@@ -1758,7 +1758,7 @@
     }
 
     .settings-error {
-      color: #b91c1c;
+      color: var(--danger);
     }
 
     .settings-field-row {
@@ -1813,7 +1813,7 @@
     /* Destructive secondary (e.g. Remove key) — red text/border, red
      * wash on hover. Matches the accent/red palette used elsewhere. */
     .settings-secondary-btn.danger {
-      color: #b91c1c;
+      color: var(--danger);
       border-color: rgba(220, 38, 38, 0.3);
     }
     .settings-secondary-btn.danger:hover:not(:disabled) {
@@ -1829,7 +1829,7 @@
     }
 
     .modal-btn.danger {
-      color: #b91c1c;
+      color: var(--danger);
       border-color: rgba(220, 38, 38, 0.3);
     }
     .modal-btn.danger:hover:not(:disabled) {
@@ -1887,7 +1887,7 @@
     .toast.toast-info    { border-left: 3px solid var(--accent); }
     .toast.toast-success { border-left: 3px solid #047857; }
     .toast.toast-warning { border-left: 3px solid #d97706; }
-    .toast.toast-error   { border-left: 3px solid #b91c1c; }
+    .toast.toast-error   { border-left: 3px solid var(--danger); }
 
     .toast-msg {
       flex: 1 1 auto;

@@ -10,6 +10,13 @@
        * #d9a000 amber on .md icons, the two are the project's color
        * signature (see `.tree-row.file.format-*` comments). */
       --accent: #0891b2;
+      /* Raw RGB of --accent, for alpha ramps: rgba(var(--accent-rgb), .08)
+       * etc. Change the accent → change both lines, nothing else. */
+      --accent-rgb: 8, 145, 178;
+      /* Danger red — destructive actions, error text, failure banners.
+       * (chat.css's #e45649 is the One-Dark editor red and the sidebar's
+       * #dc2626 is the recording red — different palettes on purpose.) */
+      --danger: #b91c1c;
       --hover: #f0f0f0;
       --active: #e8e8e8;
     }

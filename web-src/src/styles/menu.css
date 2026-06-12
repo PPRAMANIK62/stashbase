@@ -64,7 +64,7 @@
 }
 
 .menu-item.danger {
-  color: #b91c1c;
+  color: var(--danger);
 }
 
 .menu-item.danger:hover:not(:disabled),

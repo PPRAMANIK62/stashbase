@@ -183,7 +183,7 @@
       gap: 2px;
     }
     .icon-btn.chat-launch.active {
-      background: rgba(8, 145, 178, 0.08);
+      background: rgba(var(--accent-rgb), 0.08);
     }
 
 

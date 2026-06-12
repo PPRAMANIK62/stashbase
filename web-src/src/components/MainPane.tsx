@@ -49,8 +49,9 @@ export function MainPane() {
       <div className="main-body">
         {!hasTabs && (
           <div className="empty-doc">
-            Drop .md or .html files anywhere to import<br />
-            or click <strong>+</strong> for a new note (Cmd+N)
+            Drop files or folders anywhere to stash them<br />
+            — Markdown, HTML, PDFs, images —<br />
+            or click <strong>+</strong> for a new note (⌘N)
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}
