@@ -47,9 +47,9 @@ Once the app is running:
 2. Open **Settings → MCP**, click **Connector** for your AI client, restart that client, then ask `@stashbase what's the best time to start a startup?`.
 3. Then bring your own: hit **New space** and drag in your files — Markdown, HTML, PDFs, images — or record your screen and get back a structured note.
 
-**Embeddings.** StashBase asks for an OpenAI API key when you open your first space — used **only for embeddings** (no chat completions). `text-embedding-3-small` is only $0.02 per 1M tokens. [Create a key.](https://platform.openai.com/api-keys) Without a key, files still save and preview — indexing and search stay off until you add one.
+**Embeddings.** StashBase asks for an OpenAI API key when you open your first space — used **only for embeddings** (no chat completions). `text-embedding-3-small` is only $0.02 per 1M tokens. [Create a key.](https://platform.openai.com/api-keys) Without a key, files still save, preview, and stay searchable by exact keyword — only semantic search waits for the key.
 
-**Recordings.** Screen recording turns what you watched into a structured note via Gemini video understanding, and needs a Gemini API key — add one under **Settings → Capture**. [Create a key.](https://aistudio.google.com/apikey) `gemini-2.5-flash` runs about $0.30 per 1M input tokens — a 10-minute recording is roughly 150K tokens, so a few cents per recording.
+**Recordings.** Screen recording turns what you watched into a structured note via Gemini video understanding — the original video stays attached, playable inside the note. Needs a Gemini API key — add one under **Settings → Capture**. [Create a key.](https://aistudio.google.com/apikey) `gemini-2.5-flash` runs about $0.30 per 1M input tokens — a 10-minute recording is roughly 150K tokens, so a few cents per recording.
 
 ---
 
@@ -77,7 +77,7 @@ Stashing means saving the content itself — not a link to it — into your know
 
 Structured formats are indexed as they are; unstructured formats are extracted into searchable text first.
 
-Failed conversions surface a **Retry** button and are never auto-retried — failures are usually persistent (scanned-only, encrypted, …), and retrying should be your call, not a token burn.
+Failed conversions surface a **Retry** button and are never auto-retried — failures are usually persistent (scanned-only, encrypted, …), so retrying is always your call.
 
 ### Space-level import & portable embeddings
 
@@ -94,7 +94,7 @@ Indexing runs locally via [mfs](https://github.com/zilliztech/mfs) + [Milvus Lit
 ### When is content indexed?
 
 * App-internal writes (editor save, drag-and-drop) → indexed immediately; MCP `write_file` indexes in the background
-* External writes to the **open space** (other editors, git, scripts) → picked up live by a file watcher (debounced) and reconciled automatically
+* External writes (other editors, git, scripts) → reconciled at deterministic moments: when you return to the window, when an agent finishes a turn, when you open the space, or on manual Sync
 * Other spaces → reconciled when you next open them. No library-wide background scanning — embedding spend stays predictable and visible
 * Agents writing via shell can call MCP `update_index` to sync any space explicitly
 
@@ -102,7 +102,7 @@ Renames, moves, and unchanged-content rewrites are detected by content hash and 
 
 ### Embedder
 
-OpenAI `text-embedding-3-small` — the single, fixed embedder in V1 (no provider switching). The whole library lives in one Milvus collection. Without an API key, indexing and search are disabled; files still save and preview.
+OpenAI `text-embedding-3-small` — the single, fixed embedder in V1 (no provider switching). The whole library lives in one Milvus collection. Without an API key, only embedding and semantic search are disabled — files still save and preview, and keyword search (ripgrep, no index involved) keeps working.
 
 ### Search
 
@@ -185,7 +185,14 @@ pnpm dist:mac
 pnpm dist:win
 ```
 
-Optional runtime/debug knobs (log level, recording-debug bundles, PDF converter, …) are documented in [.env.example](.env.example). They're plain shell env vars — nothing is auto-loaded; export what you need, e.g. `STASHBASE_LOG=debug pnpm dev`.
+**Debugging.** Dev knobs are plain environment variables — prefix the command, e.g. `STASHBASE_LOG=debug pnpm dev` (daemon ops, conversion timing; also: `STASHBASE_PDF_CONVERTER=marker`, `STASHBASE_PYTHON=/path/to/python`). API keys are NOT env vars — they live in Settings. Renderer logs: View → Toggle Developer Tools. Packaged-app server logs: `~/Library/Logs/StashBase/`; headless-server boots log to `~/.stashbase/headless-server.log`.
+
+Before opening a PR:
+
+```bash
+pnpm exec tsc --noEmit
+pnpm test:import-folder
+```
 
 ## Publishing
 
@@ -252,9 +259,9 @@ Early alpha. macOS arm64 (Apple Silicon) is the supported platform today; Window
 * KB / space file model on disk (HTML / Markdown / PDF / images + hidden companions and asset bundles)
 * Hybrid retrieval (semantic + keyword), with PDF/image hits mapping back to originals
 * MCP KB server (stdio) with the full read/write/maintenance tool surface; one-click client connectors
-* Live file watcher on the open space + reconcile on space open; rename/move without re-embedding
+* Event-point reconcile (space open, window focus, agent turn end, manual sync); rename/move without re-embedding
 * Conversion pipeline: PDF extraction, image OCR (local), with persisted failures + Retry
-* Screen recording → structured note (Gemini video understanding; key required, checked before capture starts)
+* Screen recording → structured note with the original video attached (Gemini video understanding; key required, checked before capture starts)
 * Structured Claude chat panel: tool calls, inline diff approve/reject, permission modes, history & resume
 * Multi-window, per-space MCP server injection, KB root migration, space snapshot import
 
@@ -262,13 +269,12 @@ Early alpha. macOS arm64 (Apple Silicon) is the supported platform today; Window
 
 * **Codex chat panel** — the panel shell is in place; the structured Codex session is landing now
 * **Recording pipeline polish** — extraction quality, noise filtering, long recordings
-* **Video, note-first** — dropped-in videos and recordings converge on "a visible note with the original attached, playable in place" (design settled, see the build map)
 * **`STASHBASE.md` schema** — V1 stays freeform natural language; a precise, checkable schema is a separate RFC
 * **Retrieval filters** — file type / time range, pushed down into the index query
 
 ### Post-V1
 
-Windows / Linux, cloud sync, multi-device, mobile access, team collaboration.
+Windows / Linux, note-first treatment for dropped-in videos, cloud sync, multi-device, mobile access, team collaboration.
 
 Pin a commit if you're embedding StashBase into a larger workflow.
 
@@ -276,9 +282,7 @@ Pin a commit if you're embedding StashBase into a larger workflow.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-Small focused PRs are preferred. Open an issue before larger changes so scope and direction can be discussed first.
+Small focused PRs are preferred. Open an issue before larger changes so scope and direction can be discussed first. Setup, debugging, and release live in [Build from source](#build-from-source) and [Publishing](#publishing) above.
 
 ---
 
