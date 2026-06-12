@@ -4,6 +4,7 @@ node_modules
 data/
 dist/
 release/
+release.nosync/
 test/
 web/dist-app/
 models/

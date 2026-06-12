@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const releaseDir = path.join(root, 'release');
+const releaseDir = path.join(root, 'release.nosync');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has('--dry-run');

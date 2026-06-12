@@ -87,4 +87,4 @@ if (platform === 'win' && process.platform !== 'win32') {
 }
 clearQuarantine();
 runElectronBuilder();
-clearQuarantine(['release']);
+clearQuarantine(['release.nosync']);

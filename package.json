@@ -59,7 +59,7 @@
     "electronDist": "node_modules/electron/dist",
     "afterPack": "scripts/after-pack-unsigned.cjs",
     "directories": {
-      "output": "release"
+      "output": "release.nosync"
     },
     "files": [
       "package.json",

@@ -196,7 +196,7 @@ pnpm test:import-folder
 
 ## Publishing
 
-`dist:brew` is the one-command publishing flow: build the macOS package, upload the current version's files in `release/` to this repository's GitHub Release, then publish the Homebrew cask update.
+`dist:brew` is the one-command publishing flow: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update.
 
 ```bash
 pnpm dist:brew

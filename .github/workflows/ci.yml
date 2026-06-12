@@ -68,7 +68,7 @@ jobs:
         # confirms `rg` exists outside the asar archive.
         run: |
           set -euo pipefail
-          unpacked_root="release/mac-arm64/StashBase.app/Contents/Resources/app.asar.unpacked"
+          unpacked_root="release.nosync/mac-arm64/StashBase.app/Contents/Resources/app.asar.unpacked"
           if [ ! -d "$unpacked_root" ]; then
             echo "::error::expected unpacked dir not found at $unpacked_root"
             exit 1
