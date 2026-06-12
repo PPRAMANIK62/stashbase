@@ -9,15 +9,15 @@
  * scope to one space (e.g. `space: "cs183b"`). Paths are kbRoot-relative
  * (`cs183b/lecture-01.md`).
  *
- * Two execution paths:
- *   1. If the StashBase desktop app is running and serving on :8090,
- *      **forward over HTTP** — its single Python sidecar holds the
- *      embedding models and Milvus file lock. We hit dedicated
- *      `/api/kb/*` endpoints that operate on kbRoot-relative paths.
- *   2. If :8090 isn't answering, fall back to an **embedded MfsIndexer**
- *      that spawns its own daemon, configured with kbRoot from
- *      `~/.stashbase/config.json` and pre-binding every space under it
- *      so cross-KB search works without the app open.
+ * Single execution path: every tool forwards over HTTP to the StashBase
+ * server on :8090 (`/api/kb/*` endpoints, kbRoot-relative paths). If the
+ * server isn't running, this host SPAWNS it headless and waits for it to
+ * come up — it never opens the store itself. The `:8090` port bind is the
+ * singleton arbiter: when two MCP hosts race to spawn, one server wins the
+ * port, the loser exits with EADDRINUSE, and both hosts connect to the
+ * winner. Exactly one daemon process can therefore exist per machine,
+ * which kills the multi-daemon Milvus lock-fight class by construction
+ * (data-layer §8.7).
  *
  * Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
  *   {
@@ -33,7 +33,9 @@
 // no later import can corrupt the stdio JSON-RPC stream. See module.
 import './stdio-guard.ts';
 
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -41,32 +43,17 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { MfsIndexer } from '../server/indexer.mfs.ts';
-import {
-  ensureKbRoot,
-  getKbRoot,
-  isInsideKbRoot,
-  listKnownSpaces,
-  needsKbRootPicker,
-} from '../server/space.ts';
-import { getApiKey, migrateLegacyEmbedderConfig } from '../server/app-config.ts';
-import { getDaemon } from '../server/mfs-daemon.ts';
+import { ensureKbRoot, listKnownSpaces, needsKbRootPicker } from '../server/space.ts';
+import { migrateLegacyEmbedderConfig } from '../server/app-config.ts';
 import {
   ensureKbOverview,
-  getKbInfo,
-  getResolvedRules,
-  getSpaceInfoFull,
-  setKbOverview,
-  setSpaceRules,
   type KbInfo,
   type SpaceInfoFull,
 } from '../server/kb.ts';
 import {
   isReservedMetadataFile,
-  setFileMetadataEntry,
   type FileMetadata,
 } from '../server/metadata.ts';
-import { syncIndex } from '../server/sync.ts';
 
 // Idempotent migrations. Safe to run from both the web server and MCP —
 // second call no-ops.
@@ -90,58 +77,118 @@ function parsePortArg(argv: string[], fallback: number): number {
 // embedded-daemon fallback on every tool call.
 const WEB_BASE = `http://127.0.0.1:${parsePortArg(process.argv.slice(2), 8090)}`;
 
-// Lazily constructed embedded indexer. Spawned only when the web server
-// isn't reachable AND a tool actually fires.
-let embedded: MfsIndexer | null = null;
-let embeddedReady: Promise<void> | null = null;
+// ---------------------------------------------------------------------------
+// Headless server spawn — the singleton story.
+//
+// This host never opens the store. When :8090 isn't answering it spawns
+// the StashBase server (no Electron window) and polls until ready. The
+// port bind is the only mutual exclusion: a concurrent spawn from another
+// MCP host loses with EADDRINUSE and simply connects to the winner.
+// ---------------------------------------------------------------------------
 
-/** Tear down the embedded indexer and its daemon child. Fired whenever
- *  we observe the web app alive: the GUI server's daemon is the
- *  rightful owner of the store, and a leftover embedded daemon (from an
- *  earlier GUI-down window) would fight it for the Milvus Lite flock —
- *  the loser keeps "succeeding" while its writes silently go nowhere.
- *  Re-spawning later is cheap: getEmbedded() rebuilds and re-binds. */
-function closeEmbedded(reason: string): void {
-  if (!embedded) return;
-  const inst = embedded;
-  embedded = null;
-  embeddedReady = null;
-  process.stderr.write(`[StashBase] closing embedded daemon (${reason})\n`);
-  void inst.close().catch(() => undefined);
+const APP_ROOT = process.env.STASHBASE_APP_ROOT
+  ? path.resolve(process.env.STASHBASE_APP_ROOT)
+  : path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
+  ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
+  : APP_ROOT;
+const SERVER_START_TIMEOUT_MS = 30_000;
+
+function statIsFile(p: string): boolean {
+  try { return fs.statSync(p).isFile(); } catch { return false; }
 }
 
-function getEmbedded(): { indexer: MfsIndexer; ready: Promise<void> } {
-  if (embedded && embeddedReady) return { indexer: embedded, ready: embeddedReady };
-  const inst = new MfsIndexer();
-  embedded = inst;
-  embeddedReady = (async () => {
-    // Configure the daemon with kbRoot, then bind every known space so
-    // cross-KB search works without the user having to "open" each
-    // one in some session that doesn't exist (MCP runs headless).
-    const daemon = getDaemon();
-    daemon.configure({ kbRoot: getKbRoot() });
-    const known = listKnownSpaces();
-    const apiKey = getApiKey();
-    // V1 is OpenAI-only. With no key, spaces still bind (registered) but
-    // indexing/search stay disabled until a key is set.
-    const cfg = apiKey
-      ? ({ provider: 'openai' as const, apiKey })
-      : ({ provider: 'openai' as const });
-    if (!apiKey) {
-      process.stderr.write(
-        '[StashBase] no OpenAI key in ~/.stashbase/config.json; ' +
-          'search/indexing disabled until one is added\n',
-      );
-    }
-    for (const space of known) {
-      try {
-        await inst.bindSpace(space, cfg);
-      } catch (err: unknown) {
-        process.stderr.write(`[StashBase] bind ${space} failed: ${err instanceof Error ? err.message : String(err)}\n`);
+/** Spawn the server detached so it outlives this stdio host. Mirrors the
+ *  env injection `electron/main.cjs:ensureServer` does for the GUI path:
+ *  the packaged app has no Python interpreter, so the sidecar binaries
+ *  must be pointed at explicitly. Output goes to a per-launch log under
+ *  ~/.stashbase/ so a headless boot stays debuggable. */
+function spawnHeadlessServer(): void {
+  const builtEntry = path.join(APP_ROOT, 'dist', 'server', 'index.mjs');
+  const useBuilt = statIsFile(builtEntry);
+
+  const daemonBin = [
+    path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-daemon', 'stashbase-daemon'),
+    path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-daemon'),
+  ].find(statIsFile);
+  const extractBin = path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-extract', 'stashbase-extract');
+  const pythonBin = [
+    path.join(RESOURCES_ROOT, 'python', 'runtime', 'bin', 'python'),
+    path.join(RESOURCES_ROOT, 'python', '.venv', 'bin', 'python'),
+  ].find(statIsFile);
+
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    STASHBASE_HEADLESS: '1',
+    STASHBASE_APP_ROOT: APP_ROOT,
+    STASHBASE_RESOURCES_PATH: RESOURCES_ROOT,
+    ...(useBuilt ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+    ...(daemonBin ? { STASHBASE_DAEMON_BIN: daemonBin } : {}),
+    ...(statIsFile(extractBin) ? { STASHBASE_EXTRACT_BIN: extractBin } : {}),
+    ...(pythonBin ? { STASHBASE_PYTHON: pythonBin } : {}),
+  };
+  const [command, args] = useBuilt
+    ? [process.execPath, [builtEntry]]
+    : [path.join(APP_ROOT, 'node_modules', '.bin', 'tsx'), [path.join(APP_ROOT, 'server', 'index.ts')]];
+  // Packaged APP_ROOT is app.asar — a file, unusable as cwd (ENOTDIR at
+  // the spawn syscall). Fall back to the real Resources/ directory.
+  let cwd = APP_ROOT;
+  try { if (!fs.statSync(APP_ROOT).isDirectory()) cwd = RESOURCES_ROOT; } catch { cwd = RESOURCES_ROOT; }
+
+  let stdio: ('ignore' | number)[] = ['ignore', 'ignore', 'ignore'];
+  try {
+    const logPath = path.join(os.homedir(), '.stashbase', 'headless-server.log');
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    const fd = fs.openSync(logPath, 'w');
+    stdio = ['ignore', fd, fd];
+  } catch { /* logging is best-effort */ }
+
+  const child = spawn(command, args, { cwd, env, detached: true, stdio });
+  child.on('error', (err) => {
+    process.stderr.write(`[StashBase] headless server spawn failed: ${err.message}\n`);
+  });
+  child.unref();
+  process.stderr.write(`[StashBase] spawned headless server (pid=${child.pid})\n`);
+}
+
+async function probeWebOnce(timeoutMs = 300): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const r = await fetch(`${WEB_BASE}/api/space`, { signal: ctrl.signal });
+    clearTimeout(t);
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Single-flight: concurrent tool calls during a cold start share one
+// spawn-and-wait instead of racing N spawns from the same host.
+let webStartInflight: Promise<void> | null = null;
+
+/** Make sure a server is answering on :8090, spawning one if needed.
+ *  After this resolves, web calls can proceed. */
+async function ensureWeb(): Promise<void> {
+  if (await webIsLive()) return;
+  if (!webStartInflight) {
+    webStartInflight = (async () => {
+      spawnHeadlessServer();
+      const deadline = Date.now() + SERVER_START_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        await new Promise((res) => setTimeout(res, 300));
+        if (await probeWebOnce()) {
+          webLiveCache = { value: true, expires: Date.now() + WEB_LIVE_TTL_MS };
+          return;
+        }
       }
-    }
-  })();
-  return { indexer: inst, ready: embeddedReady };
+      throw new Error(
+        'StashBase server did not come up on :8090 within 30s — ' +
+          'check ~/.stashbase/headless-server.log',
+      );
+    })().finally(() => { webStartInflight = null; });
+  }
+  return webStartInflight;
 }
 
 /** Cache the web-live answer for a few seconds so a single Claude
@@ -242,30 +289,21 @@ function normalizeInputSchema(schema: unknown): unknown {
   return { type: 'object', properties: {}, additionalProperties: true };
 }
 
-async function tryWebElseEmbedded<T>(
-  label: string,
-  viaWeb: () => Promise<T>,
-  viaEmbedded: () => Promise<T>,
-): Promise<T> {
-  if (await webIsLive()) {
-    // Web alive ⇒ its daemon owns the store; make sure a leftover
-    // embedded daemon isn't still up competing for the Milvus flock.
-    closeEmbedded('web is live');
-    try {
-      return await viaWeb();
-    } catch (err: unknown) {
-      // Fall back ONLY on transport-level failure (Node fetch rejects
-      // with TypeError on refused/reset/DNS) — that means the web app is
-      // actually gone. An HTTP-status error means the server is alive
-      // and gave a real answer; spawning a second daemon against the
-      // same Milvus Lite store to mask an APPLICATION error is how the
-      // flock fight starts (see closeEmbedded). Rethrow those.
-      if (!(err instanceof TypeError)) throw err;
-      invalidateWebLive();
-      process.stderr.write(`[StashBase] web ${label} unreachable, falling back to embedded: ${err.message}\n`);
-    }
+/** Run a web call, starting the server first if needed. A transport-level
+ *  failure (fetch rejects with TypeError — refused/reset) means the server
+ *  died between probe and call: restart once and retry. HTTP-status errors
+ *  are real application answers and are rethrown untouched. */
+async function viaWeb<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  await ensureWeb();
+  try {
+    return await fn();
+  } catch (err: unknown) {
+    if (!(err instanceof TypeError)) throw err;
+    invalidateWebLive();
+    process.stderr.write(`[StashBase] web ${label} dropped mid-call, restarting server: ${err.message}\n`);
+    await ensureWeb();
+    return fn();
   }
-  return viaEmbedded();
 }
 
 async function searchViaWeb(
@@ -405,15 +443,6 @@ function splitSpacePath(kbRel: string): { space: string; spaceRel: string } | nu
   const spaceRel = norm.slice(slash + 1).trim();
   if (!space || !spaceRel) return null;
   return { space, spaceRel };
-}
-
-/** Same kbRoot-containment check as `isInsideKbRoot`, with the
- *  one-line throw the embedded tool handlers want. Returns the
- *  absolute path so callers can reuse it for fs ops. */
-function resolveUnderKb(kbRel: string): string {
-  const abs = path.resolve(getKbRoot(), kbRel);
-  if (!isInsideKbRoot(abs)) throw new Error(`path escapes kbRoot: ${kbRel}`);
-  return abs;
 }
 
 const DEFAULT_TOP_K = 8;
@@ -755,33 +784,14 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       1,
       Math.min(MAX_TOP_K, Math.floor(typeof args.top_k === 'number' ? args.top_k : DEFAULT_TOP_K)),
     );
-    const hits = await tryWebElseEmbedded(
-      'search',
-      () => searchViaWeb(query, k, space, pathPrefix),
-      async () => {
-        const { indexer, ready } = getEmbedded();
-        await ready;
-        return indexer.search(query, k, space, pathPrefix);
-      },
-    );
+    const hits = await viaWeb('search', () => searchViaWeb(query, k, space, pathPrefix));
     return {
       content: [{ type: 'text', text: JSON.stringify({ query, space: space ?? null, path_prefix: pathPrefix ?? null, top_k: k, hits }, null, 2) }],
     };
   }
 
   if (req.params.name === 'list_files') {
-    const files = await tryWebElseEmbedded(
-      'list_files',
-      () => listFilesViaWeb(space),
-      async () => {
-        const { ready } = getEmbedded();
-        await ready;
-        const r = await getDaemon().call<{ files: Record<string, string> }>(
-          'list', space ? { space } : {},
-        );
-        return Object.keys(r.files).sort();
-      },
-    );
+    const files = await viaWeb('list_files', () => listFilesViaWeb(space));
     return {
       content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, files }, null, 2) }],
     };
@@ -790,20 +800,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'get_file') {
     const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
     if (!kbRel) throw new Error('`path` is required');
-    const content = await tryWebElseEmbedded(
-      'get_file',
-      () => getFileViaWeb(kbRel),
-      async () => {
-        // Direct fs read. We don't need the daemon for content retrieval.
-        const abs = path.resolve(getKbRoot(), kbRel);
-        if (!isInsideKbRoot(abs)) throw new Error('path escapes kbRoot');
-        try { return fs.readFileSync(abs, 'utf8'); }
-        catch (err: any) {
-          if (err?.code === 'ENOENT') return null;
-          throw err;
-        }
-      },
-    );
+    const content = await viaWeb('get_file', () => getFileViaWeb(kbRel));
     if (content == null) throw new Error(`file not found: ${kbRel}`);
     return {
       content: [{ type: 'text', text: JSON.stringify({ path: kbRel, content }, null, 2) }],
@@ -811,17 +808,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 
   if (req.params.name === 'kb_info') {
-    const info = await tryWebElseEmbedded(
-      'kb_info',
-      () => kbInfoViaWeb(),
-      async () => {
-        // Embedded path needs the daemon up + spaces bound so the
-        // per-space file counts in the info payload are accurate.
-        const { ready } = getEmbedded();
-        await ready;
-        return getKbInfo();
-      },
-    );
+    const info = await viaWeb('kb_info', () => kbInfoViaWeb());
     return {
       content: [{ type: 'text', text: JSON.stringify(info, null, 2) }],
     };
@@ -829,17 +816,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
   if (req.params.name === 'space_info') {
     if (!space) throw new Error('`space` is required');
-    const info = await tryWebElseEmbedded(
-      'space_info',
-      () => spaceInfoViaWeb(space),
-      async () => {
-        // Embedded path needs the daemon up + spaces bound so the
-        // per-space file count is accurate.
-        const { ready } = getEmbedded();
-        await ready;
-        return getSpaceInfoFull(space);
-      },
-    );
+    const info = await viaWeb('space_info', () => spaceInfoViaWeb(space));
     return {
       content: [{ type: 'text', text: JSON.stringify(info, null, 2) }],
     };
@@ -848,28 +825,20 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'update_space_metadata') {
     const content = typeof args.content === 'string' ? args.content : '';
     if (!content) throw new Error('`content` is required');
-    await tryWebElseEmbedded(
-      'update_space_metadata',
-      () => updateKbOverviewViaWeb(content),
-      async () => { setKbOverview(content); },
-    );
+    await viaWeb('update_space_metadata', () => updateKbOverviewViaWeb(content));
     return {
       content: [{ type: 'text', text: JSON.stringify({ ok: true }, null, 2) }],
     };
   }
 
   if (req.params.name === 'get_rules') {
-    const content = await tryWebElseEmbedded(
-      'get_rules',
-      async () => {
-        const url = space ? `${WEB_BASE}/api/rules?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/rules`;
-        const r = await fetch(url);
-        if (!r.ok) throw new Error(`web /api/rules failed: ${r.status}`);
-        const j = await r.json() as { content: string };
-        return j.content;
-      },
-      async () => getResolvedRules(space),
-    );
+    const content = await viaWeb('get_rules', async () => {
+      const url = space ? `${WEB_BASE}/api/rules?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/rules`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`web /api/rules failed: ${r.status}`);
+      const j = await r.json() as { content: string };
+      return j.content;
+    });
     return {
       content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, content }, null, 2) }],
     };
@@ -880,33 +849,21 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const content = typeof args.content === 'string' ? args.content : '';
     if (!target) throw new Error('`space` is required');
     if (!content) throw new Error('`content` is required');
-    await tryWebElseEmbedded(
-      'update_space_rules',
-      async () => {
-        const r = await fetch(`${WEB_BASE}/api/spaces/${encodeURIComponent(target)}/rules`, {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ content }),
-        });
-        if (!r.ok) throw new Error(`web /api/spaces/${target}/rules failed: ${r.status}`);
-      },
-      async () => { setSpaceRules(target, content); },
-    );
+    await viaWeb('update_space_rules', async () => {
+      const r = await fetch(`${WEB_BASE}/api/spaces/${encodeURIComponent(target)}/rules`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+      if (!r.ok) throw new Error(`web /api/spaces/${target}/rules failed: ${r.status}`);
+    });
     return {
       content: [{ type: 'text', text: JSON.stringify({ ok: true, space: target }, null, 2) }],
     };
   }
 
   if (req.params.name === 'index_status') {
-    const status = await tryWebElseEmbedded(
-      'index_status',
-      () => statusViaWeb(space),
-      async () => {
-        const { indexer, ready } = getEmbedded();
-        await ready;
-        return indexer.status(space);
-      },
-    );
+    const status = await viaWeb('index_status', () => statusViaWeb(space));
     return {
       content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, ...status as object }, null, 2) }],
     };
@@ -918,23 +875,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const overwrite = args.overwrite === true;
     if (!kbRel) throw new Error('`path` is required');
     if (typeof args.content !== 'string') throw new Error('`content` (string) is required');
-    await tryWebElseEmbedded(
-      'write_file',
-      () => writeFileViaWeb(kbRel, content, overwrite),
-      async () => {
-        const abs = resolveUnderKb(kbRel);
-        if (fs.existsSync(abs) && !overwrite) {
-          throw new Error(`file exists: ${kbRel} (pass overwrite=true to replace)`);
-        }
-        fs.mkdirSync(path.dirname(abs), { recursive: true });
-        fs.writeFileSync(abs, content);
-        void (async () => {
-          const { indexer, ready } = getEmbedded();
-          await ready;
-          await indexer.upsertFile(kbRel, content);
-        })().catch(() => { /* stdio server cannot log; index_status/update_index can reconcile */ });
-      },
-    );
+    await viaWeb('write_file', () => writeFileViaWeb(kbRel, content, overwrite));
     return {
       content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel, indexDeferred: true }, null, 2) }],
     };
@@ -952,11 +893,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (isReservedMetadataFile(kbRel)) {
       throw new Error('cannot set metadata on a reserved metadata file');
     }
-    await tryWebElseEmbedded(
-      'set_file_metadata',
-      () => setFileMetadataViaWeb(kbRel, metadata as FileMetadata),
-      async () => { setFileMetadataEntry(split.space, split.spaceRel, metadata as FileMetadata); },
-    );
+    await viaWeb('set_file_metadata', () => setFileMetadataViaWeb(kbRel, metadata as FileMetadata));
     return {
       content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel }, null, 2) }],
     };
@@ -965,18 +902,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'delete_file') {
     const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
     if (!kbRel) throw new Error('`path` is required');
-    await tryWebElseEmbedded(
-      'delete_file',
-      () => deleteFileViaWeb(kbRel),
-      async () => {
-        const abs = resolveUnderKb(kbRel);
-        if (!fs.existsSync(abs)) throw new Error(`file not found: ${kbRel}`);
-        fs.rmSync(abs);
-        const { indexer, ready } = getEmbedded();
-        await ready;
-        await indexer.deleteFile(kbRel);
-      },
-    );
+    await viaWeb('delete_file', () => deleteFileViaWeb(kbRel));
     return {
       content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel }, null, 2) }],
     };
@@ -992,30 +918,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         content: [{ type: 'text', text: JSON.stringify({ ok: true, path: oldRel }, null, 2) }],
       };
     }
-    await tryWebElseEmbedded(
-      'rename_file',
-      () => renameFileViaWeb(oldRel, newRel),
-      async () => {
-        const oldAbs = resolveUnderKb(oldRel);
-        const newAbs = resolveUnderKb(newRel);
-        if (!fs.existsSync(oldAbs)) throw new Error(`file not found: ${oldRel}`);
-        if (fs.existsSync(newAbs)) throw new Error(`target exists: ${newRel}`);
-        let content: string | null = null;
-        try { content = fs.readFileSync(oldAbs, 'utf8'); } catch { /* binary or unreadable — skip re-embed */ }
-        fs.mkdirSync(path.dirname(newAbs), { recursive: true });
-        fs.renameSync(oldAbs, newAbs);
-        if (content !== null) {
-          const { indexer, ready } = getEmbedded();
-          await ready;
-          try {
-            await indexer.renameFile(oldRel, newRel, content);
-          } catch (err) {
-            try { fs.renameSync(newAbs, oldAbs); } catch { /* best effort */ }
-            throw err;
-          }
-        }
-      },
-    );
+    await viaWeb('rename_file', () => renameFileViaWeb(oldRel, newRel));
     return {
       content: [{ type: 'text', text: JSON.stringify({ ok: true, path: newRel }, null, 2) }],
     };
@@ -1025,9 +928,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     // No-scope = reconcile every known space — matches the design
     // contract that an external agent can ship "update everything"
     // without knowing the knowledge-base layout. Each space runs through
-    // /api/sync (web path) or syncIndex (embedded path) independently
-    // so a failure in one doesn't poison the others; failures land in
-    // each sub-result's `failed` field, not a top-level error.
+    // /api/sync independently so a failure in one doesn't poison the
+    // others; failures land in each sub-result's `failed` field, not a
+    // top-level error.
     const targets = space ? [space] : listKnownSpaces();
     if (targets.length === 0) {
       return {
@@ -1037,15 +940,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const perSpace: Array<{ space: string; result?: unknown; error?: string }> = [];
     for (const target of targets) {
       try {
-        const result = await tryWebElseEmbedded(
-          `update_index:${target}`,
-          () => syncViaWeb(target),
-          async () => {
-            const { indexer, ready } = getEmbedded();
-            await ready;
-            return syncIndex(indexer, target);
-          },
-        );
+        const result = await viaWeb(`update_index:${target}`, () => syncViaWeb(target));
         perSpace.push({ space: target, result });
       } catch (err: unknown) {
         perSpace.push({ space: target, error: err instanceof Error ? err.message : String(err) });
@@ -1068,46 +963,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
   if (req.params.name === 'recent_files') {
     const limit = Math.max(1, Math.min(200, Math.floor(typeof args.limit === 'number' ? args.limit : 20)));
-    const files = await tryWebElseEmbedded(
-      'recent_files',
-      () => recentFilesViaWeb(space, limit),
-      async () => {
-        // No web app running — walk the filesystem directly from
-        // kbRoot. We don't need the daemon for this; the indexer
-        // listFiles intersect is expensive without state.db and adds
-        // no signal for "recent".
-        const start = space ? path.resolve(getKbRoot(), space) : getKbRoot();
-        if (!fs.existsSync(start)) throw new Error(`space not found: ${space}`);
-        const skip = new Set([
-          '.stashbase', '.git', '.DS_Store', '.Trashes',
-          '.Spotlight-V100', '.fseventsd', '.AppleDouble', '.TemporaryItems',
-        ]);
-        const indexable = /\.(md|markdown|html|htm)$/i;
-        const MAX_ENTRIES = 5000;
-        const out: Array<{ path: string; mtimeMs: number }> = [];
-        const queue: string[] = [start];
-        while (queue.length > 0 && out.length < MAX_ENTRIES) {
-          const dir = queue.shift()!;
-          let entries: fs.Dirent[];
-          try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-          catch { continue; }
-          for (const e of entries) {
-            if (e.name.startsWith('.') && skip.has(e.name)) continue;
-            if (e.name.endsWith('_files')) continue;
-            const abs = path.join(dir, e.name);
-            if (e.isDirectory()) { queue.push(abs); continue; }
-            if (!e.isFile() || !indexable.test(e.name)) continue;
-            try {
-              const st = fs.statSync(abs);
-              const rel = path.relative(getKbRoot(), abs).split(path.sep).join('/');
-              out.push({ path: rel, mtimeMs: st.mtimeMs });
-            } catch { /* skip unreadable */ }
-          }
-        }
-        out.sort((x, y) => y.mtimeMs - x.mtimeMs);
-        return out.slice(0, limit);
-      },
-    );
+    const files = await viaWeb('recent_files', () => recentFilesViaWeb(space, limit));
     return {
       content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, limit, files }, null, 2) }],
     };
@@ -1131,8 +987,4 @@ async function main() {
 main().catch((err) => {
   process.stderr.write(`[StashBase] fatal: ${err?.stack ?? err}\n`);
   process.exit(1);
-});
-
-process.on('exit', () => {
-  embedded?.close().catch(() => {});
 });

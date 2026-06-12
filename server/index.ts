@@ -194,12 +194,17 @@ app.use((req, res, next) => {
 // skip it entirely; the proxy at the end of the chain catches the
 // browser bundle requests.
 if (!DEV_VITE) {
-  if (!fs.existsSync(path.join(WEB_BUILD_DIR, 'index.html'))) {
+  if (fs.existsSync(path.join(WEB_BUILD_DIR, 'index.html'))) {
+    app.use(express.static(WEB_BUILD_DIR));
+  } else if (process.env.STASHBASE_HEADLESS) {
+    // Headless boot (spawned by the MCP host for API/MCP traffic only) —
+    // no renderer will connect, so a missing web build is fine.
+    log.warn('web build missing; serving API only (headless)');
+  } else {
     throw new Error(
       `web/dist-app/index.html not found. Run \`pnpm build:web\` first.`,
     );
   }
-  app.use(express.static(WEB_BUILD_DIR));
 }
 
 // Route-prefix gate: every API path under these roots needs an open
