@@ -39,7 +39,7 @@ export function pythonBin(): string {
 
 /** Absolute path to a sidecar script under `python/` (e.g.
  *  `pdf_extract.py`, `ocr_extract.py`). */
-export function pythonScript(name: string): string {
+function pythonScript(name: string): string {
   return path.join(PROJECT_ROOT, 'python', name);
 }
 

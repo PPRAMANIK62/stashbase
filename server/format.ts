@@ -53,7 +53,7 @@ export const NOTE_EXTS: readonly string[] = NOTE_FORMATS.flatMap((f) => f.exts);
  *  (`report.pdf` → `.report.pdf.md`), so `report.pdf` and `report.png`
  *  don't collide on `.report.md` and the remap back to the source is
  *  deterministic (strip the leading `.` and trailing `.md` — no probing). */
-export const UNSTRUCTURED_SOURCE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'webp'] as const;
+const UNSTRUCTURED_SOURCE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'webp'] as const;
 
 const NOTE_EXT_ALT = NOTE_EXTS.join('|');
 const SRC_EXT_ALT = UNSTRUCTURED_SOURCE_EXTS.join('|');
@@ -75,12 +75,6 @@ export function isNoteName(name: string): boolean {
   return NOTE_EXT_RE.test(name);
 }
 
-/** True for an unstructured source (PDF / image) — a file that is NOT
- *  indexed directly but gets extracted into a hidden derived `.md`. Use
- *  for "skip the binary itself from the index/pending" style checks. */
-export function isUnstructuredSource(name: string): boolean {
-  return UNSTRUCTURED_SOURCE_RE.test(name);
-}
 
 /** True when a path/basename has the app-derived hidden-note shape
  *  (`.<sourceBasename>.md`, e.g. `.report.pdf.md`). Used by search

@@ -206,7 +206,7 @@ function rewriteOneHref(
 /** Pure-string rewrite of every `<a>` / `[..]` href in `content`,
  *  re-relativised from `fromDir` to `toDir` and remapped through
  *  `renames`. Used both during cascade and exposed for tests. */
-export function rewriteLinks(opts: {
+function rewriteLinks(opts: {
   content: string;
   format: 'md' | 'html';
   fromDir: string;

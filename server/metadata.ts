@@ -67,7 +67,7 @@ function isPlainObject(v: unknown): v is FileMetadata {
  *  `<title>`. Returns `{}` for unsupported formats, no metadata, or a
  *  parse error (never throws — a malformed front-matter block must not
  *  block indexing the body). */
-export function extractInFileMetadata(filePath: string, content: string): FileMetadata {
+function extractInFileMetadata(filePath: string, content: string): FileMetadata {
   const format = detectFormat(filePath);
   try {
     if (format === 'html') return extractHtmlMeta(content);
@@ -152,7 +152,7 @@ const DOC_HEADER = `# File metadata
 
 /** Parse the whole sidecar into `space-rel-path → metadata`. Tolerant:
  *  a section whose yaml is unparseable is skipped, not fatal. */
-export function readFileMetadataDoc(spaceName: string): Map<string, FileMetadata> {
+function readFileMetadataDoc(spaceName: string): Map<string, FileMetadata> {
   const out = new Map<string, FileMetadata>();
   let text: string;
   try {
@@ -176,7 +176,7 @@ export function readFileMetadataDoc(spaceName: string): Map<string, FileMetadata
 }
 
 /** Metadata for one file from the sidecar (`{}` if absent). */
-export function getFileMetadataEntry(spaceName: string, spaceRelPath: string): FileMetadata {
+function getFileMetadataEntry(spaceName: string, spaceRelPath: string): FileMetadata {
   return readFileMetadataDoc(spaceName).get(spaceRelPath) ?? {};
 }
 
