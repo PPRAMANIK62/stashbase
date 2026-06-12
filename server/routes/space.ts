@@ -221,9 +221,8 @@ export function mount(app: express.Express): void {
     try {
       if (!fs.existsSync(target)) return res.status(404).json({ error: 'space not found' });
       // Tear down live runtime bound to this space FIRST (kills the
-      // terminal PTY, stops per-space MCP servers, detaches the fs
-      // watcher via onClose) so the watcher isn't still bound when the
-      // directory vanishes under it.
+      // terminal PTY, stops per-space MCP servers via onClose) so
+      // nothing is still bound when the directory vanishes under it.
       clearSpacePath(target);
       fs.rmSync(target, { recursive: true, force: true });
       // Clear derived state: vector-store chunks + the three state.db
