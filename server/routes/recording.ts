@@ -1,28 +1,24 @@
 /**
- * Screen-recording ingest route.
+ * Screen-recording ingest route. Note-first:
  *
- * Recordings differ from dropped-in videos by design (see design-docs):
- * the video is a *means to text*, not content to archive. So unlike the
- * upload route — which saves a dropped video and OCRs it into a hidden
- * `.<file>.md` sidecar (video kept) — this route:
+ *   1. saves the webm into the note's asset bundle
+ *      (`recording-<ts>_files/recording.webm`) — persisted before any
+ *      processing, so a failed analysis never loses the recording,
+ *   2. runs Gemini video understanding in the background,
+ *   3. writes a VISIBLE `recording-<ts>.md` note with the structured
+ *      content + an inline <video> player for the saved webm.
  *
- *   1. writes the webm to a throwaway OS temp file (NOT the space),
- *   2. frame-OCRs it in the background,
- *   3. writes a VISIBLE `recording-<ts>.md` note into the space,
- *   4. deletes the temp webm.
- *
- * No multi-GB webms accumulate in the KB; the note is a first-class
- * document (not a hidden derivative of a file that no longer exists).
- * Progress surfaces through the same "Converting…" banner as the file
- * converters (`runBackgroundConversion`, keyed to the note path).
+ * The note is the product; the video rides along as its attachment
+ * (`<stem>_files/` bundles are hidden in the tree and follow the note
+ * on rename/delete). Progress surfaces through the same "Converting…"
+ * banner as the file converters (`runBackgroundConversion`, keyed to
+ * the note path).
  */
 import express from 'express';
 import multer from 'multer';
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { runBackgroundConversion } from '../conversion.ts';
-import { sanitizeFilename, saveText } from '../files.ts';
+import { sanitizeFilename, saveBytes, saveText } from '../files.ts';
 import { analyzeVideoWithGemini, geminiConfigured } from '../gemini-video.ts';
 import { errorMessage, logger } from '../log.ts';
 import { getCurrentSpace, runWithWindowId, toKbRel, WINDOW_ID_HEADER } from '../space.ts';
@@ -31,8 +27,8 @@ import { indexer } from '../state.ts';
 
 const log = logger('routes/recording');
 
-// Recordings are processed from memory then discarded; allow comfortably
-// larger than the 64 MB upload cap since nothing persists to the space.
+// Recordings land in the note's asset bundle; allow comfortably larger
+// than the 64 MB upload cap — a long recording is legitimately big.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 512 * 1024 * 1024, files: 1 },
@@ -67,15 +63,6 @@ function recordingStamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
 
-/** Debug switch (developer-facing env var, like `STASHBASE_PYTHON`). When
- *  on, the recording isn't discarded: the webm + final note are kept under
- *  `~/.stashbase/recording-debug/recording-<ts>/` so the Gemini output can
- *  be compared against the source video. */
-function recordingDebugEnabled(): boolean {
-  const v = process.env.STASHBASE_RECORDING_DEBUG;
-  return v === '1' || v === 'true' || v === 'yes';
-}
-
 function handleRecording(req: express.Request, res: express.Response): void {
   const file = req.file;
   if (!file) { res.status(400).json({ error: 'no file' }); return; }
@@ -100,6 +87,8 @@ function handleRecording(req: express.Request, res: express.Response): void {
   const prefix = dir ? dir + '/' : '';
   const stamp = recordingStamp();
   const noteRel = `${prefix}recording-${stamp}.md`;
+  const bundleName = `recording-${stamp}_files`;
+  const videoRel = `${prefix}${bundleName}/recording.webm`;
 
   // Resolve the KB-relative form now, while the window context is live —
   // the background job runs after the response and we re-bind there.
@@ -111,26 +100,23 @@ function handleRecording(req: express.Request, res: express.Response): void {
     return;
   }
 
-  // Stash the webm in a throwaway temp file for the extractor to read.
-  const tmpVideo = path.join(os.tmpdir(), `stashbase-rec-${stamp}-${process.pid}.webm`);
+  // Persist the recording into the note's asset bundle FIRST — from here
+  // on, no failure mode (Gemini error, crash, restart) loses the video.
   try {
-    fs.writeFileSync(tmpVideo, file.buffer);
+    saveBytes(videoRel, file.buffer);
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
     return;
   }
+  const videoAbs = path.join(space, videoRel);
 
-  // Respond now; OCR runs in the background and the note appears when done
-  // (the sidebar's "Converting…" banner tracks `kbRel` meanwhile).
+  // Respond now; analysis runs in the background and the note appears when
+  // done (the sidebar's "Converting…" banner tracks `kbRel` meanwhile).
   res.json({ ok: true, file: noteRel });
 
-  // Debug bundle dir (kept across the run) when the env switch is on.
-  let debugDir: string | null = null;
-  if (recordingDebugEnabled()) {
-    debugDir = path.join(os.homedir(), '.stashbase', 'recording-debug', `recording-${stamp}`);
-    try { fs.mkdirSync(debugDir, { recursive: true }); }
-    catch (err) { log.warn(`recording debug dir failed: ${errorMessage(err)}`); debugDir = null; }
-  }
+  // Relative to the note, which sits next to its bundle.
+  const videoEmbed =
+    `\n\n---\n\n<video controls preload="metadata" src="${bundleName}/recording.webm"></video>\n`;
 
   const windowId = req.header(WINDOW_ID_HEADER);
   void runBackgroundConversion(kbRel, () => runWithWindowId(windowId, async () => {
@@ -138,26 +124,15 @@ function handleRecording(req: express.Request, res: express.Response): void {
     try {
       // Gemini video understanding — reads layout / reading order /
       // temporal flow that per-frame OCR can't (multi-column, dynamic).
-      text = await analyzeVideoWithGemini(tmpVideo, 'video/webm');
+      text = await analyzeVideoWithGemini(videoAbs, 'video/webm');
     } catch (err) {
-      // Always leave a visible note — the video is gone, so a silent
-      // failure would lose the recording entirely.
+      // Still leave a visible note — the saved video makes the recording
+      // recoverable, but a silent failure would hide that it exists.
       log.warn(`recording analysis failed for ${noteRel}: ${errorMessage(err)}`);
       text = `# Recording\n\n_Could not analyze this recording: ${errorMessage(err)}_\n`;
-    } finally {
-      // Debug mode keeps the source webm in the bundle instead of dropping it.
-      if (debugDir) {
-        try { fs.copyFileSync(tmpVideo, path.join(debugDir, 'source.webm')); }
-        catch (err) { log.warn(`recording debug copy failed: ${errorMessage(err)}`); }
-      }
-      try { fs.rmSync(tmpVideo, { force: true }); } catch { /* best-effort */ }
     }
-    saveText(noteRel, text);
-    await indexer.upsertFile(kbRel, text);
-    if (debugDir) {
-      try { fs.writeFileSync(path.join(debugDir, path.basename(noteRel)), text); } catch { /* best-effort */ }
-      log.info(`recording debug bundle: ${debugDir}`);
-    }
+    saveText(noteRel, text + videoEmbed);
+    await indexer.upsertFile(kbRel, text + videoEmbed);
     log.info(`recording note written: ${noteRel}`);
   }));
 }

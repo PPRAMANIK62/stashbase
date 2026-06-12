@@ -406,6 +406,11 @@ export function mount(app: express.Express): void {
       }
       return;
     }
+    if (ext === '.webm' || ext === '.mp4' || ext === '.mov' || ext === '.m4v') {
+      // Video needs Range support for seeking — sendFile handles
+      // Accept-Ranges / 206 responses; a piped stream can't seek.
+      return res.sendFile(abs);
+    }
     res.type(MIME[ext] ?? 'application/octet-stream');
     fs.createReadStream(abs).pipe(res);
   });
