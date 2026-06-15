@@ -463,42 +463,20 @@ function SpaceMenu() {
   );
 }
 
-/** "+" icon in the sidebar header that opens a small picker for the
- *  new note's format. Default is HTML — what the README recommends
- *  for content meant to outlive a chat session — but Markdown stays
- *  one click away for quick drafts. Format is decided at create time,
- *  not via a setting; the picker enforces an explicit choice every
- *  time without making either option feel hidden. The shared `<Menu>`
- *  handles the viewport-aware positioning (the sidebar's `overflow:
- *  hidden` ancestors would otherwise clip an in-tree popover). */
+/** "+" icon in the sidebar header that creates a new Markdown note in
+ *  the active folder. HTML notes were dropped once their editor went
+ *  away, so there's no format picker — one click, one .md draft. */
 function NewNoteButton() {
   const { state, actions } = useApp();
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const target = state.activeFolder || state.space || 'space root';
 
-  function toggle() {
-    if (anchor) { setAnchor(null); return; }
-    const r = buttonRef.current?.getBoundingClientRect();
-    if (r) setAnchor(r);
-  }
-
-  const items: MenuItem[] = [
-    { label: 'HTML note', detail: 'richer structure · default', onSelect: () => void actions.newNote('html') },
-    { label: 'Markdown note', detail: 'quick draft', onSelect: () => void actions.newNote('md') },
-  ];
-
   return (
-    <>
-      <button
-        ref={buttonRef}
-        className="icon-btn"
-        type="button"
-        title={'New note in ' + target}
-        onClick={toggle}
-      ><NewFileIcon /></button>
-      {anchor && <Menu anchor={{ rect: anchor }} items={items} onClose={() => setAnchor(null)} minWidth={200} />}
-    </>
+    <button
+      className="icon-btn"
+      type="button"
+      title={'New note in ' + target}
+      onClick={() => void actions.newNote()}
+    ><NewFileIcon /></button>
   );
 }
 

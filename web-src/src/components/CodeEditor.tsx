@@ -24,7 +24,6 @@ import {
   findNext,
   findPrevious,
 } from '@codemirror/search';
-import { html as htmlLang } from '@codemirror/lang-html';
 import { markdown as mdLang } from '@codemirror/lang-markdown';
 import { useApp, type MatchInfo } from '../store/AppContext';
 
@@ -34,20 +33,19 @@ import { useApp, type MatchInfo } from '../store/AppContext';
  * store so the save / rename actions can read the live buffer without
  * prop-drilling refs around.
  *
- * Editor identity is keyed by `{file, format}` — flipping either
- * destroys the view + makes a new one (no state to migrate, the new
- * content comes in fresh). Initial content is read once from props at
- * mount time and never thereafter — CM owns the buffer.
+ * Markdown is the only editable format, so the editor is md-only.
+ * Editor identity is keyed by `name` — switching files destroys the
+ * view + makes a new one (no state to migrate, the new content comes
+ * in fresh). Initial content is read once from props at mount time and
+ * never thereafter — CM owns the buffer.
  */
 export function CodeEditor({
   name,
   initialContent,
-  format,
   onChange,
 }: {
   name: string;
   initialContent: string;
-  format: 'md' | 'html';
   onChange?: (doc: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -77,14 +75,12 @@ export function CodeEditor({
     const host = hostRef.current;
     if (!host) return;
 
-    const lang = format === 'html' ? htmlLang() : mdLang({ addKeymap: false });
+    const lang = mdLang({ addKeymap: false });
     // Strip CM's built-in Cmd-F binding — we route Cmd+F to our own
     // FindBar component instead. Cmd-G / Shift-Cmd-G (find next/prev)
     // stay so the bar's hotkeys still work when focus is in the editor.
     const editorSearchKeymap = searchKeymap.filter((b) => b.key !== 'Mod-f');
-    const linkKeymap = format === 'md'
-      ? [{ key: 'Mod-k', run: insertMarkdownLink }]
-      : [{ key: 'Mod-k', run: insertHtmlLink }];
+    const linkKeymap = [{ key: 'Mod-k', run: insertMarkdownLink }];
     const extensions = [
       lineNumbers(),
       foldGutter(),
@@ -109,7 +105,7 @@ export function CodeEditor({
         '.cm-content': { padding: '12px 0' },
         '.cm-gutters': {
           // Opaque so content scrolling horizontally doesn't show
-          // through the line-number column — matches `.split-source`'s
+          // through the line-number column — matches `.md-editor`'s
           // background (`var(--bg)`).
           background: 'var(--bg)',
           color: '#9aa0a6',
@@ -157,10 +153,10 @@ export function CodeEditor({
       view.destroy();
       viewRef.current = null;
     };
-  // Mount once per `{format}` change; initialContent and onChange are
-  // captured via refs so they don't trigger re-mounts.
+  // Mount once per file; initialContent and onChange are captured via
+  // refs so they don't trigger re-mounts.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [format, name]);
+  }, [name]);
 
   // Re-focus the editor when an inline rename ends (commit or cancel).
   useEffect(() => {
@@ -246,38 +242,4 @@ function insertMarkdownLink(view: EditorView): boolean {
   });
   view.focus();
   return true;
-}
-
-function insertHtmlLink(view: EditorView): boolean {
-  const target = window.prompt('Link target: note.md, folder/note.md#heading, #heading, or https://...');
-  if (target == null) return true;
-  const href = target.trim();
-  if (!href) return true;
-  const sel = view.state.selection.main;
-  const selected = view.state.sliceDoc(sel.from, sel.to);
-  const text = selected || 'link text';
-  const inserted = `<a href="${escapeHtmlAttr(href)}">${escapeHtmlText(text)}</a>`;
-  const textFrom = sel.from + `<a href="${escapeHtmlAttr(href)}">`.length;
-  const textTo = textFrom + escapeHtmlText(text).length;
-  view.dispatch({
-    changes: { from: sel.from, to: sel.to, insert: inserted },
-    selection: selected ? { anchor: sel.from + inserted.length } : { anchor: textFrom, head: textTo },
-  });
-  view.focus();
-  return true;
-}
-
-function escapeHtmlAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeHtmlText(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }

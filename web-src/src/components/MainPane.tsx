@@ -7,14 +7,14 @@ import { ImagePreview } from './ImagePreview';
 import { MarkdownPreview } from './MarkdownPreview';
 import { PathBreadcrumb } from './PathBreadcrumb';
 import { PdfPreview } from './PdfPreview';
-import { Split } from './Split';
+import { CodeEditor } from './CodeEditor';
 import { StashingPlaceholder } from './StashingPlaceholder';
 import { TabStrip } from './TabStrip';
 
 /**
  * Right rail. Layout from top to bottom:
  *   • TabStrip                   (when any tab is open)
- *   • main-body                  (preview / split / empty-tab landing)
+ *   • main-body                  (preview / md editor / empty-tab landing)
  *   • absolute-positioned chrome:
  *       - nav-actions  (back / forward, top-left)
  *       - breadcrumb   (path, top-center)
@@ -74,8 +74,18 @@ export function MainPane() {
           // Images, like PDFs, are binary — no edit mode.
           <ImagePreview name={cur.name} />
         )}
-        {cur && !isStashingPlaceholder && editMode && cur.format !== 'pdf' && cur.format !== 'image' && (
-          <Split name={cur.name} format={cur.format} initialContent={cur.content} />
+        {cur && !isStashingPlaceholder && editMode && cur.format === 'md' && (
+          // Markdown is the only editable format — HTML/PDF/image are
+          // read-only viewers. The editor is a single CodeMirror pane
+          // (no source+preview split); save is scheduled on every edit.
+          <div className="md-editor">
+            <CodeEditor
+              key={cur.name}
+              name={cur.name}
+              initialContent={cur.content}
+              onChange={() => actions.scheduleSave()}
+            />
+          </div>
         )}
       </div>
       {activeTab && (
@@ -107,7 +117,7 @@ export function MainPane() {
         </div>
       )}
       <FindBar />
-      {cur && !isStashingPlaceholder && cur.kind !== 'kb' && cur.format !== 'pdf' && cur.format !== 'image' && (
+      {cur && !isStashingPlaceholder && cur.kind !== 'kb' && cur.format === 'md' && (
         <div className={'main-floating-actions' + (editMode ? ' editing' : '')}>
           {editMode && saveStatus.text && (
             <span className={'save-status' + (saveStatus.cls ? ' ' + saveStatus.cls : '')}>
