@@ -290,39 +290,17 @@ function keywordFindCaseSensitive(query: string, caseStrict: boolean): boolean {
   return caseStrict || query !== query.toLowerCase();
 }
 
-const SIDEBAR_VIEW_STORAGE_KEY = 'stashbase.sidebarView';
-
-function readPersistedSidebarView(): State['activeSidebarView'] {
-  if (typeof window === 'undefined') return 'files';
-  try {
-    const raw = window.localStorage.getItem(SIDEBAR_VIEW_STORAGE_KEY);
-    return raw === 'search' || raw === 'files' ? raw : 'files';
-  } catch {
-    return 'files';
-  }
-}
-
-function initialStateWithPersistedSidebarView(base: State): State {
-  return { ...base, activeSidebarView: readPersistedSidebarView() };
-}
-
 function isSpaceFileTab(t: { file: State['tabs'][number]['file'] }, name: string): boolean {
   return t.file?.name === name && (t.file.kind ?? 'space') === 'space';
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState, initialStateWithPersistedSidebarView);
+  // Sidebar view (Files / Search) is deliberately NOT persisted: every
+  // launch lands on Files. The file tree is the canonical landing spot;
+  // Search is a task you actively enter, not a state worth restoring.
+  const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SIDEBAR_VIEW_STORAGE_KEY, state.activeSidebarView);
-    } catch {
-      // Storage can be unavailable in private/sandboxed contexts; the
-      // current session still works normally.
-    }
-  }, [state.activeSidebarView]);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

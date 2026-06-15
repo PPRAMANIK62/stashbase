@@ -232,8 +232,8 @@ export interface State {
 
   /** Which sidebar view is active. `'files'` shows the file tree +
    *  banners; `'search'` shows the search input + result list (input
-   *  visible only in this view). AppProvider restores the last view from
-   *  localStorage on launch. */
+   *  visible only in this view). Not persisted — every launch starts on
+   *  `'files'`. */
   activeSidebarView: 'files' | 'search';
   /** Sidebar search input. Empty = blank search panel; non-empty =
    *  run search in whichever mode `searchMode` selects. */

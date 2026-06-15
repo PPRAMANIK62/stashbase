@@ -25,8 +25,8 @@ function captureBridge(): CaptureBridge | undefined {
  * Exactly one icon is "active" at a time — the active state is bound
  * to `state.activeSidebarView`, NOT to whatever happens to be focused
  * in the main pane, so the bar always reads as "what view am I in".
- * AppProvider persists this view so relaunch returns to Files/Search
- * exactly where the user left it.
+ * The view is NOT persisted across launches — every relaunch lands on
+ * Files (the canonical landing spot; Search is entered on demand).
  */
 export function ActivityBar() {
   const { state, dispatch, actions } = useApp();
