@@ -45,22 +45,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { ensureKbRoot, listKnownSpaces, needsKbRootPicker } from '../server/space.ts';
 import { migrateLegacyEmbedderConfig } from '../server/app-config.ts';
-import {
-  ensureKbOverview,
-  type KbInfo,
-  type SpaceInfoFull,
-} from '../server/kb.ts';
-import {
-  isReservedMetadataFile,
-  type FileMetadata,
-} from '../server/metadata.ts';
+import { type KbInfo } from '../server/kb.ts';
 
 // Idempotent migrations. Safe to run from both the web server and MCP —
 // second call no-ops.
 migrateLegacyEmbedderConfig();
 if (!needsKbRootPicker()) {
   ensureKbRoot();
-  ensureKbOverview();
 }
 
 function parsePortArg(argv: string[], fallback: number): number {
@@ -332,83 +323,10 @@ async function statusViaWeb(space: string | undefined): Promise<unknown> {
   return r.json();
 }
 
-async function listFilesViaWeb(space: string | undefined): Promise<string[]> {
-  const url = space ? `${WEB_BASE}/api/kb/files?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/kb/files`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`web /api/kb/files failed: ${r.status}`);
-  const j = await r.json() as { files: string[] };
-  return j.files;
-}
-
 async function kbInfoViaWeb(): Promise<KbInfo> {
   const r = await fetch(`${WEB_BASE}/api/kb/info`);
   if (!r.ok) throw new Error(`web /api/kb/info failed: ${r.status}`);
   return r.json() as Promise<KbInfo>;
-}
-
-async function spaceInfoViaWeb(space: string): Promise<SpaceInfoFull> {
-  const r = await fetch(`${WEB_BASE}/api/kb/space-info?space=${encodeURIComponent(space)}`);
-  if (!r.ok) throw new Error(`web /api/kb/space-info failed: ${r.status}`);
-  return r.json() as Promise<SpaceInfoFull>;
-}
-
-async function setFileMetadataViaWeb(kbRel: string, metadata: FileMetadata): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/kb/file-metadata`, {
-    method: 'POST',
-    headers: webHeaders({ 'content-type': 'application/json' }),
-    body: JSON.stringify({ path: kbRel, metadata }),
-  });
-  if (!r.ok) {
-    const j = await r.json().catch(() => ({})) as { error?: string };
-    throw new Error(j.error ?? `web /api/kb/file-metadata failed: ${r.status}`);
-  }
-}
-
-async function updateKbOverviewViaWeb(content: string): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/kb/overview`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ content }),
-  });
-  if (!r.ok) throw new Error(`web /api/kb/overview failed: ${r.status}`);
-}
-
-async function getFileViaWeb(kbRel: string): Promise<string | null> {
-  const r = await fetch(`${WEB_BASE}/api/kb/file/${encodeKbPath(kbRel)}`);
-  if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`web /api/kb/file/${kbRel} failed: ${r.status}`);
-  const j = await r.json() as { content: string };
-  return j.content;
-}
-
-async function writeFileViaWeb(kbRel: string, content: string, overwrite: boolean): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/kb/file/${encodeKbPath(kbRel)}`, {
-    method: 'PUT',
-    headers: webHeaders({ 'content-type': 'application/json' }),
-    body: JSON.stringify({ content, overwrite }),
-  });
-  if (r.status === 409) throw new Error(`file exists: ${kbRel} (pass overwrite=true to replace)`);
-  if (!r.ok) throw new Error(`web PUT /api/kb/file/${kbRel} failed: ${r.status}`);
-}
-
-async function deleteFileViaWeb(kbRel: string): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/kb/file/${encodeKbPath(kbRel)}`, {
-    method: 'DELETE',
-    headers: webHeaders(),
-  });
-  if (r.status === 404) throw new Error(`file not found: ${kbRel}`);
-  if (!r.ok) throw new Error(`web DELETE /api/kb/file/${kbRel} failed: ${r.status}`);
-}
-
-async function renameFileViaWeb(oldRel: string, newRel: string): Promise<void> {
-  const r = await fetch(`${WEB_BASE}/api/kb/file/${encodeKbPath(oldRel)}`, {
-    method: 'PATCH',
-    headers: webHeaders({ 'content-type': 'application/json' }),
-    body: JSON.stringify({ new_path: newRel }),
-  });
-  if (r.status === 404) throw new Error(`file not found: ${oldRel}`);
-  if (r.status === 409) throw new Error(`target exists: ${newRel}`);
-  if (!r.ok) throw new Error(`web PATCH /api/kb/file/${oldRel} failed: ${r.status}`);
 }
 
 async function syncViaWeb(space: string | undefined): Promise<unknown> {
@@ -418,53 +336,63 @@ async function syncViaWeb(space: string | undefined): Promise<unknown> {
   return r.json();
 }
 
-async function recentFilesViaWeb(space: string | undefined, limit: number): Promise<unknown[]> {
-  const qs = new URLSearchParams();
-  if (space) qs.set('space', space);
-  qs.set('limit', String(limit));
-  const r = await fetch(`${WEB_BASE}/api/kb/recent-files?${qs.toString()}`);
-  if (!r.ok) throw new Error(`web /api/kb/recent-files failed: ${r.status}`);
-  const j = await r.json() as { files: unknown[] };
-  return j.files;
-}
-
-function encodeKbPath(p: string): string {
-  return p.split('/').map(encodeURIComponent).join('/');
-}
-
-/** Split a kbRoot-relative path into `{space, spaceRel}`; null when there
- *  is no space-relative remainder (bare space name). Mirrors the route
- *  helper in `routes/indexing.ts`. */
-function splitSpacePath(kbRel: string): { space: string; spaceRel: string } | null {
-  const norm = kbRel.replace(/\\/g, '/').replace(/^\/+/, '');
-  const slash = norm.indexOf('/');
-  if (slash < 0) return null;
-  const space = norm.slice(0, slash);
-  const spaceRel = norm.slice(slash + 1).trim();
-  if (!space || !spaceRel) return null;
-  return { space, spaceRel };
-}
-
 const DEFAULT_TOP_K = 8;
 const MAX_TOP_K = 25;
 
 const server = new Server(
   { name: 'stashbase', version: '0.1.0' },
-  { capabilities: { tools: {} } },
+  {
+    capabilities: { tools: {} },
+    instructions:
+      'StashBase exposes a local Markdown / HTML knowledge base as plain files on ' +
+      'disk. This server provides ONLY the things you cannot do with your own ' +
+      'filesystem tools: `search_kb` (semantic search) and `reindex` (make on-disk ' +
+      'changes searchable). Everything else is done by reading and writing files ' +
+      'directly.\n\n' +
+      'At the start of a session, call `kb_info`. It returns `kb_root` (the absolute ' +
+      'path of the knowledge base), the list of spaces, and the `STASHBASE.md` rules ' +
+      '— FOLLOW those rules for everything you do to the KB.\n\n' +
+      'To read a file, read `<kb_root>/<space>/<file>` with your filesystem tools ' +
+      '(search_kb returns kbRoot-relative paths). To create, edit, delete, or move a ' +
+      'note — or to edit the `STASHBASE.md` rules — write those files in place. There ' +
+      'is NO filesystem watcher: after ANY write, call `reindex` so the change ' +
+      'becomes searchable (it diffs disk against the index itself — you do not report ' +
+      'what changed).\n\n' +
+      'When you CREATE a new derived file (e.g. a generated summary), add ' +
+      '`generated_by: stashbase-agent` to its Markdown YAML front-matter (or an HTML ' +
+      '`<meta name="generated_by" content="stashbase-agent">`) so the user can later ' +
+      'bulk-identify agent-generated output. Never put credentials in files.',
+  },
 );
 
 const BUILTIN_TOOLS = [
     {
+      name: 'kb_info',
+      description:
+        'Orient yourself in the StashBase knowledge base. **Call this first** in a ' +
+        'new conversation. Returns `{kb_root, spaces, rules}` where `kb_root` is the ' +
+        'ABSOLUTE filesystem path of the knowledge base, `spaces` lists each space ' +
+        '(name + embedder provider), and `rules` is the KB-level `STASHBASE.md` ' +
+        'maintenance contract you must follow. ' +
+        'Everything except semantic search and reindexing is done with your OWN ' +
+        'filesystem tools directly under `kb_root`: read a full file by reading ' +
+        '`<kb_root>/<space>/<file>`; create / edit / delete / move notes, and edit ' +
+        'the `STASHBASE.md` rules, by writing those files in place. After any write, ' +
+        'call `reindex` so the changes become searchable.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    },
+    {
       name: 'search_kb',
       description:
         'Hybrid (vector + full-text) search over the local Markdown / HTML knowledge base. ' +
-        'Searches the **whole knowledge base** by default — every space under ~/Documents/StashBase/ ' +
-        '— and scopes to one space when `space` is provided (e.g. "cs183b" or "work/research"). ' +
-        'For finer control, `path_prefix` restricts hits to chunks whose kbRoot-relative source ' +
-        'starts with that prefix (e.g. "cs183b/transcripts/" to search only lecture transcripts). ' +
+        'Searches the **whole knowledge base** by default — every space under the kb_root ' +
+        'from `kb_info` — and scopes to one space when `space` is provided (e.g. "cs183b" ' +
+        'or "work/research"). For finer control, `path_prefix` restricts hits to chunks ' +
+        'whose kbRoot-relative source starts with that prefix (e.g. "cs183b/transcripts/"). ' +
         'Each hit returns the kbRoot-relative file path (`<space>/<file>`), the chunk content, ' +
         'optional heading and source line range, and a fused relevance score. Use this when ' +
-        'the user asks something the notes might answer; pull a full document with `get_file`.',
+        'the user asks something the notes might answer; read the full document by reading ' +
+        '`<kb_root>/<path>` directly with your filesystem tools.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -472,7 +400,7 @@ const BUILTIN_TOOLS = [
           space: {
             type: 'string',
             description:
-              'Optional space name (kbRoot-relative path of a folder under ~/Documents/StashBase/, ' +
+              'Optional space name (kbRoot-relative path of a folder under kb_root, ' +
               'e.g. "cs183b"). Omit to search the whole knowledge base.',
           },
           path_prefix: {
@@ -493,274 +421,25 @@ const BUILTIN_TOOLS = [
       },
     },
     {
-      name: 'list_files',
+      name: 'reindex',
       description:
-        'List every indexed file in the knowledge base (paths only — for content, use ' +
-        '`get_file`). Defaults to the whole knowledge base; pass `space` to scope. Returns ' +
-        'kbRoot-relative POSIX paths sorted alphabetically.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          space: {
-            type: 'string',
-            description: 'Optional space name; omit to list across the whole knowledge base.',
-          },
-        },
-      },
-    },
-    {
-      name: 'get_file',
-      description:
-        'Fetch the full raw content of one file by its kbRoot-relative path (e.g. ' +
-        '`cs183b/lecture-01.md`). Use after `search_kb` or `list_files` to pull the ' +
-        'surrounding document. Returns original source as text — no preview rendering.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: {
-            type: 'string',
-            description:
-              'kbRoot-relative file path (e.g. "cs183b/lecture-01.md"). The first ' +
-              'segment is the space; the rest is the path within the space.',
-          },
-        },
-        required: ['path'],
-      },
-    },
-    {
-      name: 'kb_info',
-      description:
-        'Get a one-shot map of the StashBase knowledge base: a free-form ' +
-        '`overview` (the contents of `<kbRoot>/.stashbase/space-metadata.md`, ' +
-        'an agent-maintained markdown 目录 that should describe what each ' +
-        'space contains) plus structured facts per space (name, ' +
-        'embedder provider, file count, a sample of file paths and ' +
-        'headings). **Call this first** when starting a new conversation ' +
-        'so you can decide which space(s) `search_kb` should target. If ' +
-        '`overview` is empty or out of date relative to what you find ' +
-        'during a session, update it via `update_space_metadata`.',
-      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    },
-    {
-      name: 'space_info',
-      description:
-        'Structured facts about ONE space (provider, file count, sample files + headings) ' +
-        'plus that space\'s section of the KB 目录. Use after `kb_info` to dig ' +
-        'into a specific space before `search_kb`. Returns `{name, provider, file_count, ' +
-        'sample_files, sample_headings, rules, overview_section}` — `overview_section` is ' +
-        'the `## <space>` slice of the agent-maintained 目录, empty when none exists.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          space: {
-            type: 'string',
-            description: 'Space name (kbRoot-relative folder, e.g. "cs183b" or "work/research").',
-          },
-        },
-        required: ['space'],
-      },
-    },
-    {
-      name: 'update_space_metadata',
-      description:
-        'Overwrite the entire `<kbRoot>/.stashbase/space-metadata.md` 目录 ' +
-        'with new markdown content. Call this after you have learned ' +
-        'something new about the knowledge base (a new space exists, a topic ' +
-        'in a space turned out to be different from your prior ' +
-        'understanding, etc.). Keep it concise — this file is read at ' +
-        'the start of every conversation, not searched. Structure ' +
-        'suggestion: a top-level heading + a `## Spaces` section with ' +
-        'one subsection per space.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          content: {
-            type: 'string',
-            description: 'Full markdown content to write to space-metadata.md.',
-          },
-        },
-        required: ['content'],
-      },
-    },
-    {
-      name: 'get_rules',
-      description:
-        'Read StashBase maintenance rules. Without `space`, returns KB-level rules. ' +
-        'With `space`, returns KB-level rules followed by that space\'s `STASHBASE.md`, ' +
-        'so later space rules can override earlier baseline guidance.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          space: { type: 'string', description: 'Optional space name.' },
-        },
-      },
-    },
-    {
-      name: 'update_space_rules',
-      description:
-        'Overwrite one space\'s `STASHBASE.md` maintenance rules. This does not edit ' +
-        'the KB-level `STASHBASE.md` baseline.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          space: { type: 'string', description: 'Space name to update.' },
-          content: { type: 'string', description: 'Full markdown content for the space rules.' },
-        },
-        required: ['space', 'content'],
-      },
-    },
-    {
-      name: 'index_status',
-      description:
-        'Check whether the index has caught up with the files on disk. Returns ' +
-        '`{total, indexed, pendingCount, pending, upToDate, snapshotWarning, ' +
-        'recentlyIndexed}` for the **whole knowledge base** by default, or for one `space` ' +
-        'when scoped. `pending` is the full list of kbRoot-relative paths still ' +
-        'waiting to be indexed. `recentlyIndexed` is the top-10 indexed files ' +
-        'sorted by on-disk mtime — useful for "did my recent edits get embedded ' +
-        'yet?". `snapshotWarning` surfaces a provider-mismatch from a recent ' +
-        'snapshot import. Call this when `search_kb` returns fewer or less ' +
-        'relevant results than expected — especially right after an import.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          space: {
-            type: 'string',
-            description: 'Optional space name; omit to check the whole knowledge base.',
-          },
-        },
-      },
-    },
-    {
-      name: 'write_file',
-      description:
-        'Write a file to the knowledge base at a kbRoot-relative path (e.g. ' +
-        '`cs183b/lecture-01.md`). Creates parent directories as needed and updates ' +
-        'the semantic index in the background so generated notes return quickly. ' +
-        'Call `index_status` if you need to wait until the new content is searchable. ' +
-        'Default `overwrite=false` returns an error if the target ' +
-        'exists; pass `overwrite=true` to replace user content. Intended for ' +
-        'markdown / HTML notes; binary formats can be written but won\'t enter the ' +
-        'index. The first path segment is the space name (must be an existing space). ' +
-        'When you CREATE a new derived file (e.g. a generated summary), mark it with ' +
-        '`generated_by: stashbase-agent` in its Markdown YAML front-matter (or an HTML ' +
-        '`<meta name="generated_by" content="stashbase-agent">`) so users can later ' +
-        'bulk-identify and clean up agent-generated output.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: {
-            type: 'string',
-            description: 'kbRoot-relative file path (e.g. "cs183b/lecture-01.md").',
-          },
-          content: { type: 'string', description: 'File content (UTF-8).' },
-          overwrite: {
-            type: 'boolean',
-            description: 'Replace an existing file at this path. Defaults to false.',
-          },
-        },
-        required: ['path', 'content'],
-      },
-    },
-    {
-      name: 'set_file_metadata',
-      description:
-        'Set the agent-maintained metadata for one file, stored in ' +
-        '`<space>/file-metadata.md` — a sidecar kept OUT of the user\'s file so you ' +
-        'never edit their content. `path` is kbRoot-relative (e.g. "cs183b/note.md"); ' +
-        'its first segment is the space. `metadata` is an object of arbitrary keys; it ' +
-        'REPLACES that file\'s whole section (not a merge), and passing an empty object ' +
-        '`{}` removes the section. This metadata is merged into the file\'s chunks at ' +
-        'index time, but any metadata the user wrote INSIDE the file (front-matter / ' +
-        '`<meta>`) still wins. For metadata you derived for a NEW file you generated, ' +
-        'include `generated_by: stashbase-agent` so users can bulk-identify agent output.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: {
-            type: 'string',
-            description: 'kbRoot-relative file path (e.g. "cs183b/note.md"). First segment is the space.',
-          },
-          metadata: {
-            type: 'object',
-            description: 'Metadata key/value object. Empty object removes the file\'s section.',
-            additionalProperties: true,
-          },
-        },
-        required: ['path', 'metadata'],
-      },
-    },
-    {
-      name: 'delete_file',
-      description:
-        'Delete a file at a kbRoot-relative path and remove it from the index. ' +
-        'Returns an error if the file does not exist. Intended for cleanup of ' +
-        'agent-written or stale notes — use carefully on user content.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'kbRoot-relative file path to delete.' },
-        },
-        required: ['path'],
-      },
-    },
-    {
-      name: 'rename_file',
-      description:
-        'Rename / move a file from one kbRoot-relative path to another. The new ' +
-        'path can be in a different folder within the same space; cross-space ' +
-        'moves are allowed but may invalidate links. V1 does NOT cascade-update ' +
-        'inbound markdown / HTML links — that lives behind the GUI confirm dialog ' +
-        'on `/api/files/*` PATCH. Returns 409 if the target exists.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          old_path: { type: 'string', description: 'Current kbRoot-relative file path.' },
-          new_path: { type: 'string', description: 'New kbRoot-relative file path.' },
-        },
-        required: ['old_path', 'new_path'],
-      },
-    },
-    {
-      name: 'update_index',
-      description:
-        'Force a reconcile sweep on one space (or every known space when `space` ' +
-        'is omitted). Use after editing files outside StashBase (git pull, external ' +
-        'script writes) when you want the changes searchable without first opening ' +
-        'the space in the GUI. Returns a per-space breakdown of ' +
-        '`{added, modified, removed, renamed, failed}`. WARNING: triggers ' +
-        're-embedding of changed files and consumes embedding tokens proportional ' +
-        'to the diff — pass `space` to limit blast radius when you only edited one.',
+        'Reconcile the semantic index with the files currently on disk, then report ' +
+        'index health. Call this after you create, edit, delete, or move any file under ' +
+        'kb_root with your filesystem tools — StashBase does NOT watch the filesystem, so ' +
+        'your changes are invisible to `search_kb` until you reindex. You do NOT need to ' +
+        'say what changed: the sweep diffs disk against the index and discovers added / ' +
+        'modified / removed / renamed files itself. Defaults to the **whole knowledge ' +
+        'base**; pass `space` to limit the disk walk to one space. Re-embedding cost is ' +
+        'proportional to the diff (only changed files are re-embedded), not the KB size. ' +
+        'Returns `{spaces: [{space, added, modified, removed, renamed, failed}], ' +
+        'total, indexed, pendingCount, pending, upToDate}` — the totals come from a ' +
+        'whole-KB index-status check run after the sweep.',
       inputSchema: {
         type: 'object',
         properties: {
           space: {
             type: 'string',
             description: 'Space name to reconcile. Omit to reconcile every known space.',
-          },
-        },
-      },
-    },
-    {
-      name: 'recent_files',
-      description:
-        'List indexable files (markdown / HTML) in the knowledge base sorted by on-disk mtime, ' +
-        'most recently modified first. Cheap fs walk — no daemon involved. Use to answer ' +
-        '"what did the user / I just touch?" or to prime the agent\'s context with the ' +
-        'most relevant recent material. Each entry is `{path, mtime_ms}` with `path` ' +
-        'kbRoot-relative. Default limit 20, max 200. Pass `space` to scope to one space.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          space: {
-            type: 'string',
-            description: 'Optional space name; omit to walk the whole knowledge base.',
-          },
-          limit: {
-            type: 'integer',
-            description: 'Max files to return. Default 20, capped at 200.',
-            minimum: 1,
-            maximum: 200,
           },
         },
       },
@@ -774,6 +453,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const args = (req.params.arguments ?? {}) as Record<string, unknown>;
   const space = typeof args.space === 'string' && args.space.trim() ? args.space.trim() : undefined;
+
+  if (req.params.name === 'kb_info') {
+    const info = await viaWeb('kb_info', () => kbInfoViaWeb());
+    return {
+      content: [{ type: 'text', text: JSON.stringify(info, null, 2) }],
+    };
+  }
 
   if (req.params.name === 'search_kb') {
     const query = typeof args.query === 'string' ? args.query.trim() : '';
@@ -790,182 +476,33 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     };
   }
 
-  if (req.params.name === 'list_files') {
-    const files = await viaWeb('list_files', () => listFilesViaWeb(space));
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, files }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'get_file') {
-    const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
-    if (!kbRel) throw new Error('`path` is required');
-    const content = await viaWeb('get_file', () => getFileViaWeb(kbRel));
-    if (content == null) throw new Error(`file not found: ${kbRel}`);
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ path: kbRel, content }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'kb_info') {
-    const info = await viaWeb('kb_info', () => kbInfoViaWeb());
-    return {
-      content: [{ type: 'text', text: JSON.stringify(info, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'space_info') {
-    if (!space) throw new Error('`space` is required');
-    const info = await viaWeb('space_info', () => spaceInfoViaWeb(space));
-    return {
-      content: [{ type: 'text', text: JSON.stringify(info, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'update_space_metadata') {
-    const content = typeof args.content === 'string' ? args.content : '';
-    if (!content) throw new Error('`content` is required');
-    await viaWeb('update_space_metadata', () => updateKbOverviewViaWeb(content));
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ ok: true }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'get_rules') {
-    const content = await viaWeb('get_rules', async () => {
-      const url = space ? `${WEB_BASE}/api/rules?space=${encodeURIComponent(space)}` : `${WEB_BASE}/api/rules`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`web /api/rules failed: ${r.status}`);
-      const j = await r.json() as { content: string };
-      return j.content;
-    });
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, content }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'update_space_rules') {
-    const target = typeof args.space === 'string' ? args.space.trim() : '';
-    const content = typeof args.content === 'string' ? args.content : '';
-    if (!target) throw new Error('`space` is required');
-    if (!content) throw new Error('`content` is required');
-    await viaWeb('update_space_rules', async () => {
-      const r = await fetch(`${WEB_BASE}/api/spaces/${encodeURIComponent(target)}/rules`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
-      if (!r.ok) throw new Error(`web /api/spaces/${target}/rules failed: ${r.status}`);
-    });
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ ok: true, space: target }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'index_status') {
-    const status = await viaWeb('index_status', () => statusViaWeb(space));
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, ...status as object }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'write_file') {
-    const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
-    const content = typeof args.content === 'string' ? args.content : '';
-    const overwrite = args.overwrite === true;
-    if (!kbRel) throw new Error('`path` is required');
-    if (typeof args.content !== 'string') throw new Error('`content` (string) is required');
-    await viaWeb('write_file', () => writeFileViaWeb(kbRel, content, overwrite));
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel, indexDeferred: true }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'set_file_metadata') {
-    const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
-    const metadata = args.metadata;
-    if (!kbRel) throw new Error('`path` is required');
-    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
-      throw new Error('`metadata` (object) is required');
-    }
-    const split = splitSpacePath(kbRel);
-    if (!split) throw new Error('`path` must include a space segment, e.g. "cs183b/note.md"');
-    if (isReservedMetadataFile(kbRel)) {
-      throw new Error('cannot set metadata on a reserved metadata file');
-    }
-    await viaWeb('set_file_metadata', () => setFileMetadataViaWeb(kbRel, metadata as FileMetadata));
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'delete_file') {
-    const kbRel = typeof args.path === 'string' ? args.path.trim() : '';
-    if (!kbRel) throw new Error('`path` is required');
-    await viaWeb('delete_file', () => deleteFileViaWeb(kbRel));
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ ok: true, path: kbRel }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'rename_file') {
-    const oldRel = typeof args.old_path === 'string' ? args.old_path.trim() : '';
-    const newRel = typeof args.new_path === 'string' ? args.new_path.trim() : '';
-    if (!oldRel) throw new Error('`old_path` is required');
-    if (!newRel) throw new Error('`new_path` is required');
-    if (oldRel === newRel) {
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ ok: true, path: oldRel }, null, 2) }],
-      };
-    }
-    await viaWeb('rename_file', () => renameFileViaWeb(oldRel, newRel));
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ ok: true, path: newRel }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'update_index') {
-    // No-scope = reconcile every known space — matches the design
-    // contract that an external agent can ship "update everything"
-    // without knowing the knowledge-base layout. Each space runs through
-    // /api/sync independently so a failure in one doesn't poison the
-    // others; failures land in each sub-result's `failed` field, not a
-    // top-level error.
+  if (req.params.name === 'reindex') {
+    // No-scope = reconcile every known space — an external agent can ship
+    // "sync everything" without knowing the knowledge-base layout. Each
+    // space runs through /api/sync independently so a failure in one
+    // doesn't poison the others; failures land in that sub-result's
+    // `error`, not a top-level throw. After the sweep we fetch one
+    // whole-KB index-status so the agent gets `{added/…, total, indexed,
+    // pending, upToDate}` from a single call.
     const targets = space ? [space] : listKnownSpaces();
-    if (targets.length === 0) {
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ spaces: [], note: 'no known spaces to sync' }, null, 2) }],
-      };
-    }
-    const perSpace: Array<{ space: string; result?: unknown; error?: string }> = [];
+    const perSpace: Array<{ space: string; added?: unknown; error?: string }> = [];
     for (const target of targets) {
       try {
-        const result = await viaWeb(`update_index:${target}`, () => syncViaWeb(target));
-        perSpace.push({ space: target, result });
+        const result = await viaWeb(`reindex:${target}`, () => syncViaWeb(target));
+        perSpace.push({ space: target, ...(result as object) });
       } catch (err: unknown) {
         perSpace.push({ space: target, error: err instanceof Error ? err.message : String(err) });
       }
     }
-    // Single-space callers historically expected a flat result; keep
-    // that shape when they passed `space`, switch to a list when they
-    // didn't, so the response shape matches the intent.
-    if (space && perSpace.length === 1) {
-      const r = perSpace[0];
-      const body = r.error
-        ? { space: r.space, error: r.error }
-        : { space: r.space, ...(r.result as object) };
-      return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }] };
+    let status: object = {};
+    try {
+      status = (await viaWeb('reindex:status', () => statusViaWeb(space))) as object;
+    } catch {
+      // Status is a convenience on top of the reconcile result; if it
+      // fails, still return the per-space sweep outcome.
     }
     return {
-      content: [{ type: 'text', text: JSON.stringify({ spaces: perSpace }, null, 2) }],
-    };
-  }
-
-  if (req.params.name === 'recent_files') {
-    const limit = Math.max(1, Math.min(200, Math.floor(typeof args.limit === 'number' ? args.limit : 20)));
-    const files = await viaWeb('recent_files', () => recentFilesViaWeb(space, limit));
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ space: space ?? null, limit, files }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify({ spaces: perSpace, ...status }, null, 2) }],
     };
   }
 

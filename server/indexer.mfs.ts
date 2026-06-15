@@ -14,15 +14,12 @@
  */
 import { blake3 } from '@noble/hashes/blake3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from './html.ts';
 import { detectFormat } from './format.ts';
 import { contentSizeError, shouldIndexKbRel } from './indexable.ts';
-import { resolveFileMetadata, isReservedMetadataFile } from './metadata.ts';
-import { logger, errorMessage } from './log.ts';
+import { logger } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
-import { getKbRoot } from './space.ts';
 import type {
   EmbedderRuntimeConfig,
   Indexer,
@@ -94,11 +91,6 @@ export class MfsIndexer implements Indexer {
    *  pending until the prime completes — better than flashing
    *  "everything's indexed" before we know. */
   private spaceReady = new Set<string>();
-  /** Daemon generation when each space was primed; invalidate on
-   *  respawn so a fresh process re-primes from scratch. */
-  private spaceGeneration = new Map<string, number>();
-  /** In-flight prime promises so concurrent status() calls dedupe. */
-  private primeInflight = new Map<string, Promise<void>>();
 
   async bindSpace(space: string, cfg: EmbedderRuntimeConfig): Promise<void> {
     const daemon = getDaemon();
@@ -113,7 +105,6 @@ export class MfsIndexer implements Indexer {
     // then bind brings the collection into the world).
     this.spaceIndex.delete(space);
     this.spaceReady.delete(space);
-    this.spaceGeneration.delete(space);
     log.info(`bound ${space} → ${cfg.provider}`);
   }
 
@@ -121,41 +112,6 @@ export class MfsIndexer implements Indexer {
     await getDaemon().unbindSpace(space);
     this.spaceIndex.delete(space);
     this.spaceReady.delete(space);
-    this.spaceGeneration.delete(space);
-  }
-
-  /** Reset the local indexed-name cache for a space and queue a fresh
-   *  prime via `list`. Used after first bind and after a daemon respawn.
-   *  Concurrent calls dedupe via `primeInflight`. */
-  private primeSpace(space: string): Promise<void> {
-    const existing = this.primeInflight.get(space);
-    if (existing) return existing;
-    const daemon = getDaemon();
-    const p = (async () => {
-      try {
-        const res = await daemon.call<{ files: Record<string, string> }>(
-          'list', { space },
-        );
-        this.spaceIndex.set(space, new Set(Object.keys(res.files)));
-        this.spaceReady.add(space);
-        this.spaceGeneration.set(space, daemon.currentGeneration());
-      } catch (err: unknown) {
-        log.warn(`prime ${space}: list call failed: ${errorMessage(err)}`);
-      } finally {
-        this.primeInflight.delete(space);
-      }
-    })();
-    this.primeInflight.set(space, p);
-    return p;
-  }
-
-  /** Best-effort: ensure the cache for `space` is primed against the
-   *  current daemon generation. Bails silently on failure — `status()`
-   *  falls back to reporting all-pending until a successful prime. */
-  private async ensurePrimed(space: string): Promise<void> {
-    const gen = getDaemon().currentGeneration();
-    if (this.spaceReady.has(space) && this.spaceGeneration.get(space) === gen) return;
-    await this.primeSpace(space);
   }
 
   /** Find the bound space owning `kbRel`. Spaces are flat under
@@ -183,10 +139,6 @@ export class MfsIndexer implements Indexer {
   }
 
   async upsertFile(filePath: string, content: string): Promise<void> {
-    // Reserved agent metadata files (`<space>/file-metadata.md`,
-    // `<kbRoot>/.stashbase/space-metadata.md`) must not be indexed — their
-    // YAML / 目录 prose would surface as bogus hits.
-    if (isReservedMetadataFile(filePath)) return;
     if (!shouldIndexKbRel(filePath)) {
       this.noteUnindexed(filePath);
       await getDaemon().call('delete', { path: filePath });
@@ -215,11 +167,8 @@ export class MfsIndexer implements Indexer {
       return;
     }
     const t0 = Date.now();
-    // File-level metadata (user front-matter / HTML <meta> + the agent's
-    // `<space>/file-metadata.md` sidecar) rides along so every chunk carries it.
-    const metadata = resolveFileMetadata(filePath, content);
     const res = await getDaemon().call<{ chunks: number; embed_ms: number; total_ms: number }>(
-      'upsert', { path: filePath, content: text, ext, file_hash: fileHash, metadata },
+      'upsert', { path: filePath, content: text, ext, file_hash: fileHash, metadata: {} },
     );
     if (res.chunks > 0) this.noteIndexed(filePath);
     log.info(
@@ -253,11 +202,8 @@ export class MfsIndexer implements Indexer {
   async renameFile(oldPath: string, newPath: string, content: string): Promise<void> {
     const { text, ext, fileHash } = prepareForIndex(newPath, content);
     const t0 = Date.now();
-    // Metadata only matters on the re-embed fallback (content changed);
-    // the hash-match fast path copies existing rows, metadata included.
-    const metadata = resolveFileMetadata(newPath, content);
     const res = await getDaemon().call<{ chunks: number; embed_ms: number; fast_path?: boolean }>(
-      'rename', { old: oldPath, new: newPath, content: text, ext, file_hash: fileHash, metadata },
+      'rename', { old: oldPath, new: newPath, content: text, ext, file_hash: fileHash, metadata: {} },
     );
     this.noteUnindexed(oldPath);
     if (res.chunks > 0) this.noteIndexed(newPath);
@@ -373,7 +319,6 @@ export class MfsIndexer implements Indexer {
       // window of "everything pending" has closed.
       void idx;
       this.spaceReady.add(space);
-      this.spaceGeneration.set(space, getDaemon().currentGeneration());
     }
     return {
       total: res.total,
@@ -400,7 +345,6 @@ export class MfsIndexer implements Indexer {
     await daemon.call('close_store', {});
     this.spaceIndex.clear();
     this.spaceReady.clear();
-    this.spaceGeneration.clear();
   }
 
   async close(): Promise<void> {

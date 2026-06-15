@@ -375,11 +375,6 @@ export const api = {
   getKbRules: () => getJson<{ content: string }>('/api/kb/rules'),
   putKbRules: (content: string) =>
     send<Record<string, never>>('POST', '/api/kb/rules', { content }),
-  /** Read `<kbRoot>/.stashbase/space-metadata.md` — the agent-maintained
-   *  KB 目录. Powers the Knowledge base section's "space-metadata.md" row. */
-  getKbOverview: () => getJson<{ content: string }>('/api/kb/overview'),
-  putKbOverview: (content: string) =>
-    send<Record<string, never>>('POST', '/api/kb/overview', { content }),
   /** Copy a local folder into kbRoot as a new space. `source` is an
    *  absolute path; the renderer obtains it from
    *  `window.electron.openFolderDialog` (Electron-only). `name`

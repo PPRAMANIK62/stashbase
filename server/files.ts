@@ -19,7 +19,7 @@ import { decodeEntities } from './html.ts';
 import { errorCode, errorMessage, logger } from './log.ts';
 
 const log = logger('files');
-import { detectFormat, detectViewerFormat, isDerivedNoteName, isImageFile, matchNoteStem, type FileFormat, type ViewerFormat } from './format.ts';
+import { detectViewerFormat, isDerivedNoteName, isImageFile, matchNoteStem, type FileFormat, type ViewerFormat } from './format.ts';
 import { isIndexExcludedDirName } from './indexable.ts';
 
 export { detectFormat, type FileFormat } from './format.ts';
@@ -357,7 +357,7 @@ export interface FileEntry {
   imported_at: string;
 }
 
-export interface FolderEntry {
+interface FolderEntry {
   /** Space-relative POSIX path (e.g. `topic/sub`). */
   path: string;
 }

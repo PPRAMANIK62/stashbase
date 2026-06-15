@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
-import { ChevronDownIcon, ClaudeIcon, CodexIcon, InfoIcon, StashBaseIcon } from '../icons';
+import { ChevronDownIcon, ClaudeIcon, CodexIcon, StashBaseIcon } from '../icons';
 import type { FileMeta, FolderMeta } from '../api';
 import { FILE_MIME, FOLDER_MIME } from '../dragMime';
 import { useApp } from '../store/AppContext';
@@ -380,21 +380,16 @@ function FileRow({
   // Named files get their own glyph instead of the format icon:
   //   • Agent rules-books are tagged by their owner's logo —
   //     STASHBASE.md → StashBase, CLAUDE.md → Claude, AGENTS.md → Codex.
-  //   • The *-metadata.md files → info badge.
-  // Only STASHBASE.md and the catalogs are "meta files" (muted, system
-  // rows via `.meta-file`); CLAUDE.md / AGENTS.md are ordinary notes
-  // that merely borrow a brand logo, so they keep normal row styling.
+  // Only STASHBASE.md is a "meta file" (muted, system row via
+  // `.meta-file`); CLAUDE.md / AGENTS.md are ordinary notes that merely
+  // borrow a brand logo, so they keep normal row styling.
   const metaIcon =
     basename === 'STASHBASE.md' ? <StashBaseIcon />
     : basename === 'CLAUDE.md' ? <ClaudeIcon />
     : basename === 'AGENTS.md' ? <CodexIcon />
-    : (basename === 'file-metadata.md' || basename === 'space-metadata.md') ? <InfoIcon />
     : null;
 
-  const isMetaFile =
-    basename === 'STASHBASE.md'
-    || basename === 'file-metadata.md'
-    || basename === 'space-metadata.md';
+  const isMetaFile = basename === 'STASHBASE.md';
 
   const rowClass =
     `tree-row file format-${format}` +

@@ -3,7 +3,6 @@ import {
   CollapseAllIcon,
   ExpandAllIcon,
   FolderIcon,
-  InfoIcon,
   NewFileIcon,
   NewFolderIcon,
   StashBaseIcon,
@@ -27,9 +26,8 @@ interface ElectronBridge {
 /**
  * Left rail composition. The activity bar (narrow icon column on the
  * far left) toggles between two mutually-exclusive side panels:
- *   - Files   → a KNOWLEDGE BASE section (KB-root STASHBASE.md +
- *               space-metadata.md), then the SnapshotWarning, the SPACE
- *               header, and the file tree
+ *   - Files   → a KNOWLEDGE BASE section (KB-root STASHBASE.md), then
+ *               the SnapshotWarning, the SPACE header, and the file tree
  *   - Search  → search input + ≈/= toggle + result list (see
  *               `SearchPanel.tsx`)
  *
@@ -48,12 +46,11 @@ export function Sidebar() {
   );
 }
 
-/** KB-root governance files pinned at the top of the Files panel —
- *  STASHBASE.md (the rules book) + space-metadata.md (the agent-
- *  maintained 目录). These are KB-scope (the same in every window /
- *  space), so they sit above the per-space tree as a scope label, not
- *  inside it. Per-space STASHBASE.md / file-metadata.md live in the
- *  tree below, where they physically are. */
+/** KB-root governance file pinned at the top of the Files panel —
+ *  STASHBASE.md (the rules book). KB-scope (the same in every window /
+ *  space), so it sits above the per-space tree as a scope label, not
+ *  inside it. Per-space STASHBASE.md files live in the tree below, where
+ *  they physically are. */
 function KbSection() {
   const { state, actions } = useApp();
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
@@ -73,15 +70,6 @@ function KbSection() {
         >
           <span className="kb-file-icon"><StashBaseIcon /></span>
           <span className="kb-file-label">STASHBASE.md</span>
-        </button>
-        <button
-          type="button"
-          className={'kb-file-row' + (activeKbName === 'space-metadata.md' ? ' selected' : '')}
-          onClick={() => { void actions.openKbOverview(); }}
-          title="Agent-maintained KB 目录 (.stashbase/space-metadata.md)"
-        >
-          <span className="kb-file-icon"><InfoIcon /></span>
-          <span className="kb-file-label">space-metadata.md</span>
         </button>
       </div>
     </>

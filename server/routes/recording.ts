@@ -22,7 +22,7 @@ import { sanitizeFilename, saveBytes, saveText } from '../files.ts';
 import { analyzeVideoWithGemini, geminiConfigured } from '../gemini-video.ts';
 import { errorMessage, logger } from '../log.ts';
 import { getCurrentSpace, runWithWindowId, toKbRel, WINDOW_ID_HEADER } from '../space.ts';
-import { getGeminiKey, setGeminiKey } from '../app-config.ts';
+import { setGeminiKey } from '../app-config.ts';
 import { indexer } from '../state.ts';
 
 const log = logger('routes/recording');

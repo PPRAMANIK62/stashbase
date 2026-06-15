@@ -7,22 +7,15 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { rgPath } from '@vscode/ripgrep';
-import { errorMessage, logger } from '../log.ts';
+import { logger } from '../log.ts';
 import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, toKbRel } from '../space.ts';
 import { getApiKey } from '../app-config.ts';
 import { syncIndex } from '../sync.ts';
-import { extractEmbeddedResources } from '../resources.ts';
-import {
-  isReservedMetadataFile,
-  setFileMetadataEntry,
-  type FileMetadata,
-} from '../metadata.ts';
-import { HIDDEN_DOT_DIRS } from '../files.ts';
 import { hasNoExtractableText } from '../indexable.ts';
 import { derivedPathsForPdf, displayPathForHit, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
 import { getInFlightConversions } from '../conversion.ts';
-import { isImageFile, isNoteName } from '../format.ts';
+import { isImageFile } from '../format.ts';
 import { clearRecord, listFailed, readAll as readConversionStatus } from '../conversion-status.ts';
 import { getFsChangeCounter } from '../watcher.ts';
 import { getDaemon } from '../mfs-daemon.ts';
@@ -36,7 +29,7 @@ export function mount(app: express.Express): void {
   // Trigger a space sync manually — useful after external edits / file
   // moves. Returns the diff (added / removed / failed). Defaults to the
   // active space; accepts `?space=<name>` to sync any known space
-  // (powers MCP `update_index` so external agents can refresh an
+  // (powers MCP `reindex` so external agents can refresh an
   // unopened space's index without the user opening it first).
   app.post('/api/sync', async (req, res) => {
     try {

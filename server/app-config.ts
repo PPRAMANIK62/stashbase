@@ -15,8 +15,8 @@ import type { SpaceConfigFile } from './space.ts';
 
 const log = logger('app-config');
 
-export const CONFIG_DIR = path.join(os.homedir(), '.stashbase');
-export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+const CONFIG_DIR = path.join(os.homedir(), '.stashbase');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 export interface RecentSpace {
   path: string;

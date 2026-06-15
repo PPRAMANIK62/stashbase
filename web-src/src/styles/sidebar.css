@@ -1435,13 +1435,13 @@
       background: transparent;
     }
 
-    /* KNOWLEDGE BASE section — the two KB-root governance files
-     * (STASHBASE.md + space-metadata.md) pinned at the top of the Files
-     * panel under a `.panel-section-head` "Knowledge base" label. Rows
-     * mirror the file-tree row metrics exactly (3px rhythm, 16px icon,
-     * 12px indent aligning the icon with the SPACE header's chevron) so
-     * the two sections read as one tidy list. Per-space rules are NOT
-     * here — they live in the tree below, where they physically are. */
+    /* KNOWLEDGE BASE section — the KB-root governance file (STASHBASE.md)
+     * pinned at the top of the Files panel under a `.panel-section-head`
+     * "Knowledge base" label. Rows mirror the file-tree row metrics
+     * exactly (3px rhythm, 16px icon, 12px indent aligning the icon with
+     * the SPACE header's chevron) so the two sections read as one tidy
+     * list. Per-space rules are NOT here — they live in the tree below,
+     * where they physically are. */
     .kb-file-list {
       padding: 0;
     }

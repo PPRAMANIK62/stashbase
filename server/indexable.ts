@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { detectFormat } from './format.ts';
 import { analyzeHtml } from './html.ts';
 
@@ -49,8 +48,19 @@ function dipsIntoIndexExcludedDir(relPath: string): boolean {
     .some((seg) => INDEX_EXCLUDED_DIRS.has(seg));
 }
 
+/** Legacy agent-maintained sidecar files. The metadata subsystem was
+ *  removed, but existing knowledge bases may still have these on disk;
+ *  keep them out of the index so they don't surface as bogus hits.
+ *  (STASHBASE.md is intentionally indexable and is NOT listed here.) */
+const EXCLUDED_BASENAMES = new Set<string>([
+  'file-metadata.md',
+  'space-metadata.md',
+]);
+
 export function shouldIndexFilePath(relPath: string): boolean {
   if (!detectFormat(relPath)) return false;
+  const base = relPath.replace(/\\/g, '/').split('/').pop() ?? '';
+  if (EXCLUDED_BASENAMES.has(base)) return false;
   return !dipsIntoIndexExcludedDir(relPath);
 }
 

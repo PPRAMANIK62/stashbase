@@ -58,7 +58,6 @@ const UNSTRUCTURED_SOURCE_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'webp'] as const;
 const NOTE_EXT_ALT = NOTE_EXTS.join('|');
 const SRC_EXT_ALT = UNSTRUCTURED_SOURCE_EXTS.join('|');
 const NOTE_EXT_RE = new RegExp(`\\.(${NOTE_EXT_ALT})$`, 'i');
-const UNSTRUCTURED_SOURCE_RE = new RegExp(`\\.(${SRC_EXT_ALT})$`, 'i');
 /** `<dir>/.<sourceBasename>.md` — an app-derived hidden note, where
  *  `sourceBasename` is the full source filename incl. extension. Capture
  *  1 = dir (trailing slash kept), capture 2 = the source basename. The

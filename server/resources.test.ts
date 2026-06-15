@@ -60,7 +60,7 @@ test('non-note formats are a no-op', () => {
 test('svg utf8 data URI (non-base64) decodes and gets .svg ext', () => {
   const svg = '<svg xmlns=%22http://www.w3.org/2000/svg%22></svg>';
   const html = `<img src="data:image/svg+xml,${svg}">`;
-  const { content, assets } = extractEmbeddedResources('s/p.html', html);
+  const { assets } = extractEmbeddedResources('s/p.html', html);
   assert.equal(assets.length, 1);
   assert.match(assets[0].path, /\.svg$/);
   assert.ok(assets[0].bytes.toString('utf8').includes('<svg'));

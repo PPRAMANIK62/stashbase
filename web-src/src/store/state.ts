@@ -53,9 +53,8 @@ export interface OpenFile {
    *  string for binary files (PDF / image; the viewer loads them
    *  directly from `/asset/*`). */
   content: string;
-  /** `'kb'` for Knowledge base files (`<kbRoot>/STASHBASE.md` and
-   *  `<kbRoot>/.stashbase/space-metadata.md`). Default (omitted)
-   *  means a regular per-space file. */
+  /** `'kb'` for Knowledge base files (`<kbRoot>/STASHBASE.md`). Default
+   *  (omitted) means a regular per-space file. */
   kind?: 'space' | 'kb';
 }
 
@@ -552,8 +551,8 @@ export function reducer(s: State, a: Action): State {
         name: a.body.name,
         format: a.body.format,
         content: a.body.content,
-        // Carried through for the kb-overview tab so MainPane
-        // can hide the edit button and the save path can skip it.
+        // Carried through for kb-kind tabs (STASHBASE.md) so the save
+        // path routes to the rules endpoint.
         ...((a.body as any).kind ? { kind: (a.body as any).kind } : {}),
       };
       // New-tab mode (double-click in tree, `+` then a click): create

@@ -127,12 +127,8 @@ export interface AppActions {
    *  "Open in New Tab" command. */
   openInNewTab: (name: string) => Promise<void>;
   newTab: () => Promise<void>;
-  /** Open `<kbRoot>/.stashbase/space-metadata.md` (the agent-maintained
-   *  KB 目录) as a kb-kind tab. */
-  openKbOverview: () => Promise<void>;
-  /** Open `<kbRoot>/STASHBASE.md` (KB-level rules book) as a
-   *  kb-kind tab. Same one-tab-only / activate-if-open rule
-   *  as `openKbOverview`. */
+  /** Open `<kbRoot>/STASHBASE.md` (KB-level rules book) as a kb-kind tab.
+   *  One-tab-only / activate-if-already-open. */
   openKbRules: () => Promise<void>;
   closeTab: (id: string) => Promise<void>;
   /** Close whichever tab is currently active. Convenience for keyboard
@@ -714,7 +710,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       if (cur.kind === 'kb') {
         if (cur.name === 'STASHBASE.md') await api.putKbRules(content);
-        else if (cur.name === 'space-metadata.md') await api.putKbOverview(content);
         else throw new Error(`unknown KB file: ${cur.name}`);
       } else {
         await api.putFile(cur.name, content);
@@ -956,13 +951,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openKbRules = useCallback(async () => {
     await openKbFile('STASHBASE.md', () => api.getKbRules());
-  }, [openKbFile]);
-
-  /** Open the KB 目录 (`<kbRoot>/.stashbase/space-metadata.md`) as a
-   *  kb-kind tab. The on-disk basename is `space-metadata.md`; STASHBASE.md
-   *  is the separate rules book (`openKbRules`). */
-  const openKbOverview = useCallback(async () => {
-    await openKbFile('space-metadata.md', () => api.getKbOverview());
   }, [openKbFile]);
 
   const closeTab = useCallback(async (id: string) => {
@@ -1660,7 +1648,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
     dismissSnapshotWarning,
-    selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbOverview, openKbRules, closeTab, closeActiveTab, activateTab,
+    selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbRules, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     consumePendingHighlight,
     resolveCascadePrompt,
@@ -1678,7 +1666,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
     dismissSnapshotWarning,
-    selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbOverview, openKbRules, closeTab, closeActiveTab, activateTab,
+    selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbRules, closeTab, closeActiveTab, activateTab,
     navigateTo, navBack, navForward, consumePendingScroll,
     consumePendingHighlight,
     resolveCascadePrompt,

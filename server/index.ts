@@ -29,7 +29,6 @@ import { stopSpaceMcpServers, switchSpaceMcpServers } from './mcp-host.ts';
 import { getKbRoot, onClose, onKbRootChange, onSwitch, ensureKbRoot, needsKbRootPicker } from './space.ts';
 import { migrateLegacyEmbedderConfig } from './app-config.ts';
 import { bootBindAllSpaces } from './state.ts';
-import { ensureKbOverview } from './kb.ts';
 import { logger } from './log.ts';
 import { setDerivedNoteIndexer } from './conversion.ts';
 import { noteTreeChanged } from './watcher.ts';
@@ -89,11 +88,6 @@ if (kbRootReadyAtBoot) {
   // recent entries. On a true first launch we skip this until the
   // picker persists the user's chosen root.
   ensureKbRoot();
-  // Migrate any legacy `<kbRoot>/AGENT.md` into
-  // `<kbRoot>/.stashbase/space-metadata.md`, then seed a placeholder if
-  // absent so the agent has something to extend on its first read.
-  // Idempotent.
-  ensureKbOverview();
   // Configure the daemon with kbRoot + bind every known space found
   // under it so MCP / cross-space search sees them without waiting for
   // the user to open each one. Fire-and-forget — the server starts
@@ -346,7 +340,6 @@ onKbRootChange(async () => {
   killActiveAgent();
   await indexer.close();
   closeStateDb();
-  ensureKbOverview();
   await bootBindAllSpaces();
 });
 

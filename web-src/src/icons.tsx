@@ -336,20 +336,6 @@ export function CodexIcon({ className }: IconProps) {
   );
 }
 
-/** Info badge for the *-metadata.md files (the agent-maintained KB 目录
- *  / per-file metadata). The Material `readme` mark (MIT): a solid disc
- *  with the "i" knocked out, so its filled weight matches the Material
- *  format icons. `currentColor` → muted via `.meta-file`, so it reads
- *  as a quiet system file. viewBox padded to ~78% fill to sit level
- *  with the other glyphs in the 16px slot. */
-export function InfoIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="-1 -1 18 18" fill="currentColor" fillRule="evenodd">
-      <path d="M8 1C4.136 1 1 4.136 1 8s3.136 7 7 7 7-3.136 7-7-3.136-7-7-7m1 11H7V7.5h2zm0-6H7V4h2z" />
-    </svg>
-  );
-}
-
 /** Two overlapping sheets — the conventional "copy to clipboard" glyph
  *  (Lucide proportions: front sheet + back sheet peeking top-left). */
 export function CopyIcon({ className }: IconProps) {

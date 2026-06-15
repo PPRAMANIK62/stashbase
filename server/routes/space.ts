@@ -36,7 +36,6 @@ import {
   type MigrateEntry,
 } from '../space.ts';
 import { errorMessage } from '../log.ts';
-import { sendError } from '../http.ts';
 import { indexer } from '../state.ts';
 import { switchSpaceMcpServers } from '../mcp-host.ts';
 import { deleteSpaceState } from '../state-db.ts';

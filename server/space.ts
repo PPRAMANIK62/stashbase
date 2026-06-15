@@ -19,7 +19,6 @@ import { isIndexExcludedDirName } from './indexable.ts';
 import {
   readAppConfig as readConfig,
   writeAppConfig as writeConfig,
-  type AppConfigFile,
   type RecentSpace,
 } from './app-config.ts';
 
@@ -188,7 +187,7 @@ export async function setKbRoot(
   if (fs.existsSync(root) && !opts.allowNonEmpty && !migrating) {
     if (!fs.statSync(root).isDirectory()) throw new Error('path is not a directory');
     const entries = fs.readdirSync(root);
-    const selfEntries = new Set(['.DS_Store', '.stashbase', 'STASHBASE.md', 'AGENT.md', 'space-metadata.md']);
+    const selfEntries = new Set(['.DS_Store', '.stashbase', 'STASHBASE.md']);
     if (entries.some((name) => !selfEntries.has(name))) {
       const err = new Error('directory is not empty');
       (err as any).code = 'NON_EMPTY';
@@ -733,9 +732,26 @@ function ensureKbMetadata(root: string): void {
   }
   const rules = path.join(root, 'STASHBASE.md');
   if (!fs.existsSync(rules)) {
-    fs.writeFileSync(rules, '# KB Rules\n\n', 'utf8');
+    fs.writeFileSync(rules, DEFAULT_KB_RULES, 'utf8');
   }
 }
+
+/** Seed contents for the KB-level `STASHBASE.md`. This is the user's place
+ *  for knowledge-base-specific rules — assistants read it via the `kb_info`
+ *  MCP tool and follow it. The universal agent contract (use your own
+ *  filesystem tools for CRUD, call `reindex` after writes, mark generated
+ *  files with `generated_by: stashbase-agent`) is delivered separately via
+ *  the MCP server's `instructions`, so this file stays short and KB-specific
+ *  rather than duplicating it. */
+const DEFAULT_KB_RULES = `# StashBase Rules
+
+Maintenance rules for AI assistants working in this knowledge base. Write
+whatever is specific to YOUR library here — how notes should be organized,
+naming conventions, what to summarize, what to leave untouched. Assistants
+read this file via the \`kb_info\` tool and follow it.
+
+(Empty by default — add your rules below.)
+`;
 
 // ---------- API key (global) ----------
 

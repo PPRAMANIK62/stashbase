@@ -98,10 +98,8 @@ export interface Indexer {
 
   /** Every file present in the index, keyed by kbRoot-relative path with
    *  its stored content hash as value. `space?` scopes to one space;
-   *  omitted = whole knowledge base. Used by `/api/kb/files`, MCP
-   *  `list_files`, and the KB overview info aggregator — without
-   *  this method, those reach around the interface and call the daemon
-   *  directly. */
+   *  omitted = whole knowledge base. Used by reconcile and the
+   *  `/api/kb/index-status` recently-indexed slice. */
   listFiles(space?: string): Promise<Record<string, string>>;
 
   /** Release the Milvus Lite locks so the server can move / wipe the
