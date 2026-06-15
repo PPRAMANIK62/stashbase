@@ -93,10 +93,10 @@ Indexing runs locally via [mfs](https://github.com/zilliztech/mfs) + [Milvus Lit
 
 ### When is content indexed?
 
-* App-internal writes (editor save, drag-and-drop) → indexed immediately; MCP `write_file` indexes in the background
-* External writes (other editors, git, scripts) → reconciled at deterministic moments: when you return to the window, when an agent finishes a turn, when you open the space, or on manual Sync
+* App-internal writes (editor save, drag-and-drop) → indexed immediately
+* External writes (other editors, git, scripts, **and agents writing files directly**) → reconciled at deterministic moments: when you return to the window, when an agent finishes a turn, when you open the space, or on manual Sync
 * Other spaces → reconciled when you next open them. No library-wide background scanning — embedding spend stays predictable and visible
-* Agents writing via shell can call MCP `update_index` to sync any space explicitly
+* There is no filesystem watcher — an agent that wrote files calls MCP `reindex` to make them searchable (it diffs disk against the index itself)
 
 Renames, moves, and unchanged-content rewrites are detected by content hash and **never re-embed** — vectors are the only expensive thing here, and they're never computed twice for the same bytes.
 
@@ -134,11 +134,13 @@ Hybrid retrieval: dense vector kNN + BM25, fused server-side via RRF in a single
 
 **Settings → MCP** writes the StashBase MCP server entry directly into your AI client's global config (Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Qwen Code) or copies the right stdio snippet for GUI-managed clients. One-time setup; afterwards the KB stays reachable from those clients **even when the StashBase app is closed**.
 
-The tool surface covers both halves of a memory layer — using it and tending it:
+The tool surface is just what the filesystem can't do, since the client is on the same machine as the KB:
 
-* **Read:** `search_kb`, `get_file`, `list_files`, `recent_files`
-* **Write:** `write_file`, `rename_file`, `delete_file`, `set_file_metadata` — writes index in the background; `index_status` tells you when search has caught up
-* **Orient & maintain:** `kb_info`, `space_info`, `get_rules`, `update_space_metadata`, `update_index`, `index_status`
+* **`kb_info`** — orient: the KB's absolute path, its spaces, and the `STASHBASE.md` rules to follow
+* **`search_kb`** — hybrid semantic + keyword search; read the full file directly from the returned path
+* **`reindex`** — make on-disk changes searchable after you write (diffs disk against the index itself)
+
+Everything else — reading a full file, creating / editing / deleting / moving notes, editing `STASHBASE.md` — the client does with its own filesystem tools directly under the KB root.
 
 ---
 
@@ -157,7 +159,7 @@ A structured chat panel runs Claude Code and Codex inside StashBase — message 
 
 ### Agent-maintained KB via `STASHBASE.md`
 
-Drop a `STASHBASE.md` into the KB root (or per-space) to define maintenance rules in plain language — what to summarize, how to file things, when to dedupe. Agents fetch the merged rules over MCP (`get_rules`) before they touch anything, and tidy as they go while doing your work. **No background daemon, no scheduled jobs, no tokens quietly burned.**
+Drop a `STASHBASE.md` into the KB root (or per-space) to define maintenance rules in plain language — what to summarize, how to file things, when to dedupe. Agents pick up the rules over MCP (`kb_info` returns them, and the connection's `instructions` carry the working contract) before they touch anything, and tidy as they go while doing your work. **No background daemon, no scheduled jobs, no tokens quietly burned.**
 
 ---
 
@@ -258,7 +260,7 @@ Early alpha. macOS arm64 (Apple Silicon) is the supported platform today; Window
 
 * KB / space file model on disk (HTML / Markdown / PDF / images + hidden companions and asset bundles)
 * Hybrid retrieval (semantic + keyword), with PDF/image hits mapping back to originals
-* MCP KB server (stdio) with the full read/write/maintenance tool surface; one-click client connectors
+* MCP KB server (stdio) — `kb_info` / `search_kb` / `reindex`, with everything else done via the client's own filesystem tools; one-click client connectors
 * Event-point reconcile (space open, window focus, agent turn end, manual sync); rename/move without re-embedding
 * Conversion pipeline: PDF extraction, image OCR (local), with persisted failures + Retry
 * Screen recording → structured note with the original video attached (Gemini video understanding; key required, checked before capture starts)
