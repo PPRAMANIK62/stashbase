@@ -488,6 +488,24 @@ export function getActiveTab(s: State): Tab | null {
   return s.tabs.find((t) => t.id === s.activeTabId) ?? null;
 }
 
+/** Space-relative paths that count as "stashing" — the work the user is
+ *  waiting on before a dropped/imported file is fully searchable. Two
+ *  sources, unioned: `pendingConversions` (slow OCR/transcode of PDF /
+ *  image / recording sources) and the not-yet-indexed subset of
+ *  `pendingNames` (md / html / text / code — fast embedding, but a folder
+ *  drop of hundreds still wants a count). Hidden paths are dropped: the
+ *  `.stem.md` derived notes conversions produce, and anything under
+ *  `.stashbase/`, must never surface (a segment starting with `.` flags
+ *  both). Deduped + sorted so the sidebar pill and the per-tab mark agree
+ *  on one stable list. */
+export function stashingPaths(s: State): string[] {
+  const out = new Set(s.pendingConversions);
+  for (const p of s.pendingNames) {
+    if (!p.split('/').some((seg) => seg.startsWith('.'))) out.add(p);
+  }
+  return [...out].sort();
+}
+
 /** Merge `patch` into the active tab in place. Returns the state
  *  unchanged when no tab is active — every caller checks `activeTabId`
  *  first, but the no-op guard keeps the reducer cases short. */

@@ -1,5 +1,6 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { useApp } from '../store/AppContext';
+import { stashingPaths } from '../store/state';
 import { StashBaseIcon } from '../icons';
 
 const TAB_MIME = 'application/x-stashbase-tab';
@@ -97,6 +98,8 @@ export function TabStrip() {
 
   const openFileNames = state.tabs.flatMap((t) => (t.file ? [t.file.name] : []));
   const ambiguousLabels = findAmbiguousTabLabels(openFileNames);
+  // One membership set for the whole strip — converting OR indexing.
+  const stashing = new Set(stashingPaths(state));
 
   return (
     <div className="tab-strip">
@@ -110,11 +113,12 @@ export function TabStrip() {
           const isActive = t.id === state.activeTabId;
           const label = t.file ? displayTabLabel(t.file.name, ambiguousLabels) : 'Untitled';
           const isDragging = dragId === t.id;
-          // "stashing" = the file's still being converted into searchable
-          // content. We mark it on its tab with the StashBase logo (a
+          // "stashing" = the file's still being turned into searchable
+          // content — either converting (PDF/image OCR) or indexing
+          // (embedding). We mark it on its tab with the StashBase logo (a
           // placeholder for the eventual animated mark) so an opened-but-
           // not-yet-stashed file reads as "in progress", not broken.
-          const isStashing = !!t.file && state.pendingConversions.includes(t.file.name);
+          const isStashing = !!t.file && stashing.has(t.file.name);
           const dropEdge = dropTarget?.id === t.id ? dropTarget.edge : null;
           const cls = 'tab'
             + (isActive ? ' active' : '')

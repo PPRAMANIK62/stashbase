@@ -327,6 +327,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  mark. `refreshIndexState` keeps these in `pendingConversions` until
    *  the server starts reporting them (hand-off) or the grace expires. */
   const importStashingGrace = useRef<Map<string, number>>(new Map());
+  /** Same idea for indexed (md/html) imports, which never enter
+   *  `pendingConversions`. The daemon serialises `status` behind the very
+   *  embeds it would report (`indexer.mfs.ts` status note), so a bare
+   *  poll right after a drop under-counts and lags — a 4-file drop can
+   *  read "3 stashing" because one embed finished while `status` waited
+   *  in line. We optimistically mark every imported note as pending and
+   *  keep it until the space reports fully up-to-date (the batch is done)
+   *  or the grace expires. Unlike conversions we do NOT hand off per-file
+   *  — mid-embed `pending` is unreliable, so `upToDate` is the signal. */
+  const importIndexGrace = useRef<Map<string, number>>(new Map());
   /** Promise resolver for the pending cascade dialog. Set when the
    *  rename action asks the user; cleared once they pick. */
   const cascadeResolveRef = useRef<((d: CascadeDecision) => void) | null>(null);
@@ -530,6 +540,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         if (stillGracing.length) {
           newConv = [...new Set([...newConv, ...stillGracing])].sort();
+        }
+      }
+      // Same fold for optimistically-marked note imports — but keyed on
+      // `upToDate`, not per-path hand-off: the daemon serialises `status`
+      // behind in-flight embeds, so a fresh drop's files flicker in and
+      // out of `pending` unreliably. Hold every graced import in
+      // `newPending` until the space is fully indexed (batch done) or the
+      // grace expires, so a 4-file drop reads "4 stashing" the instant it
+      // lands and clears cleanly when the last embed finishes.
+      if (importIndexGrace.current.size > 0) {
+        const now = Date.now();
+        for (const [name, deadline] of importIndexGrace.current) {
+          if (indexReady && s.upToDate) {
+            importIndexGrace.current.delete(name); // batch fully indexed
+          } else if (now <= deadline) {
+            newPending.add(name);
+          } else {
+            importIndexGrace.current.delete(name); // grace expired
+          }
         }
       }
       const prev = stateRef.current;
@@ -1381,7 +1410,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // immediate poll below races it — a user-initiated import
       // shouldn't wait a poll round-trip to show it's stashing. Limited
       // to the convertible+viewable formats (PDF / image); md/html are
-      // indexed, not converted, so they never enter `pendingConversions`.
+      // indexed, not converted, so they never enter `pendingConversions`
+      // — but they DO surface as stashing the moment the immediate poll
+      // below sees them in the indexer's `pending` set (saved to disk
+      // before the upload responds, indexed fire-and-forget after), so a
+      // markdown folder drop still gets a count via `stashingPaths`.
       // The poll reconciles: it keeps these while in-flight and drops
       // them when the derived note lands. Sorted to match the server's
       // `getInFlightConversions` ordering so the next poll is a no-op.
@@ -1395,6 +1428,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         for (const name of stashing) importStashingGrace.current.set(name, deadline);
         const merged = [...new Set([...stateRef.current.pendingConversions, ...stashing])].sort();
         dispatch({ type: 'PENDING_CONVERSIONS', paths: merged });
+      }
+      // Optimistically mark the indexable imports (md / html, non-hidden)
+      // as pending too. These never enter `pendingConversions`; they show
+      // via `pendingNames` → `stashingPaths`. The poll alone under-counts
+      // and lags here (the daemon serialises `status` behind the embeds),
+      // so without this a 4-note drop reads "3 stashing" a beat late.
+      // `refreshIndexState` holds these until the space is up-to-date.
+      const indexing = (j.files || [])
+        .filter((x) => !x.error && /\.(md|markdown|html?)$/i.test(x.file))
+        .filter((x) => !x.file.split('/').some((seg) => seg.startsWith('.')))
+        .map((x) => x.file);
+      if (indexing.length) {
+        const deadline = Date.now() + 60000;
+        for (const name of indexing) importIndexGrace.current.set(name, deadline);
+        const merged = new Set(stateRef.current.pendingNames);
+        for (const name of indexing) merged.add(name);
+        dispatch({ type: 'PENDING_NAMES', names: merged });
       }
       // Now the server has fired any PDF conversions and updated its
       // `pendingConversions` set. Poll immediately so the indicator

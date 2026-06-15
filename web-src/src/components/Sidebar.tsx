@@ -10,6 +10,7 @@ import {
   SyncIcon,
 } from '../icons';
 import { useApp } from '../store/AppContext';
+import { stashingPaths } from '../store/state';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { Menu, type MenuItem } from './Menu';
@@ -194,15 +195,17 @@ function FilesPanel() {
 }
 
 /** "N stashing" pill in the SPACE header (left of the ⋯ actions). A
- *  file is *stashing* while the server is still converting it into
- *  searchable content — the slow, user-visible phase (PDF/image OCR,
- *  recording transcode). Indexing/embedding is fast and stays silent.
- *  Counts the active space only. Clicking opens a Chrome-downloads-style
- *  list of what's in flight. The logo is a placeholder for the eventual
- *  animated "stashing" mark. */
+ *  file is *stashing* while the server is still turning it into
+ *  searchable content — BOTH the slow conversion phase (PDF/image OCR,
+ *  recording transcode) and the indexing/embedding phase that every
+ *  dropped file goes through. `stashingPaths` unions the two so a folder
+ *  drop of plain markdown gets a count too, not just PDFs. Counts the
+ *  active space only. Clicking opens a Chrome-downloads-style list of
+ *  what's in flight. The logo is a placeholder for the eventual animated
+ *  "stashing" mark. */
 function StashingIndicator() {
   const { state } = useApp();
-  const items = state.pendingConversions;
+  const items = stashingPaths(state);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
