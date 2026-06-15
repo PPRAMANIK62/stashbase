@@ -788,6 +788,39 @@
       text-align: center;
       padding: 40px;
     }
+    .empty-doc p {
+      margin: 0;
+      line-height: 1.9;
+    }
+    /* Inline ghost-accent "+" — a small rounded-square add-button so the
+     * sentence "or click + for a new note" reads as unmistakably
+     * clickable. Matches the sidebar `.icon-btn` shape (4px radius,
+     * grid-centered) so it sits in the app's button language; `padding:0`
+     * kills the UA button padding that would shove the glyph off-centre. */
+    .empty-doc-new {
+      display: inline-grid;
+      place-items: center;
+      width: 1.5em;
+      height: 1.5em;
+      /* Optical centring: the "+" glyph sits low in its line box, so a
+       * hair of bottom padding lifts it to the visual centre (content
+       * box shrinks at the bottom under border-box). */
+      padding: 0 0 0.14em 0;
+      font: inherit;
+      font-weight: 500;
+      line-height: 1;
+      vertical-align: middle;
+      color: var(--accent);
+      background: none;
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      margin: 0 5px;
+      cursor: pointer;
+      transition: background 0.12s ease;
+    }
+    .empty-doc-new:hover {
+      background: rgba(var(--accent-rgb), 0.08);
+    }
 
     /* Calm "processing" state for a stashing file opened before its
      * content exists (a just-stopped recording). Sits in the single

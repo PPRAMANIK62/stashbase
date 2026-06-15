@@ -48,10 +48,21 @@ export function MainPane() {
       {hasTabs && <TabStrip />}
       <div className="main-body">
         {!hasTabs && (
+          // One <p> wrapper so the grid centers a single block and the
+          // text keeps normal inline flow — otherwise each <br>/inline
+          // child becomes its own grid item and scatters vertically.
           <div className="empty-doc">
-            Drop files or folders anywhere to stash them<br />
-            — Markdown, HTML, PDFs, images —<br />
-            or click <strong>+</strong> for a new note (⌘N)
+            <p>
+              Drop files or folders anywhere to stash them<br />
+              — Markdown, HTML, PDFs, images —<br />
+              or click{' '}
+              <button
+                type="button"
+                className="empty-doc-new"
+                onClick={() => { void actions.newNote(); }}
+              >+</button>{' '}
+              for a new note (⌘N)
+            </p>
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}
