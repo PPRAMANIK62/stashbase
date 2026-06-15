@@ -185,7 +185,7 @@ export interface AppActions {
   dismissToast: (id: string) => void;
   toggleEditMode: () => Promise<void>;
 
-  newNote: (format?: 'md' | 'html') => Promise<void>;
+  newNote: () => Promise<void>;
   newFolder: (path: string) => Promise<void>;
   deleteFile: (name: string) => Promise<void>;
   deleteFolder: (path: string) => Promise<void>;
@@ -1169,11 +1169,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     editorRef.current = h;
   }, []);
 
-  const newNote = useCallback(async (format: 'md' | 'html' = 'md') => {
+  const newNote = useCallback(async () => {
     await flushSave();
     const dir = stateRef.current.activeFolder;
     try {
-      const { name } = await api.createNote('', dir, format);
+      const { name } = await api.createNote('', dir);
       if (dir) dispatch({ type: 'EXPAND_FOLDER', path: dir });
       await loadFiles();
       const body = await api.getFile(name);

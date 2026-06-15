@@ -412,8 +412,8 @@ export const api = {
   listFiles: () => getJson<FilesPayload>('/api/files'),
 
   // CRUD ---------------------------------------------------------
-  createNote: (content: string, dir: string, format: FileFormat = 'md') =>
-    send<{ name: string }>('POST', '/api/files', { content, dir, format }),
+  createNote: (content: string, dir: string) =>
+    send<{ name: string }>('POST', '/api/files', { content, dir }),
   createFolder: (path: string) =>
     send<{ path: string }>('POST', '/api/folders', { path }),
   deleteFile: (name: string) =>

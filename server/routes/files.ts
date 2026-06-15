@@ -75,20 +75,17 @@ export function mount(app: express.Express): void {
   });
 
   // ----- create -----
-  // Body: { name?, content?, dir?, format? }.
-  //  - `name` omitted → auto-pick first free `untitled-N.<ext>` (race-safe via O_EXCL).
+  // Body: { name?, content?, dir? }.
+  //  - `name` omitted → auto-pick first free `untitled-N.md` (race-safe via O_EXCL).
   //  - `dir`  optional → place the file inside that space-relative folder
   //    (must already exist; create with POST /api/folders first).
-  //  - `format` optional → `'md'` (default) or `'html'`. Decides the
-  //    extension when one isn't supplied via `name`. The renderer's
-  //    "+" picker uses this so users can pick the format at create
-  //    time rather than getting `.md` whether they want it or not.
+  // New notes are always Markdown — it's the only editable format (HTML
+  // files are viewable but no longer authored here).
   app.post('/api/files', async (req, res) => {
     const requestedName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     const content = typeof req.body?.content === 'string' ? req.body.content : '';
     const dir = typeof req.body?.dir === 'string' ? req.body.dir.trim() : '';
-    const format = req.body?.format === 'html' ? 'html' : 'md';
-    const ext = format === 'html' ? '.html' : '.md';
+    const ext = '.md';
     const prefix = dir ? dir.replace(/\/+$/, '') + '/' : '';
     try {
       let name: string;
