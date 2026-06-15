@@ -181,7 +181,7 @@ function SearchResults({ query }: { query: string }) {
   return (
     <div className="search-hits">
       {state.searchHits.map((hit, i) => (
-        <SearchHitRow key={`${hit.fileName}#${hit.chunkIndex}#${i}`} hit={hit} query={query} />
+        <SearchHitRow key={`${hit.fileName}#${hit.chunkIndex}#${i}`} hit={hit} />
       ))}
     </div>
   );
@@ -279,9 +279,13 @@ function highlightRanges(text: string, ranges: Array<[number, number]>) {
   return <>{parts}</>;
 }
 
-function SearchHitRow({ hit, query }: { hit: SearchHit; query: string }) {
+function SearchHitRow({ hit }: { hit: SearchHit }) {
   const { actions } = useApp();
   const fileBasename = hit.fileName.split('/').pop() ?? hit.fileName;
+  // No term highlighting on semantic snippets: a semantic hit isn't a
+  // literal substring match, so marking the query words is misleading —
+  // only keyword search (real ranges) highlights. Plain, truncated text.
+  const snippet = hit.content.length > 240 ? hit.content.slice(0, 240) + '…' : hit.content;
   return (
     <div
       className="search-hit"
@@ -295,25 +299,10 @@ function SearchHitRow({ hit, query }: { hit: SearchHit; query: string }) {
       title={hit.fileName}
     >
       {hit.heading && <div className="search-hit-heading">{hit.heading}</div>}
-      <div className="search-hit-snippet">{highlightTerms(hit.content, query)}</div>
+      <div className="search-hit-snippet">{snippet}</div>
       <div className="search-hit-meta">
         <span className="search-hit-file">{fileBasename}</span>
       </div>
     </div>
   );
-}
-
-function highlightTerms(text: string, query: string) {
-  const terms = query.split(/\s+/).filter(Boolean).map(escapeRegExp);
-  if (terms.length === 0) return text;
-  const re = new RegExp(`(${terms.join('|')})`, 'gi');
-  const trimmed = text.length > 240 ? text.slice(0, 240) + '…' : text;
-  const parts = trimmed.split(re);
-  return parts.map((p, i) =>
-    i % 2 === 1 ? <mark key={i}>{p}</mark> : <span key={i}>{p}</span>,
-  );
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
