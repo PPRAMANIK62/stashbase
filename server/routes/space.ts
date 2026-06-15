@@ -16,6 +16,7 @@ import { indexableFileSizeError, isIndexExcludedDirName, shouldIndexFilePath } f
 import { matchNoteStem } from '../format.ts';
 import {
   clearSpacePath,
+  ensureKbRoot,
   getCurrentSpace,
   getKbRoot,
   getRecentSpaces,
@@ -94,6 +95,15 @@ export function mount(app: express.Express): void {
   // children. Surfaced to the renderer so it can render the home-
   // relative form (`~/Documents/StashBase`) in copy.
   app.get('/api/kb-root', (_req, res) => {
+    // Re-create the root if it was deleted out from under a long-lived
+    // server. `ensureKbRoot` only runs at server boot, but the server can
+    // outlive an Electron session (a reused tsx-watch / headless server on
+    // :8090 isn't respawned on relaunch — see electron/main.cjs), so a
+    // root deleted between launches would never come back. The renderer
+    // hits this on every (re)launch via `refreshKbRoot`; re-ensure here
+    // when the configured root is missing. Idempotent + cheap otherwise.
+    const root = getKbRoot();
+    if (!fs.existsSync(root)) ensureKbRoot();
     res.json({ path: getKbRoot(), needsPicker: needsKbRootPicker() });
   });
 
