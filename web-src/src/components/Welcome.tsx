@@ -576,7 +576,6 @@ function ImportFolderModal({
             {preview.entryCount} item{preview.entryCount === 1 ? '' : 's'} · {formatBytes(preview.totalBytes)}
           </div>
           {preview.exists && mode === 'move' && <div>{importActionMessage}</div>}
-          {preview.hasSnapshot && <div>Snapshot found; StashBase will import it when the space opens.</div>}
           {preview.nameTaken && (
             <div className="modal-import-warn">A space named “{name.trim()}” already exists — pick another name (Import won’t merge into it).</div>
           )}
