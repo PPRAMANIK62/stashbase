@@ -463,27 +463,54 @@ function builtinSpaceSource(): string | null {
  *  fresh KB and surface it in the Welcome screen's recents, so a new user
  *  opens the app to content instead of an empty shell.
  *
- *  Runs at most once per install — gated by the `builtinSeeded` latch in
- *  config, which stays set even if the user later deletes the space (we
- *  don't resurrect it). Only seeds an **empty** KB: an existing library
- *  (upgrading user, or a root re-pointed at a populated folder) is left
- *  untouched and simply latched so we never bother them later.
+ *  Two distinct jobs, in order:
+ *
+ *   1. **Surface** — if the manual is already on disk (`<root>/<name>`),
+ *      make sure it's reachable from Welcome recents. This is independent
+ *      of the `builtinSeeded` latch: surfacing isn't re-seeding. It
+ *      covers the "config/recents wiped but the folder is still there"
+ *      case (e.g. the user deletes `~/.stashbase`) — otherwise the manual
+ *      exists but never shows. Only re-adds when it has fallen off recents,
+ *      so a normal boot doesn't keep bumping it to the top.
+ *
+ *   2. **Seed** — otherwise, copy the bundled content in, but only into a
+ *      brand-new empty library. The `builtinSeeded` latch means "we did
+ *      the initial copy already": once set, a user who *deletes the
+ *      folder* won't get it resurrected (delete the folder to be rid of
+ *      it). An existing library (upgrading user / root re-pointed at a
+ *      populated folder) is latched and left untouched.
  *
  *  Idempotent and failure-tolerant: any error is logged and swallowed —
  *  onboarding content must never block boot. Call before binding spaces
  *  so the seeded space is picked up by `bootBindAllSpaces`. */
 export function seedBuiltinSpace(): void {
-  const cfg = readConfig();
-  if (cfg.builtinSeeded) return;
+  const root = getKbRoot();
+  const dest = path.join(root, BUILTIN_SPACE_NAME);
 
   const latch = () => {
     const c = readConfig();
-    c.builtinSeeded = true;
-    writeConfig(c);
+    if (!c.builtinSeeded) { c.builtinSeeded = true; writeConfig(c); }
   };
 
+  // (1) Already on disk → ensure it's in recents, regardless of the latch.
+  if (fs.existsSync(dest)) {
+    try {
+      ensureSpaceMetadata(dest); // idempotent; makes it a known space
+      const inRecents = (readConfig().recentSpaces ?? []).some((r) => r.path === dest);
+      if (!inRecents) pushRecent(dest);
+    } catch (err) {
+      log.warn(`failed to surface built-in space: ${errorMessage(err)}`);
+    }
+    latch();
+    return;
+  }
+
+  // (2) Not on disk. If we already seeded once, the user deleted the
+  // folder — don't resurrect it.
+  if (readConfig().builtinSeeded) return;
+
   // Only seed a brand-new, empty library — never inject into an existing
-  // user's KB. Latch either way so this check runs only once.
+  // user's KB. Latch either way so this runs only once.
   if (listAvailableSpaceNames().length > 0) {
     latch();
     return;
@@ -493,12 +520,8 @@ export function seedBuiltinSpace(): void {
   if (!src) return; // not bundled in this build — try again next boot
 
   try {
-    const root = getKbRoot();
     fs.mkdirSync(root, { recursive: true });
-    const dest = path.join(root, BUILTIN_SPACE_NAME);
-    if (!fs.existsSync(dest)) {
-      copyDirectoryDereferenced(src, dest);
-    }
+    copyDirectoryDereferenced(src, dest);
     ensureSpaceMetadata(dest); // scaffolds .stashbase/ so it's a known space
     pushRecent(dest);          // show it on the Welcome screen
     latch();
