@@ -85,6 +85,10 @@
       {
         "from": "python/sidecar.nosync",
         "to": "python/sidecar"
+      },
+      {
+        "from": "assets/builtin-space",
+        "to": "assets/builtin-space"
       }
     ],
     "asar": true,

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to StashBase</title>
+<style>
+  :root {
+    --paper: #fafaf7;
+    --ink: #0f1419;
+    --muted: #5a6068;
+    --rule: #e6e4de;
+    --accent: #0891b2;
+    --accent-ink: #075e76;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14181b;
+      --ink: #e9eaec;
+      --muted: #9aa1a8;
+      --rule: #2b3138;
+      --accent: #38b6c9;
+      --accent-ink: #7fd3df;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  body {
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino,
+                 "Book Antiqua", Georgia, "Times New Roman", ui-serif, serif;
+    font-size: 18px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .letter {
+    max-width: 38rem;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.25rem, 5vw, 2rem) 4rem;
+  }
+
+  header {
+    margin-bottom: 2.25rem;
+  }
+
+  h1 {
+    font-size: clamp(1.9rem, 4vw, 2.4rem);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.4rem;
+  }
+
+  .sub {
+    margin: 0;
+    font-style: italic;
+    color: var(--muted);
+    font-size: 1.05rem;
+  }
+
+  .rule {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    margin: 2rem 0;
+    width: 3.5rem;
+    margin-left: 0;
+  }
+
+  p { margin: 0 0 1.25rem; }
+
+  .lead {
+    font-size: 1.28rem;
+    line-height: 1.45;
+    font-weight: 600;
+    margin: 2rem 0;
+    padding-left: 1.1rem;
+    border-left: 2px solid var(--accent);
+  }
+  .lead .rest { color: var(--accent-ink); }
+
+  .beliefs {
+    list-style: none;
+    margin: 1.75rem 0;
+    padding: 0;
+  }
+  .beliefs li {
+    position: relative;
+    padding-left: 1.4rem;
+    margin-bottom: 1.05rem;
+  }
+  .beliefs li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.72em;
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .beliefs b { font-weight: 600; }
+
+  .signoff {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-style: italic;
+    color: var(--muted);
+  }
+
+  em.term { font-style: italic; }
+</style>
+</head>
+<body>
+  <main class="letter">
+    <header>
+      <h1>Welcome to StashBase</h1>
+      <p class="sub">A short letter from the team.</p>
+    </header>
+
+    <hr class="rule">
+
+    <p>Almost everyone we know has tried to build a &ldquo;second brain&rdquo; &mdash; a place to keep what they learn so they can find and reuse it later. Almost no one keeps it up.</p>
+
+    <p>It isn&rsquo;t a discipline problem. The tools quietly hand you a second job. Every note has to be saved, tagged, linked, filed away, and &mdash; months later &mdash; found again. The structure is always yours to maintain. So the &ldquo;second brain&rdquo; slowly becomes a junk drawer: a place things go <em class="term">in</em>, not a memory you actually draw <em class="term">on</em>.</p>
+
+    <p>We don&rsquo;t think that job should be yours anymore.</p>
+
+    <p>Over the last couple of years something changed. Agents like Claude Code and Codex showed they can maintain a large, structured, constantly-evolving system &mdash; a codebase &mdash; under a person&rsquo;s direction. A knowledge base is the same kind of thing: long-lived, structured, always growing. At the same time, more and more of what we read and write is already being generated and organized by agents. The author is changing. The maintainer can change too.</p>
+
+    <p class="lead">You decide what&rsquo;s worth keeping.<br><span class="rest">Agents do the rest.</span></p>
+
+    <p>We call the act of keeping something a <b>Stash</b>. A bookmark saves a link; a Stash saves the content itself. Once it&rsquo;s in, it&rsquo;s yours &mdash; to search, reuse, and carry with you. The agent handles the parts that used to wear people down: summarizing, connecting, organizing, indexing, and pulling the right thing back when you need it. Maintenance stops being a chore you schedule and becomes a side effect of work you were already doing.</p>
+
+    <p>A few beliefs shape everything here, and we&rsquo;d rather say them plainly:</p>
+
+    <ul class="beliefs">
+      <li><b>It sees only what you see.</b> No background crawling, nothing fetched behind your back. Your memory begins with what you actually looked at.</li>
+      <li><b>It&rsquo;s yours, on your disk.</b> Plain files &mdash; Markdown, HTML, PDF &mdash; stored locally, in open formats. The cloud is optional, never a requirement.</li>
+      <li><b>It isn&rsquo;t locked to us.</b> Your whole knowledge base is exposed over MCP, so Claude, ChatGPT, Codex &mdash; whatever you use &mdash; can read it directly. Change tools without leaving your memory behind.</li>
+    </ul>
+
+    <p>That&rsquo;s the whole idea. Not a smarter notes app &mdash; a memory layer you and your agents share, one that grows on its own as you work, and stays with you.</p>
+
+    <p>This page you&rsquo;re reading is itself a StashBase space. Look around, search it, and delete it whenever you&rsquo;re ready. Then start keeping the things you don&rsquo;t want to lose.</p>
+
+    <p class="signoff">&mdash; The StashBase team</p>
+  </main>
+</body>
+</html>
