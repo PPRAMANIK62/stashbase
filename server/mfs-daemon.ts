@@ -342,24 +342,39 @@ class MfsDaemon extends EventEmitter {
 function resolvePythonBin(): string {
   const bin = (() => {
     if (process.env.STASHBASE_PYTHON) return process.env.STASHBASE_PYTHON;
-    const packagedRuntime = path.join(RESOURCES_ROOT, 'python', 'runtime', 'bin', 'python');
-    if (existsSync(packagedRuntime)) return packagedRuntime;
-    const packagedVenv = path.join(RESOURCES_ROOT, 'python', '.venv', 'bin', 'python');
-    if (existsSync(packagedVenv)) return packagedVenv;
+    // The packaged runtime / venv live under RESOURCES_ROOT; in dev
+    // RESOURCES_ROOT falls back to PROJECT_ROOT, so a stray `python/.venv`
+    // (e.g. copied in from another checkout) would shadow the dev
+    // `python/.venv.nosync`. Skip the packaged candidates in dev — same
+    // guard as resolveDaemonBinary. STASHBASE_PYTHON still wins.
+    if (!process.env.STASHBASE_DEV_VITE) {
+      const packagedRuntime = path.join(RESOURCES_ROOT, 'python', 'runtime', 'bin', 'python');
+      if (existsSync(packagedRuntime)) return packagedRuntime;
+      const packagedVenv = path.join(RESOURCES_ROOT, 'python', '.venv', 'bin', 'python');
+      if (existsSync(packagedVenv)) return packagedVenv;
+    }
     const venvBin = path.join(PROJECT_ROOT, 'python', '.venv.nosync', 'bin', 'python');
     if (existsSync(venvBin)) return venvBin;
     log.warn('python/.venv.nosync not found, falling back to system `python3`');
     return 'python3';
   })();
 
+  // Bounded synchronous probe. This runs on the Node main thread at
+  // daemon spawn, so an interpreter whose import deadlocks (e.g. a
+  // corrupt venv where `import openai` never returns) would otherwise
+  // block the event loop forever and wedge the whole server. A timeout
+  // turns that into a clear, recoverable error instead.
   const probe = spawnSync(bin, ['-c', 'import mfs, openai, numpy'], {
     encoding: 'utf8',
+    timeout: 30_000,
   });
   if (probe.status !== 0) {
-    const lastErrLine = (probe.stderr || '').trim().split('\n').pop() ?? '';
+    const reason = probe.error
+      ? probe.error.message
+      : ((probe.stderr || '').trim().split('\n').pop() ?? '');
     throw new Error(
-      `Python sidecar deps missing at ${bin}\n` +
-        `  ${lastErrLine}\n` +
+      `Python sidecar deps missing or unusable at ${bin}\n` +
+        `  ${reason}\n` +
         `  → fix: pnpm setup:python`,
     );
   }

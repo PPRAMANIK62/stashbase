@@ -39,3 +39,4 @@ __pycache__/
 # TypeScript
 *.tsbuildinfo
 python/.venv.nosync/
+python/.venv/
