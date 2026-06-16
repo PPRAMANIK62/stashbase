@@ -145,6 +145,11 @@ export interface Toast {
    *  clicked away). Defaults: info / success 3000, warning 5000,
    *  error null. */
   ttl: number | null;
+  /** How many identical (same level + message) toasts have collapsed
+   *  into this one. Absent / 1 = a single occurrence; rendered as a
+   *  "×N" badge when >1 so rapid-fire duplicates don't flood the
+   *  stack. Maintained by the `TOAST_ADD` reducer. */
+  count?: number;
 }
 
 export interface State {
@@ -426,6 +431,7 @@ export type Action =
   | { type: 'MODAL_CLOSE' }
   | { type: 'TOAST_ADD'; toast: Toast }
   | { type: 'TOAST_DISMISS'; id: string }
+  | { type: 'TOAST_CLEAR' }
   /** Promote a preview tab to a pinned one (sets `preview = false`).
    *  Triggered by double-click on a sidebar file, double-click on the
    *  tab title, or entering edit mode on the tab. */
@@ -750,10 +756,26 @@ export function reducer(s: State, a: Action): State {
       return { ...s, modal: a.request };
     case 'MODAL_CLOSE':
       return { ...s, modal: null };
-    case 'TOAST_ADD':
+    case 'TOAST_ADD': {
+      // Collapse rapid-fire duplicates: if an identical toast (same
+      // level + message) is already on the stack, bump its count in
+      // place instead of pushing a new one. Keeps its original id (so
+      // React doesn't remount) and position; ToastItem re-arms its
+      // auto-dismiss off the count change.
+      const dup = s.toasts.findIndex(
+        (t) => t.level === a.toast.level && t.message === a.toast.message,
+      );
+      if (dup !== -1) {
+        const next = s.toasts.slice();
+        next[dup] = { ...next[dup], count: (next[dup].count ?? 1) + 1 };
+        return { ...s, toasts: next };
+      }
       return { ...s, toasts: [...s.toasts, a.toast] };
+    }
     case 'TOAST_DISMISS':
       return { ...s, toasts: s.toasts.filter((t) => t.id !== a.id) };
+    case 'TOAST_CLEAR':
+      return s.toasts.length === 0 ? s : { ...s, toasts: [] };
     case 'PROMOTE_TAB':
       return {
         ...s,

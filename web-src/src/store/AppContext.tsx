@@ -176,6 +176,10 @@ export interface AppActions {
     },
   ) => string;
   dismissToast: (id: string) => void;
+  /** Clear all toasts at once — backs the "Clear all" control that
+   *  appears when the stack has more than one toast (persistent error
+   *  toasts otherwise have to be dismissed one by one). */
+  clearToasts: () => void;
   toggleEditMode: () => Promise<void>;
 
   newNote: () => Promise<void>;
@@ -413,6 +417,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   const dismissToast = useCallback((id: string) => {
     dispatch({ type: 'TOAST_DISMISS', id });
+  }, []);
+  const clearToasts = useCallback(() => {
+    dispatch({ type: 'TOAST_CLEAR' });
   }, []);
 
   /** Run the rename-preview probe, and if it surfaces cross-references,
@@ -1567,7 +1574,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     consumePendingHighlight,
     resolveCascadePrompt,
     alert: showAlert, confirm: askConfirm, resolveModal,
-    toast, dismissToast,
+    toast, dismissToast, clearToasts,
     toggleEditMode,
     newNote, newFolder, deleteFile, deleteFolder,
     renameFile, renameFolder, moveFile, upload, recordVideo,
@@ -1584,7 +1591,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     navigateTo, consumePendingScroll,
     consumePendingHighlight,
     resolveCascadePrompt,
-    showAlert, askConfirm, resolveModal, toast, dismissToast,
+    showAlert, askConfirm, resolveModal, toast, dismissToast, clearToasts,
     toggleEditMode,
     newNote, newFolder, deleteFile, deleteFolder,
     renameFile, renameFolder, moveFile, upload, recordVideo,
