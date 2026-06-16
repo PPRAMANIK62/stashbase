@@ -13,8 +13,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { fileURLToPath } from 'node:url';
 import { logger, errorMessage } from './log.ts';
-import { moveDirectory } from './fs-move.ts';
+import { moveDirectory, copyDirectoryDereferenced } from './fs-move.ts';
 import { isIndexExcludedDirName } from './indexable.ts';
 import {
   readAppConfig as readConfig,
@@ -35,6 +36,21 @@ const MAX_RECENT = 50;
  *  KB location" UI can edit it; for now it's just the constant. */
 const DEFAULT_KB_ROOT = path.join(os.homedir(), 'Documents', 'StashBase');
 export const WINDOW_ID_HEADER = 'x-stashbase-window-id';
+
+/** Space-folder name of the bundled product manual, seeded into a fresh
+ *  KB on first launch so the user never faces an empty app. Doubles as
+ *  the disk directory name and the Welcome-screen recents label. */
+const BUILTIN_SPACE_NAME = '👋 Start Here';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** Where bundled assets live. Packaged: `extraResources` under
+ *  `process.resourcesPath` (injected via `STASHBASE_RESOURCES_PATH`).
+ *  Dev: the project root. Mirrors `mfs-daemon.ts`'s resolution. */
+const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
+  ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
+  : process.env.STASHBASE_APP_ROOT
+    ? path.resolve(process.env.STASHBASE_APP_ROOT)
+    : path.resolve(__dirname, '..');
 
 export interface McpServerConfig {
   command: string;
@@ -425,6 +441,71 @@ export function ensureKbRoot(): void {
     log.info(`pruned ${before.length - after.length} out-of-root recent(s) (kbRoot=${root})`);
   }
   if (dirty) writeConfig(cfg);
+  // Seed the built-in manual here — `ensureKbRoot` is THE idempotent
+  // "root is now established" hook, hit by both boot and the lazy
+  // `GET /api/kb-root` adopt-default path. The picker path doesn't call
+  // this (it goes through `setKbRoot`), so it seeds via `onKbRootChange`.
+  seedBuiltinSpace();
+}
+
+/** Absolute path of the bundled built-in space's source content, or null
+ *  if it isn't shipped with this build. */
+function builtinSpaceSource(): string | null {
+  const src = path.join(RESOURCES_ROOT, 'assets', 'builtin-space');
+  try {
+    return fs.statSync(src).isDirectory() ? src : null;
+  } catch {
+    return null;
+  }
+}
+
+/** First-launch onboarding: copy the bundled product-manual space into a
+ *  fresh KB and surface it in the Welcome screen's recents, so a new user
+ *  opens the app to content instead of an empty shell.
+ *
+ *  Runs at most once per install — gated by the `builtinSeeded` latch in
+ *  config, which stays set even if the user later deletes the space (we
+ *  don't resurrect it). Only seeds an **empty** KB: an existing library
+ *  (upgrading user, or a root re-pointed at a populated folder) is left
+ *  untouched and simply latched so we never bother them later.
+ *
+ *  Idempotent and failure-tolerant: any error is logged and swallowed —
+ *  onboarding content must never block boot. Call before binding spaces
+ *  so the seeded space is picked up by `bootBindAllSpaces`. */
+export function seedBuiltinSpace(): void {
+  const cfg = readConfig();
+  if (cfg.builtinSeeded) return;
+
+  const latch = () => {
+    const c = readConfig();
+    c.builtinSeeded = true;
+    writeConfig(c);
+  };
+
+  // Only seed a brand-new, empty library — never inject into an existing
+  // user's KB. Latch either way so this check runs only once.
+  if (listAvailableSpaceNames().length > 0) {
+    latch();
+    return;
+  }
+
+  const src = builtinSpaceSource();
+  if (!src) return; // not bundled in this build — try again next boot
+
+  try {
+    const root = getKbRoot();
+    fs.mkdirSync(root, { recursive: true });
+    const dest = path.join(root, BUILTIN_SPACE_NAME);
+    if (!fs.existsSync(dest)) {
+      copyDirectoryDereferenced(src, dest);
+    }
+    ensureSpaceMetadata(dest); // scaffolds .stashbase/ so it's a known space
+    pushRecent(dest);          // show it on the Welcome screen
+    latch();
+    log.info(`seeded built-in space at ${dest}`);
+  } catch (err) {
+    log.warn(`failed to seed built-in space: ${errorMessage(err)}`);
+  }
 }
 
 function getSpaceRootPath(spaceName: string): string {

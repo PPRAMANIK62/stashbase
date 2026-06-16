@@ -53,6 +53,11 @@ export interface AppConfigFile extends SpaceConfigFile {
    *  server knows the canonical registry; this just records which
    *  entry the user last picked. Defaults to 'claude'. */
   terminalCli?: string;
+  /** Set once the bundled built-in space (the product manual) has been
+   *  seeded into a fresh KB on first launch. A latch, not live state:
+   *  it stays true even if the user later deletes the space, so we
+   *  never recreate it behind their back. See `seedBuiltinSpace`. */
+  builtinSeeded?: boolean;
 }
 
 export function readAppConfig(): AppConfigFile {

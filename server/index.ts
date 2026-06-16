@@ -26,7 +26,7 @@ import {
   killActiveAgent,
 } from './agent.ts';
 import { stopSpaceMcpServers, switchSpaceMcpServers } from './mcp-host.ts';
-import { getKbRoot, onClose, onKbRootChange, onSwitch, ensureKbRoot, needsKbRootPicker } from './space.ts';
+import { getKbRoot, onClose, onKbRootChange, onSwitch, ensureKbRoot, needsKbRootPicker, seedBuiltinSpace } from './space.ts';
 import { migrateLegacyEmbedderConfig } from './app-config.ts';
 import { bootBindAllSpaces } from './state.ts';
 import { reapOrphanDaemons } from './stale-lock.ts';
@@ -268,6 +268,9 @@ const server = app.listen(PORT, '127.0.0.1', () => {
     try { reapOrphanDaemons(getKbRoot()); } catch (err: unknown) {
       log.warn(`reap orphan daemons failed: ${err instanceof Error ? err.message : String(err)}`);
     }
+    // NB: the built-in manual is seeded inside `ensureKbRoot` (called at
+    // module load above when the root is ready), so by the time we bind
+    // here the seeded space is already on disk and gets picked up.
     // Configure the daemon + bind every known space so MCP / cross-space
     // search works without waiting for the user to open one. Background.
     bootBindAllSpaces().catch((err) =>
@@ -356,6 +359,9 @@ onKbRootChange(async () => {
   try { reapOrphanDaemons(getKbRoot()); } catch (err: unknown) {
     log.warn(`reap orphan daemons failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+  // First-run picker lands here after the user chooses a root — seed the
+  // built-in manual into it before binding (no-op once latched / non-empty).
+  seedBuiltinSpace();
   await bootBindAllSpaces();
 });
 
