@@ -259,7 +259,7 @@ command = "/Users/YOUR_USER/.stashbase/bin/stashbase-mcp"
 
 ## Status
 
-Early alpha. macOS arm64 (Apple Silicon) is the supported platform today; Windows / Linux are post-V1. Screen recording uses the native system picker on macOS 15+; on older versions you can record individual windows, but not full-screen apps.
+Early alpha. macOS arm64 is the supported platform today; Windows / Linux are post-V1. Screen recording uses the native system picker on macOS 15+; on older versions you can record individual windows, but not full-screen apps.
 
 ### Reasonably stable
 
