@@ -62,35 +62,31 @@ Drop in a research paper. Claude Code reads it and writes an HTML note; StashBas
 
 More workflows — course archives, research landscapes, podcast notes, competitor teardowns — on [stashbase.ai](https://stashbase.ai/#gallery).
 
-Codebase retrieval is already well served by [Claude Context](https://github.com/zilliztech/claude-context). StashBase focuses on everything else that accumulates around AI work.
-
 ---
 
 ## Capture
 
-Stashing means saving the content itself — not a link to it — into your knowledge base. Every format gets a real treatment:
+Stashing saves the content itself, not a link to it. Each format is handled its own way:
 
 | Format | Viewing | Into the index |
 |---|---|---|
 | Markdown | Rendered preview / source edit / live split | Indexed directly |
-| HTML | Full render — scripts and self-contained apps run | Indexed directly, split by headings |
+| HTML | Full render; scripts and self-contained apps run | Indexed directly, split by headings |
 | PDF | Built-in reader; hits locate the passage on the page | Background extraction to a hidden Markdown companion (figures included) |
 | Images | Inline preview + lightbox | Local OCR text layer (RapidOCR, on-device) |
-| Video & screen recordings | The product *is* a note | Multimodal understanding (Gemini, key required) → summary + structured content |
+| Video & screen recordings | Plays inline inside the note | Multimodal understanding (Gemini, key required) → summary + structured content |
 
 Structured formats are indexed as they are; unstructured formats are extracted into searchable text first.
 
-Failed conversions surface a **Retry** button and are never auto-retried — failures are usually persistent (scanned-only, encrypted, …), so retrying is always your call.
-
 ### Space-level import & portable embeddings
 
-**Import folder** brings any local directory in as a new space. If the folder carries a `.stashbase/snapshot.parquet`, its embedding cache is reused on open — unchanged content never re-embeds. That's how the CS183B starter opens fully indexed without costing you a token.
+**Import folder** brings any local directory in as a new space. If the folder ships a `.stashbase/snapshot.parquet`, its embedding cache is reused on open, so unchanged content never re-embeds. That's how the CS183B starter imports without re-embedding from scratch.
 
 ---
 
 ## Retrieval
 
-A StashBase KB is a folder on disk (default `~/Documents/StashBase`) containing **spaces** — first-level subdirectories. Inside spaces: HTML, Markdown, PDF, images, plus hidden extraction companions and asset bundles.
+A StashBase KB is a folder on disk (default `~/Documents/StashBase`) containing **spaces** (first-level subdirectories). Inside spaces: HTML, Markdown, PDF, images, plus hidden extraction companions and asset bundles.
 
 Indexing runs locally via [mfs](https://github.com/zilliztech/mfs) + [Milvus Lite](https://milvus.io/docs/milvus_lite.md). The index is **KB-level** (one collection per KB), so retrieval works across spaces or scoped to one.
 
@@ -98,18 +94,18 @@ Indexing runs locally via [mfs](https://github.com/zilliztech/mfs) + [Milvus Lit
 
 * App-internal writes (editor save, drag-and-drop) → indexed immediately
 * External writes (other editors, git, scripts, **and agents writing files directly**) → reconciled at deterministic moments: when you return to the window, when an agent finishes a turn, when you open the space, or on manual Sync
-* Other spaces → reconciled when you next open them. No library-wide background scanning — embedding spend stays predictable and visible
-* There is no filesystem watcher — an agent that wrote files calls MCP `reindex` to make them searchable (it diffs disk against the index itself)
+* Other spaces → reconciled when you next open them. No library-wide background scanning, so embedding spend stays predictable and visible
+* There is no filesystem watcher; an agent that wrote files calls MCP `reindex` to make them searchable (it diffs disk against the index itself)
 
-Renames, moves, and unchanged-content rewrites are detected by content hash and **never re-embed** — vectors are the only expensive thing here, and they're never computed twice for the same bytes.
+Renames, moves, and unchanged-content rewrites are detected by content hash and **never re-embed**. Vectors are the only expensive thing here, and they're never computed twice for the same bytes.
 
 ### Embedder
 
-OpenAI `text-embedding-3-small` — the single, fixed embedder in V1 (no provider switching). The whole library lives in one Milvus collection. Without an API key, only embedding and semantic search are disabled — files still save and preview, and keyword search (ripgrep, no index involved) keeps working.
+OpenAI `text-embedding-3-small` is the single, fixed embedder in V1 (no provider switching). The whole library lives in one Milvus collection. Without an API key, only embedding and semantic search are disabled; files still save and preview, and keyword search (ripgrep, no index involved) keeps working.
 
 ### Search
 
-Hybrid retrieval: dense vector kNN + BM25, fused server-side via RRF in a single Milvus query. Hits on PDFs and images map back to the original file — hidden extraction notes never surface. Available through:
+Hybrid retrieval: dense vector kNN + BM25, fused server-side via RRF in a single Milvus query. Hits on PDFs and images map back to the original file; hidden extraction notes never surface. Available through:
 
 * GUI search bar (semantic by default; toggle to exact keyword via ripgrep)
 * MCP `search_kb` tool for any AI client
@@ -133,7 +129,7 @@ Hybrid retrieval: dense vector kNN + BM25, fused server-side via RRF in a single
             any MCP client
 ```
 
-### MCP exposure with one-click connector
+### One-click MCP connector
 
 **Settings → MCP** writes the StashBase MCP server entry directly into your AI client's global config (Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Qwen Code) or copies the right stdio snippet for GUI-managed clients. One-time setup; afterwards the KB stays reachable from those clients **even when the StashBase app is closed**.
 
@@ -143,7 +139,7 @@ The tool surface is just what the filesystem can't do, since the client is on th
 * **`search_kb`** — hybrid semantic + keyword search; read the full file directly from the returned path
 * **`reindex`** — make on-disk changes searchable after you write (diffs disk against the index itself)
 
-Everything else — reading a full file, creating / editing / deleting / moving notes, editing `STASHBASE.md` — the client does with its own filesystem tools directly under the KB root.
+Everything else (reading a full file, creating / editing / deleting / moving notes, editing `STASHBASE.md`) the client does with its own filesystem tools directly under the KB root.
 
 ---
 
@@ -151,18 +147,18 @@ Everything else — reading a full file, creating / editing / deleting / moving 
 
 ### Built-in chat panel (Claude Code / Codex)
 
-A structured chat panel runs Claude Code and Codex inside StashBase — message bubbles, streaming thinking, expandable tool calls, and an inline diff viewer with approve/reject. The design tracks the VS Code Claude extension closely.
+A structured chat panel runs Claude Code and Codex inside StashBase: message bubbles, streaming thinking, expandable tool calls, and an inline diff viewer with approve/reject. The design tracks the VS Code Claude extension closely.
 
-* Runs the CLI already on your machine — your login, your subscription, your global config. No parallel universe.
+* Runs the CLI already on your machine: your login, your subscription, your global config. Nothing separate to install or configure.
 * `cwd` automatically set to the current space, with that space's rules, skills, and MCP servers in view
 * Reads pass silently; file edits and commands round-trip to you for approval
 * Permission modes (default / accept-edits / plan / auto) and thinking-effort switchable in-panel
-* Sessions stored in the CLI's standard location (`~/.claude/`) — start a conversation in the panel, resume it in your terminal, or the other way around
+* Sessions stored in the CLI's standard location (`~/.claude/`): start a conversation in the panel, resume it in your terminal, or the other way around
 * Multiple tabs = multiple parallel sessions; files dragged into the panel become temporary context, never KB imports
 
 ### Agent-maintained KB via `STASHBASE.md`
 
-Drop a `STASHBASE.md` into the KB root (or per-space) to define maintenance rules in plain language — what to summarize, how to file things, when to dedupe. Agents pick up the rules over MCP (`kb_info` returns them, and the connection's `instructions` carry the working contract) before they touch anything, and tidy as they go while doing your work. **No background daemon, no scheduled jobs, no tokens quietly burned.**
+Drop a `STASHBASE.md` into the KB root (or per-space) to define maintenance rules in plain language: what to summarize, how to file things, when to dedupe. Agents pick up the rules over MCP (`kb_info` returns them, and the connection's `instructions` carry the working contract) before they touch anything, and tidy as they go while doing your work. **No background daemon, no scheduled jobs, no tokens quietly burned.**
 
 ---
 
@@ -213,7 +209,7 @@ The cask defaults to `liliu-z/stashbase/stashbase`, backed by `git@github.com:li
 
 ## MCP integration
 
-**Settings → MCP** is the normal path (see [Retrieval](#mcp-exposure-with-one-click-connector)). The manual config below is for source builds, or for inspecting the exact settings.
+**Settings → MCP** is the normal path (see [Retrieval](#one-click-mcp-connector)). The manual config below is for source builds, or for inspecting the exact settings.
 
 The MCP server is a stdio command:
 
