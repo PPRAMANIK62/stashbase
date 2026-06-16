@@ -10,6 +10,7 @@ web/dist-app/
 models/
 python/runtime/
 python/sidecar.nosync/
+python/sidecar/
 *.log
 .DS_Store
 dev-docs/
