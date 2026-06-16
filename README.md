@@ -13,7 +13,7 @@
 
 StashBase is a local-first knowledge base that turns documents, screenshots, videos, and AI artifacts into persistent memory for you and your AI. You stash it. Agents organize and maintain it.
 
-📥 **Capture what matters:** Import documents, folders, and AI artifacts — or capture anything you've seen on your screen: screenshots get a searchable text layer, screen recordings become structured notes.
+📥 **Capture what matters:** Import documents, folders, and AI artifacts. Snap a screenshot and it's saved with searchable text; record your screen and it turns into a structured note.
 
 🤖 **One memory, every AI:** Claude, ChatGPT, Codex — every MCP client draws on the same knowledge base.
 
@@ -25,7 +25,7 @@ StashBase is a local-first knowledge base that turns documents, screenshots, vid
 
 ![Demo](.github/assets/demo_0616.gif)
 
-> Clone the CS183B starter, import it, and ask the built-in agent — 20 YC startup lectures, embeddings prebuilt.
+> Clone the CS183B starter, import it, then ask the built-in agent — it answers from all 20 Stanford startup lectures.
 
 ---
 
@@ -39,16 +39,14 @@ brew install --cask liliu-z/stashbase/stashbase
 
 Once the app is running:
 
-1. Start with the [CS183B starter](https://github.com/0-bingwu-0/stashbase-cs183b) — Stanford's **How to Start a Startup** course. Just clone it anywhere on your machine:
+1. **Open `👋 Start Here`**, already waiting on your Welcome screen.
+2. Open the **built-in Claude agent** and let it do the reading for you. Ask it something like *"How is StashBase different from a notes app or other knowledge bases?"*
+3. Want a real example? Clone the [CS183B starter](https://github.com/0-bingwu-0/stashbase-cs183b) (Stanford's **How to Start a Startup**, 20 lectures) and bring it in with **Import folder**:
    ```bash
    git clone https://github.com/0-bingwu-0/stashbase-cs183b
    ```
-   Then on the Welcome screen: **Import folder** → pick the cloned `stashbase-cs183b`. Open `founder_playbook.html` to read the playbook rendered inline.
-2. Open the **built-in Claude agent** panel and ask away — it searches across the playbook and all 20 transcripts to answer. Three to start with:
-   - *"How do I find a startup idea?"*
-   - *"How do I know if I have product-market fit?"*
-   - *"Should I worry about competitors and being copied?"*
-3. Then bring your own: hit **New space** and drag in your files — Markdown, HTML, PDFs, images — or record your screen and get back a structured note.
+   Skim `founder_playbook.html`, then work with the agent: discuss it, or drop in a new article and let it update the playbook.
+4. Bring your own: hit **New space** and drag in your files (Markdown, HTML, PDFs, images), or record your screen and get back a structured note.
 
 Want this memory in Claude Desktop, ChatGPT, or Codex too? **Settings → MCP** → click **Connector** for your client, restart it, then `@stashbase` from there.
 
