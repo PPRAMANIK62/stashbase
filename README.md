@@ -39,7 +39,7 @@ brew install --cask liliu-z/stashbase/stashbase
 
 Once the app is running:
 
-1. Start with the [CS183B starter](https://github.com/0-bingwu-0/stashbase-cs183b) — Stanford's **How to Start a Startup** course: full transcripts of all 20 lectures plus a `founder_playbook.html` distilled from them, embeddings included so search works the moment you import:
+1. Start with the [CS183B starter](https://github.com/0-bingwu-0/stashbase-cs183b) — Stanford's **How to Start a Startup** course. Just clone it anywhere on your machine:
    ```bash
    git clone https://github.com/0-bingwu-0/stashbase-cs183b
    ```
