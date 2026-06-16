@@ -6,13 +6,16 @@
  *      processing, so a failed analysis never loses the recording,
  *   2. runs Gemini video understanding in the background,
  *   3. writes a VISIBLE `recording-<ts>.md` note with the structured
- *      content + an inline <video> player for the saved webm.
+ *      content + a link to the saved webm (opens in the system browser).
  *
  * The note is the product; the video rides along as its attachment
  * (`<stem>_files/` bundles are hidden in the tree and follow the note
- * on rename/delete). Progress surfaces through the same "Converting…"
- * banner as the file converters (`runBackgroundConversion`, keyed to
- * the note path).
+ * on rename/delete). We link it rather than embedding an inline
+ * <video>: MediaRecorder webm has no Duration element in its header, so
+ * an in-app <video preload="metadata"> stalls at 0:00 and won't play —
+ * the browser (reached via previewIframe's external-open) handles it.
+ * Progress surfaces through the same "Converting…" banner as the file
+ * converters (`runBackgroundConversion`, keyed to the note path).
  */
 import express from 'express';
 import multer from 'multer';
@@ -114,9 +117,11 @@ function handleRecording(req: express.Request, res: express.Response): void {
   // done (the sidebar's "Converting…" banner tracks `kbRel` meanwhile).
   res.json({ ok: true, file: noteRel });
 
-  // Relative to the note, which sits next to its bundle.
+  // Relative to the note, which sits next to its bundle. A plain link,
+  // not an inline <video> — see the header comment (MediaRecorder webm
+  // lacks header duration; the browser plays it, the in-app player can't).
   const videoEmbed =
-    `\n\n---\n\n<video controls preload="metadata" src="${bundleName}/recording.webm"></video>\n`;
+    `\n\n---\n\n📹 [Recording video](${bundleName}/recording.webm)\n`;
 
   const windowId = req.header(WINDOW_ID_HEADER);
   void runBackgroundConversion(kbRel, () => runWithWindowId(windowId, async () => {

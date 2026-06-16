@@ -52,7 +52,7 @@ Want this memory in Claude Desktop, ChatGPT, or Codex too? **Settings → MCP** 
 
 **Embeddings.** StashBase asks for an OpenAI API key when you open your first space — used **only for embeddings** (no chat completions). `text-embedding-3-small` is only $0.02 per 1M tokens. [Create a key.](https://platform.openai.com/api-keys) Without a key, files still save, preview, and stay searchable by exact keyword — only semantic search waits for the key.
 
-**Recordings.** Screen recording turns what you watched into a structured note via Gemini video understanding — the original video stays attached, playable inside the note. Needs a Gemini API key — add one under **Settings → Capture**. [Create a key.](https://aistudio.google.com/apikey) `gemini-2.5-flash` runs about $0.30 per 1M input tokens — a 10-minute recording is roughly 150K tokens, so a few cents per recording.
+**Recordings.** Screen recording turns what you watched into a structured note via Gemini video understanding — the original video stays attached to the note and is linked at the bottom (it opens in your browser to play). Needs a Gemini API key — add one under **Settings → Capture**. [Create a key.](https://aistudio.google.com/apikey) `gemini-2.5-flash` runs about $0.30 per 1M input tokens — a 10-minute recording is roughly 150K tokens, so a few cents per recording.
 
 ---
 
@@ -74,7 +74,7 @@ Stashing saves the content itself, not a link to it. Each format is handled its 
 | HTML | Full render; scripts and self-contained apps run | Indexed directly, split by headings |
 | PDF | Built-in reader; hits locate the passage on the page | Background extraction to a hidden Markdown companion (figures included) |
 | Images | Inline preview + lightbox | Local OCR text layer (RapidOCR, on-device) |
-| Video & screen recordings | Plays inline inside the note | Multimodal understanding (Gemini, key required) → summary + structured content |
+| Video & screen recordings | Linked from the note, opens in the browser to play | Multimodal understanding (Gemini, key required) → summary + structured content |
 
 Structured formats are indexed as they are; unstructured formats are extracted into searchable text first.
 
