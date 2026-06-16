@@ -31,6 +31,10 @@
  *     { t: "exit" }                                    // session ended
  */
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { WebSocket } from 'ws';
 import {
   query,
@@ -41,12 +45,66 @@ import {
   type PermissionUpdate,
   type PermissionMode,
   type EffortLevel,
+  type SpawnOptions,
+  type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk';
 import { logger, errorMessage } from './log.ts';
 import { getCurrentSpace, runWithWindowId } from './space.ts';
 import { buildStashbasePreamble } from './agent-preamble.ts';
 
 const log = logger('agent');
+
+function isExecutable(file: string): boolean {
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveClaudeBinary(defaultCommand: string): string {
+  const explicit = [
+    process.env.STASHBASE_CLAUDE_BIN,
+    process.env.CLAUDE_CODE_BIN,
+  ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  for (const candidate of explicit) {
+    const resolved = path.resolve(candidate);
+    if (isExecutable(resolved)) return resolved;
+    log.warn(`Claude Code binary override is not executable: ${candidate}`);
+  }
+
+  const names = new Set<string>(['claude']);
+  const paths = [
+    ...(process.env.PATH ?? '').split(path.delimiter),
+    path.join(os.homedir(), '.npm-global', 'bin'),
+    path.join(os.homedir(), '.local', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+  ];
+  for (const dir of paths) {
+    if (!dir) continue;
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      if (isExecutable(candidate)) return candidate;
+    }
+  }
+
+  return defaultCommand;
+}
+
+function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
+  const command = resolveClaudeBinary(options.command);
+  if (command !== options.command) {
+    log.info(`spawning Claude Code via ${command}`);
+  }
+  return spawn(command, options.args, {
+    cwd: options.cwd,
+    env: options.env as NodeJS.ProcessEnv,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    signal: options.signal,
+  });
+}
 
 /** Tools we run without prompting — reads, searches, listings. Anything
  *  that writes (Edit / Write / Bash / MCP mutations) falls through to a
@@ -159,6 +217,7 @@ class AgentSession {
             // Route this session's MCP tools back to this window's host.
             STASHBASE_WINDOW_ID: this.windowId,
           } as NodeJS.ProcessEnv,
+          spawnClaudeCodeProcess,
           canUseTool: (name, input, opts) => this.onPermission(name, input, opts),
           stderr: (d: string) => log.debug(d),
         },
