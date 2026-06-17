@@ -16,7 +16,7 @@ import crypto from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
 import { logger, errorMessage } from './log.ts';
-import { moveDirectory, copyDirectoryDereferenced } from './fs-move.ts';
+import { copyDirectoryDereferenced } from './fs-move.ts';
 import { isIndexExcludedDirName } from './indexable.ts';
 import { kbLocalDataDir } from './local-data.ts';
 import {
@@ -69,6 +69,7 @@ const requestWindow = new AsyncLocalStorage<string>();
 const currentSpaces = new Map<string, string>();
 const switchListeners: Array<(newRoot: string, windowId: string) => void> = [];
 const closeListeners: Array<(oldRoot: string, windowId: string) => void> = [];
+const beforeKbRootListeners: Array<(oldRoot: string, newRoot: string) => void | Promise<void>> = [];
 const kbRootListeners: Array<(newRoot: string) => void | Promise<void>> = [];
 
 export function runWithWindowId<T>(windowId: string | null | undefined, fn: () => T): T {
@@ -180,16 +181,6 @@ function throwPathAccessError(target: string, err: unknown): never {
   throw err;
 }
 
-/** First free `"<base> N"` under `root` (N starts at 2), matching the
- *  duplicate-naming convention used elsewhere. Assumes `base` itself
- *  is taken. */
-function freeSpaceName(root: string, base: string): string {
-  for (let n = 2; ; n++) {
-    const cand = `${base} ${n}`;
-    if (!fs.existsSync(path.join(root, cand))) return cand;
-  }
-}
-
 export async function setKbRoot(
   absPath: string,
   opts: { allowNonEmpty?: boolean; migrate?: MigrateEntry[] } = {},
@@ -198,6 +189,9 @@ export async function setKbRoot(
   const oldRoot = getKbRoot();
   const migrate = opts.migrate ?? [];
   const migrating = migrate.length > 0;
+  const changingRoot = root !== oldRoot;
+  if (changingRoot) assertRootNotNested(oldRoot, root);
+  if (migrating && !changingRoot) throw new Error('cannot migrate into the same root');
 
   // Non-empty guard — skipped when migrating, since the whole point is
   // to move spaces *into* a populated target.
@@ -215,33 +209,25 @@ export async function setKbRoot(
   if (!fs.statSync(root).isDirectory()) throw new Error('path is not a directory');
   assertDirectoryAccess(root, 'directory');
 
+  if (changingRoot) await beforeKbRootChange(oldRoot, root);
+
   // Move spaces from the old root into the new one *before* switching —
   // `getKbRoot()` still points at the old root here, and each move is a
-  // safe copy + delete (cross-filesystem safe; see fs-move.ts).
+  // staged copy + commit (cross-filesystem safe; see migrateSpacesToRoot).
   const warnings: string[] = [];
+  let movedSpaces: MigratedSpace[] = [];
   if (migrating) {
-    if (root === oldRoot) throw new Error('cannot migrate into the same root');
-    for (const { name, action } of migrate) {
-      const src = path.join(oldRoot, name);
-      let isDir = false;
-      try { isDir = fs.statSync(src).isDirectory(); } catch { /* gone since preview */ }
-      if (!isDir) continue;
-      let destName = name;
-      if (action === 'overwrite') {
-        const dest = path.join(root, name);
-        if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
-      } else if (action === 'rename' && fs.existsSync(path.join(root, name))) {
-        destName = freeSpaceName(root, name);
-      }
-      const { warning } = moveDirectory(src, path.join(root, destName));
-      if (warning) warnings.push(warning);
-    }
+    const result = migrateSpacesToRoot(oldRoot, root, migrate);
+    movedSpaces = result.moved;
+    warnings.push(...result.warnings);
   }
+  const preserveSources = migrateLocalSpaceConfigs(oldRoot, root, movedSpaces, warnings);
+  deleteMigratedSources(movedSpaces, warnings, preserveSources);
 
   ensureKbMetadata(root);
   const cfg = readConfig();
   cfg.kbRoot = root;
-  cfg.recentSpaces = [];
+  cfg.recentSpaces = recentSpacesForRoot(root);
   delete cfg.recentVaults;
   writeConfig(cfg);
   // Make the post-save state immediately observable to the route
@@ -268,6 +254,188 @@ export async function setKbRoot(
     }
   }
   return { warnings };
+}
+
+interface MigratedSpace {
+  oldName: string;
+  newName: string;
+  source: string;
+  destination: string;
+}
+
+interface MigrationPlan extends MigratedSpace {
+  action: MigrateAction;
+  staged: string;
+  backup?: string;
+}
+
+function assertRootNotNested(oldRoot: string, newRoot: string): void {
+  if (pathContains(oldRoot, newRoot) || pathContains(newRoot, oldRoot)) {
+    throw new Error('new root cannot be inside the current root, or contain the current root');
+  }
+}
+
+function pathContains(parent: string, child: string): boolean {
+  const rel = path.relative(path.resolve(parent), path.resolve(child));
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+async function beforeKbRootChange(oldRoot: string, newRoot: string): Promise<void> {
+  for (const fn of beforeKbRootListeners) {
+    await fn(oldRoot, newRoot);
+  }
+}
+
+function migrateSpacesToRoot(
+  oldRoot: string,
+  newRoot: string,
+  entries: MigrateEntry[],
+): { moved: MigratedSpace[]; warnings: string[] } {
+  if (entries.length === 0) return { moved: [], warnings: [] };
+  const stash = path.join(newRoot, '.stashbase');
+  fs.mkdirSync(stash, { recursive: true });
+  const staging = fs.mkdtempSync(path.join(stash, 'migration-stage-'));
+  const backupRoot = fs.mkdtempSync(path.join(stash, 'migration-backup-'));
+  const reserved = new Set(listSpaceNamesUnder(newRoot));
+  const seenSources = new Set<string>();
+  const plans: MigrationPlan[] = [];
+
+  try {
+    for (const entry of entries) {
+      if (entry.action !== 'move' && entry.action !== 'overwrite' && entry.action !== 'rename') {
+        throw new Error(`invalid migrate action for "${entry.name}"`);
+      }
+      const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+      const bad = validateSpaceName(name);
+      if (bad) throw new Error(`invalid space "${entry.name}": ${bad}`);
+      if (seenSources.has(name)) throw new Error(`duplicate migrate entry for "${name}"`);
+      seenSources.add(name);
+      const source = path.join(oldRoot, name);
+      let isDir = false;
+      try { isDir = fs.statSync(source).isDirectory(); } catch { /* gone since preview */ }
+      if (!isDir) continue;
+
+      let newName = name;
+      const destinationExists = fs.existsSync(path.join(newRoot, newName));
+      if (entry.action === 'rename' && (destinationExists || reserved.has(newName))) {
+        newName = freeSpaceNameReserved(reserved, name);
+      } else if (entry.action !== 'overwrite' && reserved.has(newName)) {
+        throw new Error(`space "${newName}" already exists in the new root`);
+      }
+      reserved.add(newName);
+
+      const staged = path.join(staging, newName);
+      copyDirectoryDereferenced(source, staged);
+      plans.push({
+        oldName: name,
+        newName,
+        source,
+        destination: path.join(newRoot, newName),
+        action: entry.action,
+        staged,
+      });
+    }
+  } catch (err) {
+    try { fs.rmSync(staging, { recursive: true, force: true }); } catch { /* best-effort */ }
+    try { fs.rmSync(backupRoot, { recursive: true, force: true }); } catch { /* best-effort */ }
+    throw err;
+  }
+
+  const committed: MigrationPlan[] = [];
+  try {
+    for (const plan of plans) {
+      if (fs.existsSync(plan.destination)) {
+        if (plan.action !== 'overwrite') throw new Error(`destination already exists: ${plan.destination}`);
+        plan.backup = path.join(backupRoot, plan.newName);
+        fs.renameSync(plan.destination, plan.backup);
+      }
+      fs.renameSync(plan.staged, plan.destination);
+      pruneStashbasePerMachineState(path.join(plan.destination, '.stashbase'));
+      ensureSpaceStashbaseIgnore(path.join(plan.destination, '.stashbase'));
+      committed.push(plan);
+    }
+  } catch (err) {
+    rollbackCommittedMigration(committed);
+    try { fs.rmSync(staging, { recursive: true, force: true }); } catch { /* best-effort */ }
+    try { fs.rmSync(backupRoot, { recursive: true, force: true }); } catch { /* best-effort */ }
+    throw err;
+  }
+
+  try { fs.rmSync(staging, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { fs.rmSync(backupRoot, { recursive: true, force: true }); } catch { /* best-effort */ }
+  return { moved: committed, warnings: [] };
+}
+
+function rollbackCommittedMigration(plans: MigrationPlan[]): void {
+  for (const plan of [...plans].reverse()) {
+    try { fs.rmSync(plan.destination, { recursive: true, force: true }); } catch { /* best-effort */ }
+    if (plan.backup && fs.existsSync(plan.backup)) {
+      try { fs.renameSync(plan.backup, plan.destination); } catch { /* best-effort */ }
+    }
+  }
+}
+
+function freeSpaceNameReserved(reserved: Set<string>, base: string): string {
+  for (let n = 2; ; n++) {
+    const cand = `${base} ${n}`;
+    if (!reserved.has(cand)) return cand;
+  }
+}
+
+function migrateLocalSpaceConfigs(
+  oldRoot: string,
+  newRoot: string,
+  moved: MigratedSpace[],
+  warnings: string[],
+): Set<string> {
+  const preserveSources = new Set<string>();
+  for (const space of moved) {
+    const oldPath = spaceConfigPathForRoot(oldRoot, space.oldName);
+    const legacyPath = path.join(oldRoot, space.oldName, '.stashbase', 'config.json');
+    const source = fs.existsSync(oldPath) ? oldPath : legacyPath;
+    if (!fs.existsSync(source)) continue;
+    const target = spaceConfigPathForRoot(newRoot, space.newName);
+    try {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(source, target);
+      try { fs.chmodSync(target, 0o600); } catch { /* best-effort */ }
+    } catch (err: unknown) {
+      preserveSources.add(space.source);
+      warnings.push(`Could not copy local config for "${space.oldName}": ${errorMessage(err)}`);
+    }
+  }
+  return preserveSources;
+}
+
+function deleteMigratedSources(
+  moved: MigratedSpace[],
+  warnings: string[],
+  preserveSources: Set<string>,
+): void {
+  for (const space of moved) {
+    if (preserveSources.has(space.source)) {
+      warnings.push(
+        `Copied "${space.oldName}" into ${space.destination}, but left the original at ${space.source} ` +
+        'because its local config could not be migrated.',
+      );
+      continue;
+    }
+    try {
+      fs.rmSync(space.source, { recursive: true, force: false });
+    } catch {
+      warnings.push(
+        `Copied "${space.oldName}" into ${space.destination}, but the original at ${space.source} ` +
+        "couldn't be fully removed and may be partially deleted; delete it manually.",
+      );
+    }
+  }
+}
+
+function recentSpacesForRoot(root: string): RecentSpace[] {
+  const now = new Date().toISOString();
+  return listSpaceNamesUnder(root)
+    .slice(0, MAX_RECENT)
+    .map((name) => ({ path: path.join(root, name), openedAt: now }));
 }
 
 /** True if `absPath` is a **direct child** of the KB root. Spaces are
@@ -339,10 +507,6 @@ export function pruneStashbasePerMachineState(stashbaseDir: string): void {
   }
 }
 
-/** Direct child directories of the KB root, sorted alphabetically.
- *  Powers the "Open space" dropdown — every entry is a candidate the
- *  server will accept as a space name. Dot-dirs are skipped (`.git`,
- *  `.stashbase`, etc.). Errors (root missing, permission) return []. */
 /** Direct-child directory names under `root` that count as spaces
  *  (skips dotfiles like `.stashbase`). Sorted. */
 function listSpaceNamesUnder(root: string): string[] {
@@ -681,6 +845,10 @@ export function onClose(fn: (oldRoot: string, windowId: string) => void): void {
   closeListeners.push(fn);
 }
 
+export function onBeforeKbRootChange(fn: (oldRoot: string, newRoot: string) => void | Promise<void>): void {
+  beforeKbRootListeners.push(fn);
+}
+
 export function onKbRootChange(fn: (newRoot: string) => void | Promise<void>): void {
   kbRootListeners.push(fn);
 }
@@ -722,7 +890,7 @@ function pushRecent(absPath: string): void {
 export function getSpaceConfigPath(spaceName: string): string {
   const bad = validateSpaceName(spaceName);
   if (bad) throw new Error(bad);
-  return path.join(kbLocalDataDir(getKbRoot()), 'space-config', spaceConfigDirName(spaceName), 'config.json');
+  return spaceConfigPathForRoot(getKbRoot(), spaceName);
 }
 
 export function readSpaceConfig(spaceName: string): SpaceConfigFile {
@@ -785,6 +953,10 @@ function spaceConfigDirName(spaceName: string): string {
   const hash = crypto.createHash('sha256').update(spaceName).digest('hex').slice(0, 16);
   const base = spaceName.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'space';
   return `${base.slice(0, 48)}-${hash}`;
+}
+
+function spaceConfigPathForRoot(root: string, spaceName: string): string {
+  return path.join(kbLocalDataDir(root), 'space-config', spaceConfigDirName(spaceName), 'config.json');
 }
 
 function legacySpaceConfigPath(spaceName: string): string {

@@ -26,7 +26,7 @@ import {
   killActiveAgent,
 } from './agent.ts';
 import { stopSpaceMcpServers, switchSpaceMcpServers } from './mcp-host.ts';
-import { getKbRoot, onClose, onKbRootChange, onSwitch, ensureKbRoot, needsKbRootPicker, seedBuiltinSpace } from './space.ts';
+import { getKbRoot, onBeforeKbRootChange, onClose, onKbRootChange, onSwitch, ensureKbRoot, needsKbRootPicker, seedBuiltinSpace } from './space.ts';
 import { migrateLegacyEmbedderConfig } from './app-config.ts';
 import { bootBindAllSpaces } from './state.ts';
 import { reapOrphanDaemons } from './stale-lock.ts';
@@ -358,7 +358,7 @@ onClose((_oldRoot, windowId) => {
   killActiveAgent(windowId);
   void stopSpaceMcpServers(windowId);
 });
-onKbRootChange(async () => {
+onBeforeKbRootChange(async () => {
   const failures: string[] = [];
   try {
     await stopSpaceMcpServers();
@@ -380,6 +380,11 @@ onKbRootChange(async () => {
   } catch (err: unknown) {
     failures.push(`close state db failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+  if (failures.length > 0) {
+    throw new Error(failures.join('; '));
+  }
+});
+onKbRootChange(async () => {
   // Our old daemon is closed; sweep any orphan for the new root before
   // re-binding so the fresh daemon takes a clean lock.
   try { reapOrphanDaemons(getKbRoot()); } catch (err: unknown) {
@@ -391,9 +396,6 @@ onKbRootChange(async () => {
   bootBindAllSpaces().catch((err) =>
     log.warn(`bootBindAllSpaces failed after kbRoot change: ${err?.message ?? err}`),
   );
-  if (failures.length > 0) {
-    throw new Error(failures.join('; '));
-  }
 });
 
 // Hook WebSocket upgrades. `/ws/agent` goes to our agent-session bridge;
