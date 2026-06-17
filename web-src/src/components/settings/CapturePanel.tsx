@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api';
 
 interface CapturePermission {
@@ -24,12 +24,14 @@ interface CaptureBridge {
   openScreenPermissionSettings?: () => Promise<{
     ok: boolean;
     opened: boolean;
+    error?: string;
     primed?: { ok: boolean; error?: string; permission?: CapturePermission };
     permission?: CapturePermission;
   }>;
 }
 
 export function CapturePanel() {
+  const mountedRef = useRef(true);
   const [settings, setSettings] = useState<CaptureSettings | null>(null);
   const [busy, setBusy] = useState<'permission' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,12 +42,26 @@ export function CapturePanel() {
   const [geminiAddBusy, setGeminiAddBusy] = useState(false);
   const [geminiAddError, setGeminiAddError] = useState<string | null>(null);
   const [geminiRemoveBusy, setGeminiRemoveBusy] = useState(false);
+  const [geminiLoadError, setGeminiLoadError] = useState<string | null>(null);
+  const [geminiRemoveError, setGeminiRemoveError] = useState<string | null>(null);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
 
   useEffect(() => {
     void load();
     void api.getGeminiKey()
-      .then((r) => setGeminiHasKey(r.hasKey))
-      .catch(() => setGeminiHasKey(false));
+      .then((r) => {
+        if (!mountedRef.current) return;
+        setGeminiHasKey(r.hasKey);
+        setGeminiLoadError(null);
+      })
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
+        setGeminiHasKey(null);
+        setGeminiLoadError(errorMessage(err));
+      });
   }, []);
 
   const geminiAddSubmit = useCallback(async () => {
@@ -53,24 +69,32 @@ export function CapturePanel() {
     if (!trimmed) { setGeminiAddError('Key required'); return; }
     setGeminiAddBusy(true);
     setGeminiAddError(null);
+    setGeminiRemoveError(null);
     try {
       await api.setGeminiKey(trimmed);
+      if (!mountedRef.current) return;
       setGeminiAddKey('');
       setGeminiHasKey(true);
     } catch (err: unknown) {
+      if (!mountedRef.current) return;
       setGeminiAddError(errorMessage(err));
     } finally {
-      setGeminiAddBusy(false);
+      if (mountedRef.current) setGeminiAddBusy(false);
     }
   }, [geminiAddKey]);
 
   const geminiRemove = useCallback(async () => {
     setGeminiRemoveBusy(true);
+    setGeminiRemoveError(null);
     try {
       await api.removeGeminiKey();
+      if (!mountedRef.current) return;
       setGeminiHasKey(false);
+    } catch (err: unknown) {
+      if (!mountedRef.current) return;
+      setGeminiRemoveError(errorMessage(err));
     } finally {
-      setGeminiRemoveBusy(false);
+      if (mountedRef.current) setGeminiRemoveBusy(false);
     }
   }, []);
 
@@ -82,9 +106,11 @@ export function CapturePanel() {
     }
     try {
       const next = await bridge.getCaptureSettings();
+      if (!mountedRef.current) return;
       setSettings(next);
       setError(null);
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     }
   }
@@ -99,14 +125,22 @@ export function CapturePanel() {
       // (a 1x1 desktopCapturer grab that fires the TCC prompt) before
       // opening System Settings, so we don't prime a second time here.
       const result = await bridge.openScreenPermissionSettings();
+      if (!mountedRef.current) return;
       if (result.permission) {
-        setSettings({ ...settings!, permission: result.permission });
+        setSettings((current) => current ? { ...current, permission: result.permission! } : current);
+      }
+      if (!result.ok) {
+        setError(result.error || 'StashBase could not open Screen Recording settings.');
+        return;
       }
       if (result.primed && !result.primed.ok) {
         setError(result.primed.error || 'StashBase could not be added to Screen Recording automatically.');
       }
+    } catch (err: unknown) {
+      if (!mountedRef.current) return;
+      setError(errorMessage(err));
     } finally {
-      setBusy(null);
+      if (mountedRef.current) setBusy(null);
     }
   }
 
@@ -162,10 +196,14 @@ export function CapturePanel() {
         <div className="settings-section-title">Gemini API key</div>
         <div className="settings-section-hint">
           When set, recordings are analyzed with Gemini's video understanding for
-          better layout and multi-column extraction. Without a key, StashBase falls
-          back to local frame-OCR.
+          better layout and multi-column extraction. A key is required before
+          screen recording can start.
         </div>
-        {geminiHasKey ? (
+        {geminiLoadError ? (
+          <div className="settings-error">Couldn’t load Gemini key state: {geminiLoadError}</div>
+        ) : geminiHasKey === null ? (
+          <div className="settings-panel-loading">Loading…</div>
+        ) : geminiHasKey ? (
           <div className="settings-actions-row">
             <button
               type="button"
@@ -173,6 +211,7 @@ export function CapturePanel() {
               disabled={geminiRemoveBusy}
               onClick={() => { void geminiRemove(); }}
             >{geminiRemoveBusy ? 'Removing…' : 'Remove key…'}</button>
+            {geminiRemoveError && <div className="settings-error">{geminiRemoveError}</div>}
           </div>
         ) : (
           <>

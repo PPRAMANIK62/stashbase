@@ -186,7 +186,7 @@ function FilesPanel() {
 /** "N stashing" pill in the SPACE header (left of the ⋯ actions). A
  *  file is *stashing* while the server is still turning it into
  *  searchable content — BOTH the slow conversion phase (PDF/image OCR,
- *  recording transcode) and the indexing/embedding phase that every
+ *  recording analysis) and the indexing/embedding phase that every
  *  dropped file goes through. `stashingPaths` unions the two so a folder
  *  drop of plain markdown gets a count too, not just PDFs. Counts the
  *  active space only. Clicking opens a Chrome-downloads-style list of
@@ -365,7 +365,10 @@ function SpaceMenu() {
     if (!ok) return;
     const prevSpaces = spaces;
     setSpaces((currentSpaces) => currentSpaces.filter((name) => name !== current));
-    actions.goHome();
+    if (!(await actions.goHome())) {
+      setSpaces(prevSpaces);
+      return;
+    }
     try {
       await api.deleteSpace(current);
     } catch (err) {
@@ -382,14 +385,15 @@ function SpaceMenu() {
     if (!ok) await actions.alert('New window is only available in the desktop app.');
   }
 
-  // Bake the space's embeddings into `.stashbase/snapshot.parquet` so the
-  // folder carries reusable vectors when copied / git-cloned (the other
-  // end reuses them by text_hash instead of re-embedding).
+  // Bake the space's embeddings into `.stashbase/snapshot.parquet` plus
+  // `snapshot.meta.json` so the folder carries reusable vectors when
+  // copied / git-cloned (the other end validates the embedder and reuses
+  // them by text_hash instead of re-embedding).
   async function exportSnapshot() {
     if (!current) return;
     setBusy(true);
     try {
-      const r = await api.exportSnapshot();
+      const r = await api.exportSnapshot(current);
       actions.toast(
         `Embedding snapshot baked — ${r.vectors} vector(s) from ${r.chunks} chunk(s) into ${current}/.stashbase/.`,
         { level: 'success' },

@@ -84,13 +84,22 @@ export function readAppConfig(): AppConfigFile {
 // ever needs to write config, add real cross-process locking first.
 export function writeAppConfig(cfg: AppConfigFile): void {
   try {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-    const tmp = CONFIG_FILE + '.tmp';
-    // 0600 — config may carry the OpenAI key; keep it owner-only.
-    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(tmp, CONFIG_FILE);
+    writeAppConfigStrict(cfg);
   } catch (err: any) {
     log.warn(`failed to persist config: ${errorMessage(err)}`);
+  }
+}
+
+export function writeAppConfigStrict(cfg: AppConfigFile): void {
+  fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  const tmp = `${CONFIG_FILE}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    // 0600 — config may carry API keys; keep it owner-only.
+    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, CONFIG_FILE);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+    throw err;
   }
 }
 
@@ -104,7 +113,7 @@ export function setApiKey(key: string | undefined): void {
   const cfg = readAppConfig();
   if (key && key.trim()) cfg.apiKey = key.trim();
   else delete cfg.apiKey;
-  writeAppConfig(cfg);
+  writeAppConfigStrict(cfg);
 }
 
 /** Returns the user's stored Gemini API key, or undefined if none. */
@@ -118,7 +127,7 @@ export function setGeminiKey(key: string | undefined): void {
   const cfg = readAppConfig();
   if (key && key.trim()) cfg.geminiKey = key.trim();
   else delete cfg.geminiKey;
-  writeAppConfig(cfg);
+  writeAppConfigStrict(cfg);
 }
 
 /** Currently selected CLI for the terminal panel. Defaults to
@@ -132,7 +141,7 @@ export function setTerminalCli(id: string): void {
   if (typeof id !== 'string' || !id) throw new Error('cli id required');
   const cfg = readAppConfig();
   cfg.terminalCli = id;
-  writeAppConfig(cfg);
+  writeAppConfigStrict(cfg);
 }
 
 /** The embedder provider. V1 is fixed to OpenAI — there's no switching,

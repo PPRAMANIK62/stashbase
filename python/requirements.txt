@@ -1,5 +1,5 @@
 # StashBase Python sidecar dependencies. Installed into a venv at
-# `<project>/python/.venv/` by the `setup:python` npm script.
+# `<project>/python/.venv.nosync/` by the `setup:python` npm script.
 #
 # mfs-cli vendors most of what we need (pymilvus, langchain-text-splitters,
 # pyyaml, filelock, tree-sitter, numpy etc.) so we only have to add the bits
@@ -9,20 +9,15 @@
 #                   onnxruntime/tokenizers were dropped when embedder
 #                   switching was removed (openai-only).
 #   - numpy:        vector handling (also pulled transitively by pymilvus).
-#   - pymupdf4llm:  PDF → markdown for the pdf_extract pipeline
-#                   (heading detection, table extraction, figure
-#                   region screenshots). Brings pymupdf transitively.
-#   - rapidocr-onnxruntime:
-#                   image → text for the ocr_extract pipeline. ONNX
-#                   models (Chinese+English) bundled, no system binary
-#                   like tesseract. Brings opencv-python + onnxruntime
-#                   transitively.
 #   - blake3:       content + chunk-id hashing (faster + streaming-
 #                   friendly than SHA256; mfs's Scanner is patched to
 #                   match — see stashbase_daemon.py:_patch_scanner_blake3).
+#
+# Optional local PDF/OCR extraction dependencies live in
+# `requirements-extract.txt`. Keep them out of the default venv and
+# packaged sidecar so normal setup/release avoids PyMuPDF, OpenCV and
+# ONNXRuntime weight.
 mfs-cli>=0.1.0
 openai>=1.0
 numpy>=1.26
-pymupdf4llm>=0.0.17
-rapidocr-onnxruntime>=1.2.3
 blake3>=1.0

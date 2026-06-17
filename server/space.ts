@@ -32,6 +32,7 @@ export type { EmbedderProvider, RecentSpace } from './app-config.ts';
 const log = logger('space');
 
 const MAX_RECENT = 50;
+const MIGRATION_STAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** Default KB root: `~/Documents/StashBase/`. All spaces must live
  *  under this folder. Persisted in `config.json` so a future "change
@@ -209,51 +210,64 @@ export async function setKbRoot(
   if (!fs.statSync(root).isDirectory()) throw new Error('path is not a directory');
   assertDirectoryAccess(root, 'directory');
 
-  if (changingRoot) await beforeKbRootChange(oldRoot, root);
+  let rootChangeStarted = false;
+  let configWritten = false;
+  try {
+    if (changingRoot) {
+      rootChangeStarted = true;
+      await beforeKbRootChange(oldRoot, root);
+    }
 
-  // Move spaces from the old root into the new one *before* switching —
-  // `getKbRoot()` still points at the old root here, and each move is a
-  // staged copy + commit (cross-filesystem safe; see migrateSpacesToRoot).
-  const warnings: string[] = [];
-  let movedSpaces: MigratedSpace[] = [];
-  if (migrating) {
-    const result = migrateSpacesToRoot(oldRoot, root, migrate);
-    movedSpaces = result.moved;
-    warnings.push(...result.warnings);
-  }
-  const preserveSources = migrateLocalSpaceConfigs(oldRoot, root, movedSpaces, warnings);
-  deleteMigratedSources(movedSpaces, warnings, preserveSources);
+    // Move spaces from the old root into the new one *before* switching —
+    // `getKbRoot()` still points at the old root here, and each move is a
+    // staged copy + commit (cross-filesystem safe; see migrateSpacesToRoot).
+    const warnings: string[] = [];
+    let movedSpaces: MigratedSpace[] = [];
+    if (migrating) {
+      const result = migrateSpacesToRoot(oldRoot, root, migrate);
+      movedSpaces = result.moved;
+      warnings.push(...result.warnings);
+    }
+    const preserveSources = migrateLocalSpaceConfigs(oldRoot, root, movedSpaces, warnings);
 
-  ensureKbMetadata(root);
-  const cfg = readConfig();
-  cfg.kbRoot = root;
-  cfg.recentSpaces = recentSpacesForRoot(root);
-  delete cfg.recentVaults;
-  writeConfig(cfg);
-  // Make the post-save state immediately observable to the route
-  // response: the first-run picker refreshes Welcome right after
-  // `PUT /api/kb-root`, so the bundled starter space should already be
-  // on disk and in recents. The kbRoot-change listener also calls this;
-  // the latch makes the second call a no-op.
-  seedBuiltinSpace();
-  for (const [windowId, prevRoot] of currentSpaces.entries()) {
-    for (const fn of closeListeners) {
-      try { fn(prevRoot, windowId); } catch (err) {
-        log.warn(`close listener threw: ${(err as any)?.message ?? err}`);
+    ensureKbMetadata(root);
+    const cfg = readConfig();
+    cfg.kbRoot = root;
+    cfg.recentSpaces = recentSpacesForRoot(root);
+    delete cfg.recentVaults;
+    writeConfig(cfg);
+    configWritten = true;
+    // Make the post-save state immediately observable to the route
+    // response: the first-run picker refreshes Welcome right after
+    // `PUT /api/kb-root`, so the bundled starter space should already be
+    // on disk and in recents. The kbRoot-change listener also calls this;
+    // the latch makes the second call a no-op.
+    seedBuiltinSpace();
+    for (const [windowId, prevRoot] of currentSpaces.entries()) {
+      for (const fn of closeListeners) {
+        try { fn(prevRoot, windowId); } catch (err) {
+          log.warn(`close listener threw: ${(err as any)?.message ?? err}`);
+        }
       }
     }
-  }
-  currentSpaces.clear();
-  for (const fn of kbRootListeners) {
-    try {
-      await fn(root);
-    } catch (err) {
-      const message = (err as any)?.message ?? String(err);
-      warnings.push(`Root folder was saved, but runtime cleanup reported: ${message}`);
-      log.warn(`kbRoot listener threw: ${message}`);
+    currentSpaces.clear();
+    for (const fn of kbRootListeners) {
+      try {
+        await fn(root);
+      } catch (err) {
+        const message = (err as any)?.message ?? String(err);
+        warnings.push(`Root folder was saved, but runtime cleanup reported: ${message}`);
+        log.warn(`kbRoot listener threw: ${message}`);
+      }
     }
+    deleteMigratedSources(movedSpaces, warnings, preserveSources);
+    return { warnings };
+  } catch (err) {
+    if (rootChangeStarted && !configWritten) {
+      await restoreKbRootRuntimeAfterFailedChange(oldRoot);
+    }
+    throw err;
   }
-  return { warnings };
 }
 
 interface MigratedSpace {
@@ -286,6 +300,23 @@ async function beforeKbRootChange(oldRoot: string, newRoot: string): Promise<voi
   }
 }
 
+async function restoreKbRootRuntimeAfterFailedChange(root: string): Promise<void> {
+  for (const fn of kbRootListeners) {
+    try {
+      await fn(root);
+    } catch (err) {
+      log.warn(`kbRoot restore listener threw: ${(err as any)?.message ?? err}`);
+    }
+  }
+  for (const [windowId, spaceRoot] of currentSpaces.entries()) {
+    for (const fn of switchListeners) {
+      try { fn(spaceRoot, windowId); } catch (err) {
+        log.warn(`switch restore listener threw: ${(err as any)?.message ?? err}`);
+      }
+    }
+  }
+}
+
 function migrateSpacesToRoot(
   oldRoot: string,
   newRoot: string,
@@ -294,6 +325,7 @@ function migrateSpacesToRoot(
   if (entries.length === 0) return { moved: [], warnings: [] };
   const stash = path.join(newRoot, '.stashbase');
   fs.mkdirSync(stash, { recursive: true });
+  cleanupOldMigrationStages(stash);
   const staging = fs.mkdtempSync(path.join(stash, 'migration-stage-'));
   const backupRoot = fs.mkdtempSync(path.join(stash, 'migration-backup-'));
   const reserved = new Set(listSpaceNamesUnder(newRoot));
@@ -351,7 +383,7 @@ function migrateSpacesToRoot(
       }
       fs.renameSync(plan.staged, plan.destination);
       pruneStashbasePerMachineState(path.join(plan.destination, '.stashbase'));
-      ensureSpaceStashbaseIgnore(path.join(plan.destination, '.stashbase'));
+      ensureSpaceMetadata(plan.destination);
       committed.push(plan);
     }
   } catch (err) {
@@ -422,6 +454,7 @@ function deleteMigratedSources(
     }
     try {
       fs.rmSync(space.source, { recursive: true, force: false });
+      deleteSpaceConfigForRoot(path.dirname(space.source), space.oldName);
     } catch {
       warnings.push(
         `Copied "${space.oldName}" into ${space.destination}, but the original at ${space.source} ` +
@@ -487,6 +520,14 @@ export function validateSpaceName(name: string): string | null {
   return null;
 }
 
+/** Validate a reference to an already-existing/opened space. Kept as a
+ *  separate helper from create/rename validation so route code reads as
+ *  "this is a scope", while preserving the flat-space invariant.
+ */
+export function validateSpaceRef(spaceName: string): string | null {
+  return validateSpaceName(spaceName);
+}
+
 /** Internal entries under `.stashbase/` that **must** be wiped when a
  *  space arrives from elsewhere — a git clone or a folder import.
  *  These are per-machine state (embedder routing, the local vector store,
@@ -495,7 +536,18 @@ export function validateSpaceName(name: string): string | null {
  *  Shared by the clone and import-folder flows so a rename here only
  *  happens once. (`mfs` is the pre-rename store dir, kept until legacy
  *  spaces age out.) */
-export const STASHBASE_PER_MACHINE_ENTRIES = ['config.json', 'store.nosync', 'store', 'mfs', 'cache', 'state.db'];
+export const STASHBASE_PER_MACHINE_ENTRIES = [
+  'config.json',
+  'store.nosync',
+  'store',
+  'mfs',
+  'cache',
+  'state.db',
+  'state.db-wal',
+  'state.db-shm',
+  'pdf-status.json',
+  'pdf-status.json.migrated',
+];
 
 /** Selectively delete per-machine internal state out of a space's
  *  `.stashbase/` directory, leaving portable artefacts (notably
@@ -504,6 +556,14 @@ export function pruneStashbasePerMachineState(stashbaseDir: string): void {
   if (!fs.existsSync(stashbaseDir)) return;
   for (const entry of STASHBASE_PER_MACHINE_ENTRIES) {
     fs.rmSync(path.join(stashbaseDir, entry), { recursive: true, force: true });
+  }
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(stashbaseDir, { withFileTypes: true }); }
+  catch { return; }
+  for (const entry of entries) {
+    if (entry.name.startsWith('state.db-')) {
+      fs.rmSync(path.join(stashbaseDir, entry.name), { recursive: true, force: true });
+    }
   }
 }
 
@@ -528,7 +588,8 @@ export function listAvailableSpaceNames(): string[] {
 }
 
 /** Current space's name, expressed as a kbRoot-relative POSIX path.
- *  E.g. `cs183b` or `work/research`. null if no space open.
+ *  In normal operation this is a single direct-child segment (`cs183b`)
+ *  because spaces are flat under the KB root. null if no space open.
  *
  *  This is the bridge between the rest of the server (which operates
  *  in space-relative paths) and the indexer (which uses kbRoot-relative
@@ -559,6 +620,15 @@ export function toKbRel(spaceRel: string): string {
  *  space-relative form the UI expects. */
 export function fromKbRel(kbRel: string): string | null {
   const name = getCurrentSpaceName();
+  return name ? fromKbRelForSpace(kbRel, name) : null;
+}
+
+/** Convert a kbRoot-relative path to a path relative to `spaceName`,
+ *  without consulting the current window binding. Use this when a
+ *  route accepts an explicit space scope.
+ */
+export function fromKbRelForSpace(kbRel: string, spaceName: string): string | null {
+  const name = spaceName.trim();
   if (!name) return null;
   if (kbRel === name) return '';
   const prefix = `${name}/`;
@@ -706,7 +776,7 @@ export function seedBuiltinSpace(): void {
 }
 
 function getSpaceRootPath(spaceName: string): string {
-  const bad = validateSpaceName(spaceName);
+  const bad = validateSpaceRef(spaceName);
   if (bad) throw new Error(bad);
   return path.join(getKbRoot(), spaceName);
 }
@@ -796,7 +866,7 @@ export function setCurrentSpace(absPath: string, opts?: { create?: boolean; excl
   }
 }
 
-function clearCurrentSpace(windowId = currentWindowId()): void {
+export function clearCurrentSpace(windowId = currentWindowId()): void {
   const id = normalizeWindowId(windowId);
   const oldRoot = currentSpaces.get(id);
   currentSpaces.delete(id);
@@ -888,7 +958,7 @@ function pushRecent(absPath: string): void {
 }
 
 export function getSpaceConfigPath(spaceName: string): string {
-  const bad = validateSpaceName(spaceName);
+  const bad = validateSpaceRef(spaceName);
   if (bad) throw new Error(bad);
   return spaceConfigPathForRoot(getKbRoot(), spaceName);
 }
@@ -904,11 +974,21 @@ export function readSpaceConfig(spaceName: string): SpaceConfigFile {
 
 export function writeSpaceConfig(spaceName: string, cfg: SpaceConfigFile): void {
   const file = getSpaceConfigPath(spaceName);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(sanitizeSpaceConfig(cfg), null, 2) + '\n', {
-    encoding: 'utf8',
-    mode: 0o600,
-  });
+  writeSpaceConfigFileAtomic(file, sanitizeSpaceConfig(cfg));
+}
+
+export function deleteSpaceConfig(spaceName: string): void {
+  deleteSpaceConfigForRoot(getKbRoot(), spaceName);
+}
+
+export function renameSpaceConfig(oldName: string, newName: string): void {
+  if (oldName === newName) return;
+  const oldDir = path.dirname(getSpaceConfigPath(oldName));
+  const newDir = path.dirname(getSpaceConfigPath(newName));
+  fs.rmSync(newDir, { recursive: true, force: true });
+  if (!fs.existsSync(oldDir)) return;
+  fs.mkdirSync(path.dirname(newDir), { recursive: true, mode: 0o700 });
+  fs.renameSync(oldDir, newDir);
 }
 
 export interface ResolvedSpaceConfig {
@@ -957,6 +1037,46 @@ function spaceConfigDirName(spaceName: string): string {
 
 function spaceConfigPathForRoot(root: string, spaceName: string): string {
   return path.join(kbLocalDataDir(root), 'space-config', spaceConfigDirName(spaceName), 'config.json');
+}
+
+function deleteSpaceConfigForRoot(root: string, spaceName: string): void {
+  fs.rmSync(path.dirname(spaceConfigPathForRoot(root, spaceName)), { recursive: true, force: true });
+}
+
+function cleanupOldMigrationStages(stash: string, maxAgeMs = MIGRATION_STAGE_MAX_AGE_MS): void {
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(stash, { withFileTypes: true }); } catch { return; }
+  const cutoff = Date.now() - maxAgeMs;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (!entry.name.startsWith('migration-stage-') && !entry.name.startsWith('migration-backup-')) continue;
+    const full = path.join(stash, entry.name);
+    try {
+      const stat = fs.statSync(full);
+      if (stat.mtimeMs <= cutoff) fs.rmSync(full, { recursive: true, force: true });
+    } catch {
+      /* best-effort cleanup */
+    }
+  }
+}
+
+function writeSpaceConfigFileAtomic(file: string, cfg: SpaceConfigFile): void {
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const tmp = path.join(
+    dir,
+    `.config.json.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`,
+  );
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, file);
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(file, 0o600); } catch { /* best effort */ }
+    }
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+    throw err;
+  }
 }
 
 function legacySpaceConfigPath(spaceName: string): string {

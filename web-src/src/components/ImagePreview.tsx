@@ -36,6 +36,8 @@ export function ImagePreview({ name }: { name: string }) {
   const { state } = useApp();
   const src = useMemo(() => assetUrl(name), [name]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const currentRef = useRef({ space: state.space, name });
+  currentRef.current = { space: state.space, name };
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [scale, setScale] = useState(1);
   const [retryBusy, setRetryBusy] = useState(false);
@@ -53,6 +55,8 @@ export function ImagePreview({ name }: { name: string }) {
     setNatural(null);
     setScale(1);
     setLoadError(false);
+    setRetryBusy(false);
+    setRetryError(null);
   }, [src]);
 
   // Native wheel listener (passive:false) so ⌘/Ctrl-scroll — and trackpad
@@ -84,13 +88,18 @@ export function ImagePreview({ name }: { name: string }) {
   async function onRetry() {
     setRetryBusy(true);
     setRetryError(null);
+    const spaceAtStart = state.space;
+    const nameAtStart = name;
+    const stillCurrent = () =>
+      currentRef.current.space === spaceAtStart && currentRef.current.name === nameAtStart;
     try {
-      await api.retryConversion(name);
+      await api.retryConversion(name, { space: spaceAtStart || undefined });
       // The failures list / banner clear on the next index-status poll.
     } catch (err: unknown) {
+      if (!stillCurrent()) return;
       setRetryError(errorMessage(err));
     } finally {
-      setRetryBusy(false);
+      if (stillCurrent()) setRetryBusy(false);
     }
   }
 

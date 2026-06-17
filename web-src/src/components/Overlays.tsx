@@ -17,6 +17,7 @@ export function ContextMenu() {
   const { state, dispatch, actions } = useApp();
   if (!state.ctxMenu) return null;
   const { x, y, target, kind } = state.ctxMenu;
+  const spaceAtOpen = state.space;
   const close = () => dispatch({ type: 'CTX_MENU', menu: null });
 
   // "Retry conversion" is only meaningful when the target is a PDF or
@@ -46,7 +47,7 @@ export function ContextMenu() {
             // banner flipping `failed` → in-flight → done.
             onSelect: () => {
               actions.toast('Retrying text extraction…', { level: 'info' });
-              void api.retryConversion(target)
+              void api.retryConversion(target, { space: spaceAtOpen || undefined })
                 .then(() => actions.refreshIndexState())
                 .catch((err) => {
                   const msg = err instanceof Error ? err.message : String(err);

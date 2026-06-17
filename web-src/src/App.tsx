@@ -25,6 +25,8 @@ interface CapturePayload {
   height?: number;
   sourceTitle?: string;
   filename?: string;
+  space?: string;
+  dir?: string;
 }
 
 interface CaptureErrorPayload {
@@ -54,6 +56,7 @@ import { AppProvider, useApp } from './store/AppContext';
 import { SIDEBAR_COLLAPSE_AT, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from './store/state';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { getWindowId } from './api';
+import { isTrustedPreviewSource } from './lib/previewMessages';
 
 /**
  * Top-level shell. Wraps everything in <AppProvider> (the single
@@ -78,6 +81,7 @@ function AppBody() {
   const { state, actions } = useApp();
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [clipboardOffer, setClipboardOffer] = useState<ClipboardOffer | null>(null);
+  const [pendingClipboardOffer, setPendingClipboardOffer] = useState<ClipboardOffer | null>(null);
   // Mount the chat panel lazily on first open and then NEVER
   // unmount it — collapsing the panel just hides the column via CSS,
   // the underlying agent WebSocket sessions stay alive. Killing them
@@ -108,12 +112,12 @@ function AppBody() {
     async function handleCaptureCreated(capture: CapturePayload) {
       // `capture:created` only ever carries a screen recording now — the
       // built-in screenshot tool was removed; system screenshots come in
-      // through the clipboard offer instead. Recordings aren't stored as
-      // video: they're OCR'd into a visible note and the webm is
-      // discarded server-side. The note shows up via the "Converting…"
-      // banner when its text is ready.
+      // through the clipboard offer instead. Recordings are saved into
+      // the note's asset bundle while Gemini fills in the visible note.
       if (!capture.dataUrl || !capture.mime?.startsWith('video/')) return;
-      if (state.welcomeVisible || !state.space) {
+      const targetSpace = capture.space || state.space;
+      const targetDir = typeof capture.dir === 'string' ? capture.dir : state.activeFolder;
+      if (!targetSpace) {
         actions.toast('Open a space to save this recording.', { level: 'warning' });
         return;
       }
@@ -123,8 +127,15 @@ function AppBody() {
           capture.filename || defaultCaptureFilename(),
           capture.mime ?? 'video/webm',
         );
-        const ok = await actions.recordVideo(file, state.activeFolder);
-        if (ok) actions.toast('Recording captured — extracting text…', { level: 'info' });
+        const ok = await actions.recordVideo(file, targetDir, targetSpace);
+        if (ok) {
+          actions.toast(
+            targetSpace === state.space
+              ? 'Recording captured — analyzing video…'
+              : `Recording captured — analyzing video in ${targetSpace}.`,
+            { level: 'info' },
+          );
+        }
       } catch (err) {
         console.warn('[capture] save failed:', err);
         actions.toast('Recording captured, but it could not be processed.', { level: 'error' });
@@ -135,12 +146,22 @@ function AppBody() {
     const bridge = (window as { electron?: ElectronBridge }).electron;
     return bridge?.onClipboardImage?.((offer) => {
       if (!offer.dataUrl || !offer.mime?.startsWith('image/')) return;
-      // No place to put it — skip silently rather than nag (main already
-      // recorded the hash, so it won't re-offer the same image).
-      if (state.welcomeVisible || !state.space) return;
+      // If the app is still on Welcome, keep the offer in renderer
+      // memory. Main has already de-duped this hash, so dropping it here
+      // would make a screenshot copied just before opening a space vanish
+      // until the user copies it again.
+      if (state.welcomeVisible || !state.space) {
+        setPendingClipboardOffer(offer);
+        return;
+      }
       setClipboardOffer(offer);
     });
   }, [state.space, state.welcomeVisible]);
+  useEffect(() => {
+    if (state.welcomeVisible || !state.space || !pendingClipboardOffer || clipboardOffer) return;
+    setClipboardOffer(pendingClipboardOffer);
+    setPendingClipboardOffer(null);
+  }, [clipboardOffer, pendingClipboardOffer, state.space, state.welcomeVisible]);
   useEffect(() => {
     const bridge = (window as { electron?: ElectronBridge }).electron;
     return bridge?.onCaptureError?.((error) => {
@@ -163,14 +184,20 @@ function AppBody() {
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       if (!e.data) return;
-      if (e.data.type === 'stashbase-nav') {
+      const type = typeof e.data.type === 'string' ? e.data.type : '';
+      const previewMessage =
+        type === 'stashbase-nav' ||
+        type === 'stashbase-preview-image' ||
+        type === 'stashbase-open-external';
+      if (previewMessage && !isTrustedPreviewSource(e.source)) return;
+      if (type === 'stashbase-nav') {
         const path = typeof e.data.path === 'string' ? e.data.path : '';
         const anchor = typeof e.data.anchor === 'string' && e.data.anchor ? e.data.anchor : undefined;
         if (!path) return;
         void actions.navigateTo(path, anchor);
         return;
       }
-      if (e.data.type === 'stashbase-preview-image') {
+      if (type === 'stashbase-preview-image') {
         const raw = typeof e.data.src === 'string' ? e.data.src : '';
         try {
           const url = new URL(raw, window.location.href);
@@ -190,7 +217,7 @@ function AppBody() {
         }
         return;
       }
-      if (e.data.type !== 'stashbase-open-external') return;
+      if (type !== 'stashbase-open-external') return;
       const href = typeof e.data.href === 'string' ? e.data.href : '';
       try {
         const url = new URL(href);
@@ -201,6 +228,7 @@ function AppBody() {
         // query the way `assetUrl` does. Without it the server has no open
         // space for the request and answers NO_SPACE.
         if (url.origin === window.location.origin && url.pathname.startsWith('/asset/')
+          && !url.pathname.startsWith('/asset/__window/')
           && !url.searchParams.has('windowId')) {
           url.searchParams.set('windowId', getWindowId());
         }
@@ -220,12 +248,12 @@ function AppBody() {
 
   async function handleClipboardAdd(offer: ClipboardOffer) {
     const bridge = (window as { electron?: ElectronBridge }).electron;
-    bridge?.markClipboardHandled?.(offer.hash);
-    setClipboardOffer(null);
     try {
       const file = await dataUrlToFile(offer.dataUrl, offer.filename, offer.mime);
       const saved = await actions.upload([{ file, relPath: file.name }], state.activeFolder);
       if (!saved) return;
+      bridge?.markClipboardHandled?.(offer.hash);
+      setClipboardOffer(null);
       const suffix = state.activeFolder ? ` to ${state.activeFolder}` : '';
       actions.toast(`Saved ${file.name}${suffix}.`, { level: 'success' });
     } catch (err) {
@@ -248,7 +276,7 @@ function AppBody() {
        *  controls stop sharing the same row. */}
       <div className="app-chrome">
         <div className="app-chrome-left">
-          {!state.welcomeVisible && <HomeChromeButton onClick={() => actions.goHome()} />}
+          {!state.welcomeVisible && <HomeChromeButton onClick={() => { void actions.goHome(); }} />}
         </div>
         {!state.welcomeVisible && state.space && (
           <div className="app-chrome-title">{state.space}</div>
@@ -284,7 +312,7 @@ function AppBody() {
           onClose={() => setPreviewImage(null)}
         />
       )}
-      {clipboardOffer && (
+      {clipboardOffer && state.space && !state.welcomeVisible && (
         <ClipboardImportModal
           offer={clipboardOffer}
           onClose={() => {

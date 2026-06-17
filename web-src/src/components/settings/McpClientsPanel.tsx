@@ -3,7 +3,7 @@
  * config file); every other client just gets the standard MCP config shown
  * inline below, with their names listed for reference.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { CopyIcon, CheckIcon } from '../../icons';
 
@@ -19,6 +19,7 @@ interface McpConfigureResult {
 
 interface ElectronBridge {
   configureMcp?: (client: McpClientId) => Promise<McpConfigureResult>;
+  disconnectMcp?: (client: McpClientId) => Promise<McpConfigureResult>;
 }
 
 const MCP_CLIENTS: { id: McpClientId; name: string }[] = [
@@ -28,11 +29,20 @@ const MCP_CLIENTS: { id: McpClientId; name: string }[] = [
 ];
 
 export function McpClientsPanel() {
+  const mountedRef = useRef(true);
+  const copyResetTimerRef = useRef<number | null>(null);
   const [busy, setBusy] = useState<McpClientId | null>(null);
   const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [config, setConfig] = useState<string>('');
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    if (copyResetTimerRef.current != null) {
+      window.clearTimeout(copyResetTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +62,7 @@ export function McpClientsPanel() {
     setStatus(null);
     try {
       const result = await configureMcp(client, bridge);
+      if (!mountedRef.current) return;
       if (!result.ok) {
         setStatus({ kind: 'error', text: result.error || 'Unable to configure MCP.' });
         return;
@@ -60,28 +71,34 @@ export function McpClientsPanel() {
       setConnected((next) => ({ ...next, [client]: true }));
       setStatus({ kind: 'ok', text: `Connected ${clientLabel(client)}${file}.` });
     } catch (err: unknown) {
+      if (!mountedRef.current) return;
       const text = err instanceof Error ? err.message : String(err);
       setStatus({ kind: 'error', text });
     } finally {
-      setBusy(null);
+      if (mountedRef.current) setBusy(null);
     }
   }
 
   async function disconnect(client: McpClientId) {
+    const bridge = (window as { electron?: ElectronBridge }).electron;
     setBusy(client);
     setStatus(null);
     try {
-      // No bridge path for disconnect — api throws on failure (caught
-      // below), so a resolved result is always a success.
-      const result = await api.disconnectMcp(client);
+      const result = await disconnectMcp(client, bridge);
+      if (!mountedRef.current) return;
+      if (!result.ok) {
+        setStatus({ kind: 'error', text: result.error || 'Unable to disconnect MCP.' });
+        return;
+      }
       const file = result.file ? ` (${result.file})` : '';
       setConnected((next) => ({ ...next, [client]: false }));
       setStatus({ kind: 'ok', text: `Disconnected ${clientLabel(client)}${file}.` });
     } catch (err: unknown) {
+      if (!mountedRef.current) return;
       const text = err instanceof Error ? err.message : String(err);
       setStatus({ kind: 'error', text });
     } finally {
-      setBusy(null);
+      if (mountedRef.current) setBusy(null);
     }
   }
 
@@ -105,9 +122,17 @@ export function McpClientsPanel() {
       } catch { ok = false; }
     }
     if (ok) {
+      if (!mountedRef.current) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      if (copyResetTimerRef.current != null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = window.setTimeout(() => {
+        copyResetTimerRef.current = null;
+        if (mountedRef.current) setCopied(false);
+      }, 1500);
     } else {
+      if (!mountedRef.current) return;
       setStatus({ kind: 'error', text: 'Couldn’t copy — select the text and copy manually.' });
     }
   }
@@ -182,6 +207,21 @@ async function configureMcp(
     }
   }
   return await api.configureMcp(client) as McpConfigureResult;
+}
+
+async function disconnectMcp(
+  client: McpClientId,
+  bridge: ElectronBridge | undefined,
+): Promise<McpConfigureResult> {
+  if (bridge?.disconnectMcp) {
+    try {
+      return await bridge.disconnectMcp(client);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes('No handler registered')) throw err;
+    }
+  }
+  return await api.disconnectMcp(client) as McpConfigureResult;
 }
 
 function clientLabel(id: McpClientId): string {

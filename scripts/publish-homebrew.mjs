@@ -107,7 +107,9 @@ function caskContent({ url, checksum }) {
   end
 
   zap trash: [
+    "~/.stashbase",
     "~/Library/Application Support/${productName}",
+    "~/Library/Logs/${productName}",
     "~/Library/Preferences/${pkg.build?.appId || 'com.stashbase.app'}.plist",
     "~/Library/Saved Application State/${pkg.build?.appId || 'com.stashbase.app'}.savedState",
   ]

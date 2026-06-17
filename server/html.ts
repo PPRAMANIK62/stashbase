@@ -420,6 +420,10 @@ document.addEventListener('click', function(e) {
     try {
       if (location.pathname.indexOf('/asset/') === 0) {
         var currentEncoded = location.pathname.slice('/asset/'.length);
+        if (currentEncoded.indexOf('__window/') === 0) {
+          var currentWindowSlash = currentEncoded.indexOf('/', '__window/'.length);
+          currentEncoded = currentWindowSlash >= 0 ? currentEncoded.slice(currentWindowSlash + 1) : '';
+        }
         var currentDecoded = currentEncoded.split('/').map(decodeURIComponent).join('/');
         e.preventDefault();
         window.parent.postMessage({
@@ -438,6 +442,10 @@ document.addEventListener('click', function(e) {
     // back/forward stack records the jump.
     if (url.origin === location.origin && url.pathname.indexOf('/asset/') === 0) {
       var encoded = url.pathname.slice('/asset/'.length);
+      if (encoded.indexOf('__window/') === 0) {
+        var windowSlash = encoded.indexOf('/', '__window/'.length);
+        encoded = windowSlash >= 0 ? encoded.slice(windowSlash + 1) : '';
+      }
       var decoded;
       try {
         decoded = encoded.split('/').map(decodeURIComponent).join('/');
@@ -452,6 +460,9 @@ document.addEventListener('click', function(e) {
         }, '*');
         return;
       }
+      e.preventDefault();
+      window.parent.postMessage({ type: 'stashbase-open-external', href: url.href }, '*');
+      return;
     }
     if ((url.protocol === 'http:' || url.protocol === 'https:') && url.origin !== location.origin) {
       e.preventDefault();

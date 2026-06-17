@@ -10,14 +10,17 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from '../html.ts';
-import { contentSizeError } from '../indexable.ts';
+import { contentSizeError, isCloudPlaceholderName, isIndexExcludedDirName } from '../indexable.ts';
 import {
   createTextExclusive,
+  derivedArtifactsForSource,
   deleteFile,
   detectFormat,
+  fileVersion,
   getSpaceName,
   listFiles,
   listFolders,
+  pathExists,
   readText,
   renameOnDisk,
   resolveAsset,
@@ -25,17 +28,147 @@ import {
   sanitizeFilename,
   saveText,
 } from '../files.ts';
-import { isNoteName } from '../format.ts';
-import { readFileOrder, setFolderOrder } from '../file-order.ts';
-import { cascadeRenameLinks, planRenameLinks, type RenameEntry } from '../links.ts';
-import { getCurrentSpace, toKbRel } from '../space.ts';
+import { detectViewerFormat, isDerivedNoteName, isImageFile, isNoteName } from '../format.ts';
+import { readFileOrder, remapFileOrderPath, removeFileOrderPath, setFolderOrder } from '../file-order.ts';
+import { applyRenamePlan, planRenameLinks, type RenameEntry } from '../links.ts';
+import { getCurrentSpace, getCurrentSpaceName, toKbRel } from '../space.ts';
 import { getApiKey } from '../app-config.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError, revealInOsFileManager } from '../http.ts';
 import { bundleRenameEntry, renameWithRollback } from '../rename-helpers.ts';
+import { maybeConvertImage } from '../image.ts';
+import { maybeConvertPdf } from '../pdf.ts';
+import { noteTreeChanged } from '../watcher.ts';
+import { clearRecord, isInFlight } from '../conversion-status.ts';
 
 const log = logger('routes/files');
+
+type InFlightFileAction = 'rename' | 'delete';
+
+export interface InFlightRouteError {
+  status: 409;
+  body: {
+    error: string;
+    code: 'CONVERSION_IN_FLIGHT';
+  };
+}
+
+export function inFlightFileOperationError(name: string, action: InFlightFileAction): InFlightRouteError | null {
+  if (!isInFlight(toKbRel(name))) return null;
+  const verb = action === 'rename' ? 'Rename' : 'Delete';
+  return {
+    status: 409,
+    body: {
+      error: `This file is still processing. ${verb} it after processing finishes.`,
+      code: 'CONVERSION_IN_FLIGHT',
+    },
+  };
+}
+
+function fileWriteError(message: string, status = 400, code = 'INVALID_FILE_WRITE'): Error {
+  const err = new Error(message);
+  (err as any).status = status;
+  (err as any).code = code;
+  return err;
+}
+
+export function validateEditableFileWrite(name: string): void {
+  const normalized = name.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '');
+  if (!normalized) throw fileWriteError('path required');
+  for (const seg of normalized.split('/')) {
+    if (seg === '.' || seg === '..') throw fileWriteError('invalid path segment');
+    if (isCloudPlaceholderName(seg)) {
+      throw fileWriteError('cannot save an iCloud placeholder; download the file locally first');
+    }
+    if (seg === '.stashbase' || seg.startsWith('.stashbase-')) {
+      throw fileWriteError('cannot write into .stashbase');
+    }
+    if (isIndexExcludedDirName(seg)) {
+      throw fileWriteError(`cannot write into excluded directory "${seg}"`);
+    }
+  }
+  if (isDerivedNoteName(normalized)) {
+    throw fileWriteError('cannot edit app-maintained derived notes');
+  }
+  if (!detectFormat(normalized)) {
+    throw fileWriteError('unsupported editable format', 415, 'UNSUPPORTED_FORMAT');
+  }
+}
+
+export function fileHeadStatus(name: string): number {
+  const format = detectViewerFormat(name);
+  if (!format) return 415;
+  if (!pathExists(name)) return 404;
+  return 204;
+}
+
+async function upsertSavedFile(name: string, content: string): Promise<string | undefined> {
+  if (!getApiKey()) {
+    log.info(`save: skipped index update for ${name} because no OpenAI key is configured`);
+    return undefined;
+  }
+  if (!content.trim()) {
+    await indexer.deleteFile(toKbRel(name)).catch((err) => {
+      log.warn(`save: failed to remove empty file from index ${name}: ${errorMessage(err)}`);
+    });
+    return undefined;
+  }
+  const tooLarge = contentSizeError(content);
+  if (tooLarge) {
+    await indexer.deleteFile(toKbRel(name)).catch((err) => {
+      log.warn(`save: failed to remove oversized file from index ${name}: ${errorMessage(err)}`);
+    });
+    log.warn(`save: skipped index update for ${name}: ${tooLarge}`);
+    return `${tooLarge}. Semantic search will skip it until you split or reduce it and run sync.`;
+  }
+  try {
+    await indexer.upsertFile(toKbRel(name), content);
+    return undefined;
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
+    log.warn(`save: index update failed for ${name}: ${msg}`);
+    return `Saved, but semantic index update failed: ${msg}`;
+  }
+}
+
+export async function saveFileContent(
+  name: string,
+  content: string,
+  opts: { baseVersion?: string } = {},
+): Promise<{ indexWarning?: string; version?: string }> {
+  validateEditableFileWrite(name);
+  if (opts.baseVersion !== undefined) {
+    const currentVersion = fileVersion(name);
+    if (currentVersion !== opts.baseVersion) {
+      const err = new Error('file changed on disk; reload before saving');
+      (err as any).code = 'FILE_CHANGED';
+      (err as any).currentVersion = currentVersion;
+      throw err;
+    }
+  }
+  saveText(name, content);
+  const indexWarning = await upsertSavedFile(name, content);
+  noteTreeChanged();
+  return { indexWarning, version: fileVersion(name) ?? undefined };
+}
+
+async function handleWriteFile(req: express.Request, res: express.Response): Promise<void> {
+  const content = (req.body ?? {}).content;
+  if (typeof content !== 'string') {
+    res.status(400).json({ error: 'content (string) required' });
+    return;
+  }
+  const name = (req.params as any)[0] as string;
+  const baseVersion = typeof (req.body ?? {}).baseVersion === 'string'
+    ? (req.body ?? {}).baseVersion
+    : undefined;
+  try {
+    res.json(await saveFileContent(name, content, { baseVersion }));
+  } catch (err: unknown) {
+    sendError(res, err);
+  }
+}
 
 /** Asset content-type table, used by /asset/*. Anything outside the
  *  table falls back to application/octet-stream — the renderer's
@@ -65,7 +198,7 @@ export function mount(app: express.Express): void {
   app.get('/api/files', (_req, res) => {
     try {
       res.json({
-        space: getSpaceName(),
+        space: getCurrentSpaceName() ?? getSpaceName(),
         files: listFiles(),
         folders: listFolders(),
       });
@@ -115,12 +248,18 @@ export function mount(app: express.Express): void {
         if (!claimed) throw new Error(`could not find a free untitled-N (tried ${MAX_TRIES})`);
         name = claimed;
       }
-      // New notes with empty content are common (sidebar `+` button); skip
-      // indexing them to avoid round-tripping a no-op to the sidecar.
-      if (content.trim()) {
-        await indexer.upsertFile(toKbRel(name), content);
-      }
-      res.json({ name, content });
+      const indexWarning = await upsertSavedFile(name, content);
+      noteTreeChanged();
+      res.json({ name, content, indexWarning, version: fileVersion(name) ?? undefined });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  app.head('/api/files/*', (req, res) => {
+    const name = (req.params as any)[0] as string;
+    try {
+      res.sendStatus(fileHeadStatus(name));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -144,7 +283,7 @@ export function mount(app: express.Express): void {
       // loads its prepared version via `/asset/*` — keeping injected ids +
       // bootstrap script out of the bytes that round-trip through the
       // editor (otherwise autosave would rewrite the file to include them).
-      res.json({ name, format, content });
+      res.json({ name, format, content, version: fileVersion(name) ?? undefined });
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -155,18 +294,16 @@ export function mount(app: express.Express): void {
   // deletes existing rows for this source before inserting the freshly
   // chunked + embedded set, so a save reflects edits cleanly.
   app.put('/api/files/*', async (req, res) => {
-    const content = (req.body ?? {}).content;
-    if (typeof content !== 'string') {
-      return res.status(400).json({ error: 'content (string) required' });
-    }
-    const name = (req.params as any)[0] as string;
-    try {
-      saveText(name, content);
-      await indexer.upsertFile(toKbRel(name), content);
-      res.json({});
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+    await handleWriteFile(req, res);
+  });
+
+  // `navigator.sendBeacon()` always sends POST. The renderer uses it in
+  // `beforeunload` for the last unsaved buffer, so accept POST on the
+  // file-specific path as an unload-safe alias for PUT. Creation remains
+  // `POST /api/files` above; this wildcard route does not match that
+  // exact path.
+  app.post('/api/files/*', async (req, res) => {
+    await handleWriteFile(req, res);
   });
 
   // ----- rename -----
@@ -179,20 +316,32 @@ export function mount(app: express.Express): void {
     const oldName = (req.params as any)[0] as string;
     const requested = typeof req.body?.new_name === 'string' ? req.body.new_name.trim() : '';
     if (!requested) return res.status(400).json({ error: 'new_name required' });
+    const oldFormat = detectViewerFormat(oldName);
+    if (!oldFormat) return res.status(415).json({ error: 'unsupported format' });
+    const inFlightError = inFlightFileOperationError(oldName, 'rename');
+    if (inFlightError) return res.status(inFlightError.status).json(inFlightError.body);
+    const oldStructuredFormat = detectFormat(oldName);
+    const viewerOnly = !oldStructuredFormat && (oldFormat === 'pdf' || oldFormat === 'image');
     // Preserve the source file's extension — renaming `foo.html` should
-    // not silently produce `foo.html.md`. If the user typed their own
-    // recognised extension, honor it (cross-format rename is rare but
-    // shouldn't be blocked here; conversion has its own dedicated route).
+    // not silently produce `foo.html.md`. For binary viewer files, keep
+    // the viewer extension too; `detectFormat()` intentionally excludes
+    // those, so use the wider viewer detector here.
     let newName = requested;
-    if (!detectFormat(newName)) {
+    const requestedHasCompatibleExt = oldStructuredFormat
+      ? detectFormat(newName) !== null
+      : detectViewerFormat(newName) === oldFormat;
+    if (!requestedHasCompatibleExt) {
       const oldExt = oldName.match(/\.[^./]+$/)?.[0] ?? '.md';
       newName += oldExt;
     }
     newName = sanitizeFilename(newName);
     if (newName === oldName) return res.json({ name: oldName, linksUpdated: 0 });
-    const content = readText(oldName);
-    if (content == null) return res.status(404).json({ error: 'not found' });
-    if (readText(newName) != null) return res.status(409).json({ error: 'target exists' });
+    const content = viewerOnly ? null : readText(oldName);
+    if (!viewerOnly && content == null) return res.status(404).json({ error: 'not found' });
+    if (viewerOnly && !pathExists(oldName)) return res.status(404).json({ error: 'not found' });
+    if (pathExists(newName)) return res.status(409).json({ error: 'target exists' });
+    const oldDerivedArtifacts = derivedArtifactsForSource(oldName);
+    const newDerivedArtifacts = derivedArtifactsForSource(newName);
 
     // Cascade is opt-out per call — the client confirms via a dialog
     // backed by `/api/rename-preview`. Default to true so callers
@@ -200,25 +349,64 @@ export function mount(app: express.Express): void {
     // about the flag.
     const cascadeOn = req.body?.cascade !== false;
     const asyncIndex = req.body?.async_index === true;
+    const renames: RenameEntry[] = [{ kind: 'file', old: oldName, new: newName }];
+    const bundleEntry = bundleRenameEntry(oldName, newName, 'pre');
+    if (bundleEntry) renames.push(bundleEntry);
+    const linkPlan = cascadeOn ? planRenameLinks(renames) : [];
     let linksUpdated = 0;
 
-    const updateLinksAndIndex = async (): Promise<string | undefined> => {
+    const updateLinksAndIndex = async (opts: { rollbackLinksOnFailure: boolean }): Promise<string | undefined> => {
+      const applied = cascadeOn ? applyRenamePlan(linkPlan) : null;
+      linksUpdated = applied?.updated.length ?? 0;
+      try {
+        if (applied?.failed.length) {
+          throw new Error(`failed to update links in ${applied.failed.map((f) => f.name).join(', ')}`);
+        }
         // Cascade BEFORE the renamed file's own re-embed so any link
         // rewrites in its body are picked up by the single upsert below.
-        let updated: Array<{ name: string; changes: number }> = [];
-        if (cascadeOn) {
-          const renames: RenameEntry[] = [{ kind: 'file', old: oldName, new: newName }];
-          const bundleEntry = bundleRenameEntry(oldName, newName, 'post');
-          if (bundleEntry) renames.push(bundleEntry);
-          const cascade = cascadeRenameLinks(renames);
-          linksUpdated = cascade.updated.length;
-          updated = cascade.updated;
+        const reindexUpdatedLinks = async () => {
+          for (const u of applied?.updated ?? []) {
+            if (u.name === newName) continue;
+            const body = readText(u.name);
+            if (body == null) continue;
+            await indexer.upsertFile(toKbRel(u.name), body);
+          }
+        };
+        if (viewerOnly) {
+          const sourceAbs = resolveExisting(newName);
+          const currentDerivedNote = newDerivedArtifacts.notes[0];
+          const derivedBody = currentDerivedNote ? readText(currentDerivedNote) : null;
+          if (!derivedBody && sourceAbs) {
+            try {
+              if (oldFormat === 'pdf') maybeConvertPdf(sourceAbs);
+              else if (isImageFile(newName)) maybeConvertImage(sourceAbs);
+            } catch (err: unknown) {
+              log.warn(`rename: conversion kickoff failed for ${newName}: ${errorMessage(err)}`);
+            }
+          }
+          if (!getApiKey()) {
+            log.info(`rename: skipped index update for ${oldName} -> ${newName} because no OpenAI key is configured`);
+            return 'Semantic index was not updated because no OpenAI API key is configured.';
+          }
+          await reindexUpdatedLinks();
+          if (derivedBody && currentDerivedNote) {
+            await indexer.upsertFile(toKbRel(currentDerivedNote), derivedBody);
+          }
+          for (const rel of oldDerivedArtifacts.notes) {
+            if (rel === currentDerivedNote) continue;
+            await indexer.deleteFile(toKbRel(rel)).catch((err) => {
+              log.warn(`rename: failed to remove old derived index row ${rel}: ${errorMessage(err)}`);
+            });
+          }
+          return derivedBody
+            ? undefined
+            : 'Searchable text is being regenerated in the background.';
         }
         if (!getApiKey()) {
           log.info(`rename: skipped index update for ${oldName} -> ${newName} because no OpenAI key is configured`);
           return 'Semantic index was not updated because no OpenAI API key is configured.';
         }
-        const tooLarge = contentSizeError(content);
+        const tooLarge = contentSizeError(content ?? '');
         if (tooLarge) {
           await indexer.deleteFile(toKbRel(oldName)).catch((err) => {
             log.warn(`rename: failed to remove old index row for oversized file ${oldName}: ${errorMessage(err)}`);
@@ -226,20 +414,13 @@ export function mount(app: express.Express): void {
           log.warn(`rename: skipped index update for ${newName}: ${tooLarge}`);
           return `${tooLarge}. The file moved, but semantic search will skip it until you split or reduce it and run sync.`;
         }
-        if (updated.length) {
-          // Re-embed each external file whose links we rewrote. The
-          // renamed file itself gets re-embedded by `renameFile` below
-          // (which also cleans up its old-path row), so skip it here to
-          // avoid the wasted double-embed.
-          for (const u of updated) {
-            if (u.name === newName) continue;
-            const body = readText(u.name);
-            if (body == null) continue;
-            await indexer.upsertFile(toKbRel(u.name), body);
-          }
-        }
-        await indexer.renameFile(toKbRel(oldName), toKbRel(newName), content);
+        if (applied?.updated.length) await reindexUpdatedLinks();
+        await indexer.renameFile(toKbRel(oldName), toKbRel(newName), content ?? '');
         return undefined;
+      } catch (err) {
+        if (opts.rollbackLinksOnFailure) applied?.rollback();
+        throw err;
+      }
     };
 
     if (asyncIndex) {
@@ -249,17 +430,20 @@ export function mount(app: express.Express): void {
         sendError(res, err);
         return;
       }
-      const warning = contentSizeError(content);
+      noteTreeChanged();
+      try { remapFileOrderPath(oldName, newName, 'file'); }
+      catch (err: unknown) { log.warn(`file-order remap failed for ${oldName} -> ${newName}: ${errorMessage(err)}`); }
+      const warning = viewerOnly ? null : contentSizeError(content ?? '');
       const noKey = !getApiKey();
       res.json({
         name: newName,
-        linksUpdated,
+        linksUpdated: linkPlan.length,
         indexDeferred: !warning && !noKey,
         indexWarning: warning
           ? `${warning}. The file moved, but semantic search will skip it until you split or reduce it and run sync.`
           : undefined,
       });
-      updateLinksAndIndex().catch((err: unknown) => {
+      updateLinksAndIndex({ rollbackLinksOnFailure: false }).catch((err: unknown) => {
         log.warn(`rename: background index update failed for ${oldName} -> ${newName}: ${errorMessage(err)}`);
       });
       return;
@@ -274,9 +458,14 @@ export function mount(app: express.Express): void {
       doDisk: () => renameOnDisk(oldName, newName),
       undoDisk: () => renameOnDisk(newName, oldName),
       doIndex: async () => {
-        indexWarning = await updateLinksAndIndex();
+        indexWarning = await updateLinksAndIndex({ rollbackLinksOnFailure: true });
       },
-      okResponse: () => ({ name: newName, linksUpdated, indexWarning }),
+      okResponse: () => {
+        noteTreeChanged();
+        try { remapFileOrderPath(oldName, newName, 'file'); }
+        catch (err: unknown) { log.warn(`file-order remap failed for ${oldName} -> ${newName}: ${errorMessage(err)}`); }
+        return { name: newName, linksUpdated, indexWarning };
+      },
     });
   });
 
@@ -284,6 +473,9 @@ export function mount(app: express.Express): void {
   app.delete('/api/files/*', async (req, res) => {
     const name = (req.params as any)[0] as string;
     try {
+      const inFlightError = inFlightFileOperationError(name, 'delete');
+      if (inFlightError) return res.status(inFlightError.status).json(inFlightError.body);
+      const derivedArtifacts = derivedArtifactsForSource(name);
       const removed = deleteFile(name);
       // Respond as soon as the file is off disk. Milvus row cleanup is
       // fired async — if the daemon is busy (e.g. mid-embed of an
@@ -291,10 +483,19 @@ export function mount(app: express.Express): void {
       // A stale chunk row pointing at a missing file for a few seconds
       // is harmless: search filters by file_name on read and the next
       // sync sweeps orphans.
+      if (removed) {
+        noteTreeChanged();
+        try { removeFileOrderPath(name, 'file'); }
+        catch (err: unknown) { log.warn(`file-order cleanup failed for ${name}: ${errorMessage(err)}`); }
+      }
+      try { clearRecord(toKbRel(name)); }
+      catch (err: unknown) { log.warn(`delete: conversion status cleanup failed for ${name}: ${errorMessage(err)}`); }
       res.json({ alreadyGone: !removed });
-      indexer.deleteFile(toKbRel(name)).catch((err) => {
-        log.warn(`delete: index cleanup failed for ${name}: ${errorMessage(err)}`);
-      });
+      for (const rel of [name, ...derivedArtifacts.notes]) {
+        indexer.deleteFile(toKbRel(rel)).catch((err) => {
+          log.warn(`delete: index cleanup failed for ${rel}: ${errorMessage(err)}`);
+        });
+      }
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -389,7 +590,7 @@ export function mount(app: express.Express): void {
   // responses go through `analyzeHtml` so the prepared bytes carry the
   // scroll-bootstrap script + heading ids for in-doc anchor scrolling.
   app.get('/asset/*', (req, res) => {
-    const rel = (req.params as any)[0] as string;
+    const rel = stripAssetWindowPrefix((req.params as any)[0] as string);
     const abs = resolveAsset(rel);
     if (!abs) return res.status(404).end();
     const ext = path.extname(abs).toLowerCase();
@@ -411,4 +612,10 @@ export function mount(app: express.Express): void {
     res.type(MIME[ext] ?? 'application/octet-stream');
     fs.createReadStream(abs).pipe(res);
   });
+}
+
+function stripAssetWindowPrefix(rel: string): string {
+  if (!rel.startsWith('__window/')) return rel;
+  const slash = rel.indexOf('/', '__window/'.length);
+  return slash >= 0 ? rel.slice(slash + 1) : '';
 }

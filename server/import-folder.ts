@@ -8,6 +8,7 @@ import {
   STASHBASE_PER_MACHINE_ENTRIES,
 } from './space.ts';
 import { copyDirectoryDereferenced } from './fs-move.ts';
+import { pathHasCloudPlaceholder } from './indexable.ts';
 
 export type ImportFolderMode = 'copy' | 'move';
 
@@ -216,6 +217,7 @@ function assertImportableSource(source: string, kbRoot: string): void {
 }
 
 function isImportExcludedEntry(relPath: string, _entry: fs.Dirent): boolean {
+  if (pathHasCloudPlaceholder(relPath)) return true;
   const parts = relPath.split('/');
   if (parts[0] !== '.stashbase') return false;
   const entry = parts[1];

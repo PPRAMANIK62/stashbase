@@ -18,7 +18,10 @@ const buildPath = path.join(root, 'dist', 'pyinstaller');
 const cachePath = path.join(root, 'python', 'pyinstaller-cache.nosync');
 const specPath = path.join(root, 'dist', 'pyinstaller');
 const buildReqs = path.join(root, 'python', 'build-requirements.txt');
+const extractReqs = path.join(root, 'python', 'requirements-extract.txt');
 const setupPython = path.join(root, 'scripts', 'setup-python.mjs');
+const args = process.argv.slice(2);
+const buildExtractor = args.includes('--with-extract') || process.env.STASHBASE_BUILD_EXTRACT === '1';
 const pyinstallerEnv = {
   ...process.env,
   PYINSTALLER_CONFIG_DIR: cachePath,
@@ -34,6 +37,10 @@ const daemonExcludedModules = [
   'PIL',
   'cv2',
   'rapidocr_onnxruntime',
+  // Pulled by optional document parsing hooks, not by the daemon protocol
+  // itself. Keeping them out saves space from the default app.
+  'lxml',
+  'pyarrow.tests',
 ];
 const daemonForbiddenEntries = [
   'onnxruntime',
@@ -43,6 +50,7 @@ const daemonForbiddenEntries = [
   'fitz',
   'cv2',
   'rapidocr_onnxruntime',
+  'lxml',
 ];
 const extractExcludedModules = [
   'blake3',
@@ -76,8 +84,10 @@ function assertNoBundleEntries(bundleDir, forbiddenNames, label) {
     const current = stack.pop();
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const lower = entry.name.toLowerCase();
-      const normalized = lower.replace(/[-.].*$/, '');
-      if (forbidden.has(lower) || forbidden.has(normalized)) {
+      const packageName = lower.endsWith('.dist-info') || lower.endsWith('.egg-info')
+        ? lower.replace(/[-.].*$/, '')
+        : lower;
+      if (forbidden.has(lower) || forbidden.has(packageName)) {
         hits.push(path.relative(bundleDir, path.join(current, entry.name)));
         continue;
       }
@@ -95,6 +105,40 @@ function assertNoBundleEntries(bundleDir, forbiddenNames, label) {
     );
   }
   console.log(`[build:python-sidecar] ${label} excludes verified`);
+}
+
+function pruneDaemonBundle(bundleDir) {
+  const pyarrowDir = path.join(bundleDir, '_internal', 'pyarrow');
+  if (!fs.existsSync(pyarrowDir)) return;
+
+  const pruned = [];
+  for (const rel of ['include', 'includes', 'src', 'tests']) {
+    const target = path.join(pyarrowDir, rel);
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { recursive: true, force: true });
+      pruned.push(path.relative(bundleDir, target));
+    }
+  }
+
+  const stack = [pyarrowDir];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (/\.(pxd|pxi|pyx)$/i.test(entry.name)) {
+        fs.rmSync(full, { force: true });
+        pruned.push(path.relative(bundleDir, full));
+      }
+    }
+  }
+
+  if (pruned.length > 0) {
+    console.log(`[build:python-sidecar] pruned ${pruned.length} PyArrow development artifact(s)`);
+  }
 }
 
 if (!fs.existsSync(python)) {
@@ -116,6 +160,14 @@ const probe = spawnSync(python, ['-m', 'PyInstaller', '--version'], {
 if (probe.status !== 0) {
   console.log('[build:python-sidecar] installing PyInstaller build dependency');
   execFileSync(python, ['-m', 'pip', 'install', '-r', buildReqs], {
+    cwd: root,
+    stdio: 'inherit',
+  });
+}
+
+if (buildExtractor) {
+  console.log('[build:python-sidecar] installing optional extractor dependencies');
+  execFileSync(python, ['-m', 'pip', 'install', '-r', extractReqs], {
     cwd: root,
     stdio: 'inherit',
   });
@@ -173,6 +225,7 @@ if (!fs.existsSync(outBin)) {
   throw new Error(`PyInstaller did not produce ${outBin}`);
 }
 fs.chmodSync(outBin, 0o755);
+pruneDaemonBundle(outDir);
 assertNoBundleEntries(outDir, daemonForbiddenEntries, 'daemon');
 console.log('[build:python-sidecar] done ->', outBin);
 
@@ -186,51 +239,55 @@ console.log('[build:python-sidecar] done ->', outBin);
 // resources) without them. Both bundles share `python/sidecar.nosync/` and
 // ride to the app via electron-builder's `extraResources`
 // (`from: python/sidecar.nosync` → `to: python/sidecar` inside the .app).
-const extractEntry = path.join(root, 'python', 'extract_main.py');
-execFileSync(
-  python,
-  [
-    '-m',
-    'PyInstaller',
-    '--clean',
-    '--noconfirm',
-    '--name',
-    'stashbase-extract',
-    // pdf_extract.py / ocr_extract.py are sibling modules imported lazily
-    // by extract_main; put `python/` on the analysis path and pin them as
-    // hidden imports so PyInstaller bundles both branches.
-    '--paths',
-    path.join(root, 'python'),
-    '--hidden-import',
-    'pdf_extract',
-    '--hidden-import',
-    'ocr_extract',
-    '--collect-all',
-    'rapidocr_onnxruntime',
-    '--collect-all',
-    'pymupdf4llm',
-    '--collect-all',
-    'pymupdf',
-    ...extractExcludedModules.flatMap((moduleName) => ['--exclude-module', moduleName]),
-    '--distpath',
-    distPath,
-    '--workpath',
-    buildPath,
-    '--specpath',
-    specPath,
-    extractEntry,
-  ],
-  { cwd: root, env: pyinstallerEnv, stdio: 'inherit' },
-);
+if (!buildExtractor) {
+  console.log('[build:python-sidecar] skipped optional PDF/OCR extractor (use --with-extract or STASHBASE_BUILD_EXTRACT=1)');
+} else {
+  const extractEntry = path.join(root, 'python', 'extract_main.py');
+  execFileSync(
+    python,
+    [
+      '-m',
+      'PyInstaller',
+      '--clean',
+      '--noconfirm',
+      '--name',
+      'stashbase-extract',
+      // pdf_extract.py / ocr_extract.py are sibling modules imported lazily
+      // by extract_main; put `python/` on the analysis path and pin them as
+      // hidden imports so PyInstaller bundles both branches.
+      '--paths',
+      path.join(root, 'python'),
+      '--hidden-import',
+      'pdf_extract',
+      '--hidden-import',
+      'ocr_extract',
+      '--collect-all',
+      'rapidocr_onnxruntime',
+      '--collect-all',
+      'pymupdf4llm',
+      '--collect-all',
+      'pymupdf',
+      ...extractExcludedModules.flatMap((moduleName) => ['--exclude-module', moduleName]),
+      '--distpath',
+      distPath,
+      '--workpath',
+      buildPath,
+      '--specpath',
+      specPath,
+      extractEntry,
+    ],
+    { cwd: root, env: pyinstallerEnv, stdio: 'inherit' },
+  );
 
-const extractBin = path.join(
-  distPath,
-  'stashbase-extract',
-  process.platform === 'win32' ? 'stashbase-extract.exe' : 'stashbase-extract',
-);
-if (!fs.existsSync(extractBin)) {
-  throw new Error(`PyInstaller did not produce ${extractBin}`);
+  const extractBin = path.join(
+    distPath,
+    'stashbase-extract',
+    process.platform === 'win32' ? 'stashbase-extract.exe' : 'stashbase-extract',
+  );
+  if (!fs.existsSync(extractBin)) {
+    throw new Error(`PyInstaller did not produce ${extractBin}`);
+  }
+  fs.chmodSync(extractBin, 0o755);
+  assertNoBundleEntries(path.dirname(extractBin), extractForbiddenEntries, 'extractor');
+  console.log('[build:python-sidecar] done ->', extractBin);
 }
-fs.chmodSync(extractBin, 0o755);
-assertNoBundleEntries(path.dirname(extractBin), extractForbiddenEntries, 'extractor');
-console.log('[build:python-sidecar] done ->', extractBin);

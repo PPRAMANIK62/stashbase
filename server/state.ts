@@ -19,6 +19,7 @@ import { getApiKey } from './app-config.ts';
 import { syncIndex, type SyncResult } from './sync.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { clearStaleMilvusLock } from './stale-lock.ts';
+import { noteTreeChanged } from './watcher.ts';
 import { logger, errorMessage } from './log.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -67,6 +68,72 @@ export function clearIndexWarning(space: string): void {
 }
 function recordIndexWarning(space: string, message: string): void {
   indexWarnings.set(space, { message, at: new Date().toISOString() });
+}
+
+const spaceSyncGeneration = new Map<string, number>();
+
+export function invalidateSpaceSync(spaceName: string): void {
+  const name = spaceName.trim();
+  if (!name) return;
+  spaceSyncGeneration.set(name, (spaceSyncGeneration.get(name) ?? 0) + 1);
+}
+
+function currentSpaceSyncGeneration(spaceName: string): number {
+  return spaceSyncGeneration.get(spaceName) ?? 0;
+}
+
+function shouldContinueSpaceSync(
+  spaceName: string,
+  startedAt: number,
+  callerShouldContinue?: () => boolean,
+): boolean {
+  return currentSpaceSyncGeneration(spaceName) === startedAt && (!callerShouldContinue || callerShouldContinue());
+}
+
+export async function renameSpaceRuntimeState(oldName: string, newName: string): Promise<void> {
+  const snapshotWarning = snapshotWarnings.get(oldName);
+  if (snapshotWarning) {
+    snapshotWarnings.set(newName, snapshotWarning);
+    snapshotWarnings.delete(oldName);
+  }
+  const indexWarning = indexWarnings.get(oldName);
+  if (indexWarning) {
+    indexWarnings.set(newName, indexWarning);
+    indexWarnings.delete(oldName);
+  }
+  await clearSnapshotCacheForSpaceName(oldName);
+}
+
+export async function deleteSpaceRuntimeState(spaceName: string): Promise<void> {
+  snapshotWarnings.delete(spaceName);
+  indexWarnings.delete(spaceName);
+  await clearSnapshotCacheForSpaceName(spaceName);
+}
+
+export function __setSpaceWarningsForTest(
+  space: string,
+  warnings: { snapshot?: SnapshotImportWarning | null; index?: IndexSyncWarning | null },
+): void {
+  if ('snapshot' in warnings) {
+    if (warnings.snapshot) snapshotWarnings.set(space, warnings.snapshot);
+    else snapshotWarnings.delete(space);
+  }
+  if ('index' in warnings) {
+    if (warnings.index) indexWarnings.set(space, warnings.index);
+    else indexWarnings.delete(space);
+  }
+}
+
+export function __spaceSyncGenerationForTest(space: string): number {
+  return currentSpaceSyncGeneration(space);
+}
+
+export function __spaceSyncShouldContinueForTest(
+  space: string,
+  startedAt: number,
+  callerShouldContinue?: () => boolean,
+): boolean {
+  return shouldContinueSpaceSync(space, startedAt, callerShouldContinue);
 }
 
 /** Spaces whose snapshot vector-cache is currently loaded in the daemon
@@ -170,8 +237,19 @@ export async function resetIndexerRuntime(opts: { forgetBindings?: boolean } = {
   snapshotCacheClearTimers.clear();
 }
 
-/** One-shot latch for the stale-flock sweep below. */
-let staleLockSwept = false;
+/** Per-KB-root latch for the stale-flock sweep below. */
+const staleLockSweptRoots = new Set<string>();
+
+function claimStaleLockSweep(root: string): boolean {
+  const key = path.resolve(root);
+  if (staleLockSweptRoots.has(key)) return false;
+  staleLockSweptRoots.add(key);
+  return true;
+}
+
+export function __claimStaleLockSweepForTest(root: string): boolean {
+  return claimStaleLockSweep(root);
+}
 
 /** Bind the indexer to a space using the OpenAI embedder. Called on
  *  every space switch (idempotent). Doesn't trigger sync — caller's
@@ -179,7 +257,8 @@ let staleLockSwept = false;
  *  still bound but indexing is disabled. */
 export async function bindIndexerForSpace(spaceAbs: string): Promise<void> {
   const daemon = getDaemon();
-  daemon.configure({ kbRoot: getKbRoot() });
+  const kbRoot = getKbRoot();
+  daemon.configure({ kbRoot });
 
   // Before the first bind of this process, sweep any stashbase daemon
   // still holding the Milvus flock: a dirty previous exit (kill -9, OS
@@ -189,9 +268,8 @@ export async function bindIndexerForSpace(spaceAbs: string): Promise<void> {
   // call site is deliberately the WEB SERVER's bind path only — the MCP
   // host must never run the sweep, since the GUI's daemon is the
   // rightful lock owner it would be killing.
-  if (!staleLockSwept) {
-    staleLockSwept = true;
-    try { clearStaleMilvusLock(getKbRoot()); } catch (err: unknown) {
+  if (claimStaleLockSweep(kbRoot)) {
+    try { clearStaleMilvusLock(kbRoot); } catch (err: unknown) {
       log.warn(`stale-lock sweep failed: ${errorMessage(err)}`);
     }
   }
@@ -340,22 +418,33 @@ function syncFailureMessage(result: SyncResult): string {
   return `${result.failed.length} file(s) could not be indexed${sample ? ` (${sample}${suffix})` : ''}`;
 }
 
+function syncTouchedVisibleTree(result: SyncResult): boolean {
+  return result.added.length > 0
+    || result.modified.length > 0
+    || result.removed.length > 0
+    || result.renamed.length > 0
+    || result.failed.length > 0;
+}
+
 export async function syncSpaceNow(
   spaceRoot: string,
   opts: { reason?: string; shouldContinue?: () => boolean } = {},
 ): Promise<SyncResult> {
   const syncSpaceName = spaceNameFromAbs(spaceRoot);
+  const syncGeneration = currentSpaceSyncGeneration(syncSpaceName);
+  const shouldContinue = () => shouldContinueSpaceSync(syncSpaceName, syncGeneration, opts.shouldContinue);
   try {
     await bindIndexerForSpace(spaceRoot);
-    if (opts.shouldContinue && !opts.shouldContinue()) {
+    if (!shouldContinue()) {
       retainSnapshotCacheForRetry(spaceRoot, `${opts.reason ?? 'sync'} cancellation`);
       return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
     }
-    const result = await syncIndex(indexer, syncSpaceName, { shouldContinue: opts.shouldContinue });
+    const result = await syncIndex(indexer, syncSpaceName, { shouldContinue });
     if (result.cancelled) {
       retainSnapshotCacheForRetry(spaceRoot, `${opts.reason ?? 'sync'} cancellation`);
       return result;
     }
+    if (syncTouchedVisibleTree(result)) noteTreeChanged();
     if (result.failed.length) {
       recordIndexWarning(syncSpaceName, syncFailureMessage(result));
       retainSnapshotCacheForRetry(spaceRoot, `${opts.reason ?? 'sync'} failures`);

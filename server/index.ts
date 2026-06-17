@@ -80,6 +80,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = process.env.STASHBASE_APP_ROOT
   ? path.resolve(process.env.STASHBASE_APP_ROOT)
   : path.resolve(__dirname, '..');
+const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
+  ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
+  : APP_ROOT;
 const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'web', 'dist-app');
 
 // One-time migration from the old global-provider schema. Idempotent.
@@ -179,7 +182,14 @@ app.use((req, res, next) => {
 // process should only reuse a server that explicitly identifies itself
 // as StashBase.
 app.get('/api/health', (_req, res) => {
-  res.json({ app: 'stashbase', ok: true, protocolVersion: SERVER_PROTOCOL_VERSION });
+  res.json({
+    app: 'stashbase',
+    ok: true,
+    protocolVersion: SERVER_PROTOCOL_VERSION,
+    appRoot: APP_ROOT,
+    resourcesPath: RESOURCES_ROOT,
+    pid: process.pid,
+  });
 });
 
 // Static layer is mounted before the API routes because it falls
@@ -209,9 +219,7 @@ app.use([
   '/api/files',
   '/api/folders',
   '/api/search',
-  '/api/sync',
   '/api/index-status',
-  '/api/upload',
   '/api/rename-preview',
   '/api/file-order',
   '/api/reveal',
@@ -446,6 +454,7 @@ async function shutdown(reason: string): Promise<void> {
   log.info(`shutdown: ${reason}`);
   // Stop accepting new connections immediately; in-flight ones drain.
   try { server.close(); } catch { /* already gone */ }
+  try { killActiveAgent(); } catch { /* swallow */ }
   try { await stopSpaceMcpServers(); } catch { /* swallow */ }
   try { closeStateDb(); } catch { /* swallow */ }
   // Hard ceiling: if the indexer's close ladder can't unstick the

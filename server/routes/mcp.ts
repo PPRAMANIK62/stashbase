@@ -242,8 +242,7 @@ function readJsonObject(file: string): Record<string, unknown> | null {
 }
 
 function writeJson(file: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+  writeTextAtomic(file, JSON.stringify(value, null, 2) + '\n');
 }
 
 function configureJsonMcp(file: string, serverConfig: Record<string, unknown>): void {
@@ -303,14 +302,26 @@ function configureCodex(file: string, wrapper: string): void {
     '[mcp_servers.stashbase]',
     `command = ${JSON.stringify(wrapper)}`,
   ].join('\n');
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, replaceTomlTable(raw, 'mcp_servers.stashbase', block));
+  writeTextAtomic(file, replaceTomlTable(raw, 'mcp_servers.stashbase', block));
 }
 
 function removeCodex(file: string): void {
   if (!fs.existsSync(file)) return;
   const raw = fs.readFileSync(file, 'utf8');
-  fs.writeFileSync(file, removeTomlTable(raw, 'mcp_servers.stashbase'));
+  writeTextAtomic(file, removeTomlTable(raw, 'mcp_servers.stashbase'));
+}
+
+function writeTextAtomic(file: string, content: string): void {
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    fs.writeFileSync(tmp, content, { encoding: 'utf8' });
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+    throw err;
+  }
 }
 
 function removeTomlTable(raw: string, tableName: string): string {

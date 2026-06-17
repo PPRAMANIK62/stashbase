@@ -12,7 +12,7 @@ import { logger, errorMessage } from '../log.ts';
 import { currentWindowId, getCurrentSpace } from '../space.ts';
 import { getApiKey, getEmbedderProvider, setApiKey } from '../app-config.ts';
 import { bootBindAllSpaces, resetIndexerRuntime, scheduleIndexerSync } from '../state.ts';
-import { validateOpenAIKey } from '../http.ts';
+import { sendError, validateOpenAIKey } from '../http.ts';
 
 const log = logger('routes/embedder');
 
@@ -34,7 +34,12 @@ export function mount(app: express.Express): void {
     if (!key) return res.status(400).json({ error: 'openaiKey required' });
     const check = await validateOpenAIKey(key);
     if (!check.ok) return res.status(check.status).json({ error: check.error });
-    setApiKey(key);
+    try {
+      setApiKey(key);
+    } catch (err: unknown) {
+      sendError(res, err);
+      return;
+    }
     try {
       await resetIndexerRuntime({ forgetBindings: true });
       await bootBindAllSpaces();
@@ -51,7 +56,12 @@ export function mount(app: express.Express): void {
   // Wipe the global OpenAI key. New embed / search calls will no-op
   // until a key is added back; existing vectors stay valid.
   app.delete('/api/embedder/key', async (_req, res) => {
-    setApiKey(undefined);
+    try {
+      setApiKey(undefined);
+    } catch (err: unknown) {
+      sendError(res, err);
+      return;
+    }
     try {
       await resetIndexerRuntime({ forgetBindings: true });
       await bootBindAllSpaces();
@@ -59,14 +69,5 @@ export function mount(app: express.Express): void {
       log.warn(`key delete: runtime reset failed: ${errorMessage(err)}`);
     }
     res.json({ hasKey: false });
-  });
-
-  // Validate an OpenAI key without persisting it (for the key-entry UI).
-  app.post('/api/embedder/validate', async (req, res) => {
-    const key = typeof req.body?.openaiKey === 'string' ? req.body.openaiKey.trim() : '';
-    if (!key) return res.status(400).json({ error: 'openaiKey required' });
-    const check = await validateOpenAIKey(key);
-    if (check.ok) return res.json({});
-    res.status(check.status).json({ error: check.error });
   });
 }

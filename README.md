@@ -80,7 +80,7 @@ Structured formats are indexed as they are; unstructured formats are extracted i
 
 ### Space-level import & portable embeddings
 
-**Import folder** brings any local directory in as a new space. If the folder ships a `.stashbase/snapshot.parquet`, its embedding cache is reused on open, so unchanged content never re-embeds. That's how the CS183B starter imports without re-embedding from scratch.
+**Import folder** brings any local directory in as a new space. If the folder ships `.stashbase/snapshot.parquet` with its sibling `.stashbase/snapshot.meta.json`, its embedding cache is reused on open, so unchanged content never re-embeds. That's how the CS183B starter imports without re-embedding from scratch.
 
 ---
 
@@ -187,9 +187,10 @@ pnpm dev
 pnpm dist          # macOS DMG + zip
 pnpm dist:win     # Windows NSIS + zip, built from Windows sidecars
 pnpm pack:mac     # macOS .app only, faster packaging smoke
+pnpm build:python-extract-sidecar # optional: include local PDF/OCR extractor
 ```
 
-**Debugging.** Dev knobs are plain environment variables — prefix the command, e.g. `STASHBASE_LOG=debug pnpm dev` (daemon ops, conversion timing; also: `STASHBASE_PDF_CONVERTER=marker`, `STASHBASE_PYTHON=/path/to/python`). API keys are NOT env vars — they live in Settings. Renderer logs: View → Toggle Developer Tools. Packaged-app server logs: `~/Library/Logs/StashBase/`; headless-server boots log to `~/.stashbase/headless-server.log`.
+**Debugging.** Dev knobs are plain environment variables — prefix the command, e.g. `STASHBASE_LOG=debug pnpm dev` (daemon ops, conversion timing; also: `STASHBASE_PDF_CONVERTER=marker`, `STASHBASE_PYTHON=/path/to/python`, `STASHBASE_BUILD_EXTRACT=1`). API keys are NOT env vars — they live in Settings. Renderer logs: View → Toggle Developer Tools. Packaged-app server logs: `~/Library/Logs/StashBase/`; headless-server boots log to `~/.stashbase/headless-server.log`.
 
 Before opening a PR:
 
@@ -200,7 +201,7 @@ pnpm test:import-folder
 
 ## Publishing
 
-`release:verify:mac` is the local preflight: build the macOS package, run the packaged daemon/PDF/OCR/server smoke tests, and mount the DMG to verify its helper files. `dist:brew` is the one-command publishing flow: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update.
+`release:verify:mac` is the local preflight: build the macOS package, run the packaged daemon/server smoke tests, run PDF/OCR smoke tests only when the optional extractor is bundled, and mount the DMG to verify its helper files. `dist:brew` is the one-command publishing flow: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update.
 
 ```bash
 pnpm release:verify:mac

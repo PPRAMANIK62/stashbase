@@ -41,30 +41,56 @@ function findPackagedApp() {
   );
 }
 
-function requestOk(port, timeoutMs) {
+function requestJson(port, requestPath, timeoutMs) {
   return new Promise((resolve) => {
     const req = http.request(
-      { host: '127.0.0.1', port, path: '/api/space', method: 'GET', timeout: timeoutMs },
+      { host: '127.0.0.1', port, path: requestPath, method: 'GET', timeout: timeoutMs },
       (res) => {
-        res.resume();
-        resolve(res.statusCode != null && res.statusCode >= 200 && res.statusCode < 500);
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          if (body.length < 8192) body += chunk;
+        });
+        res.on('end', () => {
+          try {
+            resolve({ ok: true, statusCode: res.statusCode ?? 0, body: JSON.parse(body) });
+          } catch {
+            resolve({ ok: true, statusCode: res.statusCode ?? 0, body: null });
+          }
+        });
       },
     );
-    req.on('error', () => resolve(false));
+    req.on('error', () => resolve({ ok: false, statusCode: 0, body: null }));
     req.on('timeout', () => {
       req.destroy();
-      resolve(false);
+      resolve({ ok: false, statusCode: 0, body: null });
     });
     req.end();
   });
+}
+
+async function requestOk(port, timeoutMs) {
+  const res = await requestJson(port, '/api/space', timeoutMs);
+  return res.ok && res.statusCode >= 200 && res.statusCode < 500;
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function sidecarExecutable(root, name) {
-  return path.join(root, 'python', 'sidecar', name, name);
+function sidecarCandidates(root, name) {
+  const exe = process.platform === 'win32' ? `${name}.exe` : name;
+  const base = path.join(root, 'python', 'sidecar');
+  return [
+    path.join(base, name, exe),
+    path.join(base, exe),
+  ];
+}
+
+function findSidecarExecutable(root, name) {
+  return sidecarCandidates(root, name).find((candidate) => {
+    try { return fs.statSync(candidate).isFile(); } catch { return false; }
+  }) ?? sidecarCandidates(root, name)[0];
 }
 
 async function waitForServer(port, child, output) {
@@ -81,6 +107,22 @@ async function waitForServer(port, child, output) {
 
 function assertFile(file, label) {
   if (!fs.existsSync(file)) throw new Error(`Missing ${label}: ${file}`);
+}
+
+async function assertPackagedHealth(port, expected) {
+  const res = await requestJson(port, '/api/health', 1000);
+  if (!res.ok || res.statusCode !== 200 || !res.body || typeof res.body !== 'object') {
+    throw new Error(`packaged health probe failed: status=${res.statusCode}`);
+  }
+  for (const [key, value] of Object.entries(expected)) {
+    if (res.body[key] !== value) {
+      throw new Error(
+        `packaged health ${key} mismatch:\n` +
+          `  expected: ${value}\n` +
+          `  actual: ${res.body[key]}`,
+      );
+    }
+  }
 }
 
 function writeTinyPdf(file) {
@@ -205,6 +247,7 @@ async function smokeDaemon(daemonBin) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-smoke-py-'));
   const kbRoot = path.join(tmp, 'kb');
   const storeRoot = path.join(tmp, 'store');
+  const snapshot = path.join(tmp, 'snapshot.parquet');
   fs.mkdirSync(kbRoot, { recursive: true });
   const child = spawn(daemonBin, ['--kb-root', kbRoot, '--store-root', storeRoot], {
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -213,11 +256,17 @@ async function smokeDaemon(daemonBin) {
   try {
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new Error(`daemon did not report ready within 10s\n${output.slice(-4_000)}`));
-      }, 10_000);
+        reject(new Error(`daemon smoke did not finish within 20s\n${output.slice(-4_000)}`));
+      }, 20_000);
+      let settled = false;
       const settle = (fn, value) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         fn(value);
+      };
+      const send = (id, op, args) => {
+        child.stdin.write(`${JSON.stringify({ id, op, args })}\n`);
       };
       child.stdout.on('data', (chunk) => {
         output += chunk.toString();
@@ -225,7 +274,29 @@ async function smokeDaemon(daemonBin) {
           if (!line.trim()) continue;
           try {
             const msg = JSON.parse(line);
-            if (msg.event === 'ready') settle(resolve);
+            if (msg.event === 'ready') {
+              send(1, 'bind_space', { space: 'Smoke', provider: 'openai', api_key: 'sk-smoke' });
+              continue;
+            }
+            if (msg.id === 1) {
+              if (!msg.ok) {
+                settle(reject, new Error(`daemon bind_space failed: ${msg.error}\n${output.slice(-4_000)}`));
+                continue;
+              }
+              send(2, 'export_space', { space: 'Smoke', out_path: snapshot });
+              continue;
+            }
+            if (msg.id === 2) {
+              if (!msg.ok) {
+                settle(reject, new Error(`daemon export_space failed: ${msg.error}\n${output.slice(-4_000)}`));
+                continue;
+              }
+              if (!fs.existsSync(snapshot)) {
+                settle(reject, new Error(`daemon export_space did not create ${snapshot}`));
+                continue;
+              }
+              settle(resolve);
+            }
             if (msg.event === 'error') settle(reject, new Error(`daemon error: ${msg.error}`));
           } catch {
             // Keep collecting output; the daemon should speak JSON lines.
@@ -235,10 +306,10 @@ async function smokeDaemon(daemonBin) {
       child.stderr.on('data', (chunk) => { output += chunk.toString(); });
       child.on('error', (err) => settle(reject, err));
       child.on('exit', (code, signal) => {
-        settle(reject, new Error(`daemon exited before ready (code=${code}, signal=${signal})\n${output.slice(-4_000)}`));
+        settle(reject, new Error(`daemon exited before smoke completed (code=${code}, signal=${signal})\n${output.slice(-4_000)}`));
       });
     });
-    console.log('[smoke] python daemon reported ready');
+    console.log('[smoke] python daemon responded and exported a snapshot');
   } finally {
     child.stdin.end();
     if (child.exitCode == null) child.kill('SIGTERM');
@@ -257,8 +328,11 @@ const resourcesPath = path.join(appPath, 'Contents', 'Resources');
 const appRoot = path.join(resourcesPath, 'app.asar');
 const serverEntry = path.join(appRoot, 'dist', 'server', 'index.mjs');
 const electronBin = path.join(appPath, 'Contents', 'MacOS', pkg.build?.productName || pkg.name);
-const daemonBin = sidecarExecutable(resourcesPath, 'stashbase-daemon');
-const extractBin = sidecarExecutable(resourcesPath, 'stashbase-extract');
+const daemonBin = findSidecarExecutable(resourcesPath, 'stashbase-daemon');
+const extractBin = findSidecarExecutable(resourcesPath, 'stashbase-extract');
+const requireExtract = args.includes('--require-extract')
+  || process.env.STASHBASE_REQUIRE_EXTRACT === '1'
+  || process.env.STASHBASE_BUILD_EXTRACT === '1';
 const rgPath = path.join(
   resourcesPath,
   'app.asar.unpacked',
@@ -273,16 +347,20 @@ assertFile(electronBin, 'packaged Electron binary');
 assertFile(appRoot, 'app.asar');
 assertFile(rgPath, 'packaged ripgrep binary');
 assertFile(daemonBin, 'packaged Python daemon sidecar');
-assertFile(extractBin, 'packaged Python extractor sidecar');
+if (requireExtract) assertFile(extractBin, 'packaged Python extractor sidecar');
 
 await smokeDaemon(daemonBin);
-const extractProbe = await runProcess(extractBin, [], { timeoutMs: 5_000 });
-if (extractProbe.code !== 2 || !/usage: stashbase-extract/.test(extractProbe.output)) {
-  throw new Error(`unexpected extractor probe result: exit=${extractProbe.code}\n${extractProbe.output.slice(-4_000)}`);
+if (fs.existsSync(extractBin)) {
+  const extractProbe = await runProcess(extractBin, [], { timeoutMs: 5_000 });
+  if (extractProbe.code !== 2 || !/usage: stashbase-extract/.test(extractProbe.output)) {
+    throw new Error(`unexpected extractor probe result: exit=${extractProbe.code}\n${extractProbe.output.slice(-4_000)}`);
+  }
+  console.log('[smoke] python extractor responded');
+  await smokePdfExtractor(extractBin);
+  await smokeOcrExtractor(extractBin);
+} else {
+  console.log('[smoke] optional Python PDF/OCR extractor not bundled; skipping extractor smoke');
 }
-console.log('[smoke] python extractor responded');
-await smokePdfExtractor(extractBin);
-await smokeOcrExtractor(extractBin);
 
 const port = Number(argValue('--port')) || 18_000 + Math.floor(Math.random() * 20_000);
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-smoke-home-'));
@@ -309,6 +387,13 @@ child.stderr.on('data', (chunk) => output.push(chunk.toString()));
 
 try {
   await waitForServer(port, child, output);
+  await assertPackagedHealth(port, {
+    app: 'stashbase',
+    ok: true,
+    protocolVersion: 1,
+    appRoot,
+    resourcesPath,
+  });
   console.log('[smoke] packaged server responded');
 } finally {
   if (child.exitCode == null) child.kill('SIGTERM');

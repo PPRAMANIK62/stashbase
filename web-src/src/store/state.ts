@@ -54,6 +54,9 @@ export interface OpenFile {
    *  string for binary files (PDF / image; the viewer loads them
    *  directly from `/asset/*`). */
   content: string;
+  /** Opaque server-side file version used to reject stale autosaves
+   *  when another window or external editor changed the same file. */
+  version?: string;
   /** `'kb'` for Knowledge base files (`<kbRoot>/STASHBASE.md`). Default
    *  (omitted) means a regular per-space file. */
   kind?: 'space' | 'kb';
@@ -363,6 +366,7 @@ export type Action =
   | { type: 'WELCOME_SHOW'; recent: State['recent']; homeDir?: string; error?: string | null }
   | { type: 'RECENT_LOADED'; recent: State['recent']; homeDir?: string }
   | { type: 'WELCOME_ERROR'; error: string }
+  | { type: 'SPACE_NAME'; space: string }
   | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; space: string }
   | { type: 'FILE_ORDER_LOADED'; order: Record<string, string[]> }
   /** Replace one folder's ordered list (optimistic update before the
@@ -379,6 +383,8 @@ export type Action =
    *  back/forward and in-place anchor nav rely on that. */
   | { type: 'FILE_OPEN'; body: FileBody; newTab?: boolean; preview?: boolean }
   | { type: 'FILE_PATCH'; patch: Partial<OpenFile> }
+  | { type: 'PRUNE_MISSING_FILE_TABS'; names: string[] }
+  | { type: 'REMAP_PATHS'; from: string; to: string; kind: 'file' | 'folder' }
   /** Push an empty tab and activate it (Obsidian-style `+`). The next
    *  single-click in the sidebar lands here. */
   | { type: 'NEW_TAB' }
@@ -478,7 +484,7 @@ export function getActiveTab(s: State): Tab | null {
 
 /** Space-relative paths that count as "stashing" — the work the user is
  *  waiting on before a dropped/imported file is fully searchable. Two
- *  sources, unioned: `pendingConversions` (slow OCR/transcode of PDF /
+ *  sources, unioned: `pendingConversions` (slow extraction/analysis of PDF /
  *  image / recording sources) and the not-yet-indexed subset of
  *  `pendingNames` (md / html / text / code — fast embedding, but a folder
  *  drop of hundreds still wants a count). Hidden paths are dropped: the
@@ -513,6 +519,62 @@ export function patchActiveTab(s: State, patch: Partial<Tab>): State {
   };
 }
 
+function remapOnePath(path: string, from: string, to: string, kind: 'file' | 'folder'): string {
+  if (!path) return path;
+  if (kind === 'file') return path === from ? to : path;
+  if (path === from) return to;
+  return path.startsWith(from + '/') ? to + path.slice(from.length) : path;
+}
+
+function splitPath(path: string): { parent: string; base: string } {
+  const i = path.lastIndexOf('/');
+  return i < 0 ? { parent: '', base: path } : { parent: path.slice(0, i), base: path.slice(i + 1) };
+}
+
+export function renamedFilePath(oldName: string, newBaseName: string): string {
+  const extMatch = oldName.match(/\.(md|markdown|html|htm|pdf|png|jpe?g|webp)$/i);
+  const ext = extMatch ? extMatch[0] : '';
+  const lastSlash = oldName.lastIndexOf('/');
+  const dir = lastSlash >= 0 ? oldName.slice(0, lastSlash + 1) : '';
+  return dir + newBaseName + ext;
+}
+
+function uniqueOrder(names: string[]): string[] {
+  return [...new Set(names)];
+}
+
+function remapFileOrder(
+  order: Record<string, string[]>,
+  from: string,
+  to: string,
+  kind: 'file' | 'folder',
+): Record<string, string[]> {
+  const next: Record<string, string[]> = {};
+  for (const [parent, names] of Object.entries(order)) {
+    const remappedParent = kind === 'folder' ? remapOnePath(parent, from, to, kind) : parent;
+    next[remappedParent] = uniqueOrder([...(next[remappedParent] ?? []), ...names]);
+  }
+
+  const oldPart = splitPath(from);
+  const newPart = splitPath(to);
+  const oldList = next[oldPart.parent] ?? [];
+  if (oldList.includes(oldPart.base)) {
+    if (oldPart.parent === newPart.parent) {
+      next[oldPart.parent] = uniqueOrder(oldList.map((name) => (
+        name === oldPart.base ? newPart.base : name
+      )));
+    } else {
+      next[oldPart.parent] = oldList.filter((name) => name !== oldPart.base);
+      next[newPart.parent] = uniqueOrder([...(next[newPart.parent] ?? []), newPart.base]);
+    }
+  }
+
+  for (const [parent, names] of Object.entries(next)) {
+    if (names.length === 0) delete next[parent];
+  }
+  return next;
+}
+
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
     case 'WELCOME_HIDE':
@@ -533,6 +595,8 @@ export function reducer(s: State, a: Action): State {
       };
     case 'WELCOME_ERROR':
       return { ...s, welcomeError: a.error };
+    case 'SPACE_NAME':
+      return s.space === a.space ? s : { ...s, space: a.space };
     case 'FILES_LOADED':
       return { ...s, files: a.files, folders: a.folders, space: a.space };
     case 'FILE_ORDER_LOADED':
@@ -548,6 +612,7 @@ export function reducer(s: State, a: Action): State {
         name: a.body.name,
         format: a.body.format,
         content: a.body.content,
+        version: a.body.version,
         // Carried through for kb-kind tabs (STASHBASE.md) so the save
         // path routes to the rules endpoint.
         ...((a.body as any).kind ? { kind: (a.body as any).kind } : {}),
@@ -590,6 +655,47 @@ export function reducer(s: State, a: Action): State {
       return {
         ...patchActiveTab(s, { file }),
         selectedPath: renamed ? a.patch.name! : s.selectedPath,
+      };
+    }
+    case 'PRUNE_MISSING_FILE_TABS': {
+      const names = new Set(a.names);
+      const stale = new Set(
+        s.tabs
+          .filter((t) => t.file && (t.file.kind ?? 'space') === 'space' && !t.editMode && !names.has(t.file.name))
+          .map((t) => t.id),
+      );
+      if (stale.size === 0) return s;
+
+      const nextTabs = s.tabs.filter((t) => !stale.has(t.id));
+      let activeId = s.activeTabId;
+      const activeWasStale = !!activeId && stale.has(activeId);
+      if (activeWasStale) {
+        const oldIdx = s.tabs.findIndex((t) => t.id === activeId);
+        activeId = nextTabs[oldIdx]?.id ?? nextTabs[oldIdx - 1]?.id ?? null;
+      }
+      const active = activeId ? nextTabs.find((t) => t.id === activeId) : null;
+      return {
+        ...s,
+        tabs: nextTabs,
+        activeTabId: activeId,
+        selectedPath: activeWasStale ? active?.file?.name ?? '' : s.selectedPath,
+      };
+    }
+    case 'REMAP_PATHS': {
+      const tabs = s.tabs.map((t) => {
+        if (!t.file || t.file.kind === 'kb') return t;
+        const nextName = remapOnePath(t.file.name, a.from, a.to, a.kind);
+        return nextName === t.file.name ? t : { ...t, file: { ...t.file, name: nextName } };
+      });
+      const expanded = new Set<string>();
+      for (const p of s.expanded) expanded.add(remapOnePath(p, a.from, a.to, a.kind));
+      return {
+        ...s,
+        tabs,
+        expanded,
+        fileOrder: remapFileOrder(s.fileOrder, a.from, a.to, a.kind),
+        activeFolder: remapOnePath(s.activeFolder, a.from, a.to, a.kind),
+        selectedPath: remapOnePath(s.selectedPath, a.from, a.to, a.kind),
       };
     }
     case 'NEW_TAB': {
@@ -734,7 +840,7 @@ export function reducer(s: State, a: Action): State {
     case 'FILTER':
       return { ...s, filterQuery: a.q };
     case 'SEARCH_START':
-      return { ...s, searching: true, searchError: null };
+      return { ...s, searching: true, searchHits: null, keywordResult: null, searchError: null };
     case 'SEARCH_HITS':
       return { ...s, searching: false, searchHits: a.hits, keywordResult: null, searchError: null };
     case 'SEARCH_KEYWORD':

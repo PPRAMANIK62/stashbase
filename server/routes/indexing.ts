@@ -8,21 +8,159 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { rgPath } from '@vscode/ripgrep';
 import { logger } from '../log.ts';
-import { fromKbRel, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, requireSpaceExistsByName, toKbRel } from '../space.ts';
+import { fromKbRelForSpace, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, requireSpaceExistsByName, validateSpaceRef } from '../space.ts';
 import { getApiKey } from '../app-config.ts';
 import { hasNoExtractableText } from '../indexable.ts';
-import { derivedPathsForPdf, displayPathForHit, maybeConvertPdf } from '../pdf.ts';
+import { derivedPathsForPdf, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
 import { getInFlightConversions } from '../conversion.ts';
 import { isImageFile } from '../format.ts';
-import { clearRecord, listFailed, readAll as readConversionStatus } from '../conversion-status.ts';
+import { clearRecord, isInFlight, listFailed, readAll as readConversionStatus } from '../conversion-status.ts';
 import { getFsChangeCounter } from '../watcher.ts';
 import { getDaemon } from '../mfs-daemon.ts';
 import { clearIndexWarning, clearSnapshotWarning, getIndexWarning, getSnapshotWarning, indexer, syncSpaceNow } from '../state.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { sendError } from '../http.ts';
+import {
+  remapKeywordFilesForDisplay,
+  remapSearchHitsForDisplay,
+  type KeywordHitFile,
+  type KeywordMatch,
+  type KeywordSearchResult,
+} from '../search-display.ts';
 
 const log = logger('routes/indexing');
+
+export interface SnapshotExportResult {
+  path: string;
+  vectors: number;
+  chunks: number;
+  version: number;
+  embedder: { provider: string; model: string | null; dim: number };
+}
+
+export interface SnapshotMeta {
+  version: number;
+  space: string;
+  embedder: { provider: string; model: string | null; dim: number };
+  vectors: number;
+  chunks: number;
+  exported_at: string;
+}
+
+function parseSpaceParam(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function requireRequestSpace(explicit?: string): { spaceName: string; spaceRoot: string } {
+  if (explicit) {
+    const bad = validateSpaceRef(explicit);
+    if (bad) {
+      const err = new Error(bad);
+      (err as any).status = 400;
+      throw err;
+    }
+    return { spaceName: explicit, spaceRoot: requireSpaceExistsByName(explicit) };
+  }
+  const spaceName = getCurrentSpaceName();
+  const spaceRoot = getCurrentSpace();
+  if (!spaceName || !spaceRoot) {
+    const err = new Error('no space open');
+    (err as any).status = 412;
+    (err as any).code = 'NO_SPACE';
+    throw err;
+  }
+  return { spaceName, spaceRoot };
+}
+
+function kbRelForAbs(absPath: string): string | null {
+  const rel = path.relative(getKbRoot(), absPath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return rel.split(path.sep).join('/');
+}
+
+export function conversionFailuresForSpace(space: string): Array<{ path: string; lastError: string; attempts: number }> {
+  const out: Array<{ path: string; lastError: string; attempts: number }> = [];
+  for (const { path: kbRel, entry } of listFailed()) {
+    const rel = fromKbRelForSpace(kbRel, space);
+    if (rel == null) continue;
+    if (!fs.existsSync(path.join(getKbRoot(), kbRel))) {
+      clearRecord(kbRel);
+      continue;
+    }
+    out.push({ path: rel, lastError: entry.lastError ?? '', attempts: entry.attempts });
+  }
+  return out;
+}
+
+export function retryConversionInSpace(relPath: string, spaceName?: string): void {
+  const rel = typeof relPath === 'string' ? relPath.trim() : '';
+  if (!rel) {
+    const err = new Error('path required');
+    (err as any).status = 400;
+    throw err;
+  }
+  const isPdf = /\.pdf$/i.test(rel);
+  const isImage = isImageFile(rel);
+  if (!isPdf && !isImage) {
+    const err = new Error('not a convertible file (expected PDF or image)');
+    (err as any).status = 400;
+    throw err;
+  }
+
+  let spaceRoot: string | null;
+  let resolvedSpace = spaceName?.trim();
+  if (resolvedSpace) {
+    const bad = validateSpaceRef(resolvedSpace);
+    if (bad) {
+      const err = new Error(bad);
+      (err as any).status = 400;
+      throw err;
+    }
+    spaceRoot = requireSpaceExistsByName(resolvedSpace);
+  } else {
+    spaceRoot = getCurrentSpace();
+    resolvedSpace = getCurrentSpaceName() ?? undefined;
+  }
+  if (!spaceRoot || !resolvedSpace) {
+    const err = new Error('no space open');
+    (err as any).status = 412;
+    (err as any).code = 'NO_SPACE';
+    throw err;
+  }
+
+  const abs = path.resolve(spaceRoot, rel);
+  const spaceRel = path.relative(spaceRoot, abs);
+  if (spaceRel.startsWith('..') || path.isAbsolute(spaceRel) || !isInsideKbRoot(abs)) {
+    const err = new Error('path escapes space');
+    (err as any).status = 400;
+    throw err;
+  }
+  const kbRel = kbRelForAbs(abs);
+  if (!kbRel) {
+    const err = new Error('path escapes KB root');
+    (err as any).status = 400;
+    throw err;
+  }
+  if (!fs.existsSync(abs)) {
+    clearRecord(kbRel);
+    const err = new Error('file not found');
+    (err as any).status = 404;
+    throw err;
+  }
+  if (isInFlight(kbRel)) return;
+
+  clearRecord(kbRel);
+  if (isPdf) {
+    const { notePath: staleNote, bundleDir: staleBundle } = derivedPathsForPdf(abs);
+    try { fs.rmSync(staleNote, { force: true }); } catch { /* no stale to remove */ }
+    try { fs.rmSync(staleBundle, { recursive: true, force: true }); } catch { /* no bundle */ }
+    maybeConvertPdf(abs);
+  } else {
+    try { fs.rmSync(derivedNotePathForImage(abs), { force: true }); } catch { /* no stale */ }
+    maybeConvertImage(abs);
+  }
+}
 
 export function mount(app: express.Express): void {
   // Trigger a space sync manually — useful after external edits / file
@@ -34,12 +172,19 @@ export function mount(app: express.Express): void {
     try {
       const explicit = typeof req.query.space === 'string' && req.query.space.trim()
         ? req.query.space.trim() : undefined;
+      if (explicit) {
+        const bad = validateSpaceRef(explicit);
+        if (bad) return res.status(400).json({ error: bad });
+      }
       const space = explicit ?? getCurrentSpaceName() ?? undefined;
       if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
       const result = await syncSpaceNow(requireSpaceExistsByName(space), { reason: 'manual sync' });
-      if (result.added.length || result.modified.length || result.removed.length || result.renamed.length) {
-        noteTreeChanged();
-      }
+      // `/api/sync` is also the explicit "something outside the app may
+      // have changed" reconcile hook. Bump even when the semantic diff is
+      // empty: no-key mode, non-indexable assets, empty dirs, and fast
+      // no-op syncs still need the renderer to refresh its visible tree
+      // and active read-only tab from disk.
+      if (!result.cancelled) noteTreeChanged();
       res.json(result);
     } catch (err: unknown) {
       sendError(res, err);
@@ -61,25 +206,31 @@ export function mount(app: express.Express): void {
           code: 'EMBEDDER_KEY_REQUIRED',
         });
       }
-      const space = getCurrentSpaceName();
-      const hits = await indexer.search(query, topK, space ?? undefined);
-      const spaceRoot = getCurrentSpace();
+      const explicit = typeof req.body?.space === 'string' && req.body.space.trim()
+        ? req.body.space.trim() : undefined;
+      if (explicit) {
+        const bad = validateSpaceRef(explicit);
+        if (bad) return res.status(400).json({ error: bad });
+      }
+      const space = explicit ?? getCurrentSpaceName();
+      const spaceRoot = explicit ? requireSpaceExistsByName(explicit) : getCurrentSpace();
+      if (!space || !spaceRoot) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
+      const hits = await indexer.search(query, topK, space);
       // Daemon hits arrive kbRoot-relative; translate fileName back to
       // space-relative for the sidebar (which only knows the current
       // space). Then `displayPathForHit` rewrites a derived note to its
       // source PDF/image (or drops an orphan) so a hidden `.md` never
       // shows — PdfPreview/ImagePreview pick up the chunk text from
       // pendingHighlight and jump to the matching passage.
-      const out = space
-        ? hits
-            .map((h) => {
-              const rel = fromKbRel(h.fileName);
-              if (rel == null) return null;
-              const display = spaceRoot ? displayPathForHit(rel, spaceRoot) : rel;
-              return display == null ? null : { ...h, fileName: display };
-            })
-            .filter((h): h is NonNullable<typeof h> => h !== null)
-        : hits;
+      const out = remapSearchHitsForDisplay(
+        hits
+          .map((h) => {
+            const rel = fromKbRelForSpace(h.fileName, space);
+            return rel == null ? null : { ...h, fileName: rel };
+          })
+          .filter((h): h is NonNullable<typeof h> => h !== null),
+        spaceRoot,
+      );
       res.json({ hits: out });
     } catch (err: unknown) {
       sendError(res, err);
@@ -98,20 +249,13 @@ export function mount(app: express.Express): void {
       if (!query) return res.status(400).json({ error: 'q required' });
       const explicit = typeof req.query.space === 'string' && req.query.space.trim()
         ? req.query.space.trim() : undefined;
+      if (explicit) {
+        const bad = validateSpaceRef(explicit);
+        if (bad) return res.status(400).json({ error: bad });
+      }
       const spaceName = explicit ?? getCurrentSpaceName() ?? undefined;
       if (!spaceName) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
-      const spaceDir = path.resolve(getKbRoot(), spaceName);
-      // Reject paths that escape kbRoot (e.g. ?space=../etc) and
-      // missing space dirs up front so ripgrep's ENOENT doesn't bubble
-      // out as a confusing 500.
-      const kbRoot = getKbRoot();
-      const rel = path.relative(kbRoot, spaceDir);
-      if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel) || rel.includes(path.sep)) {
-        return res.status(400).json({ error: 'invalid space' });
-      }
-      if (!fs.existsSync(spaceDir)) {
-        return res.status(404).json({ error: `space not found: ${spaceName}` });
-      }
+      const spaceDir = requireSpaceExistsByName(spaceName);
       const caseStrict = req.query.case_strict === '1' || req.query.case_strict === 'true';
       const wholeWord = req.query.whole_word === '1' || req.query.whole_word === 'true';
       const result = await runRipgrep(query, spaceDir, { caseStrict, wholeWord });
@@ -120,13 +264,8 @@ export function mount(app: express.Express): void {
       // remap-or-drop rule as the semantic routes so a hit's row points
       // at the openable source PDF / image (the matched OCR / converted
       // snippet stays) and an orphan note never surfaces.
-      const files = result.files
-        .map((f) => {
-          const display = displayPathForHit(f.path, spaceDir);
-          return display == null ? null : { ...f, path: display };
-        })
-        .filter((f): f is NonNullable<typeof f> => f !== null);
-      res.json({ query, space: spaceName, ...result, files });
+      const remapped = remapKeywordFilesForDisplay(result.files, spaceDir);
+      res.json({ query, space: spaceName, ...result, ...remapped });
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -138,12 +277,10 @@ export function mount(app: express.Express): void {
   // from Claude Code / `touch` that wouldn't move `pending`
   // (non-indexable files, empty dirs). Also surfaces in-flight PDF
   // conversions for the conversion indicator.
-  app.get('/api/index-status', async (_req, res) => {
+  app.get('/api/index-status', async (req, res) => {
     try {
-      const cur = getCurrentSpace();
-      if (!cur) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
-      const space = getCurrentSpaceName();
-      const status = await indexer.status(space ?? undefined);
+      const { spaceName: space, spaceRoot: cur } = requireRequestSpace(parseSpaceParam(req.query.space));
+      const status = await indexer.status(space);
       // Convert kbRoot-relative paths back to space-relative for the UI.
       // Admission filtering (extensions / excluded dirs / empty / over-
       // size) happens daemon-side with the rules Node pushes via
@@ -154,11 +291,11 @@ export function mount(app: express.Express): void {
       // whitespace-only notes) chunk to nothing, never enter Milvus, and
       // would pulse "indexing…" forever.
       const pending = status.pending
-        .map((p) => fromKbRel(p))
+        .map((p) => fromKbRelForSpace(p, space))
         .filter((p): p is string => p != null)
         .filter((p) => !hasNoExtractableText(path.join(cur, p)));
       const orphaned = status.orphaned
-        .map((p) => fromKbRel(p))
+        .map((p) => fromKbRelForSpace(p, space))
         .filter((p): p is string => p != null);
       // Conversion status: space-scoped. `pendingConversions` keeps the
       // old shape (in-flight only) for the sidebar "Converting…"
@@ -167,17 +304,13 @@ export function mount(app: express.Express): void {
       // (pdf_extract) and images (ocr_extract), which share this
       // status DB. `/api/conversion/retry` dispatches by extension, so a
       // failed image re-runs OCR (not pdf_extract).
-      const conversionFailures = listFailed()
-        .map(({ path: kbRel, entry }) => {
-          const rel = fromKbRel(kbRel);
-          return rel == null ? null : { path: rel, lastError: entry.lastError ?? '', attempts: entry.attempts };
-        })
-        .filter((x): x is { path: string; lastError: string; attempts: number } => x !== null);
+      const conversionFailures = space ? conversionFailuresForSpace(space) : [];
       res.json({
+        space,
         ...status,
         pending,
         orphaned,
-        pendingConversions: getInFlightConversions(),
+        pendingConversions: getInFlightConversions(space),
         conversionFailures,
         treeVersion: getFsChangeCounter(),
         // Surface any unresolved snapshot-import warning for the
@@ -195,15 +328,29 @@ export function mount(app: express.Express): void {
   // when the user clicks "Dismiss" on the banner. Idempotent — a
   // dismissed warning won't reappear unless a new import surfaces a
   // fresh skip count.
-  app.post('/api/snapshot-warning/dismiss', (_req, res) => {
-    const space = getCurrentSpaceName();
+  app.post('/api/snapshot-warning/dismiss', (req, res) => {
+    const explicit = typeof req.body?.space === 'string' && req.body.space.trim()
+      ? req.body.space.trim()
+      : undefined;
+    if (explicit) {
+      const bad = validateSpaceRef(explicit);
+      if (bad) return res.status(400).json({ error: bad });
+    }
+    const space = explicit ?? getCurrentSpaceName();
     if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
     clearSnapshotWarning(space);
     res.json({ ok: true });
   });
 
-  app.post('/api/index-warning/dismiss', (_req, res) => {
-    const space = getCurrentSpaceName();
+  app.post('/api/index-warning/dismiss', (req, res) => {
+    const explicit = typeof req.body?.space === 'string' && req.body.space.trim()
+      ? req.body.space.trim()
+      : undefined;
+    if (explicit) {
+      const bad = validateSpaceRef(explicit);
+      if (bad) return res.status(400).json({ error: bad });
+    }
+    const space = explicit ?? getCurrentSpaceName();
     if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
     clearIndexWarning(space);
     res.json({ ok: true });
@@ -229,42 +376,10 @@ export function mount(app: express.Express): void {
   app.post('/api/conversion/retry', (req, res) => {
     try {
       const rel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
-      if (!rel) return res.status(400).json({ error: 'path required' });
-      const isPdf = /\.pdf$/i.test(rel);
-      const isImage = isImageFile(rel);
-      if (!isPdf && !isImage) {
-        return res.status(400).json({ error: 'not a convertible file (expected PDF or image)' });
-      }
-      const space = getCurrentSpace();
-      if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
-      const abs = path.resolve(space, rel);
-      // The source can sit at any depth inside the space, so use the
-      // file-level kbRoot containment check, not the space-boundary
-      // `isUnderRoot` (which restricts to one-segment children). Also
-      // verify the path actually resolves inside the space (not "..").
-      const spaceRel = path.relative(space, abs);
-      if (spaceRel.startsWith('..') || path.isAbsolute(spaceRel) || !isInsideKbRoot(abs)) {
-        return res.status(400).json({ error: 'path escapes space' });
-      }
-      if (!fs.existsSync(abs)) return res.status(404).json({ error: 'file not found' });
-      // Clear by KB-relative form (matches what the converters write
-      // when they spin back up).
-      try {
-        clearRecord(toKbRel(rel));
-      } catch { /* no current space — guarded above, defensive */ }
-      // Remove the stale derived note(s) so the converter's "skip if
-      // note exists" guard doesn't immediately bail. The source binary
-      // (.pdf / image) stays in place — Retry only re-derives the
-      // dot-prefixed `.md` (+ PDF image bundle).
-      if (isPdf) {
-        const { notePath: staleNote, bundleDir: staleBundle } = derivedPathsForPdf(abs);
-        try { fs.rmSync(staleNote, { force: true }); } catch { /* no stale to remove */ }
-        try { fs.rmSync(staleBundle, { recursive: true, force: true }); } catch { /* no bundle */ }
-        maybeConvertPdf(abs);
-      } else {
-        try { fs.rmSync(derivedNotePathForImage(abs), { force: true }); } catch { /* no stale */ }
-        maybeConvertImage(abs);
-      }
+      const targetSpace = typeof req.body?.space === 'string' && req.body.space.trim()
+        ? req.body.space.trim()
+        : undefined;
+      retryConversionInSpace(rel, targetSpace);
       res.json({ ok: true });
     } catch (err: unknown) {
       sendError(res, err);
@@ -276,33 +391,17 @@ export function mount(app: express.Express): void {
   // dense_vector} cache) plus a `snapshot.meta.json` descriptor.
   // Downstream consumers prime the cache on bind and reuse vectors
   // during reindex (see `maybeImportSnapshot` in state.ts).
-  app.post('/api/space/export-snapshot', async (_req, res) => {
+  app.post('/api/space/export-snapshot', async (req, res) => {
     try {
-      const cur = getCurrentSpace();
-      if (!cur) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
-      const spaceName = getCurrentSpaceName();
-      if (!spaceName) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
+      const { spaceName, spaceRoot: cur } = requireRequestSpace(parseSpaceParam(req.body?.space));
       const outPath = path.join(cur, '.stashbase', 'snapshot.parquet');
-      const result = await getDaemon().call<{
-        path: string;
-        vectors: number;
-        chunks: number;
-        version: number;
-        embedder: { provider: string; model: string | null; dim: number };
-      }>('export_space', { space: spaceName, out_path: outPath });
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+      const result = await getDaemon().call<SnapshotExportResult>('export_space', { space: spaceName, out_path: outPath });
       // The Parquet holds only vectors; the human-readable descriptor
       // (embedder identity, counts, timestamp) lives in a sibling JSON so
       // import can validate the embedder without decoding any vectors.
       const metaPath = path.join(cur, '.stashbase', 'snapshot.meta.json');
-      const meta = {
-        version: result.version,
-        space: spaceName,
-        embedder: result.embedder,
-        vectors: result.vectors,
-        chunks: result.chunks,
-        exported_at: new Date().toISOString(),
-      };
-      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
+      writeSnapshotMetaOrCleanup(metaPath, outPath, makeSnapshotMeta(spaceName, result));
       log.info(
         `snapshot export ${spaceName}: ${result.vectors} vector(s) from ${result.chunks} chunk(s) → ${result.path}`,
       );
@@ -313,35 +412,42 @@ export function mount(app: express.Express): void {
   });
 }
 
+export function makeSnapshotMeta(spaceName: string, result: SnapshotExportResult, now = new Date()): SnapshotMeta {
+  return {
+    version: result.version,
+    space: spaceName,
+    embedder: result.embedder,
+    vectors: result.vectors,
+    chunks: result.chunks,
+    exported_at: now.toISOString(),
+  };
+}
+
+export function writeSnapshotMetaOrCleanup(metaPath: string, snapshotPath: string, meta: SnapshotMeta): void {
+  try {
+    writeTextAtomic(metaPath, JSON.stringify(meta, null, 2) + '\n');
+  } catch (err) {
+    try { fs.rmSync(snapshotPath, { force: true }); } catch { /* best effort */ }
+    throw err;
+  }
+}
+
+function writeTextAtomic(file: string, content: string): void {
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    fs.writeFileSync(tmp, content, 'utf8');
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+    throw err;
+  }
+}
+
 
 
 // ---------- keyword search (ripgrep) ----------
-
-interface KeywordMatch {
-  /** 1-based line number, matches what every editor jump expects. */
-  line: number;
-  /** Line text (right-trimmed); truncated to 240 chars so the sidebar
-   *  doesn't choke on minified HTML lines. */
-  text: string;
-  /** Byte ranges within `text` (post-truncation) the user query hit.
-   *  Renderer uses these to `<mark>` the exact spans. */
-  ranges: Array<[number, number]>;
-}
-
-interface KeywordHitFile {
-  /** Space-relative POSIX path. */
-  path: string;
-  matches: KeywordMatch[];
-  /** Match count for this file; may exceed `matches.length` when the
-   *  per-file cap kicked in. */
-  totalMatches: number;
-}
-
-interface KeywordSearchResult {
-  files: KeywordHitFile[];
-  totalMatches: number;
-  truncated: boolean;
-}
 
 const RG_PER_FILE_CAP = 50;
 const RG_TOTAL_CAP = 500;

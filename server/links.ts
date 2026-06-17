@@ -68,6 +68,13 @@ export interface CascadeResult {
   failed: Array<{ name: string; error: string }>;
 }
 
+export interface AppliedRenamePlan extends CascadeResult {
+  /** Restore every file that was rewritten by this application pass.
+   *  Used when a later index step fails and the disk rename is about to
+   *  roll back, so link rewrites don't point at a reverted path. */
+  rollback: () => void;
+}
+
 export interface PlanEntry {
   /** Path BEFORE the rename. Used to read the source from disk. */
   fromName: string;
@@ -260,6 +267,45 @@ export function planRenameLinks(renames: RenameEntry[]): PlanEntry[] {
     out.push({ fromName, toName, newContent: next, changes });
   }
   return out;
+}
+
+/** Apply a side-effect-free preview plan to the current POST-rename disk
+ *  state. The returned rollback only undoes files this call successfully
+ *  rewrote; failed writes are reported and left for the caller to decide. */
+export function applyRenamePlan(plan: PlanEntry[]): AppliedRenamePlan {
+  const updated: Array<{ name: string; changes: number }> = [];
+  const failed: Array<{ name: string; error: string }> = [];
+  const originals: Array<{ name: string; content: string }> = [];
+
+  for (const p of plan) {
+    const original = readText(p.toName);
+    if (original == null) {
+      failed.push({ name: p.toName, error: 'read returned null' });
+      continue;
+    }
+    try {
+      saveText(p.toName, p.newContent);
+      originals.push({ name: p.toName, content: original });
+      updated.push({ name: p.toName, changes: p.changes });
+    } catch (err: unknown) {
+      failed.push({ name: p.toName, error: errorMessage(err) });
+    }
+  }
+
+  return {
+    updated,
+    failed,
+    rollback: () => {
+      for (let i = originals.length - 1; i >= 0; i--) {
+        const original = originals[i];
+        try {
+          saveText(original.name, original.content);
+        } catch (err: unknown) {
+          log.warn(`failed to roll back link rewrite in ${original.name}: ${errorMessage(err)}`);
+        }
+      }
+    },
+  };
 }
 
 /** Walk in POST-rename disk state and rewrite. Used after the disk

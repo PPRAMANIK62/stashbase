@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FilesViewIcon, RecordIcon, SearchIcon, SettingsIcon, StopIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { api } from '../api';
@@ -8,7 +8,7 @@ import { useHoverTip } from '../hooks/useHoverTip';
 
 interface CaptureBridge {
   /** Start screen recording → Gemini video understanding → note. */
-  startRecording?: () => void;
+  startRecording?: (context?: { space?: string; dir?: string }) => void;
   stopRecording?: () => void;
   onRecordingState?: (handler: (recording: boolean) => void) => (() => void);
 }
@@ -32,6 +32,8 @@ function captureBridge(): CaptureBridge | undefined {
  */
 export function ActivityBar() {
   const { state, dispatch, actions } = useApp();
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
 
   // Screen recording trigger (desktop app only). The button doubles as
   // the stop control while recording — main pushes the state so it stays
@@ -39,6 +41,7 @@ export function ActivityBar() {
   // macOS recording indicator).
   const [recording, setRecording] = useState(false);
   const [needGeminiKey, setNeedGeminiKey] = useState(false);
+  const [pendingRecordingContext, setPendingRecordingContext] = useState<{ space: string; dir: string } | null>(null);
   const isElectron = !!captureBridge();
   useEffect(() => captureBridge()?.onRecordingState?.(setRecording), []);
 
@@ -49,15 +52,32 @@ export function ActivityBar() {
   async function toggleRecording() {
     const bridge = captureBridge();
     if (recording) { bridge?.stopRecording?.(); return; }
+    if (state.welcomeVisible || !state.space) {
+      actions.toast('Open a space before starting a recording.', { level: 'warning' });
+      return;
+    }
+    const target = { space: state.space, dir: state.activeFolder };
     // Recording is Gemini-only (no local fallback) — check the key BEFORE
     // capture starts, so the user never loses a recording to a missing key.
     // No key → pop the add-key modal (mirrors the embedder gate) and start
     // recording once it's saved, rather than bouncing the user to Settings.
     try {
       const { hasKey } = await api.getGeminiKey();
-      if (!hasKey) { setNeedGeminiKey(true); return; }
+      if (!hasKey) {
+        if (stateRef.current.welcomeVisible || stateRef.current.space !== target.space) {
+          actions.toast('Recording was not started because the space changed.', { level: 'warning' });
+          return;
+        }
+        setPendingRecordingContext(target);
+        setNeedGeminiKey(true);
+        return;
+      }
     } catch { /* server unreachable — let the route's own guard handle it */ }
-    bridge?.startRecording?.();
+    if (stateRef.current.welcomeVisible || stateRef.current.space !== target.space) {
+      actions.toast('Recording was not started because the space changed.', { level: 'warning' });
+      return;
+    }
+    bridge?.startRecording?.(target);
   }
 
   /** VSCode rail semantics: clicking the *active* view toggles the
@@ -113,8 +133,21 @@ export function ActivityBar() {
       )}
       {needGeminiKey && (
         <RequireGeminiKeyModal
-          onSaved={() => { setNeedGeminiKey(false); captureBridge()?.startRecording?.(); }}
-          onLater={() => setNeedGeminiKey(false)}
+          onSaved={() => {
+            const target = pendingRecordingContext;
+            setNeedGeminiKey(false);
+            setPendingRecordingContext(null);
+            if (!target) return;
+            if (stateRef.current.welcomeVisible || stateRef.current.space !== target.space) {
+              actions.toast('Recording was not started because the space changed.', { level: 'warning' });
+              return;
+            }
+            captureBridge()?.startRecording?.(target);
+          }}
+          onLater={() => {
+            setNeedGeminiKey(false);
+            setPendingRecordingContext(null);
+          }}
         />
       )}
       {/* Settings pinned to the bottom of the rail, VSCode-style. The

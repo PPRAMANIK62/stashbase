@@ -41,6 +41,7 @@ export function useGlobalDragDrop(): boolean {
     function hideVeil() {
       dragDepth.current = 0;
       hotRef.current = false;
+      dropTargetFolder.current = '';
       setVeilHot(false);
       clearDropHighlights();
     }
@@ -73,7 +74,7 @@ export function useGlobalDragDrop(): boolean {
       if (hotRef.current) hideVeil();
     }
     function onDragOver(e: DragEvent) {
-      if (inChatPanel(e)) return; // panel handles its own dragover
+      if (inChatPanel(e)) { hideVeil(); return; } // panel handles its own dragover
       e.preventDefault();
       const tgt = e.target instanceof Element ? e.target : null;
       const folderEl = tgt?.closest('.tree-row.folder') as HTMLElement | null;
@@ -92,10 +93,8 @@ export function useGlobalDragDrop(): boolean {
     async function onDrop(e: DragEvent) {
       if (inChatPanel(e)) { hideVeil(); return; } // panel handles its own drop
       e.preventDefault();
-      hideVeil();
-
       const targetDir = dropTargetFolder.current;
-      dropTargetFolder.current = '';
+      hideVeil();
 
       const internal = e.dataTransfer?.getData(FILE_MIME);
       if (internal) {
@@ -122,8 +121,7 @@ export function useGlobalDragDrop(): boolean {
       hideVeil();
       const collected: { file: File; relPath: string }[] = [];
       for (const entry of entries) await walkEntry(entry, '', collected);
-      if (collected.length) await actions.upload(collected, dropTargetFolder.current);
-      dropTargetFolder.current = '';
+      if (collected.length) await actions.upload(collected, '');
     }
 
     window.addEventListener('dragenter', onDragEnter);
@@ -172,4 +170,3 @@ async function walkEntry(
     for (const child of batch) await walkEntry(child, dirPath, out);
   }
 }
-

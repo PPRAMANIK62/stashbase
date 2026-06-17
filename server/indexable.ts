@@ -42,6 +42,17 @@ export function isIndexExcludedDirName(name: string): boolean {
   return INDEX_EXCLUDED_DIRS.has(name);
 }
 
+export function isCloudPlaceholderName(name: string): boolean {
+  return name.toLowerCase().endsWith('.icloud');
+}
+
+export function pathHasCloudPlaceholder(relPath: string): boolean {
+  return relPath
+    .replace(/\\/g, '/')
+    .split('/')
+    .some((seg) => isCloudPlaceholderName(seg));
+}
+
 function dipsIntoIndexExcludedDir(relPath: string): boolean {
   return relPath
     .replace(/\\/g, '/')
@@ -59,6 +70,7 @@ const EXCLUDED_BASENAMES = new Set<string>([
 ]);
 
 export function shouldIndexFilePath(relPath: string): boolean {
+  if (pathHasCloudPlaceholder(relPath)) return false;
   if (!detectFormat(relPath)) return false;
   const base = relPath.replace(/\\/g, '/').split('/').pop() ?? '';
   if (EXCLUDED_BASENAMES.has(base)) return false;

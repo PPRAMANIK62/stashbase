@@ -1,12 +1,10 @@
 /**
- * OpenAI key entry modal. Validates against /v1/models before resolving
- * so a typo never lands in `~/.stashbase/config.json`. `mode='change'`
- * only swaps the title + button text; the validation + save path is
- * identical (the caller wires `onSaved` to either commitSwitch or
- * changeApiKey).
+ * OpenAI key entry modal. The caller persists through `/api/embedder/key`,
+ * which validates against /v1/models before writing config. `mode='change'`
+ * only swaps the title + button text.
  */
 import { useEffect, useRef, useState } from 'react';
-import { api, errorMessage } from '../../api';
+import { errorMessage } from '../../api';
 import { ModalShell } from '../ModalShell';
 
 export function KeyModal({
@@ -16,7 +14,7 @@ export function KeyModal({
 }: {
   mode?: 'enter' | 'change';
   onCancel: () => void;
-  onSaved: (key: string) => void;
+  onSaved: (key: string) => void | Promise<void>;
 }) {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
@@ -30,11 +28,10 @@ export function KeyModal({
     setBusy(true);
     setError(null);
     try {
-      // validateEmbedder throws ApiError on a bad key; resolves silently
-      // on success. The server-side check ran against /v1/models — at
-      // this point we know the key is valid, hand it to the caller.
-      await api.validateEmbedder(trimmed);
-      onSaved(trimmed);
+      // The caller saves via changeApiKey, whose server route validates
+      // before persisting; don't preflight here or successful saves pay
+      // for two OpenAI validation calls.
+      await onSaved(trimmed);
     } catch (err: unknown) {
       setError(errorMessage(err));
       setBusy(false);

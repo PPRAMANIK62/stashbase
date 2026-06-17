@@ -1,0 +1,10 @@
+# Optional local PDF/OCR extraction dependencies.
+#
+# Install only when building or developing the local extractor:
+#   python/.venv.nosync/bin/python -m pip install -r python/requirements-extract.txt
+#
+# These bring heavy transitive payloads (PyMuPDF resources, OpenCV,
+# ONNXRuntime and RapidOCR model data), so they are intentionally not part
+# of the default `pnpm setup:python` flow.
+pymupdf4llm>=0.0.17
+rapidocr-onnxruntime>=1.2.3

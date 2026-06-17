@@ -7,20 +7,46 @@ import express from 'express';
 import {
   createFolder,
   deleteFolder,
+  listIndexableTextFilesUnder,
   listFiles,
   readText,
   renameFolder,
   sanitizeFilename,
 } from '../files.ts';
-import { cascadeRenameLinks } from '../links.ts';
+import { applyRenamePlan, planRenameLinks } from '../links.ts';
 import { toKbRel } from '../space.ts';
 import { getApiKey } from '../app-config.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
 import { renameWithRollback } from '../rename-helpers.ts';
+import { noteTreeChanged } from '../watcher.ts';
+import { remapFileOrderPath, removeFileOrderPath } from '../file-order.ts';
+import { clearRecordsUnder, hasInFlightUnder } from '../conversion-status.ts';
 
 const log = logger('routes/folders');
+
+type InFlightFolderAction = 'rename' | 'delete';
+
+export interface InFlightFolderRouteError {
+  status: 409;
+  body: {
+    error: string;
+    code: 'CONVERSION_IN_FLIGHT';
+  };
+}
+
+export function inFlightFolderOperationError(p: string, action: InFlightFolderAction): InFlightFolderRouteError | null {
+  if (!hasInFlightUnder(toKbRel(p))) return null;
+  const actionText = action === 'rename' ? 'Rename it' : 'Delete it';
+  return {
+    status: 409,
+    body: {
+      error: `This folder contains files that are still processing. ${actionText} after processing finishes.`,
+      code: 'CONVERSION_IN_FLIGHT',
+    },
+  };
+}
 
 export function mount(app: express.Express): void {
   app.post('/api/folders', (req, res) => {
@@ -28,6 +54,7 @@ export function mount(app: express.Express): void {
     if (!requested) return res.status(400).json({ error: 'path required' });
     try {
       if (!createFolder(requested)) return res.status(409).json({ error: 'folder exists' });
+      noteTreeChanged();
       res.json({ path: requested });
     } catch (err: unknown) {
       sendError(res, err);
@@ -37,11 +64,20 @@ export function mount(app: express.Express): void {
   app.delete('/api/folders/*', (req, res) => {
     const p = (req.params as any)[0] as string;
     try {
+      const inFlightError = inFlightFolderOperationError(p, 'delete');
+      if (inFlightError) return res.status(inFlightError.status).json(inFlightError.body);
       // Recursive delete on disk — the route layer trusts the UI's
       // confirm prompt to be the guardrail against "oops, I just
       // wiped a populated folder". Index cleanup fires async so we
       // can respond fast (same fire-and-forget pattern as file delete).
       const removed = deleteFolder(p);
+      if (removed) {
+        noteTreeChanged();
+        try { removeFileOrderPath(p, 'folder'); }
+        catch (err: unknown) { log.warn(`file-order cleanup failed for ${p}: ${errorMessage(err)}`); }
+      }
+      try { clearRecordsUnder(toKbRel(p)); }
+      catch (err: unknown) { log.warn(`delete_prefix: conversion status cleanup failed for ${p}: ${errorMessage(err)}`); }
       res.json({ alreadyGone: !removed });
       indexer.deletePathPrefix(toKbRel(p)).catch((err) => {
         log.warn(`delete_prefix: index cleanup failed for ${p}: ${errorMessage(err)}`);
@@ -67,6 +103,10 @@ export function mount(app: express.Express): void {
     const parent = lastSlash >= 0 ? oldPath.slice(0, lastSlash + 1) : '';
     const newPath = sanitizeFilename(parent + requested);
     if (newPath === oldPath) return res.json({ path: oldPath });
+    const inFlightError = inFlightFolderOperationError(oldPath, 'rename');
+    if (inFlightError) return res.status(inFlightError.status).json(inFlightError.body);
+    const cascadeOn = req.body?.cascade !== false;
+    const linkPlan = cascadeOn ? planRenameLinks([{ kind: 'folder', old: oldPath, new: newPath }]) : [];
 
     await renameWithRollback({
       kind: 'folder',
@@ -76,41 +116,50 @@ export function mount(app: express.Express): void {
       doDisk: () => renameFolder(oldPath, newPath),
       undoDisk: () => renameFolder(newPath, oldPath),
       doIndex: async () => {
-        const cascadeOn = req.body?.cascade !== false;
-        const cascade = cascadeOn
-          ? cascadeRenameLinks([{ kind: 'folder', old: oldPath, new: newPath }])
-          : { updated: [], failed: [] };
+        const applied = cascadeOn ? applyRenamePlan(linkPlan) : null;
+        try {
+          if (applied?.failed.length) {
+            throw new Error(`failed to update links in ${applied.failed.map((f) => f.name).join(', ')}`);
+          }
 
-        if (!getApiKey()) {
-          log.info(`rename_folder: skipped index update for ${oldPath} -> ${newPath} because no OpenAI key is configured`);
-          return;
-        }
-        // Cascade BEFORE the index call so files whose links we rewrite
-        // are embedded with their fresh content — saves a second round of
-        // embed for everything inside the renamed folder.
-        // Re-collect bodies from the new locations (cascade may have
-        // rewritten some). renamePathPrefix's contract takes OLD-keyed
-        // entries, so we map new → old names.
-        const filesUnder = listFiles()
-          .filter((f) => f.name === newPath || f.name.startsWith(newPath + '/'))
-          .map((f) => ({
-            // Indexer's renamePathPrefix takes OLD-keyed paths, kbRoot-relative.
-            path: toKbRel(oldPath + f.name.slice(newPath.length)),
-            content: readText(f.name) ?? '',
-          }));
-        await indexer.renamePathPrefix(toKbRel(oldPath), toKbRel(newPath), filesUnder);
+          if (!getApiKey()) {
+            log.info(`rename_folder: skipped index update for ${oldPath} -> ${newPath} because no OpenAI key is configured`);
+            return;
+          }
+          // Cascade BEFORE the index call so files whose links we rewrite
+          // are embedded with their fresh content — saves a second round of
+          // embed for everything inside the renamed folder.
+          // Re-collect bodies from the new locations (cascade may have
+          // rewritten some). renamePathPrefix's contract takes OLD-keyed
+          // entries, so we map new → old names.
+          const filesUnder = listIndexableTextFilesUnder(newPath)
+            .map((f) => ({
+              // Indexer's renamePathPrefix takes OLD-keyed paths, kbRoot-relative.
+              path: toKbRel(oldPath + f.name.slice(newPath.length)),
+              content: f.content,
+            }));
+          await indexer.renamePathPrefix(toKbRel(oldPath), toKbRel(newPath), filesUnder);
 
-        // Files OUTSIDE the renamed folder that had links rewritten
-        // need a separate upsert — the prefix rename only touches rows
-        // under oldPath.
-        for (const u of cascade.updated) {
-          if (u.name === newPath || u.name.startsWith(newPath + '/')) continue;
-          const body = readText(u.name);
-          if (body == null) continue;
-          await indexer.upsertFile(toKbRel(u.name), body);
+          // Files OUTSIDE the renamed folder that had links rewritten
+          // need a separate upsert — the prefix rename only touches rows
+          // under oldPath.
+          for (const u of applied?.updated ?? []) {
+            if (u.name === newPath || u.name.startsWith(newPath + '/')) continue;
+            const body = readText(u.name);
+            if (body == null) continue;
+            await indexer.upsertFile(toKbRel(u.name), body);
+          }
+        } catch (err) {
+          applied?.rollback();
+          throw err;
         }
       },
-      okResponse: () => ({ path: newPath }),
+      okResponse: () => {
+        noteTreeChanged();
+        try { remapFileOrderPath(oldPath, newPath, 'folder'); }
+        catch (err: unknown) { log.warn(`file-order remap failed for ${oldPath} -> ${newPath}: ${errorMessage(err)}`); }
+        return { path: newPath };
+      },
     });
   });
 }

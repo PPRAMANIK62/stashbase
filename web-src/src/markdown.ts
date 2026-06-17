@@ -176,6 +176,10 @@ document.addEventListener("click", function(e) {
     var url = new URL(raw, document.baseURI);
     if (url.origin === location.origin && url.pathname.indexOf("/asset/") === 0) {
       var encoded = url.pathname.slice("/asset/".length);
+      if (encoded.indexOf("__window/") === 0) {
+        var windowSlash = encoded.indexOf("/", "__window/".length);
+        encoded = windowSlash >= 0 ? encoded.slice(windowSlash + 1) : "";
+      }
       var decoded;
       try {
         decoded = encoded.split("/").map(decodeURIComponent).join("/");

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { assetUrl } from '../api';
+import { versionedAssetUrl } from '../api';
 import { useApp, type MatchInfo } from '../store/AppContext';
 import { useIframeDropForward } from '../hooks/useIframeDropForward';
+import { isTrustedFrameSource } from '../lib/previewMessages';
 
 /**
  * Read-only HTML preview. Loads via `/asset/*` so the iframe's base
@@ -57,10 +58,7 @@ export function HtmlPreview({ name }: { name: string }) {
     }
     return (h >>> 0).toString(36);
   }, [content]);
-  // `assetUrl()` already carries a `?windowId=…` query — append the
-  // cache-bust with `&` so we don't end up with two `?` separators
-  // (the second would be swallowed into the value of `windowId`).
-  const src = `${assetUrl(name)}&v=${fingerprint}`;
+  const src = versionedAssetUrl(name, fingerprint);
 
   function postScroll() {
     if (!pendingAnchor) return;
@@ -136,6 +134,7 @@ export function HtmlPreview({ name }: { name: string }) {
     }
 
     function onMessage(e: MessageEvent) {
+      if (!isTrustedFrameSource(e.source, frameRef.current?.contentWindow ?? null)) return;
       const d = e.data;
       if (!d || typeof d !== 'object') return;
       if (d.type === 'stashbase-find-result' && typeof d.reqId === 'number') {

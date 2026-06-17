@@ -47,6 +47,7 @@ function clearQuarantine(extraCandidates = []) {
     'web',
     'python/stashbase_daemon.py',
     'python/requirements.txt',
+    'python/requirements-extract.txt',
     'python/sidecar.nosync',
     'package.json',
     'package-lock.json',
@@ -137,18 +138,32 @@ function sidecarCandidates(name) {
 function assertSidecarsForPlatform() {
   const daemon = sidecarCandidates('stashbase-daemon').find((candidate) => fs.existsSync(candidate));
   const extract = sidecarCandidates('stashbase-extract').find((candidate) => fs.existsSync(candidate));
-  if (daemon && extract) return;
+  const requireExtract = process.env.STASHBASE_REQUIRE_EXTRACT === '1' || process.env.STASHBASE_BUILD_EXTRACT === '1';
+  if (daemon && (extract || !requireExtract)) {
+    if (!extract) {
+      console.warn(
+        `[package] optional PDF/OCR extractor sidecar not found; packaged local PDF/OCR extraction will be disabled.\n` +
+          `          To include it, run with STASHBASE_BUILD_EXTRACT=1.`,
+      );
+    }
+    return;
+  }
 
   const expected = sidecarCandidates('stashbase-daemon')[0];
   const extractExpected = sidecarCandidates('stashbase-extract')[0];
   const hint = platform === 'win'
     ? 'Build the Windows Python sidecars on Windows before running `pnpm dist:win` from another OS.'
-    : 'Run `pnpm build:python-sidecar` before packaging.';
+    : requireExtract
+      ? 'Run `STASHBASE_BUILD_EXTRACT=1 pnpm build:python-sidecar` before packaging.'
+      : 'Run `pnpm build:python-sidecar` before packaging.';
+  const missing = [
+    daemon ? null : path.relative(root, expected),
+    requireExtract && !extract ? path.relative(root, extractExpected) : null,
+  ].filter(Boolean);
   throw new Error(
-    `${platform} packaging requires Python sidecars:\n` +
-      `  - ${path.relative(root, expected)}\n` +
-      `  - ${path.relative(root, extractExpected)}\n` +
-      `${hint}`,
+    `${platform} packaging requires missing Python sidecar${missing.length === 1 ? '' : 's'}:\n` +
+      missing.map((item) => `  - ${item}`).join('\n') +
+      `\n${hint}`,
   );
 }
 

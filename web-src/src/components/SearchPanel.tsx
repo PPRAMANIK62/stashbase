@@ -73,6 +73,7 @@ function SearchBox() {
       void actions.runSearch('');
       return;
     }
+    dispatch({ type: 'SEARCH_START' });
     debounce.current = setTimeout(() => { void actions.runSearch(value); }, 250);
   }
 
@@ -88,13 +89,23 @@ function SearchBox() {
   function toggleCaseStrict() {
     const next = !state.caseStrict;
     dispatch({ type: 'SEARCH_CASE_STRICT', strict: next });
-    if (state.filterQuery.trim()) void actions.runSearch(state.filterQuery);
+    if (state.filterQuery.trim()) {
+      void actions.runSearch(state.filterQuery, 'keyword', {
+        caseStrict: next,
+        wholeWord: state.wholeWord,
+      });
+    }
   }
 
   function toggleWholeWord() {
     const next = !state.wholeWord;
     dispatch({ type: 'SEARCH_WHOLE_WORD', on: next });
-    if (state.filterQuery.trim()) void actions.runSearch(state.filterQuery);
+    if (state.filterQuery.trim()) {
+      void actions.runSearch(state.filterQuery, 'keyword', {
+        caseStrict: state.caseStrict,
+        wholeWord: next,
+      });
+    }
   }
 
   const isKeyword = state.searchMode === 'keyword';

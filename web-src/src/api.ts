@@ -30,7 +30,7 @@ export interface FolderMeta {
 }
 
 export interface SpaceState {
-  current: string | null;
+  current: { path: string; name: string } | null;
   recent: { path: string; openedAt: string }[];
   homeDir?: string;
 }
@@ -78,6 +78,7 @@ export interface FileBody {
   name: string;
   format: FileFormat;
   content: string;
+  version?: string;
 }
 
 /** A local Claude Code session, as listed in the chat panel's History
@@ -100,6 +101,7 @@ export type SessionBlock =
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
 
 export interface IndexStatus {
+  space?: string;
   total: number;
   indexed: number;
   pendingCount: number;
@@ -258,9 +260,11 @@ export function errorMessage(err: unknown): string {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -300,6 +304,16 @@ async function send<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string
   return parseJsonOrThrow<T>(r);
 }
 
+async function head(path: string): Promise<void> {
+  const r = await fetch(path, { method: 'HEAD', headers: requestHeaders() });
+  if (!r.ok) {
+    const msg = r.status === 404 ? 'not found'
+      : r.status === 415 ? 'unsupported format'
+        : `HTTP ${r.status}`;
+    throw new ApiError(msg, r.status);
+  }
+}
+
 async function parseJsonOrThrow<T>(r: Response): Promise<T> {
   // Most error routes return `{ error: '…' }` so we surface that
   // message; raw status fallback covers the rest.
@@ -309,10 +323,14 @@ async function parseJsonOrThrow<T>(r: Response): Promise<T> {
     const msg = (payload && typeof payload === 'object' && 'error' in payload && typeof (payload as any).error === 'string')
       ? (payload as any).error as string
       : `HTTP ${r.status}`;
-    throw new ApiError(msg, r.status);
+    const code = payload && typeof payload === 'object' && typeof (payload as any).code === 'string'
+      ? (payload as any).code as string
+      : undefined;
+    throw new ApiError(msg, r.status, code);
   }
   if (payload && typeof payload === 'object' && 'error' in payload && (payload as any).error) {
-    throw new ApiError((payload as any).error as string, r.status);
+    const code = typeof (payload as any).code === 'string' ? (payload as any).code as string : undefined;
+    throw new ApiError((payload as any).error as string, r.status, code);
   }
   return payload as T;
 }
@@ -339,6 +357,7 @@ export const api = {
       create: opts?.create,
       exclusiveCreate: opts?.exclusiveCreate,
     }),
+  closeSpace: () => send<{ ok: boolean }>('DELETE', '/api/space'),
   /** Absolute path of the KB root. All spaces live under it as direct
    *  children; the renderer uses this to display the home-relative
    *  form (`~/Documents/StashBase`) in copy. */
@@ -382,9 +401,13 @@ export const api = {
     ),
   /** Read `<kbRoot>/STASHBASE.md` — the KB-level rules book. Powers the
    *  Knowledge base section's "STASHBASE.md" row. */
-  getKbRules: () => getJson<{ content: string }>('/api/kb/rules'),
-  putKbRules: (content: string) =>
-    send<Record<string, never>>('POST', '/api/kb/rules', { content }),
+  getKbRules: () => getJson<{ content: string; version?: string }>('/api/kb/rules'),
+  putKbRules: (content: string, baseVersion?: string) =>
+    send<{ ok: true; version?: string }>(
+      'POST',
+      '/api/kb/rules',
+      { content, ...(baseVersion !== undefined ? { baseVersion } : {}) },
+    ),
   /** Copy a local folder into kbRoot as a new space. `source` is an
    *  absolute path; the renderer obtains it from
    *  `window.electron.openFolderDialog` (Electron-only). `name`
@@ -415,10 +438,11 @@ export const api = {
 
   // Files / folders listing --------------------------------------
   listFiles: () => getJson<FilesPayload>('/api/files'),
+  statFile: (name: string) => head('/api/files/' + encodePath(name)),
 
   // CRUD ---------------------------------------------------------
   createNote: (content: string, dir: string) =>
-    send<{ name: string }>('POST', '/api/files', { content, dir }),
+    send<{ name: string; content: string; version?: string; indexWarning?: string }>('POST', '/api/files', { content, dir }),
   createFolder: (path: string) =>
     send<{ path: string }>('POST', '/api/folders', { path }),
   deleteFile: (name: string) =>
@@ -453,13 +477,18 @@ export const api = {
 
   // File body ----------------------------------------------------
   getFile: (name: string) => getJson<FileBody>('/api/files/' + encodePath(name)),
-  putFile: (name: string, content: string) =>
-    send<Record<string, never>>('PUT', '/api/files/' + encodePath(name), { content }),
+  putFile: (name: string, content: string, baseVersion?: string) =>
+    send<{ indexWarning?: string; version?: string }>(
+      'PUT',
+      '/api/files/' + encodePath(name),
+      { content, ...(baseVersion !== undefined ? { baseVersion } : {}) },
+    ),
 
   // Upload (FormData) -------------------------------------------
   upload: async (
     items: { file: File; relPath: string }[],
     dir = '',
+    space?: string,
   ): Promise<UploadResult> => {
     const fd = new FormData();
     for (const it of items) {
@@ -467,21 +496,23 @@ export const api = {
       fd.append('paths', it.relPath);
     }
     if (dir) fd.append('dir', dir);
+    if (space) fd.append('space', space);
     const r = await fetch('/api/upload', { method: 'POST', body: fd, headers: requestHeaders() });
     return parseJsonOrThrow<UploadResult>(r);
   },
 
-  /** Ingest a screen recording: the webm is OCR'd into a VISIBLE
-   *  `recording-<ts>.md` note and then discarded (not stored in the KB).
-   *  Returns the planned note path; OCR runs in the background and the
-   *  note appears via the "Converting…" banner → file watch. */
+  /** Ingest a screen recording: the webm is saved into the note's
+   *  `<stem>_files/` bundle, then Gemini writes/updates a visible
+   *  `recording-<ts>.md` note in the background. */
   recordVideo: async (
     file: File,
     dir = '',
+    space?: string,
   ): Promise<{ ok?: boolean; file?: string; error?: string }> => {
     const fd = new FormData();
     fd.append('file', file);
     if (dir) fd.append('dir', dir);
+    if (space) fd.append('space', space);
     const r = await fetch('/api/recording', { method: 'POST', body: fd, headers: requestHeaders() });
     return parseJsonOrThrow(r);
   },
@@ -499,9 +530,12 @@ export const api = {
   },
 
   // Sync / search / status --------------------------------------
-  sync: () => send<SyncResult>('POST', '/api/sync'),
-  search: (query: string, top_k = 8) =>
-    send<{ hits: SearchHit[] }>('POST', '/api/search', { query, top_k }),
+  sync: (space?: string) => send<SyncResult>(
+    'POST',
+    space ? `/api/sync?space=${encodeURIComponent(space)}` : '/api/sync',
+  ),
+  search: (query: string, top_k = 8, opts?: { space?: string }) =>
+    send<{ hits: SearchHit[] }>('POST', '/api/search', { query, top_k, space: opts?.space }),
   keywordSearch: (query: string, opts?: { caseStrict?: boolean; wholeWord?: boolean; space?: string }) => {
     const qs = new URLSearchParams({ q: query });
     if (opts?.caseStrict) qs.set('case_strict', '1');
@@ -512,18 +546,19 @@ export const api = {
     if (opts?.space) qs.set('space', opts.space);
     return getJson<KeywordSearchResult>(`/api/keyword-search?${qs.toString()}`);
   },
-  indexStatus: () => getJson<IndexStatus>('/api/index-status'),
-  dismissSnapshotWarning: () =>
-    send<{ ok: boolean }>('POST', '/api/snapshot-warning/dismiss'),
-  dismissIndexWarning: () =>
-    send<{ ok: boolean }>('POST', '/api/index-warning/dismiss'),
+  indexStatus: (space?: string) =>
+    getJson<IndexStatus>(space ? `/api/index-status?space=${encodeURIComponent(space)}` : '/api/index-status'),
+  dismissSnapshotWarning: (space?: string) =>
+    send<{ ok: boolean }>('POST', '/api/snapshot-warning/dismiss', { space }),
+  dismissIndexWarning: (space?: string) =>
+    send<{ ok: boolean }>('POST', '/api/index-warning/dismiss', { space }),
   /** Bake the current space's embeddings into a portable
    *  `.stashbase/snapshot.parquet` (+ `snapshot.meta.json`) so copying /
    *  git-cloning the space folder carries the vectors — the other end
    *  reuses them by `text_hash` instead of re-embedding. */
-  exportSnapshot: () =>
+  exportSnapshot: (space?: string) =>
     send<{ vectors: number; chunks: number; embedder: { provider: string; model: string | null; dim: number } }>(
-      'POST', '/api/space/export-snapshot',
+      'POST', '/api/space/export-snapshot', { space },
     ),
 
   /** Full per-file PDF conversion status, KB-wide, keyed by KB-relative
@@ -536,16 +571,11 @@ export const api = {
    *  (+ PDF bundle) if present, then re-fires the matching converter
    *  (pdf_extract / ocr_extract) in the background. Client observes the
    *  outcome via the next `/api/index-status` poll. */
-  retryConversion: (path: string) =>
-    send<{ ok: boolean }>('POST', '/api/conversion/retry', { path }),
+  retryConversion: (path: string, opts?: { space?: string }) =>
+    send<{ ok: boolean }>('POST', '/api/conversion/retry', { path, space: opts?.space }),
 
   // Embedder ----------------------------------------------------
   getEmbedder: () => getJson<EmbedderState>('/api/embedder'),
-  /** Validate an OpenAI key without saving. Used before storing a fresh
-   *  key so a bad one never lands in `~/.stashbase/config.json`. Throws
-   *  `ApiError` on invalid; resolves on valid. */
-  validateEmbedder: (openaiKey: string) =>
-    send<Record<string, never>>('POST', '/api/embedder/validate', { openaiKey }),
 
   // Agents (chat-panel CLIs) -----------------------------------
   // Server routes stay under `/api/terminal/*` for historical reasons;
@@ -584,9 +614,8 @@ export const api = {
   /** Rotate the global OpenAI key without touching the provider choice. */
   changeApiKey: (openaiKey: string) =>
     send<{ hasKey: true }>('PUT', '/api/embedder/key', { openaiKey }),
-  /** Clear the global OpenAI key. If the knowledge base is on OpenAI, embed /
-   *  search will fail until a key is added back or the provider is
-   *  switched to Local. */
+  /** Clear the global OpenAI key. Embedding and semantic search stay
+   *  disabled until a key is added back; keyword search is unaffected. */
   removeApiKey: () =>
     send<{ hasKey: false }>('DELETE', '/api/embedder/key'),
 
@@ -641,30 +670,36 @@ export async function setKbRootConfirming(
  *  references inside the page — `<img src="X_files/figure.png">` —
  *  resolve correctly). Caller passes a space-relative path.
  *
- *  The `?windowId=` query param mirrors the `x-stashbase-window-id`
- *  header that fetch-based calls carry — the browser can't add a
- *  custom header to `<img src>` or iframe loads, so the server's
- *  `withWindowContext` middleware also honours this query param.
- *  Without it, images would resolve against the process-wide default
- *  space in a multi-window session. */
+ *  The reserved `__window/<id>/` path prefix mirrors the
+ *  `x-stashbase-window-id` header that fetch-based calls carry — the
+ *  browser can't add a custom header to `<img src>` or iframe loads.
+ *  Without it, images would resolve against the default window's space
+ *  in a multi-window session. */
 export function assetUrl(name: string): string {
-  return '/asset/' + encodePath(name) + '?windowId=' + encodeURIComponent(getWindowId());
+  return assetWindowPrefix() + encodePath(name);
+}
+
+export function versionedAssetUrl(name: string, version: string): string {
+  const url = assetUrl(name);
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}v=${encodeURIComponent(version)}`;
 }
 
 /** Base URL for live HTML edit previews. The preview itself is a blob,
  *  but relative image/css/font URLs should still resolve next to the
  *  saved file in the current space.
  *
- *  KNOWN multi-window limitation: a `?windowId=` query on the `<base
- *  href>` does NOT propagate to relative `<img src="…">` URLs (per
- *  the URL spec, only the path of a base href is inherited), so we
- *  don't add one here. In multi-window sessions, images inside a
- *  markdown preview resolve against the process-wide default space.
- *  Fix requires either encoding windowId in the URL path or rewriting
- *  each relative URL during preview compilation. */
+ *  The window id lives in the path instead of a query string because
+ *  `<base href="?windowId=…">` does not propagate that query to relative
+ *  `<img>`, CSS, or font URLs. The server strips the reserved prefix
+ *  before resolving the actual space-relative asset path. */
 export function assetBaseUrl(name: string): string {
   const parts = name.split('/');
   parts.pop();
   const dir = parts.join('/');
-  return '/asset/' + (dir ? encodePath(dir) + '/' : '');
+  return assetWindowPrefix() + (dir ? encodePath(dir) + '/' : '');
+}
+
+function assetWindowPrefix(): string {
+  return '/asset/__window/' + encodeURIComponent(getWindowId()) + '/';
 }

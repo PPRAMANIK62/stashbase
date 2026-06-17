@@ -10,14 +10,38 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { errorMessage, logger } from '../log.ts';
-import { getKbRoot } from '../space.ts';
+import { getKbRoot, requireSpaceExistsByName } from '../space.ts';
 import { indexer, getSnapshotWarning } from '../state.ts';
-import { displayPathForHit } from '../pdf.ts';
-import { getKbInfo, getKbRules, setKbRules } from '../kb.ts';
+import { remapSearchHitsForDisplay } from '../search-display.ts';
+import { getKbInfo, getKbRules, kbRulesVersion, setKbRules } from '../kb.ts';
 import { sendError } from '../http.ts';
 import { getApiKey } from '../app-config.ts';
 
 const log = logger('routes/kb');
+
+export interface KbSearchScope {
+  space?: string;
+  pathPrefix?: string;
+}
+
+export function normalizeKbSearchScope(spaceRaw: unknown, pathPrefixRaw: unknown): KbSearchScope {
+  const space = typeof spaceRaw === 'string' && spaceRaw.trim() ? spaceRaw.trim() : undefined;
+  const pathPrefix = typeof pathPrefixRaw === 'string' && pathPrefixRaw.trim()
+    ? normalizeKbPathPrefix(pathPrefixRaw.trim())
+    : undefined;
+  if (space) requireSpaceExistsByName(space);
+  if (pathPrefix) {
+    const first = pathPrefix.split('/')[0];
+    requireSpaceExistsByName(first);
+  }
+  return { space, pathPrefix };
+}
+
+export function requireKbStatusSpace(spaceRaw: unknown): string | undefined {
+  const space = typeof spaceRaw === 'string' && spaceRaw.trim() ? spaceRaw.trim() : undefined;
+  if (space) requireSpaceExistsByName(space);
+  return space;
+}
 
 export function mount(app: express.Express): void {
   // Hybrid search over the whole KB (optional `space` / `path_prefix`
@@ -28,10 +52,7 @@ export function mount(app: express.Express): void {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
       const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
-      const space = typeof req.body?.space === 'string' && req.body.space.trim()
-        ? req.body.space.trim() : undefined;
-      const pathPrefix = typeof req.body?.path_prefix === 'string' && req.body.path_prefix.trim()
-        ? req.body.path_prefix.trim() : undefined;
+      const { space, pathPrefix } = normalizeKbSearchScope(req.body?.space, req.body?.path_prefix);
       if (!query) return res.status(400).json({ error: 'query required' });
       if (!getApiKey()) {
         return res.status(412).json({
@@ -39,13 +60,10 @@ export function mount(app: express.Express): void {
           code: 'EMBEDDER_KEY_REQUIRED',
         });
       }
-      const kbRoot = getKbRoot();
-      const hits = (await indexer.search(query, topK, space, pathPrefix))
-        .map((h) => {
-          const display = displayPathForHit(h.fileName, kbRoot);
-          return display == null ? null : { ...h, fileName: display };
-        })
-        .filter((h): h is NonNullable<typeof h> => h !== null);
+      const hits = remapSearchHitsForDisplay(
+        await indexer.search(query, topK, space, pathPrefix),
+        getKbRoot(),
+      );
       res.json({ hits });
     } catch (err: unknown) {
       sendError(res, err);
@@ -56,8 +74,7 @@ export function mount(app: express.Express): void {
   // MCP's `reindex` reports after a sweep.
   app.get('/api/kb/index-status', async (req, res) => {
     try {
-      const space = typeof req.query.space === 'string' && req.query.space.trim()
-        ? req.query.space.trim() : undefined;
+      const space = requireKbStatusSpace(req.query.space);
       const status = await indexer.status(space);
       // Recently-indexed slice: intersect the indexed file set with
       // their on-disk mtime, return top N. Helps an agent answer "what
@@ -102,19 +119,40 @@ export function mount(app: express.Express): void {
   // row in the Knowledge base section.
   app.get('/api/kb/rules', (_req, res) => {
     try {
-      res.json({ content: getKbRules() });
+      res.json({ content: getKbRules(), version: kbRulesVersion() ?? undefined });
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
 
   app.post('/api/kb/rules', (req, res) => {
-    const content = typeof req.body?.content === 'string' ? req.body.content : '';
+    if (typeof req.body?.content !== 'string') {
+      return res.status(400).json({ error: 'content (string) required' });
+    }
+    const content = req.body.content;
+    const baseVersion = typeof req.body?.baseVersion === 'string' ? req.body.baseVersion : undefined;
     try {
-      setKbRules(content);
-      res.json({ ok: true });
+      res.json({ ok: true, version: setKbRules(content, { baseVersion }) ?? undefined });
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
+}
+
+function normalizeKbPathPrefix(value: string): string {
+  if (value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) || value.includes('\\')) {
+    throw new Error('path_prefix must be kbRoot-relative POSIX path');
+  }
+  const norm = value.replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '');
+  if (!norm) throw new Error('path_prefix required');
+  if (/[\x00-\x1f'"]/.test(norm)) throw new Error('path_prefix contains invalid characters');
+  for (const seg of norm.split('/')) {
+    if (!seg || seg === '.' || seg === '..') throw new Error('path_prefix contains an invalid segment');
+  }
+  const abs = path.join(getKbRoot(), norm);
+  const rel = path.relative(getKbRoot(), abs);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('path_prefix escapes kb_root');
+  }
+  return norm;
 }

@@ -126,6 +126,18 @@ function toSpaceRelFailures(
   return failed.map((f) => ({ ...f, name: spaceRelOf(space, f.name) ?? f.name }));
 }
 
+async function deleteStaleRenameSource(
+  indexer: Indexer,
+  oldPath: string,
+  failed: { name: string; error: string }[],
+): Promise<void> {
+  try {
+    await indexer.deleteFile(oldPath);
+  } catch (err: unknown) {
+    failed.push({ name: oldPath, error: `stale rename cleanup failed: ${errorMessage(err)}` });
+  }
+}
+
 /** Full content-hash diff. `space` is the kbRoot-relative space name
  *  (e.g. `cs183b`) — any known space, not necessarily one open in a
  *  window. Returns space-relative paths so the manual sync UI can show
@@ -193,11 +205,13 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
       const tooLarge = indexableFileSizeError(path.join(getKbRoot(), r.new));
       if (tooLarge) {
         failed.push({ name: r.new, error: tooLarge });
+        await deleteStaleRenameSource(indexer, r.old, failed);
         continue;
       }
       const content = readTextAtKbRel(r.new);
       if (content == null) {
         failed.push({ name: r.new, error: 'read returned null on rename target' });
+        await deleteStaleRenameSource(indexer, r.old, failed);
         continue;
       }
       try {
@@ -205,6 +219,7 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
         renamedDone.push(r.new);
       } catch (err: any) {
         failed.push({ name: r.new, error: errorMessage(err) });
+        await deleteStaleRenameSource(indexer, r.old, failed);
       }
     }
   }

@@ -5,14 +5,14 @@
  * `RequireApiKeyModal` auto-pop on space load lives in
  * `EmbedderRequireKeyGate` so it fires whether or not Settings is open.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage, type EmbedderState } from '../../api';
 import { useApp } from '../../store/AppContext';
 import { KeyModal } from '../embedder/KeyModal';
 import { RemoveKeyModal } from '../embedder/RemoveKeyModal';
 
 export function EmbeddingPanel() {
-  const { state: appState, dispatch } = useApp();
+  const { state: appState, dispatch, actions } = useApp();
   const [state, setState] = useState<EmbedderState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadNonce, setLoadNonce] = useState(0);
@@ -23,6 +23,12 @@ export function EmbeddingPanel() {
   const [addKey, setAddKey] = useState('');
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,9 +47,11 @@ export function EmbeddingPanel() {
 
   async function onKeyChanged(key: string) {
     await api.changeApiKey(key);
+    if (!mountedRef.current) return;
     setKeyEditOpen(false);
     setState((s) => (s ? { ...s, hasKey: true } : s));
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
+    void actions.refreshIndexState();
   }
 
   async function addKeySubmit() {
@@ -52,25 +60,29 @@ export function EmbeddingPanel() {
     setAddBusy(true);
     setAddError(null);
     try {
-      // Validate against /v1/models before saving so a typo never lands
-      // in config (same guard the modal used).
-      await api.validateEmbedder(trimmed);
+      // changeApiKey validates server-side before persisting, so the
+      // success path only does one OpenAI round trip.
       await api.changeApiKey(trimmed);
+      if (!mountedRef.current) return;
       setAddKey('');
       setState((s) => (s ? { ...s, hasKey: true } : s));
       dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
+      void actions.refreshIndexState();
     } catch (err: unknown) {
+      if (!mountedRef.current) return;
       setAddError(errorMessage(err));
     } finally {
-      setAddBusy(false);
+      if (mountedRef.current) setAddBusy(false);
     }
   }
 
   async function onKeyRemoveConfirmed() {
     await api.removeApiKey();
+    if (!mountedRef.current) return;
     setKeyRemoveOpen(false);
     setState((s) => (s ? { ...s, hasKey: false } : s));
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: false });
+    void actions.refreshIndexState();
     if (appState.searchMode === 'semantic' && appState.filterQuery.trim()) {
       dispatch({
         type: 'SEARCH_ERROR',

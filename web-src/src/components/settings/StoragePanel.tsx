@@ -84,7 +84,7 @@ export function StoragePanel() {
   async function applySaved(path: string, warnings?: string[]) {
     setKbRoot(path);
     setSavedRoot(path);
-    actions.goHome();
+    await actions.goHome();
     setSaved(true);
     setNotice(warnings && warnings.length ? warnings.join(' ') : null);
     void actions.bootstrap().catch((err) => {
@@ -99,6 +99,10 @@ export function StoragePanel() {
     setError(null);
     setSaved(false);
     try {
+      if (!(await actions.flushSave())) {
+        setError('Current file could not be saved. Resolve the save error before changing the root folder.');
+        return;
+      }
       const r = await setKbRootConfirming(target, actions.confirm);
       if (r) await applySaved(r.path); // null → user declined the non-empty confirm
     } catch (err) {
@@ -155,6 +159,10 @@ export function StoragePanel() {
     setMigrationError(null);
     setSaved(false);
     try {
+      if (!(await actions.flushSave())) {
+        setMigrationError('Current file could not be saved. Resolve the save error before changing the root folder.');
+        return;
+      }
       const r = await api.setKbRoot(m.target, { migrate });
       setMigration(null);
       await applySaved(r.path, r.warnings);

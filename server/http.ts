@@ -27,6 +27,20 @@ export function sendError(res: express.Response, err: unknown): void {
     res.status(404).json({ error: 'space not found', code: 'SPACE_NOT_FOUND' });
     return;
   }
+  if (errorCode(err) === 'FILE_CHANGED') {
+    res.status(409).json({
+      error: errorMessage(err),
+      code: 'FILE_CHANGED',
+      currentVersion: (err as { currentVersion?: unknown }).currentVersion ?? null,
+    });
+    return;
+  }
+  const status = (err as { status?: unknown })?.status;
+  if (typeof status === 'number' && status >= 400 && status <= 599) {
+    const code = typeof (err as { code?: unknown }).code === 'string' ? (err as { code: string }).code : undefined;
+    res.status(status).json({ error: errorMessage(err), ...(code ? { code } : {}) });
+    return;
+  }
   res.status(500).json({ error: errorMessage(err) });
 }
 
@@ -44,15 +58,31 @@ export const requireSpace: express.RequestHandler = (_req, res, next) => {
 export const withWindowContext: express.RequestHandler = (req, _res, next) => {
   // The header is the primary channel — every fetch via `api.ts` sets
   // it. Browser-loaded URLs (`<img src="/asset/…">`, iframe src) can't
-  // attach custom headers, so we also honour a `?windowId=` query
-  // param. `api.assetUrl()` appends it so previews resolve against the
-  // current window's space instead of the process-wide default.
+  // attach custom headers, so assets carry either a legacy `?windowId=`
+  // query or the path form `/asset/__window/<id>/...`. The path form is
+  // required for iframe `<base href>` because relative image/css/font
+  // URLs inherit the base path, but not its query string.
   const header = req.header(WINDOW_ID_HEADER);
   const fromQuery = typeof req.query.windowId === 'string' ? req.query.windowId : undefined;
-  runWithWindowId(header ?? fromQuery, next);
+  const fromAssetPath = assetWindowIdFromPath(req.path);
+  runWithWindowId(header ?? fromQuery ?? fromAssetPath, next);
 };
 
+function assetWindowIdFromPath(reqPath: string): string | undefined {
+  const prefix = '/asset/__window/';
+  if (!reqPath.startsWith(prefix)) return undefined;
+  const rest = reqPath.slice(prefix.length);
+  const slash = rest.indexOf('/');
+  if (slash <= 0) return undefined;
+  try {
+    return decodeURIComponent(rest.slice(0, slash));
+  } catch {
+    return undefined;
+  }
+}
+
 export type OpenAIKeyCheck = { ok: true } | { ok: false; status: number; error: string };
+const OPENAI_KEY_CHECK_TIMEOUT_MS = 15_000;
 
 /** Probe an OpenAI key against `/v1/models` — cheapest unauth check
  *  (no embed credits consumed). Single source of truth so the validate
@@ -60,10 +90,14 @@ export type OpenAIKeyCheck = { ok: true } | { ok: false; status: number; error: 
  *  network / parsing behaviour. `status` carries the HTTP status the
  *  caller should respond with: 400 when OpenAI rejected the key, 502
  *  when we couldn't reach OpenAI at all. */
-export async function validateOpenAIKey(key: string): Promise<OpenAIKeyCheck> {
+export async function validateOpenAIKey(
+  key: string,
+  opts: { timeoutMs?: number } = {},
+): Promise<OpenAIKeyCheck> {
   try {
     const r = await fetch('https://api.openai.com/v1/models', {
       headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(opts.timeoutMs ?? OPENAI_KEY_CHECK_TIMEOUT_MS),
     });
     if (r.ok) return { ok: true };
     const detail = await r.text().catch(() => '');

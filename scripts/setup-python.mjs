@@ -8,6 +8,10 @@
  *    iCloud Drive from corrupting it when the repo is under ~/Documents).
  * 3. `pip install -r python/requirements.txt` into it.
  *
+ * Optional PDF/OCR extraction dependencies are intentionally split into
+ * `python/requirements-extract.txt`; install them only when developing or
+ * building the local extractor.
+ *
  * Fails loudly with an actionable message rather than letting the
  * embedding daemon crash later with "No module named 'mfs'".
  */
@@ -82,8 +86,8 @@ execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-r', REQS], { stdio: 'inheri
 const probeImports = `
 import sys
 try:
-    import mfs, openai, numpy, pymupdf4llm, rapidocr_onnxruntime
-    print(f'[setup:python] ok: mfs, openai ({openai.__version__}), numpy, pymupdf4llm, rapidocr_onnxruntime')
+    import mfs, openai, numpy
+    print(f'[setup:python] ok: mfs, openai ({openai.__version__}), numpy')
 except Exception as e:
     print(f'[setup:python] import probe failed: {e}', file=sys.stderr)
     sys.exit(1)

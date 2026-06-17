@@ -19,6 +19,7 @@
  */
 import {
   clearConversionStatus,
+  clearConversionStatusUnder,
   getConversionStatus,
   listConversionStatus,
   readConversionStatusMap,
@@ -49,6 +50,20 @@ export function markInFlight(kbRel: string): void {
   inFlight.add(kbRel);
 }
 
+export function isInFlight(kbRel: string): boolean {
+  return inFlight.has(kbRel);
+}
+
+export function hasInFlightUnder(kbRelPrefix: string): boolean {
+  const name = kbRelPrefix.replace(/\/+$/, '');
+  if (!name) return false;
+  const prefix = `${name}/`;
+  for (const path of inFlight) {
+    if (path === name || path.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
 /** Success: drop the in-flight marker and clear any stale failure row
  *  from a previous attempt. */
 export function markDone(kbRel: string): void {
@@ -64,6 +79,16 @@ export function markFailed(kbRel: string, errorMsg: string): void {
 export function clearRecord(kbRel: string): void {
   inFlight.delete(kbRel);
   clearConversionStatus(kbRel);
+}
+
+export function clearRecordsUnder(kbRelPrefix: string): void {
+  const name = kbRelPrefix.replace(/\/+$/, '');
+  if (!name) return;
+  const prefix = `${name}/`;
+  for (const path of [...inFlight]) {
+    if (path === name || path.startsWith(prefix)) inFlight.delete(path);
+  }
+  clearConversionStatusUnder(name);
 }
 
 export function listFailed(): Array<{ path: string; entry: ConversionStatusEntry }> {

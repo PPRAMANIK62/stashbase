@@ -70,6 +70,9 @@ test('copy preserves portable snapshots while skipping local stashbase state', (
   fs.writeFileSync(path.join(source, '.stashbase', 'config.json'), '{}');
   fs.writeFileSync(path.join(source, '.stashbase', 'state.db'), 'db');
   fs.writeFileSync(path.join(source, '.stashbase', 'state.db-wal'), 'wal');
+  fs.writeFileSync(path.join(source, '.stashbase', 'state.db-shm'), 'shm');
+  fs.writeFileSync(path.join(source, '.stashbase', 'pdf-status.json'), '{}');
+  fs.writeFileSync(path.join(source, '.stashbase', 'pdf-status.json.migrated'), '{}');
   fs.writeFileSync(path.join(source, '.stashbase', 'store', 'milvus.db'), 'milvus');
   fs.writeFileSync(path.join(source, '.stashbase', 'cache', 'tmp'), 'cache');
 
@@ -87,6 +90,9 @@ test('copy preserves portable snapshots while skipping local stashbase state', (
   assert.equal(fs.existsSync(path.join(stash, 'config.json')), false);
   assert.equal(fs.existsSync(path.join(stash, 'state.db')), false);
   assert.equal(fs.existsSync(path.join(stash, 'state.db-wal')), false);
+  assert.equal(fs.existsSync(path.join(stash, 'state.db-shm')), false);
+  assert.equal(fs.existsSync(path.join(stash, 'pdf-status.json')), false);
+  assert.equal(fs.existsSync(path.join(stash, 'pdf-status.json.migrated')), false);
   assert.equal(fs.existsSync(path.join(stash, 'store')), false);
   assert.equal(fs.existsSync(path.join(stash, 'cache')), false);
 });
@@ -131,6 +137,32 @@ test('preview skips import-excluded local stashbase state', () => {
 
   assert.equal(preview.entryCount, 3);
   assert.equal(preview.totalBytes, Buffer.byteLength('# hello\n') + Buffer.byteLength('snapshot'));
+});
+
+test('preview and import skip iCloud placeholder files', () => {
+  const kbRoot = tmpDir('kb');
+  const source = tmpDir('source');
+  fs.mkdirSync(path.join(source, 'nested'));
+  fs.writeFileSync(path.join(source, 'note.md'), '# hello\n');
+  fs.writeFileSync(path.join(source, '.remote.md.icloud'), 'placeholder');
+  fs.writeFileSync(path.join(source, 'nested', 'image.png.icloud'), 'placeholder');
+
+  const preview = previewFolderImport({ source, kbRoot, name: 'cloudy' });
+
+  assert.equal(preview.entryCount, 2);
+  assert.equal(preview.totalBytes, Buffer.byteLength('# hello\n'));
+
+  const result = importFolderAsSpace({
+    source,
+    kbRoot,
+    name: 'cloudy',
+    mode: 'copy',
+    confirmExisting: true,
+  });
+
+  assert.equal(fs.existsSync(path.join(result.path, 'note.md')), true);
+  assert.equal(fs.existsSync(path.join(result.path, '.remote.md.icloud')), false);
+  assert.equal(fs.existsSync(path.join(result.path, 'nested', 'image.png.icloud')), false);
 });
 
 test('move imports by copy-then-delete, preserving dereferenced content in the space', () => {

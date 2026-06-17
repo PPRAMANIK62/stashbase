@@ -24,9 +24,9 @@
  * heavier; ML-backed quality ceiling).
  */
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { isDerivedNoteName, matchDerivedNote } from './format.ts';
+import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
 import { extractorSpawn } from './python-host.ts';
 import { discoverNewSources, maybeConvert, type ConversionSpec } from './conversion.ts';
 
@@ -55,6 +55,12 @@ export function derivedPathsForPdf(pdfAbsPath: string): { notePath: string; bund
   };
 }
 
+function cleanupDerivedPdf(pdfAbsPath: string): void {
+  const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
+  rmSync(notePath, { force: true });
+  rmSync(bundleDir, { recursive: true, force: true });
+}
+
 /** Given a POSIX-relative path to a dot-prefixed app-derived note
  *  (`.paper.pdf.md` / `.shot.png.md`), return the relative path of its
  *  parent binary source (PDF / image) when that source exists on disk —
@@ -70,6 +76,28 @@ function originalForDerivedNote(noteRel: string, baseAbs: string): string | null
   const m = matchDerivedNote(noteRel);
   if (!m) return null;
   return existsSync(path.join(baseAbs, m.source)) ? m.source : null;
+}
+
+function originalForLegacyDerivedNote(noteRel: string, baseAbs: string): string | null {
+  const norm = noteRel.replace(/\\/g, '/');
+  const dir = path.posix.dirname(norm);
+  const base = path.posix.basename(norm);
+  const extAlt = NOTE_EXTS.join('|');
+  const m = base.match(new RegExp(`^\\.(.+)\\.(${extAlt})$`, 'i'));
+  if (!m) return null;
+  const stem = m[1];
+  // Current derived notes (`.paper.pdf.md`) are handled above. Treat
+  // extension-less legacy names (`.paper.md`) as derived only when a
+  // source with the same stem exists next to them; this keeps ordinary
+  // user-authored hidden notes visible unless they collide with a legacy
+  // converter artifact.
+  if (/\.(pdf|png|jpe?g|webp)$/i.test(stem)) return null;
+  for (const ext of ['pdf', 'png', 'jpg', 'jpeg', 'webp']) {
+    const sourceBase = `${stem}.${ext}`;
+    const source = dir === '.' ? sourceBase : `${dir}/${sourceBase}`;
+    if (existsSync(path.join(baseAbs, source))) return source;
+  }
+  return null;
 }
 
 /** The single remap-or-drop rule every search route applies to a hit's
@@ -88,6 +116,8 @@ function originalForDerivedNote(noteRel: string, baseAbs: string): string | null
 export function displayPathForHit(rel: string, baseAbs: string): string | null {
   const source = originalForDerivedNote(rel, baseAbs);
   if (source) return source;
+  const legacySource = originalForLegacyDerivedNote(rel, baseAbs);
+  if (legacySource) return legacySource;
   if (isDerivedNoteName(rel)) return null;
   return rel;
 }
@@ -125,6 +155,7 @@ const PDF_SPEC: ConversionSpec = {
   matches: (name) => /\.pdf$/i.test(name),
   derivedNote: (abs) => derivedPathsForPdf(abs).notePath,
   convert: convertPdf,
+  cleanupDerived: cleanupDerivedPdf,
 };
 
 /** Fire-and-forget convert used by the upload route. Skips if the note

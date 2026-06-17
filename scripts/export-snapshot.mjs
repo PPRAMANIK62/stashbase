@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Export the **currently open** space's chunk index to
- * `<space>/.stashbase/snapshot.parquet`. Used by starter-pack
+ * `<space>/.stashbase/snapshot.parquet` plus `snapshot.meta.json`. Used by starter-pack
  * maintainers to ship a pre-built index downstream — `git clone`-ing
  * the repo preserves the snapshot (see `pruneClonedStashbase` in
  * `server/routes/space.ts`), and the next user's app auto-imports it
@@ -34,8 +34,8 @@ try {
     console.log(`  ${p.provider} (dim=${p.dim}): ${p.chunks}`);
   }
   console.log('');
-  console.log('Commit `.stashbase/snapshot.parquet` to your repo so downstream');
-  console.log('clones get a pre-built index (auto-imported on first open).');
+  console.log('Commit `.stashbase/snapshot.parquet` and `.stashbase/snapshot.meta.json`');
+  console.log('to your repo so downstream clones get a reusable embedding cache.');
 } catch (err) {
   console.error(`couldn't reach ${base}/api/space/export-snapshot — is StashBase running?`);
   console.error(err.message ?? err);

@@ -89,6 +89,25 @@ function statIsFile(p: string): boolean {
   try { return fs.statSync(p).isFile(); } catch { return false; }
 }
 
+function sidecarExecutable(root: string, name: string, opts: { direct?: boolean } = {}): string {
+  const exe = process.platform === 'win32' ? `${name}.exe` : name;
+  return opts.direct
+    ? path.join(root, exe)
+    : path.join(root, name, exe);
+}
+
+function pythonCandidates(root: string): string[] {
+  return process.platform === 'win32'
+    ? [
+        path.join(root, 'Scripts', 'python.exe'),
+        path.join(root, 'bin', 'python'),
+      ]
+    : [
+        path.join(root, 'bin', 'python'),
+        path.join(root, 'Scripts', 'python.exe'),
+      ];
+}
+
 /** Spawn the server detached so it outlives this stdio host. Mirrors the
  *  env injection `electron/main.cjs:ensureServer` does for the GUI path:
  *  the packaged app has no Python interpreter, so the sidecar binaries
@@ -98,14 +117,18 @@ function spawnHeadlessServer(): void {
   const builtEntry = path.join(APP_ROOT, 'dist', 'server', 'index.mjs');
   const useBuilt = statIsFile(builtEntry);
 
+  const sidecarRoot = path.join(RESOURCES_ROOT, 'python', 'sidecar');
   const daemonBin = [
-    path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-daemon', 'stashbase-daemon'),
-    path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-daemon'),
+    sidecarExecutable(sidecarRoot, 'stashbase-daemon'),
+    sidecarExecutable(sidecarRoot, 'stashbase-daemon', { direct: true }),
   ].find(statIsFile);
-  const extractBin = path.join(RESOURCES_ROOT, 'python', 'sidecar', 'stashbase-extract', 'stashbase-extract');
+  const extractBin = [
+    sidecarExecutable(sidecarRoot, 'stashbase-extract'),
+    sidecarExecutable(sidecarRoot, 'stashbase-extract', { direct: true }),
+  ].find(statIsFile);
   const pythonBin = [
-    path.join(RESOURCES_ROOT, 'python', 'runtime', 'bin', 'python'),
-    path.join(RESOURCES_ROOT, 'python', '.venv', 'bin', 'python'),
+    ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')),
+    ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv')),
   ].find(statIsFile);
 
   const env: NodeJS.ProcessEnv = {
@@ -115,7 +138,7 @@ function spawnHeadlessServer(): void {
     STASHBASE_RESOURCES_PATH: RESOURCES_ROOT,
     ...(useBuilt ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     ...(daemonBin ? { STASHBASE_DAEMON_BIN: daemonBin } : {}),
-    ...(statIsFile(extractBin) ? { STASHBASE_EXTRACT_BIN: extractBin } : {}),
+    ...(extractBin ? { STASHBASE_EXTRACT_BIN: extractBin } : {}),
     ...(pythonBin ? { STASHBASE_PYTHON: pythonBin } : {}),
   };
   const [command, args] = useBuilt
@@ -131,6 +154,16 @@ function spawnHeadlessServer(): void {
     const logPath = path.join(os.homedir(), '.stashbase', 'headless-server.log');
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const fd = fs.openSync(logPath, 'w');
+    fs.writeSync(
+      fd,
+      `--- StashBase headless server launch ${new Date().toISOString()} (pid=${process.pid}, built=${useBuilt}) ---\n`,
+    );
+    fs.writeSync(fd, `server entry: ${useBuilt ? builtEntry : path.join(APP_ROOT, 'server', 'index.ts')}\n`);
+    fs.writeSync(fd, `cwd: ${cwd}\n`);
+    fs.writeSync(fd, `resources: ${RESOURCES_ROOT}\n`);
+    fs.writeSync(fd, `daemon: ${daemonBin || '(missing; using Python script fallback if available)'}\n`);
+    fs.writeSync(fd, `extractor: ${extractBin || '(missing; using Python script fallback if available)'}\n`);
+    fs.writeSync(fd, `python: ${pythonBin || '(missing)'}\n`);
     stdio = ['ignore', fd, fd];
   } catch { /* logging is best-effort */ }
 

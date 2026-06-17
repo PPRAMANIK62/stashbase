@@ -22,11 +22,14 @@ import {
 import {
   api,
   ApiError,
+  encodePath,
+  getWindowId,
   type SearchHit,
 } from '../api';
 import {
   getActiveTab,
   initialState,
+  renamedFilePath,
   reducer,
   type Action,
   type CascadeDecision,
@@ -89,7 +92,7 @@ export interface AppActions {
    *  Preferred over `openSpace(path)` for new UI flows now that
    *  spaces are flat. */
   openSpaceByName: (name: string, opts?: { create?: boolean; exclusiveCreate?: boolean }) => Promise<void>;
-  goHome: () => void;
+  goHome: () => Promise<boolean>;
 
   loadFiles: () => Promise<void>;
   refreshIndexState: () => Promise<void>;
@@ -190,12 +193,12 @@ export interface AppActions {
   deleteFolder: (path: string) => Promise<void>;
   renameFile: (oldName: string, newBaseName: string) => Promise<void>;
   renameFolder: (oldPath: string, newName: string) => Promise<void>;
-  moveFile: (oldPath: string, targetDir: string) => Promise<void>;
+  moveFile: (oldPath: string, targetDir: string) => Promise<boolean>;
   upload: (items: { file: File; relPath: string }[], dir: string) => Promise<boolean>;
-  recordVideo: (file: File, dir: string) => Promise<boolean>;
+  recordVideo: (file: File, dir: string, space?: string) => Promise<boolean>;
 
   scheduleSave: () => void;
-  flushSave: () => Promise<void>;
+  flushSave: () => Promise<boolean>;
 
   registerEditor: (h: EditorHandle | null) => void;
   /** Sidebar SearchBox registers its input element on mount so
@@ -325,6 +328,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   stateRef.current = state;
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveInFlight = useRef<Promise<boolean> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<EditorHandle | null>(null);
   // Sidebar's SearchBox registers its input here so `focusSearch` can
@@ -338,6 +342,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // remembers its own value; an older request's response is dropped
   // when it returns after a newer one has been issued.
   const searchGen = useRef(0);
+  // Same idea for manual sync: switching spaces cancels the renderer
+  // ownership of the old sync so its `finally` can't clear a newer
+  // space's spinner.
+  const syncGen = useRef(0);
+  // Opening spaces is multi-step (server bind → files/order load →
+  // landing file). A newer open/home action invalidates older finishers.
+  const openGen = useRef(0);
   // Last `treeVersion` we saw from `/api/index-status`. Any bump means
   // the watcher detected a disk change since last poll → refetch files.
   const lastTreeVersion = useRef<number>(-1);
@@ -476,31 +487,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [askCascade]);
 
-  const loadFiles = useCallback(async () => {
+  const loadFilesFromServer = useCallback(async (expectedSpace?: string) => {
+    const j = await api.listFiles();
+    const files = j.files ?? [];
+    if (expectedSpace !== undefined && stateRef.current.space !== expectedSpace) return null;
+    dispatch({
+      type: 'FILES_LOADED',
+      files,
+      folders: j.folders ?? [],
+      space: j.space ?? 'notes',
+    });
+    return files;
+  }, []);
+
+  const loadFiles = useCallback(async (expectedSpace?: string) => {
     try {
-      const j = await api.listFiles();
-      const files = j.files ?? [];
-      dispatch({
-        type: 'FILES_LOADED',
-        files,
-        folders: j.folders ?? [],
-        space: j.space ?? 'notes',
-      });
-      return files;
-    } catch {
-      dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: 'notes' });
+      return (await loadFilesFromServer(expectedSpace)) ?? [];
+    } catch (err: unknown) {
+      if (expectedSpace !== undefined && stateRef.current.space !== expectedSpace) return [];
+      const fallbackSpace = err instanceof ApiError && err.status === 412
+        ? ''
+        : stateRef.current.space;
+      dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: fallbackSpace });
       return [];
     }
-  }, []);
+  }, [loadFilesFromServer]);
 
   /** Fetch the per-space manual ordering map. Called alongside
    *  `loadFiles` on space switch and on bootstrap. Errors are
    *  swallowed — the tree falls back to default sort. */
-  const loadFileOrder = useCallback(async () => {
+  const loadFileOrder = useCallback(async (expectedSpace?: string) => {
     try {
       const order = await api.getFileOrder();
+      if (expectedSpace !== undefined && stateRef.current.space !== expectedSpace) return;
       dispatch({ type: 'FILE_ORDER_LOADED', order });
     } catch {
+      if (expectedSpace !== undefined && stateRef.current.space !== expectedSpace) return;
       dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
     }
   }, []);
@@ -526,17 +548,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const tab = getActiveTab(stateRef.current);
     if (!tab?.file) return;
     if (tab.editMode) return;
+    const spaceAtStart = stateRef.current.space;
     const name = tab.file.name;
     try {
-      const body = await api.getFile(name);
+      const body = tab.file.kind === 'kb'
+        ? await api.getKbRules().then((r) => ({ content: r.content, version: r.version }))
+        : await api.getFile(name);
       // The active tab may have been swapped (or the file renamed) in
       // the time it took to fetch — re-check before patching.
-      const stillActive = getActiveTab(stateRef.current)?.file?.name === name;
+      if (stateRef.current.space !== spaceAtStart) return;
+      const latestActive = getActiveTab(stateRef.current);
+      const stillActive = latestActive?.file?.name === name && latestActive.file.kind === tab.file.kind;
       if (!stillActive) return;
-      if (body.content === tab.file.content) return;
+      if (latestActive?.editMode) return;
+      if (body.content === latestActive.file.content) return;
       dispatch({
         type: 'FILE_PATCH',
-        patch: { content: body.content },
+        patch: { content: body.content, ...('version' in body ? { version: body.version } : {}) },
       });
     } catch {
       /* swallow — sidebar will reflect a delete on the next poll */
@@ -545,8 +573,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refreshIndexState = useCallback(async () => {
     let nextDelay = POLL_IDLE_MS;
+    const scheduleNextPoll = (delay: number) => {
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+      pollTimer.current = setTimeout(() => { void refreshIndexState(); }, delay);
+    };
+    const spaceAtStart = stateRef.current.space;
+    const openGenAtStart = openGen.current;
     try {
-      const s = await api.indexStatus();
+      const s = await api.indexStatus(spaceAtStart || undefined);
+      if (stateRef.current.space !== spaceAtStart) {
+        scheduleNextPoll(nextDelay);
+        return;
+      }
       const indexReady = s.indexReady !== false;
       const newPending = indexReady ? new Set(s.pending ?? []) : new Set<string>();
       let newConv = s.pendingConversions ?? [];
@@ -611,6 +649,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const treeChanged =
         lastTreeVersion.current >= 0 && newTreeVersion !== lastTreeVersion.current;
       lastTreeVersion.current = newTreeVersion;
+      if (s.space && s.space !== prev.space) dispatch({ type: 'SPACE_NAME', space: s.space });
       dispatch({ type: 'PENDING_NAMES', names: newPending });
       if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
       // Snapshot warning is sticky until the user dismisses it (or a
@@ -629,7 +668,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!shallowEqualConversionFailures(prev.conversionFailures, incomingFailures)) {
         dispatch({ type: 'CONVERSION_FAILURES', failures: incomingFailures });
       }
-      if (pendingChanged || convChanged || treeChanged) void loadFiles();
+      if (pendingChanged || convChanged || treeChanged) {
+        if (treeChanged) {
+          const expectedSpace = prev.space;
+          void loadFilesFromServer(expectedSpace)
+            .then((files) => {
+              if (!files) return;
+              dispatch({ type: 'PRUNE_MISSING_FILE_TABS', names: files.map((f) => f.name) });
+            })
+            .catch((err) => {
+              console.warn('[files] refresh after tree change failed:', err);
+            });
+        } else {
+          void loadFiles();
+        }
+      }
       // Tree changed = someone else wrote to disk (Claude Code in the
       // chat panel is the common case). Re-read the active tab's
       // body so the preview / read-only editor doesn't keep showing
@@ -645,21 +698,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const busy = !indexReady || !s.upToDate || newConv.length > 0;
       nextDelay = busy ? POLL_PENDING_MS : POLL_IDLE_MS;
     } catch (err) {
+      if (stateRef.current.space !== spaceAtStart) {
+        scheduleNextPoll(nextDelay);
+        return;
+      }
       if (err instanceof ApiError && err.status === 412) {
+        if (spaceAtStart && openGenAtStart === openGen.current) {
+          try {
+            // Server restart / dev tsx reload drops the in-memory
+            // window → space binding while the renderer still has the
+            // right space and possibly an unsaved editor buffer. Rebind
+            // first; only fall back to Welcome if the space is truly gone.
+            const opened = await api.openSpaceByName(spaceAtStart);
+            if (stateRef.current.space === spaceAtStart && opened.current?.name) {
+              lastTreeVersion.current = -1;
+              void loadFilesFromServer(spaceAtStart);
+              scheduleNextPoll(POLL_PENDING_MS);
+              return;
+            }
+          } catch {
+            // Space was deleted/renamed, or the server is still not ready.
+            // Drop through to the hard reset below.
+          }
+        }
         // No space open (e.g. just went home). Clear every space-scoped
         // indicator so a stale banner from the previous space doesn't
         // bleed into the welcome / next-space view.
+        syncGen.current += 1;
+        openGen.current += 1;
         dispatch({ type: 'PENDING_NAMES', names: new Set() });
         dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
         dispatch({ type: 'SNAPSHOT_WARNING', warning: null });
         dispatch({ type: 'INDEX_WARNING', warning: null });
         dispatch({ type: 'CONVERSION_FAILURES', failures: [] });
+        dispatch({ type: 'SYNC_RUNNING', running: false });
         lastTreeVersion.current = -1;
+        if (stateRef.current.space) {
+          // Another window may have deleted/closed the space. The server
+          // has already cleared this window's current-space context; make
+          // the renderer match instead of leaving a stale tree open.
+          dispatch({ type: 'TABS_RESET' });
+          dispatch({ type: 'CHAT_TABS_RESET' });
+          dispatch({ type: 'FILTER', q: '' });
+          dispatch({ type: 'SEARCH_CLEAR' });
+          dispatch({ type: 'ACTIVE_FOLDER', path: '' });
+          dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
+          dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: '' });
+          dispatch({ type: 'WELCOME_SHOW', recent: [] });
+          void api.getSpace()
+            .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
+            .catch(() => { /* welcome can stay empty until bootstrap/focus */ });
+        }
       }
     }
-    if (pollTimer.current) clearTimeout(pollTimer.current);
-    pollTimer.current = setTimeout(() => { void refreshIndexState(); }, nextDelay);
-  }, [loadFiles, refreshActiveTabFromDisk]);
+    scheduleNextPoll(nextDelay);
+  }, [loadFiles, loadFilesFromServer, refreshActiveTabFromDisk]);
 
   /** Fire whichever search the current `searchMode` selects and dispatch
    *  the result. Empty query clears (back to tree view). Bails out on
@@ -684,6 +777,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     const mode = modeOverride ?? stateRef.current.searchMode;
+    const spaceAtStart = stateRef.current.space;
+    const isStaleSearch = () => (
+      myGen !== searchGen.current ||
+      stateRef.current.space !== spaceAtStart ||
+      stateRef.current.filterQuery.trim() !== q
+    );
     dispatch({ type: 'SEARCH_START' });
     try {
       if (mode === 'keyword') {
@@ -696,13 +795,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const result = await api.keywordSearch(q, {
           caseStrict: opts?.caseStrict ?? s.caseStrict,
           wholeWord: opts?.wholeWord ?? s.wholeWord,
-          space: s.space || undefined,
+          space: spaceAtStart || undefined,
         });
-        if (myGen !== searchGen.current) return;
+        if (isStaleSearch()) return;
         dispatch({ type: 'SEARCH_KEYWORD', result });
       } else {
         const embedder = await api.getEmbedder();
-        if (myGen !== searchGen.current) return;
+        if (isStaleSearch()) return;
         dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.hasKey });
         if (!embedder.hasKey) {
           dispatch({
@@ -711,12 +810,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
-        const { hits } = await api.search(q, SEMANTIC_SEARCH_CANDIDATES);
-        if (myGen !== searchGen.current) return;
+        const { hits } = await api.search(q, SEMANTIC_SEARCH_CANDIDATES, {
+          space: spaceAtStart || undefined,
+        });
+        if (isStaleSearch()) return;
         dispatch({ type: 'SEARCH_HITS', hits: filterGuiSemanticHits(hits) });
       }
     } catch (err) {
-      if (myGen !== searchGen.current) return;
+      if (isStaleSearch()) return;
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[search:${mode}] failed:`, msg);
       // 412 = no space open: just clear (there's nothing to search), no
@@ -731,34 +832,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const flushSave = useCallback(async () => {
+    const inFlight = saveInFlight.current;
+    if (inFlight) {
+      const ok = await inFlight;
+      if (!ok) return false;
+    }
+
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    const cur = getActiveTab(stateRef.current)?.file ?? null;
-    const handle = editorRef.current;
-    if (!cur || !handle) return;
-    const content = handle.getValue();
-    if (content === cur.content) {
-      dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
-      return;
-    }
-    dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
-    try {
-      if (cur.kind === 'kb') {
-        if (cur.name === 'STASHBASE.md') await api.putKbRules(content);
-        else throw new Error(`unknown KB file: ${cur.name}`);
-      } else {
-        await api.putFile(cur.name, content);
+
+    const run = (async () => {
+      const tabAtStart = getActiveTab(stateRef.current);
+      const cur = tabAtStart?.file ?? null;
+      const tabId = tabAtStart?.id ?? null;
+      const handle = editorRef.current;
+      if (!cur || !handle) return true;
+      const content = handle.getValue();
+      if (content === cur.content) {
+        dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
+        return true;
       }
-      dispatch({ type: 'FILE_PATCH', patch: { content } });
-      dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
-      if (cur.kind !== 'kb') void loadFiles();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + msg, cls: 'error' } });
+      dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
+      try {
+        let savedVersion = cur.version;
+        if (cur.kind === 'kb') {
+          if (cur.name === 'STASHBASE.md') {
+            const result = await api.putKbRules(content, cur.version);
+            savedVersion = result.version;
+          }
+          else throw new Error(`unknown KB file: ${cur.name}`);
+        } else {
+          const result = await api.putFile(cur.name, content, cur.version);
+          if (result.indexWarning) toast(result.indexWarning, { level: 'warning' });
+          savedVersion = result.version;
+        }
+        const latestTab = getActiveTab(stateRef.current);
+        const sameTab =
+          latestTab?.id === tabId &&
+          latestTab.file?.name === cur.name &&
+          latestTab.file.kind === cur.kind;
+        if (!sameTab) return true;
+
+        const liveValue = editorRef.current?.getValue();
+        dispatch({ type: 'FILE_PATCH', patch: { content, version: savedVersion } });
+        if (liveValue === content) {
+          dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
+        } else {
+          dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
+          if (!saveTimer.current) {
+            saveTimer.current = setTimeout(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
+          }
+        }
+        if (cur.kind !== 'kb') void loadFiles();
+        return true;
+      } catch (e: unknown) {
+        const latestTab = getActiveTab(stateRef.current);
+        const sameTab =
+          latestTab?.id === tabId &&
+          latestTab.file?.name === cur.name &&
+          latestTab.file.kind === cur.kind;
+        if (!sameTab) return false;
+        const msg = e instanceof ApiError && e.status === 409
+          ? 'This file changed on disk. Copy your edits, reload the file, then apply them again.'
+          : e instanceof Error ? e.message : String(e);
+        dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + msg, cls: 'error' } });
+        if (e instanceof ApiError && e.status === 409) {
+          toast('Save blocked because this file changed on disk.', { level: 'error' });
+          void loadFiles();
+        }
+        return false;
+      }
+    })();
+
+    saveInFlight.current = run;
+    try {
+      return await run;
+    } finally {
+      if (saveInFlight.current === run) saveInFlight.current = null;
     }
-  }, [loadFiles]);
+  }, [loadFiles, toast]);
 
   const scheduleSave = useCallback(() => {
     dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
@@ -780,31 +934,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
       anchor?: string;
       /** Open an empty placeholder when the file isn't on disk yet
        *  (instead of erroring) — used to pop a recording's tab the
-       *  instant it's stopped, before its OCR note has been written. */
+       *  instant it's stopped, before its analysis note has been written. */
       placeholderIfMissing?: boolean;
+      expectedSpace?: string;
     },
   ) => {
+    if (opts.expectedSpace && stateRef.current.space !== opts.expectedSpace) return;
     const cur = getActiveTab(stateRef.current)?.file ?? null;
     if (editorRef.current && cur && cur.name !== name && !opts.newTab) {
-      await flushSave();
+      if (!(await flushSave())) return;
     }
+    if (opts.expectedSpace && stateRef.current.space !== opts.expectedSpace) return;
     let body;
     if (/\.pdf$/i.test(name)) {
       // PDFs aren't loaded as text — PdfPreview pulls the binary from
       // `/asset/*` directly. We synthesize a FileBody so the rest of
       // the tab / nav / save-status machinery treats it like any
       // other open file.
+      try {
+        await api.statFile(name);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        dispatch({ type: 'SAVE_STATUS', status: { text: msg, cls: 'error' } });
+        return;
+      }
       body = { name, format: 'pdf' as const, content: '' };
     } else if (/\.(png|jpe?g|webp)$/i.test(name)) {
       // Images, same story as PDFs — ImagePreview loads the binary from
       // `/asset/*`. The searchable text lives in the hidden `.<stem>.md`
       // OCR note, never opened directly.
+      try {
+        await api.statFile(name);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        dispatch({ type: 'SAVE_STATUS', status: { text: msg, cls: 'error' } });
+        return;
+      }
       body = { name, format: 'image' as const, content: '' };
     } else {
       try {
         body = await api.getFile(name);
       } catch (e: unknown) {
-        // A recording note doesn't exist on disk until its OCR finishes.
+        // A recording note may not exist on disk until its Gemini analysis finishes.
         // For such a placeholder open, synthesize an empty body so the
         // tab pops immediately; the content fills in once the note lands
         // (see `openRecordingPlaceholder`).
@@ -817,6 +988,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
     }
+    if (opts.expectedSpace && stateRef.current.space !== opts.expectedSpace) return;
     // "Implicit new tab" — first open in a fresh session (no active tab
     // yet) goes through the new-tab path too.
     const noActiveTab = stateRef.current.activeTabId == null || !getActiveTab(stateRef.current);
@@ -838,10 +1010,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *       content (the previewed file gets "kicked out" — by design).
    *    4. Otherwise → create a fresh preview tab. */
   const selectFile = useCallback(async (name: string) => {
+    const expectedSpace = stateRef.current.space;
     // Flush any pending edit FIRST, then read state — so the tab
     // decisions below act on the post-flush snapshot, not one a
     // concurrent poll / loadFiles could invalidate across the await.
-    if (editorRef.current) await flushSave();
+    if (editorRef.current && !(await flushSave())) return;
+    if (stateRef.current.space !== expectedSpace) return;
     const s = stateRef.current;
     const existing = s.tabs.find((t) => isSpaceFileTab(t, name));
     if (existing) {
@@ -850,7 +1024,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     const active = getActiveTab(s);
     if (active && !active.file) {
-      await loadFile(name, { preview: true });
+      await loadFile(name, { preview: true, expectedSpace });
       return;
     }
     const previewTab = s.tabs.find((t) => t.preview);
@@ -858,10 +1032,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (s.activeTabId !== previewTab.id) dispatch({ type: 'ACTIVATE_TAB', id: previewTab.id });
       // FILE_OPEN with no `preview` field preserves the tab's existing
       // preview=true status, so the slot stays the "preview slot".
-      await loadFile(name, {});
+      await loadFile(name, { expectedSpace });
       return;
     }
-    await loadFile(name, { newTab: true, preview: true });
+    await loadFile(name, { newTab: true, preview: true, expectedSpace });
   }, [flushSave, loadFile]);
 
   /** Open `name` (preview-tab semantics like `selectFile`) and arm
@@ -875,7 +1049,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  button lets the user opt in when they actually want to verify
    *  against the source. */
   const selectFileWithHighlight = useCallback(async (name: string, hit: PendingHighlight) => {
+    const expectedSpace = stateRef.current.space;
     await selectFile(name);
+    if (stateRef.current.space !== expectedSpace) return;
+    if (getActiveTab(stateRef.current)?.file?.name !== name) return;
     dispatch({ type: 'PENDING_HIGHLIGHT', highlight: hit });
     // Keyword-search hits carry `openFindBar: true` so the user can
     // walk every in-file match with Cmd+G. Setting `find.{open, query}`
@@ -900,8 +1077,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *    1. File already open → activate, AND promote it if it was
    *       living in the preview slot (so it stops being kickable).
    *    2. Otherwise → fresh pinned tab. */
-  const openInNewTab = useCallback(async (name: string) => {
-    if (editorRef.current) await flushSave();
+  const openInNewTab = useCallback(async (name: string, expectedSpace?: string) => {
+    const targetSpace = expectedSpace ?? stateRef.current.space;
+    if (targetSpace && stateRef.current.space !== targetSpace) return;
+    if (editorRef.current && !(await flushSave())) return;
+    if (targetSpace && stateRef.current.space !== targetSpace) return;
     const s = stateRef.current;
     const existing = s.tabs.find((t) => isSpaceFileTab(t, name));
     if (existing) {
@@ -909,11 +1089,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (existing.preview) dispatch({ type: 'PROMOTE_TAB', id: existing.id });
       return;
     }
-    await loadFile(name, { newTab: true });
+    await loadFile(name, { newTab: true, expectedSpace: targetSpace });
   }, [flushSave, loadFile]);
 
   const newTab = useCallback(async () => {
-    if (editorRef.current) await flushSave();
+    if (editorRef.current && !(await flushSave())) return;
     dispatch({ type: 'NEW_TAB' });
   }, [flushSave]);
 
@@ -921,7 +1101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  the on-disk filename (so the user reads "STASHBASE.md" exactly).
    *  Tab dedup is by `name` since the KB-scope files coexist in the
    *  same kind. */
-  const openKbFile = useCallback(async (name: string, fetcher: () => Promise<{ content: string }>) => {
+  const openKbFile = useCallback(async (name: string, fetcher: () => Promise<{ content: string; version?: string }>) => {
     try {
       const s = stateRef.current;
       const existing = s.tabs.find((t) => t.file?.kind === 'kb' && t.file?.name === name);
@@ -929,7 +1109,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (existing.id !== s.activeTabId) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
         return;
       }
-      if (editorRef.current) await flushSave();
+      if (editorRef.current && !(await flushSave())) return;
       const r = await fetcher();
       dispatch({
         type: 'FILE_OPEN',
@@ -937,6 +1117,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name,
           format: 'md',
           content: r.content,
+          version: r.version,
           kind: 'kb',
         } as any,
         newTab: true,
@@ -945,7 +1126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const msg = err instanceof Error ? err.message : String(err);
       toast(`Failed to load ${name}: ${msg}`, { level: 'error' });
     }
-  }, [flushSave]);
+  }, [flushSave, toast]);
 
   const openKbRules = useCallback(async () => {
     await openKbFile('STASHBASE.md', () => api.getKbRules());
@@ -953,7 +1134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const closeTab = useCallback(async (id: string) => {
     const s = stateRef.current;
-    if (s.activeTabId === id && editorRef.current) await flushSave();
+    if (s.activeTabId === id && editorRef.current && !(await flushSave())) return;
     dispatch({ type: 'CLOSE_TAB', id });
   }, [flushSave]);
 
@@ -1074,7 +1255,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const activateTab = useCallback(async (id: string) => {
     const s = stateRef.current;
     if (s.activeTabId === id) return;
-    if (editorRef.current) await flushSave();
+    if (editorRef.current && !(await flushSave())) return;
     dispatch({ type: 'ACTIVATE_TAB', id });
   }, [flushSave]);
 
@@ -1083,12 +1264,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  (activating it if already open) so following a source link never
    *  replaces what you're reading. */
   const navigateTo = useCallback(async (name: string, anchor?: string) => {
+    const expectedSpace = stateRef.current.space;
     const cur = getActiveTab(stateRef.current)?.file ?? null;
     if (cur && cur.name === name) {
       if (anchor) dispatch({ type: 'PENDING_SCROLL', anchor });
       return;
     }
-    if (editorRef.current) await flushSave();
+    if (editorRef.current && !(await flushSave())) return;
+    if (stateRef.current.space !== expectedSpace) return;
     const existing = stateRef.current.tabs.find((t) => isSpaceFileTab(t, name));
     if (existing) {
       if (stateRef.current.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
@@ -1096,7 +1279,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (anchor) dispatch({ type: 'PENDING_SCROLL', anchor });
       return;
     }
-    await loadFile(name, { newTab: true, anchor });
+    await loadFile(name, { newTab: true, anchor, expectedSpace });
   }, [flushSave, loadFile]);
 
   const consumePendingScroll = useCallback(() => {
@@ -1111,7 +1294,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const tab = getActiveTab(stateRef.current);
     if (!tab?.file) return;
     if (tab.editMode) {
-      await flushSave();
+      if (!(await flushSave())) return;
       dispatch({ type: 'EDIT_MODE', on: false });
     } else {
       dispatch({ type: 'EDIT_MODE', on: true });
@@ -1123,13 +1306,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const newNote = useCallback(async () => {
-    await flushSave();
+    if (!(await flushSave())) return;
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) return;
     const dir = stateRef.current.activeFolder;
     try {
-      const { name } = await api.createNote('', dir);
+      const created = await api.createNote('', dir);
+      if (stateRef.current.space !== targetSpace) return;
+      const { name } = created;
+      if (created.indexWarning) toast(created.indexWarning, { level: 'warning' });
       if (dir) dispatch({ type: 'EXPAND_FOLDER', path: dir });
-      await loadFiles();
+      await loadFiles(targetSpace);
+      if (stateRef.current.space !== targetSpace) return;
       const body = await api.getFile(name);
+      if (stateRef.current.space !== targetSpace) return;
       dispatch({ type: 'FILE_OPEN', body });
       dispatch({ type: 'EDIT_MODE', on: true });
       dispatch({ type: 'RENAMING', renaming: { path: name, kind: 'file' } });
@@ -1137,21 +1327,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (e: unknown) {
       toast('Failed to create: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
-  }, [flushSave, loadFiles, refreshIndexState, showAlert]);
+  }, [flushSave, loadFiles, refreshIndexState, toast]);
 
   const newFolder = useCallback(async (path: string) => {
     if (!path) return;
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) return;
     try {
       const j = await api.createFolder(path);
+      if (stateRef.current.space !== targetSpace) return;
       dispatch({ type: 'EXPAND_FOLDER', path: j.path });
       dispatch({ type: 'ACTIVE_FOLDER', path: j.path });
-      await loadFiles();
+      await loadFiles(targetSpace);
     } catch (e: unknown) {
       toast('Failed to create folder: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
-  }, [loadFiles, showAlert]);
+  }, [loadFiles, toast]);
 
   const deleteFile = useCallback(async (name: string) => {
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) return;
     // PDFs own a dot-prefixed derived note (`.paper.md`) + image
     // bundle (`.paper_files/`) sitting next to them — say so up front
     // so the user knows the index goes with it. Plain notes just
@@ -1161,78 +1356,103 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ? `Delete ${name}? This also removes the derived markdown + image bundle and the indexed content.`
       : `Delete ${name}? (removes file + index)`;
     if (!(await askConfirm(prompt))) return;
+    if (stateRef.current.space !== targetSpace) return;
     const activeFile = getActiveTab(stateRef.current)?.file;
-    if (saveTimer.current && activeFile?.name === name) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
+    if ((activeFile?.kind ?? 'space') === 'space' && activeFile?.name === name) {
+      if (!(await flushSave())) return;
+      if (stateRef.current.space !== targetSpace) return;
     }
-    const before = stateRef.current;
-    const stale = before.tabs.filter((t) => isSpaceFileTab(t, name));
-    for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
-    dispatch({
-      type: 'FILES_LOADED',
-      files: before.files.filter((f) => f.name !== name),
-      folders: before.folders,
-      space: before.space,
-    });
     try {
       await api.deleteFile(name);
-      await loadFiles();
+      if (stateRef.current.space !== targetSpace) return;
+      if (saveTimer.current && activeFile?.name === name) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      const before = stateRef.current;
+      const stale = before.tabs.filter((t) => isSpaceFileTab(t, name));
+      for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+      dispatch({
+        type: 'FILES_LOADED',
+        files: before.files.filter((f) => f.name !== name),
+        folders: before.folders,
+        space: before.space,
+      });
+      await loadFiles(targetSpace);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 404) {
-        await loadFiles();
+        const files = await loadFiles(targetSpace);
+        if (stateRef.current.space !== targetSpace) return;
+        dispatch({ type: 'PRUNE_MISSING_FILE_TABS', names: files.map((f) => f.name) });
         return;
       }
-      await loadFiles();
+      await loadFiles(targetSpace);
       toast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
-  }, [loadFiles, showAlert, askConfirm]);
+  }, [flushSave, loadFiles, toast, askConfirm]);
 
   const deleteFolder = useCallback(async (path: string) => {
     if (!path) return;
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) return;
     if (!(await askConfirm(`Delete folder "${path}" and everything inside?`))) return;
-    const before = stateRef.current;
-    const stale = before.tabs.filter(
-      (t) => t.file && t.file.name.startsWith(path + '/'),
-    );
-    for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
-    const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-    if (before.activeFolder === path || before.activeFolder.startsWith(path + '/')) {
-      dispatch({ type: 'ACTIVE_FOLDER', path: parent });
+    if (stateRef.current.space !== targetSpace) return;
+    const activeFile = getActiveTab(stateRef.current)?.file;
+    if ((activeFile?.kind ?? 'space') === 'space' && activeFile?.name.startsWith(path + '/')) {
+      if (!(await flushSave())) return;
+      if (stateRef.current.space !== targetSpace) return;
     }
-    if (before.selectedPath === path || before.selectedPath.startsWith(path + '/')) {
-      dispatch({ type: 'SELECT_PATH', path: parent });
-    }
-    dispatch({
-      type: 'FILES_LOADED',
-      files: before.files.filter((f) => !f.name.startsWith(path + '/')),
-      folders: before.folders.filter((f) => f.path !== path && !f.path.startsWith(path + '/')),
-      space: before.space,
-    });
     try {
       await api.deleteFolder(path);
-      await loadFiles();
+      if (stateRef.current.space !== targetSpace) return;
+      if (saveTimer.current && activeFile?.name.startsWith(path + '/')) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      const before = stateRef.current;
+      const stale = before.tabs.filter(
+        (t) => t.file && (t.file.kind ?? 'space') === 'space' && t.file.name.startsWith(path + '/'),
+      );
+      for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+      const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+      if (before.activeFolder === path || before.activeFolder.startsWith(path + '/')) {
+        dispatch({ type: 'ACTIVE_FOLDER', path: parent });
+      }
+      if (before.selectedPath === path || before.selectedPath.startsWith(path + '/')) {
+        dispatch({ type: 'SELECT_PATH', path: parent });
+      }
+      dispatch({
+        type: 'FILES_LOADED',
+        files: before.files.filter((f) => !f.name.startsWith(path + '/')),
+        folders: before.folders.filter((f) => f.path !== path && !f.path.startsWith(path + '/')),
+        space: before.space,
+      });
+      await loadFiles(targetSpace);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 404) {
-        await loadFiles();
+        const files = await loadFiles(targetSpace);
+        if (stateRef.current.space !== targetSpace) return;
+        dispatch({ type: 'PRUNE_MISSING_FILE_TABS', names: files.map((f) => f.name) });
         return;
       }
-      await loadFiles();
+      await loadFiles(targetSpace);
       toast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     }
-  }, [loadFiles, showAlert, askConfirm]);
+  }, [flushSave, loadFiles, toast, askConfirm]);
 
   const renameFile = useCallback(async (oldName: string, newBaseName: string) => {
-    const extMatch = oldName.match(/\.(md|markdown|html|htm)$/i);
-    const ext = extMatch ? extMatch[0] : '';
-    const lastSlash = oldName.lastIndexOf('/');
-    const dir = lastSlash >= 0 ? oldName.slice(0, lastSlash + 1) : '';
-    const newName = dir + newBaseName + ext;
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) return;
+    const newName = renamedFilePath(oldName, newBaseName);
     if (newName === oldName) {
       dispatch({ type: 'RENAMING', renaming: null });
       return;
     }
     const cascade = await askCascadeForRename('file', oldName, newName);
+    if (stateRef.current.space !== targetSpace) {
+      dispatch({ type: 'RENAMING', renaming: null });
+      return;
+    }
     if (cascade === null) {
       dispatch({ type: 'RENAMING', renaming: null });
       return;
@@ -1240,28 +1460,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const activeFile = getActiveTab(stateRef.current)?.file;
     const wasActive = activeFile?.name === oldName;
     if (wasActive) {
-      await flushSave();
+      if (!(await flushSave())) {
+        dispatch({ type: 'RENAMING', renaming: null });
+        return;
+      }
+      if (stateRef.current.space !== targetSpace) {
+        dispatch({ type: 'RENAMING', renaming: null });
+        return;
+      }
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Renaming…', cls: '' } });
     }
     try {
       const j = await api.renameFile(oldName, newName, { cascade });
+      if (stateRef.current.space !== targetSpace) return;
+      dispatch({ type: 'REMAP_PATHS', from: oldName, to: j.name, kind: 'file' });
       if (wasActive && activeFile) {
-        dispatch({ type: 'FILE_PATCH', patch: { name: j.name } });
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
       }
-      await loadFiles();
+      await loadFiles(targetSpace);
     } catch (e: unknown) {
+      if (stateRef.current.space !== targetSpace) return;
       const msg = e instanceof Error ? e.message : String(e);
       toast('Rename failed: ' + msg, { level: 'error' });
       if (wasActive) {
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Rename failed', cls: 'error' } });
       }
     } finally {
-      dispatch({ type: 'RENAMING', renaming: null });
+      if (stateRef.current.space === targetSpace) dispatch({ type: 'RENAMING', renaming: null });
     }
-  }, [askCascadeForRename, flushSave, loadFiles, showAlert]);
+  }, [askCascadeForRename, flushSave, loadFiles, toast]);
 
   const renameFolder = useCallback(async (oldPath: string, newName: string) => {
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) return;
     if (!newName || newName.includes('/')) {
       toast('Folder name cannot contain "/".', { level: 'warning' });
       dispatch({ type: 'RENAMING', renaming: null });
@@ -1275,12 +1506,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     const cascade = await askCascadeForRename('folder', oldPath, newPath);
+    if (stateRef.current.space !== targetSpace) {
+      dispatch({ type: 'RENAMING', renaming: null });
+      return;
+    }
     if (cascade === null) {
       dispatch({ type: 'RENAMING', renaming: null });
       return;
     }
+    const activeFile = getActiveTab(stateRef.current)?.file;
+    if (activeFile && activeFile.name.startsWith(oldPath + '/')) {
+      if (!(await flushSave())) {
+        dispatch({ type: 'RENAMING', renaming: null });
+        return;
+      }
+      if (stateRef.current.space !== targetSpace) {
+        dispatch({ type: 'RENAMING', renaming: null });
+        return;
+      }
+    }
     try {
       const j = await api.renameFolder(oldPath, newName, { cascade });
+      if (stateRef.current.space !== targetSpace) return;
       const s = stateRef.current;
       // Server has rewritten the on-disk path; mirror the expansion
       // across so the renamed folder stays open after `loadFiles`.
@@ -1289,64 +1536,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (s.expanded.has(oldPath)) {
         dispatch({ type: 'EXPAND_FOLDER', path: j.path });
       }
-      if (s.activeFolder === oldPath) dispatch({ type: 'ACTIVE_FOLDER', path: j.path });
-      const activeFile = getActiveTab(s)?.file;
-      if (activeFile && activeFile.name.startsWith(oldPath + '/')) {
-        const newFileName = j.path + activeFile.name.slice(oldPath.length);
-        dispatch({ type: 'FILE_PATCH', patch: { name: newFileName } });
-      }
-      await loadFiles();
+      dispatch({ type: 'REMAP_PATHS', from: oldPath, to: j.path, kind: 'folder' });
+      await loadFiles(targetSpace);
     } catch (e: unknown) {
+      if (stateRef.current.space !== targetSpace) return;
       toast('Rename failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     } finally {
-      dispatch({ type: 'RENAMING', renaming: null });
+      if (stateRef.current.space === targetSpace) dispatch({ type: 'RENAMING', renaming: null });
     }
-  }, [askCascadeForRename, loadFiles, showAlert]);
+  }, [askCascadeForRename, flushSave, loadFiles, toast]);
 
   const moveFile = useCallback(async (oldPath: string, targetDir: string) => {
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) return false;
     const basename = oldPath.split('/').pop() ?? oldPath;
     const newPath = targetDir ? `${targetDir}/${basename}` : basename;
-    if (newPath === oldPath) return;
+    if (newPath === oldPath) return true;
     const cascade = await askCascadeForRename('file', oldPath, newPath);
-    if (cascade === null) return;
+    if (stateRef.current.space !== targetSpace) return false;
+    if (cascade === null) return false;
+    const cur = getActiveTab(stateRef.current)?.file;
+    if (cur?.name === oldPath && !(await flushSave())) return false;
+    if (stateRef.current.space !== targetSpace) return false;
     try {
       const j = await api.renameFile(oldPath, newPath, { cascade, asyncIndex: true });
-      const cur = getActiveTab(stateRef.current)?.file;
-      if (cur?.name === oldPath) dispatch({ type: 'FILE_PATCH', patch: { name: j.name } });
+      if (stateRef.current.space !== targetSpace) return true;
+      dispatch({ type: 'REMAP_PATHS', from: oldPath, to: j.name, kind: 'file' });
       if (targetDir) dispatch({ type: 'EXPAND_FOLDER', path: targetDir });
-      await loadFiles();
+      await loadFiles(targetSpace);
       if (j.indexWarning) {
         toast('Moved. ' + j.indexWarning, { level: 'warning' });
       } else if (j.indexDeferred) {
         toast('Moved. Updating semantic index in the background.', { level: 'info' });
       }
+      return true;
     } catch (e: unknown) {
+      if (stateRef.current.space !== targetSpace) return false;
       toast('Move failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
+      return false;
     }
-  }, [askCascadeForRename, loadFiles, showAlert]);
+  }, [askCascadeForRename, flushSave, loadFiles, toast]);
 
   const upload = useCallback(async (
     items: { file: File; relPath: string }[],
     dir: string,
   ): Promise<boolean> => {
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) {
+      toast('Open a space before importing files.', { level: 'warning' });
+      return false;
+    }
     if (dir) dispatch({ type: 'EXPAND_FOLDER', path: dir });
     try {
-      let j = await api.upload(items, dir);
-      // Self-heal a lost server-side space binding. The server tracks the
-      // open space per window *in memory*; a server restart (e.g. tsx
-      // watch in dev) drops it while the renderer still shows a space
-      // open, so every upload comes back "no space open". If we still
-      // believe a space is open, re-bind it and retry once.
-      const lostBinding = (j.files || []).some((x) => /no space open/i.test(x.error || ''));
-      if (lostBinding && stateRef.current.space) {
-        try {
-          await api.openSpaceByName(stateRef.current.space);
-          j = await api.upload(items, dir);
-        } catch (e: unknown) {
-          console.warn('[upload] rebind failed:', e);
+      const j = await api.upload(items, dir, targetSpace);
+      const stillInTargetSpace = stateRef.current.space === targetSpace;
+      if (!stillInTargetSpace) {
+        const failed = (j.files || []).filter((x) => x.error);
+        if (failed.length) {
+          console.warn('[upload] failed:', failed);
+          toast(`${failed.length} file(s) failed to import into ${targetSpace}.`, { level: 'error' });
+        } else {
+          toast(`Imported ${j.files?.length ?? items.length} file(s) into ${targetSpace}.`, { level: 'info' });
         }
+        return failed.length === 0;
       }
-      await loadFiles();
+      await loadFiles(targetSpace);
       // Optimistically light up the stashing indicator (sidebar pill +
       // the opened tab's logo) the instant the drop lands. The server
       // registers each conversion only *after* it has responded, so the
@@ -1408,7 +1662,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Pinned, not preview: a drop is a deliberate, committed gesture
       // (the double-click analog), so the imported file should stay open
       // rather than be a tentative tab the next sidebar click evicts.
-      if (first) void openInNewTab(first.file);
+      if (first) void openInNewTab(first.file, targetSpace);
       const failed = (j.files || []).filter((x) => x.error);
       if (failed.length) {
         console.warn('[upload] failed:', failed);
@@ -1420,33 +1674,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toast('Upload failed — see console.', { level: 'error' });
       return false;
     }
-  }, [loadFiles, refreshIndexState, openInNewTab, showAlert]);
+  }, [loadFiles, refreshIndexState, openInNewTab, toast]);
 
   /** Stop-recording UX: pop a pinned placeholder tab for the (not-yet-
    *  written) `recording-<ts>.md` the instant the upload returns, so the
    *  user lands in their recording immediately instead of staring at
-   *  nothing for the length of the OCR. The tab carries the stashing
+   *  nothing for the length of the Gemini analysis. The tab carries the stashing
    *  mark (the note is in `pendingConversions`); its content fills in the
-   *  moment the OCR writes the note to disk — `refreshActiveTabFromDisk`
+   *  moment the analysis writes the note to disk — `refreshActiveTabFromDisk`
    *  catches it on the next poll, and the loop below is an explicit
    *  backstop in case the placeholder is the active tab. Bounded so a
    *  failed / stuck job never leaks the watcher. */
-  const openRecordingPlaceholder = useCallback(async (name: string) => {
+  const openRecordingPlaceholder = useCallback(async (name: string, space: string) => {
+    if (stateRef.current.space !== space) return;
     // Already open (double-stop / retry) → just surface it.
     if (stateRef.current.tabs.some((t) => t.file?.name === name)) {
-      await openInNewTab(name);
+      await openInNewTab(name, space);
       return;
     }
-    await loadFile(name, { newTab: true, placeholderIfMissing: true });
+    await loadFile(name, { newTab: true, placeholderIfMissing: true, expectedSpace: space });
     const deadline = Date.now() + 5 * 60_000;
     while (Date.now() < deadline) {
+      if (stateRef.current.space !== space) return;
       if (stateRef.current.files.some((f) => f.name === name)) {
         // Note landed. Pull real content into the placeholder if it's
         // still the active, still-empty tab; if the user navigated away
         // or closed it, leave it be.
         const active = getActiveTab(stateRef.current);
         if (active?.file?.name === name && !active.file.content) {
-          await loadFile(name, {});
+          if (stateRef.current.space === space) await loadFile(name, { expectedSpace: space });
         }
         return;
       }
@@ -1454,64 +1710,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [loadFile, openInNewTab]);
 
-  /** Send a screen recording for OCR. The webm is NOT stored — it's
-   *  transcribed into a visible `recording-<ts>.md` note in the background
-   *  (the stashing indicator tracks it; the note appears when done, at
-   *  which point `openRecordingWhenReady` opens it).
-   *  Mirrors `upload`'s lost-binding self-heal. */
-  const recordVideo = useCallback(async (file: File, dir: string): Promise<boolean> => {
+  /** Send a screen recording for Gemini analysis. The webm is saved in
+   *  the note's asset bundle, and the visible `recording-<ts>.md` note
+   *  is filled in by the background job. The capture-time space is sent
+   *  explicitly so a later space switch cannot retarget the write. */
+  const recordVideo = useCallback(async (file: File, dir: string, space?: string): Promise<boolean> => {
+    const targetSpace = space || stateRef.current.space;
     try {
-      let j = await api.recordVideo(file, dir);
-      if (/no space open/i.test(j.error || '') && stateRef.current.space) {
-        try {
-          await api.openSpaceByName(stateRef.current.space);
-          j = await api.recordVideo(file, dir);
-        } catch (e: unknown) {
-          console.warn('[recordVideo] rebind failed:', e);
-        }
-      }
+      const j = await api.recordVideo(file, dir, targetSpace || undefined);
       if (j.error) {
         toast(`Recording failed: ${j.error}`, { level: 'error' });
         return false;
       }
-      if (j.file && !stateRef.current.pendingConversions.includes(j.file)) {
+      const stillInTargetSpace = !targetSpace || stateRef.current.space === targetSpace;
+      if (stillInTargetSpace && j.file && !stateRef.current.pendingConversions.includes(j.file)) {
         // Optimistically mark the note as stashing so the placeholder
         // tab's logo + the SPACE pill show instantly, instead of one
         // index-poll round-trip later. The poll reconciles from here —
-        // the server reports it in-flight through OCR, then drops it.
+        // the server reports it in-flight through analysis, then drops it.
         dispatch({
           type: 'PENDING_CONVERSIONS',
           paths: [...stateRef.current.pendingConversions, j.file],
         });
       }
       // Poll now so the stashing indicator reconciles with the server.
-      void refreshIndexState();
-      // Pop a placeholder tab immediately; it fills when the OCR lands.
-      if (j.file) void openRecordingPlaceholder(j.file);
+      if (stillInTargetSpace) void refreshIndexState();
+      // Pop a placeholder tab immediately; it fills when the analysis lands.
+      if (stillInTargetSpace && j.file && targetSpace) void openRecordingPlaceholder(j.file, targetSpace);
       return true;
     } catch (e: unknown) {
       console.warn('[recordVideo] request failed:', e);
-      toast('Recording failed — see console.', { level: 'error' });
+      const msg = e instanceof ApiError
+        ? e.message
+        : e instanceof Error ? e.message : String(e);
+      toast(`Recording failed: ${msg}`, { level: 'error' });
       return false;
     }
   }, [refreshIndexState, openRecordingPlaceholder]);
 
   const runSync = useCallback(async () => {
     if (stateRef.current.syncRunning) return;
+    const targetSpace = stateRef.current.space;
+    if (!targetSpace) return;
+    const myGen = ++syncGen.current;
     dispatch({ type: 'SYNC_RUNNING', running: true });
     void refreshIndexState();
     try {
-      const result = await api.sync();
+      const result = await api.sync(targetSpace);
+      if (stateRef.current.space !== targetSpace) return;
       if (result.failed?.length || result.cancelled) {
         await refreshIndexState();
       } else {
         dispatch({ type: 'INDEX_WARNING', warning: null });
       }
-      await loadFiles();
+      await loadFiles(targetSpace);
     } catch (e: unknown) {
       toast('Sync failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
     } finally {
-      dispatch({ type: 'SYNC_RUNNING', running: false });
+      if (myGen === syncGen.current) dispatch({ type: 'SYNC_RUNNING', running: false });
     }
   }, [loadFiles, refreshIndexState, showAlert]);
 
@@ -1522,21 +1778,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // on a space switch (onSwitch → killActiveAgent); CHAT_TABS_RESET drops
   // our tab list to match so we don't render orphan panels.
   const resetSpaceScopedState = useCallback(() => {
+    syncGen.current += 1;
+    searchGen.current += 1;
+    lastTreeVersion.current = -1;
+    importStashingGrace.current.clear();
+    importIndexGrace.current.clear();
     dispatch({ type: 'TABS_RESET' });
     dispatch({ type: 'CHAT_TABS_RESET' });
     dispatch({ type: 'FILTER', q: '' });
     dispatch({ type: 'SEARCH_CLEAR' });
+    dispatch({ type: 'ACTIVE_FOLDER', path: '' });
+    dispatch({ type: 'PENDING_NAMES', names: new Set() });
+    dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
+    dispatch({ type: 'SNAPSHOT_WARNING', warning: null });
     dispatch({ type: 'INDEX_WARNING', warning: null });
+    dispatch({ type: 'CONVERSION_FAILURES', failures: [] });
+    dispatch({ type: 'SYNC_RUNNING', running: false });
     dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
   }, []);
 
-  const finishOpenSpace = useCallback(async () => {
+  const finishOpenSpace = useCallback(async (expectedSpace: string, generation: number) => {
+    if (generation !== openGen.current) return;
     resetSpaceScopedState();
     dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
+    // Establish the renderer-side space identity before the guarded
+    // `/api/files` load below. Otherwise the stale-response check sees
+    // the previous space (or Welcome's empty space) and drops the first
+    // legitimate file listing after an open/create/import flow.
+    dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: expectedSpace });
     void refreshIndexState();
     // Load files BEFORE hiding the welcome overlay so the sidebar doesn't
     // briefly flash "NOTES" with an empty tree behind the overlay's fade.
-    const [files] = await Promise.all([loadFiles(), loadFileOrder()]);
+    const [files] = await Promise.all([loadFiles(expectedSpace), loadFileOrder(expectedSpace)]);
+    if (generation !== openGen.current || stateRef.current.space !== expectedSpace) return;
     dispatch({ type: 'WELCOME_HIDE' });
     // Land on a Welcome/README note instead of a blank tab. `finishOpenSpace`
     // is the fresh-entry path (it just reset tabs above), so no need to guard
@@ -1557,22 +1831,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // to show the error and keep their input. (They used to swallow here,
   // which made every caller's catch dead code and hid in-space failures.)
   const openSpace = useCallback(async (path: string) => {
-    await api.openSpace(path);
+    if (editorRef.current && !(await flushSave())) {
+      throw new Error('Current file could not be saved. Resolve the save error before switching spaces.');
+    }
+    const generation = ++openGen.current;
+    const opened = await api.openSpace(path);
+    const openedName = opened.current?.name;
+    if (!openedName || generation !== openGen.current) return;
     void refreshRecent().catch((err) => {
       console.warn('[recent] refresh after open failed:', err);
     });
-    await finishOpenSpace();
-  }, [finishOpenSpace, refreshRecent]);
+    await finishOpenSpace(openedName, generation);
+  }, [finishOpenSpace, flushSave, refreshRecent]);
 
   const openSpaceByName = useCallback(async (name: string, opts?: { create?: boolean; exclusiveCreate?: boolean }) => {
-    await api.openSpaceByName(name, opts);
+    if (editorRef.current && !(await flushSave())) {
+      throw new Error('Current file could not be saved. Resolve the save error before switching spaces.');
+    }
+    const generation = ++openGen.current;
+    const opened = await api.openSpaceByName(name, opts);
+    const openedName = opened.current?.name;
+    if (!openedName || generation !== openGen.current) return;
     void refreshRecent().catch((err) => {
       console.warn('[recent] refresh after open failed:', err);
     });
-    await finishOpenSpace();
-  }, [finishOpenSpace, refreshRecent]);
+    await finishOpenSpace(openedName, generation);
+  }, [finishOpenSpace, flushSave, refreshRecent]);
 
-  const goHome = useCallback(() => {
+  const goHome = useCallback(async () => {
+    if (editorRef.current && !(await flushSave())) return false;
+    openGen.current += 1;
+    try {
+      await api.closeSpace();
+    } catch (err: unknown) {
+      toast('Could not close the current space: ' + (err instanceof Error ? err.message : String(err)), { level: 'error' });
+      return false;
+    }
     resetSpaceScopedState();
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], space: '' });
     // Recent entries can disappear or move outside kbRoot while a space
@@ -1582,7 +1876,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void api.getSpace()
       .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
       .catch(() => { /* keep the empty list if the refresh fails */ });
-  }, [resetSpaceScopedState]);
+    return true;
+  }, [flushSave, resetSpaceScopedState, toast]);
 
   const bootstrap = useCallback(async () => {
     try {
@@ -1591,28 +1886,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const initialSpace = new URLSearchParams(window.location.search).get('space');
       if (initialSpace) {
         window.history.replaceState(null, '', window.location.pathname);
-        await openSpaceByName(initialSpace);
+        try {
+          await openSpaceByName(initialSpace);
+        } catch (err: unknown) {
+          dispatch({
+            type: 'WELCOME_SHOW',
+            recent: j.recent ?? [],
+            homeDir: j.homeDir,
+            error: `Could not open "${initialSpace}": ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+      } else if (j.current?.name) {
+        const generation = ++openGen.current;
+        await finishOpenSpace(j.current.name, generation);
       }
     } catch {
       dispatch({ type: 'WELCOME_SHOW', recent: [], error: 'Server unreachable' });
     }
-  }, [openSpaceByName]);
+  }, [finishOpenSpace, openSpaceByName]);
 
   const dismissSnapshotWarning = useCallback(async () => {
     // Optimistic: blank the banner locally so the click feels instant;
     // server call confirms. If it fails the next poll restores the
     // warning (recordSnapshotWarning is still set server-side) so we
     // don't need to roll back here.
+    const spaceAtStart = stateRef.current.space;
     dispatch({ type: 'SNAPSHOT_WARNING', warning: null });
-    try { await api.dismissSnapshotWarning(); }
+    try { await api.dismissSnapshotWarning(spaceAtStart || undefined); }
     catch (err) {
       console.warn('[snapshot-warning] dismiss failed:', err instanceof Error ? err.message : String(err));
     }
   }, []);
 
   const dismissIndexWarning = useCallback(async () => {
+    const spaceAtStart = stateRef.current.space;
     dispatch({ type: 'INDEX_WARNING', warning: null });
-    try { await api.dismissIndexWarning(); }
+    try { await api.dismissIndexWarning(spaceAtStart || undefined); }
     catch (err) {
       console.warn('[index-warning] dismiss failed:', err instanceof Error ? err.message : String(err));
     }
@@ -1676,28 +1985,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let lastFocusSync = 0;
     function onFocus() {
-      if (!stateRef.current.space) return;
+      const focusSpace = stateRef.current.space;
+      if (!focusSpace) return;
       const now = Date.now();
       if (now - lastFocusSync < 5000) return;
       lastFocusSync = now;
-      void api.sync().catch(() => { /* surfaced by the next status poll */ });
+      void api.sync(focusSpace)
+        .catch(() => { /* surfaced by the next status poll */ })
+        .finally(() => { void refreshIndexState(); });
     }
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, []);
+  }, [refreshIndexState]);
 
-  // Best-effort flush before unload. `sendBeacon` keeps the PUT alive
+  // Best-effort flush before unload. `sendBeacon` keeps the POST alive
   // past page teardown.
   useEffect(() => {
     function onUnload() {
       const cur = getActiveTab(stateRef.current)?.file ?? null;
       const h = editorRef.current;
-      if (saveTimer.current && cur && h) {
+      const liveValue = h?.getValue();
+      if (cur && h && liveValue !== undefined && liveValue !== cur.content) {
         clearTimeout(saveTimer.current);
         try {
+          const qs = `?windowId=${encodeURIComponent(getWindowId())}`;
+          const endpoint = cur.kind === 'kb'
+            ? `/api/kb/rules${qs}`
+            : `/api/files/${encodePath(cur.name)}${qs}`;
           navigator.sendBeacon?.(
-            '/api/files/' + encodeURIComponent(cur.name),
-            new Blob([JSON.stringify({ content: h.getValue() })], { type: 'application/json' }),
+            endpoint,
+            new Blob(
+              [JSON.stringify({ content: liveValue, ...(cur.version ? { baseVersion: cur.version } : {}) })],
+              { type: 'application/json' },
+            ),
           );
         } catch { /* swallow */ }
       }

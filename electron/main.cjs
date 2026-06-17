@@ -16,6 +16,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const { isCompatibleServerHealth } = require('./main-probe.cjs');
 
 function parsePortArg(argv, fallback) {
   for (let i = 0; i < argv.length; i++) {
@@ -44,6 +45,45 @@ function sidecarExecutable(root, name, opts = {}) {
   return opts.direct ? path.join(root, exe) : path.join(root, name, exe);
 }
 
+function statIsFile(file) {
+  try { return fs.statSync(file).isFile(); } catch { return false; }
+}
+
+function readFileTail(file, maxBytes = 5000) {
+  try {
+    const st = fs.statSync(file);
+    const size = Math.min(st.size, maxBytes);
+    const fd = fs.openSync(file, 'r');
+    try {
+      const buf = Buffer.alloc(size);
+      fs.readSync(fd, buf, 0, size, Math.max(0, st.size - size));
+      return buf.toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return '';
+  }
+}
+
+function appendServerLogHint(message) {
+  const tail = readFileTail(SERVER_LOG_PATH);
+  return tail
+    ? `${message}\n\nRecent server log:\n${tail}`
+    : message;
+}
+
+function stopSpawnedServer() {
+  const proc = serverProc;
+  if (!proc || proc.exitCode != null || proc.signalCode != null) return;
+  try { proc.kill('SIGTERM'); } catch { /* already gone */ }
+  setTimeout(() => {
+    if (proc.exitCode == null && proc.signalCode == null) {
+      try { proc.kill('SIGKILL'); } catch { /* already gone */ }
+    }
+  }, 1500).unref();
+}
+
 // Capture server stdout/stderr to a file the user can `cat` after a
 // failed launch. Dock-launched packaged apps inherit Electron's stderr
 // which goes to /dev/null, so without this every server crash is
@@ -64,6 +104,7 @@ const SERVER_ENTRY = app.isPackaged
 const MCP_ENTRY = app.isPackaged
   ? path.join(PROJECT_ROOT, 'dist', 'mcp', 'server.mjs')
   : path.join(PROJECT_ROOT, 'mcp', 'server.ts');
+const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
 let serverProc = null;
 const mainWindows = new Set();
@@ -71,6 +112,8 @@ let lastMainWindow = null;
 let capturePickerWindow = null;
 let recorderWindow = null;
 let recordingIndicatorWindow = null;
+let recordingOwnerWindow = null;
+let recordingContext = null;
 // Four thin edge strips (top/bottom/left/right) forming the recording frame.
 // Thin windows float over fullscreen Spaces like the pill does; a single
 // screen-sized window gets ordered *under* the fullscreen app instead.
@@ -109,8 +152,7 @@ function readJsonObject(file) {
 }
 
 function writeJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+  writeFileAtomic(file, JSON.stringify(value, null, 2) + '\n');
 }
 
 function readAppConfig() {
@@ -119,15 +161,13 @@ function readAppConfig() {
 }
 
 function writeAppConfig(cfg) {
-  fs.mkdirSync(path.dirname(APP_CONFIG_FILE), { recursive: true });
-  fs.writeFileSync(APP_CONFIG_FILE, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
-  try { fs.chmodSync(APP_CONFIG_FILE, 0o600); } catch { /* best-effort */ }
+  writeFileAtomic(APP_CONFIG_FILE, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
 }
 
 function writeMcpWrapper() {
   const binDir = path.join(os.homedir(), '.stashbase', 'bin');
   const wrapper = path.join(binDir, 'stashbase-mcp');
-  const resourcesPath = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
+  const resourcesPath = RESOURCES_ROOT;
   const commandLines = app.isPackaged
     ? [
         'export ELECTRON_RUN_AS_NODE=1',
@@ -144,15 +184,13 @@ function writeMcpWrapper() {
     ...commandLines,
     '',
   ].join('\n');
-  fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(wrapper, content, { mode: 0o755 });
-  fs.chmodSync(wrapper, 0o755);
+  writeFileAtomic(wrapper, content, { mode: 0o755 });
   return wrapper;
 }
 
 function configureJsonMcp(file, serverConfig) {
   const config = readJsonObject(file);
-  if (!config) return false;
+  if (!config) throw new Error(`Couldn't parse ${file}; leaving it untouched.`);
   const currentServers =
     config.mcpServers && typeof config.mcpServers === 'object' && !Array.isArray(config.mcpServers)
       ? config.mcpServers
@@ -162,7 +200,17 @@ function configureJsonMcp(file, serverConfig) {
     stashbase: serverConfig,
   };
   writeJson(file, config);
-  return true;
+}
+
+function removeJsonMcp(file) {
+  if (!fs.existsSync(file)) return;
+  const config = readJsonObject(file);
+  if (!config) throw new Error(`Couldn't parse ${file}; leaving it untouched.`);
+  const servers = config.mcpServers;
+  if (!servers || typeof servers !== 'object' || Array.isArray(servers)) return;
+  delete servers.stashbase;
+  if (Object.keys(servers).length === 0) delete config.mcpServers;
+  writeJson(file, config);
 }
 
 function replaceTomlTable(raw, tableName, block) {
@@ -196,9 +244,57 @@ function configureCodex(wrapper) {
     '[mcp_servers.stashbase]',
     `command = ${JSON.stringify(wrapper)}`,
   ].join('\n');
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, replaceTomlTable(raw, 'mcp_servers.stashbase', block));
+  writeFileAtomic(file, replaceTomlTable(raw, 'mcp_servers.stashbase', block));
   return true;
+}
+
+function removeTomlTable(raw, tableName) {
+  const lines = raw.split(/\r?\n/);
+  const out = [];
+  const headerRe = /^\s*\[([^\]]+)\]\s*$/;
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(headerRe);
+    if (!match || match[1] !== tableName) {
+      out.push(lines[i]);
+      continue;
+    }
+    i += 1;
+    while (i < lines.length) {
+      const nextMatch = lines[i].match(headerRe);
+      if (nextMatch && nextMatch[1] !== tableName && !nextMatch[1].startsWith(`${tableName}.`)) {
+        break;
+      }
+      i += 1;
+    }
+    i -= 1;
+  }
+  const trimmed = out.join('\n').trimEnd();
+  return trimmed ? `${trimmed}\n` : '';
+}
+
+function removeCodex() {
+  const file = path.join(os.homedir(), '.codex', 'config.toml');
+  if (!fs.existsSync(file)) return true;
+  const raw = fs.readFileSync(file, 'utf8');
+  writeFileAtomic(file, removeTomlTable(raw, 'mcp_servers.stashbase'));
+  return true;
+}
+
+function writeFileAtomic(file, content, options = {}) {
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true });
+  const nonce = Math.random().toString(36).slice(2);
+  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.${nonce}.tmp`);
+  try {
+    fs.writeFileSync(tmp, content, options);
+    fs.renameSync(tmp, file);
+    if (typeof options.mode === 'number') {
+      try { fs.chmodSync(file, options.mode); } catch { /* best-effort */ }
+    }
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+    throw err;
+  }
 }
 
 function getStandardMcpJson(wrapper) {
@@ -247,6 +343,34 @@ function configureMcpClient(client) {
   return { client, command: wrapper, manual: getStandardMcpJson(wrapper), mode: 'clipboard' };
 }
 
+function disconnectMcpClient(client) {
+  if (client === 'claude-desktop') {
+    if (process.platform !== 'darwin') {
+      throw new Error('Claude Desktop auto configuration is currently supported on macOS only.');
+    }
+    const file = path.join(
+      os.homedir(),
+      'Library',
+      'Application Support',
+      'Claude',
+      'claude_desktop_config.json',
+    );
+    removeJsonMcp(file);
+    return { client, file, mode: 'file' };
+  }
+  if (client === 'claude-code') {
+    const file = path.join(os.homedir(), '.claude.json');
+    removeJsonMcp(file);
+    return { client, file, mode: 'file' };
+  }
+  if (client === 'codex-cli') {
+    const file = path.join(os.homedir(), '.codex', 'config.toml');
+    removeCodex();
+    return { client, file, mode: 'file' };
+  }
+  throw new Error(`${client} configuration is managed outside StashBase. Remove the pasted stashbase server from that client.`);
+}
+
 /** Spawn the Express server as a child. If something else is already on
  *  the port (e.g. you've got `pnpm dev` running in a terminal), we
  *  skip the spawn and just point the window at it — handy for editing
@@ -284,8 +408,8 @@ async function ensureServer() {
   // packaged. Model weights are cached by huggingface_hub under
   // `~/.cache/huggingface/` regardless of dev vs packaged.
   const packagedPythonCandidates = [
-    ...pythonCandidates(path.join(process.resourcesPath, 'python', 'runtime')),
-    ...pythonCandidates(path.join(process.resourcesPath, 'python', '.venv')),
+    ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')),
+    ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv')),
   ];
   const packagedPython = packagedPythonCandidates.find((candidate) => {
     try { return require('node:fs').existsSync(candidate); } catch { return false; }
@@ -298,11 +422,11 @@ async function ensureServer() {
   // each candidate as a *file* — spawn-ing the outer directory by
   // mistake yields EACCES with no useful hint.
   const packagedDaemonCandidates = [
-    sidecarExecutable(path.join(process.resourcesPath, 'python', 'sidecar'), 'stashbase-daemon'),
-    sidecarExecutable(path.join(process.resourcesPath, 'python', 'sidecar'), 'stashbase-daemon', { direct: true }),
+    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon'),
+    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon', { direct: true }),
   ];
   const packagedDaemon = packagedDaemonCandidates.find((candidate) => {
-    try { return require('node:fs').statSync(candidate).isFile(); } catch { return false; }
+    return statIsFile(candidate);
   });
   const hasPackagedDaemon = Boolean(packagedDaemon);
   // The PDF / OCR extractors ship as a second PyInstaller --onedir bundle
@@ -312,18 +436,33 @@ async function ensureServer() {
   // subcommand when STASHBASE_EXTRACT_BIN is set; in dev it spawns the
   // scripts via the local venv instead.
   const packagedExtractCandidates = [
-    sidecarExecutable(path.join(process.resourcesPath, 'python', 'sidecar'), 'stashbase-extract'),
-    sidecarExecutable(path.join(process.resourcesPath, 'python', 'sidecar'), 'stashbase-extract', { direct: true }),
+    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-extract'),
+    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-extract', { direct: true }),
   ];
   const packagedExtract = packagedExtractCandidates.find((candidate) => {
-    try { return require('node:fs').statSync(candidate).isFile(); } catch { return false; }
+    return statIsFile(candidate);
   });
   const hasPackagedExtract = Boolean(packagedExtract);
+  const packagedDaemonScript = path.join(RESOURCES_ROOT, 'python', 'stashbase_daemon.py');
+  const packagedPdfScript = path.join(RESOURCES_ROOT, 'python', 'pdf_extract.py');
+  const packagedOcrScript = path.join(RESOURCES_ROOT, 'python', 'ocr_extract.py');
+  if (app.isPackaged) {
+    if (!statIsFile(SERVER_ENTRY)) {
+      throw new Error(`Packaged server entry is missing: ${SERVER_ENTRY}`);
+    }
+    if (!hasPackagedDaemon && !(packagedPython && statIsFile(packagedDaemonScript))) {
+      throw new Error(
+        'Packaged Python daemon is missing. Rebuild with `pnpm build:python-sidecar` and package again.\n' +
+        `Looked for: ${packagedDaemonCandidates.join(', ')}\n` +
+        `Fallback script: ${packagedDaemonScript}`,
+      );
+    }
+  }
   const packagedEnv = app.isPackaged
     ? {
         ELECTRON_RUN_AS_NODE: '1',
         STASHBASE_APP_ROOT: PROJECT_ROOT,
-        STASHBASE_RESOURCES_PATH: process.resourcesPath,
+        STASHBASE_RESOURCES_PATH: RESOURCES_ROOT,
         ...(hasPackagedDaemon ? { STASHBASE_DAEMON_BIN: packagedDaemon } : {}),
         ...(hasPackagedExtract ? { STASHBASE_EXTRACT_BIN: packagedExtract } : {}),
         ...(packagedPython ? { STASHBASE_PYTHON: packagedPython } : {}),
@@ -333,7 +472,7 @@ async function ensureServer() {
   // a FILE, not a directory. spawn(cwd) hits the OS syscall (no
   // electron asar shim) and bails with ENOTDIR. Use the real
   // Resources/ directory there; in dev keep PROJECT_ROOT (the repo).
-  const serverCwd = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
+  const serverCwd = app.isPackaged ? RESOURCES_ROOT : PROJECT_ROOT;
   // Tee server output to a per-launch log file in ~/Library/Logs/StashBase/
   // so a packaged Dock launch is debuggable, AND to the parent stdio so
   // `pnpm electron` from a terminal still shows live logs. The file is
@@ -344,6 +483,20 @@ async function ensureServer() {
     logFd,
     `--- StashBase server launch ${new Date().toISOString()} (pid=${process.pid}, packaged=${app.isPackaged}) ---\n`,
   );
+  fs.writeSync(logFd, `server entry: ${SERVER_ENTRY}\n`);
+  fs.writeSync(logFd, `server cwd: ${serverCwd}\n`);
+  if (app.isPackaged) {
+    fs.writeSync(logFd, `resources: ${RESOURCES_ROOT}\n`);
+    fs.writeSync(logFd, `daemon: ${packagedDaemon || '(missing; using Python script fallback if available)'}\n`);
+    fs.writeSync(logFd, `extractor: ${packagedExtract || '(missing; using Python script fallback if available)'}\n`);
+    fs.writeSync(logFd, `python: ${packagedPython || '(missing)'}\n`);
+    if (!hasPackagedExtract && !(packagedPython && statIsFile(packagedPdfScript) && statIsFile(packagedOcrScript))) {
+      fs.writeSync(
+        logFd,
+        'warning: packaged extractor resources are missing; PDF/image text extraction will fail until the package is rebuilt\n',
+      );
+    }
+  }
   serverProc = spawn(serverBin, serverArgs, {
     cwd: serverCwd,
     // Port flows via the CLI arg above, not the env — keeps the server
@@ -361,11 +514,14 @@ async function ensureServer() {
     // are debuggable; terminal launches can `tail -f` the same file.
     stdio: ['ignore', logFd, logFd],
   });
+  try { fs.closeSync(logFd); } catch { /* child owns its dup */ }
   // `spawn` can fail asynchronously (ENOENT when tsx isn't installed,
   // permission errors, etc.). Without an explicit listener Node treats
   // the 'error' event as fatal and the whole Electron process crashes
   // with an unhelpful stack — surface a useful message instead.
+  let serverSpawnError = null;
   serverProc.on('error', (err) => {
+    serverSpawnError = err;
     console.warn(`[electron] server spawn failed: ${err.message}`);
     if (err.code === 'ENOENT') {
       console.warn(`[electron]   couldn't find ${serverBin}. ` +
@@ -382,10 +538,20 @@ async function ensureServer() {
   // generous; we surface a clear error rather than hanging forever.
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
+    if (serverSpawnError) {
+      throw new Error(appendServerLogHint(`server spawn failed: ${serverSpawnError.message}`));
+    }
     if ((await probeServer(SERVER_PORT, 200)).compatible) return;
+    if (serverProc.exitCode != null || serverProc.signalCode != null) {
+      const detail = serverProc.exitCode != null
+        ? `server exited with code ${serverProc.exitCode}`
+        : `server exited with signal ${serverProc.signalCode}`;
+      throw new Error(appendServerLogHint(`${detail} before reporting healthy on :${SERVER_PORT}`));
+    }
     await sleep(150);
   }
-  throw new Error(`server did not come up on :${SERVER_PORT} within 10s`);
+  stopSpawnedServer();
+  throw new Error(appendServerLogHint(`server did not come up on :${SERVER_PORT} within 10s`));
 }
 
 async function probeServer(port, timeoutMs) {
@@ -393,9 +559,11 @@ async function probeServer(port, timeoutMs) {
   if (!health.reachable) return { compatible: false, occupied: false, legacyStashBase: false };
   if (
     health.statusCode === 200 &&
-    health.body?.app === 'stashbase' &&
-    health.body?.ok === true &&
-    health.body?.protocolVersion === SERVER_PROTOCOL_VERSION
+    isCompatibleServerHealth(health.body, {
+      protocolVersion: SERVER_PROTOCOL_VERSION,
+      appRoot: PROJECT_ROOT,
+      resourcesPath: RESOURCES_ROOT,
+    })
   ) {
     return { compatible: true, occupied: true, legacyStashBase: false };
   }
@@ -457,18 +625,40 @@ function isAppUrl(rawUrl) {
   }
 }
 
-function getMainTargetWindow() {
+async function openExternalUnchecked(rawUrl, label = 'external URL') {
+  try {
+    await shell.openExternal(rawUrl);
+    return { ok: true };
+  } catch (err) {
+    const message = err && typeof err.message === 'string' ? err.message : String(err);
+    console.warn(`[electron] failed to open ${label}: ${message}`);
+    return { ok: false, error: message };
+  }
+}
+
+async function openHttpExternal(rawUrl, label = 'external URL') {
+  if (typeof rawUrl !== 'string' || !isHttpUrl(rawUrl)) return false;
+  const result = await openExternalUnchecked(rawUrl, label);
+  return result.ok;
+}
+
+function isLiveMainWindow(win) {
+  return !!(win && mainWindows.has(win) && !win.isDestroyed());
+}
+
+function getMainTargetWindow(preferred = null) {
+  if (isLiveMainWindow(preferred)) return preferred;
   const focused = BrowserWindow.getFocusedWindow();
-  if (focused && mainWindows.has(focused) && !focused.isDestroyed()) return focused;
-  if (lastMainWindow && mainWindows.has(lastMainWindow) && !lastMainWindow.isDestroyed()) return lastMainWindow;
+  if (isLiveMainWindow(focused)) return focused;
+  if (isLiveMainWindow(lastMainWindow)) return lastMainWindow;
   for (const win of Array.from(mainWindows)) {
     if (!win.isDestroyed()) return win;
   }
   return null;
 }
 
-function emitCaptureCreated(capture) {
-  const target = getMainTargetWindow();
+function emitCaptureCreated(capture, preferredWindow = null) {
+  const target = getMainTargetWindow(preferredWindow);
   if (!target) return false;
   target.webContents.send('capture:created', capture);
   if (target.isMinimized()) target.restore();
@@ -476,8 +666,8 @@ function emitCaptureCreated(capture) {
   return true;
 }
 
-function emitCaptureError(error) {
-  const target = getMainTargetWindow();
+function emitCaptureError(error, preferredWindow = null) {
+  const target = getMainTargetWindow(preferredWindow);
   if (!target) return false;
   target.webContents.send('capture:error', error);
   return true;
@@ -592,7 +782,19 @@ async function openScreenPermissionSettings() {
   if (process.platform !== 'darwin') return false;
   const before = getScreenPermission();
   const primed = before.needsGuide ? await primeScreenRecordingPermission() : undefined;
-  await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  const opened = await openExternalUnchecked(
+    'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+    'screen permission settings',
+  );
+  if (!opened.ok) {
+    return {
+      ok: false,
+      opened: false,
+      primed,
+      permission: getScreenPermission(),
+      error: opened.error,
+    };
+  }
   return {
     ok: true,
     opened: true,
@@ -1085,10 +1287,12 @@ function createRecorderWindow() {
   win.on('closed', () => {
     if (recorderWindow === win) {
       recorderWindow = null;
-      if (recordingActive) {
+      if (recordingActive || recordingPending) {
         recordingActive = false;
+        recordingPending = false;
         emitRecordingState(false);
       }
+      clearRecordingOwner();
     }
   });
   return win;
@@ -1097,8 +1301,23 @@ function createRecorderWindow() {
 // Entry point from the renderer's recording control. macOS 15+ goes
 // straight to the system picker (it can list fullscreen apps); older
 // macOS opens our own windows-only picker.
-function beginRecording() {
+function clearRecordingOwner() {
+  recordingOwnerWindow = null;
+  recordingContext = null;
+}
+
+function normalizeRecordingContext(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const space = typeof raw.space === 'string' ? raw.space.trim() : '';
+  if (!space) return null;
+  const dir = typeof raw.dir === 'string' ? raw.dir.trim() : '';
+  return { space, dir };
+}
+
+function beginRecording(ownerWindow = null, context = null) {
   if (recordingActive || recordingPending) return;
+  recordingOwnerWindow = isLiveMainWindow(ownerWindow) ? ownerWindow : getMainTargetWindow();
+  recordingContext = normalizeRecordingContext(context);
   if (supportsSystemPicker()) startRecordingSystemPicker();
   else createCapturePickerWindow('record');
 }
@@ -1118,7 +1337,13 @@ function startRecordingSystemPicker() {
       // doesn't provide to this window.
       recorderWindow.webContents
         .executeJavaScript('window.startCapture && window.startCapture()', true)
-        .catch(() => {});
+        .catch((err) => {
+          recordingPending = false;
+          emitCaptureError(classifyCaptureError(err && err.message ? err.message : String(err)), recordingOwnerWindow);
+          if (recorderWindow && !recorderWindow.isDestroyed()) recorderWindow.close();
+          recorderWindow = null;
+          clearRecordingOwner();
+        });
     }
   };
   if (recorderWindow.webContents.isLoading()) {
@@ -1134,7 +1359,8 @@ function startRecordingSystemPicker() {
 function startRecording(sourceId) {
   if (recordingActive) return;
   if (!sourceId) {
-    emitCaptureError(classifyCaptureError('No capture source was selected.'));
+    emitCaptureError(classifyCaptureError('No capture source was selected.'), recordingOwnerWindow);
+    clearRecordingOwner();
     return;
   }
   recordingActive = true;
@@ -1192,7 +1418,10 @@ function createCapturePickerWindow(mode) {
     path.join(__dirname, 'capture-picker.html'),
     mode === 'record' ? { hash: 'record' } : undefined,
   );
-  capturePickerWindow.on('closed', () => { capturePickerWindow = null; });
+  capturePickerWindow.on('closed', () => {
+    capturePickerWindow = null;
+    if (!recordingActive && !recordingPending) clearRecordingOwner();
+  });
 }
 
 async function createWindow(initialSpace) {
@@ -1245,13 +1474,13 @@ async function createWindow(initialSpace) {
   // accidental navigation away from the app shell) gets denied so the
   // main window stays anchored at SERVER_URL.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isAppUrl(url) && isHttpUrl(url)) shell.openExternal(url);
+    if (!isAppUrl(url)) void openHttpExternal(url, 'window-open URL');
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
     if (isAppUrl(url)) return;
     event.preventDefault();
-    if (isHttpUrl(url)) shell.openExternal(url);
+    void openHttpExternal(url, 'navigation URL');
   });
 
   // macOS fullscreen hides the traffic lights, so the chrome strip
@@ -1317,9 +1546,7 @@ ipcMain.handle('dialog:openFolder', async (_e, opts = {}) => {
 // scheme so an injected `file://` / `javascript:` URL can't smuggle a
 // local navigation through us.
 ipcMain.handle('shell:openExternal', async (_e, url) => {
-  if (typeof url !== 'string' || !isHttpUrl(url)) return false;
-  await shell.openExternal(url);
-  return true;
+  return openHttpExternal(url, 'renderer external URL');
 });
 
 ipcMain.handle('mcp:configure', async (_e, client) => {
@@ -1328,6 +1555,19 @@ ipcMain.handle('mcp:configure', async (_e, client) => {
   }
   try {
     const result = configureMcpClient(client);
+    return { ok: true, ...result };
+  } catch (err) {
+    const message = err && typeof err.message === 'string' ? err.message : String(err);
+    return { ok: false, error: message };
+  }
+});
+
+ipcMain.handle('mcp:disconnect', async (_e, client) => {
+  if (typeof client !== 'string') {
+    return { ok: false, error: 'Invalid MCP client.' };
+  }
+  try {
+    const result = disconnectMcpClient(client);
     return { ok: true, ...result };
   } catch (err) {
     const message = err && typeof err.message === 'string' ? err.message : String(err);
@@ -1370,8 +1610,8 @@ ipcMain.on('clipboard:markHandled', (_event, hash) => {
 
 // Rail "record" button: start recording (system picker on macOS 15+, our
 // own windows-only picker below that).
-ipcMain.on('capture:startRecording', () => {
-  beginRecording();
+ipcMain.on('capture:startRecording', (event, context) => {
+  beginRecording(BrowserWindow.fromWebContents(event.sender), context);
 });
 
 // Older-macOS picker handed us the chosen window — start recording it and
@@ -1402,6 +1642,7 @@ ipcMain.on('recorder:canceled', (event) => {
   recordingPending = false;
   if (recorderWindow && !recorderWindow.isDestroyed()) recorderWindow.close();
   recorderWindow = null;
+  clearRecordingOwner();
 });
 
 ipcMain.on('capture:stopRecording', () => {
@@ -1446,9 +1687,12 @@ ipcMain.on('recorder:meta', (event, meta) => {
 // space.
 ipcMain.on('recorder:result', (event, payload) => {
   if (recorderWindow && event.sender !== recorderWindow.webContents) return;
+  const owner = recordingOwnerWindow;
+  const context = recordingContext;
   finishScreenRecording();
   if (!payload || typeof payload.dataUrl !== 'string') {
-    emitCaptureError(classifyCaptureError('Recording produced no data.'));
+    emitCaptureError(classifyCaptureError('Recording produced no data.'), owner);
+    clearRecordingOwner();
     return;
   }
   emitCaptureCreated({
@@ -1458,13 +1702,17 @@ ipcMain.on('recorder:result', (event, payload) => {
     dataUrl: payload.dataUrl,
     sourceTitle: 'Screen recording',
     filename: recordingFilename(),
-  });
+    ...(context ? { space: context.space, dir: context.dir } : {}),
+  }, owner);
+  clearRecordingOwner();
 });
 
 ipcMain.on('recorder:error', (event, message) => {
   if (recorderWindow && event.sender !== recorderWindow.webContents) return;
+  const owner = recordingOwnerWindow;
   finishScreenRecording();
-  emitCaptureError(classifyCaptureError(typeof message === 'string' ? message : String(message)));
+  emitCaptureError(classifyCaptureError(typeof message === 'string' ? message : String(message)), owner);
+  clearRecordingOwner();
 });
 
 app.whenReady().then(async () => {

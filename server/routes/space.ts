@@ -12,12 +12,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { detectFormat, getSpaceName, HIDDEN_DOT_DIRS } from '../files.ts';
-import { indexableFileSizeError, isIndexExcludedDirName, shouldIndexFilePath } from '../indexable.ts';
+import { indexableFileSizeError, isCloudPlaceholderName, isIndexExcludedDirName, shouldIndexFilePath } from '../indexable.ts';
 import { matchNoteStem } from '../format.ts';
 import {
   clearSpacePath,
+  clearCurrentSpace,
+  deleteSpaceConfig,
   ensureKbRoot,
   getCurrentSpace,
+  getCurrentSpaceName,
   getKbRoot,
   getRecentSpaces,
   getActiveSpaces,
@@ -27,6 +30,7 @@ import {
   needsKbRootPicker,
   previewKbRootMigration,
   readSpaceConfig,
+  renameSpaceConfig,
   replaceCurrentSpacePath,
   resolveSpaceConfig,
   setCurrentSpace,
@@ -35,15 +39,19 @@ import {
   writeSpaceConfig,
   type MigrateEntry,
 } from '../space.ts';
-import { errorMessage } from '../log.ts';
-import { indexer } from '../state.ts';
+import { errorMessage, logger } from '../log.ts';
+import { deleteSpaceRuntimeState, indexer, invalidateSpaceSync, renameSpaceRuntimeState } from '../state.ts';
 import { switchSpaceMcpServers } from '../mcp-host.ts';
-import { deleteSpaceState } from '../state-db.ts';
+import { deleteSpaceState, renameSpaceState } from '../state-db.ts';
+import { hasInFlightUnder } from '../conversion-status.ts';
+import { noteTreeChanged } from '../watcher.ts';
 import {
   importFolderAsSpace,
   previewFolderImport,
   type ImportFolderMode,
 } from '../import-folder.ts';
+
+const log = logger('routes/space');
 
 export function mount(app: express.Express): void {
   // List the open + recent spaces. Powers the Welcome screen. Includes
@@ -52,7 +60,7 @@ export function mount(app: express.Express): void {
   app.get('/api/space', (_req, res) => {
     const current = getCurrentSpace();
     res.json({
-      current: current ? { path: current, name: path.basename(current) } : null,
+      current: current ? { path: current, name: getCurrentSpaceName() ?? path.basename(current) } : null,
       recent: getRecentSpaces(),
       homeDir: os.homedir(),
     });
@@ -81,11 +89,25 @@ export function mount(app: express.Express): void {
     try {
       setCurrentSpace(target, { create, exclusiveCreate });
       const spaceRoot = getCurrentSpace()!;
-      res.json({ current: { path: spaceRoot, name: getSpaceName() } });
+      res.json({ current: { path: spaceRoot, name: getCurrentSpaceName() ?? getSpaceName() } });
     } catch (err: unknown) {
       if ((err as any)?.code === 'SPACE_EXISTS') {
         return res.status(409).json({ error: errorMessage(err), code: 'SPACE_EXISTS' });
       }
+      res.status(400).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Close the current window's active space. Idempotent: if this window
+  // is already on Welcome, there is nothing to do. This keeps the
+  // server-side window binding in lockstep with renderer goHome(), so
+  // subsequent polls return NO_SPACE instead of silently reviving the
+  // previous space.
+  app.delete('/api/space', (_req, res) => {
+    try {
+      clearCurrentSpace();
+      res.json({ ok: true });
+    } catch (err: unknown) {
       res.status(400).json({ error: errorMessage(err) });
     }
   });
@@ -201,6 +223,8 @@ export function mount(app: express.Express): void {
     try {
       if (!fs.existsSync(oldPath)) return res.status(404).json({ error: 'space not found' });
       if (fs.existsSync(newPath)) return res.status(409).json({ error: `space "${newName}" already exists` });
+      assertNoInFlightSpaceConversion(oldName);
+      invalidateSpaceSync(oldName);
       fs.renameSync(oldPath, newPath);
       try {
         const files = collectIndexableFilesForRename(newPath, oldName);
@@ -210,16 +234,18 @@ export function mount(app: express.Express): void {
         throw err;
       }
       replaceCurrentSpacePath(oldPath, newPath);
-      // Drop the old prefix's state.db rows. `renamePathPrefix` already
-      // re-embedded the chunks under the new prefix; the per-file /
-      // pdf-conversion / queue rows under the old name are now orphans
-      // (reconcile repopulates the new prefix on next open). Without
-      // this, a stale conversions row could mislead a future space
-      // that reuses the old name — same hazard as delete.
-      deleteSpaceState(oldName);
+      // Carry persisted conversion failures through the rename so the
+      // Retry banner remains attached to the same source under its new
+      // kbRoot-relative prefix. Delete semantics are only for actual
+      // space deletion.
+      renameSpaceState(oldName, newName);
+      await renameSpaceRuntimeState(oldName, newName);
+      try { renameSpaceConfig(oldName, newName); }
+      catch (err: unknown) { log.warn(`space config rename failed for ${oldName} -> ${newName}: ${errorMessage(err)}`); }
+      noteTreeChanged();
       res.json({ name: newName, path: newPath });
     } catch (err: unknown) {
-      res.status(400).json({ error: errorMessage(err) });
+      sendSpaceOperationError(res, err);
     }
   });
 
@@ -230,6 +256,8 @@ export function mount(app: express.Express): void {
     const target = path.join(getKbRoot(), name);
     try {
       if (!fs.existsSync(target)) return res.status(404).json({ error: 'space not found' });
+      assertNoInFlightSpaceConversion(name);
+      invalidateSpaceSync(name);
       // Tear down live runtime bound to this space FIRST (kills the
       // terminal PTY, stops per-space MCP servers via onClose) so
       // nothing is still bound when the directory vanishes under it.
@@ -241,9 +269,13 @@ export function mount(app: express.Express): void {
       // a later same-named PDF skip auto-conversion (see deleteSpaceState).
       await indexer.deletePathPrefix(name);
       deleteSpaceState(name);
+      await deleteSpaceRuntimeState(name);
+      try { deleteSpaceConfig(name); }
+      catch (err: unknown) { log.warn(`space config delete failed for ${name}: ${errorMessage(err)}`); }
+      noteTreeChanged();
       res.json({});
     } catch (err: unknown) {
-      res.status(400).json({ error: errorMessage(err) });
+      sendSpaceOperationError(res, err);
     }
   });
 
@@ -297,6 +329,27 @@ export function mount(app: express.Express): void {
 
 }
 
+export function assertNoInFlightSpaceConversion(spaceName: string): void {
+  if (!hasInFlightUnder(spaceName)) return;
+  const err = new Error('space has conversions in progress');
+  (err as any).status = 409;
+  (err as any).code = 'CONVERSION_IN_FLIGHT';
+  throw err;
+}
+
+function sendSpaceOperationError(res: express.Response, err: unknown): void {
+  const status = (err as { status?: unknown })?.status;
+  const code = (err as { code?: unknown })?.code;
+  if (typeof status === 'number' && status >= 400 && status <= 599) {
+    res.status(status).json({
+      error: errorMessage(err),
+      ...(typeof code === 'string' ? { code } : {}),
+    });
+    return;
+  }
+  res.status(400).json({ error: errorMessage(err) });
+}
+
 function collectIndexableFilesForRename(
   spaceRoot: string,
   oldSpaceName: string,
@@ -325,6 +378,7 @@ function walkSpace(
     if (m) noteStems.add(m.stem);
   }
   for (const e of entries) {
+    if (isCloudPlaceholderName(e.name)) continue;
     if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
     if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
     if (e.isDirectory() && e.name.endsWith('_files')) {

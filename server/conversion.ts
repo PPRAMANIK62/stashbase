@@ -27,14 +27,20 @@ import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
 import { isPendingOrFailed, listInFlight, markDone, markFailed, markInFlight } from './conversion-status.ts';
 import { clearRecord } from './conversion-status.ts';
-import { fromKbRel, getKbRoot } from './space.ts';
+import { fromKbRel, fromKbRelForSpace, getKbRoot } from './space.ts';
 import { logger, errorMessage } from './log.ts';
+import { isCloudPlaceholderName } from './indexable.ts';
 
 const log = logger('conversion');
 
 // Keep the in-flight indicator visible long enough for a 500ms-poll
 // client to catch even a sub-second run.
 const MIN_VISIBLE_MS = 800;
+
+interface SourceSignature {
+  size: number;
+  mtimeMs: number;
+}
 
 export interface ConversionSpec {
   /** Short label for logs, e.g. `pdf_extract` / `ocr_extract`. */
@@ -45,6 +51,8 @@ export interface ConversionSpec {
   derivedNote: (absPath: string) => string;
   /** Run the extractor; resolve on success, reject with the stderr tail. */
   convert: (absPath: string) => Promise<unknown>;
+  /** Best-effort cleanup for derived files if the source disappears mid-run. */
+  cleanupDerived?: (absPath: string) => void;
 }
 
 /** Wired at boot (`server/index.ts`): push a freshly written derived
@@ -63,12 +71,26 @@ function kbRelOf(absPath: string): string | null {
   return rel.split(path.sep).join('/');
 }
 
+function sourceSignature(absPath: string): SourceSignature | null {
+  try {
+    const st = fs.statSync(absPath);
+    return st.isFile() ? { size: st.size, mtimeMs: st.mtimeMs } : null;
+  } catch {
+    return null;
+  }
+}
+
+function sameSourceSignature(a: SourceSignature | null, b: SourceSignature | null): boolean {
+  return a != null && b != null && a.size === b.size && a.mtimeMs === b.mtimeMs;
+}
+
 /** Run a conversion fire-and-forget, tracking in-flight in memory and
  *  persisting failures so the UI can offer Retry. On success the derived
  *  note goes straight into the index — no watcher round-trip. */
 function runConversion(absPath: string, kbRel: string | null, spec: ConversionSpec): void {
   log.info(`${spec.kind}: ${absPath} → ${path.basename(spec.derivedNote(absPath))} …`);
   if (kbRel) markInFlight(kbRel);
+  const startedWith = sourceSignature(absPath);
   const t0 = Date.now();
   // Defer the terminal status write so a 500ms-poll client catches even
   // a sub-second conversion's "Converting…" state.
@@ -79,6 +101,22 @@ function runConversion(absPath: string, kbRel: string | null, spec: ConversionSp
   spec.convert(absPath).then(
     async () => {
       log.info(`${spec.kind}: done in ${Date.now() - t0}ms (${path.basename(spec.derivedNote(absPath))})`);
+      if (!existsSync(absPath)) {
+        log.info(`${spec.kind}: source disappeared before completion, cleaning derived output for ${absPath}`);
+        try { spec.cleanupDerived?.(absPath); } catch (err: unknown) {
+          log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}: ${errorMessage(err)}`);
+        }
+        settle(() => { if (kbRel) clearRecord(kbRel); });
+        return;
+      }
+      if (!sameSourceSignature(startedWith, sourceSignature(absPath))) {
+        log.info(`${spec.kind}: source changed before completion, cleaning stale derived output for ${absPath}`);
+        try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
+          log.warn(`${spec.kind}: stale derived cleanup failed for changed source ${absPath}: ${errorMessage(cleanupErr)}`);
+        }
+        settle(() => { if (kbRel) clearRecord(kbRel); });
+        return;
+      }
       // Index the note before flipping the status — when "Converting…"
       // clears, the content is already searchable.
       try {
@@ -90,6 +128,14 @@ function runConversion(absPath: string, kbRel: string | null, spec: ConversionSp
     },
     (err: Error) => {
       log.warn(`${spec.kind}: failed for ${absPath}: ${err.message}`);
+      if (!existsSync(absPath)) {
+        settle(() => { if (kbRel) clearRecord(kbRel); });
+        return;
+      }
+      if (!sameSourceSignature(startedWith, sourceSignature(absPath))) {
+        settle(() => { if (kbRel) clearRecord(kbRel); });
+        return;
+      }
       settle(() => { if (kbRel) markFailed(kbRel, err.message); });
     },
   );
@@ -119,11 +165,18 @@ export function runBackgroundConversion(kbRel: string, work: () => Promise<void>
  *  silently if the derived note already exists (re-drop of the same
  *  source). kbRel derives from the absolute path — no window context. */
 export function maybeConvert(absPath: string, spec: ConversionSpec): void {
+  const kbRel = kbRelOf(absPath);
   if (existsSync(spec.derivedNote(absPath))) {
     log.info(`${spec.kind}: skipped ${absPath} — ${path.basename(spec.derivedNote(absPath))} already present`);
+    if (kbRel) markDone(kbRel);
     return;
   }
-  runConversion(absPath, kbRelOf(absPath), spec);
+  if (!existsSync(absPath)) {
+    if (kbRel) clearRecord(kbRel);
+    return;
+  }
+  if (kbRel && isPendingOrFailed(kbRel)) return;
+  runConversion(absPath, kbRel, spec);
 }
 
 /** Reconcile hook: walk `spaceAbs` for convertible sources and queue any
@@ -142,12 +195,12 @@ export function discoverNewSources(spaceAbs: string, spec: ConversionSpec): void
 }
 
 /** Space-relative paths of every source whose conversion is currently
- *  in-flight, scoped to the current window's space — this is a UI view,
- *  so the ambient window context is the right scope here. */
-export function getInFlightConversions(): string[] {
+ *  in-flight. Prefer passing `spaceName` from the request/window; the
+ *  ambient current-space fallback exists for older internal callers. */
+export function getInFlightConversions(spaceName?: string): string[] {
   const out: string[] = [];
   for (const kbRel of listInFlight()) {
-    const spaceRel = fromKbRel(kbRel);
+    const spaceRel = spaceName ? fromKbRelForSpace(kbRel, spaceName) : fromKbRel(kbRel);
     if (spaceRel != null) out.push(spaceRel);
   }
   out.sort();
@@ -163,6 +216,7 @@ function walkSources(
   let entries: fs.Dirent[];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
   for (const e of entries) {
+    if (isCloudPlaceholderName(e.name)) continue;
     // Skip hidden / sidecar / git plumbing and derived `_files` bundles.
     if (e.name.startsWith('.')) continue;
     if (e.isDirectory() && e.name.endsWith('_files')) continue;

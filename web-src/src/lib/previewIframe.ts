@@ -58,9 +58,8 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
   let url: URL;
   try { url = new URL(anchor.href, window.location.href); } catch { return; }
   if (url.origin === window.location.origin && url.pathname.startsWith('/asset/')) {
-    const encoded = url.pathname.slice('/asset/'.length);
     let decoded: string;
-    try { decoded = encoded.split('/').map(decodeURIComponent).join('/'); } catch { return; }
+    try { decoded = decodeAssetPathname(url.pathname); } catch { return; }
     if (/\.(md|markdown|html|htm)$/i.test(decoded)) {
       // Notes navigate in-app.
       e.preventDefault();
@@ -82,6 +81,15 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
     e.preventDefault();
     window.postMessage({ type: 'stashbase-open-external', href: url.href }, window.location.origin);
   }
+}
+
+function decodeAssetPathname(pathname: string): string {
+  let encoded = pathname.slice('/asset/'.length);
+  if (encoded.startsWith('__window/')) {
+    const slash = encoded.indexOf('/', '__window/'.length);
+    encoded = slash >= 0 ? encoded.slice(slash + 1) : '';
+  }
+  return encoded.split('/').map(decodeURIComponent).join('/');
 }
 
 function escapeAttr(value: string): string {

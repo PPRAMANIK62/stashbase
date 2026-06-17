@@ -14,13 +14,14 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { onSwitch, requireCurrentSpace } from './space.ts';
 import { decodeEntities } from './html.ts';
 import { errorCode, errorMessage, logger } from './log.ts';
 
 const log = logger('files');
-import { detectViewerFormat, isDerivedNoteName, isImageFile, matchNoteStem, type FileFormat, type ViewerFormat } from './format.ts';
-import { isIndexExcludedDirName } from './indexable.ts';
+import { detectFormat, detectViewerFormat, isDerivedNoteName, isImageFile, matchNoteStem, NOTE_EXTS, type FileFormat, type ViewerFormat } from './format.ts';
+import { isCloudPlaceholderName, isIndexExcludedDirName, shouldIndexFilePath } from './indexable.ts';
 
 export { detectFormat, type FileFormat } from './format.ts';
 
@@ -93,8 +94,56 @@ function resolveSafe(rel: string): string {
   return full;
 }
 
+function isPathInsideOrSame(parent: string, child: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function realSpaceRoot(): string {
+  return fs.realpathSync.native(spaceRoot());
+}
+
+function assertRealPathInsideSpace(absPath: string, label = 'path'): void {
+  const real = fs.realpathSync.native(absPath);
+  if (!isPathInsideOrSame(realSpaceRoot(), real)) {
+    throw new Error(`${label} escapes space through symlink`);
+  }
+}
+
+function assertCreatablePathInsideSpace(absPath: string, label = 'path'): void {
+  const root = spaceRoot();
+  const rootReal = realSpaceRoot();
+  let probe = path.resolve(path.dirname(absPath));
+  while (!fs.existsSync(probe)) {
+    const parent = path.dirname(probe);
+    if (parent === probe) break;
+    probe = parent;
+  }
+  const probeRel = path.relative(root, probe);
+  if (probeRel.startsWith('..') || path.isAbsolute(probeRel)) {
+    throw new Error(`${label} escapes space`);
+  }
+  const probeReal = fs.realpathSync.native(probe);
+  if (!isPathInsideOrSame(rootReal, probeReal)) {
+    throw new Error(`${label} escapes space through symlink`);
+  }
+}
+
 export function saveText(relPath: string, content: string): void {
   saveBytes(relPath, Buffer.from(content, 'utf8'));
+}
+
+export function fileVersion(relPath: string): string | null {
+  let target: string;
+  try { target = resolveSafe(relPath); } catch { return null; }
+  try {
+    assertRealPathInsideSpace(target);
+    const st = fs.statSync(target);
+    if (!st.isFile()) return null;
+    return `${st.dev}:${st.ino}:${st.ctimeMs}:${st.mtimeMs}:${st.size}`;
+  } catch {
+    return null;
+  }
 }
 
 /** Write raw bytes (e.g. images / css / fonts that arrive alongside
@@ -103,10 +152,20 @@ export function saveText(relPath: string, content: string): void {
  *  space. */
 export function saveBytes(relPath: string, bytes: Buffer): void {
   const target = resolveSafe(relPath);
+  assertCreatablePathInsideSpace(target);
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  const tmp = target + '.tmp';
-  fs.writeFileSync(tmp, bytes);
-  fs.renameSync(tmp, target);
+  assertCreatablePathInsideSpace(target);
+  const tmp = path.join(
+    path.dirname(target),
+    `.${path.basename(target)}.${process.pid}.${crypto.randomUUID()}.tmp`,
+  );
+  try {
+    fs.writeFileSync(tmp, bytes);
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+    throw err;
+  }
 }
 
 /** Exclusive-create variant: returns false if the file already exists
@@ -115,7 +174,9 @@ export function saveBytes(relPath: string, bytes: Buffer): void {
  *  directories if needed. */
 export function createTextExclusive(relPath: string, content: string): boolean {
   const target = resolveSafe(relPath);
+  assertCreatablePathInsideSpace(target);
   fs.mkdirSync(path.dirname(target), { recursive: true });
+  assertCreatablePathInsideSpace(target);
   try {
     fs.writeFileSync(target, content, { encoding: 'utf8', flag: 'wx' });
     return true;
@@ -130,13 +191,28 @@ export function createTextExclusive(relPath: string, content: string): boolean {
 export function renameOnDisk(oldRel: string, newRel: string): void {
   const o = resolveSafe(oldRel);
   const n = resolveSafe(newRel);
+  if (!fs.existsSync(o) || !fs.statSync(o).isFile()) {
+    throw new Error('source file not found');
+  }
+  assertRealPathInsideSpace(o, 'source file');
+  assertCreatablePathInsideSpace(n, 'target file');
+  if (fs.existsSync(n)) {
+    throw new Error('target already exists');
+  }
   fs.mkdirSync(path.dirname(n), { recursive: true });
+  assertCreatablePathInsideSpace(n, 'target file');
   fs.renameSync(o, n);
   // Notes carry an implicit "<stem>_files/" attachment bundle (browser
   // "Save Page As Complete" output for HTML, paste/drag image targets
   // for both formats). When the note itself is renamed, keep the
   // bundle in lockstep so the iframe's relative URLs stay resolvable.
   renameBundleSibling(oldRel, newRel);
+  // Binary viewer files (PDF/images) own hidden extracted markdown
+  // siblings. Keep those artifacts next to the source on rename/move so
+  // search does not point at an orphaned old path.
+  if (/\.pdf$/i.test(oldRel) || isImageFile(oldRel)) {
+    renameDerivedArtifactsForSource(oldRel, newRel);
+  }
 }
 
 /** Resolve a space-relative path to an absolute filesystem path for
@@ -147,6 +223,7 @@ export function resolveAsset(relPath: string): string | null {
   let target: string;
   try { target = resolveSafe(relPath); } catch { return null; }
   try {
+    assertRealPathInsideSpace(target);
     const st = fs.statSync(target);
     if (!st.isFile()) return null;
   } catch { return null; }
@@ -156,14 +233,17 @@ export function resolveAsset(relPath: string): string | null {
 export function readText(relPath: string): string | null {
   let target: string;
   try { target = resolveSafe(relPath); } catch { return null; }
-  try { return fs.readFileSync(target, 'utf8'); } catch { return null; }
+  try {
+    assertRealPathInsideSpace(target);
+    return fs.readFileSync(target, 'utf8');
+  } catch { return null; }
 }
 
 /** True if a file or directory exists at the space-relative path. */
 export function pathExists(relPath: string): boolean {
   let target: string;
   try { target = resolveSafe(relPath); } catch { return false; }
-  try { fs.statSync(target); return true; } catch { return false; }
+  try { assertRealPathInsideSpace(target); fs.statSync(target); return true; } catch { return false; }
 }
 
 /** Resolve to an absolute path if anything exists at the space-relative
@@ -172,7 +252,7 @@ export function pathExists(relPath: string): boolean {
 export function resolveExisting(relPath: string): string | null {
   let target: string;
   try { target = resolveSafe(relPath); } catch { return null; }
-  try { fs.statSync(target); return target; } catch { return null; }
+  try { assertRealPathInsideSpace(target); fs.statSync(target); return target; } catch { return null; }
 }
 
 /** Delete a file at the given space-relative path. Returns false only
@@ -183,6 +263,8 @@ export function deleteFile(relPath: string): boolean {
   const target = resolveSafe(relPath);
   let removed = false;
   try {
+    if (!fs.existsSync(target)) return false;
+    assertRealPathInsideSpace(target, 'file');
     fs.unlinkSync(target);
     removed = true;
   } catch (err: any) {
@@ -197,10 +279,10 @@ export function deleteFile(relPath: string): boolean {
     // bundle (`.paper.pdf_files/`). Without this, those orphaned files
     // would re-appear in the sidebar (the sibling-bound hide rule in
     // `walk()` depends on the parent PDF still being there).
-    if (/\.pdf$/i.test(relPath)) deletePdfDerivedSiblings(relPath);
+    if (/\.pdf$/i.test(relPath)) deleteDerivedArtifactsForSource(relPath);
     // Same story for an image's OCR sibling note (`.shot.png.md`) — no
     // bundle, just the single derived note.
-    else if (isImageFile(relPath)) deleteImageDerivedNote(relPath);
+    else if (isImageFile(relPath)) deleteDerivedArtifactsForSource(relPath);
   }
   return removed;
 }
@@ -242,23 +324,53 @@ function deleteBundleSibling(noteRel: string): void {
   } catch { /* no bundle — fine */ }
 }
 
-/** Tear down a PDF's app-derived siblings: the dot-prefixed
- *  `.<sourceBasename>.md` (or `.html`) note + `.<sourceBasename>_files/` bundle. Called
- *  from `deleteFile` whenever a `.pdf` goes away — otherwise the
- *  sibling-bound hide rule in `walk()` would un-hide these orphans
- *  on the next sidebar refresh. Best-effort: missing siblings are
- *  fine. */
-function deletePdfDerivedSiblings(pdfRel: string): void {
-  const base = path.posix.basename(pdfRel);
-  const m = base.match(/^(.+)\.pdf$/i);
-  if (!m) return;
-  const stem = m[1];
-  const parent = path.posix.dirname(pdfRel);
+export interface DerivedArtifacts {
+  notes: string[];
+  bundles: string[];
+}
+
+/** App-maintained derived artifacts for a PDF/image source. Current names
+ *  carry the full source basename (`paper.pdf` → `.paper.pdf.md`) so
+ *  same-stem PDFs/images cannot collide. Legacy names without the source
+ *  extension are included for cleanup only. */
+export function derivedArtifactsForSource(relPath: string): DerivedArtifacts {
+  const base = path.posix.basename(relPath);
+  const parent = path.posix.dirname(relPath);
   const join = (name: string) => (parent === '.' ? name : `${parent}/${name}`);
-  // Notes (md / html — md is the current default, html stays covered
-  // for spaces that still have legacy derived html sitting around).
-  for (const ext of ['md', 'markdown', 'html', 'htm']) {
-    const rel = join(`.${stem}.${ext}`);
+  const notes: string[] = [];
+  const bundles: string[] = [];
+  const addNote = (name: string) => {
+    if (!notes.includes(name)) notes.push(name);
+  };
+  const addBundle = (name: string) => {
+    if (!bundles.includes(name)) bundles.push(name);
+  };
+
+  if (/\.pdf$/i.test(base)) {
+    const stem = base.replace(/\.pdf$/i, '');
+    for (const sourceBase of [base, stem]) {
+      if (!sourceBase) continue;
+      for (const ext of NOTE_EXTS) addNote(join(`.${sourceBase}.${ext}`));
+      addBundle(join(`.${sourceBase}_files`));
+    }
+  } else if (isImageFile(base)) {
+    const stem = base.replace(/\.[^.]+$/, '');
+    for (const sourceBase of [base, stem]) {
+      if (!sourceBase) continue;
+      addNote(join(`.${sourceBase}.md`));
+      addNote(join(`.${sourceBase}.markdown`));
+    }
+  }
+
+  return { notes, bundles };
+}
+
+/** Tear down a source file's app-derived siblings. Best-effort: missing
+ *  artifacts are fine, but permission/IO failures are logged so hidden
+ *  stale conversion output is diagnosable. */
+function deleteDerivedArtifactsForSource(sourceRel: string): void {
+  const artifacts = derivedArtifactsForSource(sourceRel);
+  for (const rel of artifacts.notes) {
     let abs: string;
     try { abs = resolveSafe(rel); } catch { continue; }
     try { fs.unlinkSync(abs); } catch (err: any) {
@@ -267,35 +379,50 @@ function deletePdfDerivedSiblings(pdfRel: string): void {
       }
     }
   }
-  // Bundle dir
-  const bundleRel = join(`.${stem}_files`);
-  let bundleAbs: string;
-  try { bundleAbs = resolveSafe(bundleRel); } catch { return; }
-  try {
-    if (fs.statSync(bundleAbs).isDirectory()) {
-      fs.rmSync(bundleAbs, { recursive: true, force: true });
-    }
-  } catch { /* no bundle — fine */ }
+  for (const rel of artifacts.bundles) {
+    let abs: string;
+    try { abs = resolveSafe(rel); } catch { continue; }
+    try {
+      if (fs.statSync(abs).isDirectory()) {
+        fs.rmSync(abs, { recursive: true, force: true });
+      }
+    } catch { /* no bundle — fine */ }
+  }
 }
 
-/** Tear down an image's app-derived OCR note (`.<sourceBasename>.md`). Called
- *  from `deleteFile` whenever an image goes away — otherwise the
- *  orphaned dot-prefixed note would un-hide in the sidebar (the
- *  sibling-bound hide rule depends on the parent image still being
- *  there). Images have no `_files/` bundle, so this is note-only.
- *  Best-effort: a missing note is fine. */
-function deleteImageDerivedNote(imageRel: string): void {
-  const base = path.posix.basename(imageRel);
-  const m = base.match(/^(.+)\.[^.]+$/);
-  if (!m) return;
-  const stem = m[1];
-  const parent = path.posix.dirname(imageRel);
-  const rel = parent === '.' ? `.${stem}.md` : `${parent}/.${stem}.md`;
-  let abs: string;
-  try { abs = resolveSafe(rel); } catch { return; }
-  try { fs.unlinkSync(abs); } catch (err: any) {
-    if (errorCode(err) !== 'ENOENT') {
-      log.warn(`failed to unlink derived ${rel}: ${errorMessage(err)}`);
+function renameDerivedArtifactsForSource(oldSourceRel: string, newSourceRel: string): void {
+  const oldArtifacts = derivedArtifactsForSource(oldSourceRel);
+  const newArtifacts = derivedArtifactsForSource(newSourceRel);
+  renameFirstExistingArtifact(oldArtifacts.notes, newArtifacts.notes[0], 'file');
+  renameFirstExistingArtifact(oldArtifacts.bundles, newArtifacts.bundles[0], 'dir');
+}
+
+function renameFirstExistingArtifact(oldRels: string[], newRel: string | undefined, kind: 'file' | 'dir'): void {
+  let moved = false;
+  for (const oldRel of oldRels) {
+    let oldAbs: string;
+    try { oldAbs = resolveSafe(oldRel); } catch { continue; }
+    if (!fs.existsSync(oldAbs)) continue;
+    if (!moved && newRel) {
+      let newAbs: string;
+      try { newAbs = resolveSafe(newRel); } catch { continue; }
+      try {
+        fs.mkdirSync(path.dirname(newAbs), { recursive: true });
+        // Target source was just claimed non-existent, so a matching
+        // hidden target artifact can only be stale app output. Replace it
+        // with the artifact that belongs to the file being renamed.
+        fs.rmSync(newAbs, { recursive: kind === 'dir', force: true });
+        fs.renameSync(oldAbs, newAbs);
+        moved = true;
+        continue;
+      } catch (err: unknown) {
+        log.warn(`failed to rename derived ${oldRel} -> ${newRel}: ${errorMessage(err)}`);
+      }
+    }
+    try {
+      fs.rmSync(oldAbs, { recursive: kind === 'dir', force: true });
+    } catch (err: unknown) {
+      log.warn(`failed to remove stale derived ${oldRel}: ${errorMessage(err)}`);
     }
   }
 }
@@ -305,7 +432,9 @@ function deleteImageDerivedNote(imageRel: string): void {
 export function createFolder(relPath: string): boolean {
   const target = resolveSafe(relPath);
   if (fs.existsSync(target)) return false;
+  assertCreatablePathInsideSpace(target, 'folder');
   fs.mkdirSync(target, { recursive: true });
+  assertRealPathInsideSpace(target, 'folder');
   return true;
 }
 
@@ -316,6 +445,8 @@ export function createFolder(relPath: string): boolean {
 export function renameFolder(oldRel: string, newRel: string): void {
   const oldAbs = resolveSafe(oldRel);
   const newAbs = resolveSafe(newRel);
+  assertRealPathInsideSpace(oldAbs, 'source folder');
+  assertCreatablePathInsideSpace(newAbs, 'target folder');
   if (!fs.existsSync(oldAbs) || !fs.statSync(oldAbs).isDirectory()) {
     throw new Error('source folder not found');
   }
@@ -323,6 +454,7 @@ export function renameFolder(oldRel: string, newRel: string): void {
     throw new Error('target already exists');
   }
   fs.mkdirSync(path.dirname(newAbs), { recursive: true });
+  assertCreatablePathInsideSpace(newAbs, 'target folder');
   fs.renameSync(oldAbs, newAbs);
 }
 
@@ -336,6 +468,8 @@ export function deleteFolder(relPath: string): boolean {
   let target: string;
   try { target = resolveSafe(relPath); } catch { return false; }
   try {
+    if (!fs.existsSync(target)) return false;
+    assertRealPathInsideSpace(target, 'folder');
     fs.rmSync(target, { recursive: true, force: true });
     return true;
   } catch (err: any) {
@@ -443,6 +577,27 @@ export function listFolders(): FolderEntry[] {
   return out;
 }
 
+/** Text files that should be carried through a folder-level index rename.
+ *  Unlike `listFiles()`, this includes app-derived hidden notes
+ *  (`.paper.pdf.md`, `.shot.png.md`) because those are the actual indexed
+ *  text for PDF/image sources. */
+export function listIndexableTextFilesUnder(relPrefix: string): Array<{ name: string; content: string }> {
+  const safePrefix = safePath(relPrefix);
+  const start = resolveSafe(safePrefix);
+  assertRealPathInsideSpace(start, 'folder');
+  const out: Array<{ name: string; content: string }> = [];
+  walk(start, safePrefix, (rel, full, ent) => {
+    if (!ent.isFile()) return;
+    if (!detectFormat(ent.name)) return;
+    if (!shouldIndexFilePath(rel)) return;
+    try {
+      out.push({ name: rel, content: fs.readFileSync(full, 'utf8') });
+    } catch { /* unreadable files are skipped; sync can surface them later */ }
+  }, { includeDerivedNotes: true });
+  out.sort((a, b) => (a.name < b.name ? -1 : 1));
+  return out;
+}
+
 /** Dot-prefixed dir / file names we **always** hide from the sidebar.
  *
  *  Three categories:
@@ -471,6 +626,7 @@ function walk(
   dir: string,
   prefix: string,
   fn: (rel: string, full: string, ent: fs.Dirent) => void,
+  opts: { includeDerivedNotes?: boolean } = {},
 ): void {
   let entries: fs.Dirent[];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
@@ -482,12 +638,16 @@ function walk(
   // is still reachable via `/asset/*` for the iframe; the sidebar
   // tree just sees the note as one row.
   const noteStems = new Set<string>();
+  const legacyDerivedStems = new Set<string>();
   for (const e of entries) {
     if (!e.isFile()) continue;
     const m = e.name.match(/^(.+)\.(md|markdown|html|htm|pdf)$/i);
     if (m) noteStems.add(m[1]);
+    const src = e.name.match(/^(.+)\.(pdf|png|jpe?g|webp)$/i);
+    if (src) legacyDerivedStems.add(src[1]);
   }
   for (const e of entries) {
+    if (isCloudPlaceholderName(e.name)) continue;
     // Hide only the load-bearing internals (`.stashbase`), git plumbing,
     // and OS junk — see `HIDDEN_DOT_DIRS`. Everything else with a `.`
     // prefix is the user's content (`.claude` / `.codex` / `.vscode` /
@@ -508,7 +668,8 @@ function walk(
     // hides them — and that's exactly what "dot-prefix = system
     // artifact" should mean.
     if (e.isFile() && e.name.startsWith('.')) {
-      if (isDerivedNoteName(e.name)) continue;
+      if (!opts.includeDerivedNotes && isDerivedNoteName(e.name)) continue;
+      if (!opts.includeDerivedNotes && isLegacyDerivedNoteName(e.name, legacyDerivedStems)) continue;
     }
     if (e.isDirectory() && e.name.endsWith('_files')) {
       const stem = e.name.slice(0, -'_files'.length);
@@ -521,8 +682,16 @@ function walk(
     const rel = prefix ? `${prefix}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
     fn(rel, full, e);
-    if (e.isDirectory()) walk(full, rel, fn);
+    if (e.isDirectory()) walk(full, rel, fn, opts);
   }
+}
+
+function isLegacyDerivedNoteName(name: string, sourceStems: Set<string>): boolean {
+  const m = name.match(/^\.([^/]+)\.(md|markdown|html|htm)$/i);
+  if (!m) return false;
+  const stem = m[1];
+  if (/\.(pdf|png|jpe?g|webp)$/i.test(stem)) return false;
+  return sourceStems.has(stem);
 }
 
 function preview(

@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('electron', {
    *  This is only run from the user's MCP Settings click path; app
    *  launch and package install no longer modify client configs. */
   configureMcp: (client) => ipcRenderer.invoke('mcp:configure', client),
+  disconnectMcp: (client) => ipcRenderer.invoke('mcp:disconnect', client),
   openSpaceWindow: (name) => ipcRenderer.invoke('window:openSpace', name),
   listCaptureWindows: () => ipcRenderer.invoke('capture:listWindows'),
   getCaptureSettings: () => ipcRenderer.invoke('capture:getSettings'),
@@ -92,7 +93,7 @@ contextBridge.exposeInMainWorld('electron', {
    *  re-offered on the next focus. */
   markClipboardHandled: (hash) => ipcRenderer.send('clipboard:markHandled', hash),
   /** Rail "record" button: start recording (raises the source picker). */
-  startRecording: () => ipcRenderer.send('capture:startRecording'),
+  startRecording: (context) => ipcRenderer.send('capture:startRecording', context),
   /** Picker hands the chosen window id over to start recording it. */
   recordWindow: (sourceId) => ipcRenderer.invoke('recorder:recordWindow', sourceId),
   /** Stop an in-progress screen recording (the rail button toggles to a

@@ -37,6 +37,7 @@
     "build:server": "node scripts/build-server.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",
     "build:python-sidecar": "node scripts/build-python-sidecar.mjs",
+    "build:python-extract-sidecar": "node scripts/build-python-sidecar.mjs --with-extract",
     "clean:python-build": "node scripts/clean-python-build.mjs",
     "test:import-folder": "node --import tsx --test server/import-folder.test.ts",
     "build": "pnpm build:web && pnpm build:server && pnpm build:mcp",

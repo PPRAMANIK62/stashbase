@@ -37,6 +37,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { WebSocket } from 'ws';
 import {
+  getSessionInfo,
   query,
   type Query,
   type SDKMessage,
@@ -154,6 +155,7 @@ interface Pending {
   resolve: (r: PermissionResult) => void;
   input: Record<string, unknown>;
   suggestions?: PermissionUpdate[];
+  cleanup?: () => void;
 }
 
 /** One live Agent-SDK session bridged to one WebSocket. */
@@ -166,20 +168,41 @@ class AgentSession {
    *  client so the history dropdown can mark this session active. */
   private sessionId: string | null = null;
 
-  constructor(private ws: WebSocket, readonly windowId: string, private effort?: EffortLevel, private resume?: string) {
+  constructor(
+    private ws: WebSocket,
+    windowId: string,
+    private effort?: EffortLevel,
+    private resume?: string,
+    private onDispose?: (session: AgentSession) => void,
+  ) {
+    this.windowId = normalizeAgentWindowId(windowId);
     ws.on('message', (raw) => this.onMessage(String(raw)));
     ws.on('close', () => this.dispose());
     ws.on('error', () => this.dispose());
-    runWithWindowId(this.windowId, () => this.start());
   }
 
-  private start(): void {
+  readonly windowId: string;
+
+  begin(): void {
+    runWithWindowId(this.windowId, () => { void this.start(); });
+  }
+
+  private async start(): Promise<void> {
+    if (this.closed) return;
     const cwd = getCurrentSpace();
     if (!cwd) {
       this.send({ t: 'error', message: 'No space open.' });
-      this.send({ t: 'exit' });
+      this.finish();
       return;
     }
+    if (this.closed) return;
+    if (this.resume && !(await resumeMatchesCwd(this.resume, cwd))) {
+      if (this.closed) return;
+      this.send({ t: 'error', message: 'That session belongs to a different space.' });
+      this.finish();
+      return;
+    }
+    if (this.closed) return;
     try {
       this.q = query({
         prompt: this.input,
@@ -224,7 +247,11 @@ class AgentSession {
       });
     } catch (err: unknown) {
       this.send({ t: 'error', message: errorMessage(err) });
-      this.send({ t: 'exit' });
+      this.finish();
+      return;
+    }
+    if (this.closed) {
+      void this.q?.interrupt().catch(() => { /* already disposed */ });
       return;
     }
     this.send({ t: 'ready' });
@@ -239,7 +266,7 @@ class AgentSession {
     } catch (err: unknown) {
       if (!this.closed) this.send({ t: 'error', message: errorMessage(err) });
     }
-    if (!this.closed) this.send({ t: 'exit' });
+    this.finish();
   }
 
   private onSdkMessage(msg: SDKMessage): void {
@@ -314,11 +341,20 @@ class AgentSession {
     }
     return new Promise<PermissionResult>((resolve) => {
       const id = randomUUID();
-      this.pending.set(id, { resolve, input, suggestions: opts.suggestions });
-      this.send({ t: 'permission', id, toolUseId: opts.toolUseID, name, title: opts.title ?? null, input });
-      opts.signal.addEventListener('abort', () => {
+      const onAbort = () => {
+        const p = this.pending.get(id);
+        if (!p) return;
+        p.cleanup?.();
         if (this.pending.delete(id)) resolve({ behavior: 'deny', message: 'Interrupted.' });
+      };
+      opts.signal.addEventListener('abort', onAbort, { once: true });
+      this.pending.set(id, {
+        resolve,
+        input,
+        suggestions: opts.suggestions,
+        cleanup: () => opts.signal.removeEventListener('abort', onAbort),
       });
+      this.send({ t: 'permission', id, toolUseId: opts.toolUseID, name, title: opts.title ?? null, input });
     });
   }
 
@@ -342,6 +378,7 @@ class AgentSession {
         const p = this.pending.get(id);
         if (!p) return;
         this.pending.delete(id);
+        p.cleanup?.();
         if (msg.allow) {
           p.resolve({
             behavior: 'allow',
@@ -380,16 +417,39 @@ class AgentSession {
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
 
+  private finish(): void {
+    if (this.closed) return;
+    this.send({ t: 'exit' });
+    this.dispose();
+  }
+
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    this.onDispose?.(this);
     // Resolve any dangling permission prompts so the SDK loop unwinds.
-    for (const [, p] of this.pending) p.resolve({ behavior: 'deny', message: 'Session closed.' });
+    for (const [, p] of this.pending) {
+      p.cleanup?.();
+      p.resolve({ behavior: 'deny', message: 'Session closed.' });
+    }
     this.pending.clear();
     void this.q?.interrupt().catch(() => { /* already gone */ });
     this.input.end();
     try { this.ws.close(); } catch { /* already closed */ }
   }
+}
+
+export async function resumeMatchesCwd(sessionId: string, cwd: string): Promise<boolean> {
+  try {
+    const info = await getSessionInfo(sessionId);
+    return sessionInfoMatchesCwd(info, cwd);
+  } catch {
+    return false;
+  }
+}
+
+export function sessionInfoMatchesCwd(info: { cwd?: unknown } | null | undefined, cwd: string): boolean {
+  return !!(info && typeof info.cwd === 'string' && path.resolve(info.cwd) === path.resolve(cwd));
 }
 
 /** Stringify a tool_result `content` (string, or an array of text/other
@@ -413,9 +473,15 @@ function stringifyToolResult(content: unknown): string {
 const sessions = new Set<AgentSession>();
 
 export function attachAgentWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string): void {
-  const session = new AgentSession(ws, windowId, effort as EffortLevel | undefined, resume);
+  const session = new AgentSession(
+    ws,
+    windowId,
+    effort as EffortLevel | undefined,
+    resume,
+    (s) => sessions.delete(s),
+  );
   sessions.add(session);
-  ws.on('close', () => { sessions.delete(session); });
+  session.begin();
 }
 
 /** Kill every live agent session (optionally for one window). Called on
@@ -427,4 +493,19 @@ export function killActiveAgent(windowId?: string): void {
       sessions.delete(session);
     }
   }
+}
+
+export function __activeAgentSessionCountForTest(): number {
+  return sessions.size;
+}
+
+export function __setAgentSessionForTest(session: { windowId: string; dispose: () => void }): () => void {
+  const testSession = session as unknown as AgentSession;
+  sessions.add(testSession);
+  return () => sessions.delete(testSession);
+}
+
+function normalizeAgentWindowId(windowId: string | null | undefined): string {
+  const raw = typeof windowId === 'string' ? windowId.trim() : '';
+  return raw ? raw.slice(0, 128) : 'default';
 }

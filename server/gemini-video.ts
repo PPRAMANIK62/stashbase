@@ -27,6 +27,7 @@ import { getGeminiKey } from './app-config.ts';
 
 const log = logger('gemini-video');
 const BASE = 'https://generativelanguage.googleapis.com';
+const GEMINI_FETCH_TIMEOUT_MS = 30_000;
 
 const PROMPT = `You are analyzing a screen recording for a personal knowledge base. Produce a single Markdown note.
 
@@ -61,10 +62,17 @@ async function bodyText(res: Response): Promise<string> {
   try { return (await res.text()).slice(0, 500); } catch { return '(no body)'; }
 }
 
+function geminiFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(GEMINI_FETCH_TIMEOUT_MS),
+  });
+}
+
 /** Resumable Files-API upload (start → upload+finalize). Returns the file
  *  record (still PROCESSING for video). */
 async function uploadFile(key: string, bytes: Uint8Array, mimeType: string): Promise<GeminiFile> {
-  const start = await fetch(`${BASE}/upload/v1beta/files?key=${key}`, {
+  const start = await geminiFetch(`${BASE}/upload/v1beta/files?key=${key}`, {
     method: 'POST',
     headers: {
       'X-Goog-Upload-Protocol': 'resumable',
@@ -79,7 +87,7 @@ async function uploadFile(key: string, bytes: Uint8Array, mimeType: string): Pro
   const uploadUrl = start.headers.get('x-goog-upload-url');
   if (!uploadUrl) throw new Error('files:start returned no upload URL');
 
-  const up = await fetch(uploadUrl, {
+  const up = await geminiFetch(uploadUrl, {
     method: 'POST',
     headers: {
       'Content-Length': String(bytes.byteLength),
@@ -104,21 +112,20 @@ export async function analyzeVideoWithGemini(videoAbsPath: string, mimeType: str
   const bytes = await readFile(videoAbsPath);
   log.info(`gemini: uploading recording (${mimeType}, ${bytes.byteLength} bytes) …`);
   let file = await uploadFile(key, bytes, mimeType);
-
-  // Video files are processed asynchronously; wait for ACTIVE (capped).
-  const deadline = Date.now() + 5 * 60 * 1000;
-  while (file.state === 'PROCESSING') {
-    if (Date.now() > deadline) throw new Error('Gemini file processing timed out');
-    await sleep(2000);
-    const r = await fetch(`${BASE}/v1beta/${file.name}?key=${key}`);
-    if (!r.ok) throw new Error(`files:get ${r.status}: ${await bodyText(r)}`);
-    file = await r.json() as GeminiFile;
-  }
-  if (file.state !== 'ACTIVE') throw new Error(`Gemini file not ACTIVE (state=${file.state})`);
-
-  log.info(`gemini: analysing with ${model} …`);
   try {
-    const res = await fetch(`${BASE}/v1beta/models/${model}:generateContent?key=${key}`, {
+    // Video files are processed asynchronously; wait for ACTIVE (capped).
+    const deadline = Date.now() + 5 * 60 * 1000;
+    while (file.state === 'PROCESSING') {
+      if (Date.now() > deadline) throw new Error('Gemini file processing timed out');
+      await sleep(2000);
+      const r = await geminiFetch(`${BASE}/v1beta/${file.name}?key=${key}`);
+      if (!r.ok) throw new Error(`files:get ${r.status}: ${await bodyText(r)}`);
+      file = await r.json() as GeminiFile;
+    }
+    if (file.state !== 'ACTIVE') throw new Error(`Gemini file not ACTIVE (state=${file.state})`);
+
+    log.info(`gemini: analysing with ${model} …`);
+    const res = await geminiFetch(`${BASE}/v1beta/models/${model}:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -143,8 +150,9 @@ export async function analyzeVideoWithGemini(videoAbsPath: string, mimeType: str
     }
     return text;
   } finally {
-    // Don't leave the recording on Google's servers longer than needed.
-    try { await fetch(`${BASE}/v1beta/${file.name}?key=${key}`, { method: 'DELETE' }); }
+    // Don't leave the recording on Google's servers longer than needed,
+    // including poll/timeout/error paths after upload succeeds.
+    try { await geminiFetch(`${BASE}/v1beta/${file.name}?key=${key}`, { method: 'DELETE' }); }
     catch (err) { log.warn(`gemini: file delete failed: ${err instanceof Error ? err.message : err}`); }
   }
 }

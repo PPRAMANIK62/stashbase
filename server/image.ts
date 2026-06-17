@@ -18,6 +18,7 @@
  * the in-flight list cover images for free.
  */
 import { spawn } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { isImageFile } from './format.ts';
 import { extractorSpawn } from './python-host.ts';
@@ -30,6 +31,10 @@ export function derivedNotePathForImage(imageAbsPath: string): string {
   // images with the same stem don't collide on `.shot.png.md`.
   const dir = path.dirname(imageAbsPath);
   return path.join(dir, `.${path.basename(imageAbsPath)}.md`);
+}
+
+function cleanupDerivedImage(imageAbsPath: string): void {
+  rmSync(derivedNotePathForImage(imageAbsPath), { force: true });
 }
 
 /** Run the OCR extractor on a single image. Resolves with the note path
@@ -67,6 +72,7 @@ const IMAGE_SPEC: ConversionSpec = {
   matches: isImageFile,
   derivedNote: derivedNotePathForImage,
   convert: convertImage,
+  cleanupDerived: cleanupDerivedImage,
 };
 
 /** Fire-and-forget OCR used by the upload route. Skips if the note

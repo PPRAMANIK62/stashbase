@@ -95,6 +95,10 @@ function isDefaultChatTitle(t: string): boolean {
 
 export function AgentView({ active, id, title }: { active: boolean; id: string; title: string }) {
   const { state, dispatch, actions } = useApp();
+  const spaceRef = useRef(state.space);
+  spaceRef.current = state.space;
+  const mountedRef = useRef(true);
+  const uploadCountRef = useRef(0);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [turnActive, setTurnActive] = useState(false);
   // Composer attachments (context files) — lifted here so a drop anywhere
@@ -135,6 +139,11 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
   // Which streaming block kind is currently "open" (so consecutive text
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
+  const knownFilePaths = useMemo(() => new Set(state.files.map((f) => f.name)), [state.files]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
 
   useEffect(() => {
     readyRef.current = false;
@@ -254,9 +263,13 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
         if (!ev.isError) {
           const toolName = toolNamesRef.current.get(ev.id);
           if (shouldRefreshAfterTool(toolName)) {
-            const createdFile = fileInCurrentSpaceFromToolResult(toolName, ev.content, state.space);
+            const toolSpace = spaceRef.current;
+            const createdFile = fileInCurrentSpaceFromToolResult(toolName, ev.content, toolSpace);
             void (async () => {
+              await api.sync(toolSpace).catch(() => { /* turn-end / next poll will surface it */ });
+              if (spaceRef.current !== toolSpace) return;
               await actions.loadFiles();
+              if (spaceRef.current !== toolSpace) return;
               void actions.refreshIndexState();
               if (createdFile) await actions.selectFile(createdFile);
             })().catch((err) => {
@@ -290,7 +303,14 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
         // reconcile now (deterministic, replaces fs.watch). MCP writes
         // already index on their own path; this catches `Bash`/editor
         // writes the moment the turn finishes.
-        void api.sync().catch(() => { /* next status poll surfaces it */ });
+        {
+          const turnSpace = spaceRef.current;
+          void api.sync(turnSpace || undefined)
+            .catch(() => { /* next status poll surfaces it */ })
+            .finally(() => {
+              if (spaceRef.current === turnSpace) void actions.refreshIndexState();
+            });
+        }
         break;
       case 'error':
         openKind.current = null;
@@ -360,9 +380,11 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
    *  path, which the agent reads. */
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
+    uploadCountRef.current += 1;
     setUploading(true);
     try {
       const result = await api.attachFiles(files);
+      if (!mountedRef.current) return;
       // `result.files` is 1:1 with `files` (server preserves order); pull
       // image dimensions off the original File for the chip label.
       const entries = result.files ?? [];
@@ -375,19 +397,25 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
         const dims = orig && orig.type.startsWith('image/') ? await readImageDims(orig) : undefined;
         added.push({ path: r.path, name: r.name, dims });
       }
+      if (!mountedRef.current) return;
       if (added.length) setAttachments((a) => mergeAttachments(a, added));
       if (failed) actions.toast(`${failed} file(s) failed to attach.`, { level: 'error' });
     } catch {
+      if (!mountedRef.current) return;
       actions.toast('Attach failed.', { level: 'error' });
     } finally {
-      setUploading(false);
+      uploadCountRef.current = Math.max(0, uploadCountRef.current - 1);
+      if (mountedRef.current) setUploading(uploadCountRef.current > 0);
     }
   }
 
   /** Add chips for files already in the space (dragged from the sidebar);
    *  no upload needed — just reference their existing path. */
   function addSpaceFiles(paths: string[]) {
-    const add = paths.filter(Boolean).map((p) => ({ path: p, name: baseName(p) }));
+    const clean = paths.filter((p) => p && knownFilePaths.has(p));
+    const skipped = paths.filter((p) => p && !knownFilePaths.has(p)).length;
+    if (skipped) actions.toast('Only files from the current space can be attached.', { level: 'warning' });
+    const add = clean.map((p) => ({ path: p, name: baseName(p) }));
     if (add.length) setAttachments((a) => mergeAttachments(a, add));
   }
 

@@ -14,6 +14,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { getKbRoot, listKnownSpaces } from './space.ts';
 import { getEmbedderProvider } from './app-config.ts';
 
@@ -27,11 +28,40 @@ export function getKbRules(): string {
   try { return fs.readFileSync(kbRulesPath(), 'utf8'); } catch { return ''; }
 }
 
-export function setKbRules(content: string): void {
+export function kbRulesVersion(): string | null {
+  try {
+    const st = fs.statSync(kbRulesPath());
+    if (!st.isFile()) return null;
+    return `${st.dev}:${st.ino}:${st.ctimeMs}:${st.mtimeMs}:${st.size}`;
+  } catch {
+    return null;
+  }
+}
+
+export function setKbRules(content: string, opts: { baseVersion?: string } = {}): string | null {
+  if (opts.baseVersion !== undefined) {
+    const currentVersion = kbRulesVersion();
+    if (currentVersion !== opts.baseVersion) {
+      const err = new Error('KB rules changed on disk; reload before saving');
+      (err as any).code = 'FILE_CHANGED';
+      (err as any).currentVersion = currentVersion;
+      throw err;
+    }
+  }
   const target = kbRulesPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target + '.tmp', content, 'utf8');
-  fs.renameSync(target + '.tmp', target);
+  const tmp = path.join(
+    path.dirname(target),
+    `.${path.basename(target)}.${process.pid}.${crypto.randomUUID()}.tmp`,
+  );
+  try {
+    fs.writeFileSync(tmp, content, 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+    throw err;
+  }
+  return kbRulesVersion();
 }
 
 export interface KbInfo {

@@ -192,6 +192,8 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const currentRef = useRef({ space: state.space, name });
+  currentRef.current = { space: state.space, name };
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [scale, setScale] = useState(1.2);
@@ -224,6 +226,9 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     setDoc(null);
     setNumPages(0);
     setPageHighlight(null);
+    setRetryBusy(false);
+    setRetryStarted(false);
+    setRetryError(null);
     loadingTask = getDocument({ url: fileUrl, worker: pdfWorker });
     loadingTask.promise.then(
       (pdf) => {
@@ -442,14 +447,20 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   async function onRetry() {
     setRetryBusy(true);
     setRetryError(null);
+    const spaceAtStart = state.space;
+    const nameAtStart = name;
+    const stillCurrent = () =>
+      currentRef.current.space === spaceAtStart && currentRef.current.name === nameAtStart;
     try {
-      await api.retryConversion(name);
+      await api.retryConversion(name, { space: spaceAtStart || undefined });
+      if (!stillCurrent()) return;
       setRetryStarted(true);
     } catch (err: unknown) {
+      if (!stillCurrent()) return;
       setRetryError(errorMessage(err));
       setRetryStarted(false);
     } finally {
-      setRetryBusy(false);
+      if (stillCurrent()) setRetryBusy(false);
     }
   }
 

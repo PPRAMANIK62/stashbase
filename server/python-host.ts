@@ -4,9 +4,10 @@
  * so `image.ts` and any future converter share one interpreter-discovery
  * path instead of each re-implementing the packaged-vs-dev venv probe.
  *
- * The packaged app ships a relocated runtime under
- * `<resources>/python/runtime/`; in dev we fall back to the project's
- * `python/.venv.nosync/`, then to a bare `python3` on PATH.
+ * Packaged app builds normally ship PyInstaller extractor binaries. If a
+ * packaged/runtime Python is explicitly present we can use it, but dev
+ * mode must prefer the repo's live `.venv.nosync` so stale packaged
+ * artifacts never shadow source edits.
  */
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -27,9 +28,14 @@ const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
  *  then bare `python3`. */
 export function pythonBin(): string {
   if (process.env.STASHBASE_PYTHON) return process.env.STASHBASE_PYTHON;
+  const packagedCandidates = process.env.STASHBASE_DEV_VITE
+    ? []
+    : [
+        ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')),
+        ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv')),
+      ];
   for (const candidate of [
-    ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')),
-    ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv')),
+    ...packagedCandidates,
     ...pythonCandidates(path.join(PROJECT_ROOT, 'python', '.venv.nosync')),
   ]) {
     if (existsSync(candidate)) return candidate;
@@ -40,7 +46,13 @@ export function pythonBin(): string {
 /** Absolute path to a sidecar script under `python/` (e.g.
  *  `pdf_extract.py`, `ocr_extract.py`). */
 function pythonScript(name: string): string {
-  return path.join(PROJECT_ROOT, 'python', name);
+  const candidates = [
+    path.join(RESOURCES_ROOT, 'python', name),
+    path.join(PROJECT_ROOT, 'python', name),
+  ];
+  const script = candidates.find(isFile);
+  if (script) return script;
+  throw new Error(`Python extractor script not found: ${name}. Looked in: ${candidates.join(', ')}`);
 }
 
 /** Resolve how to spawn a one-shot extractor.
@@ -59,7 +71,15 @@ export function extractorSpawn(
 ): { cmd: string; args: string[] } {
   const bin = process.env.STASHBASE_EXTRACT_BIN || resolvePackagedExtractBin();
   if (bin) return { cmd: bin, args: [mode, ...args] };
-  return { cmd: pythonBin(), args: [pythonScript(scriptName), ...args] };
+  const cmd = pythonBin();
+  const script = pythonScript(scriptName);
+  if (isPackagedRuntime() && isSystemPythonFallback(cmd)) {
+    throw new Error(
+      `${mode.toUpperCase()} extractor is not bundled in this StashBase build. ` +
+        'Rebuild with STASHBASE_BUILD_EXTRACT=1 to enable local PDF/OCR extraction.',
+    );
+  }
+  return { cmd, args: [script, ...args] };
 }
 
 function pythonCandidates(root: string): string[] {
@@ -85,6 +105,17 @@ function resolvePackagedExtractBin(): string | undefined {
     path.join(PROJECT_ROOT, 'python', 'sidecar.nosync', exe),
   ];
   return candidates.find(isFile);
+}
+
+function isPackagedRuntime(): boolean {
+  return !process.env.STASHBASE_DEV_VITE && RESOURCES_ROOT !== PROJECT_ROOT;
+}
+
+function isSystemPythonFallback(cmd: string): boolean {
+  return !process.env.STASHBASE_PYTHON
+    && cmd === 'python3'
+    && !pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')).some(existsSync)
+    && !pythonCandidates(path.join(RESOURCES_ROOT, 'python', '.venv')).some(existsSync);
 }
 
 function isFile(candidate: string): boolean {

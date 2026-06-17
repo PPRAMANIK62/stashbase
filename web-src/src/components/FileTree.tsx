@@ -301,7 +301,8 @@ function FolderRow({
       if (!filePath || dragSourceKind !== 'file') return;
       const slot = edge;
       void (async () => {
-        await actions.moveFile(filePath, parent);
+        const moved = await actions.moveFile(filePath, parent);
+        if (!moved) return;
         const next = insertIntoOrder(siblings, dragSourceName!, node.name, slot);
         await actions.setFolderOrder(parent, next);
       })();
@@ -471,7 +472,8 @@ function FileRow({
       if (!filePath || dragSourceKind !== 'file') return;
       const slot = edge;
       void (async () => {
-        await actions.moveFile(filePath, parent);
+        const moved = await actions.moveFile(filePath, parent);
+        if (!moved) return;
         const next = insertIntoOrder(siblings, dragSourceName!, basename, slot);
         await actions.setFolderOrder(parent, next);
       })();

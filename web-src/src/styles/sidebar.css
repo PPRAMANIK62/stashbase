@@ -836,7 +836,7 @@
 
     /* Stashing indicator. A file is "stashing" while the server is still
      * converting it into searchable content (pymupdf / marker on a PDF,
-     * RapidOCR on an image, transcode on a recording) — the slow, user-
+     * RapidOCR on an image, Gemini analysis on a recording) — the slow, user-
      * visible phase. The "N stashing" pill lives in the SPACE header
      * (left of ⋯) and stays visible at all times; clicking it opens the
      * `.stashing-list` dropdown. Auto-dismisses when the conversion

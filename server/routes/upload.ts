@@ -14,49 +14,180 @@
  */
 import express from 'express';
 import multer from 'multer';
+import fs from 'node:fs';
 import path from 'node:path';
 import {
   detectFormat,
   pathExists,
   sanitizeFilename,
-  saveBytes,
-  saveText,
 } from '../files.ts';
 import { isImageFile, isNoteName } from '../format.ts';
+import { getApiKey } from '../app-config.ts';
+import { isCloudPlaceholderName, isIndexExcludedDirName } from '../indexable.ts';
 import { errorMessage, logger } from '../log.ts';
-import { getCurrentSpace, runWithWindowId, toKbRel, WINDOW_ID_HEADER } from '../space.ts';
+import {
+  getCurrentSpace,
+  getCurrentSpaceName,
+  requireSpaceExistsByName,
+  runWithWindowId,
+  validateSpaceRef,
+  WINDOW_ID_HEADER,
+} from '../space.ts';
 import { extractEmbeddedResources } from '../resources.ts';
 import { maybeConvertImage } from '../image.ts';
 import { maybeConvertPdf } from '../pdf.ts';
 import { indexer } from '../state.ts';
+import { noteTreeChanged } from '../watcher.ts';
 
 const log = logger('routes/upload');
 
 // In-memory upload buffer. Bumped beyond the original 8 MB / 50-file
 // limits to accommodate "Save Page As Complete" bundles (arxiv HTML
 // pulls in dozens of figures + CSS).
-const upload = multer({
+const uploadParser = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 64 * 1024 * 1024, files: 500 },
 });
 
 export function mount(app: express.Express): void {
-  app.post('/api/upload', upload.array('files', 500), async (req, res) => {
-    // Multer consumes the request body stream, and its callbacks run in the
-    // connection-time async context — which drops the windowId that
-    // `withWindowContext` stashed in AsyncLocalStorage. Without re-binding
-    // it here, every space-scoped lookup inside the handler
-    // (getCurrentSpace, saveBytes → resolveSafe) falls back to
-    // DEFAULT_WINDOW_ID and the upload fails with "no space open" even
-    // though the client sent the right window header. Re-establish the
-    // context from the header before doing any per-window work.
-    await runWithWindowId(req.header(WINDOW_ID_HEADER), () => handleUpload(req, res));
+  app.post('/api/upload', (req, res, next) => {
+    uploadParser.array('files', 500)(req, res, (err: unknown) => {
+      if (err) {
+        sendUploadError(res, err);
+        return;
+      }
+      void (async () => {
+        // Multer consumes the request body stream, and its callbacks run in the
+        // connection-time async context — which drops the windowId that
+        // `withWindowContext` stashed in AsyncLocalStorage. Without re-binding
+        // it here, every space-scoped lookup inside the handler
+        // (getCurrentSpace, saveBytes → resolveSafe) falls back to
+        // DEFAULT_WINDOW_ID and the upload fails with "no space open" even
+        // though the client sent the right window header. Re-establish the
+        // context from the header before doing any per-window work.
+        await runWithWindowId(req.header(WINDOW_ID_HEADER), () => handleUpload(req, res));
+      })().catch(next);
+    });
   });
+}
+
+function sendUploadError(res: express.Response, err: unknown): void {
+  if (err instanceof multer.MulterError) {
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'file is too large to upload'
+      : err.code === 'LIMIT_FILE_COUNT'
+        ? 'too many files in one upload'
+        : err.message;
+    res.status(status).json({ error: message, code: err.code });
+    return;
+  }
+  res.status(400).json({ error: errorMessage(err) });
+}
+
+function resolveInSpace(spaceRoot: string, relPath: string): string {
+  validateUploadPath(relPath);
+  const full = path.join(spaceRoot, relPath);
+  const back = path.relative(spaceRoot, full);
+  if (back.startsWith('..') || path.isAbsolute(back)) throw new Error('path escapes space');
+  return full;
+}
+
+function isPathInsideOrSame(parent: string, child: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function realSpaceRoot(spaceRoot: string): string {
+  return fs.realpathSync.native(spaceRoot);
+}
+
+function assertRealPathInsideSpace(spaceRoot: string, absPath: string, label = 'path'): void {
+  const real = fs.realpathSync.native(absPath);
+  if (!isPathInsideOrSame(realSpaceRoot(spaceRoot), real)) {
+    throw new Error(`${label} escapes space through symlink`);
+  }
+}
+
+function assertCreatablePathInsideSpace(spaceRoot: string, absPath: string, label = 'path'): void {
+  const rootReal = realSpaceRoot(spaceRoot);
+  let probe = path.resolve(path.dirname(absPath));
+  while (!fs.existsSync(probe)) {
+    const parent = path.dirname(probe);
+    if (parent === probe) break;
+    probe = parent;
+  }
+  const probeRel = path.relative(spaceRoot, probe);
+  if (probeRel.startsWith('..') || path.isAbsolute(probeRel)) throw new Error(`${label} escapes space`);
+  const probeReal = fs.realpathSync.native(probe);
+  if (!isPathInsideOrSame(rootReal, probeReal)) {
+    throw new Error(`${label} escapes space through symlink`);
+  }
+}
+
+function pathExistsInSpace(spaceRoot: string, relPath: string): boolean {
+  try {
+    const target = resolveInSpace(spaceRoot, relPath);
+    if (!fs.existsSync(target)) return false;
+    assertRealPathInsideSpace(spaceRoot, target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function saveBytesInSpace(spaceRoot: string, relPath: string, bytes: Buffer): void {
+  const target = resolveInSpace(spaceRoot, relPath);
+  assertCreatablePathInsideSpace(spaceRoot, target);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  assertCreatablePathInsideSpace(spaceRoot, target);
+  const tmp = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    fs.writeFileSync(tmp, bytes);
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+    throw err;
+  }
+}
+
+function saveTextInSpace(spaceRoot: string, relPath: string, text: string): void {
+  saveBytesInSpace(spaceRoot, relPath, Buffer.from(text, 'utf8'));
+}
+
+export function __pathExistsInSpaceForTest(spaceRoot: string, relPath: string): boolean {
+  return pathExistsInSpace(spaceRoot, relPath);
+}
+
+export function __saveBytesInSpaceForTest(spaceRoot: string, relPath: string, bytes: Buffer): void {
+  saveBytesInSpace(spaceRoot, relPath, bytes);
 }
 
 async function handleUpload(req: express.Request, res: express.Response): Promise<void> {
   const files = (req.files as Express.Multer.File[]) ?? [];
   if (files.length === 0) { res.status(400).json({ error: 'no files' }); return; }
+  const explicitSpace = typeof req.body?.space === 'string' && req.body.space.trim()
+    ? req.body.space.trim()
+    : '';
+  let spaceName = explicitSpace || getCurrentSpaceName() || '';
+  if (explicitSpace) {
+    const bad = validateSpaceRef(explicitSpace);
+    if (bad) { res.status(400).json({ error: bad }); return; }
+  }
+  if (!spaceName) { res.status(412).json({ error: 'no space open', code: 'NO_SPACE' }); return; }
+
+  let spaceAbs: string;
+  try {
+    spaceAbs = explicitSpace ? requireSpaceExistsByName(explicitSpace) : getCurrentSpace()!;
+  } catch (err) {
+    const code = (err as { code?: unknown })?.code;
+    if (code === 'SPACE_NOT_FOUND') {
+      res.status(404).json({ error: 'space not found', code: 'SPACE_NOT_FOUND' });
+      return;
+    }
+    res.status(400).json({ error: errorMessage(err) });
+    return;
+  }
   // Optional `dir` form field: space-relative path of the folder to
   // drop the files into. Sanitised the same way we treat any other
   // write path so a stray `..` or absolute path can't escape the space.
@@ -72,22 +203,23 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
     ? rawPaths.map(String)
     : typeof rawPaths === 'string' ? [rawPaths] : [];
 
-  const finalNames = computeFinalNames(files, paths, prefix);
+  const finalNames = computeFinalNames(files, paths, prefix, (rel) => pathExistsInSpace(spaceAbs, rel));
 
   const out: { file: string; error?: string }[] = [];
-  const toIndex: { name: string; text: string }[] = [];
+  const toIndex: { name: string; kbRel: string; text: string }[] = [];
   const toConvertPdf: { abs: string; rel: string }[] = [];
   const toOcrImage: { abs: string; rel: string }[] = [];
-  const spaceAbs = getCurrentSpace();
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     const name = finalNames[i];
     try {
+      validateUploadPath(rawUploadPathFor(files, paths, i));
+      validateUploadPath(name);
       // Always save bytes to disk — bundle assets (PNG / CSS / WOFF
       // shipped alongside an arxiv HTML) are needed by the iframe even
       // though they're not indexable. Only indexable formats go to
       // the indexer.
-      saveBytes(name, f.buffer);
+      saveBytesInSpace(spaceAbs, name, f.buffer);
       out.push({ file: name });
       if (detectFormat(name)) {
         let text = f.buffer.toString('utf8');
@@ -98,15 +230,15 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
         try {
           const { content, assets } = extractEmbeddedResources(name, text);
           if (assets.length > 0) {
+            for (const a of assets) saveBytesInSpace(spaceAbs, a.path, a.bytes);
             text = content;
-            saveText(name, text);
-            for (const a of assets) saveBytes(a.path, a.bytes);
+            saveTextInSpace(spaceAbs, name, text);
             log.info(`upload: extracted ${assets.length} embedded resource(s) from ${name}`);
           }
         } catch (err: unknown) {
           log.warn(`upload: resource extraction failed for ${name}: ${errorMessage(err)}`);
         }
-        toIndex.push({ name, text });
+        toIndex.push({ name, kbRel: `${spaceName}/${name}`, text });
       } else if (spaceAbs && /\.pdf$/i.test(name)) {
         // PDFs run through the pymupdf / marker pipeline so the
         // user gets a readable note + image bundle they can preview
@@ -123,17 +255,22 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
       out.push({ file: name, error: errorMessage(err) });
     }
   }
+  if (out.some((x) => !x.error)) noteTreeChanged();
   res.json({ files: out });
   // Background indexing — don't await; the response has already been sent.
-  (async () => {
-    for (const { name, text } of toIndex) {
-      try {
-        await indexer.upsertFile(toKbRel(name), text);
-      } catch (err: unknown) {
-        log.warn(`upload: index failed for ${name}: ${errorMessage(err)}`);
+  if (getApiKey()) {
+    (async () => {
+      for (const { name, kbRel, text } of toIndex) {
+        try {
+          await indexer.upsertFile(kbRel, text);
+        } catch (err: unknown) {
+          log.warn(`upload: index failed for ${name}: ${errorMessage(err)}`);
+        }
       }
-    }
-  })();
+    })();
+  } else if (toIndex.length) {
+    log.info(`upload: skipped indexing ${toIndex.length} file(s) because no OpenAI key is configured`);
+  }
   // Kick off conversions fire-and-forget. They handle their own async
   // failures internally; guard only against a synchronous throw at
   // kickoff (the response is already sent, so it'd otherwise be an
@@ -157,16 +294,31 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
  *  Notes additionally reserve against their `<stem>_files/` bundle and
  *  carry it along when renamed. A renamed folder moves as a unit, so any
  *  bundle that lives *inside* it follows along untouched. */
-function computeFinalNames(
+export function validateUploadPath(relPath: string): void {
+  const segments = relPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  for (const seg of segments) {
+    if (seg === '.' || seg === '..') throw new Error('upload path contains an invalid segment');
+    if (isCloudPlaceholderName(seg)) {
+      throw new Error('upload path points to an iCloud placeholder; download the file locally first');
+    }
+    if (seg === '.stashbase' || seg.startsWith('.stashbase-')) {
+      throw new Error('upload path cannot write into .stashbase');
+    }
+    if (isIndexExcludedDirName(seg)) throw new Error(`upload path cannot include excluded directory "${seg}"`);
+  }
+}
+
+function rawUploadPathFor(files: Express.Multer.File[], paths: string[], idx: number): string {
+  const f = files[idx];
+  return paths[idx] && paths[idx].length ? paths[idx] : f.originalname;
+}
+
+export function computeFinalNames(
   files: Express.Multer.File[],
   paths: string[],
   prefix: string,
+  exists: (relPath: string) => boolean = pathExists,
 ): string[] {
-  function relForFile(idx: number): string {
-    const f = files[idx];
-    return paths[idx] && paths[idx].length ? paths[idx] : f.originalname;
-  }
-
   // Step 1: reserve a non-colliding name for every TOP-LEVEL file (any
   // type). "Top-level" = no folder separator (so it lives directly at
   // the drop target, alongside its `<stem>_files/` bundle if it's a
@@ -176,7 +328,7 @@ function computeFinalNames(
   const noteStemRenames = new Map<string, string>(); // note origStem → finalStem (for bundles)
   const topLevelNoteStems = new Set<string>();    // stems of top-level notes (to spot their bundles)
   for (let i = 0; i < files.length; i++) {
-    const rel = relForFile(i);
+    const rel = rawUploadPathFor(files, paths, i);
     if (rel.includes('/')) continue;
     const isNote = isNoteName(rel);
     const dot = rel.lastIndexOf('.');
@@ -186,9 +338,9 @@ function computeFinalNames(
     let finalStem = origStem;
     let n = 2;
     while (
-      pathExists(prefix + finalStem + ext)
+      exists(prefix + finalStem + ext)
       || reserved.has(finalStem + ext)
-      || (isNote && pathExists(prefix + finalStem + '_files'))
+      || (isNote && exists(prefix + finalStem + '_files'))
     ) {
       finalStem = `${origStem}-${n}`;
       n++;
@@ -203,7 +355,7 @@ function computeFinalNames(
   const dirRenames = new Map<string, string>(); // origTopDir → finalTopDir
   const seenDirs = new Set<string>();
   for (let i = 0; i < files.length; i++) {
-    const rel = relForFile(i);
+    const rel = rawUploadPathFor(files, paths, i);
     const dirEnd = rel.indexOf('/');
     if (dirEnd < 0) continue; // top-level file, handled above
     const top = rel.slice(0, dirEnd);
@@ -213,7 +365,7 @@ function computeFinalNames(
     if (bm && topLevelNoteStems.has(bm[1])) continue; // a note bundle, not a folder
     let finalDir = top;
     let n = 2;
-    while (pathExists(prefix + finalDir) || reserved.has(finalDir)) {
+    while (exists(prefix + finalDir) || reserved.has(finalDir)) {
       finalDir = `${top}-${n}`;
       n++;
     }
@@ -224,8 +376,8 @@ function computeFinalNames(
   // reserved final name; a renamed note's `<stem>_files/...` bundle
   // tracks the renumbered stem; everything under a renumbered folder
   // gets its first segment swapped; the rest stay verbatim.
-  return files.map((_, i) => {
-    const rel = relForFile(i);
+  const finalNames = files.map((_, i) => {
+    const rel = rawUploadPathFor(files, paths, i);
     const segments = rel.split('/');
     if (segments.length === 1) {
       return sanitizeFilename(prefix + (finalByIndex.get(i) ?? rel));
@@ -242,4 +394,26 @@ function computeFinalNames(
     }
     return sanitizeFilename(prefix + rel);
   });
+  const used = new Set<string>();
+  return finalNames.map((name) => reserveFinalPath(name, used, exists));
+}
+
+function reserveFinalPath(candidate: string, used: Set<string>, exists: (relPath: string) => boolean): string {
+  if (!used.has(candidate) && !exists(candidate)) {
+    used.add(candidate);
+    return candidate;
+  }
+  const slash = candidate.lastIndexOf('/');
+  const dir = slash >= 0 ? candidate.slice(0, slash + 1) : '';
+  const base = slash >= 0 ? candidate.slice(slash + 1) : candidate;
+  const dot = base.lastIndexOf('.');
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot) : '';
+  for (let n = 2; ; n++) {
+    const next = `${dir}${stem}-${n}${ext}`;
+    if (!used.has(next) && !exists(next)) {
+      used.add(next);
+      return next;
+    }
+  }
 }

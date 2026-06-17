@@ -76,6 +76,10 @@ export function mount(app: express.Express): void {
   // so the client renders it with its existing BlockView untouched.
   app.get('/api/agent/sessions/:id/messages', async (req, res) => {
     try {
+      if (!(await sessionBelongsToCurrentSpace(req.params.id))) {
+        res.status(404).json({ error: 'session not found for current space' });
+        return;
+      }
       const msgs = await getSessionMessages(req.params.id);
       res.json(transcriptToBlocks(msgs));
     } catch (err: unknown) {
@@ -91,6 +95,10 @@ export function mount(app: express.Express): void {
       return;
     }
     try {
+      if (!(await sessionBelongsToCurrentSpace(req.params.id))) {
+        res.status(404).json({ error: 'session not found for current space' });
+        return;
+      }
       await renameSession(req.params.id, title);
       const info = await getSessionInfo(req.params.id);
       res.json(info ? toRow(info) : { id: req.params.id, title, lastModified: 0 });
@@ -102,12 +110,29 @@ export function mount(app: express.Express): void {
   // Delete (the trash) — removes the `{id}.jsonl` transcript.
   app.delete('/api/agent/sessions/:id', async (req, res) => {
     try {
+      if (!(await sessionBelongsToCurrentSpace(req.params.id))) {
+        res.status(404).json({ error: 'session not found for current space' });
+        return;
+      }
       await deleteSession(req.params.id);
       res.json({});
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
+}
+
+async function sessionBelongsToCurrentSpace(id: string): Promise<boolean> {
+  const space = getCurrentSpace();
+  // When no space is open, the list route intentionally falls back to
+  // all sessions; keep direct actions global in that spaceless state.
+  if (!space) return true;
+  const info = await getSessionInfo(id);
+  return sessionInfoMatchesSpace(info, space);
+}
+
+export function sessionInfoMatchesSpace(info: { cwd?: unknown } | null | undefined, space: string): boolean {
+  return !!(info && typeof info.cwd === 'string' && path.resolve(info.cwd) === path.resolve(space));
 }
 
 // ----- transcript → panel blocks ----------------------------------------

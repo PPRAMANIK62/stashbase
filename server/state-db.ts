@@ -2,10 +2,9 @@
  * KB-level transactional state in the per-machine app data directory.
  *
  * This is StashBase-owned state, separate from MFS/Milvus' `store/`
- * schema. It holds exactly one thing: PDF / image conversion status
- * (in-flight + failed-with-reason), which is non-derivable — a failed
- * conversion looks identical on disk to one that hasn't run — and drives
- * the sidebar "Converting…" indicator and the per-file Retry banner.
+ * schema. It holds exactly one thing: failed PDF / image conversion
+ * status, which is non-derivable — a failed conversion looks identical
+ * on disk to one that hasn't run — and drives the per-file Retry banner.
  *
  * Everything else lives at its authoritative source: the daemon/store
  * owns the per-file hash + index state (via `scan_diff`), the filesystem
@@ -53,6 +52,7 @@ function getStateDb(): Database.Database {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   migrate(db);
+  migrateLegacyStateDbRows(db);
   migrateLegacyStatusJson(db);
   return db;
 }
@@ -65,22 +65,32 @@ function migrateLegacyStateDb(target: string): void {
   const legacy = legacyStateDbPath();
   if (!fs.existsSync(legacy) || fs.existsSync(target)) return;
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  for (const suffix of ['', '-wal', '-shm']) {
-    const from = legacy + suffix;
-    if (!fs.existsSync(from)) continue;
-    const to = target + suffix;
-    try {
-      fs.renameSync(from, to);
-    } catch {
-      try {
-        fs.copyFileSync(from, to);
-        fs.unlinkSync(from);
-      } catch (err: unknown) {
-        log.warn(`failed to migrate legacy state db ${from}: ${errorMessage(err)}`);
-      }
+  const suffixes = ['', '-wal', '-shm'].filter((suffix) => fs.existsSync(legacy + suffix));
+  const nonce = `${process.pid}.${Date.now()}`;
+  const temps = suffixes.map((suffix) => ({ suffix, path: `${target}${suffix}.${nonce}.tmp` }));
+  const installed: string[] = [];
+  try {
+    for (const { suffix, path: tmp } of temps) {
+      fs.copyFileSync(legacy + suffix, tmp);
     }
+    for (const { suffix, path: tmp } of temps) {
+      const to = target + suffix;
+      fs.renameSync(tmp, to);
+      installed.push(to);
+    }
+    for (const suffix of suffixes) {
+      try { fs.unlinkSync(legacy + suffix); } catch { /* keep retry-safe source cleanup best-effort */ }
+    }
+    log.info(`migrated state.db out of KB root → ${target}`);
+  } catch (err: unknown) {
+    for (const { path: tmp } of temps) {
+      try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+    }
+    for (const file of installed) {
+      try { fs.rmSync(file, { force: true }); } catch { /* best effort */ }
+    }
+    log.warn(`failed to migrate legacy state db ${legacy}: ${errorMessage(err)}`);
   }
-  log.info(`migrated state.db out of KB root → ${target}`);
 }
 
 export function closeStateDb(): void {
@@ -127,6 +137,47 @@ function migrate(conn: Database.Database): void {
   `);
 }
 
+function migrateLegacyStateDbRows(conn: Database.Database): void {
+  const legacy = legacyStateDbPath();
+  if (!fs.existsSync(legacy)) return;
+  let attached = false;
+  try {
+    conn.prepare('ATTACH DATABASE ? AS legacy_state').run(legacy);
+    attached = true;
+    const hasConversions = conn.prepare(`
+      SELECT 1 AS ok
+      FROM legacy_state.sqlite_master
+      WHERE type = 'table' AND name = 'conversions'
+      LIMIT 1
+    `).get();
+    if (hasConversions) {
+      conn.exec(`
+        INSERT INTO conversions (path, status, attempts, last_error, last_attempt_at, done_at)
+        SELECT path, status, attempts, last_error, last_attempt_at, done_at
+        FROM legacy_state.conversions
+        WHERE status = 'failed'
+        ON CONFLICT(path) DO UPDATE SET
+          status = excluded.status,
+          attempts = excluded.attempts,
+          last_error = excluded.last_error,
+          last_attempt_at = excluded.last_attempt_at,
+          done_at = excluded.done_at;
+      `);
+    }
+    conn.prepare('DETACH DATABASE legacy_state').run();
+    attached = false;
+    for (const suffix of ['', '-wal', '-shm']) {
+      try { fs.unlinkSync(legacy + suffix); } catch { /* best-effort */ }
+    }
+    log.info(`merged legacy state.db rows from ${legacy}`);
+  } catch (err: unknown) {
+    if (attached) {
+      try { conn.prepare('DETACH DATABASE legacy_state').run(); } catch { /* best-effort */ }
+    }
+    log.warn(`failed to merge legacy state db rows from ${legacy}: ${errorMessage(err)}`);
+  }
+}
+
 function migrateLegacyStatusJson(conn: Database.Database): void {
   const legacy = path.join(getKbRoot(), '.stashbase', 'pdf-status.json');
   const migrated = legacy + '.migrated';
@@ -151,6 +202,10 @@ function migrateLegacyStatusJson(conn: Database.Database): void {
       for (const [pathKey, raw] of Object.entries(parsed)) {
         const entry = sanitizeConversionEntry(raw);
         if (!entry) continue;
+        // Only failures survive process restarts. Legacy in-flight rows
+        // are corpse state (the child process died with us), and done is
+        // represented by the derived note already being on disk.
+        if (entry.status !== 'failed') continue;
         rows.push({
           path: pathKey,
           status: entry.status,
@@ -235,6 +290,15 @@ export function clearConversionStatus(pathKey: string): void {
   getStateDb().prepare('DELETE FROM conversions WHERE path = ?').run(pathKey);
 }
 
+export function clearConversionStatusUnder(pathKey: string): void {
+  const name = pathKey.replace(/\/+$/, '');
+  if (!name) return;
+  const prefix = name + '/';
+  getStateDb().prepare(
+    'DELETE FROM conversions WHERE path = @name OR substr(path, 1, @plen) = @prefix',
+  ).run({ name, prefix, plen: prefix.length });
+}
+
 export function listConversionStatus(status: ConversionStatus): Array<{ path: string; entry: ConversionStatusEntry }> {
   const rows = getStateDb().prepare(`
     SELECT path, status, attempts, last_error AS lastError,
@@ -263,10 +327,33 @@ export function listConversionStatus(status: ConversionStatus): Array<{ path: st
  *  `space/...`); the `substr` prefix match avoids LIKE wildcard escaping
  *  on arbitrary space names. */
 export function deleteSpaceState(space: string): void {
-  const name = space.replace(/\/+$/, '');
-  if (!name) return;
-  const prefix = name + '/';
-  getStateDb().prepare(
-    'DELETE FROM conversions WHERE path = @name OR substr(path, 1, @plen) = @prefix',
-  ).run({ name, prefix, plen: prefix.length });
+  clearConversionStatusUnder(space);
+}
+
+/** Carry conversion failures through a space rename. Unlike delete, a
+ *  rename preserves the user's Retry context: a failed PDF/image is
+ *  still failed after the folder's name changes. Destination rows should
+ *  not exist for a freshly-renamed space, but remove them first so a
+ *  stale row from an older same-named space cannot conflict or win. */
+export function renameSpaceState(oldSpace: string, newSpace: string): void {
+  const oldName = oldSpace.replace(/\/+$/, '');
+  const newName = newSpace.replace(/\/+$/, '');
+  if (!oldName || !newName || oldName === newName) return;
+  const oldPrefix = oldName + '/';
+  const newPrefix = newName + '/';
+  const conn = getStateDb();
+  const tx = conn.transaction(() => {
+    conn.prepare(
+      'DELETE FROM conversions WHERE path = @newName OR substr(path, 1, @newPlen) = @newPrefix',
+    ).run({ newName, newPrefix, newPlen: newPrefix.length });
+    conn.prepare(`
+      UPDATE conversions
+      SET path = CASE
+        WHEN path = @oldName THEN @newName
+        ELSE @newPrefix || substr(path, @oldPlen + 1)
+      END
+      WHERE path = @oldName OR substr(path, 1, @oldPlen) = @oldPrefix
+    `).run({ oldName, newName, oldPrefix, oldPlen: oldPrefix.length, newPrefix });
+  });
+  tx();
 }

@@ -27,7 +27,7 @@ export function MainPane() {
   const saveStatus = activeTab?.saveStatus ?? { text: '', cls: '' };
   const hasTabs = state.tabs.length > 0;
   const emptyTab = !!activeTab && !cur;
-  // A recording's tab pops open before its OCR note exists, so its body
+  // A recording's tab pops open before its analysis note exists, so its body
   // is empty while it's still stashing. Show a calm "processing" state
   // instead of a blank editor; it clears itself the moment the note
   // lands (content fills) or the conversion drops out of flight.
