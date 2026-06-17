@@ -14,7 +14,7 @@ import { useApp } from '../store/AppContext';
 import { RequireApiKeyModal } from './embedder/RequireApiKeyModal';
 
 export function EmbedderRequireKeyGate() {
-  const { state: appState, dispatch } = useApp();
+  const { state: appState, dispatch, actions } = useApp();
   const space = appState.space;
   const [state, setState] = useState<EmbedderState | null>(null);
   const [open, setOpen] = useState(false);
@@ -41,6 +41,7 @@ export function EmbedderRequireKeyGate() {
         setState((s) => (s ? { ...s, hasKey: true } : s));
         dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
         setOpen(false);
+        void actions.refreshIndexState();
       }}
       onLater={() => setOpen(false)}
     />

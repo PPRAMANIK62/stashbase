@@ -16,7 +16,7 @@ import { MfsIndexer } from './indexer.mfs.ts';
 import type { Indexer, EmbedderRuntimeConfig } from './indexer.ts';
 import { getCurrentSpace, getCurrentSpaceName, getKbRoot, listKnownSpaces, onClose, onSwitch, runWithWindowId } from './space.ts';
 import { getApiKey } from './app-config.ts';
-import { syncIndex } from './sync.ts';
+import { syncIndex, type SyncResult } from './sync.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { clearStaleMilvusLock } from './stale-lock.ts';
 import { logger, errorMessage } from './log.ts';
@@ -74,19 +74,54 @@ function recordIndexWarning(space: string, message: string): void {
  *  reindex and cleared once that reindex drains, so the daemon doesn't
  *  hold every snapshot's vectors in memory forever. */
 const loadedSnapshotCaches = new Set<string>();
+const snapshotCacheClearTimers = new Map<string, NodeJS.Timeout>();
+const SNAPSHOT_CACHE_RETAIN_ON_FAILURE_MS = 30 * 60_000;
+
+function spaceNameFromAbs(spaceAbs: string): string {
+  const rel = path.relative(getKbRoot(), spaceAbs).split(path.sep).join('/');
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`space path is not under kbRoot: ${spaceAbs}`);
+  }
+  return rel;
+}
+
+function cancelSnapshotCacheClearTimer(spaceName: string): void {
+  const timer = snapshotCacheClearTimers.get(spaceName);
+  if (!timer) return;
+  clearTimeout(timer);
+  snapshotCacheClearTimers.delete(spaceName);
+}
+
+async function clearSnapshotCacheForSpaceName(spaceName: string): Promise<void> {
+  cancelSnapshotCacheClearTimer(spaceName);
+  if (!loadedSnapshotCaches.has(spaceName)) return;
+  loadedSnapshotCaches.delete(spaceName);
+  try {
+    await getDaemon().call('clear_vector_cache', { space: spaceName });
+  } catch (err) {
+    log.warn(`snapshot cache clear ${spaceName} failed: ${errorMessage(err)}`);
+  }
+}
 
 /** Drop the daemon-side snapshot vector cache for `spaceAbs`'s space if
- *  one was loaded. Called after the import-time sync finishes (or is
- *  abandoned). Best-effort: a failed clear only costs daemon memory. */
+ *  one was loaded. Called only after a successful import-time sync; failed
+ *  or cancelled syncs retain the cache briefly for retry. */
 async function clearSnapshotCacheIfLoaded(spaceAbs: string): Promise<void> {
-  const rel = path.relative(getKbRoot(), spaceAbs).split(path.sep).join('/');
-  if (!loadedSnapshotCaches.has(rel)) return;
-  loadedSnapshotCaches.delete(rel);
-  try {
-    await getDaemon().call('clear_vector_cache', { space: rel });
-  } catch (err) {
-    log.warn(`snapshot cache clear ${rel} failed: ${errorMessage(err)}`);
-  }
+  await clearSnapshotCacheForSpaceName(spaceNameFromAbs(spaceAbs));
+}
+
+function retainSnapshotCacheForRetry(spaceAbs: string, reason: string): void {
+  const spaceName = spaceNameFromAbs(spaceAbs);
+  if (!loadedSnapshotCaches.has(spaceName) || snapshotCacheClearTimers.has(spaceName)) return;
+  const timer = setTimeout(() => {
+    void clearSnapshotCacheForSpaceName(spaceName);
+  }, SNAPSHOT_CACHE_RETAIN_ON_FAILURE_MS);
+  timer.unref();
+  snapshotCacheClearTimers.set(spaceName, timer);
+  log.warn(
+    `snapshot ${spaceName}: retaining vector cache for retry after ${reason}; ` +
+      `will clear in ${SNAPSHOT_CACHE_RETAIN_ON_FAILURE_MS / 60_000}min if no successful sync happens first`,
+  );
 }
 
 /** Resolve the runtime embedder config (V1 = OpenAI only). Returns null
@@ -131,6 +166,8 @@ export async function resetIndexerRuntime(opts: { forgetBindings?: boolean } = {
   await indexer.close();
   if (opts.forgetBindings) getDaemon().forgetBindings();
   loadedSnapshotCaches.clear();
+  for (const timer of snapshotCacheClearTimers.values()) clearTimeout(timer);
+  snapshotCacheClearTimers.clear();
 }
 
 /** One-shot latch for the stale-flock sweep below. */
@@ -167,10 +204,7 @@ export async function bindIndexerForSpace(spaceAbs: string): Promise<void> {
   // We can't use getCurrentSpaceName() here — the switch listener fires
   // BEFORE the renderer sees the new currentSpace, and bootBindAllSpaces
   // calls this without changing currentSpace at all.
-  const rel = path.relative(getKbRoot(), spaceAbs).split(path.sep).join('/');
-  if (rel === '' || rel.startsWith('..')) {
-    throw new Error(`bindIndexerForSpace: ${spaceAbs} is not under kbRoot`);
-  }
+  const rel = spaceNameFromAbs(spaceAbs);
   await indexer.bindSpace(rel, runtime);
   await maybeImportSnapshot(spaceAbs, rel);
 }
@@ -300,7 +334,44 @@ function ensureSwitchWatchdog(): void {
   switchWatchdog.unref();
 }
 
-function scheduleIndexerSync(spaceRoot: string, reason: string, windowId = 'default'): void {
+function syncFailureMessage(result: SyncResult): string {
+  const sample = result.failed.slice(0, 3).map((f) => `${f.name}: ${f.error}`).join('; ');
+  const suffix = result.failed.length > 3 ? `; plus ${result.failed.length - 3} more` : '';
+  return `${result.failed.length} file(s) could not be indexed${sample ? ` (${sample}${suffix})` : ''}`;
+}
+
+export async function syncSpaceNow(
+  spaceRoot: string,
+  opts: { reason?: string; shouldContinue?: () => boolean } = {},
+): Promise<SyncResult> {
+  const syncSpaceName = spaceNameFromAbs(spaceRoot);
+  try {
+    await bindIndexerForSpace(spaceRoot);
+    if (opts.shouldContinue && !opts.shouldContinue()) {
+      retainSnapshotCacheForRetry(spaceRoot, `${opts.reason ?? 'sync'} cancellation`);
+      return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+    }
+    const result = await syncIndex(indexer, syncSpaceName, { shouldContinue: opts.shouldContinue });
+    if (result.cancelled) {
+      retainSnapshotCacheForRetry(spaceRoot, `${opts.reason ?? 'sync'} cancellation`);
+      return result;
+    }
+    if (result.failed.length) {
+      recordIndexWarning(syncSpaceName, syncFailureMessage(result));
+      retainSnapshotCacheForRetry(spaceRoot, `${opts.reason ?? 'sync'} failures`);
+    } else {
+      clearIndexWarning(syncSpaceName);
+      await clearSnapshotCacheIfLoaded(spaceRoot);
+    }
+    return result;
+  } catch (err: unknown) {
+    recordIndexWarning(syncSpaceName, errorMessage(err));
+    retainSnapshotCacheForRetry(spaceRoot, `${opts.reason ?? 'sync'} error`);
+    throw err;
+  }
+}
+
+export function scheduleIndexerSync(spaceRoot: string, reason: string, windowId = 'default'): void {
   const seq = (indexerSwitchSeq.get(windowId) ?? 0) + 1;
   indexerSwitchSeq.set(windowId, seq);
   const prev = indexerSwitchQueues.get(windowId) ?? Promise.resolve();
@@ -312,23 +383,18 @@ function scheduleIndexerSync(spaceRoot: string, reason: string, windowId = 'defa
         const syncSpaceName = path.relative(getKbRoot(), spaceRoot).split(path.sep).join('/');
         if (!syncSpaceName || syncSpaceName.startsWith('..') || path.isAbsolute(syncSpaceName)) return;
         try {
-          await bindIndexerForSpace(spaceRoot);
-          if (getCurrentSpace() !== spaceRoot || seq !== indexerSwitchSeq.get(windowId)) return;
           // Full content-hash diff — the only reconcile tier. Hashing
           // is milliseconds for a personal KB; embedding still only
           // happens for changed hashes, so reopening a fully-indexed
           // space costs zero tokens, AND external edits made while the
           // app was closed are caught right here instead of waiting for
           // a manual sync.
-          await syncIndex(indexer, syncSpaceName);
-          clearIndexWarning(syncSpaceName);
+          await syncSpaceNow(spaceRoot, {
+            reason,
+            shouldContinue: () => getCurrentSpace() === spaceRoot && seq === indexerSwitchSeq.get(windowId),
+          });
         } catch (err: unknown) {
-          recordIndexWarning(syncSpaceName, errorMessage(err));
           log.warn(`${reason}: index sync failed for ${spaceRoot}: ${errorMessage(err)}`);
-        } finally {
-          // The import-time reindex (if any) has drained — free the
-          // daemon-side snapshot vector cache. No-op when none was loaded.
-          await clearSnapshotCacheIfLoaded(spaceRoot);
         }
       });
     });

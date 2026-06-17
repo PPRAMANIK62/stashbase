@@ -176,6 +176,8 @@ export interface SyncResult {
    *  deleted and an added path). These bypass the embedding pipeline
    *  entirely — cached vectors get re-stamped under the new source. */
   renamed?: string[];
+  failed?: { name: string; error: string }[];
+  cancelled?: boolean;
   error?: string;
 }
 

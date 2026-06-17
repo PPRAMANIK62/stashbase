@@ -94,13 +94,43 @@ export interface SyncResult {
    *  spent for these. */
   renamed: string[];
   failed: { name: string; error: string }[];
+  /** True when the caller deliberately abandoned the sync because the
+   *  target space/window is no longer current. Any arrays are partial work
+   *  completed before cancellation was observed. */
+  cancelled?: boolean;
+}
+
+export interface SyncOptions {
+  /** Cooperative cancellation hook. The Python daemon cannot abort an
+   *  in-flight upsert, but checking between files stops stale imports from
+   *  continuing through the rest of a large folder after a space switch. */
+  shouldContinue?: () => boolean;
+}
+
+function emptyResult(cancelled = false): SyncResult {
+  return { added: [], modified: [], removed: [], renamed: [], failed: [], ...(cancelled ? { cancelled: true } : {}) };
+}
+
+function shouldStop(opts: SyncOptions | undefined): boolean {
+  return opts?.shouldContinue ? !opts.shouldContinue() : false;
+}
+
+function toSpaceRelList(space: string, paths: string[]): string[] {
+  return paths.map((p) => spaceRelOf(space, p) ?? p);
+}
+
+function toSpaceRelFailures(
+  space: string,
+  failed: { name: string; error: string }[],
+): { name: string; error: string }[] {
+  return failed.map((f) => ({ ...f, name: spaceRelOf(space, f.name) ?? f.name }));
 }
 
 /** Full content-hash diff. `space` is the kbRoot-relative space name
  *  (e.g. `cs183b`) — any known space, not necessarily one open in a
  *  window. Returns space-relative paths so the manual sync UI can show
  *  them straight. */
-export async function syncIndex(indexer: Indexer, space: string): Promise<SyncResult> {
+export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptions = {}): Promise<SyncResult> {
   // No OpenAI key → semantic indexing is disabled by design (§5.3): the
   // daemon has no embedder/store, so every upsert would throw "no bound
   // space … set an OpenAI API key" and a whole-folder import would flood
@@ -112,8 +142,9 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
   // key is set picks everything up.
   if (!getApiKey()) {
     log.info(`no OpenAI key — skipping semantic index for "${space}" (keyword search unaffected)`);
-    return { added: [], modified: [], removed: [], renamed: [], failed: [] };
+    return emptyResult();
   }
+  if (shouldStop(opts)) return emptyResult(true);
   // Surface untracked PDFs / images before running the index diff. We
   // don't await individual conversions — each converter indexes its
   // derived note directly on completion; here we just start the queueing
@@ -124,6 +155,7 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
   discoverNewPdfs(spaceAbs);
   discoverNewImages(spaceAbs);
 
+  if (shouldStop(opts)) return emptyResult(true);
   const diff = await indexer.syncDiff(space);
   const failed: { name: string; error: string }[] = [];
 
@@ -132,7 +164,7 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
     diff.deleted.length === 0 && diff.renamed.length === 0
   ) {
     log.info('index up to date');
-    return { added: [], modified: [], removed: [], renamed: [], failed: [] };
+    return emptyResult();
   }
 
   // Renames first — they consume rows the deletes would otherwise wipe
@@ -143,6 +175,16 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
   if (diff.renamed.length) {
     log.info(`renaming ${diff.renamed.length} file(s) (hash match, no re-embed)`);
     for (const r of diff.renamed) {
+      if (shouldStop(opts)) {
+        return {
+          added: [],
+          modified: [],
+          removed: [],
+          renamed: toSpaceRelList(space, renamedDone),
+          failed: toSpaceRelFailures(space, failed),
+          cancelled: true,
+        };
+      }
       const spaceRel = spaceRelOf(space, r.new);
       if (spaceRel == null) {
         failed.push({ name: r.new, error: `path not under synced space "${space}"` });
@@ -167,10 +209,24 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
     }
   }
 
+  const removedDone: string[] = [];
   if (diff.deleted.length) {
     log.info(`removing ${diff.deleted.length} stale file(s) from index`);
     for (const kbRel of diff.deleted) {
-      try { await indexer.deleteFile(kbRel); }
+      if (shouldStop(opts)) {
+        return {
+          added: [],
+          modified: [],
+          removed: toSpaceRelList(space, removedDone),
+          renamed: toSpaceRelList(space, renamedDone),
+          failed: toSpaceRelFailures(space, failed),
+          cancelled: true,
+        };
+      }
+      try {
+        await indexer.deleteFile(kbRel);
+        removedDone.push(kbRel);
+      }
       catch (err: any) { failed.push({ name: kbRel, error: errorMessage(err) }); }
     }
   }
@@ -185,9 +241,29 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
   const addedDone: string[] = [];
   const modifiedDone: string[] = [];
   for (const kbRel of diff.added) {
+    if (shouldStop(opts)) {
+      return {
+        added: toSpaceRelList(space, addedDone),
+        modified: [],
+        removed: toSpaceRelList(space, removedDone),
+        renamed: toSpaceRelList(space, renamedDone),
+        failed: toSpaceRelFailures(space, failed),
+        cancelled: true,
+      };
+    }
     if (await indexOne(indexer, space, kbRel, failed)) addedDone.push(kbRel);
   }
   for (const kbRel of diff.modified) {
+    if (shouldStop(opts)) {
+      return {
+        added: toSpaceRelList(space, addedDone),
+        modified: toSpaceRelList(space, modifiedDone),
+        removed: toSpaceRelList(space, removedDone),
+        renamed: toSpaceRelList(space, renamedDone),
+        failed: toSpaceRelFailures(space, failed),
+        cancelled: true,
+      };
+    }
     if (await indexOne(indexer, space, kbRel, failed)) modifiedDone.push(kbRel);
   }
 
@@ -195,15 +271,15 @@ export async function syncIndex(indexer: Indexer, space: string): Promise<SyncRe
     `done. added=${addedDone.length}/${diff.added.length} ` +
       `modified=${modifiedDone.length}/${diff.modified.length} ` +
       `renamed=${renamedDone.length}/${diff.renamed.length} ` +
-      `removed=${diff.deleted.length} failed=${failed.length}`,
+      `removed=${removedDone.length}/${diff.deleted.length} failed=${failed.length}`,
   );
   await assertSyncConverged(indexer, space, [...addedDone, ...modifiedDone, ...renamedDone]);
   return {
-    added: addedDone.map((p) => spaceRelOf(space, p) ?? p),
-    modified: modifiedDone.map((p) => spaceRelOf(space, p) ?? p),
-    removed: diff.deleted.map((p) => spaceRelOf(space, p) ?? p),
-    renamed: renamedDone.map((p) => spaceRelOf(space, p) ?? p),
-    failed,
+    added: toSpaceRelList(space, addedDone),
+    modified: toSpaceRelList(space, modifiedDone),
+    removed: toSpaceRelList(space, removedDone),
+    renamed: toSpaceRelList(space, renamedDone),
+    failed: toSpaceRelFailures(space, failed),
   };
 }
 

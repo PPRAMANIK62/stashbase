@@ -1501,8 +1501,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SYNC_RUNNING', running: true });
     void refreshIndexState();
     try {
-      await api.sync();
-      dispatch({ type: 'INDEX_WARNING', warning: null });
+      const result = await api.sync();
+      if (result.failed?.length || result.cancelled) {
+        await refreshIndexState();
+      } else {
+        dispatch({ type: 'INDEX_WARNING', warning: null });
+      }
       await loadFiles();
     } catch (e: unknown) {
       toast('Sync failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });

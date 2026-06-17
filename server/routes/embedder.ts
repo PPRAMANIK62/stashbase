@@ -9,9 +9,9 @@
  */
 import express from 'express';
 import { logger, errorMessage } from '../log.ts';
-import { getCurrentSpace } from '../space.ts';
+import { currentWindowId, getCurrentSpace } from '../space.ts';
 import { getApiKey, getEmbedderProvider, setApiKey } from '../app-config.ts';
-import { bindIndexerForSpace, bootBindAllSpaces, resetIndexerRuntime } from '../state.ts';
+import { bootBindAllSpaces, resetIndexerRuntime, scheduleIndexerSync } from '../state.ts';
 import { validateOpenAIKey } from '../http.ts';
 
 const log = logger('routes/embedder');
@@ -40,7 +40,7 @@ export function mount(app: express.Express): void {
       await bootBindAllSpaces();
       const cur = getCurrentSpace();
       if (cur) {
-        await bindIndexerForSpace(cur);
+        scheduleIndexerSync(cur, 'embedder key set', currentWindowId());
       }
     } catch (err: unknown) {
       log.warn(`key set: runtime reset/rebind failed: ${errorMessage(err)}`);
