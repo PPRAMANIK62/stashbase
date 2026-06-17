@@ -1095,6 +1095,11 @@
       background: #fef0c5;
       opacity: 1;
     }
+    .snapshot-warning-dismiss svg {
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+    }
 
     .file-list {
       flex: 1;

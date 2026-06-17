@@ -54,6 +54,21 @@ function recordSnapshotWarning(space: string, warning: SnapshotImportWarning): v
   snapshotWarnings.set(space, warning);
 }
 
+export interface IndexSyncWarning {
+  message: string;
+  at: string;
+}
+const indexWarnings = new Map<string, IndexSyncWarning>();
+export function getIndexWarning(space: string): IndexSyncWarning | null {
+  return indexWarnings.get(space) ?? null;
+}
+export function clearIndexWarning(space: string): void {
+  indexWarnings.delete(space);
+}
+function recordIndexWarning(space: string, message: string): void {
+  indexWarnings.set(space, { message, at: new Date().toISOString() });
+}
+
 /** Spaces whose snapshot vector-cache is currently loaded in the daemon
  *  (keyed by kbRoot-relative name). Loaded just before an import-time
  *  reindex and cleared once that reindex drains, so the daemon doesn't
@@ -294,6 +309,8 @@ function scheduleIndexerSync(spaceRoot: string, reason: string, windowId = 'defa
     .then(async () => {
       await runWithWindowId(windowId, async () => {
         if (getCurrentSpace() !== spaceRoot) return;
+        const syncSpaceName = path.relative(getKbRoot(), spaceRoot).split(path.sep).join('/');
+        if (!syncSpaceName || syncSpaceName.startsWith('..') || path.isAbsolute(syncSpaceName)) return;
         try {
           await bindIndexerForSpace(spaceRoot);
           if (getCurrentSpace() !== spaceRoot || seq !== indexerSwitchSeq.get(windowId)) return;
@@ -303,9 +320,10 @@ function scheduleIndexerSync(spaceRoot: string, reason: string, windowId = 'defa
           // space costs zero tokens, AND external edits made while the
           // app was closed are caught right here instead of waiting for
           // a manual sync.
-          const spaceName = getCurrentSpaceName();
-          if (spaceName) await syncIndex(indexer, spaceName);
+          await syncIndex(indexer, syncSpaceName);
+          clearIndexWarning(syncSpaceName);
         } catch (err: unknown) {
+          recordIndexWarning(syncSpaceName, errorMessage(err));
           log.warn(`${reason}: index sync failed for ${spaceRoot}: ${errorMessage(err)}`);
         } finally {
           // The import-time reindex (if any) has drained — free the

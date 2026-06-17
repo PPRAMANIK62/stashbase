@@ -51,6 +51,12 @@ test('copy imports into a new space, dereferences symlinks, and leaves the sourc
   assert.equal(fs.lstatSync(path.join(result.path, 'linked.md')).isSymbolicLink(), false);
   assert.equal(fs.existsSync(path.join(result.path, '.stashbase', 'snapshot.parquet')), true);
   assert.equal(fs.existsSync(path.join(result.path, '.stashbase', 'config.json')), false);
+  assert.equal(fs.existsSync(path.join(result.path, '.stashbase', '.gitignore')), true);
+  assert.equal(fs.existsSync(path.join(result.path, 'STASHBASE.md')), true);
+  assert.deepEqual(
+    fs.readdirSync(path.join(kbRoot, '.stashbase')).filter((name) => name.startsWith('import-stage-')),
+    [],
+  );
   assert.equal(fs.existsSync(source), true);
 });
 
@@ -98,6 +104,35 @@ test('preview counts a symlinked directory once', () => {
   assert.equal(preview.totalBytes, Buffer.byteLength('# linked\n'));
 });
 
+test('preview counts duplicate symlinked directories the way import copies them', () => {
+  const kbRoot = tmpDir('kb');
+  const source = tmpDir('source');
+  const linkedDir = tmpDir('linked');
+  fs.writeFileSync(path.join(linkedDir, 'linked.md'), '# linked\n');
+  fs.symlinkSync(linkedDir, path.join(source, 'first'));
+  fs.symlinkSync(linkedDir, path.join(source, 'second'));
+
+  const preview = previewFolderImport({ source, kbRoot });
+
+  assert.equal(preview.entryCount, 4);
+  assert.equal(preview.totalBytes, Buffer.byteLength('# linked\n') * 2);
+});
+
+test('preview skips import-excluded local stashbase state', () => {
+  const kbRoot = tmpDir('kb');
+  const source = tmpDir('source');
+  fs.writeFileSync(path.join(source, 'note.md'), '# hello\n');
+  fs.mkdirSync(path.join(source, '.stashbase', 'store'), { recursive: true });
+  fs.writeFileSync(path.join(source, '.stashbase', 'config.json'), '{}');
+  fs.writeFileSync(path.join(source, '.stashbase', 'snapshot.parquet'), 'snapshot');
+  fs.writeFileSync(path.join(source, '.stashbase', 'store', 'milvus.db'), 'milvus');
+
+  const preview = previewFolderImport({ source, kbRoot });
+
+  assert.equal(preview.entryCount, 3);
+  assert.equal(preview.totalBytes, Buffer.byteLength('# hello\n') + Buffer.byteLength('snapshot'));
+});
+
 test('move imports by copy-then-delete, preserving dereferenced content in the space', () => {
   const kbRoot = tmpDir('kb');
   const source = tmpDir('source');
@@ -113,6 +148,28 @@ test('move imports by copy-then-delete, preserving dereferenced content in the s
 
   assert.equal(fs.readFileSync(path.join(result.path, 'note.md'), 'utf8'), '# moved\n');
   assert.equal(fs.existsSync(source), false);
+});
+
+test('move refuses a symlinked source folder', () => {
+  const kbRoot = tmpDir('kb');
+  const real = tmpDir('real-source');
+  const link = path.join(tmpDir('links'), 'source-link');
+  fs.writeFileSync(path.join(real, 'note.md'), '# real\n');
+  fs.symlinkSync(real, link, 'dir');
+
+  assert.throws(
+    () => importFolderAsSpace({
+      source: link,
+      kbRoot,
+      name: 'linked-move',
+      mode: 'move',
+      confirmExisting: true,
+    }),
+    /cannot move a symlinked folder/,
+  );
+  assert.equal(fs.existsSync(path.join(kbRoot, 'linked-move')), false);
+  assert.equal(fs.existsSync(link), true);
+  assert.equal(fs.existsSync(path.join(real, 'note.md')), true);
 });
 
 test('move keeps the imported space and warns when the original cannot be removed', () => {
@@ -159,6 +216,30 @@ test('import refuses to merge into an existing space', () => {
     }),
     /already exists/,
   );
+});
+
+test('import cleans stale staging folders without touching fresh ones', () => {
+  const kbRoot = tmpDir('kb');
+  const source = tmpDir('source');
+  const stash = path.join(kbRoot, '.stashbase');
+  const oldStage = path.join(stash, 'import-stage-old');
+  const freshStage = path.join(stash, 'import-stage-fresh');
+  fs.writeFileSync(path.join(source, 'note.md'), '# hello\n');
+  fs.mkdirSync(oldStage, { recursive: true });
+  fs.mkdirSync(freshStage, { recursive: true });
+  const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  fs.utimesSync(oldStage, old, old);
+
+  importFolderAsSpace({
+    source,
+    kbRoot,
+    name: 'clean-stage',
+    mode: 'copy',
+    confirmExisting: true,
+  });
+
+  assert.equal(fs.existsSync(oldStage), false);
+  assert.equal(fs.existsSync(freshStage), true);
 });
 
 test('import refuses non-empty source without confirmation', () => {
@@ -239,6 +320,50 @@ test('import refuses sources that contain the KB root', () => {
     () => previewFolderImport({ source: parent, kbRoot }),
     /contains the KB root/,
   );
+});
+
+test('import refuses symlinks that resolve into or around the KB root', () => {
+  const parent = tmpDir('parent');
+  const kbRoot = path.join(parent, 'StashBase');
+  fs.mkdirSync(path.join(kbRoot, 'Space'), { recursive: true });
+  const linkToKb = path.join(tmpDir('links'), 'kb-link');
+  fs.symlinkSync(kbRoot, linkToKb, 'dir');
+
+  assert.throws(
+    () => previewFolderImport({ source: linkToKb, kbRoot, name: 'Imported' }),
+    /already inside the knowledge base/,
+  );
+
+  const linkToParent = path.join(tmpDir('links'), 'parent-link');
+  fs.symlinkSync(parent, linkToParent, 'dir');
+  assert.throws(
+    () => previewFolderImport({ source: linkToParent, kbRoot, name: 'Imported' }),
+    /contains the KB root/,
+  );
+});
+
+test('import refuses source entries that symlink into the KB root', () => {
+  const parent = tmpDir('parent');
+  const kbRoot = path.join(parent, 'StashBase');
+  const source = tmpDir('source');
+  fs.mkdirSync(path.join(kbRoot, 'Space'), { recursive: true });
+  fs.symlinkSync(kbRoot, path.join(source, 'kb-link'), 'dir');
+
+  assert.throws(
+    () => previewFolderImport({ source, kbRoot, name: 'Imported' }),
+    /inside the knowledge base/,
+  );
+  assert.throws(
+    () => importFolderAsSpace({
+      source,
+      kbRoot,
+      name: 'Imported',
+      mode: 'copy',
+      confirmExisting: true,
+    }),
+    /inside the knowledge base/,
+  );
+  assert.equal(fs.existsSync(path.join(kbRoot, 'Imported')), false);
 });
 
 test('import refuses home, filesystem root, kb root, and sources already inside kb root', () => {

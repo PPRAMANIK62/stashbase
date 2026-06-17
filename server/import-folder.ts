@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  ensureSpaceMetadata,
   validateSpaceName,
   pruneStashbasePerMachineState,
   STASHBASE_PER_MACHINE_ENTRIES,
@@ -52,6 +53,7 @@ export interface ImportFolderResult {
 const CONFIRM_ENTRY_LIMIT = 0;
 const LARGE_IMPORT_ENTRY_LIMIT = 10_000;
 const LARGE_IMPORT_BYTES = 1024 ** 3;
+const IMPORT_STAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** Cap on how deep `scanFolder` walks before it stops counting. A
  *  preview is informational, not a manifest — without a bound, pointing
  *  the picker at a tens-of-GB tree would block the server on a full
@@ -72,7 +74,7 @@ export function previewFolderImport(
   if (badName) throw new Error(badName);
 
   const destination = path.join(kbRoot, name);
-  const stats = scanFolder(source);
+  const stats = scanFolder(source, kbRoot);
   const largeImportReason = getLargeImportReason(stats.entryCount, stats.totalBytes, stats.truncated);
   const warnings = buildWarnings(source, kbRoot, name, stats.entryCount, stats.totalBytes, stats.truncated);
 
@@ -96,6 +98,9 @@ export function importFolderAsSpace(opts: ImportFolderOptions): ImportFolderResu
   const mode = opts.mode ?? 'copy';
   if (mode !== 'copy' && mode !== 'move') throw new Error('mode must be "copy" or "move"');
   const preview = previewFolderImport(opts);
+  if (mode === 'move' && isSymlink(preview.source)) {
+    throw new Error('cannot move a symlinked folder; copy it instead, or move the real folder');
+  }
   if (preview.requiresConfirmation && opts.confirmExisting !== true) {
     const err = new Error('confirmation required before importing this folder');
     (err as any).code = 'CONFIRM_EXISTING';
@@ -115,20 +120,46 @@ export function importFolderAsSpace(opts: ImportFolderOptions): ImportFolderResu
     throw err;
   }
 
-  // Phase 1 — build the new space. Anything that throws here leaves a
-  // partial destination behind, so we roll it back. The source is still
-  // untouched, so rolling back the destination is safe and complete.
+  // Phase 1 — build the new space under the internal staging directory.
+  // A crash mid-copy may leave a staging folder, but never a half-imported
+  // visible space under <kbRoot>/<name>.
+  const kbRoot = path.dirname(preview.destination);
+  const kbRootReal = kbRootRealpath(kbRoot);
+  const stash = path.join(kbRootReal, '.stashbase');
+  fs.mkdirSync(stash, { recursive: true });
+  cleanupOldImportStages(stash);
+  const stagingRoot = fs.mkdtempSync(path.join(stash, 'import-stage-'));
+  const staged = path.join(stagingRoot, preview.name);
   try {
-    copyDirectoryDereferenced(preview.source, preview.destination, {
+    copyDirectoryDereferenced(preview.source, staged, {
       exclude: isImportExcludedEntry,
+      validateEntry: (_relPath, _sourcePath, _entry, stat, realPath) => {
+        assertImportableTarget(realPath, stat.isDirectory(), kbRootReal);
+      },
     });
-    pruneStashbasePerMachineState(path.join(preview.destination, '.stashbase'));
+    pruneStashbasePerMachineState(path.join(staged, '.stashbase'));
+    ensureSpaceMetadata(staged);
   } catch (err) {
-    try { fs.rmSync(preview.destination, { recursive: true, force: true }); } catch { /* best-effort rollback */ }
+    try { fs.rmSync(stagingRoot, { recursive: true, force: true }); } catch { /* best-effort rollback */ }
     throw err;
   }
 
-  // Phase 2 — for a move, delete the original now that the copy is
+  // Phase 2 — commit the completed staged space into the KB root. The
+  // destination is checked again to handle races with another import.
+  try {
+    if (fs.existsSync(preview.destination)) {
+      const err = new Error(`space "${preview.name}" already exists`);
+      (err as any).code = 'SPACE_EXISTS';
+      throw err;
+    }
+    fs.renameSync(staged, preview.destination);
+  } catch (err) {
+    try { fs.rmSync(stagingRoot, { recursive: true, force: true }); } catch { /* best-effort rollback */ }
+    throw err;
+  }
+  try { fs.rmSync(stagingRoot, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+
+  // Phase 3 — for a move, delete the original now that the copy is
   // committed. This is deliberately *outside* the rollback above: if
   // deleting the source fails partway (permissions / file in use), the
   // new space is already complete and must be kept. Tearing it down here
@@ -160,19 +191,25 @@ function normalizeSource(raw: string): string {
 
 function assertImportableSource(source: string, kbRoot: string): void {
   const home = os.homedir();
-  if (source === home || source === path.parse(source).root) {
+  const sourceReal = fs.realpathSync(source);
+  const kbRootReal = kbRootRealpath(kbRoot);
+  const homeReal = kbRootRealpath(home);
+  if (
+    samePath(source, home) ||
+    samePath(sourceReal, homeReal) ||
+    source === path.parse(source).root ||
+    sourceReal === path.parse(sourceReal).root
+  ) {
     throw new Error('refusing to import home or filesystem root');
   }
-  const relFromRoot = path.relative(kbRoot, source);
-  const isInsideKb = source === kbRoot
-    || (relFromRoot !== '' && !relFromRoot.startsWith('..') && !path.isAbsolute(relFromRoot));
+  const isInsideKb = samePath(source, kbRoot)
+    || pathContains(kbRoot, source)
+    || samePath(sourceReal, kbRootReal)
+    || pathContains(kbRootReal, sourceReal);
   if (isInsideKb) {
     throw new Error('source is already inside the knowledge base; use Open space');
   }
-  const relRootFromSource = path.relative(source, kbRoot);
-  const containsKbRoot = relRootFromSource !== ''
-    && !relRootFromSource.startsWith('..')
-    && !path.isAbsolute(relRootFromSource);
+  const containsKbRoot = pathContains(source, kbRoot) || pathContains(sourceReal, kbRootReal);
   if (containsKbRoot) {
     throw new Error('source contains the KB root; choose a more specific folder');
   }
@@ -188,33 +225,38 @@ function isImportExcludedEntry(relPath: string, _entry: fs.Dirent): boolean {
   return entry === 'pdf-status.json' || entry === 'pdf-status.json.migrated';
 }
 
-function scanFolder(source: string): { entryCount: number; totalBytes: number; truncated: boolean } {
+function scanFolder(source: string, kbRoot: string): { entryCount: number; totalBytes: number; truncated: boolean } {
   let entryCount = 0;
   let totalBytes = 0;
-  const seenDirectories = new Set<string>();
-  try { seenDirectories.add(fs.realpathSync(source)); } catch { /* source was already stat-checked */ }
-  const stack = [source];
+  const sourceReal = fs.realpathSync(source);
+  const kbRootReal = kbRootRealpath(kbRoot);
+  const stack: Array<{ dir: string; rel: string; ancestors: Set<string> }> = [
+    { dir: source, rel: '', ancestors: new Set([sourceReal]) },
+  ];
   while (stack.length) {
     if (entryCount >= SCAN_ENTRY_CAP) return { entryCount, totalBytes, truncated: true };
-    const dir = stack.pop()!;
+    const frame = stack.pop()!;
     let entries: fs.Dirent[];
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    try { entries = fs.readdirSync(frame.dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
+      const rel = frame.rel ? `${frame.rel}/${entry.name}` : entry.name;
+      if (isImportExcludedEntry(rel, entry)) continue;
       if (entryCount >= SCAN_ENTRY_CAP) return { entryCount, totalBytes, truncated: true };
       entryCount += 1;
-      const full = path.join(dir, entry.name);
+      const full = path.join(frame.dir, entry.name);
+      let stat: fs.Stats;
       try {
-        const stat = fs.statSync(full);
-        if (stat.isFile()) totalBytes += stat.size;
-        if (stat.isDirectory()) {
-          const real = fs.realpathSync(full);
-          if (!seenDirectories.has(real)) {
-            seenDirectories.add(real);
-            stack.push(full);
-          }
-        }
+        stat = fs.statSync(full);
       } catch {
         /* Unreadable entries are surfaced by copy during import. */
+        continue;
+      }
+      if (stat.isFile()) totalBytes += stat.size;
+      const real = fs.realpathSync(full);
+      assertImportableTarget(real, stat.isDirectory(), kbRootReal);
+      if (stat.isDirectory()) {
+        if (frame.ancestors.has(real)) throw new Error(`cyclic symlink detected: ${full}`);
+        stack.push({ dir: full, rel, ancestors: new Set([...frame.ancestors, real]) });
       }
     }
   }
@@ -272,4 +314,46 @@ function dirExists(p: string): boolean {
 
 function fileExists(p: string): boolean {
   try { return fs.statSync(p).isFile(); } catch { return false; }
+}
+
+function isSymlink(p: string): boolean {
+  try { return fs.lstatSync(p).isSymbolicLink(); } catch { return false; }
+}
+
+function kbRootRealpath(kbRoot: string): string {
+  try { return fs.realpathSync(kbRoot); } catch { return path.resolve(kbRoot); }
+}
+
+function samePath(a: string, b: string): boolean {
+  return path.resolve(a) === path.resolve(b);
+}
+
+function pathContains(parent: string, child: string): boolean {
+  const rel = path.relative(path.resolve(parent), path.resolve(child));
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+function assertImportableTarget(targetReal: string, isDirectory: boolean, kbRootReal: string): void {
+  if (samePath(targetReal, kbRootReal) || pathContains(kbRootReal, targetReal)) {
+    throw new Error('source includes an entry inside the knowledge base; choose a different folder');
+  }
+  if (isDirectory && pathContains(targetReal, kbRootReal)) {
+    throw new Error('source contains the KB root; choose a more specific folder');
+  }
+}
+
+function cleanupOldImportStages(stash: string, maxAgeMs = IMPORT_STAGE_MAX_AGE_MS): void {
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(stash, { withFileTypes: true }); } catch { return; }
+  const cutoff = Date.now() - maxAgeMs;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('import-stage-')) continue;
+    const full = path.join(stash, entry.name);
+    try {
+      const stat = fs.statSync(full);
+      if (stat.mtimeMs <= cutoff) fs.rmSync(full, { recursive: true, force: true });
+    } catch {
+      /* best-effort cleanup */
+    }
+  }
 }

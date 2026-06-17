@@ -16,6 +16,7 @@ import type {
   FolderMeta,
   KeywordSearchResult,
   ConversionFailure,
+  IndexWarning,
   SearchHit,
   SnapshotWarning,
   Agent,
@@ -263,6 +264,9 @@ export interface State {
    *  surfaced a provider-mismatch warning. Cleared by user dismissal
    *  (`SNAPSHOT_WARNING_DISMISS`) or by the server reporting null. */
   snapshotWarning: SnapshotWarning | null;
+  /** Non-null when the active space's background indexing failed.
+   *  Cleared by user dismissal or the server reporting a later success. */
+  indexWarning: IndexWarning | null;
   /** Space-relative paths of PDFs / images whose most recent conversion
    *  failed, carried in from `/api/index-status`. Drives the failure
    *  banner inside `PdfPreview` / `ImagePreview` and the context-menu
@@ -343,6 +347,7 @@ export const initialState: State = {
   searchError: null,
   embedderHasKey: null,
   snapshotWarning: null,
+  indexWarning: null,
   conversionFailures: [],
   ctxMenu: null,
   renaming: null,
@@ -419,6 +424,7 @@ export type Action =
   | { type: 'SEARCH_CASE_STRICT'; strict: boolean }
   | { type: 'SEARCH_WHOLE_WORD'; on: boolean }
   | { type: 'SNAPSHOT_WARNING'; warning: SnapshotWarning | null }
+  | { type: 'INDEX_WARNING'; warning: IndexWarning | null }
   | { type: 'CONVERSION_FAILURES'; failures: ConversionFailure[] }
   | { type: 'CTX_MENU'; menu: CtxMenu | null }
   | { type: 'RENAMING'; renaming: State['renaming'] }
@@ -756,6 +762,8 @@ export function reducer(s: State, a: Action): State {
       return { ...s, wholeWord: a.on, keywordResult: null };
     case 'SNAPSHOT_WARNING':
       return { ...s, snapshotWarning: a.warning };
+    case 'INDEX_WARNING':
+      return { ...s, indexWarning: a.warning };
     case 'CONVERSION_FAILURES':
       return { ...s, conversionFailures: a.failures };
     case 'CTX_MENU':

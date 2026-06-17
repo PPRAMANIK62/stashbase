@@ -130,11 +130,20 @@ export interface IndexStatus {
    *  current embedder. The renderer surfaces this as a dismissible
    *  banner with a link to switch embedders. */
   snapshotWarning?: SnapshotWarning | null;
+  /** Non-null when the active space's background index sync failed after
+   *  opening/importing. Cleared by a successful manual/background sync or
+   *  user dismissal. */
+  indexWarning?: IndexWarning | null;
 }
 
 export interface SnapshotWarning {
   skipped: number;
   details: { provider: string; chunks: number }[];
+  at: string;
+}
+
+export interface IndexWarning {
+  message: string;
   at: string;
 }
 
@@ -504,6 +513,8 @@ export const api = {
   indexStatus: () => getJson<IndexStatus>('/api/index-status'),
   dismissSnapshotWarning: () =>
     send<{ ok: boolean }>('POST', '/api/snapshot-warning/dismiss'),
+  dismissIndexWarning: () =>
+    send<{ ok: boolean }>('POST', '/api/index-warning/dismiss'),
   /** Bake the current space's embeddings into a portable
    *  `.stashbase/snapshot.parquet` (+ `snapshot.meta.json`) so copying /
    *  git-cloning the space folder carries the vectors — the other end

@@ -988,7 +988,7 @@ function migrateLegacySpaceConfig(spaceName: string): SpaceConfigFile {
   return cfg;
 }
 
-function ensureSpaceMetadata(spaceRoot: string): void {
+export function ensureSpaceMetadata(spaceRoot: string): void {
   const stash = path.join(spaceRoot, '.stashbase');
   fs.mkdirSync(stash, { recursive: true });
   ensureSpaceStashbaseIgnore(stash);

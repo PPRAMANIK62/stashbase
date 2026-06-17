@@ -110,6 +110,7 @@ function FilesPanel() {
     <div className="files-panel" id="sidebar-panel-files" role="tabpanel">
       <KbSection />
       <SnapshotWarningBanner />
+      <IndexWarningBanner />
       {/* VSCode-style two-tier header: a section-title row ("SPACE" +
           space-actions ⋯, mirroring EXPLORER) above the folder row
           (current space name + file actions). */}
@@ -520,6 +521,36 @@ function SnapshotWarningBanner() {
         className="snapshot-warning-dismiss"
         title="Dismiss"
         onClick={() => { void actions.dismissSnapshotWarning(); }}
+      >×</button>
+    </div>
+  );
+}
+
+function IndexWarningBanner() {
+  const { state, actions } = useApp();
+  const w = state.indexWarning;
+  if (!w) return null;
+  return (
+    <div className="snapshot-warning">
+      <div className="snapshot-warning-body">
+        <div className="snapshot-warning-title">
+          Indexing needs attention
+        </div>
+        <div className="snapshot-warning-msg">
+          Search may be incomplete: {w.message}
+        </div>
+      </div>
+      <button
+        type="button"
+        className="snapshot-warning-dismiss"
+        title="Retry indexing"
+        onClick={() => { void actions.runSync(); }}
+      ><SyncIcon /></button>
+      <button
+        type="button"
+        className="snapshot-warning-dismiss"
+        title="Dismiss"
+        onClick={() => { void actions.dismissIndexWarning(); }}
       >×</button>
     </div>
   );

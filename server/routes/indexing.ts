@@ -19,7 +19,7 @@ import { isImageFile } from '../format.ts';
 import { clearRecord, listFailed, readAll as readConversionStatus } from '../conversion-status.ts';
 import { getFsChangeCounter } from '../watcher.ts';
 import { getDaemon } from '../mfs-daemon.ts';
-import { bindIndexerForSpace, clearSnapshotWarning, getSnapshotWarning, indexer } from '../state.ts';
+import { bindIndexerForSpace, clearIndexWarning, clearSnapshotWarning, getIndexWarning, getSnapshotWarning, indexer } from '../state.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { sendError } from '../http.ts';
 
@@ -41,6 +41,7 @@ export function mount(app: express.Express): void {
         await bindIndexerForSpace(requireSpaceExistsByName(space));
       }
       const result = await syncIndex(indexer, space);
+      clearIndexWarning(space);
       if (result.added.length || result.modified.length || result.removed.length || result.renamed.length) {
         noteTreeChanged();
       }
@@ -188,6 +189,7 @@ export function mount(app: express.Express): void {
         // current space so the renderer can show a banner. `null` when
         // nothing's wrong (the typical state).
         snapshotWarning: space ? getSnapshotWarning(space) : null,
+        indexWarning: space ? getIndexWarning(space) : null,
       });
     } catch (err: unknown) {
       sendError(res, err);
@@ -202,6 +204,13 @@ export function mount(app: express.Express): void {
     const space = getCurrentSpaceName();
     if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
     clearSnapshotWarning(space);
+    res.json({ ok: true });
+  });
+
+  app.post('/api/index-warning/dismiss', (_req, res) => {
+    const space = getCurrentSpaceName();
+    if (!space) return res.status(412).json({ error: 'no space open', code: 'NO_SPACE' });
+    clearIndexWarning(space);
     res.json({ ok: true });
   });
 
@@ -511,4 +520,3 @@ function isKeywordWordChar(ch: string): boolean {
 }
 
 // ---------- recent-files walk ----------
-

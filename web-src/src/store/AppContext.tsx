@@ -107,6 +107,8 @@ export interface AppActions {
    *  `/api/snapshot-warning/dismiss` so the warning doesn't reappear
    *  the next time `/api/index-status` polls. */
   dismissSnapshotWarning: () => Promise<void>;
+  /** Clear the active space's background-index warning. */
+  dismissIndexWarning: () => Promise<void>;
   /** Replace a folder's ordered child list (manual sidebar ordering).
    *  Optimistic — state updates immediately, then a PUT is fired.
    *  Failure of the PUT rolls the renderer back to whatever the server
@@ -243,6 +245,15 @@ function shallowEqualSnapshotWarning(
   return a.details.every((d, i) =>
     d.provider === b.details[i].provider && d.chunks === b.details[i].chunks,
   );
+}
+
+function shallowEqualIndexWarning(
+  a: State['indexWarning'],
+  b: State['indexWarning'],
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.message === b.message && a.at === b.at;
 }
 
 function shallowEqualConversionFailures(
@@ -610,6 +621,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!shallowEqualSnapshotWarning(prev.snapshotWarning, incomingWarning)) {
         dispatch({ type: 'SNAPSHOT_WARNING', warning: incomingWarning });
       }
+      const incomingIndexWarning = s.indexWarning ?? null;
+      if (!shallowEqualIndexWarning(prev.indexWarning, incomingIndexWarning)) {
+        dispatch({ type: 'INDEX_WARNING', warning: incomingIndexWarning });
+      }
       const incomingFailures = s.conversionFailures ?? [];
       if (!shallowEqualConversionFailures(prev.conversionFailures, incomingFailures)) {
         dispatch({ type: 'CONVERSION_FAILURES', failures: incomingFailures });
@@ -637,6 +652,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'PENDING_NAMES', names: new Set() });
         dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
         dispatch({ type: 'SNAPSHOT_WARNING', warning: null });
+        dispatch({ type: 'INDEX_WARNING', warning: null });
         dispatch({ type: 'CONVERSION_FAILURES', failures: [] });
         lastTreeVersion.current = -1;
       }
@@ -1486,6 +1502,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void refreshIndexState();
     try {
       await api.sync();
+      dispatch({ type: 'INDEX_WARNING', warning: null });
       await loadFiles();
     } catch (e: unknown) {
       toast('Sync failed: ' + (e instanceof Error ? e.message : String(e)), { level: 'error' });
@@ -1505,6 +1522,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'CHAT_TABS_RESET' });
     dispatch({ type: 'FILTER', q: '' });
     dispatch({ type: 'SEARCH_CLEAR' });
+    dispatch({ type: 'INDEX_WARNING', warning: null });
     dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
   }, []);
 
@@ -1588,10 +1606,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const dismissIndexWarning = useCallback(async () => {
+    dispatch({ type: 'INDEX_WARNING', warning: null });
+    try { await api.dismissIndexWarning(); }
+    catch (err) {
+      console.warn('[index-warning] dismiss failed:', err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
   const actions = useMemo<AppActions>(() => ({
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
-    dismissSnapshotWarning,
+    dismissSnapshotWarning, dismissIndexWarning,
     selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbRules, closeTab, closeActiveTab, activateTab,
     navigateTo, consumePendingScroll,
     consumePendingHighlight,
@@ -1609,7 +1635,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }), [
     bootstrap, openSpace, openSpaceByName, goHome,
     loadFiles, refreshIndexState, runSync, runSearch, setFolderOrder,
-    dismissSnapshotWarning,
+    dismissSnapshotWarning, dismissIndexWarning,
     selectFile, selectFileWithHighlight, openInNewTab, newTab, openKbRules, closeTab, closeActiveTab, activateTab,
     navigateTo, consumePendingScroll,
     consumePendingHighlight,
