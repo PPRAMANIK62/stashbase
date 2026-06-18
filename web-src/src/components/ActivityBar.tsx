@@ -72,7 +72,12 @@ export function ActivityBar() {
         setNeedGeminiKey(true);
         return;
       }
-    } catch { /* server unreachable — let the route's own guard handle it */ }
+    } catch {
+      actions.toast('Could not verify the Gemini key, so recording was not started. Try again when StashBase is connected.', {
+        level: 'error',
+      });
+      return;
+    }
     if (stateRef.current.welcomeVisible || stateRef.current.space !== target.space) {
       actions.toast('Recording was not started because the space changed.', { level: 'warning' });
       return;

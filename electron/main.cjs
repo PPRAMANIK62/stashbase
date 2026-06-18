@@ -1318,6 +1318,7 @@ function beginRecording(ownerWindow = null, context = null) {
   if (recordingActive || recordingPending) return;
   recordingOwnerWindow = isLiveMainWindow(ownerWindow) ? ownerWindow : getMainTargetWindow();
   recordingContext = normalizeRecordingContext(context);
+  recordingPending = true;
   if (supportsSystemPicker()) startRecordingSystemPicker();
   else createCapturePickerWindow('record');
 }
@@ -1328,7 +1329,6 @@ function beginRecording(ownerWindow = null, context = null) {
 // ack, so dismissing the picker leaves no stuck red ball (`recordingPending`
 // guards re-entry meanwhile).
 function startRecordingSystemPicker() {
-  recordingPending = true;
   recorderWindow = createRecorderWindow();
   const trigger = () => {
     if (recorderWindow && !recorderWindow.isDestroyed()) {
@@ -1359,10 +1359,12 @@ function startRecordingSystemPicker() {
 function startRecording(sourceId) {
   if (recordingActive) return;
   if (!sourceId) {
+    recordingPending = false;
     emitCaptureError(classifyCaptureError('No capture source was selected.'), recordingOwnerWindow);
     clearRecordingOwner();
     return;
   }
+  recordingPending = false;
   recordingActive = true;
   emitRecordingState(true);
   recorderWindow = createRecorderWindow();
@@ -1420,7 +1422,10 @@ function createCapturePickerWindow(mode) {
   );
   capturePickerWindow.on('closed', () => {
     capturePickerWindow = null;
-    if (!recordingActive && !recordingPending) clearRecordingOwner();
+    if (!recordingActive) {
+      recordingPending = false;
+      clearRecordingOwner();
+    }
   });
 }
 
@@ -1461,6 +1466,18 @@ async function createWindow(initialSpace) {
     lastMainWindow = win;
     offerClipboardImage(win);
     startClipboardPolling();
+  });
+  win.on('close', (event) => {
+    if (recordingOwnerWindow !== win || (!recordingActive && !recordingPending)) return;
+    event.preventDefault();
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    emitCaptureError({
+      kind: 'capture-failed',
+      message: 'Stop or cancel the recording before closing this window.',
+      detail: 'The recording result is delivered back to the window that started it.',
+    }, win);
   });
   win.on('closed', () => {
     mainWindows.delete(win);
@@ -1611,12 +1628,17 @@ ipcMain.on('clipboard:markHandled', (_event, hash) => {
 // Rail "record" button: start recording (system picker on macOS 15+, our
 // own windows-only picker below that).
 ipcMain.on('capture:startRecording', (event, context) => {
-  beginRecording(BrowserWindow.fromWebContents(event.sender), context);
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(ownerWindow)) return;
+  beginRecording(ownerWindow, context);
 });
 
 // Older-macOS picker handed us the chosen window — start recording it and
 // dismiss the picker (the recording indicator pill is the stop control).
 ipcMain.handle('recorder:recordWindow', (event, sourceId) => {
+  if (!capturePickerWindow || event.sender !== capturePickerWindow.webContents) {
+    return { ok: false, error: 'Invalid recorder request.' };
+  }
   if (typeof sourceId !== 'string' || !sourceId) return { ok: false, error: 'Nothing was selected.' };
   if (recordingActive) return { ok: false, error: 'A recording is already in progress.' };
   startRecording(sourceId);
