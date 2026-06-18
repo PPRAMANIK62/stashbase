@@ -626,17 +626,22 @@ export const api = {
   removeGeminiKey: () =>
     send<{ hasKey: false }>('DELETE', '/api/gemini/key'),
 
-  // Claude sessions (chat-panel History dropdown) ----------------
-  /** All local Claude Code sessions, newest first. */
-  listSessions: () => getJson<SessionInfo[]>('/api/agent/sessions'),
+  // Agent sessions (chat-panel History dropdown) ----------------
+  /** All local agent sessions for the current space, newest first. */
+  listSessions: (agent: 'claude' | 'codex' = 'claude') =>
+    getJson<SessionInfo[]>(agentSessionBase(agent)),
   /** A session's transcript as renderable blocks (for resume replay). */
-  getSessionMessages: (id: string) =>
-    getJson<SessionBlock[]>('/api/agent/sessions/' + encodeURIComponent(id) + '/messages'),
-  renameSession: (id: string, title: string) =>
-    send<SessionInfo>('PATCH', '/api/agent/sessions/' + encodeURIComponent(id), { title }),
-  deleteSession: (id: string) =>
-    send<Record<string, never>>('DELETE', '/api/agent/sessions/' + encodeURIComponent(id)),
+  getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude') =>
+    getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages'),
+  renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude') =>
+    send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id), { title }),
+  deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude') =>
+    send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id)),
 };
+
+function agentSessionBase(agent: 'claude' | 'codex'): string {
+  return agent === 'codex' ? '/api/codex/sessions' : '/api/agent/sessions';
+}
 
 /** Set the KB root, transparently handling the "directory is not empty"
  *  guard: the server rejects a populated target with 409 unless

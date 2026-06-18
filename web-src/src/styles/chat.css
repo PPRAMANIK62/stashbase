@@ -193,8 +193,7 @@
 
 
     /* ===================================================================
-     * Structured agent panel (AgentView) — Phase 1 of the VSCode-style
-     * Claude chat. The Codex placeholder (CodexView) reuses these styles.
+     * Structured agent panel (AgentView) — VSCode-style chat surface.
      * See design-docs/chat-panel.md.
      * =================================================================== */
     .agent-view {
@@ -406,31 +405,6 @@
       width: 64px;
       height: 50px;
       image-rendering: pixelated;
-    }
-    /* "Coming soon" placeholder (Codex panel stub) */
-    .agent-coming-soon {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      max-width: 280px;
-    }
-    .agent-coming-soon-pill {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--muted);
-      background: var(--hover);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 3px 10px;
-    }
-    .agent-coming-soon-note {
-      margin: 0;
-      font-size: 12px;
-      line-height: 1.5;
-      color: var(--muted);
     }
     .agent-empty,
     .agent-ended {
@@ -905,6 +879,7 @@
     .agent-mode-icon { width: 14px; height: 14px; flex-shrink: 0; }
     .agent-mode-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-mode-btn:disabled { cursor: default; }
+    .agent-effort-btn { min-width: 0; }
 
     /* "Modes" dropdown — opens upward from the mode button. */
     .agent-mode-wrap { position: relative; display: inline-flex; }
@@ -920,6 +895,10 @@
       border: 1px solid var(--border);
       border-radius: 10px;
       box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    }
+    .agent-mode-menu.effort-only {
+      width: 240px;
+      padding: 6px 8px;
     }
     .agent-mode-menu-head {
       display: flex;
@@ -986,6 +965,11 @@
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
     .agent-effort-notch.max.cur { border-color: #a855f7; }
+    .agent-mode-menu.effort-only .agent-effort {
+      margin-top: 0;
+      padding: 4px 0;
+      border-top: 0;
+    }
     /* Neutral send button — subtle surface + border, not a filled accent
      * (matches the VSCode composer). Goes accent only on hover-when-ready. */
     .agent-send {

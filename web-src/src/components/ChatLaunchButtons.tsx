@@ -18,9 +18,8 @@ import type { ChatTab } from '../store/state';
 
 /** Agents that get their own chrome launcher, in left→right display
  *  order. Each pairs an agent id with its brand glyph; the label feeds
- *  the hover title and the spawned tab's name. Claude opens the
- *  structured SDK panel; Codex opens a "Coming soon" placeholder until
- *  its panel is built (see design-docs/chat-panel.md). */
+ *  the hover title and the spawned tab's name. Both launch into the
+ *  structured chat panel; their backends differ behind the shared UI. */
 const LAUNCHERS = [
   { id: 'claude', label: 'Claude Code', Icon: ClaudeIcon },
   { id: 'codex', label: 'Codex', Icon: CodexIcon },

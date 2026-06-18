@@ -1,14 +1,13 @@
 /**
  * Right-side chat panel — Cursor-style tabbed chats. Each tab in
- * `state.chatTabs` renders a structured agent panel: Claude routes to the
- * SDK-backed `AgentView`, Codex to a "Coming soon" `CodexView` placeholder.
+ * `state.chatTabs` renders a structured agent panel. Claude routes to the
+ * Claude Agent SDK bridge; Codex routes to the Codex app-server bridge.
  * All tabs stay mounted at once so switching preserves each session's
  * state (inactive tabs are absolutely-positioned + `visibility: hidden`).
  * New tabs are spawned from the chrome-row agent launchers (see
  * ChatLaunchButtons) — this panel just renders + switches between them.
  */
 import { AgentView } from './AgentView';
-import { CodexView } from './CodexView';
 import { ClaudeIcon, CodexIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 
@@ -64,9 +63,12 @@ export function ChatPane() {
             role="tabpanel"
             aria-hidden={tab.id !== activeId}
           >
-            {tab.agent === 'codex'
-              ? <CodexView title={tab.title} />
-              : <AgentView active={tab.id === activeId} id={tab.id} title={tab.title} />}
+            <AgentView
+              active={tab.id === activeId}
+              id={tab.id}
+              title={tab.title}
+              agent={tab.agent === 'codex' ? 'codex' : 'claude'}
+            />
           </div>
         ))}
         {tabs.length === 0 && (

@@ -1,16 +1,17 @@
 /**
- * Structured chat view for a Claude tab — the VSCode-extension-style
- * panel. Connects to `/ws/agent` (SDK-backed,
- * see server/agent.ts) and renders the event stream as ordered blocks:
+ * Structured chat view for an agent tab — the VSCode-extension-style
+ * panel. Claude connects to `/ws/agent` (Claude Agent SDK, see
+ * server/agent.ts); Codex connects to `/ws/codex` (Codex app-server
+ * structured session, see server/codex-agent.ts).
+ * Both render the event stream as ordered blocks:
  * user / assistant bubbles, collapsible thinking, tool cards with
  * inline diffs + approve/reject, and error notices. A composer at the
  * bottom sends prompts, stops a running turn, takes dropped files, and
  * `@`-mentions KB files.
  *
- * This is Phase 1 of design-docs/chat-panel.md. Only Claude routes here;
- * Codex shows a "Coming soon" placeholder (CodexView).
+ * This is Phase 1 of design-docs/chat-panel.md.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { api, getWindowId, type SessionInfo } from '../api';
 import { FILE_MIME } from '../dragMime';
 import { renderMarkdownInline } from '../markdown';
@@ -19,7 +20,7 @@ import { getActiveTab, type ChatTab } from '../store/state';
 import {
   ChevronDownIcon, ClaudeIcon, HistoryIcon, PlusIcon, NewChatIcon, FileGenericIcon, CodeIcon,
   HandIcon, ClipboardListIcon, BoltIcon, CheckIcon, DumbbellIcon, SlashSquareIcon,
-  ArrowUpIcon, EditIcon, TrashIcon,
+  ArrowUpIcon, EditIcon, TrashIcon, CodexIcon,
 } from '../icons';
 
 // ----- permission modes (composer "Modes" dropdown) ----------------------
@@ -78,11 +79,43 @@ type ServerEvent =
   | { t: 'text'; delta: string }
   | { t: 'thinking'; delta: string }
   | { t: 'tool'; id: string; name: string; input: Record<string, unknown> }
+  | { t: 'tool-delta'; id: string; delta: string }
   | { t: 'tool-result'; id: string; content: string; isError: boolean }
   | { t: 'permission'; id: string; toolUseId: string; name: string; title: string | null; input: Record<string, unknown> }
   | { t: 'turn-end'; isError: boolean }
   | { t: 'error'; message: string }
   | { t: 'exit' };
+
+type AgentKind = 'claude' | 'codex';
+
+const AGENT_META: Record<AgentKind, {
+  name: string;
+  shortName: string;
+  endpoint: string;
+  supportsHistory: boolean;
+  supportsModes: boolean;
+  supportsEffort: boolean;
+  Icon: ComponentType<{ className?: string }>;
+}> = {
+  claude: {
+    name: 'Claude Code',
+    shortName: 'Claude',
+    endpoint: '/ws/agent',
+    supportsHistory: true,
+    supportsModes: true,
+    supportsEffort: true,
+    Icon: ClaudeIcon,
+  },
+  codex: {
+    name: 'Codex',
+    shortName: 'Codex',
+    endpoint: '/ws/codex',
+    supportsHistory: true,
+    supportsModes: false,
+    supportsEffort: true,
+    Icon: CodexIcon,
+  },
+};
 
 let blockSeq = 0;
 const nextId = () => `b${++blockSeq}`;
@@ -93,8 +126,19 @@ function isDefaultChatTitle(t: string): boolean {
   return /^Untitled( \d+)?$/.test(t.trim());
 }
 
-export function AgentView({ active, id, title }: { active: boolean; id: string; title: string }) {
+export function AgentView({
+  active,
+  id,
+  title,
+  agent = 'claude',
+}: {
+  active: boolean;
+  id: string;
+  title: string;
+  agent?: AgentKind;
+}) {
   const { state, dispatch, actions } = useApp();
+  const meta = AGENT_META[agent];
   const spaceRef = useRef(state.space);
   spaceRef.current = state.space;
   const mountedRef = useRef(true);
@@ -152,7 +196,7 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
     // re-resuming.
     const resume = resumeIdRef.current;
     resumeIdRef.current = null;
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/agent`
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${meta.endpoint}`
       + `?windowId=${encodeURIComponent(getWindowId())}&effort=${effortRef.current}`
       + (resume ? `&resume=${encodeURIComponent(resume)}` : '');
     const ws = new WebSocket(wsUrl);
@@ -168,7 +212,7 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
       // Closing before the session was ever ready is a startup failure,
       // not a normal end — surface it (with a Retry) rather than a quiet
       // "session ended".
-      if (!readyRef.current) setFatal((f) => f ?? 'Connection closed before Claude started.');
+      if (!readyRef.current) setFatal((f) => f ?? `Connection closed before ${meta.shortName} started.`);
       setPhase('closed');
     };
 
@@ -179,8 +223,7 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
       try { ws.send(JSON.stringify({ t: 'close' })); } catch { /* gone */ }
       ws.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nonce]);
+  }, [nonce, meta.endpoint, meta.shortName]);
 
   /** Tear down and start a fresh session (Retry button / after the user
    *  reopens a space). */
@@ -204,7 +247,7 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
     setHistoryOpen(false);
     let hist: Block[] = [];
     try {
-      hist = (await api.getSessionMessages(id)) as Block[];
+      hist = (await api.getSessionMessages(id, agent)) as Block[];
     } catch {
       actions.toast('Could not load that session.', { level: 'error' });
       return;
@@ -234,7 +277,7 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
         // A fresh session always starts at permissionMode 'default'; if the
         // user had picked a non-default mode, re-apply it so a reconnect
         // (Retry / effort change) doesn't silently reset it.
-        if (mode !== 'default') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode }));
+        if (agent === 'claude' && mode !== 'default') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode }));
         break;
       case 'session-id':
         setCurrentSessionId(ev.id);
@@ -254,6 +297,12 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
         openKind.current = null;
         toolNamesRef.current.set(ev.id, ev.name);
         setBlocks((bs) => [...bs, { kind: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running' }]);
+        break;
+      case 'tool-delta':
+        setBlocks((bs) => bs.map((b) =>
+          b.kind === 'tool' && b.id === ev.id && b.status !== 'denied'
+            ? { ...b, result: (b.result ?? '') + ev.delta }
+            : b));
         break;
       case 'tool-result':
         setBlocks((bs) => bs.map((b) =>
@@ -314,10 +363,10 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
         break;
       case 'error':
         openKind.current = null;
-        setTurnActive(false);
         // An error before the session is ready is fatal (e.g. no space
         // open / not authenticated); mid-session it's just a notice.
         if (!readyRef.current) {
+          setTurnActive(false);
           setFatal(ev.message);
           setPhase('closed');
         } else {
@@ -427,10 +476,11 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
     wsRef.current?.send(JSON.stringify({ t: 'interrupt' }));
   }
 
-  /** Switch permission mode and tell the server to apply it live. */
+  /** Switch permission mode and tell the server to apply it live when
+   *  the selected backend supports it. */
   function changeMode(m: PermMode) {
     setMode(m);
-    wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: m }));
+    if (agent === 'claude') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: m }));
   }
 
   /** Change thinking effort. The SDK fixes effort at session construction
@@ -453,7 +503,7 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
     const sid = sessionIdRef.current;
     if (!tabId || !sid || !isDefaultChatTitle(titleRef.current)) return;
     try {
-      const sessions = await api.listSessions();
+      const sessions = await api.listSessions(agent);
       const t = sessions.find((x) => x.id === sid)?.title?.trim();
       if (t && !isDefaultChatTitle(t)) {
         dispatch({ type: 'CHAT_TAB_RENAME', id: tabId, title: t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : t });
@@ -461,12 +511,12 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
     } catch { /* leave the placeholder if the lookup fails */ }
   }
 
-  /** Spawn a fresh Claude chat tab (the in-panel `+`, mirroring the
+  /** Spawn a fresh chat tab for the same agent (the in-panel `+`, mirroring the
    *  chrome launcher). */
   function newChat() {
-    const same = state.chatTabs.filter((t) => t.agent === 'claude');
+    const same = state.chatTabs.filter((t) => t.agent === agent);
     const tabTitle = same.length === 0 ? 'Untitled' : `Untitled ${same.length + 1}`;
-    const tab: ChatTab = { id: crypto.randomUUID(), agent: 'claude', title: tabTitle };
+    const tab: ChatTab = { id: crypto.randomUUID(), agent, title: tabTitle };
     dispatch({ type: 'CHAT_TAB_NEW', tab });
   }
 
@@ -537,20 +587,31 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
       <div className="agent-head">
         <span className="agent-head-title">{title}</span>
         <div className="agent-head-actions">
-          <HistoryMenu
-            open={historyOpen}
-            currentSessionId={currentSessionId}
-            onToggle={() => setHistoryOpen((o) => !o)}
-            onClose={() => setHistoryOpen(false)}
-            onResume={resumeSession}
-            onActiveDeleted={reconnect}
-          />
-          <button type="button" className="agent-head-btn" title="New Claude chat" onClick={newChat}>
+          {meta.supportsHistory && (
+            <HistoryMenu
+              open={historyOpen}
+              currentSessionId={currentSessionId}
+              agent={agent}
+              onToggle={() => setHistoryOpen((o) => !o)}
+              onClose={() => setHistoryOpen(false)}
+              onResume={resumeSession}
+              onActiveDeleted={reconnect}
+            />
+          )}
+          <button type="button" className="agent-head-btn" title={`New ${meta.name} chat`} onClick={newChat}>
             <NewChatIcon />
           </button>
         </div>
       </div>
-      <MessageList blocks={blocks} turnActive={turnActive} phase={phase} onPermission={replyPermission} />
+      <MessageList
+        blocks={blocks}
+        turnActive={turnActive}
+        phase={phase}
+        agentName={meta.name}
+        agentShortName={meta.shortName}
+        Icon={meta.Icon}
+        onPermission={replyPermission}
+      />
       {phase === 'closed' && (
         fatal
           ? (
@@ -558,7 +619,7 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
               <span className="agent-fatal-msg">
                 {/No space open/i.test(fatal)
                   ? 'No space is open. Open a space, then retry.'
-                  : `Couldn't start Claude: ${fatal}`}
+                  : `Couldn't start ${meta.shortName}: ${fatal}`}
               </span>
               <button type="button" className="agent-btn" onClick={reconnect}>Retry</button>
             </div>
@@ -580,6 +641,9 @@ export function AgentView({ active, id, title }: { active: boolean; id: string; 
         onSetMode={changeMode}
         effort={effort}
         onSetEffort={changeEffort}
+        showModeMenu={meta.supportsModes}
+        showEffortMenu={meta.supportsEffort && !meta.supportsModes}
+        agentShortName={meta.shortName}
         attachments={attachments}
         uploading={uploading}
         onPickFiles={uploadFiles}
@@ -633,15 +697,16 @@ function relTime(ms: number): string {
   return new Date(ms).toLocaleDateString();
 }
 
-/** The History button + its dropdown: lists all local Claude Code sessions
+/** The History button + its dropdown: lists local agent sessions
  *  (newest first), with client-side search, and per-row open (click) /
  *  rename (pencil) / delete (trash). Local only — no Web tab. Reuses the
  *  ModeMenu outside-click convention. */
 function HistoryMenu({
-  open, currentSessionId, onToggle, onClose, onResume, onActiveDeleted,
+  open, currentSessionId, agent, onToggle, onClose, onResume, onActiveDeleted,
 }: {
   open: boolean;
   currentSessionId: string | null;
+  agent: AgentKind;
   onToggle: () => void;
   onClose: () => void;
   onResume: (id: string) => void;
@@ -656,7 +721,7 @@ function HistoryMenu({
 
   async function refresh() {
     setLoading(true);
-    try { setSessions(await api.listSessions()); }
+    try { setSessions(await api.listSessions(agent)); }
     catch { setSessions([]); }
     finally { setLoading(false); }
   }
@@ -666,7 +731,7 @@ function HistoryMenu({
   useEffect(() => {
     if (open) { void refresh(); }
     else { setQ(''); setEditingId(null); }
-  }, [open]);
+  }, [open, agent]);
 
   // Close on outside click (same pattern as ModeMenu).
   useEffect(() => {
@@ -688,13 +753,13 @@ function HistoryMenu({
     setEditingId(null);
     if (!title) return;
     try {
-      const updated = await api.renameSession(id, title);
+      const updated = await api.renameSession(id, title, agent);
       setSessions((ss) => ss.map((s) => (s.id === id ? updated : s)));
     } catch { /* leave list as-is */ }
   }
 
   async function remove(id: string) {
-    try { await api.deleteSession(id); } catch { return; }
+    try { await api.deleteSession(id, agent); } catch { return; }
     setSessions((ss) => ss.filter((s) => s.id !== id));
     if (id === currentSessionId) onActiveDeleted();
   }
@@ -785,11 +850,14 @@ function HistoryMenu({
 // ----- message list ------------------------------------------------------
 
 function MessageList({
-  blocks, turnActive, phase, onPermission,
+  blocks, turnActive, phase, agentName, agentShortName, Icon, onPermission,
 }: {
   blocks: Block[];
   turnActive: boolean;
   phase: 'connecting' | 'live' | 'closed';
+  agentName: string;
+  agentShortName: string;
+  Icon: ComponentType<{ className?: string }>;
   onPermission: (toolBlockId: string, permId: string, allow: boolean) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -814,15 +882,15 @@ function MessageList({
 
   return (
     <div className="agent-messages" ref={ref} onScroll={onScroll}>
-      {blocks.length === 0 && phase === 'live' && <Hero />}
-      {phase === 'connecting' && <div className="agent-empty">Connecting to Claude…</div>}
+      {blocks.length === 0 && phase === 'live' && <Hero name={agentName} Icon={Icon} />}
+      {phase === 'connecting' && <div className="agent-empty">Connecting to {agentShortName}…</div>}
       {turns.map((turn) => (
         <div className="agent-turn" key={turn.key}>
           {turn.head && <UserTurnHead block={turn.head} scrollRef={ref} />}
           {turn.body.map((b) => <BlockView key={b.id} block={b} onPermission={onPermission} />)}
         </div>
       ))}
-      {turnActive && <div className="agent-working"><span className="agent-dot" />Claude is working…</div>}
+      {turnActive && <div className="agent-working"><span className="agent-dot" />{agentShortName} is working…</div>}
     </div>
   );
 }
@@ -894,15 +962,15 @@ function UserTurnHead({
   );
 }
 
-/** Empty-state hero: Claude Code wordmark + a pixel mascot. */
-function Hero() {
+/** Empty-state hero: agent wordmark + a small pixel mark. */
+function Hero({ name, Icon }: { name: string; Icon: ComponentType<{ className?: string }> }) {
   return (
     <div className="agent-hero">
       <div className="agent-hero-wordmark">
-        <ClaudeIcon className="agent-hero-mark" />
-        <span className="agent-hero-name">Claude Code</span>
+        <Icon className="agent-hero-mark" />
+        <span className="agent-hero-name">{name}</span>
       </div>
-      <PixelMascot />
+      {name === 'Claude Code' && <PixelMascot />}
     </div>
   );
 }
@@ -971,7 +1039,7 @@ const STATUS_LABEL: Record<ToolStatus, string> = {
 };
 
 function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t: string, p: string, a: boolean) => void }) {
-  const [open, setOpen] = useState(block.status === 'awaiting');
+  const [open, setOpen] = useState(block.status === 'awaiting' || block.name === 'Bash');
   const diff = useMemo(() => buildDiff(block.name, block.input), [block.name, block.input]);
   const summary = toolSummary(block.name, block.input);
 
@@ -1214,9 +1282,42 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
   );
 }
 
+function EffortMenu({
+  effort, open, disabled, wrapRef, onToggle, onSetEffort,
+}: {
+  effort: EffortLevel;
+  open: boolean;
+  disabled: boolean;
+  wrapRef: React.RefObject<HTMLDivElement | null>;
+  onToggle: () => void;
+  onSetEffort: (level: EffortLevel) => void;
+}) {
+  return (
+    <div className="agent-mode-wrap" ref={wrapRef}>
+      {open && (
+        <div className="agent-mode-menu effort-only" role="menu">
+          <EffortBar effort={effort} onSet={onSetEffort} />
+        </div>
+      )}
+      <button
+        type="button"
+        className="agent-mode-btn agent-effort-btn"
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Effort"
+        onClick={onToggle}
+      >
+        <DumbbellIcon className="agent-mode-icon" />
+        {EFFORT_LABEL[effort]}
+      </button>
+    </div>
+  );
+}
+
 function Composer({
   phase, disabled, turnActive, active, activeFile, mode, onSetMode, effort, onSetEffort,
-  attachments, uploading, onPickFiles, onRemoveAttachment, onSend, onStop,
+  attachments, uploading, agentShortName, showModeMenu, showEffortMenu, onPickFiles, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -1229,6 +1330,9 @@ function Composer({
   onSetEffort: (level: EffortLevel) => void;
   attachments: Attachment[];
   uploading: boolean;
+  agentShortName: string;
+  showModeMenu: boolean;
+  showEffortMenu: boolean;
   onPickFiles: (files: File[]) => void;
   onRemoveAttachment: (path: string) => void;
   onSend: (text: string) => void;
@@ -1276,8 +1380,8 @@ function Composer({
     : phase === 'closed'
       ? 'Reconnect to continue…'
       : turnActive
-        ? 'Claude is working…'
-        : 'Message Claude…';
+        ? `${agentShortName} is working…`
+        : `Message ${agentShortName}…`;
 
   function onChange(v: string, caret: number) {
     setText(v);
@@ -1316,7 +1420,7 @@ function Composer({
       return;
     }
     // ⇧+Tab cycles the permission mode (matches the dropdown's hint).
-    if (e.key === 'Tab' && e.shiftKey && !disabled) {
+    if (showModeMenu && e.key === 'Tab' && e.shiftKey && !disabled) {
       e.preventDefault();
       cycleMode();
       return;
@@ -1402,16 +1506,28 @@ function Composer({
             </>
           )}
           <span className="agent-bar-spacer" />
-          <ModeMenu
-            mode={mode}
-            effort={effort}
-            open={modeOpen}
-            disabled={disabled}
-            wrapRef={modeWrapRef}
-            onToggle={() => setModeOpen((o) => !o)}
-            onPick={(m) => { onSetMode(m); setModeOpen(false); }}
-            onSetEffort={onSetEffort}
-          />
+          {showModeMenu && (
+            <ModeMenu
+              mode={mode}
+              effort={effort}
+              open={modeOpen}
+              disabled={disabled}
+              wrapRef={modeWrapRef}
+              onToggle={() => setModeOpen((o) => !o)}
+              onPick={(m) => { onSetMode(m); setModeOpen(false); }}
+              onSetEffort={onSetEffort}
+            />
+          )}
+          {showEffortMenu && (
+            <EffortMenu
+              effort={effort}
+              open={modeOpen}
+              disabled={disabled}
+              wrapRef={modeWrapRef}
+              onToggle={() => setModeOpen((o) => !o)}
+              onSetEffort={onSetEffort}
+            />
+          )}
           {turnActive ? (
             <button type="button" className="agent-send stop" title="Stop" onClick={onStop}>■</button>
           ) : (

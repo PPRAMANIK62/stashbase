@@ -25,6 +25,10 @@ import {
   attachAgentWebSocket,
   killActiveAgent,
 } from './agent.ts';
+import {
+  attachCodexWebSocket,
+  killActiveCodex,
+} from './codex-agent.ts';
 import { stopSpaceMcpServers, switchSpaceMcpServers } from './mcp-host.ts';
 import { getKbRoot, onBeforeKbRootChange, onClose, onKbRootChange, onSwitch, ensureKbRoot, needsKbRootPicker, seedBuiltinSpace } from './space.ts';
 import { migrateLegacyEmbedderConfig } from './app-config.ts';
@@ -48,6 +52,7 @@ import { mount as mountKbRoutes } from './routes/kb.ts';
 import { mount as mountTerminalRoutes } from './routes/terminal.ts';
 import { mount as mountMcpRoutes } from './routes/mcp.ts';
 import { mount as mountSessionsRoutes } from './routes/sessions.ts';
+import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 
 const log = logger('server');
 
@@ -239,6 +244,7 @@ mountKbRoutes(app);
 mountTerminalRoutes(app);
 mountMcpRoutes(app);
 mountSessionsRoutes(app); // global (no requireSpace) — lists all local sessions
+mountCodexSessionsRoutes(app); // global (no requireSpace) — filters to current space when open
 
 // Renderer error sink. The root `ErrorBoundary` POSTs render-time
 // exceptions here so they appear in the same server log developers
@@ -312,12 +318,15 @@ server.on('error', (err: NodeJS.ErrnoException) => {
   process.exit(1);
 });
 
-// WebSocket bridge for the structured chat panel — the SDK-backed agent
-// session (see server/agent.ts). `noServer: true` because we share the
-// existing http.Server with Vite's HMR proxy.
+// WebSocket bridges for the structured chat panel. `noServer: true`
+// because we share the existing http.Server with Vite's HMR proxy.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
   attachAgentWebSocket(ws, windowIdOf(req), effortOf(req), resumeOf(req));
+});
+const codexWss = new WebSocketServer({ noServer: true });
+codexWss.on('connection', (ws, req) => {
+  attachCodexWebSocket(ws, windowIdOf(req), effortOf(req), resumeOf(req));
 });
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {
@@ -360,10 +369,12 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 // the user opens the panel again.
 onSwitch((newRoot, windowId) => {
   killActiveAgent(windowId);
+  killActiveCodex(windowId);
   void switchSpaceMcpServers(windowId, newRoot);
 });
 onClose((_oldRoot, windowId) => {
   killActiveAgent(windowId);
+  killActiveCodex(windowId);
   void stopSpaceMcpServers(windowId);
 });
 onBeforeKbRootChange(async () => {
@@ -377,6 +388,11 @@ onBeforeKbRootChange(async () => {
     killActiveAgent();
   } catch (err: unknown) {
     failures.push(`stop active agent failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  try {
+    killActiveCodex();
+  } catch (err: unknown) {
+    failures.push(`stop active Codex failed: ${err instanceof Error ? err.message : String(err)}`);
   }
   try {
     await indexer.close();
@@ -406,8 +422,9 @@ onKbRootChange(async () => {
   );
 });
 
-// Hook WebSocket upgrades. `/ws/agent` goes to our agent-session bridge;
-// everything else (Vite HMR in dev) falls through to the existing
+// Hook WebSocket upgrades. `/ws/agent` and `/ws/codex` go to our
+// structured chat bridges; everything else (Vite HMR in dev) falls
+// through to the existing
 // proxy upgrade handler.
 server.on('upgrade', (req, socket, head) => {
   // Same origin gate as the HTTP middleware — a webpage shouldn't be
@@ -423,6 +440,12 @@ server.on('upgrade', (req, socket, head) => {
   if (url.startsWith('/ws/agent')) {
     agentWss.handleUpgrade(req, socket, head, (ws) => {
       agentWss.emit('connection', ws, req);
+    });
+    return;
+  }
+  if (url.startsWith('/ws/codex')) {
+    codexWss.handleUpgrade(req, socket, head, (ws) => {
+      codexWss.emit('connection', ws, req);
     });
     return;
   }

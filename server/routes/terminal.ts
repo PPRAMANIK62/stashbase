@@ -2,7 +2,7 @@
  * Agent CLI registry routes: enumerate the supported CLIs (with their
  * installed-state) and record the user's last-used default. The chat
  * panel reads these to populate its launchers; the CLIs themselves run
- * via the SDK-backed agent session (see server/agent.ts), not a PTY.
+ * via structured agent bridges, not a PTY.
  */
 import express from 'express';
 import { checkCliInstalled, CLIS, launchCommandFor } from '../terminal.ts';

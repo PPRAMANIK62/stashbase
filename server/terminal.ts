@@ -3,8 +3,9 @@
  * Codex) are enumerated here with their install hints and a cheap
  * on-PATH check; the chat panel surfaces them via `/api/terminal/clis`.
  *
- * The CLIs themselves run through the SDK-backed agent session (see
- * server/agent.ts), not a PTY — this module no longer bridges a shell.
+ * The CLIs themselves run through structured agent bridges (Claude Agent
+ * SDK in server/agent.ts, Codex app-server in server/codex-agent.ts),
+ * not a PTY — this module no longer bridges a shell.
  */
 import { spawnSync } from 'node:child_process';
 
@@ -32,7 +33,7 @@ export interface CliDef {
   bin: string;           // PATH name we probe
   /** Argv that would be appended after `bin` to launch the CLI. Retained
    *  in the registry so `/api/terminal/clis` can expose a full launch
-   *  command, though the SDK-backed panel doesn't shell out. */
+   *  command, though the structured chat panel doesn't shell out. */
   launchArgs: string[];
   install: string[];     // argv for `npm install -g ...` style invocation
   installHint: string;   // human-readable install command
@@ -98,4 +99,3 @@ export function checkCliInstalled(id: string): boolean {
     return false;
   }
 }
-
