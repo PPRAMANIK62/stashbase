@@ -15,8 +15,11 @@ python/sidecar/
 *.log
 .DS_Store
 dev-docs/
-CLAUDE.md
 package-lock.json
+
+# Manually-run prompt for updating the Feishu use-case Bitable; not part of
+# the repo's design-doc maintenance loop.
+update-use-cases.md
 
 # Per-space sidecars StashBase itself writes when the repo is opened
 # as a space. Never meant to travel with the repo.
