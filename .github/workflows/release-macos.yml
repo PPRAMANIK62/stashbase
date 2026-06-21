@@ -1,0 +1,62 @@
+name: Release macOS
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v0.9.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  macos-dmg:
+    runs-on: macos-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+      GITHUB_TOKEN: ${{ github.token }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 11.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Validate release tag
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$RELEASE_TAG" != "$expected" ]; then
+            echo "::error::release tag $RELEASE_TAG does not match package.json version $expected"
+            exit 1
+          fi
+
+      - name: Configure Git author
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Configure Homebrew tap auth
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN secret is required to update liliu-z/homebrew-stashbase"
+            exit 1
+          fi
+          echo "HOMEBREW_TAP_GIT_URL=https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/liliu-z/homebrew-stashbase.git" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build, upload, and publish Homebrew cask
+        run: pnpm dist:brew

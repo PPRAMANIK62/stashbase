@@ -1,0 +1,24 @@
+name: Release Windows
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag placeholder, for example v0.9.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  windows-placeholder:
+    runs-on: windows-latest
+    steps:
+      - name: Placeholder
+        shell: pwsh
+        run: |
+          Write-Host "Windows installer publishing is intentionally not enabled yet."
+          Write-Host "This placeholder keeps the release matrix shape visible until Windows is supported."

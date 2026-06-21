@@ -32,6 +32,14 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
+      - name: Validate release tag
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$RELEASE_TAG" != "$expected" ]; then
+            echo "::error::release tag $RELEASE_TAG does not match package.json version $expected"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

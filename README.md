@@ -214,7 +214,9 @@ pnpm test:import-folder
 
 ## Publishing
 
-`release:verify:mac` is the local preflight: build the macOS package, run the packaged daemon/server smoke tests, run PDF/OCR smoke tests only when the optional extractor is bundled, and mount the DMG to verify its helper files. `dist:brew` is the one-command macOS publishing flow: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update. When that GitHub Release is published, the `Release Linux` workflow builds the Linux `.deb` on Ubuntu and uploads it to the same release; use the workflow's manual `tag` input to backfill an existing release.
+CI only runs typechecks, tests, and source builds. Installer packaging is release-only: `Release macOS` builds and uploads the DMG/zip and updates the Homebrew cask, `Release Linux` builds and uploads the Debian package, and `Release Windows` is a placeholder until Windows is supported. The macOS workflow requires a `HOMEBREW_TAP_TOKEN` secret with push access to `liliu-z/homebrew-stashbase`.
+
+`release:verify:mac` is the local preflight: build the macOS package, run the packaged daemon/server smoke tests, run PDF/OCR smoke tests only when the optional extractor is bundled, and mount the DMG to verify its helper files. `dist:brew` remains the local fallback for macOS publishing: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update. Use the release workflows' manual `tag` input to backfill an existing release.
 
 ```bash
 pnpm release:verify:mac

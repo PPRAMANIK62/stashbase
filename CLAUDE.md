@@ -125,17 +125,15 @@ restoring + re-applying hunks so each commit compiles and tests green
 on its own. Do NOT push — push only when the user says push, or as
 part of a release.
 
-## Release procedure (macOS)
+## Release procedure
 
 **When the user asks to release / package a build (in any language):
-prepare everything, then hand `pnpm dist:brew` to the user — they run it,
-not you.** The command builds
-the DMG, tags the current HEAD (`gh` creates the tag — never hand-run
-`git tag` or edit the cask), creates the GitHub Release with the DMG
-attached, then bumps and pushes the Homebrew cask (`Casks/stashbase.rb`
-in `github.com/liliu-z/homebrew-stashbase`). The scripts under
-`scripts/publish-*.mjs` are implementation details, not the public
-surface.
+prepare everything, then have them publish a GitHub Release for the matching
+`v<X.Y.Z>` tag.** Packaging is release-only: GitHub Actions builds and uploads
+the macOS and Linux installers from the tag; Windows has a placeholder workflow
+until it is supported. `pnpm dist:brew` remains the local macOS fallback, but it
+is no longer the default release path. The scripts under `scripts/publish-*.mjs`
+are implementation details, not the public surface.
 
 Protocol, in order:
 
@@ -148,22 +146,22 @@ Protocol, in order:
    major derived from `package.json` `version`). This is the ONE
    question in the flow; everything after runs unattended.
 3. **Commit the bump** as a standalone `chore: bump to <new-version>`.
-4. **Hand off**: tell the user to run `pnpm dist:brew` (suggest
-   `--dry-run` first if anything about the setup looks unusual). While
-   they run it you may keep working on other pending tasks.
-5. **Verify when they report it finished** (or when asked):
-   `gh release view v<version>` — DMG
-   asset attached, tap commit landed. Release notes are auto-generated
-   and state: macOS arm64 (Apple Silicon) only, unsigned — first launch
-   is blocked by Gatekeeper; run the bundled `Fix.sh` (user-facing
-   instructions ship in the DMG as `build/dmg-scripts/Read Me.txt`).
-   Report the release URL.
+4. **Hand off**: tell the user to publish the GitHub Release for
+   `v<version>` (or manually run the `Release macOS` / `Release Linux`
+   workflows with that tag to backfill assets). The macOS workflow requires
+   `HOMEBREW_TAP_TOKEN` with push access to `liliu-z/homebrew-stashbase`.
+5. **Verify when Actions finish** (or when asked): `gh release view
+   v<version>` — DMG/zip and deb assets attached, tap commit landed.
+   Release notes are auto-generated and state: macOS arm64 (Apple Silicon)
+   only, unsigned — first launch is blocked by Gatekeeper; run the bundled
+   `Fix.sh` (user-facing instructions ship in the DMG as
+   `build/dmg-scripts/Read Me.txt`). Report the release URL.
 
 Commands:
 
 ```bash
-pnpm dist:brew            # USER runs this — full pipeline (add --dry-run to preview)
-gh release view v<X.Y.Z>  # CLAUDE runs this in step 5 — verify DMG + tap commit
+pnpm dist:brew            # local fallback only (add --dry-run to preview)
+gh release view v<X.Y.Z>  # verify release assets after Actions finish
 ```
 
 Prereq on a fresh machine: `brew install gh && gh auth login` (asset
