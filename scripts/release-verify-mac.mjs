@@ -14,6 +14,13 @@ if (process.platform !== 'darwin') {
   throw new Error('release:verify:mac must run on macOS.');
 }
 
+// Mirror what `dist:brew` actually ships: the distributed build bundles and
+// requires the optional PDF/OCR extractor sidecar (see
+// scripts/publish-github-release.mjs). Force it on here too so the preflight
+// builds, asserts, and smoke-tests the same artifact users install.
+process.env.STASHBASE_BUILD_EXTRACT = '1';
+process.env.STASHBASE_REQUIRE_EXTRACT = '1';
+
 function run(command, args, options = {}) {
   console.log(`[release:verify:mac] ${command} ${args.join(' ')}`);
   execFileSync(command, args, {

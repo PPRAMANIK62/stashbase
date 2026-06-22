@@ -216,7 +216,7 @@ pnpm test:import-folder
 
 CI only runs typechecks, tests, and source builds. Installer packaging is release-only: `Release macOS` builds and uploads the DMG/zip and updates the Homebrew cask, `Release Linux` builds and uploads the Debian package, and `Release Windows` is a placeholder until Windows is supported. The macOS workflow requires a `HOMEBREW_TAP_TOKEN` secret with push access to `liliu-z/homebrew-stashbase`.
 
-`release:verify:mac` is the local preflight: build the macOS package, run the packaged daemon/server smoke tests, run PDF/OCR smoke tests only when the optional extractor is bundled, and mount the DMG to verify its helper files. `dist:brew` remains the local fallback for macOS publishing: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update. Use the release workflows' manual `tag` input to backfill an existing release.
+`release:verify:mac` is the local preflight: build the macOS package, run the packaged daemon/server smoke tests, run the PDF/OCR smoke tests, and mount the DMG to verify its helper files. `dist:brew` remains the local fallback for macOS publishing: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update. Both force-bundle the ~450MB PDF/OCR extractor sidecar (`STASHBASE_BUILD_EXTRACT=1` + `STASHBASE_REQUIRE_EXTRACT=1`) so distributed builds always support local PDF/OCR extraction — only dev builds (`pnpm build:python-sidecar`) omit it for speed. Use the release workflows' manual `tag` input to backfill an existing release.
 
 ```bash
 pnpm release:verify:mac

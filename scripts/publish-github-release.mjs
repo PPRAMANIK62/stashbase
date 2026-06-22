@@ -17,6 +17,17 @@ const tag = `v${pkg.version}`;
 const repo = process.env.GITHUB_REPOSITORY || repositorySlug(pkg.repository?.url);
 const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
+// Distributed builds (GitHub Release / Homebrew cask) MUST ship the optional
+// PDF/OCR extractor sidecar — without it the packaged app throws "PDF
+// extractor is not bundled" the first time a user opens a PDF. The flag is
+// opt-in for dev/local builds (the extractor adds ~450MB), but the release is
+// the one place where "complete" beats "lean", so force it on and make it
+// mandatory: the package build bundles it, package-unsigned asserts it, and
+// the smoke test verifies it end-to-end. Both child processes below inherit
+// these via process.env.
+process.env.STASHBASE_BUILD_EXTRACT = '1';
+process.env.STASHBASE_REQUIRE_EXTRACT = '1';
+
 if (!repo) {
   throw new Error('Unable to determine GitHub repository. Set GITHUB_REPOSITORY=owner/repo.');
 }
