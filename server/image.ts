@@ -40,15 +40,37 @@ function cleanupDerivedImage(imageAbsPath: string): void {
 /** Run the OCR extractor on a single image. Resolves with the note path
  *  on success; rejects with the extractor's stderr tail on failure.
  *  Does not throw synchronously — fire-and-forget at the call site. */
-function convertImage(imageAbsPath: string): Promise<{ notePath: string }> {
+function convertImage(
+  imageAbsPath: string,
+  _onProgress?: unknown,
+  signal?: AbortSignal,
+): Promise<{ notePath: string }> {
   const notePath = derivedNotePathForImage(imageAbsPath);
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('ocr_extract cancelled'));
+      return;
+    }
     const { cmd, args } = extractorSpawn('ocr', 'ocr_extract.py', [imageAbsPath, notePath]);
     const proc = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';
+    let cancelled = false;
+    const onAbort = () => {
+      cancelled = true;
+      proc.kill('SIGTERM');
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
     proc.stderr.on('data', (b) => { stderr += String(b); });
-    proc.on('error', (err) => reject(new Error(`spawn failed: ${err.message}`)));
+    proc.on('error', (err) => {
+      signal?.removeEventListener('abort', onAbort);
+      reject(new Error(`spawn failed: ${err.message}`));
+    });
     proc.on('exit', (code) => {
+      signal?.removeEventListener('abort', onAbort);
+      if (cancelled) {
+        reject(new Error('ocr_extract cancelled'));
+        return;
+      }
       if (code === 0) {
         resolve({ notePath });
       } else {

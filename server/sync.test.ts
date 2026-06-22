@@ -32,6 +32,7 @@ class FakeIndexer implements Indexer {
   failDeletes = new Set<string>();
   failRenames = new Set<string>();
   syncDiffCalls = 0;
+  indexedFiles: Record<string, string> = {};
 
   constructor(private readonly diff: SyncDiff) {}
 
@@ -61,7 +62,7 @@ class FakeIndexer implements Indexer {
   async status(_space?: string): Promise<IndexStatus> {
     return { total: 0, indexed: 0, pendingCount: 0, pending: [], orphanedCount: 0, orphaned: [], upToDate: true };
   }
-  async listFiles(_space?: string): Promise<Record<string, string>> { return {}; }
+  async listFiles(_space?: string): Promise<Record<string, string>> { return this.indexedFiles; }
   async closeStore(): Promise<void> {}
   async close(): Promise<void> {}
 }
@@ -175,4 +176,29 @@ test('syncIndex deletes the stale source row when index rename fails', async () 
   assert.equal(result.failed.length, 1);
   assert.equal(result.failed[0].name, 'new.md');
   assert.match(result.failed[0].error, /rename failed/);
+});
+
+test('syncIndex removes generated PDF batch cache files already in the index', async () => {
+  const kbRoot = tmpDir('sync-pdf-batch-cache-kb');
+  const spaceRoot = path.join(kbRoot, 'Project');
+  fs.mkdirSync(path.join(spaceRoot, '.book.pdf.md.batches'), { recursive: true });
+  fs.writeFileSync(path.join(spaceRoot, '.book.pdf.md.batches', 'batch-0001.md'), '# batch\n');
+  await configureForSyncTest(kbRoot);
+  const { syncIndex } = await import('./sync.ts');
+  const fake = new FakeIndexer({
+    added: [],
+    modified: [],
+    deleted: [],
+    renamed: [],
+  });
+  fake.indexedFiles = {
+    'Project/.book.pdf.md.batches/batch-0001.md': 'hash',
+    'Project/keep.md': 'hash',
+  };
+
+  const result = await syncIndex(fake, 'Project');
+
+  assert.deepEqual(fake.deleted, ['Project/.book.pdf.md.batches/batch-0001.md']);
+  assert.deepEqual(result.removed, ['.book.pdf.md.batches/batch-0001.md']);
+  assert.deepEqual(result.failed, []);
 });

@@ -377,6 +377,9 @@ function FileRow({
   // search still works). Dropping the not-indexed dim/pulse here matches the
   // stashing-pill suppression so the tree doesn't breathe forever with no key.
   const isPending = state.embedderHasKey !== false && state.pendingNames.has(path);
+  const isConverting = state.pendingConversions.includes(path);
+  const isTemporarilyUnsearchable = isPending || isConverting;
+  const conversionFailure = state.conversionFailures.find((f) => conversionFailureMatchesTarget(f.path, path));
   const renaming = useRenameTarget(path, 'file');
   const [dropEdge, setDropEdge] = useState<DropEdge>(null);
 
@@ -400,10 +403,17 @@ function FileRow({
     (isMetaFile ? ' meta-file' : '') +
     (isActive ? ' active' : '') +
     (isPending ? ' not-indexed' : '') +
+    (isTemporarilyUnsearchable ? ' temporarily-unsearchable' : '') +
+    (conversionFailure ? ' conversion-failed' : '') +
     (dropEdge === 'above' ? ' drop-edge-above' : '') +
     (dropEdge === 'below' ? ' drop-edge-below' : '');
 
   const display = displayName(basename);
+  const title = conversionFailure
+    ? `Text extraction failed; this file is not searchable. ${path}`
+    : isTemporarilyUnsearchable
+      ? `Not searchable yet; StashBase is still processing this file. ${path}`
+        : path;
   // Protect the extension during inline rename for every recognised
   // format — notes (md/html) *and* the binary viewer formats (pdf +
   // images). Without the binaries here, editing "photo.png" exposes the
@@ -496,7 +506,7 @@ function FileRow({
       className={rowClass}
       style={{ paddingLeft }}
       data-path={path}
-      title={isPending ? `Indexing… · ${path}` : path}
+      title={title}
       draggable={!renaming}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -539,7 +549,32 @@ function FileRow({
       ) : (
         <span className="label">{display}</span>
       )}
+      {conversionFailure ? (
+        <span
+          className="conversion-status-icon conversion-failure-icon"
+          aria-label="Text extraction failed"
+          title="Text extraction failed; this file is not searchable."
+        >
+          <WarningGlyph />
+        </span>
+      ) : null}
     </div>
+  );
+}
+
+function conversionFailureMatchesTarget(failurePath: string, target: string): boolean {
+  if (failurePath === target) return true;
+  const slash = target.lastIndexOf('/');
+  const dir = slash >= 0 ? target.slice(0, slash + 1) : '';
+  const base = slash >= 0 ? target.slice(slash + 1) : target;
+  return failurePath === `${dir}.${base}.md`;
+}
+
+function WarningGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 1.5 15 14H1L8 1.5Zm0 3.8c-.38 0-.68.3-.66.68l.18 3.72c.01.25.22.45.48.45s.47-.2.48-.45l.18-3.72A.64.64 0 0 0 8 5.3Zm0 7.05a.8.8 0 1 0 0-1.6.8.8 0 0 0 0 1.6Z" />
+    </svg>
   );
 }
 

@@ -23,6 +23,10 @@ export interface SearchHit {
   /** 1-based source-line offsets — useful for "jump to line N" UX. */
   startLine?: number;
   endLine?: number;
+  /** For hits remapped from a PDF-derived hidden markdown note:
+   *  best-known 1-based PDF page. Present when the derived note carries
+   *  page markers. */
+  pdfPage?: number;
   /** Hybrid (RRF) score, higher = better. Scale is opaque; compare within a single response only. */
   score: number;
 }

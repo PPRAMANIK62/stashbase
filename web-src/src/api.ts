@@ -115,6 +115,9 @@ export interface IndexStatus {
    *  into a readable note + bundle. Empty when no conversions are in
    *  flight. Used by the sidebar to render a transient indicator. */
   pendingConversions?: string[];
+  /** Space-relative conversion progress keyed by visible source path.
+   *  Used by PDF preview banners for "Reading page X" / indexing copy. */
+  conversionProgress?: Record<string, ConversionProgress>;
   /** Persistent failure list — PDFs (pdf_extract) and images
    *  (ocr_extract) whose most recent conversion attempt errored.
    *  Survives app restart (read back from `<KB>/.stashbase/state.db`).
@@ -137,6 +140,10 @@ export interface IndexStatus {
    *  user dismissal. */
   indexWarning?: IndexWarning | null;
 }
+
+export type ConversionProgress =
+  | { phase: 'extracting'; currentPage?: number }
+  | { phase: 'indexing' };
 
 export interface SnapshotWarning {
   skipped: number;
@@ -199,6 +206,7 @@ export interface SearchHit {
   heading: string;
   startLine?: number;
   endLine?: number;
+  pdfPage?: number;
   score: number;
 }
 
@@ -206,6 +214,7 @@ export interface KeywordMatch {
   line: number;
   text: string;
   ranges: Array<[number, number]>;
+  pdfPage?: number;
 }
 
 export interface KeywordHitFile {

@@ -30,8 +30,12 @@ import {
 
 export type { ConversionStatus, ConversionStatusEntry };
 export type ConversionStatusMap = Record<string, ConversionStatusEntry>;
+export type ConversionProgress =
+  | { phase: 'extracting'; currentPage?: number }
+  | { phase: 'indexing' };
 
 const inFlight = new Set<string>();
+const progress = new Map<string, ConversionProgress>();
 
 /** Persisted failures only (the Retry surface). */
 export function readAll(): ConversionStatusMap {
@@ -48,6 +52,7 @@ export function isPendingOrFailed(kbRel: string): boolean {
 
 export function markInFlight(kbRel: string): void {
   inFlight.add(kbRel);
+  progress.set(kbRel, { phase: 'extracting' });
 }
 
 export function isInFlight(kbRel: string): boolean {
@@ -68,16 +73,19 @@ export function hasInFlightUnder(kbRelPrefix: string): boolean {
  *  from a previous attempt. */
 export function markDone(kbRel: string): void {
   inFlight.delete(kbRel);
+  progress.delete(kbRel);
   clearConversionStatus(kbRel);
 }
 
 export function markFailed(kbRel: string, errorMsg: string): void {
   inFlight.delete(kbRel);
+  progress.delete(kbRel);
   setConversionStatus(kbRel, 'failed', { error: errorMsg, incrementAttempts: true });
 }
 
 export function clearRecord(kbRel: string): void {
   inFlight.delete(kbRel);
+  progress.delete(kbRel);
   clearConversionStatus(kbRel);
 }
 
@@ -86,7 +94,10 @@ export function clearRecordsUnder(kbRelPrefix: string): void {
   if (!name) return;
   const prefix = `${name}/`;
   for (const path of [...inFlight]) {
-    if (path === name || path.startsWith(prefix)) inFlight.delete(path);
+    if (path === name || path.startsWith(prefix)) {
+      inFlight.delete(path);
+      progress.delete(path);
+    }
   }
   clearConversionStatusUnder(name);
 }
@@ -98,4 +109,13 @@ export function listFailed(): Array<{ path: string; entry: ConversionStatusEntry
 /** kbRels with a conversion running in this process right now. */
 export function listInFlight(): string[] {
   return [...inFlight];
+}
+
+export function setProgress(kbRel: string, next: ConversionProgress): void {
+  if (!inFlight.has(kbRel)) return;
+  progress.set(kbRel, next);
+}
+
+export function readProgress(kbRel: string): ConversionProgress | undefined {
+  return progress.get(kbRel);
 }

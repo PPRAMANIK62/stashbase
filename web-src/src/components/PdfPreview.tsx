@@ -30,6 +30,9 @@ import '../lib/pdfPolyfill';
 // (PDFWorker.create over `new PDFWorker({ port })` only because the latter's
 // generated d.ts mistypes `port` as null; both wrap the same port instance.)
 const pdfWorker = PDFWorker.create({ port: new PdfWorker() });
+const PDF_FIT_SIDE_PADDING = 48;
+const PDF_MIN_SCALE = 0.5;
+const PDF_MAX_SCALE = 3;
 
 /**
  * PDF viewer built on pdfjs-dist's programmatic API. Renders every
@@ -61,6 +64,8 @@ function foldPdfText(s: string): string {
 
 interface FlatPage {
   flat: string;
+  compact: string;
+  compactToFlat: number[];
   items: PdfFlatItem[];
   itemStarts: number[];
   viewport1x: { width: number; height: number };
@@ -109,12 +114,106 @@ async function flattenPageText(page: PDFPageProxy): Promise<FlatPage> {
     pos += piece.length;
     lastEnd = piece.slice(-1);
   }
+  const flat = foldPdfText(segments.join(''));
+  const compactToFlat: number[] = [];
+  let compact = '';
+  for (let i = 0; i < flat.length;) {
+    const len = charLengthAt(flat, i);
+    const ch = flat.slice(i, i + len);
+    if (!/\s/u.test(ch)) {
+      compact += ch;
+      compactToFlat.push(i);
+    }
+    i += len;
+  }
   return {
-    flat: foldPdfText(segments.join('')),
+    flat,
+    compact,
+    compactToFlat,
     items,
     itemStarts,
     viewport1x: page.getViewport({ scale: 1 }),
   };
+}
+
+function cleanPdfSearchText(raw: string): string {
+  return foldPdfText(raw)
+    // Strip markdown noise — chunk text comes from pymupdf4llm
+    // which embeds bold / italic / link / code markers, none of
+    // which appear in the rendered PDF text.
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/(^|\s)[*_]([^\s*_][^*_]*?)[*_](?=\s|$|[.,;:])/g, '$1$2')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactPdfSearchText(raw: string): string {
+  return cleanPdfSearchText(raw).replace(/\s+/g, '');
+}
+
+function textAnchors(raw: string, slice: number, minLen: number): string[] {
+  const cleaned = cleanPdfSearchText(raw);
+  if (!cleaned) return [];
+  const mid = Math.max(0, Math.floor(cleaned.length / 2) - Math.floor(slice / 2));
+  const tail = Math.max(0, cleaned.length - slice);
+  return Array.from(new Set([
+    cleaned.slice(0, slice),
+    cleaned.slice(mid, mid + slice),
+    cleaned.slice(tail),
+  ].filter((a) => a.length >= Math.min(minLen, cleaned.length))));
+}
+
+function compactAnchors(raw: string, slice: number, minLen: number): string[] {
+  const compacted = compactPdfSearchText(raw);
+  if (!compacted) return [];
+  const mid = Math.max(0, Math.floor(compacted.length / 2) - Math.floor(slice / 2));
+  const tail = Math.max(0, compacted.length - slice);
+  return Array.from(new Set([
+    compacted.slice(0, slice),
+    compacted.slice(mid, mid + slice),
+    compacted.slice(tail),
+  ].filter((a) => a.length >= Math.min(minLen, compacted.length))));
+}
+
+function findPdfChunkMatch(fp: FlatPage, raw: string): { idx: number; length: number; score: number } | null {
+  for (const anchor of textAnchors(raw, 60, 12)) {
+    const idx = fp.flat.indexOf(anchor);
+    if (idx >= 0) return { idx, length: anchor.length, score: 1000 + anchor.length };
+  }
+  for (const anchor of compactAnchors(raw, 40, 10)) {
+    const compactIdx = fp.compact.indexOf(anchor);
+    const idx = compactIdx >= 0 ? fp.compactToFlat[compactIdx] : undefined;
+    if (idx !== undefined) return { idx, length: anchor.length, score: 800 + anchor.length };
+  }
+
+  // Fuzzy fallback: short compact anchors survive OCR-added spaces,
+  // heading markers, and small reflow differences. Use the earliest
+  // matching anchor on the highest-scoring page.
+  const anchors = compactAnchors(raw, 18, 8);
+  let best: { idx: number; length: number; score: number } | null = null;
+  for (const anchor of anchors) {
+    const compactIdx = fp.compact.indexOf(anchor);
+    const idx = compactIdx >= 0 ? fp.compactToFlat[compactIdx] : undefined;
+    if (idx === undefined) continue;
+    const score = anchor.length;
+    if (!best || score > best.score) best = { idx, length: anchor.length, score };
+  }
+  return best;
+}
+
+function exactPageForHighlight(highlight: { pdfPage?: number }, numPages: number): number | null {
+  if (numPages <= 0) return null;
+  if (typeof highlight.pdfPage === 'number' && highlight.pdfPage > 0) {
+    return Math.max(1, Math.min(numPages, Math.round(highlight.pdfPage)));
+  }
+  return null;
 }
 
 /** y-ratio (0 = page top, 1 = bottom) of the text item covering the
@@ -196,7 +295,8 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   currentRef.current = { space: state.space, name };
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
-  const [scale, setScale] = useState(1.2);
+  const [scale, setScale] = useState(1);
+  const [autoFit, setAutoFit] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryBusy, setRetryBusy] = useState(false);
   const [retryStarted, setRetryStarted] = useState(false);
@@ -204,6 +304,18 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const [pageHighlight, setPageHighlight] = useState<PdfPageHighlight | null>(null);
   const failure = state.conversionFailures.find((f) => f.path === name);
   const failureMessage = failure ? pdfConversionFailureMessage(failure.lastError) : '';
+  const conversionProgress = state.conversionProgress[name];
+  const notSearchableYet = !failure
+    && (state.pendingConversions.includes(name) || state.pendingNames.has(name));
+  const notSearchableDetail = pdfNotSearchableDetail(conversionProgress, numPages);
+  const chromeStatus = failure && showConversionBanner
+    ? {
+        kind: 'error' as const,
+        text: `This PDF is not searchable.${failureMessage ? ` ${failureMessage}` : ''}${retryError ? ` (${retryError})` : ''}`,
+      }
+    : showConversionBanner && notSearchableYet
+      ? { kind: 'pending' as const, text: `This PDF is not searchable yet. ${notSearchableDetail}` }
+      : null;
   const retryInProgress = retryBusy || retryStarted;
   // Sampled page 1 viewport at 1× scale. Used as the per-page
   // placeholder height so the lazy-rendered pages reserve the
@@ -218,6 +330,14 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   // re-fetches the binary instead of the stale 404 / failed body.
   const fileUrl = useMemo(() => assetUrl(name), [name]);
 
+  function fitScale(): number {
+    const viewportWidth = containerRef.current?.clientWidth ?? 0;
+    const pageWidth = pageMetrics?.width ?? 0;
+    if (viewportWidth <= 0 || pageWidth <= 0) return 1;
+    const available = Math.max(1, viewportWidth - PDF_FIT_SIDE_PADDING);
+    return Math.max(PDF_MIN_SCALE, Math.min(PDF_MAX_SCALE, available / pageWidth));
+  }
+
   // Load PDF on name change.
   useEffect(() => {
     let cancelled = false;
@@ -225,6 +345,9 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     setError(null);
     setDoc(null);
     setNumPages(0);
+    setPageMetrics(null);
+    setScale(1);
+    setAutoFit(true);
     setPageHighlight(null);
     setRetryBusy(false);
     setRetryStarted(false);
@@ -254,6 +377,20 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   }, [fileUrl, actions]);
 
   useEffect(() => {
+    if (!autoFit || !pageMetrics) return;
+    setScale(fitScale());
+  }, [autoFit, pageMetrics]);
+
+  useEffect(() => {
+    if (!autoFit) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setScale(fitScale()));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [autoFit, pageMetrics]);
+
+  useEffect(() => {
     if (!failure || state.pendingConversions.includes(name)) setRetryStarted(false);
   }, [failure, name, state.pendingConversions]);
 
@@ -274,71 +411,55 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   useEffect(() => {
     if (!doc || !pendingHighlight?.chunkText) return;
     let cancelled = false;
-    const clean = (s: string) =>
-      s
-        // Strip markdown noise — chunk text comes from pymupdf4llm
-        // which embeds bold / italic / link / code markers, none of
-        // which appear in the rendered PDF text.
-        .replace(/```[\s\S]*?```/g, ' ')
-        .replace(/`[^`]*`/g, ' ')
-        .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-        .replace(/\*\*([^*]+)\*\*/g, '$1')
-        .replace(/__([^_]+)__/g, '$1')
-        .replace(/(^|\s)[*_]([^\s*_][^*_]*?)[*_](?=\s|$|[.,;:])/g, '$1$2')
-        .replace(/^#{1,6}\s+/gm, '')
-        .replace(/^>\s+/gm, '')
-        // Fold Unicode variants the PDF text would have used.
-        .replace(/[‐-―−]/g, '-')
-        .replace(/[‘’]/g, "'")
-        .replace(/[“”]/g, '"')
-        .replace(/[  ​]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    const cleaned = clean(pendingHighlight.chunkText);
+    const cleaned = cleanPdfSearchText(pendingHighlight.chunkText);
     if (!cleaned) { actions.consumePendingHighlight(); return; }
-    // Three anchors: head, middle, tail. Each ~60 chars so column
-    // breaks don't bisect them. We bail on the first hit.
-    const SLICE = 60;
-    const mid = Math.max(0, Math.floor(cleaned.length / 2) - Math.floor(SLICE / 2));
-    const tail = Math.max(0, cleaned.length - SLICE);
-    const anchors = Array.from(new Set([
-      cleaned.slice(0, SLICE),
-      cleaned.slice(mid, mid + SLICE),
-      cleaned.slice(tail),
-    ]).values()).filter((a) => a.length >= 12);
-    if (anchors.length === 0) { actions.consumePendingHighlight(); return; }
 
     void (async () => {
-      let found = false;
+      let best: { page: number; idx: number; length: number; score: number; fp: FlatPage } | null = null;
       for (let i = 0; i < numPages; i++) {
         if (cancelled) return;
         try {
           const page = await doc.getPage(i + 1);
           const fp = await flattenPageText(page);
-          let idx = -1;
-          let anchorLength = 0;
-          for (const a of anchors) {
-            const pos = fp.flat.indexOf(a);
-            if (pos >= 0) { idx = pos; anchorLength = a.length; break; }
+          const match = findPdfChunkMatch(fp, pendingHighlight.chunkText);
+          if (!match) continue;
+          if (!best || match.score > best.score) {
+            best = { page: i + 1, idx: match.idx, length: match.length, score: match.score, fp };
+            if (match.score >= 800) break;
           }
-          if (idx < 0) continue;
-          found = true;
-          const yRatio = yRatioForIndex(fp, idx);
-          const rects = highlightRectsForMatch(fp, idx, anchorLength);
-          setPageHighlight(rects.length > 0 ? { page: i + 1, rects } : null);
-          const root = containerRef.current;
-          const target = root?.querySelector(`[data-page="${i + 1}"]`) as HTMLElement | null;
-          if (!root || !target) break;
-          const renderedHeight = target.offsetHeight;
-          const desiredScroll = target.offsetTop
-            + yRatio * renderedHeight
-            - root.clientHeight * 0.3;
-          root.scrollTo({ top: Math.max(0, desiredScroll), behavior: 'smooth' });
-          break;
         } catch { /* skip page */ }
       }
-      if (!cancelled && found) actions.consumePendingHighlight();
+      if (cancelled || !best) {
+        if (!cancelled) {
+          const fallbackPage = exactPageForHighlight(pendingHighlight, numPages);
+          const root = containerRef.current;
+          const target = fallbackPage
+            ? root?.querySelector(`[data-page="${fallbackPage}"]`) as HTMLElement | null
+            : null;
+          if (root && target) {
+            setPageHighlight(null);
+            root.scrollTo({
+              top: Math.max(0, target.offsetTop - root.clientHeight * 0.12),
+              behavior: 'smooth',
+            });
+            actions.consumePendingHighlight();
+          }
+        }
+        return;
+      }
+      const yRatio = yRatioForIndex(best.fp, best.idx);
+      const rects = highlightRectsForMatch(best.fp, best.idx, best.length);
+      setPageHighlight(rects.length > 0 ? { page: best.page, rects } : null);
+      const root = containerRef.current;
+      const target = root?.querySelector(`[data-page="${best.page}"]`) as HTMLElement | null;
+      if (root && target) {
+        const renderedHeight = target.offsetHeight;
+        const desiredScroll = target.offsetTop
+          + yRatio * renderedHeight
+          - root.clientHeight * 0.3;
+        root.scrollTo({ top: Math.max(0, desiredScroll), behavior: 'smooth' });
+      }
+      actions.consumePendingHighlight();
     })();
     return () => { cancelled = true; };
   }, [doc, numPages, pendingHighlight, actions]);
@@ -466,30 +587,27 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
 
   return (
     <div className="pdf-preview" ref={containerRef}>
-      {showConversionBanner && failure && (
-        <div className="pdf-failure-banner" role="status">
-          <span className="pdf-failure-text">
-            PDF text extraction failed{failureMessage ? `: ${failureMessage}` : ''}. The original
-            PDF still opens normally.
-            {retryError ? ` (${retryError})` : ''}
-          </span>
-          <button
-            type="button"
-            className="pdf-failure-retry"
-            disabled={retryInProgress}
-            onClick={() => { void onRetry(); }}
-          >
-            {retryInProgress ? 'Retrying…' : 'Retry conversion'}
-          </button>
-        </div>
-      )}
       {error && <div className="pdf-error">Failed to open PDF: {error}</div>}
       {!error && !doc && <div className="pdf-loading">Loading PDF…</div>}
       <PdfChromePortal
         scale={scale}
         numPages={numPages}
-        onZoomOut={() => setScale((s) => Math.max(0.5, s - 0.2))}
-        onZoomIn={() => setScale((s) => Math.min(3, s + 0.2))}
+        status={chromeStatus}
+        retryLabel={retryInProgress ? 'Retrying…' : 'Retry conversion'}
+        retryDisabled={retryInProgress}
+        onRetry={failure && showConversionBanner ? onRetry : undefined}
+        onFit={() => {
+          setAutoFit(true);
+          setScale(fitScale());
+        }}
+        onZoomOut={() => {
+          setAutoFit(false);
+          setScale((s) => Math.max(PDF_MIN_SCALE, s - 0.2));
+        }}
+        onZoomIn={() => {
+          setAutoFit(false);
+          setScale((s) => Math.min(PDF_MAX_SCALE, s + 0.2));
+        }}
       />
       <div className="pdf-pages">
         {doc && Array.from({ length: numPages }, (_, i) => (
@@ -507,6 +625,21 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   );
 }
 
+function pdfNotSearchableDetail(
+  progress: { phase: 'extracting'; currentPage?: number } | { phase: 'indexing' } | undefined,
+  numPages: number,
+): string {
+  if (progress?.phase === 'indexing') return 'Preparing search index';
+  if (progress?.phase === 'extracting') {
+    const page = progress.currentPage;
+    if (typeof page === 'number' && page > 0) {
+      return numPages > 0 ? `Reading page ${Math.min(page, numPages)} of ${numPages}` : `Reading page ${page}`;
+    }
+    return 'Reading PDF';
+  }
+  return 'Preparing search';
+}
+
 /** Render the PDF chrome (zoom controls + page count) into the
  *  `#pdf-chrome-slot` MainPane mounts at the top-right of the
  *  breadcrumb row — replaces the old "second toolbar row" so the
@@ -516,11 +649,21 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
 function PdfChromePortal({
   scale,
   numPages,
+  status,
+  retryLabel,
+  retryDisabled,
+  onRetry,
+  onFit,
   onZoomOut,
   onZoomIn,
 }: {
   scale: number;
   numPages: number;
+  status: { kind: 'pending' | 'error'; text: string } | null;
+  retryLabel: string;
+  retryDisabled: boolean;
+  onRetry?: () => void;
+  onFit: () => void;
   onZoomOut: () => void;
   onZoomIn: () => void;
 }) {
@@ -534,10 +677,26 @@ function PdfChromePortal({
   }, []);
   const chrome = (
     <div className="pdf-chrome">
-      <button type="button" className="icon-btn" title="Zoom out" onClick={onZoomOut}>−</button>
-      <span className="pdf-zoom">{Math.round(scale * 100)}%</span>
-      <button type="button" className="icon-btn" title="Zoom in" onClick={onZoomIn}>+</button>
-      {numPages > 0 && <span className="pdf-pageinfo">{numPages} pages</span>}
+      <div className={'pdf-search-status' + (status ? ` ${status.kind}` : '')} role={status ? 'status' : undefined}>
+        {status?.text ?? ''}
+        {status?.kind === 'error' && onRetry && (
+          <button
+            type="button"
+            className="pdf-search-retry"
+            disabled={retryDisabled}
+            onClick={() => { void onRetry(); }}
+          >
+            {retryLabel}
+          </button>
+        )}
+      </div>
+      <div className="pdf-zoom-controls">
+        <button type="button" className="icon-btn" title="Zoom out" onClick={onZoomOut}>−</button>
+        <span className="pdf-zoom">{Math.round(scale * 100)}%</span>
+        <button type="button" className="icon-btn" title="Zoom in" onClick={onZoomIn}>+</button>
+        <button type="button" className="pdf-fit-btn" title="Fit to width" onClick={onFit}>Fit</button>
+        {numPages > 0 && <span className="pdf-pageinfo">{numPages} pages</span>}
+      </div>
     </div>
   );
   return slot ? createPortal(chrome, slot) : null;

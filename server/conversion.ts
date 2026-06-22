@@ -25,11 +25,12 @@
  */
 import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
-import { isPendingOrFailed, listInFlight, markDone, markFailed, markInFlight } from './conversion-status.ts';
+import { isPendingOrFailed, listInFlight, markDone, markFailed, markInFlight, setProgress, type ConversionProgress } from './conversion-status.ts';
 import { clearRecord } from './conversion-status.ts';
 import { fromKbRel, fromKbRelForSpace, getKbRoot } from './space.ts';
 import { logger, errorMessage } from './log.ts';
 import { isCloudPlaceholderName } from './indexable.ts';
+import { hasNoExtractableText, indexableFileSizeError } from './indexable.ts';
 
 const log = logger('conversion');
 
@@ -50,7 +51,11 @@ export interface ConversionSpec {
   /** The dot-prefixed `.<sourceBasename>.md` derived-note path for a source file. */
   derivedNote: (absPath: string) => string;
   /** Run the extractor; resolve on success, reject with the stderr tail. */
-  convert: (absPath: string) => Promise<unknown>;
+  convert: (
+    absPath: string,
+    onProgress?: (progress: ConversionProgress) => void,
+    signal?: AbortSignal,
+  ) => Promise<unknown>;
   /** Best-effort cleanup for derived files if the source disappears mid-run. */
   cleanupDerived?: (absPath: string) => void;
 }
@@ -61,6 +66,16 @@ export interface ConversionSpec {
 let indexDerivedNote: ((noteAbs: string) => Promise<void>) | null = null;
 export function setDerivedNoteIndexer(fn: (noteAbs: string) => Promise<void>): void {
   indexDerivedNote = fn;
+}
+
+const activeControllers = new Map<string, AbortController>();
+
+export function cancelConversion(kbRel: string): boolean {
+  const controller = activeControllers.get(kbRel);
+  if (!controller) return false;
+  controller.abort();
+  activeControllers.delete(kbRel);
+  return true;
 }
 
 /** kbRoot-relative path for an absolute path inside the KB, or null when
@@ -90,6 +105,8 @@ function sameSourceSignature(a: SourceSignature | null, b: SourceSignature | nul
 function runConversion(absPath: string, kbRel: string | null, spec: ConversionSpec): void {
   log.info(`${spec.kind}: ${absPath} → ${path.basename(spec.derivedNote(absPath))} …`);
   if (kbRel) markInFlight(kbRel);
+  const controller = new AbortController();
+  if (kbRel) activeControllers.set(kbRel, controller);
   const startedWith = sourceSignature(absPath);
   const t0 = Date.now();
   // Defer the terminal status write so a 500ms-poll client catches even
@@ -98,8 +115,12 @@ function runConversion(absPath: string, kbRel: string | null, spec: ConversionSp
     if (!kbRel) { fn(); return; }
     setTimeout(fn, Math.max(0, MIN_VISIBLE_MS - (Date.now() - t0)));
   };
-  spec.convert(absPath).then(
+  try { spec.cleanupDerived?.(absPath); } catch (err: unknown) {
+    log.warn(`${spec.kind}: preflight cleanup failed for ${absPath}: ${errorMessage(err)}`);
+  }
+  spec.convert(absPath, (progress) => { if (kbRel) setProgress(kbRel, progress); }, controller.signal).then(
     async () => {
+      if (kbRel) activeControllers.delete(kbRel);
       log.info(`${spec.kind}: done in ${Date.now() - t0}ms (${path.basename(spec.derivedNote(absPath))})`);
       if (!existsSync(absPath)) {
         log.info(`${spec.kind}: source disappeared before completion, cleaning derived output for ${absPath}`);
@@ -120,21 +141,42 @@ function runConversion(absPath: string, kbRel: string | null, spec: ConversionSp
       // Index the note before flipping the status — when "Converting…"
       // clears, the content is already searchable.
       try {
-        await indexDerivedNote?.(spec.derivedNote(absPath));
+        const noteAbs = spec.derivedNote(absPath);
+        const indexSizeError = indexableFileSizeError(noteAbs);
+        if (indexSizeError) {
+          settle(() => { if (kbRel) markFailed(kbRel, `extracted text could not be indexed: ${indexSizeError}`); });
+          return;
+        }
+        if (hasNoExtractableText(noteAbs)) {
+          settle(() => { if (kbRel) markFailed(kbRel, 'extracted text is empty, so this file is not searchable'); });
+          return;
+        }
+        if (kbRel) setProgress(kbRel, { phase: 'indexing' });
+        await indexDerivedNote?.(noteAbs);
       } catch (err: unknown) {
-        log.warn(`${spec.kind}: derived-note index failed for ${absPath}: ${errorMessage(err)} (reconcile will pick it up)`);
+        const msg = errorMessage(err);
+        log.warn(`${spec.kind}: derived-note index failed for ${absPath}: ${msg}`);
+        settle(() => { if (kbRel) markFailed(kbRel, `extracted text could not be indexed: ${msg}`); });
+        return;
       }
       settle(() => { if (kbRel) markDone(kbRel); });
     },
     (err: Error) => {
+      if (kbRel) activeControllers.delete(kbRel);
       log.warn(`${spec.kind}: failed for ${absPath}: ${err.message}`);
       if (!existsSync(absPath)) {
+        try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
+          log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}: ${errorMessage(cleanupErr)}`);
+        }
         settle(() => { if (kbRel) clearRecord(kbRel); });
         return;
       }
       if (!sameSourceSignature(startedWith, sourceSignature(absPath))) {
         settle(() => { if (kbRel) clearRecord(kbRel); });
         return;
+      }
+      try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
+        log.warn(`${spec.kind}: failed-conversion cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
       }
       settle(() => { if (kbRel) markFailed(kbRel, err.message); });
     },

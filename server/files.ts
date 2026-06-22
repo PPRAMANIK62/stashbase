@@ -388,6 +388,7 @@ function deleteDerivedArtifactsForSource(sourceRel: string): void {
       }
     } catch { /* no bundle — fine */ }
   }
+  deleteDerivedScratchBundlesForSource(sourceRel);
 }
 
 function renameDerivedArtifactsForSource(oldSourceRel: string, newSourceRel: string): void {
@@ -668,6 +669,7 @@ function walk(
     // hides them — and that's exactly what "dot-prefix = system
     // artifact" should mean.
     if (e.isFile() && e.name.startsWith('.')) {
+      if (isDerivedScratchName(e.name)) continue;
       if (!opts.includeDerivedNotes && isDerivedNoteName(e.name)) continue;
       if (!opts.includeDerivedNotes && isLegacyDerivedNoteName(e.name, legacyDerivedStems)) continue;
     }
@@ -679,6 +681,11 @@ function walk(
       // `.<sourceBasename>_files/` dot-prefixed app-derived bundle — always hide.
       if (stem.startsWith('.')) continue;
     }
+    // PDF extraction publishes the final dot-prefixed bundle only when
+    // conversion succeeds, but long-running page batches create sibling
+    // scratch dirs first. They are app-maintained artifacts too and must
+    // not briefly surface as user folders while extraction is running.
+    if (e.isDirectory() && isDerivedScratchName(e.name)) continue;
     const rel = prefix ? `${prefix}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
     fn(rel, full, e);
@@ -692,6 +699,39 @@ function isLegacyDerivedNoteName(name: string, sourceStems: Set<string>): boolea
   const stem = m[1];
   if (/\.(pdf|png|jpe?g|webp)$/i.test(stem)) return false;
   return sourceStems.has(stem);
+}
+
+function isDerivedScratchName(name: string): boolean {
+  return /^\.\.?[^/]+_files\.(?:tmp|batch)-/i.test(name)
+    || /^\.[^/]+\.pdf\.md\.tmp-/i.test(name)
+    || /^\.[^/]+\.pdf\.md\.batches$/i.test(name);
+}
+
+function deleteDerivedScratchBundlesForSource(sourceRel: string): void {
+  const base = path.posix.basename(sourceRel);
+  if (!/\.pdf$/i.test(base)) return;
+  const stem = base.replace(/\.pdf$/i, '');
+  const sourceNames = [base, stem].filter(Boolean).map(escapeRegExp).join('|');
+  const scratchRe = new RegExp(
+    `^(?:\\.{1,2}(?:${sourceNames})_files\\.(?:tmp|batch)-.*|\\.${escapeRegExp(base)}\\.md\\.tmp-.*|\\.${escapeRegExp(base)}\\.md\\.batches)$`,
+    'i',
+  );
+  let parentAbs: string;
+  try { parentAbs = path.dirname(resolveSafe(sourceRel)); } catch { return; }
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(parentAbs, { withFileTypes: true }); } catch { return; }
+  for (const ent of entries) {
+    if (!scratchRe.test(ent.name)) continue;
+    try {
+      fs.rmSync(path.join(parentAbs, ent.name), { recursive: ent.isDirectory(), force: true });
+    } catch (err: unknown) {
+      log.warn(`failed to remove stale derived scratch ${ent.name}: ${errorMessage(err)}`);
+    }
+  }
+}
+
+function escapeRegExp(raw: string): string {
+  return raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function preview(

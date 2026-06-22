@@ -16,6 +16,7 @@ import type {
   FolderMeta,
   KeywordSearchResult,
   ConversionFailure,
+  ConversionProgress,
   IndexWarning,
   SearchHit,
   SnapshotWarning,
@@ -107,6 +108,7 @@ export interface PendingHighlight {
   endLine?: number;
   chunkText: string;
   openFindBar?: boolean;
+  pdfPage?: number;
 }
 
 /** Data for the rename-cascade confirmation dialog (VSCode "Update N
@@ -226,6 +228,10 @@ export interface State {
    *  empty triggers a `loadFiles` so the produced `.html` shows up
    *  in the tree without waiting for the next user action. */
   pendingConversions: string[];
+  /** Current per-file conversion progress for the active space. Kept
+   *  separate from `pendingConversions` so the sidebar stays simple
+   *  while rich viewers can show local detail. */
+  conversionProgress: Record<string, ConversionProgress>;
 
   syncRunning: boolean;
 
@@ -342,6 +348,7 @@ export const initialState: State = {
   activeChatTabId: null,
   pendingNames: new Set(),
   pendingConversions: [],
+  conversionProgress: {},
   syncRunning: false,
   activeSidebarView: 'files',
   filterQuery: '',
@@ -420,6 +427,7 @@ export type Action =
   | { type: 'SELECT_PATH'; path: string }
   | { type: 'PENDING_NAMES'; names: Set<string> }
   | { type: 'PENDING_CONVERSIONS'; paths: string[] }
+  | { type: 'CONVERSION_PROGRESS'; progress: Record<string, ConversionProgress> }
   | { type: 'SAVE_STATUS'; status: SaveStatus }
   | { type: 'SYNC_RUNNING'; running: boolean }
   | { type: 'FILTER'; q: string }
@@ -860,6 +868,8 @@ export function reducer(s: State, a: Action): State {
       return { ...s, pendingNames: a.names };
     case 'PENDING_CONVERSIONS':
       return { ...s, pendingConversions: a.paths };
+    case 'CONVERSION_PROGRESS':
+      return { ...s, conversionProgress: a.progress };
     case 'SAVE_STATUS':
       return patchActiveTab(s, { saveStatus: a.status });
     case 'SYNC_RUNNING':

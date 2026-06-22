@@ -15,20 +15,21 @@
  * into the PDF row), but the indexer still picks them up so RAG sees
  * the structured content.
  *
- * Converter knob (set on the server process, no per-space config yet):
- *   - `STASHBASE_PDF_CONVERTER`  pymupdf | marker  (default pymupdf)
- *
  * Default `pymupdf` route uses `pymupdf4llm` for LLM-friendly markdown
- * (heading detection, table extraction, figure screenshots). `marker`
- * needs `pip install marker-pdf` in the same venv (~2 GB models, much
- * heavier; ML-backed quality ceiling).
+ * (heading detection, table extraction, figure screenshots), falling back
+ * to plain PyMuPDF text extraction when the richer layout pass fails.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
 import { extractorSpawn } from './python-host.ts';
 import { discoverNewSources, maybeConvert, type ConversionSpec } from './conversion.ts';
+import type { ConversionProgress } from './conversion-status.ts';
+import { logger } from './log.ts';
+
+const log = logger('pdf');
+const STDERR_TAIL_BYTES = 64 * 1024;
 
 export interface ConvertResult {
   /** Absolute path of the written `.<sourceBasename>.md` (dot-prefixed app-
@@ -59,6 +60,29 @@ function cleanupDerivedPdf(pdfAbsPath: string): void {
   const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
   rmSync(notePath, { force: true });
   rmSync(bundleDir, { recursive: true, force: true });
+  cleanupDerivedPdfScratch(pdfAbsPath);
+}
+
+function cleanupDerivedPdfScratch(pdfAbsPath: string): void {
+  const dir = path.dirname(pdfAbsPath);
+  const base = path.basename(pdfAbsPath);
+  const stem = base.replace(/\.pdf$/i, '');
+  const sourceNames = [base, stem].filter(Boolean).map(escapeRegExp).join('|');
+  const scratchRe = new RegExp(
+    `^(?:\\.{1,2}(?:${sourceNames})_files\\.(?:tmp|batch)-.*|\\.${escapeRegExp(base)}\\.md\\.tmp-.*|\\.${escapeRegExp(base)}\\.md\\.batches)$`,
+    'i',
+  );
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const ent of entries) {
+    if (scratchRe.test(ent.name)) {
+      rmSync(path.join(dir, ent.name), { recursive: ent.isDirectory(), force: true });
+    }
+  }
+}
+
+function escapeRegExp(raw: string): string {
+  return raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** Given a POSIX-relative path to a dot-prefixed app-derived note
@@ -126,19 +150,64 @@ export function displayPathForHit(rel: string, baseAbs: string): string | null {
  *  rejects with the extractor's stderr tail on failure. Fire-and-
  *  forget at the call site if you don't want to block — `convertPdf`
  *  itself does not throw synchronously. */
-function convertPdf(pdfAbsPath: string): Promise<ConvertResult> {
+function convertPdf(
+  pdfAbsPath: string,
+  onProgress?: (progress: ConversionProgress) => void,
+  signal?: AbortSignal,
+): Promise<ConvertResult> {
   const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
-  const converter = process.env.STASHBASE_PDF_CONVERTER === 'marker' ? 'marker' : 'pymupdf';
 
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('pdf_extract cancelled'));
+      return;
+    }
     const { cmd, args } = extractorSpawn('pdf', 'pdf_extract.py', [
-      pdfAbsPath, notePath, bundleDir, '--converter', converter,
+      pdfAbsPath, notePath, bundleDir,
     ]);
     const proc = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';
-    proc.stderr.on('data', (b) => { stderr += String(b); });
-    proc.on('error', (err) => reject(new Error(`spawn failed: ${err.message}`)));
+    let stderrLineBuffer = '';
+    let cancelled = false;
+    const onAbort = () => {
+      cancelled = true;
+      proc.kill('SIGTERM');
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    const handleStderrLine = (line: string) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('[pdf_extract]')) {
+        const message = trimmed.replace(/^\[pdf_extract\]\s*/, '');
+        const started = message.match(/^batch \d+\/\d+ pages (\d+)-\d+ started$/);
+        const done = message.match(/^batch \d+\/\d+ pages \d+-(\d+) done$/);
+        if (started) onProgress?.({ phase: 'extracting', currentPage: Number(started[1]) });
+        if (done) onProgress?.({ phase: 'extracting', currentPage: Number(done[1]) });
+        log.info(`${path.basename(pdfAbsPath)}: ${message}`);
+      } else if (/^(Using RapidOCR|OCR on page\.number=)/.test(trimmed)) {
+        log.debug(`${path.basename(pdfAbsPath)}: ${trimmed}`);
+      }
+    };
+    proc.stderr.on('data', (b) => {
+      const text = String(b);
+      stderr = (stderr + text).slice(-STDERR_TAIL_BYTES);
+      const lines = (stderrLineBuffer + text).split(/\r?\n/);
+      stderrLineBuffer = lines.pop() ?? '';
+      for (const line of lines) handleStderrLine(line);
+    });
+    proc.on('error', (err) => {
+      signal?.removeEventListener('abort', onAbort);
+      reject(new Error(`spawn failed: ${err.message}`));
+    });
     proc.on('exit', (code) => {
+      signal?.removeEventListener('abort', onAbort);
+      if (stderrLineBuffer) {
+        handleStderrLine(stderrLineBuffer);
+        stderrLineBuffer = '';
+      }
+      if (cancelled) {
+        reject(new Error('pdf_extract cancelled'));
+        return;
+      }
       if (code === 0) {
         resolve({ notePath, bundleDir });
       } else {

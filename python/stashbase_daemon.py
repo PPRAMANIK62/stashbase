@@ -344,7 +344,7 @@ INDEX_EXCLUDED_DIRS = {
     "target",
     "vendor",
 }
-MAX_INDEXABLE_BYTES = 2 * 1024 * 1024
+MAX_INDEXABLE_BYTES = 8 * 1024 * 1024
 
 # Mutable copy of the indexing rules. Node is the single source of truth
 # for format/admission knowledge (server/indexable.ts, server/format.ts)

@@ -43,10 +43,12 @@ const log = logger('routes/upload');
 
 // In-memory upload buffer. Bumped beyond the original 8 MB / 50-file
 // limits to accommodate "Save Page As Complete" bundles (arxiv HTML
-// pulls in dozens of figures + CSS).
+// pulls in dozens of figures + CSS) and large PDFs before the async
+// extractor takes over.
+const MAX_UPLOAD_FILE_BYTES = 512 * 1024 * 1024;
 const uploadParser = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 64 * 1024 * 1024, files: 500 },
+  limits: { fileSize: MAX_UPLOAD_FILE_BYTES, files: 500 },
 });
 
 export function mount(app: express.Express): void {
@@ -75,7 +77,7 @@ function sendUploadError(res: express.Response, err: unknown): void {
   if (err instanceof multer.MulterError) {
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     const message = err.code === 'LIMIT_FILE_SIZE'
-      ? 'file is too large to upload'
+      ? `file is too large to upload (max ${Math.floor(MAX_UPLOAD_FILE_BYTES / 1024 / 1024)} MB)`
       : err.code === 'LIMIT_FILE_COUNT'
         ? 'too many files in one upload'
         : err.message;
@@ -240,7 +242,7 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
         }
         toIndex.push({ name, kbRel: `${spaceName}/${name}`, text });
       } else if (spaceAbs && /\.pdf$/i.test(name)) {
-        // PDFs run through the pymupdf / marker pipeline so the
+        // PDFs run through the PyMuPDF pipeline so the
         // user gets a readable note + image bundle they can preview
         // and that the converter pushes into the index on completion.
         toConvertPdf.push({ abs: path.join(spaceAbs, name), rel: name });

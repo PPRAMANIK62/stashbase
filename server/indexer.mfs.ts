@@ -86,6 +86,7 @@ export class MfsIndexer implements Indexer {
    *  embed would otherwise block every UI poll. Primed lazily on first
    *  `status()` for a given space; updated by upsert / delete / rename. */
   private spaceIndex = new Map<string, Set<string>>();
+  private loggedBindings = new Map<string, string>();
   /** Spaces whose indexedNames cache has been primed via a daemon
    *  `list` call. Status queries against unprimed spaces report all
    *  pending until the prime completes — better than flashing
@@ -105,13 +106,20 @@ export class MfsIndexer implements Indexer {
     // then bind brings the collection into the world).
     this.spaceIndex.delete(space);
     this.spaceReady.delete(space);
-    log.info(`bound ${space} → ${cfg.provider}`);
+    const bindingKey = `${cfg.provider}:${cfg.model ?? ''}:${cfg.dimension ?? ''}`;
+    if (this.loggedBindings.get(space) === bindingKey) {
+      log.debug(`bound ${space} → ${cfg.provider}`);
+    } else {
+      this.loggedBindings.set(space, bindingKey);
+      log.info(`bound ${space} → ${cfg.provider}`);
+    }
   }
 
   async unbindSpace(space: string): Promise<void> {
     await getDaemon().unbindSpace(space);
     this.spaceIndex.delete(space);
     this.spaceReady.delete(space);
+    this.loggedBindings.delete(space);
   }
 
   /** Find the bound space owning `kbRel`. Spaces are flat under

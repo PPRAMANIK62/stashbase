@@ -27,6 +27,7 @@ import {
   renameOnDisk,
 } from '../files.ts';
 import { inFlightFileOperationError, saveFileContent } from './files.ts';
+import { cancelConversion } from '../conversion.ts';
 import { applyRenamePlan, planRenameLinks, type RenameEntry } from '../links.ts';
 import { maybeConvertPdf } from '../pdf.ts';
 import { maybeConvertImage } from '../image.ts';
@@ -582,6 +583,7 @@ export async function deleteKbFile(rawPath: unknown): Promise<{ path: string; al
     if (inFlightError) throw routeError(inFlightError.body.error, inFlightError.status, inFlightError.body.code);
     const derivedArtifacts = derivedArtifactsForSource(target.spaceRel);
     const removed = deleteFile(target.spaceRel);
+    if (removed) cancelConversion(target.kbRel);
     try { clearRecord(target.kbRel); }
     catch (err: unknown) { log.warn(`kb delete: conversion status cleanup failed for ${target.kbRel}: ${errorMessage(err)}`); }
     if (removed && getApiKey()) {

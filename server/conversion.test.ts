@@ -149,6 +149,28 @@ test('conversion failure clears status when source was deleted mid-run', async (
   assert.equal(status.listInFlight().includes(kbRel), false);
 });
 
+test('conversion records failure when derived note indexing fails', async () => {
+  const { spaceRoot, spaceName } = await openTestSpace('conversion-index-failure');
+  const source = path.join(spaceRoot, 'paper.pdf');
+  const kbRel = `${spaceName}/paper.pdf`;
+  fs.writeFileSync(source, '%PDF-1.7\n');
+  conversion.setDerivedNoteIndexer(async () => {
+    throw new Error('index unavailable');
+  });
+  try {
+    conversion.maybeConvert(source, testSpec());
+    await wait(900);
+
+    assert.equal(fs.existsSync(derivedNote(source)), true);
+    assert.equal(status.readAll()[kbRel]?.status, 'failed');
+    assert.match(status.readAll()[kbRel]?.lastError ?? '', /extracted text could not be indexed: index unavailable/);
+    assert.equal(status.listInFlight().includes(kbRel), false);
+  } finally {
+    conversion.setDerivedNoteIndexer(async () => {});
+    status.clearRecord(kbRel);
+  }
+});
+
 test('conversion success cleans stale derived output when source changed mid-run', async () => {
   const { spaceRoot, spaceName } = await openTestSpace('conversion-source-changed-success');
   const source = path.join(spaceRoot, 'paper.pdf');

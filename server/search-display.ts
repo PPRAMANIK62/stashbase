@@ -1,10 +1,13 @@
 import { displayPathForHit } from './pdf.ts';
 import type { SearchHit } from './indexer.ts';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export interface KeywordMatch {
   line: number;
   text: string;
   ranges: Array<[number, number]>;
+  pdfPage?: number;
 }
 
 export interface KeywordHitFile {
@@ -29,6 +32,7 @@ export function remapKeywordFilesForDisplay(
   for (const file of files) {
     const display = displayPathForHit(file.path, baseAbs);
     if (display == null) continue;
+    const pageMap = display !== file.path ? pdfDerivedLineMap(file.path, baseAbs) : null;
     let bucket = byPath.get(display);
     if (!bucket) {
       bucket = { path: display, matches: [], totalMatches: 0 };
@@ -37,10 +41,16 @@ export function remapKeywordFilesForDisplay(
     }
     const seen = seenMatches.get(display)!;
     for (const match of file.matches) {
-      const key = `${match.line}\0${match.text}\0${JSON.stringify(match.ranges)}`;
+      const nextMatch = pageMap
+        ? {
+            ...match,
+            pdfPage: pdfPageForLine(pageMap, match.line),
+          }
+        : match;
+      const key = `${nextMatch.line}\0${nextMatch.text}\0${JSON.stringify(nextMatch.ranges)}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      bucket.matches.push(match);
+      bucket.matches.push(nextMatch);
     }
     bucket.totalMatches = Math.max(bucket.totalMatches, file.totalMatches, bucket.matches.length);
   }
@@ -63,7 +73,16 @@ export function remapSearchHitsForDisplay(hits: SearchHit[], baseAbs: string): S
   for (const hit of hits) {
     const display = displayPathForHit(hit.fileName, baseAbs);
     if (display == null) continue;
-    const next = { ...hit, fileName: display };
+    const pageMap = display !== hit.fileName ? pdfDerivedLineMap(hit.fileName, baseAbs) : null;
+    const next = {
+      ...hit,
+      fileName: display,
+      ...(pageMap
+        ? {
+            pdfPage: hit.startLine ? pdfPageForLine(pageMap, hit.startLine) : undefined,
+          }
+        : {}),
+    };
     const key = [
       next.fileName,
       next.content,
@@ -76,4 +95,34 @@ export function remapSearchHitsForDisplay(hits: SearchHit[], baseAbs: string): S
     out.push(next);
   }
   return out;
+}
+
+interface PdfDerivedLineMap {
+  markers: Array<{ line: number; page: number }>;
+}
+
+function pdfDerivedLineMap(rel: string, baseAbs: string): PdfDerivedLineMap | null {
+  const full = path.resolve(baseAbs, rel);
+  const back = path.relative(baseAbs, full);
+  if (back.startsWith('..') || path.isAbsolute(back)) return null;
+  let text: string;
+  try { text = fs.readFileSync(full, 'utf8'); } catch { return null; }
+  const lines = text.split(/\r?\n/);
+  const markers: Array<{ line: number; page: number }> = [];
+  lines.forEach((line, i) => {
+    const marker = line.match(/stashbase-pdf-pages?:\s*(\d+)(?:\s*-\s*(\d+))?/i);
+    const pageHeading = line.match(/^#{1,6}\s+Page\s+(\d+)\b/i);
+    const page = marker ? Number(marker[1]) : pageHeading ? Number(pageHeading[1]) : NaN;
+    if (Number.isFinite(page) && page > 0) markers.push({ line: i + 1, page });
+  });
+  return { markers };
+}
+
+function pdfPageForLine(map: PdfDerivedLineMap, line: number): number | undefined {
+  let page: number | undefined;
+  for (const marker of map.markers) {
+    if (marker.line > line) break;
+    page = marker.page;
+  }
+  return page;
 }

@@ -39,6 +39,7 @@ import { sendError, revealInOsFileManager } from '../http.ts';
 import { bundleRenameEntry, renameWithRollback } from '../rename-helpers.ts';
 import { maybeConvertImage } from '../image.ts';
 import { maybeConvertPdf } from '../pdf.ts';
+import { cancelConversion } from '../conversion.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { clearRecord, isInFlight } from '../conversion-status.ts';
 
@@ -55,6 +56,7 @@ export interface InFlightRouteError {
 }
 
 export function inFlightFileOperationError(name: string, action: InFlightFileAction): InFlightRouteError | null {
+  if (action === 'delete') return null;
   if (!isInFlight(toKbRel(name))) return null;
   const verb = action === 'rename' ? 'Rename' : 'Delete';
   return {
@@ -485,6 +487,7 @@ export function mount(app: express.Express): void {
       // sync sweeps orphans.
       if (removed) {
         noteTreeChanged();
+        cancelConversion(toKbRel(name));
         try { removeFileOrderPath(name, 'file'); }
         catch (err: unknown) { log.warn(`file-order cleanup failed for ${name}: ${errorMessage(err)}`); }
       }

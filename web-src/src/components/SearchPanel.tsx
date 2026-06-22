@@ -234,6 +234,7 @@ function KeywordFileGroup({ file, query }: { file: KeywordHitFile; query: string
             startLine: file.matches[0]?.line,
             chunkText: query,
             openFindBar: true,
+            pdfPage: file.matches[0]?.pdfPage,
           });
         }}
       >
@@ -260,6 +261,7 @@ function KeywordMatchRow({ file, match, query }: { file: KeywordHitFile; match: 
           startLine: match.line,
           chunkText: query,
           openFindBar: true,
+          pdfPage: match.pdfPage,
         });
       }}
       title={`Line ${match.line}`}
@@ -305,6 +307,7 @@ function SearchHitRow({ hit }: { hit: SearchHit }) {
           startLine: hit.startLine,
           endLine: hit.endLine,
           chunkText: hit.content,
+          pdfPage: hit.pdfPage,
         });
       }}
       title={hit.fileName}

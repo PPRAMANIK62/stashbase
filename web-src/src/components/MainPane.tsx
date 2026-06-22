@@ -118,7 +118,7 @@ export function MainPane() {
         // Slot that PdfPreview portals its zoom / page-count chrome
         // into — sits on the same row as back/forward + breadcrumb
         // so we don't waste a row on viewer chrome.
-        <div className="main-floating-actions" id="pdf-chrome-slot" />
+        <div className="main-floating-actions pdf-chrome-slot" id="pdf-chrome-slot" />
       )}
     </main>
   );

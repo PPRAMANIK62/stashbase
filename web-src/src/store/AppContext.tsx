@@ -23,6 +23,7 @@ import {
   api,
   ApiError,
   encodePath,
+  errorMessage,
   getWindowId,
   type SearchHit,
 } from '../api';
@@ -279,6 +280,24 @@ function shallowEqualConversionFailures(
   );
 }
 
+function shallowEqualConversionProgress(
+  a: State['conversionProgress'],
+  b: State['conversionProgress'],
+): boolean {
+  const ak = Object.keys(a);
+  const bk = Object.keys(b);
+  if (ak.length !== bk.length) return false;
+  return ak.every((key) => {
+    const av = a[key];
+    const bv = b[key];
+    if (!bv || av.phase !== bv.phase) return false;
+    if (av.phase === 'extracting' && bv.phase === 'extracting') {
+      return av.currentPage === bv.currentPage;
+    }
+    return true;
+  });
+}
+
 function filterGuiSemanticHits(hits: SearchHit[]): SearchHit[] {
   if (hits.length <= 1) return hits;
   const top = hits[0]?.score ?? 0;
@@ -304,6 +323,16 @@ function filterGuiSemanticHits(hits: SearchHit[]): SearchHit[] {
   }
 
   return hits.slice(0, Math.max(1, cutoff));
+}
+
+function waitForNextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
 }
 
 function keywordFindCaseSensitive(query: string, caseStrict: boolean): boolean {
@@ -672,6 +701,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (s.space && s.space !== prev.space) dispatch({ type: 'SPACE_NAME', space: s.space });
       dispatch({ type: 'PENDING_NAMES', names: newPending });
       if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
+      const incomingProgress = s.conversionProgress ?? {};
+      if (!shallowEqualConversionProgress(prev.conversionProgress, incomingProgress)) {
+        dispatch({ type: 'CONVERSION_PROGRESS', progress: incomingProgress });
+      }
       // Snapshot warning is sticky until the user dismisses it (or a
       // fresh import wipes it server-side). Always reflect what the
       // server reports so a switch back to a "fixed" space clears the
@@ -748,6 +781,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         openGen.current += 1;
         dispatch({ type: 'PENDING_NAMES', names: new Set() });
         dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
+        dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
         dispatch({ type: 'SNAPSHOT_WARNING', warning: null });
         dispatch({ type: 'INDEX_WARNING', warning: null });
         dispatch({ type: 'CONVERSION_FAILURES', failures: [] });
@@ -1072,6 +1106,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const expectedSpace = stateRef.current.space;
     await selectFile(name);
     if (stateRef.current.space !== expectedSpace) return;
+    for (let i = 0; i < 8; i++) {
+      if (getActiveTab(stateRef.current)?.file?.name === name) break;
+      await waitForNextFrame();
+      if (stateRef.current.space !== expectedSpace) return;
+    }
     if (getActiveTab(stateRef.current)?.file?.name !== name) return;
     dispatch({ type: 'PENDING_HIGHLIGHT', highlight: hit });
     // Keyword-search hits carry `openFindBar: true` so the user can
@@ -1392,6 +1431,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const before = stateRef.current;
       const stale = before.tabs.filter((t) => isSpaceFileTab(t, name));
       for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
+      importStashingGrace.current.delete(name);
+      importIndexGrace.current.delete(name);
+      dispatch({ type: 'PENDING_NAMES', names: new Set([...before.pendingNames].filter((p) => p !== name)) });
+      dispatch({ type: 'PENDING_CONVERSIONS', paths: before.pendingConversions.filter((p) => p !== name) });
+      const { [name]: _deletedProgress, ...remainingProgress } = before.conversionProgress;
+      dispatch({ type: 'CONVERSION_PROGRESS', progress: remainingProgress });
       dispatch({
         type: 'FILES_LOADED',
         files: before.files.filter((f) => f.name !== name),
@@ -1709,7 +1754,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return failed.length === 0;
     } catch (e: unknown) {
       console.warn('[upload] request failed:', e);
-      toast('Upload failed — see console.', { level: 'error' });
+      toast(`Upload failed: ${errorMessage(e)}`, { level: 'error' });
       return false;
     }
   }, [loadFiles, refreshIndexState, openInNewTab, toast]);
@@ -1952,11 +1997,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else if (j.current?.name) {
         const generation = ++openGen.current;
         await finishOpenSpace(j.current.name, generation);
+        const restoredSpace = j.current.name;
+        if (generation === openGen.current && stateRef.current.space === restoredSpace) {
+          void api.sync(restoredSpace)
+            .catch(() => { /* surfaced by the next status poll */ })
+            .finally(() => { void refreshIndexState(); });
+        }
       }
     } catch {
       dispatch({ type: 'WELCOME_SHOW', recent: [], error: 'Server unreachable' });
     }
-  }, [finishOpenSpace, openSpaceByName]);
+  }, [finishOpenSpace, openSpaceByName, refreshIndexState]);
 
   const dismissSnapshotWarning = useCallback(async () => {
     // Optimistic: blank the banner locally so the click feels instant;

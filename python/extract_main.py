@@ -11,13 +11,14 @@ the individual scripts via the venv interpreter, so this entry only
 matters for the packaged binary.
 
 Usage:
-    stashbase-extract pdf   <pdf>   <out_note> <bundle_dir> [--converter ...]
+    stashbase-extract pdf   <pdf>   <out_note> <bundle_dir>
     stashbase-extract ocr   <image> <out_note>
 """
 
 from __future__ import annotations
 
 import sys
+import multiprocessing
 
 
 def main() -> int:
@@ -40,4 +41,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     sys.exit(main())

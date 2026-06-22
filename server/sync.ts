@@ -126,6 +126,13 @@ function toSpaceRelFailures(
   return failed.map((f) => ({ ...f, name: spaceRelOf(space, f.name) ?? f.name }));
 }
 
+function syncIndexCandidates(space: string, paths: string[]): string[] {
+  return paths.filter((kbRel) => {
+    const spaceRel = spaceRelOf(space, kbRel);
+    return spaceRel != null && shouldIndexFilePath(spaceRel);
+  });
+}
+
 async function deleteStaleRenameSource(
   indexer: Indexer,
   oldPath: string,
@@ -170,12 +177,13 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
   if (shouldStop(opts)) return emptyResult(true);
   const diff = await indexer.syncDiff(space);
   const failed: { name: string; error: string }[] = [];
+  const excludedRemoved = await removeExcludedIndexedFiles(indexer, space, failed);
 
   if (
     diff.added.length === 0 && diff.modified.length === 0 &&
-    diff.deleted.length === 0 && diff.renamed.length === 0
+    diff.deleted.length === 0 && diff.renamed.length === 0 && excludedRemoved.length === 0
   ) {
-    log.info('index up to date');
+    log.debug('index up to date');
     return emptyResult();
   }
 
@@ -224,7 +232,7 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
     }
   }
 
-  const removedDone: string[] = [];
+  const removedDone: string[] = [...excludedRemoved];
   if (diff.deleted.length) {
     log.info(`removing ${diff.deleted.length} stale file(s) from index`);
     for (const kbRel of diff.deleted) {
@@ -246,16 +254,18 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
     }
   }
 
-  const toIndex = [...diff.added, ...diff.modified];
+  const addedCandidates = syncIndexCandidates(space, diff.added);
+  const modifiedCandidates = syncIndexCandidates(space, diff.modified);
+  const toIndex = [...addedCandidates, ...modifiedCandidates];
   if (toIndex.length) {
     log.info(
       `indexing ${toIndex.length} file(s) ` +
-        `(${diff.added.length} new, ${diff.modified.length} drift-detected)`,
+        `(${addedCandidates.length} new, ${modifiedCandidates.length} drift-detected)`,
     );
   }
   const addedDone: string[] = [];
   const modifiedDone: string[] = [];
-  for (const kbRel of diff.added) {
+  for (const kbRel of addedCandidates) {
     if (shouldStop(opts)) {
       return {
         added: toSpaceRelList(space, addedDone),
@@ -268,7 +278,7 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
     }
     if (await indexOne(indexer, space, kbRel, failed)) addedDone.push(kbRel);
   }
-  for (const kbRel of diff.modified) {
+  for (const kbRel of modifiedCandidates) {
     if (shouldStop(opts)) {
       return {
         added: toSpaceRelList(space, addedDone),
@@ -283,10 +293,10 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
   }
 
   log.info(
-    `done. added=${addedDone.length}/${diff.added.length} ` +
-      `modified=${modifiedDone.length}/${diff.modified.length} ` +
+    `done. added=${addedDone.length}/${addedCandidates.length} ` +
+      `modified=${modifiedDone.length}/${modifiedCandidates.length} ` +
       `renamed=${renamedDone.length}/${diff.renamed.length} ` +
-      `removed=${removedDone.length}/${diff.deleted.length} failed=${failed.length}`,
+      `removed=${removedDone.length}/${diff.deleted.length + excludedRemoved.length} failed=${failed.length}`,
   );
   await assertSyncConverged(indexer, space, [...addedDone, ...modifiedDone, ...renamedDone]);
   return {
@@ -339,4 +349,30 @@ async function indexOne(
     log.warn(`failed ${kbRel}: ${msg}`);
     return false;
   }
+}
+
+async function removeExcludedIndexedFiles(
+  indexer: Indexer,
+  space: string,
+  failed: { name: string; error: string }[],
+): Promise<string[]> {
+  let indexed: Record<string, string>;
+  try {
+    indexed = await indexer.listFiles(space);
+  } catch {
+    return [];
+  }
+  const removed: string[] = [];
+  for (const kbRel of Object.keys(indexed)) {
+    const spaceRel = spaceRelOf(space, kbRel);
+    if (spaceRel == null || shouldIndexFilePath(spaceRel)) continue;
+    try {
+      await indexer.deleteFile(kbRel);
+      removed.push(kbRel);
+    } catch (err: unknown) {
+      failed.push({ name: kbRel, error: `excluded index cleanup failed: ${errorMessage(err)}` });
+    }
+  }
+  if (removed.length) log.info(`removed ${removed.length} excluded file(s) from index`);
+  return removed;
 }

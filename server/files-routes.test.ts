@@ -125,7 +125,7 @@ test('fileHeadStatus accepts viewer files without reading binary bodies', async 
   assert.equal(fileHeadStatus('archive.zip'), 415);
 });
 
-test('file route helpers reject rename and delete while conversion is in flight', async () => {
+test('file route helpers reject rename but allow delete while conversion is in flight', async () => {
   const kbRel = space.toKbRel('paper.pdf');
   markInFlight(kbRel);
   try {
@@ -136,13 +136,7 @@ test('file route helpers reject rename and delete while conversion is in flight'
         code: 'CONVERSION_IN_FLIGHT',
       },
     });
-    assert.deepEqual(inFlightFileOperationError('paper.pdf', 'delete'), {
-      status: 409,
-      body: {
-        error: 'This file is still processing. Delete it after processing finishes.',
-        code: 'CONVERSION_IN_FLIGHT',
-      },
-    });
+    assert.equal(inFlightFileOperationError('paper.pdf', 'delete'), null);
     assert.equal(inFlightFileOperationError('other.pdf', 'delete'), null);
   } finally {
     clearRecord(kbRel);

@@ -143,6 +143,13 @@
       z-index: 5;
     }
 
+    .main-floating-actions.pdf-chrome-slot {
+      left: 14px;
+      right: 14px;
+      justify-content: stretch;
+      pointer-events: none;
+    }
+
     /* Centered placeholder strip for an empty (Untitled) tab. Absolute +
      * 50% transform centers it relative to .main. */
     .main-breadcrumb {
@@ -407,11 +414,52 @@
      * floating-actions row so it sits next to back/forward instead
      * of taking its own row. */
     .pdf-chrome {
+      width: 100%;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 6px;
       font-size: 12px;
       color: var(--fg);
+      pointer-events: auto;
+    }
+    .pdf-zoom-controls {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pdf-search-status {
+      flex: 1 1 auto;
+      min-width: 0;
+      margin-right: 16px;
+      overflow: hidden;
+      color: transparent;
+      font-size: 12px;
+      line-height: 1.2;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pdf-search-status.pending {
+      color: #24514d;
+    }
+    .pdf-search-status.error {
+      color: #a23a24;
+    }
+    .pdf-search-retry {
+      margin-left: 10px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .pdf-search-retry:disabled {
+      cursor: progress;
+      opacity: 0.6;
     }
     .pdf-chrome .icon-btn {
       width: 26px;
@@ -430,6 +478,18 @@
       text-align: center;
       font-variant-numeric: tabular-nums;
     }
+    .pdf-fit-btn {
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+    }
+    .pdf-fit-btn:hover { background: rgba(0,0,0,0.06); }
     .pdf-pageinfo {
       margin-left: 6px;
       opacity: 0.6;
@@ -484,10 +544,11 @@
     .pdf-error { color: #c83a3a; }
     .pdf-failure-banner {
       position: sticky;
-      top: 0;
+      top: -44px;
       z-index: 5;
       width: 100%;
       max-width: 1100px;
+      margin-top: -44px;
       display: flex;
       align-items: flex-start;
       gap: 10px;
@@ -496,6 +557,9 @@
       border-bottom: 1px solid #f0c060;
       color: #5a3b00;
       font-size: 12px;
+    }
+    .pdf-indexing-banner {
+      display: none;
     }
     .pdf-failure-text {
       flex: 1;

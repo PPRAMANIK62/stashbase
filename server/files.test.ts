@@ -54,10 +54,13 @@ test('deleteFolder reports true only when it removed an existing folder', async 
 });
 
 test('deleteFile removes current and legacy PDF derived artifacts', async () => {
-  await openTestSpace('delete-pdf-derived');
+  const root = await openTestSpace('delete-pdf-derived');
   files.saveBytes('paper.pdf', Buffer.from('%PDF-1.7\n'));
   files.saveText('.paper.pdf.md', '# current extract\n');
   files.saveBytes('.paper.pdf_files/page.png', Buffer.from('png'));
+  files.saveText('.paper.pdf.md.tmp-active', '# partial extract\n');
+  fs.mkdirSync(path.join(root, '.paper.pdf_files.tmp-active'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.paper.pdf.md.batches'), { recursive: true });
   files.saveText('.paper.md', '# legacy extract\n');
   files.saveBytes('.paper_files/page.png', Buffer.from('png'));
 
@@ -66,6 +69,9 @@ test('deleteFile removes current and legacy PDF derived artifacts', async () => 
   assert.equal(files.pathExists('paper.pdf'), false);
   assert.equal(files.pathExists('.paper.pdf.md'), false);
   assert.equal(files.pathExists('.paper.pdf_files'), false);
+  assert.equal(files.pathExists('.paper.pdf.md.tmp-active'), false);
+  assert.equal(files.pathExists('.paper.pdf_files.tmp-active'), false);
+  assert.equal(files.pathExists('.paper.pdf.md.batches'), false);
   assert.equal(files.pathExists('.paper.md'), false);
   assert.equal(files.pathExists('.paper_files'), false);
 });
@@ -132,6 +138,26 @@ test('listIndexableTextFilesUnder includes hidden derived notes for folder index
     files.listIndexableTextFilesUnder('docs').map((f) => f.name),
     ['docs/.paper.md', 'docs/.paper.pdf.md', 'docs/a.md'],
   );
+});
+
+test('file tree hides PDF derived bundles and conversion scratch folders', async () => {
+  const root = await openTestSpace('list-pdf-scratch');
+  files.saveBytes('paper.pdf', Buffer.from('%PDF-1.7\n'));
+  files.saveText('.paper.pdf.md', '# extracted\n');
+  files.saveBytes('.paper.pdf_files/page.png', Buffer.from('png'));
+  fs.mkdirSync(path.join(root, '.paper.pdf_files.tmp-active'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.paper.pdf_files.batch-active'), { recursive: true });
+  fs.mkdirSync(path.join(root, '..paper.pdf_files.tmp-legacy'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.paper.pdf.md.tmp-active'), '# partial\n');
+  fs.mkdirSync(path.join(root, '.paper.pdf.md.batches'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.paper.pdf_files.batch-0001-stale.md'), '# stale\n');
+  fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+
+  assert.deepEqual(
+    files.listFiles().map((f) => f.name).filter((name) => name.includes('paper')),
+    ['paper.pdf'],
+  );
+  assert.deepEqual(files.listFolders().map((f) => f.path), ['.claude']);
 });
 
 test('file listing and folder index rename skip iCloud placeholder files', async () => {

@@ -10,12 +10,12 @@ import { rgPath } from '@vscode/ripgrep';
 import { logger } from '../log.ts';
 import { fromKbRelForSpace, getCurrentSpace, getCurrentSpaceName, getKbRoot, isInsideKbRoot, requireSpaceExistsByName, validateSpaceRef } from '../space.ts';
 import { getApiKey } from '../app-config.ts';
-import { hasNoExtractableText } from '../indexable.ts';
+import { hasNoExtractableText, shouldIndexFilePath } from '../indexable.ts';
 import { derivedPathsForPdf, displayPathForHit, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
 import { getInFlightConversions } from '../conversion.ts';
 import { isImageFile } from '../format.ts';
-import { clearRecord, isInFlight, listFailed, readAll as readConversionStatus } from '../conversion-status.ts';
+import { clearRecord, isInFlight, listFailed, listInFlight, readAll as readConversionStatus, readProgress, type ConversionProgress } from '../conversion-status.ts';
 import { getFsChangeCounter } from '../watcher.ts';
 import { getDaemon } from '../mfs-daemon.ts';
 import { clearIndexWarning, clearSnapshotWarning, getIndexWarning, getSnapshotWarning, indexer, syncSpaceNow } from '../state.ts';
@@ -89,6 +89,17 @@ export function conversionFailuresForSpace(space: string): Array<{ path: string;
       continue;
     }
     out.push({ path: rel, lastError: entry.lastError ?? '', attempts: entry.attempts });
+  }
+  return out;
+}
+
+export function conversionProgressForSpace(space: string): Record<string, ConversionProgress> {
+  const out: Record<string, ConversionProgress> = {};
+  for (const kbRel of listInFlight()) {
+    const rel = fromKbRelForSpace(kbRel, space);
+    if (rel == null) continue;
+    const progress = readProgress(kbRel);
+    if (progress) out[rel] = progress;
   }
   return out;
 }
@@ -282,18 +293,19 @@ export function mount(app: express.Express): void {
       const { spaceName: space, spaceRoot: cur } = requireRequestSpace(parseSpaceParam(req.query.space));
       const status = await indexer.status(space);
       // Convert kbRoot-relative paths back to space-relative for the UI.
-      // Admission filtering (extensions / excluded dirs / empty / over-
-      // size) happens daemon-side with the rules Node pushes via
-      // `set_rules` — no second copy here. The ONE Node-side filter left
-      // is content-semantic and deliberately stays out of the daemon
-      // ("daemon never touches format logic"): files with no extractable
-      // text (bundler-format HTML that is one giant <script>,
-      // whitespace-only notes) chunk to nothing, never enter Milvus, and
-      // would pulse "indexing…" forever.
+      // The daemon should already apply the same admission rules Node
+      // pushes via `set_rules`, but status is a user-facing indicator:
+      // defensively re-check Node's source-of-truth path rules here so
+      // a non-indexable source (PDF/image original, hidden scratch dir,
+      // old daemon rules) cannot pulse "indexing…" forever. The second
+      // Node-side filter is content-semantic and deliberately stays out
+      // of the daemon: files with no extractable text chunk to nothing,
+      // never enter Milvus, and would otherwise remain pending forever.
       const pendingSet = new Set<string>();
       for (const kbRel of status.pending) {
         const rel = fromKbRelForSpace(kbRel, space);
         if (rel == null) continue;
+        if (!shouldIndexFilePath(rel)) continue;
         if (hasNoExtractableText(path.join(cur, rel))) continue;
         const visible = displayPathForHit(rel, cur);
         if (visible) pendingSet.add(visible);
@@ -317,6 +329,7 @@ export function mount(app: express.Express): void {
         pendingCount: pending.length,
         orphaned,
         pendingConversions: getInFlightConversions(space),
+        conversionProgress: space ? conversionProgressForSpace(space) : {},
         conversionFailures,
         treeVersion: getFsChangeCounter(),
         // Surface any unresolved snapshot-import warning for the

@@ -33,10 +33,9 @@ export const INDEX_EXCLUDED_DIRS = new Set<string>([
 ]);
 
 /** Hard ceiling for a single source text that we will send to the daemon.
- *  Large books/PDF extracts should be split into separate notes; huge
- *  bundled HTML/Markdown usually indicates saved app output or source
- *  trees and can trip provider request limits. */
-export const MAX_INDEXABLE_BYTES = 600 * 1024;
+ *  It must be large enough for book-length PDF/OCR derived markdown,
+ *  while still catching accidental bundled app dumps or source trees. */
+export const MAX_INDEXABLE_BYTES = 8 * 1024 * 1024;
 
 export function isIndexExcludedDirName(name: string): boolean {
   return INDEX_EXCLUDED_DIRS.has(name);
@@ -57,7 +56,11 @@ function dipsIntoIndexExcludedDir(relPath: string): boolean {
   return relPath
     .replace(/\\/g, '/')
     .split('/')
-    .some((seg) => INDEX_EXCLUDED_DIRS.has(seg));
+    .some((seg) => INDEX_EXCLUDED_DIRS.has(seg) || isGeneratedPdfBatchCacheDir(seg));
+}
+
+function isGeneratedPdfBatchCacheDir(seg: string): boolean {
+  return /^\.[^/]+\.pdf\.md\.batches$/i.test(seg);
 }
 
 /** Legacy agent-maintained sidecar files. The metadata subsystem was
@@ -104,7 +107,7 @@ export function indexableFileSizeError(absPath: string): string | null {
  *  pulse, skip the futile embed round-trip.
  *
  *  Cached by (size, mtime): the status poll runs every 1.5s while the
- *  sidebar pulses, and re-analyzing a 2MB HTML on each tick would be
+ *  sidebar pulses, and re-analyzing a large HTML on each tick would be
  *  wasted work. */
 const noTextCache = new Map<string, { size: number; mtimeMs: number; noText: boolean }>();
 
