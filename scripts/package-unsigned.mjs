@@ -79,7 +79,7 @@ function runElectronBuilder() {
   assertPnpmCollectorInput();
   const fallback = preparePnpmCollectorFallback();
   try {
-    run(electronBuilderBin, [`--${platform}`, ...target], {
+    run(electronBuilderBin, [`--${platform}`, ...target, '--publish', 'never'], {
       ...fallback.env,
       CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     });

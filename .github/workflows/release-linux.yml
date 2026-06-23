@@ -44,9 +44,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Linux Python sidecar
-        run: pnpm build:python-sidecar
+        run: pnpm build:python-extract-sidecar
 
       - name: Build Debian package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STASHBASE_REQUIRE_EXTRACT: '1'
         run: STASHBASE_SKIP_SIDECAR_BUILD=1 pnpm dist:linux
 
       - name: Upload Debian package to release
