@@ -623,6 +623,31 @@ def _hash_text(text: str) -> str:
     return blake3(text.encode("utf-8", errors="replace")).hexdigest()
 
 
+def _flush_store(store) -> None:
+    """Make successful writes visible to immediate scan/status queries.
+
+    Milvus Lite can acknowledge an upsert before a following query_iterator
+    observes the rows. Sync's I2 check intentionally asks status right after
+    writing, so flush after committed inserts/updates and keep failures
+    non-fatal: the write already succeeded, and later flushes/reopens may
+    still make it visible.
+    """
+    client = getattr(store, "client", None)
+    config = getattr(store, "_config", None)
+    collection = getattr(config, "collection_name", None)
+    if client is None or not collection or not hasattr(client, "flush"):
+        return
+    try:
+        client.flush(collection_name=collection)
+    except TypeError:
+        try:
+            client.flush(collection)
+        except Exception as err:
+            print(f"[stashbase] flush warn: {err}", file=sys.stderr)
+    except Exception as err:
+        print(f"[stashbase] flush warn: {err}", file=sys.stderr)
+
+
 def _embed_with_cache(svc: "StashbaseStore", path: str, embedder, texts: list[str]) -> list:
     """Embed ``texts``, reusing vectors from the space's snapshot cache
     (keyed by ``BLAKE3(chunk_text)``) where present. A snapshot is a pure
@@ -745,6 +770,7 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
             account_id="stashbase",
         ))
     store.insert_chunks(records)
+    _flush_store(store)
     return {
         "chunks": len(records),
         "embed_ms": embed_ms,
@@ -884,6 +910,7 @@ def _try_rename_without_reembed(
     # All rows validated — commit the copy + drop the old source.
     for store, records in per_store_records:
         store.insert_chunks(records)
+        _flush_store(store)
     for _pk, _emb, store in svc.stores():
         try:
             store.delete_by_source(old)

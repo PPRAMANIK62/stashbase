@@ -223,8 +223,8 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
         continue;
       }
       try {
-        await indexer.renameFile(r.old, r.new, content);
-        renamedDone.push(r.new);
+        const chunks = await indexer.renameFile(r.old, r.new, content);
+        if (chunks > 0) renamedDone.push(r.new);
       } catch (err: any) {
         failed.push({ name: r.new, error: errorMessage(err) });
         await deleteStaleRenameSource(indexer, r.old, failed);
@@ -276,7 +276,8 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
         cancelled: true,
       };
     }
-    if (await indexOne(indexer, space, kbRel, failed)) addedDone.push(kbRel);
+    const chunks = await indexOne(indexer, space, kbRel, failed);
+    if (chunks > 0) addedDone.push(kbRel);
   }
   for (const kbRel of modifiedCandidates) {
     if (shouldStop(opts)) {
@@ -289,7 +290,8 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
         cancelled: true,
       };
     }
-    if (await indexOne(indexer, space, kbRel, failed)) modifiedDone.push(kbRel);
+    const chunks = await indexOne(indexer, space, kbRel, failed);
+    if (chunks > 0) modifiedDone.push(kbRel);
   }
 
   log.info(
@@ -309,45 +311,45 @@ export async function syncIndex(indexer: Indexer, space: string, opts: SyncOptio
 }
 
 /** Read the file at `kbRel` and upsert it under its kbRoot-relative
- *  path. Returns true on success, pushes a failure record otherwise. */
+ *  path. Returns the stored chunk count on success, 0 when skipped or
+ *  unchunkable, and pushes a failure record on real failure. */
 async function indexOne(
   indexer: Indexer,
   space: string,
   kbRel: string,
   failed: { name: string; error: string }[],
-): Promise<boolean> {
+): Promise<number> {
   const spaceRel = spaceRelOf(space, kbRel);
   if (spaceRel == null) {
     // Daemon reported a path outside the space this sync is scoped to —
     // shouldn't happen, but guard so a cross-space surprise can't wedge
     // the loop.
     failed.push({ name: kbRel, error: `path not under synced space "${space}"` });
-    return false;
+    return 0;
   }
   if (!shouldIndexFilePath(spaceRel)) {
     try { await indexer.deleteFile(kbRel); } catch { /* best-effort stale cleanup */ }
-    return false;
+    return 0;
   }
   const tooLarge = indexableFileSizeError(path.join(getKbRoot(), kbRel));
   if (tooLarge) {
     try { await indexer.deleteFile(kbRel); } catch { /* best-effort stale cleanup */ }
     failed.push({ name: kbRel, error: tooLarge });
     log.warn(`skipped ${kbRel}: ${tooLarge}`);
-    return false;
+    return 0;
   }
   const content = readTextAtKbRel(kbRel);
   if (content == null) {
     failed.push({ name: kbRel, error: 'read returned null' });
-    return false;
+    return 0;
   }
   try {
-    await indexer.upsertFile(kbRel, content);
-    return true;
+    return await indexer.upsertFile(kbRel, content);
   } catch (err: any) {
     const msg = errorMessage(err);
     failed.push({ name: kbRel, error: msg });
     log.warn(`failed ${kbRel}: ${msg}`);
-    return false;
+    return 0;
   }
 }
 

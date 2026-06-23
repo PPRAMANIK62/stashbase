@@ -426,11 +426,31 @@ function syncTouchedVisibleTree(result: SyncResult): boolean {
     || result.failed.length > 0;
 }
 
+const spaceSyncQueues = new Map<string, Promise<unknown>>();
+
 export async function syncSpaceNow(
   spaceRoot: string,
   opts: { reason?: string; shouldContinue?: () => boolean } = {},
 ): Promise<SyncResult> {
   const syncSpaceName = spaceNameFromAbs(spaceRoot);
+  const prev = spaceSyncQueues.get(syncSpaceName) ?? Promise.resolve();
+  const next = prev
+    .catch(() => undefined)
+    .then(() => syncSpaceNowInner(spaceRoot, syncSpaceName, opts));
+  const settled = next.finally(() => {
+    if (spaceSyncQueues.get(syncSpaceName) === settled) {
+      spaceSyncQueues.delete(syncSpaceName);
+    }
+  });
+  spaceSyncQueues.set(syncSpaceName, settled);
+  return next;
+}
+
+async function syncSpaceNowInner(
+  spaceRoot: string,
+  syncSpaceName: string,
+  opts: { reason?: string; shouldContinue?: () => boolean },
+): Promise<SyncResult> {
   const syncGeneration = currentSpaceSyncGeneration(syncSpaceName);
   const shouldContinue = () => shouldContinueSpaceSync(syncSpaceName, syncGeneration, opts.shouldContinue);
   try {

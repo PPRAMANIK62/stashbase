@@ -29,9 +29,13 @@ class FakeIndexer implements Indexer {
   deleted: string[] = [];
   upserted: string[] = [];
   renamed: Array<{ oldPath: string; newPath: string; content: string }> = [];
+  upsertChunks = new Map<string, number>();
+  renameChunks = new Map<string, number>();
   failDeletes = new Set<string>();
   failRenames = new Set<string>();
   syncDiffCalls = 0;
+  statusCalls = 0;
+  statusPending: string[] = [];
   indexedFiles: Record<string, string> = {};
 
   constructor(private readonly diff: SyncDiff) {}
@@ -39,8 +43,9 @@ class FakeIndexer implements Indexer {
   async bindSpace(_space: string, _cfg: EmbedderRuntimeConfig): Promise<void> {}
   async unbindSpace(_space: string): Promise<void> {}
 
-  async upsertFile(filePath: string, _content: string): Promise<void> {
+  async upsertFile(filePath: string, _content: string): Promise<number> {
     this.upserted.push(filePath);
+    return this.upsertChunks.get(filePath) ?? 1;
   }
 
   async deleteFile(filePath: string): Promise<void> {
@@ -49,9 +54,10 @@ class FakeIndexer implements Indexer {
   }
 
   async deletePathPrefix(_prefix: string): Promise<void> {}
-  async renameFile(oldPath: string, newPath: string, content: string): Promise<void> {
+  async renameFile(oldPath: string, newPath: string, content: string): Promise<number> {
     if (this.failRenames.has(newPath)) throw new Error('rename failed');
     this.renamed.push({ oldPath, newPath, content });
+    return this.renameChunks.get(newPath) ?? 1;
   }
   async renamePathPrefix(_oldPrefix: string, _newPrefix: string, _files: Array<{ path: string; content: string }>): Promise<void> {}
   async search(_query: string, _topK: number, _space?: string, _pathPrefix?: string): Promise<SearchHit[]> { return []; }
@@ -60,7 +66,16 @@ class FakeIndexer implements Indexer {
     return this.diff;
   }
   async status(_space?: string): Promise<IndexStatus> {
-    return { total: 0, indexed: 0, pendingCount: 0, pending: [], orphanedCount: 0, orphaned: [], upToDate: true };
+    this.statusCalls += 1;
+    return {
+      total: 0,
+      indexed: 0,
+      pendingCount: this.statusPending.length,
+      pending: this.statusPending,
+      orphanedCount: 0,
+      orphaned: [],
+      upToDate: this.statusPending.length === 0,
+    };
   }
   async listFiles(_space?: string): Promise<Record<string, string>> { return this.indexedFiles; }
   async closeStore(): Promise<void> {}
@@ -128,6 +143,30 @@ test('syncIndex stops between files when the caller cancels a stale sync', async
   assert.equal(result.cancelled, true);
   assert.deepEqual(result.added, ['one.md']);
   assert.deepEqual(fake.upserted, ['Project/one.md']);
+});
+
+test('syncIndex does not assert convergence for zero-chunk upserts', async () => {
+  const kbRoot = tmpDir('sync-zero-chunk-kb');
+  const spaceRoot = path.join(kbRoot, 'Project');
+  fs.mkdirSync(spaceRoot, { recursive: true });
+  fs.writeFileSync(path.join(spaceRoot, 'tiny.md'), 'hegen\nLarainoh\nPHILIPS\n');
+  await configureForSyncTest(kbRoot);
+  const { syncIndex } = await import('./sync.ts');
+  const fake = new FakeIndexer({
+    added: ['Project/tiny.md'],
+    modified: [],
+    deleted: [],
+    renamed: [],
+  });
+  fake.upsertChunks.set('Project/tiny.md', 0);
+  fake.statusPending = ['Project/tiny.md'];
+
+  const result = await syncIndex(fake, 'Project');
+
+  assert.deepEqual(fake.upserted, ['Project/tiny.md']);
+  assert.deepEqual(result.added, []);
+  assert.equal(result.failed.length, 0);
+  assert.equal(fake.statusCalls, 0);
 });
 
 test('syncIndex deletes the stale source row when a detected rename target is not indexable', async () => {

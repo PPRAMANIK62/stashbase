@@ -146,19 +146,19 @@ export class MfsIndexer implements Indexer {
     this.spaceIndex.get(space)?.delete(kbRel);
   }
 
-  async upsertFile(filePath: string, content: string): Promise<void> {
+  async upsertFile(filePath: string, content: string): Promise<number> {
     if (!shouldIndexKbRel(filePath)) {
       this.noteUnindexed(filePath);
       await getDaemon().call('delete', { path: filePath });
       log.info(`upsert ${filePath}: skipped by index rules`);
-      return;
+      return 0;
     }
     const tooLarge = contentSizeError(content);
     if (tooLarge) {
       this.noteUnindexed(filePath);
       await getDaemon().call('delete', { path: filePath });
       log.warn(`upsert ${filePath}: ${tooLarge}`);
-      return;
+      return 0;
     }
     const { text, ext, fileHash } = prepareForIndex(filePath, content);
     // Mark not-indexed while we re-embed so an in-flight status() during
@@ -172,7 +172,7 @@ export class MfsIndexer implements Indexer {
     if (text.trim().length === 0) {
       await getDaemon().call('delete', { path: filePath });
       log.info(`upsert ${filePath}: no extractable text, skipped embedding`);
-      return;
+      return 0;
     }
     const t0 = Date.now();
     const res = await getDaemon().call<{ chunks: number; embed_ms: number; total_ms: number }>(
@@ -183,6 +183,7 @@ export class MfsIndexer implements Indexer {
       `upsert ${filePath}: ${res.chunks} chunks ` +
         `(embed ${fmtMs(res.embed_ms)}, total ${fmtMs(res.total_ms)}, wall ${fmtMs(Date.now() - t0)})`,
     );
+    return res.chunks;
   }
 
   async deleteFile(filePath: string): Promise<void> {
@@ -207,7 +208,7 @@ export class MfsIndexer implements Indexer {
     log.info(`delete_prefix ${prefix}: removed ${res.removed} chunk(s) from index`);
   }
 
-  async renameFile(oldPath: string, newPath: string, content: string): Promise<void> {
+  async renameFile(oldPath: string, newPath: string, content: string): Promise<number> {
     const { text, ext, fileHash } = prepareForIndex(newPath, content);
     const t0 = Date.now();
     const res = await getDaemon().call<{ chunks: number; embed_ms: number; fast_path?: boolean }>(
@@ -223,6 +224,7 @@ export class MfsIndexer implements Indexer {
       `rename ${oldPath} → ${newPath}: ${how} ${res.chunks} chunks ` +
         `(embed ${fmtMs(res.embed_ms)}, wall ${fmtMs(Date.now() - t0)})`,
     );
+    return res.chunks;
   }
 
   async renamePathPrefix(

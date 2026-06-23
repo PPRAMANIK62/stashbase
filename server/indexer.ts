@@ -54,9 +54,10 @@ export interface Indexer {
    *  searchable until explicit delete. */
   unbindSpace(space: string): Promise<void>;
 
-  /** Insert / replace all chunks for one file. Empty content is valid —
-   *  the file disappears from the index but no error is raised. */
-  upsertFile(path: string, content: string): Promise<void>;
+  /** Insert / replace all chunks for one file. Returns the number of
+   *  chunks actually stored. Empty / unchunkable content is valid: the
+   *  file disappears from the index, returns 0, and no error is raised. */
+  upsertFile(path: string, content: string): Promise<number>;
 
   /** Drop all chunks for one file. Safe to call on a never-indexed file. */
   deleteFile(path: string): Promise<void>;
@@ -70,8 +71,9 @@ export interface Indexer {
    *  impl fast-paths this: when every stored chunk's `file_hash` still
    *  matches, it reuses the cached `dense_vector`s and only rewrites
    *  `source` / `id` (no re-embed). It falls back to a full
-   *  delete + re-insert if any chunk drifted or lacks a vector. */
-  renameFile(oldPath: string, newPath: string, content: string): Promise<void>;
+   *  delete + re-insert if any chunk drifted or lacks a vector. Returns
+   *  the number of chunks present under the new path. */
+  renameFile(oldPath: string, newPath: string, content: string): Promise<number>;
 
   /** Move every file under `oldPrefix` to `newPrefix`. `files` carries
    *  the bodies under the OLD paths. The MFS impl deletes every
