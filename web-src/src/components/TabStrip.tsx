@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { useApp } from '../store/AppContext';
-import { stashingPaths } from '../store/state';
+import { isVisibleStashing } from '../store/state';
 import { StashBaseIcon } from '../icons';
 
 const TAB_MIME = 'application/x-stashbase-tab';
@@ -96,9 +96,6 @@ export function TabStrip() {
     onDragEnd();
   }
 
-  // One membership set for the whole strip — converting OR indexing.
-  const stashing = new Set(stashingPaths(state));
-
   return (
     <div className="tab-strip">
       <div
@@ -116,7 +113,7 @@ export function TabStrip() {
           // (embedding). We mark it on its tab with the StashBase logo (a
           // placeholder for the eventual animated mark) so an opened-but-
           // not-yet-stashed file reads as "in progress", not broken.
-          const isStashing = !!t.file && stashing.has(t.file.name);
+          const isStashing = !!t.file && isVisibleStashing(state, t.file.name);
           const dropEdge = dropTarget?.id === t.id ? dropTarget.edge : null;
           const cls = 'tab'
             + (isActive ? ' active' : '')

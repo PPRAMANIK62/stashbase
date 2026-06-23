@@ -94,9 +94,14 @@ export function Welcome() {
 
   useEffect(() => {
     if (!state.welcomeVisible) return;
+    let cancelled = false;
     void Promise.all([api.getSpace(), refreshKbRoot()])
-      .then(([j]) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
+      .then(([j]) => {
+        if (cancelled) return;
+        dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir });
+      })
       .catch(() => { /* keep the current welcome state */ });
+    return () => { cancelled = true; };
   }, [dispatch, refreshKbRoot, state.welcomeVisible]);
 
   function openOpenSpaceModal() {

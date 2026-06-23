@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   initialState,
+  isVisibleIndexPending,
+  isVisibleStashing,
   optimisticKeyBackfillPaths,
   reducer,
   renamedFilePath,
@@ -152,6 +154,20 @@ test('stashingPaths resumes pending note visibility when an embedder key is adde
   const withKey = reducer(withoutKey, { type: 'EMBEDDER_KEY_STATE', hasKey: true });
 
   assert.deepEqual(stashingPaths(withKey), ['note.md', 'paper.pdf']);
+});
+
+test('visible stashing helpers apply key and hidden-path rules consistently', () => {
+  const state: State = {
+    ...initialState,
+    embedderHasKey: false,
+    pendingNames: new Set(['note.md', '.paper.pdf.md']),
+    pendingConversions: ['paper.pdf', '.hidden.md'],
+  };
+
+  assert.equal(isVisibleIndexPending(state, 'note.md'), false);
+  assert.equal(isVisibleStashing(state, 'note.md'), false);
+  assert.equal(isVisibleStashing(state, 'paper.pdf'), true);
+  assert.deepEqual(stashingPaths(state), ['paper.pdf']);
 });
 
 test('optimisticKeyBackfillPaths marks only visible searchable files', () => {

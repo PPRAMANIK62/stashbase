@@ -328,6 +328,8 @@ export function mount(app: express.Express): void {
         pending,
         pendingCount: pending.length,
         orphaned,
+        orphanedCount: orphaned.length,
+        visibleIndexingSettled: pending.length === 0,
         pendingConversions: getInFlightConversions(space),
         conversionProgress: space ? conversionProgressForSpace(space) : {},
         conversionFailures,

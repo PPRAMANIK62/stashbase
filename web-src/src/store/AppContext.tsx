@@ -404,9 +404,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  poll right after a drop under-counts and lags — a 4-file drop can
    *  read "3 stashing" because one embed finished while `status` waited
    *  in line. We optimistically mark every imported note as pending and
-   *  keep it until the space reports fully up-to-date (the batch is done)
+   *  keep it until the UI-visible pending set settles (the batch is done)
    *  or the grace expires. Unlike conversions we do NOT hand off per-file
-   *  — mid-embed `pending` is unreliable, so `upToDate` is the signal. */
+   *  — mid-embed `pending` is unreliable, so the server sends a dedicated
+   *  `visibleIndexingSettled` signal for this renderer-only state. */
   const importIndexGrace = useRef<Map<string, number>>(new Map());
   /** Promise resolver for the pending cascade dialog. Set when the
    *  rename action asks the user; cleared once they pick. */
@@ -636,6 +637,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       const indexReady = s.indexReady !== false;
       const newPending = indexReady ? new Set(s.pending ?? []) : new Set<string>();
+      const visibleIndexingSettled =
+        stateRef.current.embedderHasKey === false
+        || (indexReady && (s.visibleIndexingSettled ?? newPending.size === 0));
       let newConv = s.pendingConversions ?? [];
       // Fold in optimistically-marked imports the server hasn't started
       // reporting yet (it registers the conversion only after responding
@@ -658,16 +662,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
       // Same fold for optimistically-marked note imports — but keyed on
-      // `upToDate`, not per-path hand-off: the daemon serialises `status`
-      // behind in-flight embeds, so a fresh drop's files flicker in and
-      // out of `pending` unreliably. Hold every graced import in
-      // `newPending` until the space is fully indexed (batch done) or the
-      // grace expires, so a 4-file drop reads "4 stashing" the instant it
-      // lands and clears cleanly when the last embed finishes.
+      // the renderer-facing visibleIndexingSettled signal, not raw daemon
+      // upToDate. The daemon serialises `status` behind in-flight embeds,
+      // so a fresh drop's files flicker in and out of `pending`
+      // unreliably. Hold every graced import in `newPending` until the
+      // UI-visible pending set settles (batch done) or the grace expires.
       if (importIndexGrace.current.size > 0) {
         const now = Date.now();
         for (const [name, deadline] of importIndexGrace.current) {
-          if (indexReady && s.upToDate) {
+          if (visibleIndexingSettled) {
             importIndexGrace.current.delete(name); // batch fully indexed
           } else if (now <= deadline) {
             newPending.add(name);
@@ -748,7 +751,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Keep polling fast while a conversion is in flight, even if
       // the index itself is settled — the user is waiting on a file
       // to appear.
-      const busy = !indexReady || !s.upToDate || newConv.length > 0;
+      const busy = !indexReady || !visibleIndexingSettled || newConv.length > 0;
       nextDelay = busy ? POLL_PENDING_MS : POLL_IDLE_MS;
     } catch (err) {
       if (stateRef.current.space !== spaceAtStart) {

@@ -117,6 +117,10 @@ export interface IndexStatus {
   orphanedCount: number;
   orphaned: string[];
   upToDate: boolean;
+  /** True when no UI-visible file is waiting for embedding. Unlike
+   *  upToDate, this ignores orphaned/hidden index rows that are not
+   *  rendered as "stashing" work in the file tree. */
+  visibleIndexingSettled?: boolean;
   /** False while the server is still loading the index cache for a space. */
   indexReady?: boolean;
   /** Space-relative paths of PDFs the server is currently converting

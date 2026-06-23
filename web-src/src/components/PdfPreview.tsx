@@ -13,6 +13,7 @@ import {
 import PdfWorker from '../lib/pdfWorker?worker';
 import { api, assetUrl, errorMessage } from '../api';
 import { useApp } from '../store/AppContext';
+import { isVisibleStashing } from '../store/state';
 
 // Polyfill the main-thread scope too — render() calls getOrInsertComputed
 // synchronously before it ever talks to the worker.
@@ -306,7 +307,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const failureMessage = failure ? pdfConversionFailureMessage(failure.lastError) : '';
   const conversionProgress = state.conversionProgress[name];
   const notSearchableYet = !failure
-    && (state.pendingConversions.includes(name) || state.pendingNames.has(name));
+    && isVisibleStashing(state, name);
   const notSearchableDetail = pdfNotSearchableDetail(conversionProgress, numPages);
   const chromeStatus = failure && showConversionBanner
     ? {

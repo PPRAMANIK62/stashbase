@@ -494,6 +494,25 @@ export function getActiveTab(s: State): Tab | null {
   return s.tabs.find((t) => t.id === s.activeTabId) ?? null;
 }
 
+function isHiddenStatusPath(path: string): boolean {
+  return path.split('/').some((seg) => seg.startsWith('.'));
+}
+
+export function isVisibleIndexPending(s: State, path: string): boolean {
+  // Without an OpenAI key the embedder is off, so the not-yet-embedded set
+  // never drains — those files aren't "in progress", they're as searchable
+  // as they'll get (keyword via ripgrep). Only suppress on a known missing
+  // key (false); null = not yet checked.
+  return s.embedderHasKey !== false
+    && s.pendingNames.has(path)
+    && !isHiddenStatusPath(path);
+}
+
+export function isVisibleStashing(s: State, path: string): boolean {
+  return (s.pendingConversions.includes(path) && !isHiddenStatusPath(path))
+    || isVisibleIndexPending(s, path);
+}
+
 /** Space-relative paths that count as "stashing" — the work the user is
  *  waiting on before a dropped/imported file is fully searchable. Two
  *  sources, unioned: `pendingConversions` (slow extraction/analysis of PDF /
@@ -505,17 +524,12 @@ export function getActiveTab(s: State): Tab | null {
  *  both). Deduped + sorted so the sidebar pill and the per-tab mark agree
  *  on one stable list. */
 export function stashingPaths(s: State): string[] {
-  const out = new Set(s.pendingConversions);
-  // Without an OpenAI key the embedder is off, so the not-yet-embedded set
-  // never drains — those files aren't "in progress", they're as searchable
-  // as they'll get (keyword via ripgrep). Counting them would spin the
-  // stashing indicator forever (see "23 stashing" with no key). Conversions
-  // (local OCR / Gemini) don't need this key, so they stay counted. Only
-  // suppress on a *known* missing key (false); null = not yet checked.
-  if (s.embedderHasKey !== false) {
-    for (const p of s.pendingNames) {
-      if (!p.split('/').some((seg) => seg.startsWith('.'))) out.add(p);
-    }
+  const out = new Set<string>();
+  for (const p of s.pendingConversions) {
+    if (!isHiddenStatusPath(p)) out.add(p);
+  }
+  for (const p of s.pendingNames) {
+    if (isVisibleIndexPending(s, p)) out.add(p);
   }
   return [...out].sort();
 }
