@@ -89,7 +89,8 @@ const OPENAI_KEY_CHECK_TIMEOUT_MS = 15_000;
  *  route, key-rotate route, and any future caller share the same
  *  network / parsing behaviour. `status` carries the HTTP status the
  *  caller should respond with: 400 when OpenAI rejected the key, 502
- *  when we couldn't reach OpenAI at all. */
+ *  when the check could not prove the key invalid (network / transient
+ *  upstream failure). */
 export async function validateOpenAIKey(
   key: string,
   opts: { timeoutMs?: number } = {},
@@ -101,6 +102,13 @@ export async function validateOpenAIKey(
     });
     if (r.ok) return { ok: true };
     const detail = await r.text().catch(() => '');
+    if (r.status !== 401 && r.status !== 403) {
+      return {
+        ok: false,
+        status: 502,
+        error: `OpenAI key check could not complete (HTTP ${r.status}): ${detail.slice(0, 200)}`,
+      };
+    }
     return {
       ok: false,
       status: 400,

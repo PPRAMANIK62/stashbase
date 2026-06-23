@@ -31,6 +31,21 @@ test('validateOpenAIKey maps OpenAI rejection to a user-facing 400', async () =>
   }
 });
 
+test('validateOpenAIKey maps transient OpenAI failures to a retryable 502', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response('try later', { status: 500 })) as typeof fetch;
+  try {
+    const result = await validateOpenAIKey('sk-transient');
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.status, 502);
+      assert.match(result.error, /could not complete \(HTTP 500\): try later/);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('validateOpenAIKey times out stalled network checks', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {

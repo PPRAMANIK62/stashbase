@@ -17,7 +17,7 @@ export function RequireApiKeyModal({
   onSaved,
   onLater,
 }: {
-  onSaved: () => void;
+  onSaved: (warning?: string) => void;
   onLater: () => void;
 }) {
   const [key, setKey] = useState('');
@@ -32,11 +32,11 @@ export function RequireApiKeyModal({
     setBusy(true);
     setError(null);
     try {
-      // `changeApiKey` server-side validates against OpenAI /v1/models,
+      // `changeApiKey` server-side rejects definite OpenAI auth failures,
       // persists to `~/.stashbase/config.json`, and rebinds so the next
       // search uses the new key (creating the collection on first key).
-      await api.changeApiKey(k);
-      onSaved();
+      const result = await api.changeApiKey(k);
+      onSaved(result.warning);
     } catch (err: unknown) {
       const msg = err instanceof ApiError ? err.message : errorMessage(err);
       setError(msg);

@@ -17,6 +17,14 @@
  *  than the server's on purpose. */
 export type FileFormat = 'md' | 'html' | 'pdf' | 'image';
 
+export interface ApiKeySaveResult {
+  hasKey: true;
+  /** Present when the key was saved but StashBase could not reach
+   *  OpenAI to validate it at save time. Indexing/search will surface the
+   *  real connectivity failure if it persists. */
+  warning?: string;
+}
+
 export interface FileMeta {
   name: string;
   format: FileFormat;
@@ -622,7 +630,7 @@ export const api = {
     }>('POST', '/api/mcp/disconnect', { client }),
   /** Rotate the global OpenAI key without touching the provider choice. */
   changeApiKey: (openaiKey: string) =>
-    send<{ hasKey: true }>('PUT', '/api/embedder/key', { openaiKey }),
+    send<ApiKeySaveResult>('PUT', '/api/embedder/key', { openaiKey }),
   /** Clear the global OpenAI key. Embedding and semantic search stay
    *  disabled until a key is added back; keyword search is unaffected. */
   removeApiKey: () =>

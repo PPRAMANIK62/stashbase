@@ -46,11 +46,12 @@ export function EmbeddingPanel() {
   const retryLoad = useCallback(() => setLoadNonce((n) => n + 1), []);
 
   async function onKeyChanged(key: string) {
-    await api.changeApiKey(key);
+    const result = await api.changeApiKey(key);
     if (!mountedRef.current) return;
     setKeyEditOpen(false);
     setState((s) => (s ? { ...s, hasKey: true } : s));
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
+    if (result.warning) actions.toast(`OpenAI key saved, but validation could not reach OpenAI: ${result.warning}`, { level: 'warning' });
     void actions.refreshIndexState();
   }
 
@@ -60,13 +61,14 @@ export function EmbeddingPanel() {
     setAddBusy(true);
     setAddError(null);
     try {
-      // changeApiKey validates server-side before persisting, so the
-      // success path only does one OpenAI round trip.
-      await api.changeApiKey(trimmed);
+      // changeApiKey rejects definite OpenAI auth failures server-side, so
+      // the success path only does one OpenAI validation round trip.
+      const result = await api.changeApiKey(trimmed);
       if (!mountedRef.current) return;
       setAddKey('');
       setState((s) => (s ? { ...s, hasKey: true } : s));
       dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
+      if (result.warning) actions.toast(`OpenAI key saved, but validation could not reach OpenAI: ${result.warning}`, { level: 'warning' });
       void actions.markVisibleFilesStashing();
       void actions.refreshIndexState();
     } catch (err: unknown) {

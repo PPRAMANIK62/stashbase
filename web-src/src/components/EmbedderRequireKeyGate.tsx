@@ -37,10 +37,11 @@ export function EmbedderRequireKeyGate() {
 
   return (
     <RequireApiKeyModal
-      onSaved={() => {
+      onSaved={(warning) => {
         setState((s) => (s ? { ...s, hasKey: true } : s));
         dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
         setOpen(false);
+        if (warning) actions.toast(`OpenAI key saved, but validation could not reach OpenAI: ${warning}`, { level: 'warning' });
         void actions.markVisibleFilesStashing();
         void actions.refreshIndexState();
       }}

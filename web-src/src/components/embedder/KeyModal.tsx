@@ -1,7 +1,7 @@
 /**
  * OpenAI key entry modal. The caller persists through `/api/embedder/key`,
- * which validates against /v1/models before writing config. `mode='change'`
- * only swaps the title + button text.
+ * which rejects definite OpenAI auth failures before writing config.
+ * `mode='change'` only swaps the title + button text.
  */
 import { useEffect, useRef, useState } from 'react';
 import { errorMessage } from '../../api';
@@ -28,9 +28,9 @@ export function KeyModal({
     setBusy(true);
     setError(null);
     try {
-      // The caller saves via changeApiKey, whose server route validates
-      // before persisting; don't preflight here or successful saves pay
-      // for two OpenAI validation calls.
+      // The caller saves via changeApiKey, whose server route rejects
+      // definite OpenAI auth failures; don't preflight here or successful
+      // saves pay for two OpenAI validation calls.
       await onSaved(trimmed);
     } catch (err: unknown) {
       setError(errorMessage(err));

@@ -25,15 +25,17 @@ export function mount(app: express.Express): void {
     });
   });
 
-  // Set / rotate the global OpenAI key. Validates first so a typo can't
-  // blow away a working one, then rebinds the current space so the
-  // daemon picks up the key for subsequent embeds (and creates the
-  // collection on the first key).
+  // Set / rotate the global OpenAI key. A definite OpenAI rejection
+  // blocks the save so a typo can't blow away a working key. A network /
+  // transient validation failure still saves the key: offline/proxied
+  // machines need to configure first and let indexing report connectivity
+  // failures later.
   app.put('/api/embedder/key', async (req, res) => {
     const key = typeof req.body?.openaiKey === 'string' ? req.body.openaiKey.trim() : '';
     if (!key) return res.status(400).json({ error: 'openaiKey required' });
     const check = await validateOpenAIKey(key);
-    if (!check.ok) return res.status(check.status).json({ error: check.error });
+    const warning = check.ok ? undefined : check.error;
+    if (!check.ok && check.status < 500) return res.status(check.status).json({ error: check.error });
     try {
       setApiKey(key);
     } catch (err: unknown) {
@@ -50,7 +52,7 @@ export function mount(app: express.Express): void {
     } catch (err: unknown) {
       log.warn(`key set: runtime reset/rebind failed: ${errorMessage(err)}`);
     }
-    res.json({ hasKey: true });
+    res.json({ hasKey: true, ...(warning ? { warning } : {}) });
   });
 
   // Wipe the global OpenAI key. New embed / search calls will no-op
