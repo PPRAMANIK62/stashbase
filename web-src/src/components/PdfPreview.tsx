@@ -63,6 +63,15 @@ function foldPdfText(s: string): string {
     .replace(/[  ​]/g, ' ');
 }
 
+function charLengthAt(text: string, offset: number): number {
+  const first = text.charCodeAt(offset);
+  if (first >= 0xd800 && first <= 0xdbff && offset + 1 < text.length) {
+    const second = text.charCodeAt(offset + 1);
+    if (second >= 0xdc00 && second <= 0xdfff) return 2;
+  }
+  return 1;
+}
+
 interface FlatPage {
   flat: string;
   compact: string;
