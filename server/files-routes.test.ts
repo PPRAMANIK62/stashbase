@@ -75,6 +75,19 @@ test('saveFileContent detects same-size external edits that preserve mtime', asy
   assert.equal(files.readText('same-size.md'), 'bbbb\n');
 });
 
+test('fileVersion ignores metadata-only churn from sync providers', async () => {
+  const first = await saveFileContent('same-content.md', 'same\n');
+  const file = path.join(initialSpaceRoot, 'same-content.md');
+  const before = fs.statSync(file);
+  fs.utimesSync(file, before.atime, new Date(before.mtimeMs + 1000));
+
+  const result = await saveFileContent('same-content.md', 'same\n', { baseVersion: first.version });
+
+  assert.equal(files.readText('same-content.md'), 'same\n');
+  assert.equal(result.version, files.fileVersion('same-content.md'));
+  assert.equal(result.version, first.version);
+});
+
 test('saveFileContent with a stale version does not recreate a deleted file', async () => {
   const first = await saveFileContent('deleted.md', 'first\n');
   files.deleteFile('deleted.md');

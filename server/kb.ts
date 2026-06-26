@@ -32,7 +32,7 @@ export function kbRulesVersion(): string | null {
   try {
     const st = fs.statSync(kbRulesPath());
     if (!st.isFile()) return null;
-    return `${st.dev}:${st.ino}:${st.ctimeMs}:${st.mtimeMs}:${st.size}`;
+    return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(kbRulesPath())).digest('hex')}`;
   } catch {
     return null;
   }
@@ -42,6 +42,7 @@ export function setKbRules(content: string, opts: { baseVersion?: string } = {})
   if (opts.baseVersion !== undefined) {
     const currentVersion = kbRulesVersion();
     if (currentVersion !== opts.baseVersion) {
+      if (getKbRules() === content) return currentVersion;
       const err = new Error('KB rules changed on disk; reload before saving');
       (err as any).code = 'FILE_CHANGED';
       (err as any).currentVersion = currentVersion;

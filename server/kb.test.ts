@@ -70,3 +70,19 @@ test('setKbRules detects same-size external edits that preserve mtime', async ()
   );
   assert.equal(getKbRules(), 'bbbb\n');
 });
+
+test('kbRulesVersion ignores metadata-only churn from sync providers', async () => {
+  const kbRoot = await openKbRoot('rules-same-content-write');
+  const { getKbRules, kbRulesVersion, setKbRules } = await import('./kb.ts');
+
+  const first = setKbRules('same\n');
+  const file = path.join(kbRoot, 'STASHBASE.md');
+  const before = fs.statSync(file);
+  fs.utimesSync(file, before.atime, new Date(before.mtimeMs + 1000));
+
+  const result = setKbRules('same\n', { baseVersion: first ?? undefined });
+
+  assert.equal(getKbRules(), 'same\n');
+  assert.equal(result, kbRulesVersion());
+  assert.equal(result, first);
+});

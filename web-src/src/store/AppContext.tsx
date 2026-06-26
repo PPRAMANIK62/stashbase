@@ -180,8 +180,7 @@ export interface AppActions {
    *  running operation finally settles).
    *
    *  Default ttl: info / success 3000ms, warning 5000ms, error null
-   *  (persistent — error toasts only go away when the user clicks
-   *  the × or presses Esc / clicks the Reload button on the toast). */
+   *  (persistent — error toasts only go away when the user dismisses them). */
   toast: (
     message: string,
     opts?: {
@@ -592,14 +591,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  (typically: Claude Code wrote to the file via its `Edit` tool from
    *  the panel). No-op when nothing's open, when the active tab is in
    *  edit mode (would clobber the unsaved buffer), or when disk + tab
-   *  agree. Failures are swallowed — the sidebar reload that runs in
+   *  agree. `force` is only for an explicit user reload after a save
+   *  conflict; it discards the editor buffer and reopens the tab from
+   *  disk. Failures are swallowed — the sidebar reload that runs in
    *  the same poll cycle covers the "file got deleted externally" case. */
-  const refreshActiveTabFromDisk = useCallback(async () => {
+  const refreshActiveTabFromDisk = useCallback(async (opts: { force?: boolean } = {}) => {
     const tab = getActiveTab(stateRef.current);
     if (!tab?.file) return;
-    if (tab.editMode) return;
+    if (tab.editMode && !opts.force) return;
     const spaceAtStart = stateRef.current.space;
     const name = tab.file.name;
+    const kind = tab.file.kind;
     try {
       const body = tab.file.kind === 'kb'
         ? await api.getKbRules().then((r) => ({ content: r.content, version: r.version }))
@@ -609,7 +611,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (stateRef.current.space !== spaceAtStart) return;
       const latestActive = getActiveTab(stateRef.current);
       const latestFile = latestActive?.file;
-      if (!latestFile || latestFile.name !== name || latestFile.kind !== tab.file.kind) return;
+      if (!latestFile || latestFile.name !== name || latestFile.kind !== kind) return;
+      if (opts.force) {
+        dispatch({
+          type: 'FILE_OPEN',
+          body: {
+            name,
+            format: latestFile.format,
+            content: body.content,
+            version: 'version' in body ? body.version : undefined,
+            ...(kind ? { kind } : {}),
+          } as any,
+        });
+        dispatch({ type: 'SAVE_STATUS', status: { text: 'Reloaded from disk', cls: 'saved' } });
+        return;
+      }
       if (latestActive?.editMode) return;
       if (body.content === latestFile.content) return;
       dispatch({
@@ -912,18 +928,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return true;
       }
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
-      try {
-        let savedVersion = cur.version;
+      const saveContent = async (baseVersion?: string) => {
         if (cur.kind === 'kb') {
-          if (cur.name === 'STASHBASE.md') {
-            const result = await api.putKbRules(content, cur.version);
-            savedVersion = result.version;
-          }
-          else throw new Error(`unknown KB file: ${cur.name}`);
-        } else {
-          const result = await api.putFile(cur.name, content, cur.version);
-          if (result.indexWarning) toast(result.indexWarning, { level: 'warning' });
-          savedVersion = result.version;
+          if (cur.name !== 'STASHBASE.md') throw new Error(`unknown KB file: ${cur.name}`);
+          const result = await api.putKbRules(content, baseVersion);
+          return { version: result.version };
+        }
+        const result = await api.putFile(cur.name, content, baseVersion);
+        if (result.indexWarning) toast(result.indexWarning, { level: 'warning' });
+        return { version: result.version };
+      };
+      try {
+        let savedVersion: string | undefined;
+        try {
+          savedVersion = (await saveContent(cur.version)).version;
+        } catch (err: unknown) {
+          if (!(err instanceof ApiError && err.status === 409)) throw err;
+          const latestTab = getActiveTab(stateRef.current);
+          const sameTab =
+            latestTab?.id === tabId &&
+            latestTab.file?.name === cur.name &&
+            latestTab.file.kind === cur.kind;
+          const liveValue = editorRef.current?.getValue();
+          if (!sameTab || liveValue !== content) return false;
+          savedVersion = (await saveContent(undefined)).version;
+          toast('Saved over a newer disk copy from sync.', { level: 'info' });
         }
         const latestTab = getActiveTab(stateRef.current);
         const sameTab =
@@ -951,14 +980,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           latestTab.file?.name === cur.name &&
           latestTab.file.kind === cur.kind;
         if (!sameTab) return false;
-        const msg = e instanceof ApiError && e.status === 409
-          ? 'This file changed on disk. Copy your edits, reload the file, then apply them again.'
-          : e instanceof Error ? e.message : String(e);
+        const msg = e instanceof Error ? e.message : String(e);
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + msg, cls: 'error' } });
-        if (e instanceof ApiError && e.status === 409) {
-          toast('Save blocked because this file changed on disk.', { level: 'error' });
-          void loadFiles();
-        }
         return false;
       }
     })();

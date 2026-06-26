@@ -140,7 +140,7 @@ export function fileVersion(relPath: string): string | null {
     assertRealPathInsideSpace(target);
     const st = fs.statSync(target);
     if (!st.isFile()) return null;
-    return `${st.dev}:${st.ino}:${st.ctimeMs}:${st.mtimeMs}:${st.size}`;
+    return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex')}`;
   } catch {
     return null;
   }

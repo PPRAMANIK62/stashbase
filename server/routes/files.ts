@@ -143,6 +143,9 @@ export async function saveFileContent(
   if (opts.baseVersion !== undefined) {
     const currentVersion = fileVersion(name);
     if (currentVersion !== opts.baseVersion) {
+      if (readText(name) === content) {
+        return { version: currentVersion ?? undefined };
+      }
       const err = new Error('file changed on disk; reload before saving');
       (err as any).code = 'FILE_CHANGED';
       (err as any).currentVersion = currentVersion;
