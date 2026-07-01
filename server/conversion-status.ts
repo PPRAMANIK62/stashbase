@@ -1,5 +1,5 @@
 /**
- * Conversion status (PDF + image) — split by durability:
+ * File preparation status — split by durability:
  *
  *   - **in-flight: process memory only.** A conversion's subprocess is
  *     our child; if this process dies, the conversion dies with it, so
@@ -10,7 +10,7 @@
  *     record → queue") — conversions are idempotent.
  *
  *   - **failures: persisted** (per-machine app-data `state.db`,
- *     `conversions` table) — the Retry banner needs the reason and
+ *     `conversions` table) — recovery affordances need the reason and
  *     attempt count to survive restarts, and a persistent failure must
  *     NOT be silently re-queued by the next discovery walk.
  *

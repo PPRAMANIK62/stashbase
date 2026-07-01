@@ -31,6 +31,7 @@ export type Block =
 export type ServerEvent =
   | { t: 'ready' }
   | { t: 'session-id'; id: string }
+  | { t: 'session-title'; title: string }
   | { t: 'turn-start' }
   | { t: 'text'; delta: string }
   | { t: 'thinking'; delta: string }

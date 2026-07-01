@@ -153,6 +153,10 @@ export interface IndexStatus {
   orphaned: string[];
   /** True iff pending = 0 and orphaned = 0. */
   upToDate: boolean;
+  /** False when semantic indexing/search is unavailable, e.g. no API key. */
+  semanticEnabled?: boolean;
+  /** Human-readable reason when semantic indexing/search is disabled. */
+  semanticDisabledReason?: string;
   /** False until the folder has received at least one daemon status response. */
   indexReady?: boolean;
   /** PDFs currently being converted to a readable note + bundle. */

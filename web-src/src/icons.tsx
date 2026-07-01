@@ -258,6 +258,40 @@ export function TrashIcon({ className }: IconProps) {
   );
 }
 
+/** Library collection — Lucide `archive`. */
+export function LibraryIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <rect width="20" height="5" x="2" y="3" rx="1" />
+      <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+      <path d="M10 12h4" />
+    </svg>
+  );
+}
+
+/** Horizontal ellipsis — more actions menu. */
+export function MoreHorizontalIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Plug — integration / connector glyph (Lucide `plug`). */
+export function PlugIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M12 22v-5" />
+      <path d="M9 8V2" />
+      <path d="M15 8V2" />
+      <path d="M18 8v5a6 6 0 0 1-12 0V8Z" />
+    </svg>
+  );
+}
+
 export function PreviewIcon({ className }: IconProps) {
   // Open-book silhouette for the floating edit/read toggle. Earlier it
   // was drawn with two geometric half-pages that read as "two
@@ -286,7 +320,7 @@ export function CheckIcon({ className }: IconProps) {
 
 /** StashBase mark — the app's own cube logo (`build/icon.svg`, minus
  *  the rounded background plate that would render as a white square at
- *  16px). Used as the stashing-progress pill/list logo. */
+ *  16px). Kept available for compact branded UI marks. */
 export function StashBaseIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="31 25 450 450" fill="none">

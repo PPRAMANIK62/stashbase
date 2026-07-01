@@ -52,6 +52,7 @@ export function EmbeddingPanel() {
     setState((s) => (s ? { ...s, hasKey: true } : s));
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
     if (result.warning) actions.toast(`OpenAI key saved, but validation could not reach OpenAI: ${result.warning}`, { level: 'warning' });
+    void actions.markVisibleFilesPendingForSearch();
     void actions.refreshIndexState();
   }
 
@@ -69,7 +70,7 @@ export function EmbeddingPanel() {
       setState((s) => (s ? { ...s, hasKey: true } : s));
       dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
       if (result.warning) actions.toast(`OpenAI key saved, but validation could not reach OpenAI: ${result.warning}`, { level: 'warning' });
-      void actions.markVisibleFilesStashing();
+      void actions.markVisibleFilesPendingForSearch();
       void actions.refreshIndexState();
     } catch (err: unknown) {
       if (!mountedRef.current) return;

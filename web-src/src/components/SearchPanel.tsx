@@ -22,8 +22,11 @@ export function SearchPanel() {
   return (
     <div className="search-panel" id="sidebar-panel-search" role="tabpanel">
       <SearchBox />
+      <SearchStatusBanner />
       <div className="search-panel-body">
-        {query ? (
+        {state.searchMode === 'semantic' && state.embedderHasKey === false ? (
+          <SearchResults query={query} />
+        ) : query ? (
           <SearchResults query={query} />
         ) : (
           // Per design: nothing shown until the user starts typing.
@@ -33,6 +36,74 @@ export function SearchPanel() {
       </div>
     </div>
   );
+}
+
+function SearchStatusBanner() {
+  const { state, actions } = useApp();
+  const isSemantic = state.searchMode === 'semantic';
+  const semanticDisabled = state.embedderHasKey === false;
+  const conversionPendingCount = state.pendingConversions.length;
+  const semanticPendingPaths = new Set<string>();
+  for (const path of state.pendingSemanticNames) semanticPendingPaths.add(path);
+  for (const path of state.pendingConversions) semanticPendingPaths.add(path);
+  const semanticPendingCount = semanticPendingPaths.size;
+  const pendingCount = isSemantic ? semanticPendingCount : conversionPendingCount;
+  const failureCount = state.preparationFailures.length;
+  const total = state.files.length;
+  const readyCount = Math.max(0, total - pendingCount - failureCount);
+
+  if (isSemantic && semanticDisabled) return null;
+
+  if (isSemantic && state.indexWarning) {
+    return (
+      <div className="search-status-banner warning">
+        <div className="search-status-copy">
+          <div className="search-status-title">Search needs attention</div>
+          <div className="search-status-detail">
+            Search may be incomplete: {state.indexWarning.message}
+          </div>
+        </div>
+        <div className="search-status-actions">
+          <button type="button" onClick={() => { void actions.runSync(); }}>Retry</button>
+          <button type="button" onClick={() => { void actions.dismissIndexWarning(); }}>Dismiss</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (failureCount > 0) {
+    return (
+      <div className="search-status-banner warning">
+        <div className="search-status-copy">
+          <div className="search-status-title">Some files could not be prepared for search.</div>
+          <div className="search-status-detail">
+            {failureCount} file{failureCount === 1 ? '' : 's'} need attention.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (pendingCount > 0) {
+    const readyLabel = `${readyCount} file${readyCount === 1 ? '' : 's'} ${readyCount === 1 ? 'is' : 'are'} ready to search.`;
+    const pendingLabel = isSemantic
+      ? `${pendingCount} ${pendingCount === 1 ? 'is' : 'are'} still being prepared.`
+      : `${pendingCount} ${pendingCount === 1 ? 'is' : 'are'} still being converted.`;
+    return (
+      <div className="search-status-banner pending">
+        <div className="search-status-copy">
+          <div className="search-status-title">
+            {isSemantic ? 'Making files searchable' : 'Preparing text for keyword search'}
+          </div>
+          <div className="search-status-detail">
+            {readyLabel} {pendingLabel}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /** Input + ≈/= mode flip + (keyword-only) Aa / Word sub-toggles. The
@@ -78,7 +149,6 @@ function SearchBox() {
   }
 
   function flipMode() {
-    if (state.searchMode === 'keyword' && state.embedderHasKey === false) return;
     const next = state.searchMode === 'semantic' ? 'keyword' : 'semantic';
     dispatch({ type: 'SEARCH_MODE', mode: next });
     if (state.filterQuery.trim()) {
@@ -154,13 +224,12 @@ function SearchBox() {
         )}
         <button
           type="button"
-          className={'side-search-mode-btn side-search-mode-flip' + (semanticDisabled && isKeyword ? ' disabled' : '')}
+          className="side-search-mode-btn side-search-mode-flip"
           onClick={flipMode}
-          disabled={semanticDisabled && isKeyword}
           aria-label={isKeyword ? 'Switch to semantic search' : 'Switch to keyword search'}
           title={
             isKeyword
-              ? semanticDisabled ? 'Semantic search disabled until you add an OpenAI API key' : 'Keyword search · click for semantic'
+              ? semanticDisabled ? 'Keyword search · click for semantic setup' : 'Keyword search · click for semantic'
               : 'Semantic search · click for keyword'
           }
         >
@@ -173,10 +242,24 @@ function SearchBox() {
 
 function SearchResults({ query }: { query: string }) {
   const { state } = useApp();
+  if (state.searchMode === 'semantic' && state.embedderHasKey === false) {
+    return (
+      <div className="empty-list">
+        <div>Semantic search needs an OpenAI API key.</div>
+        <div>Keyword search works without embeddings.</div>
+      </div>
+    );
+  }
+
   // A real failure (server / daemon error) — distinct from "no matches".
   if (state.searchError) {
     if (state.searchError.startsWith('Semantic search is disabled')) {
-      return <div className="empty-list">{state.searchError}</div>;
+      return (
+        <div className="empty-list">
+          <div>Semantic search needs an OpenAI API key.</div>
+          <div>Keyword search works without embeddings.</div>
+        </div>
+      );
     }
     return <div className="empty-list search-failed">Search failed: {state.searchError}</div>;
   }

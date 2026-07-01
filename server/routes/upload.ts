@@ -79,7 +79,7 @@ export function mount(app: express.Express): void {
       void (async () => {
         // Multer consumes the request body stream, and its callbacks run in the
         // connection-time async context — which drops the windowId that
-        // `withWindowContext` stashed in AsyncLocalStorage. Without re-binding
+        // `withWindowContext` stored in AsyncLocalStorage. Without re-binding
         // it here, every folder-scoped lookup inside the handler
         // (getCurrentFolder, saveBytes → resolveSafe) falls back to
         // DEFAULT_WINDOW_ID and the upload fails with "no folder open" even

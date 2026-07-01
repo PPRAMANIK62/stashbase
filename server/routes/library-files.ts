@@ -7,7 +7,7 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { deleteDerivedForSource, derivedNoteFor } from '../derived-store.ts';
+import { deleteDerivedForSource, derivedNoteFor, sourceForDerivedNote } from '../derived-store.ts';
 import { errorMessage, logger } from '../log.ts';
 import { getFolderHome, memberFolderRoots, memberRootForAbs, resolveFolderRoot, runWithFolderRoot, toPosixAbs } from '../folder.ts';
 import { indexer, syncFolderNow } from '../state.ts';
@@ -492,6 +492,8 @@ export async function readLibraryFile(rawPath: unknown): Promise<{
   readPath?: string;
   derived?: boolean;
 }> {
+  const derived = normalizeDerivedReadPath(rawPath);
+  if (derived) return derived;
   const target = normalizeLibraryFilePath(rawPath);
   return runWithFolderRoot(target.folderRoot, async () => {
     const format = detectFormat(target.folderRel);
@@ -527,6 +529,54 @@ export async function readLibraryFile(rawPath: unknown): Promise<{
       format,
       content,
       version: fileVersion(target.folderRel) ?? undefined,
+    };
+  });
+}
+
+function normalizeDerivedReadPath(rawPath: unknown): ReturnType<typeof readDerivedLibraryFile> | null {
+  let abs: string;
+  try {
+    abs = resolveLibraryAbs(rawPath, { allowEmpty: false });
+  } catch {
+    return null;
+  }
+  const sourceAbs = sourceForDerivedNote(abs);
+  if (!sourceAbs) return null;
+  const folderRoot = memberRootForAbs(sourceAbs);
+  if (!folderRoot) {
+    throw routeError('derived source is not in your folders (call library_info to list them)', 400);
+  }
+  return readDerivedLibraryFile(abs, sourceAbs, folderRoot);
+}
+
+function readDerivedLibraryFile(derivedAbs: string, sourceAbs: string, folderRoot: string): Promise<{
+  path: string;
+  format: string;
+  content: string;
+  version?: string;
+  sourceFormat?: string;
+  readPath?: string;
+  derived?: boolean;
+}> {
+  const folderRel = sourceAbs.slice(folderRoot.length + 1);
+  if (detectViewerFormat(folderRel) !== 'pdf') {
+    throw routeError('derived Markdown reads are only exposed for PDF text context', 403);
+  }
+  return runWithFolderRoot(folderRoot, async () => {
+    let content: string;
+    try {
+      content = fs.readFileSync(derivedAbs, 'utf8');
+    } catch {
+      throw routeError('extracted Markdown is not available for this PDF yet; retry conversion or run reindex first', 409, 'CONVERSION_NOT_READY');
+    }
+    return {
+      path: sourceAbs,
+      format: 'pdf-derived-md',
+      sourceFormat: 'pdf',
+      readPath: derivedAbs,
+      derived: true,
+      content,
+      version: fileVersion(folderRel) ?? undefined,
     };
   });
 }
@@ -691,7 +741,7 @@ export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: strin
       catch (err: unknown) { log.warn(`library delete: derived cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
     }
     try { clearRecord(target.abs); }
-    catch (err: unknown) { log.warn(`library delete: conversion status cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
+    catch (err: unknown) { log.warn(`library delete: preparation status cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
     if (removed && getApiKey()) {
       for (const rel of [target.folderRel, ...derivedArtifacts.notes]) {
         indexer.deleteFile(`${target.folderRoot}/${rel}`).catch((err) => {

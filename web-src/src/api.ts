@@ -82,9 +82,13 @@ export interface IndexStatus {
   orphanedCount: number;
   orphaned: string[];
   upToDate: boolean;
+  /** False when semantic indexing/search is unavailable, e.g. no OpenAI key. */
+  semanticEnabled?: boolean;
+  /** Human-readable reason when semantic indexing/search is disabled. */
+  semanticDisabledReason?: string;
   /** True when no UI-visible file is waiting for embedding. Unlike
    *  upToDate, this ignores orphaned/hidden index rows that are not
-   *  rendered as "stashing" work in the file tree. */
+   *  relevant to search-readiness accounting. */
   visibleIndexingSettled?: boolean;
   /** False while the server is still loading the index cache for a folder. */
   indexReady?: boolean;
@@ -95,12 +99,11 @@ export interface IndexStatus {
   /** Folder-relative conversion progress keyed by visible source path.
    *  Used by PDF preview banners for "Reading page X" / indexing copy. */
   conversionProgress?: Record<string, ConversionProgress>;
-  /** Persistent failure list — PDFs (pdf_extract) and images
-   *  (ocr_extract) whose most recent conversion attempt errored.
-   *  Survives app restart (read back from AppData `state.db`).
-   *  Empty when no failures. Drives the per-file Retry banner in
-   *  PdfPreview / ImagePreview and the context-menu Retry entry. */
-  conversionFailures?: ConversionFailure[];
+  /** Persistent file preparation failures. Survives app restart (read
+   *  back from AppData `state.db`). Empty when no failures. Drives
+   *  lightweight row markers, rich viewer banners where available, and
+   *  the context-menu Reprocess entry. */
+  preparationFailures?: PreparationFailure[];
   /** Monotonic counter the server bumps on every external fs event
    *  (after self-write filtering). Renderer compares against its
    *  last-seen value and triggers `/api/files` on any change — picks
@@ -122,18 +125,18 @@ export interface IndexWarning {
   at: string;
 }
 
-/** Persistent conversion failure record (PDF or image — subset of the
- *  on-disk entry, with timestamps the UI doesn't need stripped). */
-export interface ConversionFailure {
+/** Persistent file preparation failure record — subset of the on-disk
+ *  entry, with timestamps the UI doesn't need stripped. */
+export interface PreparationFailure {
   path: string;
   lastError: string;
   attempts: number;
 }
 
-/** Full PDF/image conversion status entries returned by `GET /api/pdf/status`.
- *  Keyed by absolute source path. PdfPreview uses this to pick out the entry for
- *  the file it's rendering and decide whether to show the failure
- *  banner. */
+/** Full file preparation status entries returned by `GET /api/pdf/status`.
+ *  Keyed by absolute source path. Rich viewers use this to pick out the
+ *  entry for the file they're rendering and decide whether to show the
+ *  failure banner. */
 export type PdfStatusKind = 'in-flight' | 'done' | 'failed' | 'cancelled';
 export interface PdfStatusEntry {
   status: PdfStatusKind;
@@ -423,10 +426,11 @@ export const api = {
    *  reads. Used by the composer `+` and panel drag-drop. */
   attachFiles: async (
     files: File[],
+    opts: { signal?: AbortSignal } = {},
   ): Promise<{ files: { name: string; path?: string; error?: string }[] }> => {
     const fd = new FormData();
     for (const f of files) fd.append('files', f);
-    const r = await fetch('/api/agent/attach', { method: 'POST', body: fd, headers: requestHeaders() });
+    const r = await fetch('/api/agent/attach', { method: 'POST', body: fd, headers: requestHeaders(), signal: opts.signal });
     return parseJsonOrThrow(r);
   },
   agentContextFile: (folder: string, path: string) =>
@@ -456,19 +460,15 @@ export const api = {
   dismissIndexWarning: (folder?: string) =>
     send<{ ok: boolean }>('POST', '/api/index-warning/dismiss', { folder }),
 
-  /** Full per-file PDF/image conversion status, library-wide, keyed by
-   *  absolute source path. PdfPreview calls this when the active file is a PDF to
-   *  decide whether to render the failure banner. */
+  /** Full per-file preparation status, library-wide, keyed by absolute
+   *  source path. */
   pdfStatus: () =>
     getJson<{ entries: Record<string, PdfStatusEntry> }>('/api/pdf/status'),
-  /** Retry conversion of a specific PDF or image (folder-relative path).
-   *  Clears the existing status record, removes the stale derived note
-   *  (+ PDF bundle) if present, then re-fires the matching converter
-   *  (pdf_extract / ocr_extract) in the background. Client observes the
-   *  outcome via the next `/api/index-status` poll. */
-  retryConversion: (path: string, opts?: { folder?: string }) =>
-    send<{ ok: boolean }>('POST', '/api/conversion/retry', { path, folder: opts?.folder }),
-
+  /** Reprocess a specific source file (folder-relative path). PDF/image
+   *  sources re-run extraction; directly readable files clear the
+   *  failure row and trigger reconcile/index. */
+  reprocessFile: (path: string, opts?: { folder?: string }) =>
+    send<{ ok: boolean; mode?: 'conversion' | 'index' }>('POST', '/api/files/reprocess', { path, folder: opts?.folder }),
   // Embedder ----------------------------------------------------
   getEmbedder: () => getJson<EmbedderState>('/api/embedder'),
 
@@ -484,9 +484,7 @@ export const api = {
       config: unknown;
     }>('/api/mcp/status'),
   // `send` throws ApiError on any non-2xx, so a resolved value is always
-  // the success shape — no `error` field, `ok` is always true. (The
-  // Electron bridge path in McpClientsPanel models `{ok:false,error}`
-  // separately, since it returns failures as a value rather than throwing.)
+  // the success shape — no `error` field, `ok` is always true.
   configureMcp: (client: string) =>
     send<{
       ok: true;

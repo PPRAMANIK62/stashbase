@@ -1,13 +1,9 @@
 #!/usr/bin/env python
 """PDF → markdown + image bundle.
 
-Invoked by `server/pdf.ts` after the user drags a PDF into a folder.
-Writes a derived note (`.<stem>.md`, dot-prefixed because it's an
-app-maintained artifact rather than user content) alongside the PDF
-and an image bundle dir named `.<stem>_files/` containing every
-embedded image — matches the HTML-import convention so the rest of
-StashBase (indexer / iframe asset routing / rename-cascade) treats
-the result the same as a hand-imported note.
+Invoked by `server/pdf.ts` when a PDF needs Agent-readable text.
+Writes a derived note and extracted asset bundle to AppData paths supplied
+by Node. The user-facing PDF remains untouched in its original folder.
 
 Uses `pymupdf4llm.to_markdown(write_images=True)` for structured markdown
 and image extraction. If that richer layout pass fails on a PDF that still
@@ -16,13 +12,16 @@ the PDF can still be searched.
 
 Output shape is always:
 
-    .<stem>.md          (dot-prefixed app-derived note)
-    .<stem>_files/      (dot-prefixed image bundle)
+    <out_note>          (AppData markdown)
+    <bundle_dir>/       (AppData image bundle)
         ...png
 
 Args: ``<pdf> <out_note> <bundle_dir>``.
 
-Exits 0 on success, non-zero on failure with a diagnostic on stderr.
+With ``--probe-text-layer <pdf>``, samples a few pages without OCR and
+exits 0 when a text layer is detected, 10 when the PDF looks scanned.
+Normal conversion exits 0 on success, non-zero on failure with a diagnostic
+on stderr.
 """
 
 from __future__ import annotations
@@ -44,6 +43,7 @@ DEFAULT_BATCH_SIZE = 4
 DEFAULT_OCR_DPI = 300
 DEFAULT_OCR_MAX_MPIX = 12.0
 DEFAULT_BATCH_TIMEOUT_S = 180.0
+PDF_COMPLETE_MARKER = "<!-- stashbase-pdf-conversion: complete -->"
 
 
 def parse_page_range(raw: str | None) -> list[int] | None:
@@ -128,6 +128,37 @@ def _batches(items: list[int], size: int) -> list[list[int]]:
 def _source_signature(pdf_path: Path) -> dict[str, int]:
     st = pdf_path.stat()
     return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+
+
+def _sample_page_indexes(page_count: int, max_pages: int) -> list[int]:
+    if page_count <= 0 or max_pages <= 0:
+        return []
+    if page_count <= max_pages:
+        return list(range(page_count))
+    if max_pages == 1:
+        return [0]
+    indexes = {0, page_count - 1}
+    slots = max_pages - len(indexes)
+    for i in range(1, slots + 1):
+        indexes.add(round(i * (page_count - 1) / (slots + 1)))
+    return sorted(indexes)
+
+
+def has_text_layer(pdf_path: Path, max_pages: int = 5, min_chars: int = 24) -> bool:
+    """Cheap scheduling probe: sample a few pages with plain PyMuPDF text.
+
+    This deliberately does not OCR. It only answers whether the PDF likely
+    has an extractable text layer, so Node can run text PDFs before scanned
+    PDFs whose OCR path is much slower.
+    """
+    pymupdf = _pymupdf_module()
+    with pymupdf.open(str(pdf_path)) as doc:
+        chars = 0
+        for page_index in _sample_page_indexes(len(doc), max_pages):
+            chars += len(_page_text(doc[page_index]).strip())
+            if chars >= min_chars:
+                return True
+    return False
 
 
 def _resume_dir_for(out_path: Path) -> Path:
@@ -665,6 +696,7 @@ def convert_with_pymupdf(
                             except OSError:
                                 pass
                             shutil.rmtree(batch_bundle, ignore_errors=True)
+                out.write(f"\n\n{PDF_COMPLETE_MARKER}\n")
         finally:
             shutil.rmtree(batch_parent, ignore_errors=True)
         if not wrote_any_text:
@@ -685,9 +717,20 @@ def convert_with_pymupdf(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PDF → markdown + bundle for StashBase.")
+    parser.add_argument(
+        "--probe-text-layer",
+        action="store_true",
+        help="Probe whether the PDF has extractable text. Exit 0=text, 10=scanned/no text.",
+    )
+    parser.add_argument(
+        "--probe-pages",
+        type=parse_batch_size,
+        default=5,
+        help="Maximum number of pages to sample for --probe-text-layer.",
+    )
     parser.add_argument("pdf")
-    parser.add_argument("out_path", help="Target note path (`.<stem>.md`).")
-    parser.add_argument("bundle_dir", help="Bundle dir (`.<stem>_files/`) to dump images into.")
+    parser.add_argument("out_path", nargs="?", help="Target AppData markdown path.")
+    parser.add_argument("bundle_dir", nargs="?", help="Target AppData bundle dir to dump images into.")
     parser.add_argument("--pages", type=parse_page_range, help="1-based inclusive page range, e.g. 3 or 3-10.")
     parser.add_argument(
         "--batch-size",
@@ -710,11 +753,26 @@ def main() -> int:
     args = parser.parse_args()
 
     pdf_path = Path(args.pdf).resolve()
-    out_path = Path(args.out_path).resolve()
-    bundle_dir = Path(args.bundle_dir).resolve()
     if not pdf_path.is_file():
         print(f"[pdf_extract] not a file: {pdf_path}", file=sys.stderr)
         return 2
+
+    if args.probe_text_layer:
+        try:
+            if has_text_layer(pdf_path, max_pages=args.probe_pages):
+                print("[pdf_extract] text layer detected", file=sys.stderr)
+                return 0
+            print("[pdf_extract] no text layer detected", file=sys.stderr)
+            return 10
+        except Exception as err:
+            print(f"[pdf_extract] text-layer probe failed: {err}", file=sys.stderr)
+            return 2
+
+    if not args.out_path or not args.bundle_dir:
+        print("[pdf_extract] out_path and bundle_dir are required", file=sys.stderr)
+        return 2
+    out_path = Path(args.out_path).resolve()
+    bundle_dir = Path(args.bundle_dir).resolve()
 
     try:
         convert_with_pymupdf(

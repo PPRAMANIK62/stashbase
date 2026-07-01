@@ -3,22 +3,14 @@
 
 Invoked by `server/image.ts` after the user drops / pastes an image
 into a folder. Runs RapidOCR (ONNX, bundled Chinese+English models, no
-system binary like tesseract) over the image and writes a derived note
-(`.<stem>.md`, dot-prefixed because it's an app-maintained artifact
-rather than user content) alongside the image. The image itself stays
-on disk as the user-facing file; the fs.watch debounce picks up the
-hidden note and the indexer embeds it, so a screenshot's text becomes
-searchable.
+system binary like tesseract) over the image and writes a derived
+AppData note. The image itself stays on disk as the user-facing file;
+the derived note is indexed under the image source path so a
+screenshot's text becomes searchable.
 
-Unlike `pdf_extract.py` there is no image bundle — OCR yields only
-text, so the output is a single markdown note:
-
-    .<stem>.md          (dot-prefixed app-derived OCR note)
-
-Always writes the note even when OCR finds nothing (per the
-always-build-sidecar decision): a text-free photo still gets a note
-seeded with its filename stem, so behaviour is uniform and the daemon
-never has to embed a zero-length file.
+Unlike `pdf_extract.py` there is no image bundle. Empty OCR is a
+conversion failure: the image still opens normally, but StashBase should
+not claim it is searchable when no text was extracted.
 
 Args: ``<image> <out_note>``.
 
@@ -30,6 +22,8 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+
+OCR_COMPLETE_MARKER = "<!-- stashbase-ocr-conversion: complete -->"
 
 
 def load_image(path: Path):
@@ -91,12 +85,10 @@ def main() -> int:
         print(f"[ocr_extract] OCR failed: {err}", file=sys.stderr)
         return 1
 
-    # Always write the note (always-build-sidecar). Seed an empty result
-    # with the filename stem so the note is non-empty and still findable
-    # by name.
     if not text:
-        text = image_path.stem
-    out_path.write_text(text + "\n", encoding="utf-8")
+        print(f"[ocr_extract] no text found in image: {image_path}", file=sys.stderr)
+        return 3
+    out_path.write_text(f"{text}\n\n{OCR_COMPLETE_MARKER}\n", encoding="utf-8")
     return 0
 
 

@@ -206,8 +206,9 @@ class CodexSession {
     switch (msg.t) {
       case 'prompt': {
         const body = typeof msg.text === 'string' ? msg.text : '';
+        const titleHint = typeof msg.titleHint === 'string' ? msg.titleHint : '';
         if (!body.trim()) return;
-        void this.runTurn(body);
+        void this.runTurn(body, titleHint);
         break;
       }
       case 'permission-reply':
@@ -227,7 +228,7 @@ class CodexSession {
     }
   }
 
-  private async runTurn(prompt: string): Promise<void> {
+  private async runTurn(prompt: string, titleHint = ''): Promise<void> {
     if (this.closed) return;
     if (!this.ready || !this.cwd) {
       this.send({ t: 'error', message: 'Codex is not ready yet.' });
@@ -245,7 +246,7 @@ class CodexSession {
     try {
       await this.ensureAppServer();
       this.throwIfInterruptedBeforeTurn();
-      const threadId = await this.ensureThread();
+      const threadId = await this.ensureThread(titleHint);
       this.throwIfInterruptedBeforeTurn();
       const result = await this.request('turn/start', {
         threadId,
@@ -271,10 +272,11 @@ class CodexSession {
     }
   }
 
-  private async ensureThread(): Promise<string> {
+  private async ensureThread(titleHint = ''): Promise<string> {
     if (this.threadId) return this.threadId;
     if (!this.cwd) throw new Error('No folder open.');
     await this.ensureAppServer();
+    const isNewThread = !this.resumeThreadId;
     const common = {
       cwd: this.cwd,
       approvalPolicy: 'on-request',
@@ -295,6 +297,14 @@ class CodexSession {
     this.threadId = id;
     this.resumeThreadId = null;
     if (shouldSendSessionId) this.send({ t: 'session-id', id });
+    if (isNewThread) {
+      const title = titleFromPrompt(titleHint);
+      if (title) {
+        this.send({ t: 'session-title', title });
+        await this.request('thread/name/set', { threadId: id, name: title })
+          .catch((err: unknown) => log.warn(`Codex title set failed for ${id}: ${errorMessage(err)}`));
+      }
+    }
     return id;
   }
 
@@ -786,6 +796,16 @@ function codexEffortOption(effort: string | undefined): { effort?: string } {
   if (!effort) return {};
   if (effort === 'max') return { effort: 'xhigh' };
   return ['low', 'medium', 'high', 'xhigh'].includes(effort) ? { effort } : {};
+}
+
+function titleFromPrompt(prompt: string): string {
+  const firstLine = prompt
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) ?? '';
+  if (!firstLine) return '';
+  const compact = firstLine.replace(/\s+/g, ' ');
+  return compact.length > 60 ? `${compact.slice(0, 60).trimEnd()}…` : compact;
 }
 
 function objectValue(value: unknown): JsonObject {

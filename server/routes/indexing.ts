@@ -17,7 +17,7 @@ import {
 } from '../folder.ts';
 import { getApiKey } from '../app-config.ts';
 import { hasNoExtractableText, isCloudPlaceholderName, isIndexExcludedDirName, shouldIndexFilePath } from '../indexable.ts';
-import { derivedPathsForPdf, displayPathForHit, maybeConvertPdf } from '../pdf.ts';
+import { derivedPathsForPdf, displayPathForHit, getQueuedPdfConversions, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
 import { getInFlightConversions } from '../conversion.ts';
 import { isImageFile } from '../format.ts';
@@ -71,7 +71,7 @@ function sourcePathForAbs(absPath: string): string {
   return toPosixAbs(absPath);
 }
 
-export function conversionFailuresForFolder(folderRoot: string): Array<{ path: string; lastError: string; attempts: number }> {
+export function preparationFailuresForFolder(folderRoot: string): Array<{ path: string; lastError: string; attempts: number }> {
   const root = toPosixAbs(folderRoot);
   const out: Array<{ path: string; lastError: string; attempts: number }> = [];
   for (const { path: sourcePath, entry } of listFailed()) {
@@ -98,17 +98,10 @@ export function conversionProgressForFolder(folderRoot: string): Record<string, 
   return out;
 }
 
-export function retryConversionInFolder(relPath: string, folderName?: string): void {
+export function reprocessFileInFolder(relPath: string, folderName?: string): 'conversion' | 'index' {
   const rel = typeof relPath === 'string' ? relPath.trim() : '';
   if (!rel) {
     const err = new Error('path required');
-    (err as any).status = 400;
-    throw err;
-  }
-  const isPdf = /\.pdf$/i.test(rel);
-  const isImage = isImageFile(rel);
-  if (!isPdf && !isImage) {
-    const err = new Error('not a convertible file (expected PDF or image)');
     (err as any).status = 400;
     throw err;
   }
@@ -129,18 +122,32 @@ export function retryConversionInFolder(relPath: string, folderName?: string): v
     (err as any).status = 404;
     throw err;
   }
-  if (isInFlight(sourcePath)) return;
+  const isPdf = /\.pdf$/i.test(rel);
+  const isImage = isImageFile(rel);
+  if (isInFlight(sourcePath)) return isPdf || isImage ? 'conversion' : 'index';
 
   clearRecord(sourcePath);
   if (isPdf) {
     const { notePath: staleNote, bundleDir: staleBundle } = derivedPathsForPdf(abs);
     try { fs.rmSync(staleNote, { force: true }); } catch { /* no stale to remove */ }
     try { fs.rmSync(staleBundle, { recursive: true, force: true }); } catch { /* no bundle */ }
-    maybeConvertPdf(abs);
-  } else {
+    maybeConvertPdf(abs, { priority: 'immediate' });
+    return 'conversion';
+  }
+  if (isImage) {
     try { fs.rmSync(derivedNotePathForImage(abs), { force: true }); } catch { /* no stale */ }
     maybeConvertImage(abs);
+    return 'conversion';
   }
+
+  void syncFolderNow(folderRoot, { reason: `manual reprocess ${rel}` })
+    .then((result) => {
+      if (!result.cancelled) noteTreeChanged();
+    })
+    .catch((err: unknown) => {
+      log.warn(`manual reprocess sync failed for ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  return 'index';
 }
 
 export function mount(app: express.Express): void {
@@ -247,6 +254,7 @@ export function mount(app: express.Express): void {
       const { folderRoot: cur } = requireRequestFolder(parseFolderParam(req.query.folder));
       const curRoot = toPosixAbs(cur);
       const status = await indexer.status(curRoot);
+      const semanticEnabled = !!getApiKey();
       // Convert absolute paths back to folder-relative for the UI.
       // The daemon should already apply the same admission rules Node
       // pushes via `set_rules`, but status is a user-facing indicator:
@@ -265,29 +273,32 @@ export function mount(app: express.Express): void {
         const visible = displayPathForHit(rel, cur);
         if (visible) pendingSet.add(visible);
       }
-      const pending = [...pendingSet].sort();
+      const pending = semanticEnabled ? [...pendingSet].sort() : [];
       const orphaned = status.orphaned
         .map((p) => relInFolder(p, curRoot))
         .filter((p): p is string => p != null);
-      // Conversion status: folder-scoped. `pendingConversions` keeps the
-      // old shape (in-flight only) for the sidebar "Converting…"
-      // indicator. `conversionFailures` surfaces the persistent failure
-      // list so the UI can render Retry entries — for BOTH PDFs
-      // (pdf_extract) and images (ocr_extract), which share this
-      // status DB. `/api/conversion/retry` dispatches by extension, so a
-      // failed image re-runs OCR (not pdf_extract).
-      const conversionFailures = conversionFailuresForFolder(curRoot);
+      // File preparation status: folder-scoped. `pendingConversions`
+      // feeds search-readiness accounting, while `preparationFailures`
+      // surfaces durable preparation failures. `/api/files/reprocess`
+      // dispatches by extension: PDF/image sources re-run extraction,
+      // other files clear the failure row and reconcile the folder.
+      const preparationFailures = preparationFailuresForFolder(curRoot);
+      const pendingConversions = [
+        ...new Set([...getInFlightConversions(curRoot), ...getQueuedPdfConversions(curRoot)]),
+      ].sort();
       res.json({
         folder: curRoot,
         ...status,
+        semanticEnabled,
+        ...(semanticEnabled ? {} : { semanticDisabledReason: 'OpenAI API key required' }),
         pending,
         pendingCount: pending.length,
         orphaned,
         orphanedCount: orphaned.length,
-        visibleIndexingSettled: pending.length === 0,
-        pendingConversions: getInFlightConversions(curRoot),
+        visibleIndexingSettled: !semanticEnabled || pending.length === 0,
+        pendingConversions,
         conversionProgress: conversionProgressForFolder(curRoot),
-        conversionFailures,
+        preparationFailures,
         treeVersion: getFsChangeCounter(),
         indexWarning: getIndexWarning(curRoot),
       });
@@ -307,10 +318,10 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // PDF conversion status: full map, library-wide. Used by PdfPreview to
-  // render the per-file failure banner (cheaper than polling the
+  // File preparation status: full map, library-wide. Used by rich
+  // viewers to render per-file failure banners (cheaper than polling
   // folder-scoped /api/index-status when the viewer just needs one
-  // PDF's status).
+  // file's status).
   app.get('/api/pdf/status', (_req, res) => {
     try {
       res.json({ entries: readConversionStatus() });
@@ -319,24 +330,22 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Conversion Retry: take a folder-relative path, clear its status
-  // record, remove the stale derived note, then re-fire the right
-  // converter — pdf_extract for `.pdf`, ocr_extract for images. The
-  // fire-and-forget convert path writes back to state.db with the new
-  // outcome; the client polls /api/index-status to observe the result.
-  app.post('/api/conversion/retry', (req, res) => {
+  // File reprocess: take a folder-relative path and clear its durable
+  // failure row. PDF/image sources also clear stale final derived
+  // artifacts and re-run extraction; directly readable files schedule a
+  // reconcile so the index is rebuilt from source.
+  app.post('/api/files/reprocess', (req, res) => {
     try {
       const rel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
       const targetFolder = typeof req.body?.folder === 'string' && req.body.folder.trim()
         ? req.body.folder.trim()
         : undefined;
-      retryConversionInFolder(rel, targetFolder);
-      res.json({ ok: true });
+      const mode = reprocessFileInFolder(rel, targetFolder);
+      res.json({ ok: true, mode });
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
-
 }
 
 

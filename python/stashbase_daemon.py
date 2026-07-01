@@ -349,8 +349,9 @@ _RULES = {
 
 def op_set_rules(svc: StashbaseStore, args: dict) -> dict:
     """Receive indexing rules from Node (the single source of truth —
-    see data-layer §8.6 I7). Only supplied keys are updated; the reply
-    echoes the effective rules so Node can verify what landed."""
+    see Data Correctness & Recovery: Reconcile Rules). Only supplied
+    keys are updated; the reply echoes the effective rules so Node can
+    verify what landed."""
     if isinstance(args.get("excluded_dirs"), list):
         _RULES["excluded_dirs"] = {str(d) for d in args["excluded_dirs"] if d}
     mib = args.get("max_indexable_bytes")
@@ -1285,7 +1286,7 @@ def main() -> int:
                              "global milvus.db; folders register absolute roots into it")
     parsed, _unknown = parser.parse_known_args()
 
-    # Single-instance guard (data-layer §8.6 I3): hold an exclusive flock
+    # Single-instance guard: hold an exclusive flock
     # on a sidecar lock file for the whole process lifetime. Milvus Lite
     # has its own LOCK, but the loser of that race doesn't fail — it
     # half-opens (reads fine, writes silently lost). Failing fast here

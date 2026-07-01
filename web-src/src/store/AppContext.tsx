@@ -35,6 +35,7 @@ import {
   type Action,
   type CascadeDecision,
   type CascadePrompt,
+  type LibraryFolderStatus,
   type PendingHighlight,
   type State,
 } from './state';
@@ -42,8 +43,8 @@ import {
   filterGuiSemanticHits,
   isFolderFileTab,
   keywordFindCaseSensitive,
-  pickLandingFile,
-  shallowEqualConversionFailures,
+  pickInitialFile,
+  shallowEqualPreparationFailures,
   shallowEqualConversionProgress,
   shallowEqualIndexWarning,
   waitForNextFrame,
@@ -99,17 +100,17 @@ export interface AppActions {
    *  single path segment. `openFolder(path)` opens any folder in place. */
   openFolderByName: (
     name: string,
-    opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticStashingOnOpen?: boolean },
+    opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticPendingOnOpen?: boolean },
   ) => Promise<void>;
   goHome: () => Promise<boolean>;
 
   loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
-  /** Optimistically mark the current visible files as stashing. Used
+  /** Optimistically mark the current visible files as pending for search. Used
    *  after the first embedder key is added and immediately after a
    *  folder import opens the new folder, before daemon status can catch
    *  up. */
-  markVisibleFilesStashing: (files?: State['files']) => Promise<void>;
-  refreshIndexState: () => Promise<void>;
+  markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
+  refreshIndexState: (folderPath?: string) => Promise<void>;
   runSync: () => Promise<void>;
   /** Run a search. Pass `mode` to force a specific routing — useful
    *  when the caller has just dispatched `SEARCH_MODE` and can't rely
@@ -241,6 +242,13 @@ const AUTOSAVE_DEBOUNCE_MS = 1200;
 const POLL_PENDING_MS = 1500;
 const POLL_IDLE_MS = 8000;
 
+function libraryStatusFromActiveFolder(s: State): LibraryFolderStatus {
+  if (s.indexWarning || s.preparationFailures.length > 0) return 'failed';
+  const semanticPending = s.embedderHasKey !== false && s.pendingSemanticNames.size > 0;
+  if (s.syncRunning || semanticPending || s.pendingConversions.length > 0) return 'preparing';
+  return 'ready';
+}
+
 function isAbsoluteFolderRef(value: string): boolean {
   return value.startsWith('/');
 }
@@ -278,25 +286,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Last `treeVersion` we saw from `/api/index-status`. Any bump means
   // the watcher detected a disk change since last poll → refetch files.
   const lastTreeVersion = useRef<number>(-1);
-  /** Optimistically-stashing imports awaiting server confirmation:
-   *  folder-relative path → grace deadline (ms). On import we mark a
-   *  convertible file stashing immediately, but the server only
-   *  registers the conversion *after* responding, so an index poll that
-   *  lands in that gap would otherwise report it absent and wipe the
-   *  mark. `refreshIndexState` keeps these in `pendingConversions` until
-   *  the server starts reporting them (hand-off) or the grace expires. */
-  const importStashingGrace = useRef<Map<string, number>>(new Map());
+  /** Recently imported convertible files awaiting server confirmation:
+   *  folder-relative path → grace deadline (ms). On import we include a
+   *  PDF/image in search-readiness accounting immediately, but the server
+   *  only registers the conversion after responding. `refreshIndexState`
+   *  keeps these in `pendingConversions` until the server starts reporting
+   *  them (hand-off) or the grace expires. */
+  const importConversionGrace = useRef<Map<string, number>>(new Map());
   /** Same idea for indexed (md/html) imports, which never enter
    *  `pendingConversions`. The daemon serialises `status` behind the very
    *  embeds it would report (`indexer.mfs.ts` status note), so a bare
-   *  poll right after a drop under-counts and lags — a 4-file drop can
-   *  read "3 stashing" because one embed finished while `status` waited
-   *  in line. We optimistically mark every imported note as pending and
+   *  poll right after a drop under-counts and lags. We optimistically
+   *  mark every imported note as pending and
    *  keep it until the UI-visible pending set settles (the batch is done)
    *  or the grace expires. Unlike conversions we do NOT hand off per-file
    *  — mid-embed `pending` is unreliable, so the server sends a dedicated
    *  `visibleIndexingSettled` signal for this renderer-only state. */
   const importIndexGrace = useRef<Map<string, number>>(new Map());
+  /** Same optimistic hold after an API key is added. The server schedules
+   *  backfill asynchronously, so an immediate status poll can report no
+   *  semantic pending work before the sync has started. */
+  const keyBackfillGrace = useRef<Map<string, number>>(new Map());
   /** Promise resolver for the pending cascade dialog. Set when the
    *  rename action asks the user; cleared once they pick. */
   const cascadeResolveRef = useRef<((d: CascadeDecision) => void) | null>(null);
@@ -423,6 +433,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       files,
       folders: j.folders ?? [],
       folder: j.folder ?? 'notes',
+      folderPath: expectedFolderPath,
     });
     return files;
   }, []);
@@ -446,15 +457,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [loadFilesFromServer]);
 
-  const markVisibleFilesStashing = useCallback(async (files?: State['files']) => {
+  const markVisibleFilesPendingForSearch = useCallback(async (files?: State['files']) => {
     const folderPath = stateRef.current.folderPath;
     const source = files ?? (stateRef.current.files.length ? stateRef.current.files : folderPath ? await loadFiles(folderPath) : []);
     if (stateRef.current.folderPath !== folderPath) return;
     const paths = optimisticKeyBackfillPaths(source);
     if (paths.length === 0) return;
-    const merged = new Set(stateRef.current.pendingNames);
-    for (const path of paths) merged.add(path);
-    dispatch({ type: 'PENDING_NAMES', names: merged });
+    const deadline = Date.now() + 15000;
+    const merged = new Set(stateRef.current.pendingSemanticNames);
+    for (const path of paths) {
+      keyBackfillGrace.current.set(path, deadline);
+      merged.add(path);
+    }
+    dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: merged });
   }, [loadFiles]);
 
   /** Fetch the per-folder manual ordering map. Called alongside
@@ -528,40 +543,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refreshIndexState = useCallback(async () => {
+  const refreshIndexState = useCallback(async (folderPathOverride?: string) => {
     let nextDelay = POLL_IDLE_MS;
     const scheduleNextPoll = (delay: number) => {
       if (pollTimer.current) clearTimeout(pollTimer.current);
       pollTimer.current = setTimeout(() => { void refreshIndexState(); }, delay);
     };
-    const folderPathAtStart = stateRef.current.folderPath;
+    const explicitFolderPath = folderPathOverride?.trim() || undefined;
+    const folderPathAtStart = explicitFolderPath ?? stateRef.current.folderPath;
     const openGenAtStart = openGen.current;
+    const stillTargetFolder = () =>
+      stateRef.current.folderPath === folderPathAtStart
+      || (explicitFolderPath != null && openGenAtStart === openGen.current);
     try {
       const s = await api.indexStatus(folderPathAtStart || undefined);
-      if (stateRef.current.folderPath !== folderPathAtStart) {
+      if (!stillTargetFolder()) {
         scheduleNextPoll(nextDelay);
         return;
       }
       const indexReady = s.indexReady !== false;
-      const newPending = indexReady ? new Set(s.pending ?? []) : new Set<string>();
+      const semanticEnabled = s.semanticEnabled !== false;
+      if (stateRef.current.embedderHasKey !== semanticEnabled) {
+        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: semanticEnabled });
+      }
+      const newPending = semanticEnabled && indexReady ? new Set(s.pending ?? []) : new Set<string>();
       const visibleIndexingSettled =
-        stateRef.current.embedderHasKey === false
+        !semanticEnabled
         || (indexReady && (s.visibleIndexingSettled ?? newPending.size === 0));
       let newConv = s.pendingConversions ?? [];
       // Fold in optimistically-marked imports the server hasn't started
       // reporting yet (it registers the conversion only after responding
       // to the upload). Hand off once the server tracks a path; expire
       // the grace otherwise so a never-converted file doesn't stick.
-      if (importStashingGrace.current.size > 0) {
+      if (importConversionGrace.current.size > 0) {
         const now = Date.now();
         const stillGracing: string[] = [];
-        for (const [name, deadline] of importStashingGrace.current) {
+        for (const [name, deadline] of importConversionGrace.current) {
           if (newConv.includes(name)) {
-            importStashingGrace.current.delete(name); // server owns it now
+            importConversionGrace.current.delete(name); // server owns it now
           } else if (now <= deadline) {
             stillGracing.push(name);
           } else {
-            importStashingGrace.current.delete(name); // grace expired
+            importConversionGrace.current.delete(name); // grace expired
           }
         }
         if (stillGracing.length) {
@@ -574,7 +597,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // so a fresh drop's files flicker in and out of `pending`
       // unreliably. Hold every graced import in `newPending` until the
       // UI-visible pending set settles (batch done) or the grace expires.
-      if (importIndexGrace.current.size > 0) {
+      if (semanticEnabled && importIndexGrace.current.size > 0) {
         const now = Date.now();
         for (const [name, deadline] of importIndexGrace.current) {
           if (visibleIndexingSettled) {
@@ -585,6 +608,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
             importIndexGrace.current.delete(name); // grace expired
           }
         }
+      } else if (!semanticEnabled && importIndexGrace.current.size > 0) {
+        importIndexGrace.current.clear();
+      }
+      if (semanticEnabled && keyBackfillGrace.current.size > 0) {
+        const now = Date.now();
+        for (const [name, deadline] of keyBackfillGrace.current) {
+          if (newPending.has(name)) {
+            keyBackfillGrace.current.delete(name); // daemon owns it now
+          } else if (now <= deadline) {
+            newPending.add(name);
+          } else {
+            keyBackfillGrace.current.delete(name);
+          }
+        }
+      } else if (!semanticEnabled && keyBackfillGrace.current.size > 0) {
+        keyBackfillGrace.current.clear();
       }
       const prev = stateRef.current;
       // Trigger a `/api/files` refresh whenever the indexer's
@@ -594,9 +633,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // would otherwise leave the sidebar tree stale until the
       // next user action.
       const pendingChanged =
-        newPending.size !== prev.pendingNames.size
-        || [...newPending].some((n) => !prev.pendingNames.has(n))
-        || [...prev.pendingNames].some((n) => !newPending.has(n));
+        newPending.size !== prev.pendingSemanticNames.size
+        || [...newPending].some((n) => !prev.pendingSemanticNames.has(n))
+        || [...prev.pendingSemanticNames].some((n) => !newPending.has(n));
       const convChanged =
         newConv.length !== prev.pendingConversions.length
         || newConv.some((p, i) => p !== prev.pendingConversions[i]);
@@ -608,7 +647,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const treeChanged =
         lastTreeVersion.current >= 0 && newTreeVersion !== lastTreeVersion.current;
       lastTreeVersion.current = newTreeVersion;
-      dispatch({ type: 'PENDING_NAMES', names: newPending });
+      dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: newPending });
       if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
       const incomingProgress = s.conversionProgress ?? {};
       if (!shallowEqualConversionProgress(prev.conversionProgress, incomingProgress)) {
@@ -618,13 +657,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!shallowEqualIndexWarning(prev.indexWarning, incomingIndexWarning)) {
         dispatch({ type: 'INDEX_WARNING', warning: incomingIndexWarning });
       }
-      const incomingFailures = s.conversionFailures ?? [];
-      if (!shallowEqualConversionFailures(prev.conversionFailures, incomingFailures)) {
-        dispatch({ type: 'CONVERSION_FAILURES', failures: incomingFailures });
+      const incomingFailures = s.preparationFailures ?? [];
+      if (!shallowEqualPreparationFailures(prev.preparationFailures, incomingFailures)) {
+        dispatch({ type: 'PREPARATION_FAILURES', failures: incomingFailures });
       }
-      if (pendingChanged || convChanged || treeChanged) {
+      const canRefreshVisibleFiles = stateRef.current.folderPath === folderPathAtStart;
+      if (canRefreshVisibleFiles && (pendingChanged || convChanged || treeChanged)) {
         if (treeChanged) {
-              const expectedFolderPath = prev.folderPath;
+              const expectedFolderPath = folderPathAtStart;
               void loadFilesFromServer(expectedFolderPath)
             .then((files) => {
               if (!files) return;
@@ -645,14 +685,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // a "this file changed on disk, reload?" prompt belongs here
       // long-term, but for now silent reload-when-safe is the best
       // tradeoff vs. silently stale.
-      if (treeChanged) void refreshActiveTabFromDisk();
+      if (treeChanged && canRefreshVisibleFiles) void refreshActiveTabFromDisk();
       // Keep polling fast while a conversion is in flight, even if
       // the index itself is settled — the user is waiting on a file
       // to appear.
-      const busy = !indexReady || !visibleIndexingSettled || newConv.length > 0;
+      const busy = (semanticEnabled && (!indexReady || !visibleIndexingSettled)) || newConv.length > 0;
+      if (folderPathAtStart) {
+        dispatch({
+          type: 'LIBRARY_FOLDER_STATUS',
+          path: folderPathAtStart,
+          status: incomingIndexWarning || incomingFailures.length > 0
+            ? 'failed'
+            : busy ? 'preparing' : 'ready',
+        });
+      }
       nextDelay = busy ? POLL_PENDING_MS : POLL_IDLE_MS;
     } catch (err) {
-      if (stateRef.current.folderPath !== folderPathAtStart) {
+      if (!stillTargetFolder()) {
         scheduleNextPoll(nextDelay);
         return;
       }
@@ -688,11 +737,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // bleed into the welcome / next-folder view.
         syncGen.current += 1;
         openGen.current += 1;
-        dispatch({ type: 'PENDING_NAMES', names: new Set() });
+        dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
         dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
         dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
         dispatch({ type: 'INDEX_WARNING', warning: null });
-        dispatch({ type: 'CONVERSION_FAILURES', failures: [] });
+        dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
         dispatch({ type: 'SYNC_RUNNING', running: false });
         lastTreeVersion.current = -1;
         if (stateRef.current.folderPath) {
@@ -1291,9 +1340,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const before = stateRef.current;
       const stale = before.tabs.filter((t) => isFolderFileTab(t, name));
       for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
-      importStashingGrace.current.delete(name);
+      importConversionGrace.current.delete(name);
       importIndexGrace.current.delete(name);
-      dispatch({ type: 'PENDING_NAMES', names: new Set([...before.pendingNames].filter((p) => p !== name)) });
+      dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set([...before.pendingSemanticNames].filter((p) => p !== name)) });
       dispatch({ type: 'PENDING_CONVERSIONS', paths: before.pendingConversions.filter((p) => p !== name) });
       const { [name]: _deletedProgress, ...remainingProgress } = before.conversionProgress;
       dispatch({ type: 'CONVERSION_PROGRESS', progress: remainingProgress });
@@ -1545,36 +1594,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return failed.length === 0;
       }
       await loadFiles(targetFolderPath);
-      // Optimistically light up the stashing indicator (sidebar pill +
-      // the opened tab's logo) the instant the drop lands. The server
-      // registers each conversion only *after* it has responded, so the
-      // immediate poll below races it — a user-initiated import
-      // shouldn't wait a poll round-trip to show it's stashing. Limited
-      // to the convertible+viewable formats (PDF / image); md/html are
-      // indexed, not converted, so they never enter `pendingConversions`
-      // — but they DO surface as stashing the moment the immediate poll
-      // below sees them in the indexer's `pending` set (saved to disk
-      // before the upload responds, indexed fire-and-forget after), so a
-      // markdown folder drop still gets a count via `stashingPaths`.
-      // The poll reconciles: it keeps these while in-flight and drops
-      // them when the derived note lands. Sorted to match the server's
-      // `getInFlightConversions` ordering so the next poll is a no-op.
-      const stashing = (j.files || [])
+      // Optimistically include convertible imports in search-readiness
+      // accounting the instant the drop lands. The server registers each
+      // conversion only after responding, so the immediate status poll can
+      // otherwise briefly undercount pending PDF/image work.
+      const converting = (j.files || [])
         .filter((x) => !x.error && /\.(pdf|png|jpe?g|webp)$/i.test(x.file))
         .map((x) => x.file);
-      if (stashing.length) {
+      if (converting.length) {
         // Protect the optimistic entries from being wiped by an index
         // poll that lands before the server registers the conversion.
         const deadline = Date.now() + 6000;
-        for (const name of stashing) importStashingGrace.current.set(name, deadline);
-        const merged = [...new Set([...stateRef.current.pendingConversions, ...stashing])].sort();
+        for (const name of converting) importConversionGrace.current.set(name, deadline);
+        const merged = [...new Set([...stateRef.current.pendingConversions, ...converting])].sort();
         dispatch({ type: 'PENDING_CONVERSIONS', paths: merged });
       }
       // Optimistically mark the indexable imports (md / html, non-hidden)
-      // as pending too. These never enter `pendingConversions`; they show
-      // via `pendingNames` → `stashingPaths`. The poll alone under-counts
-      // and lags here (the daemon serialises `status` behind the embeds),
-      // so without this a 4-note drop reads "3 stashing" a beat late.
+      // as pending too. These never enter `pendingConversions`; they live
+      // in `pendingSemanticNames` until the folder is up-to-date.
       // `refreshIndexState` holds these until the folder is up-to-date.
       const indexing = (j.files || [])
         .filter((x) => !x.error && /\.(md|markdown|html?)$/i.test(x.file))
@@ -1583,23 +1620,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (indexing.length) {
         const deadline = Date.now() + 60000;
         for (const name of indexing) importIndexGrace.current.set(name, deadline);
-        const merged = new Set(stateRef.current.pendingNames);
+        const merged = new Set(stateRef.current.pendingSemanticNames);
         for (const name of indexing) merged.add(name);
-        dispatch({ type: 'PENDING_NAMES', names: merged });
+        dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: merged });
       }
-      // Now the server has fired any PDF conversions and updated its
-      // `pendingConversions` set. Poll immediately so the indicator
-      // reconciles even when the conversion is fast enough to finish
-      // inside the regular poll window.
+      // Now the server has fired any PDF/image conversions. Poll
+      // immediately so search-readiness accounting catches up even when a
+      // conversion finishes inside the regular poll window.
       void refreshIndexState();
       // Auto-open the first viewable file the drop produced — the
       // import was a deliberate user action, so showing what landed is
       // expected (mirrors dropping a file into an editor). Limited to
       // formats the viewer can actually render (md/html via getFile,
-      // pdf + image synthesized in `loadFile`); a dropped PDF/image
-      // opens its body immediately and carries the stashing mark on its
-      // tab while it converts. Opens at most ONE file, so a batch drop
-      // doesn't explode into tabs.
+      // pdf + image synthesized in `loadFile`). Opens at most ONE file,
+      // so a batch drop doesn't explode into tabs.
       const first = j.files?.find(
         (x) => !x.error && /\.(md|markdown|html|htm|pdf|png|jpe?g|webp)$/i.test(x.file),
       );
@@ -1650,20 +1684,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // on a folder switch (onSwitch → killActiveAgent); CHAT_TABS_RESET drops
   // our tab list to match so we don't render orphan panels.
   const resetFolderScopedState = useCallback(() => {
+    const prev = stateRef.current;
+    if (prev.folderPath) {
+      dispatch({
+        type: 'LIBRARY_FOLDER_STATUS',
+        path: prev.folderPath,
+        status: libraryStatusFromActiveFolder(prev),
+      });
+    }
     syncGen.current += 1;
     searchGen.current += 1;
     lastTreeVersion.current = -1;
-    importStashingGrace.current.clear();
+    importConversionGrace.current.clear();
     importIndexGrace.current.clear();
+    keyBackfillGrace.current.clear();
     dispatch({ type: 'TABS_RESET' });
     dispatch({ type: 'CHAT_TABS_RESET' });
     dispatch({ type: 'FILTER', q: '' });
     dispatch({ type: 'SEARCH_CLEAR' });
     dispatch({ type: 'ACTIVE_FOLDER', path: '' });
-    dispatch({ type: 'PENDING_NAMES', names: new Set() });
+    dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
     dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
     dispatch({ type: 'INDEX_WARNING', warning: null });
-    dispatch({ type: 'CONVERSION_FAILURES', failures: [] });
+    dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
     dispatch({ type: 'SYNC_RUNNING', running: false });
     dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
   }, []);
@@ -1671,7 +1714,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const finishOpenFolder = useCallback(async (
     expected: { path: string; name: string },
     generation: number,
-    opts: { optimisticStashingOnOpen?: boolean } = {},
+    opts: { optimisticPendingOnOpen?: boolean } = {},
   ) => {
     if (generation !== openGen.current) return;
     const expectedFolderPath = expected.path;
@@ -1688,22 +1731,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
       folder: expected.name,
       folderPath: expectedFolderPath,
     });
-    void refreshIndexState();
     // Load files BEFORE hiding the welcome overlay so the sidebar doesn't
     // briefly flash "NOTES" with an empty tree behind the overlay's fade.
-    const [files] = await Promise.all([loadFiles(expectedFolderPath), loadFileOrder(expectedFolderPath)]);
+    // Also wait for the first index-status response so per-file failure
+    // markers are available when the tree first appears, instead of
+    // popping in a few seconds later on the poll.
+    const [files] = await Promise.all([
+      loadFiles(expectedFolderPath),
+      loadFileOrder(expectedFolderPath),
+      refreshIndexState(expectedFolderPath),
+    ]);
     if (generation !== openGen.current || stateRef.current.folderPath !== expectedFolderPath) return;
-    if (opts.optimisticStashingOnOpen && stateRef.current.embedderHasKey !== false) {
-      await markVisibleFilesStashing(files);
+    if (opts.optimisticPendingOnOpen && stateRef.current.embedderHasKey !== false) {
+      await markVisibleFilesPendingForSearch(files);
     }
     dispatch({ type: 'WELCOME_HIDE' });
-    // Land on a Welcome/README note instead of a blank tab. `finishOpenFolder`
-    // is the fresh-entry path (it just reset tabs above), so no need to guard
-    // on tab count — and we use the files loadFiles just returned rather than
-    // reading `stateRef`, which may not yet reflect the FILES_LOADED dispatch.
-    const landing = pickLandingFile(files);
+    // Land on a Welcome/README note when present, otherwise open the first
+    // file so a completed folder switch does not leave the main pane blank.
+    // `finishOpenFolder` is the fresh-entry path (it just reset tabs above),
+    // so no need to guard on tab count — and we use the files loadFiles just
+    // returned rather than reading `stateRef`, which may not yet reflect the
+    // FILES_LOADED dispatch.
+    const landing = pickInitialFile(files);
     if (landing) void selectFile(landing);
-  }, [loadFiles, loadFileOrder, markVisibleFilesStashing, refreshIndexState, resetFolderScopedState, selectFile]);
+  }, [loadFiles, loadFileOrder, markVisibleFilesPendingForSearch, refreshIndexState, resetFolderScopedState, selectFile]);
 
   const refreshRecent = useCallback(async () => {
     const j = await api.getFolder();
@@ -1731,7 +1782,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openFolderByName = useCallback(async (
     name: string,
-    opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticStashingOnOpen?: boolean },
+    opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticPendingOnOpen?: boolean },
   ) => {
     if (editorRef.current && !(await flushSave())) {
       throw new Error('Current file could not be saved. Resolve the save error before switching folders.');
@@ -1747,7 +1798,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.warn('[recent] refresh after open failed:', err);
     });
     await finishOpenFolder(current, generation, {
-      optimisticStashingOnOpen: opts?.optimisticStashingOnOpen,
+      optimisticPendingOnOpen: opts?.optimisticPendingOnOpen,
     });
   }, [finishOpenFolder, flushSave, refreshRecent]);
 
@@ -1819,7 +1870,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const actions = useMemo<AppActions>(() => ({
     bootstrap, openFolder, openFolderByName, goHome,
-    loadFiles, markVisibleFilesStashing, refreshIndexState, runSync, runSearch, setFolderOrder,
+    loadFiles, markVisibleFilesPendingForSearch, refreshIndexState, runSync, runSearch, setFolderOrder,
     dismissIndexWarning,
     selectFile, selectFileWithHighlight, openInNewTab, newTab, closeTab, closeActiveTab, activateTab,
     navigateTo, consumePendingScroll,
@@ -1837,7 +1888,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   }), [
     bootstrap, openFolder, openFolderByName, goHome,
-    loadFiles, markVisibleFilesStashing, refreshIndexState, runSync, runSearch, setFolderOrder,
+    loadFiles, markVisibleFilesPendingForSearch, refreshIndexState, runSync, runSearch, setFolderOrder,
     dismissIndexWarning,
     selectFile, selectFileWithHighlight, openInNewTab, newTab, closeTab, closeActiveTab, activateTab,
     navigateTo, consumePendingScroll,

@@ -88,6 +88,19 @@ async function searchViaWeb(
   return j.hits;
 }
 
+function annotateSearchHitsForMcp(hits: unknown[]): unknown[] {
+  return hits.map((hit) => {
+    if (!hit || typeof hit !== 'object' || Array.isArray(hit)) return hit;
+    const obj = hit as Record<string, unknown>;
+    const fileName = typeof obj.fileName === 'string' ? obj.fileName : '';
+    if (!/\.pdf$/i.test(fileName)) return hit;
+    return {
+      ...obj,
+      read_hint: 'Use read_file on this PDF path; StashBase returns extracted Markdown when conversion has completed.',
+    };
+  });
+}
+
 async function libraryInfoViaWeb(): Promise<LibraryInfo> {
   const r = await fetch(`${WEB_BASE}/api/library/info`);
   if (!r.ok) throw new Error(`web /api/library/info failed: ${r.status}`);
@@ -190,7 +203,8 @@ const server = new Server(
       'Folders can live anywhere on disk, not just under folder_home.\n\n' +
       'All file tools take ABSOLUTE POSIX paths that live under one of those folders ' +
       '(e.g. `/Users/me/notes/topic/note.md`); `search_library` returns paths in the same ' +
-      'form. `write_file`, `edit_file`, `move_file`, and `delete_file` update the ' +
+      'form. When a returned path is a PDF, call `read_file` on that PDF path; StashBase ' +
+      'returns extracted Markdown when conversion has completed. `write_file`, `edit_file`, `move_file`, and `delete_file` update the ' +
       'semantic index when an API key is configured. Call `reindex` after bulk ' +
       'external changes or whenever a tool returns an index warning.\n\n' +
       'When you CREATE a new generated note (e.g. a summary or report), add ' +
@@ -312,7 +326,8 @@ const BUILTIN_TOOLS = [
         '"/Users/me/notes"). For finer control, `path_prefix` restricts hits to chunks ' +
         'whose absolute source starts with that prefix (e.g. "/Users/me/notes/transcripts/"). ' +
         'Each hit returns the absolute file path, the chunk content, ' +
-        'optional heading and source line range, and a fused relevance score. Use this when ' +
+        'optional heading and source line range, and a fused relevance score. PDF hits include a ' +
+        '`read_hint`; use `read_file` on the PDF path to get extracted Markdown. Use this when ' +
         'the user asks something the notes might answer; read full text documents with `read_file`.',
       inputSchema: {
         type: 'object',
@@ -392,7 +407,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       1,
       Math.min(MAX_TOP_K, Math.floor(typeof args.top_k === 'number' ? args.top_k : DEFAULT_TOP_K)),
     );
-    const hits = await viaWeb('search', () => searchViaWeb(query, k, folder, pathPrefix));
+    const hits = annotateSearchHitsForMcp(await viaWeb('search', () => searchViaWeb(query, k, folder, pathPrefix)));
     return {
       content: [{ type: 'text', text: JSON.stringify({ query, folder: folder ?? null, path_prefix: pathPrefix ?? null, top_k: k, hits }, null, 2) }],
     };

@@ -80,7 +80,7 @@ export function mount(app: express.Express): void {
         catch (err: unknown) { log.warn(`file-order cleanup failed for ${p}: ${errorMessage(err)}`); }
       }
       try { clearRecordsUnder(toSourcePath(p)); }
-      catch (err: unknown) { log.warn(`delete_prefix: conversion status cleanup failed for ${p}: ${errorMessage(err)}`); }
+      catch (err: unknown) { log.warn(`delete_prefix: preparation status cleanup failed for ${p}: ${errorMessage(err)}`); }
       res.json({ alreadyGone: !removed });
       indexer.deletePathPrefix(toSourcePath(p)).catch((err) => {
         log.warn(`delete_prefix: index cleanup failed for ${p}: ${errorMessage(err)}`);

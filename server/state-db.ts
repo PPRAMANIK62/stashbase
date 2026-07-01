@@ -2,9 +2,10 @@
  * Library-level transactional state in the per-machine app data directory.
  *
  * This is StashBase-owned state, separate from MFS/Milvus' `store/`
- * schema. It holds exactly one thing: failed PDF / image conversion
- * status, which is non-derivable — a failed conversion looks identical
- * on disk to one that hasn't run — and drives the per-file Retry banner.
+ * schema. It holds exactly one thing: durable file preparation failures,
+ * which are non-derivable — a failed extraction/index attempt can look
+ * identical on disk to one that hasn't run — and drives per-file
+ * recovery affordances.
  *
  * Everything else lives at its authoritative source: the daemon/store
  * owns the per-file hash + index state (via `scan_diff`), the filesystem
@@ -140,7 +141,7 @@ function migrate(conn: Database.Database): void {
     -- Drop legacy tables on open so existing installs shed dead schema:
     --   'pdf_conversions'  → renamed to 'conversions' (covers PDF + image
     --        alike; the old name predated image OCR sharing the table).
-    --        Its rows are ephemeral conversion status — dropping them just
+    --        Its rows are ephemeral preparation status — dropping them just
     --        makes reconcile re-trigger any untracked source, so no
     --        migration is needed.
     --   'files' (per-file index/hash) and 'index_queue' (op queue) — both

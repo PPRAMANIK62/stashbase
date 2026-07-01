@@ -5,11 +5,9 @@ import {
   FolderIcon,
   NewFileIcon,
   NewFolderIcon,
-  StashBaseIcon,
   SyncIcon,
 } from '../icons';
 import { useApp } from '../store/AppContext';
-import { stashingPaths } from '../store/state';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { Menu, type MenuItem } from './Menu';
@@ -17,7 +15,7 @@ import { ModalShell } from './ModalShell';
 import { SearchPanel } from './SearchPanel';
 import { api, errorMessage } from '../api';
 import { FILE_MIME } from '../dragMime';
-import { useEffect, useLayoutEffect, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 
 interface ElectronBridge {
   openFolderDialog?: (opts?: {
@@ -51,8 +49,8 @@ export function Sidebar() {
   );
 }
 
-/** The current sidebar content minus the search input — owns the
- *  index-warning banner, a VSCode-style two-tier FOLDER header (a
+/** The current sidebar content minus the search input — owns a
+ *  VSCode-style two-tier FOLDER header (a
  *  "FOLDER" section row with the folder-actions ⋯ above the folder row:
  *  current folder name + the 4 file-action buttons), and the file tree. */
 function FilesPanel() {
@@ -82,17 +80,11 @@ function FilesPanel() {
 
   return (
     <div className="files-panel" id="sidebar-panel-files" role="tabpanel">
-      <IndexWarningBanner />
       {/* VSCode-style two-tier header: a section-title row ("FOLDER" +
           folder-actions ⋯, mirroring EXPLORER) above the folder row
           (current folder name + file actions). */}
       <div className="panel-section-head folder-section-head">
         <span className="panel-section-title">FOLDER</span>
-        {/* Stashing status sits left, right after the FOLDER label — and
-            OUTSIDE .side-actions (which is hover-reveal-only) so the count
-            stays visible at all times. The ⋯ actions are pushed to the
-            right edge via `margin-left:auto`. */}
-        <StashingIndicator />
         <div className="side-actions">
           <FolderMenu />
         </div>
@@ -151,109 +143,6 @@ function FilesPanel() {
       <div className={'file-list' + (state.folderCollapsed ? ' collapsed' : '')}>
         <FileTree />
       </div>
-    </div>
-  );
-}
-
-/** "N stashing" pill in the FOLDER header (left of the ⋯ actions). A
- *  file is *stashing* while the server is still turning it into
- *  searchable content — BOTH the slow conversion phase (PDF/image OCR,
- *  recording analysis) and the indexing/embedding phase that every
- *  dropped file goes through. `stashingPaths` unions the two so a folder
- *  drop of plain markdown gets a count too, not just PDFs. Counts the
- *  active folder only. Clicking opens a Chrome-downloads-style list of
- *  what's in flight. The logo is a placeholder for the eventual animated
- *  "stashing" mark. */
-function StashingIndicator() {
-  const { state } = useApp();
-  const items = stashingPaths(state);
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-
-  if (items.length === 0) return null;
-
-  function toggle() {
-    if (anchor) { setAnchor(null); return; }
-    const r = buttonRef.current?.getBoundingClientRect();
-    if (r) setAnchor(r);
-  }
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        className="stashing-pill"
-        title={`${items.length} file${items.length === 1 ? '' : 's'} stashing`}
-        onClick={toggle}
-      >
-        <StashBaseIcon className="stashing-pill-logo" />
-        <span className="stashing-pill-count">{items.length} stashing</span>
-      </button>
-      {anchor && (
-        <StashingList anchor={anchor} items={items} onClose={() => setAnchor(null)} />
-      )}
-    </>
-  );
-}
-
-/** The dropdown list anchored under the stashing pill. Right-aligned to
- *  the pill and clamped into the viewport (mirrors `Menu`'s fixed-
- *  position approach so it escapes the sidebar's `overflow: hidden`). */
-function StashingList({
-  anchor,
-  items,
-  onClose,
-}: {
-  anchor: DOMRect;
-  items: string[];
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const { width, height } = el.getBoundingClientRect();
-    let left = anchor.left; // left-align to the pill (sits on the left)
-    let top = anchor.bottom + 4;
-    left = Math.max(6, Math.min(left, window.innerWidth - width - 6));
-    top = Math.max(6, Math.min(top, window.innerHeight - height - 6));
-    setPos((prev) => (prev && prev.top === top && prev.left === left ? prev : { top, left }));
-  }, [anchor]);
-
-  useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('blur', onClose);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('blur', onClose);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      ref={ref}
-      className={'stashing-list' + (pos ? ' ready' : '')}
-      style={{ position: 'fixed', top: pos?.top ?? 0, left: pos?.left ?? 0 }}
-    >
-      <div className="stashing-list-head">Stashing</div>
-      {items.map((p) => (
-        <div key={p} className="stashing-list-row" title={p}>
-          <StashBaseIcon className="stashing-list-logo" />
-          <span className="stashing-list-name">{p.split('/').pop()}</span>
-          <span className="stashing-list-phase">stashing…</span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -390,36 +279,6 @@ function NewNoteButton() {
       title={'New note in ' + target}
       onClick={() => void actions.newNote()}
     ><NewFileIcon /></button>
-  );
-}
-
-function IndexWarningBanner() {
-  const { state, actions } = useApp();
-  const w = state.indexWarning;
-  if (!w) return null;
-  return (
-    <div className="index-warning">
-      <div className="index-warning-body">
-        <div className="index-warning-title">
-          Indexing needs attention
-        </div>
-        <div className="index-warning-msg">
-          Search may be incomplete: {w.message}
-        </div>
-      </div>
-      <button
-        type="button"
-        className="index-warning-dismiss"
-        title="Retry indexing"
-        onClick={() => { void actions.runSync(); }}
-      ><SyncIcon /></button>
-      <button
-        type="button"
-        className="index-warning-dismiss"
-        title="Dismiss"
-        onClick={() => { void actions.dismissIndexWarning(); }}
-      >×</button>
-    </div>
   );
 }
 

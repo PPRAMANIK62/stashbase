@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, assetUrl, errorMessage } from '../api';
 import { useApp } from '../store/AppContext';
-import { getConversionFailure } from '../store/fileReadiness';
+import { getPreparationFailure } from '../store/fileReadiness';
 
 /**
  * In-pane viewer for a standalone image file. The image binary is
@@ -26,7 +26,7 @@ import { getConversionFailure } from '../store/fileReadiness';
  *
  * If OCR failed for this image, a small banner offers Retry — the image
  * still renders (it's the user-facing file), only its searchable text is
- * missing. Failure state comes from `state.conversionFailures` (fed by
+ * missing. Failure state comes from `state.preparationFailures` (fed by
  * the index-status poll), the same list that drives PdfPreview's banner.
  */
 const MIN_SCALE = 0.1;
@@ -45,7 +45,7 @@ export function ImagePreview({ name }: { name: string }) {
   const [retryError, setRetryError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
   const alt = name.split('/').pop() ?? name;
-  const failure = getConversionFailure(state, name);
+  const failure = getPreparationFailure(state, name);
   const failureMessage = failure ? imageOcrFailureMessage(failure.lastError) : '';
   // Device pixel ratio: the baseline (100%) maps one image pixel to one
   // physical pixel, so a Retina screenshot shows at captured size + sharp.
@@ -94,7 +94,7 @@ export function ImagePreview({ name }: { name: string }) {
     const stillCurrent = () =>
       currentRef.current.folderPath === folderPathAtStart && currentRef.current.name === nameAtStart;
     try {
-      await api.retryConversion(name, { folder: folderPathAtStart || undefined });
+      await api.reprocessFile(name, { folder: folderPathAtStart || undefined });
       // The failures list / banner clear on the next index-status poll.
     } catch (err: unknown) {
       if (!stillCurrent()) return;
@@ -121,7 +121,7 @@ export function ImagePreview({ name }: { name: string }) {
             disabled={retryBusy}
             onClick={() => { void onRetry(); }}
           >
-            {retryBusy ? 'Retrying…' : 'Retry text extraction'}
+            {retryBusy ? 'Reprocessing…' : 'Reprocess'}
           </button>
         </div>
       )}

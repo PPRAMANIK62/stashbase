@@ -82,8 +82,8 @@ export function clearStaleMilvusLock(): void {
  *  crash, Electron force-quit, or losing the `:8090` startup race). Unlike
  *  `clearStaleMilvusLock`, these may NOT hold `milvus.db` — the lock-fight
  *  loser never grabbed it, yet its mere presence lets the rightful
- *  daemon's writes vanish into the loser (the write-black-hole, data-layer
- *  §8.1 / §8.6 I2). So we match by command line instead of by lock holder.
+ *  daemon's writes vanish into the loser (the write-black-hole). So we match
+ *  by command line instead of by lock holder.
  *
  *  MUST be called only AFTER winning the `:8090` arbiter and BEFORE
  *  spawning this server's own daemon: that ordering guarantees any other

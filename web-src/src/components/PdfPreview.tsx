@@ -45,9 +45,8 @@ const PDF_MAX_SCALE = 3;
  *
  * Two things this component is responsible for, neither of which the
  * out-of-the-box pdfjs viewer.html gives us cleanly:
- *   1. Failure banner sourced from `state.db` so users see
- *      "conversion failed, click to retry" in-context, not buried in
- *      a separate failure list.
+ *   1. Failure banner sourced from `state.db` so users can reprocess a
+ *      failed PDF in-context, not from a separate failure list.
  *   2. Chunk text search — when a search hit on a PDF-derived HTML
  *      file co-opens the PDF, we call into the find controller with
  *      the chunk text so the PDF jumps to the same passage.
@@ -288,7 +287,7 @@ function highlightRectsForMatch(p: FlatPage, idx: number, length: number): PdfHi
   });
 }
 
-export function pdfConversionFailureMessage(raw: string): string {
+export function pdfPreparationFailureMessage(raw: string): string {
   return raw
     .replace(/^pdf_extract exit \d+:\s*/i, '')
     .replace(/^\[pdf_extract\]\s*/i, '')
@@ -313,19 +312,14 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const [retryError, setRetryError] = useState<string | null>(null);
   const [pageHighlight, setPageHighlight] = useState<PdfPageHighlight | null>(null);
   const readiness = getFileReadiness(state, name);
-  const failure = readiness.conversionFailure;
-  const failureMessage = failure ? pdfConversionFailureMessage(failure.lastError) : '';
-  const conversionProgress = state.conversionProgress[name];
-  const notSearchableYet = !failure && readiness.isStashing;
-  const notSearchableDetail = pdfNotSearchableDetail(conversionProgress, numPages);
+  const failure = readiness.preparationFailure;
+  const failureMessage = failure ? pdfPreparationFailureMessage(failure.lastError) : '';
   const chromeStatus = failure && showConversionBanner
     ? {
         kind: 'error' as const,
         text: `This PDF is not searchable.${failureMessage ? ` ${failureMessage}` : ''}${retryError ? ` (${retryError})` : ''}`,
       }
-    : showConversionBanner && notSearchableYet
-      ? { kind: 'pending' as const, text: `This PDF is not searchable yet. ${notSearchableDetail}` }
-      : null;
+    : null;
   const retryInProgress = retryBusy || retryStarted;
   // Sampled page 1 viewport at 1× scale. Used as the per-page
   // placeholder height so the lazy-rendered pages reserve the
@@ -583,7 +577,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     const stillCurrent = () =>
       currentRef.current.folderPath === folderPathAtStart && currentRef.current.name === nameAtStart;
     try {
-      await api.retryConversion(name, { folder: folderPathAtStart || undefined });
+      await api.reprocessFile(name, { folder: folderPathAtStart || undefined });
       if (!stillCurrent()) return;
       setRetryStarted(true);
     } catch (err: unknown) {
@@ -603,7 +597,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
         scale={scale}
         numPages={numPages}
         status={chromeStatus}
-        retryLabel={retryInProgress ? 'Retrying…' : 'Retry conversion'}
+        retryLabel={retryInProgress ? 'Reprocessing…' : 'Reprocess'}
         retryDisabled={retryInProgress}
         onRetry={failure && showConversionBanner ? onRetry : undefined}
         onFit={() => {
@@ -635,21 +629,6 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   );
 }
 
-function pdfNotSearchableDetail(
-  progress: { phase: 'extracting'; currentPage?: number } | { phase: 'indexing' } | undefined,
-  numPages: number,
-): string {
-  if (progress?.phase === 'indexing') return 'Preparing search index';
-  if (progress?.phase === 'extracting') {
-    const page = progress.currentPage;
-    if (typeof page === 'number' && page > 0) {
-      return numPages > 0 ? `Reading page ${Math.min(page, numPages)} of ${numPages}` : `Reading page ${page}`;
-    }
-    return 'Reading PDF';
-  }
-  return 'Preparing search';
-}
-
 /** Render the PDF chrome (zoom controls + page count) into the
  *  `#pdf-chrome-slot` MainPane mounts at the top-right of the
  *  breadcrumb row — replaces the old "second toolbar row" so the
@@ -669,7 +648,7 @@ function PdfChromePortal({
 }: {
   scale: number;
   numPages: number;
-  status: { kind: 'pending' | 'error'; text: string } | null;
+  status: { kind: 'error'; text: string } | null;
   retryLabel: string;
   retryDisabled: boolean;
   onRetry?: () => void;

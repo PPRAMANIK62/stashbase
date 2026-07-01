@@ -33,10 +33,10 @@ import {
 } from './codex-agent.ts';
 import { onClose, onSwitch, ensureFolderHome, toPosixAbs } from './folder.ts';
 import { getApiKey, migrateLegacyEmbedderConfig } from './app-config.ts';
-import { bootBindAllFolders } from './state.ts';
+import { bootBindAllFolders, reconcileLibraryFolders } from './state.ts';
 import { reapOrphanDaemons } from './stale-lock.ts';
 import { logger } from './log.ts';
-import { setDerivedNoteIndexer } from './conversion.ts';
+import { cancelAllConversions, setDerivedNoteIndexer } from './conversion.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { indexer } from './state.ts';
 import { closeStateDb } from './state-db.ts';
@@ -224,7 +224,6 @@ app.use([
   '/api/files',
   '/api/folders',
   '/api/search',
-  '/api/index-status',
   '/api/rename-preview',
   '/api/file-order',
   '/api/reveal',
@@ -284,7 +283,7 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   // We own :8090 now → we're THE server. Reap any orphan daemon left by a
   // previous server that died hard (kill -9 / crash / lost the startup
   // race) BEFORE spawning ours, so it gets a clean Milvus lock instead of
-  // fighting an orphan and black-holing writes (data-layer §8.1).
+  // fighting an orphan and black-holing writes.
   try { reapOrphanDaemons(); } catch (err: unknown) {
     log.warn(`reap orphan daemons failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -293,9 +292,11 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   // already on disk and gets picked up. Configure the daemon + bind every
   // known folder so MCP / cross-folder search works without waiting for the
   // user to open one. Background.
-  bootBindAllFolders().catch((err) =>
-    log.warn(`bootBindAllFolders failed: ${err?.message ?? err}`),
-  );
+  bootBindAllFolders()
+    .then(() => reconcileLibraryFolders('app boot'))
+    .catch((err) =>
+      log.warn(`boot library bind/reconcile failed: ${err?.message ?? err}`),
+    );
   log.info('waiting for the user to pick a folder');
 });
 
@@ -416,8 +417,9 @@ server.on('upgrade', (req, socket, head) => {
 //
 // Without this, SIGTERM (Electron `will-quit`) leaves the Python daemon
 // orphaned still holding Milvus Lite's flock — the next launch then
-// fails to open the same DB. Run the close ladder once, with a hard
-// ceiling so a stuck close can't keep us pinned.
+// fails to open the same DB. Active extractors are cancelled before state.db
+// closes so transient conversion exits can clear in-flight state. Run the close
+// ladder once, with a hard ceiling so a stuck close can't keep us pinned.
 
 let shuttingDown = false;
 async function shutdown(reason: string): Promise<void> {
@@ -427,13 +429,15 @@ async function shutdown(reason: string): Promise<void> {
   // Stop accepting new connections immediately; in-flight ones drain.
   try { server.close(); } catch { /* already gone */ }
   try { killActiveAgent(); } catch { /* swallow */ }
-  try { closeStateDb(); } catch { /* swallow */ }
-  // Hard ceiling: if the indexer's close ladder can't unstick the
-  // Python child in 4 s, exit anyway. The daemon's own kill ladder
-  // is 1.5 s SIGTERM + 1.5 s SIGKILL + 0.5 s grace = 3.5 s; we leave
-  // a small buffer for Milvus flush.
-  const exitTimer = setTimeout(() => process.exit(0), 4000);
+  try { killActiveCodex(); } catch { /* swallow */ }
+  // Hard ceiling: conversion cancellation may spend up to 2.5 s waiting for
+  // extractor process groups to exit, and the daemon close ladder can spend
+  // another ~3.5 s. Exit anyway if either side wedges.
+  const exitTimer = setTimeout(() => process.exit(0), 6500);
   try {
+    const cancelled = await cancelAllConversions();
+    if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} conversion(s)`);
+    try { closeStateDb(); } catch { /* swallow */ }
     await indexer.close();
   } catch (err: unknown) {
     log.warn(`shutdown: indexer.close failed: ${err instanceof Error ? err.message : String(err)}`);

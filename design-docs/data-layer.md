@@ -1,152 +1,210 @@
-# Data Layer
+# Data Correctness & Recovery
 
-> This document describes StashBase data ownership and liveness: which bytes are authoritative, which state is derived, how the index catches up with local files, and what must stay true when folders are opened, removed, renamed, or searched.
+> StashBase looks simple at the product surface: open a folder, import files, search the library. The hard part is underneath. Conversion and indexing can be interrupted, partially completed, retried, or made stale by external file changes. This document defines how the system avoids lying to itself.
 
----
-
-# 1. Sources of Truth
-
-StashBase has one local **library**: the set of folders in "Your Folders". A folder can live anywhere on disk. The default folder home (`~/Documents/StashBase`) is only where New Folder starts and where the built-in manual is seeded. It is not a boundary, an index scope, or a configurable root.
-
-| Data | Source of truth | Durable? | Notes |
-|-|-|-|-|
-| User files | Filesystem | Yes | Markdown, HTML, PDF, images, and attachments stay in the user's folder tree. |
-| Opened folders | `~/.stashbase/config.json` `recentFolders` | Yes | This is library membership, not a disposable MRU cache. |
-| Folder descriptions | `~/.stashbase/config.json` `recentFolders[].description` | Yes | Optional short orientation metadata. Not indexed content and not a scope boundary. |
-| Embedder/settings | `~/.stashbase/config.json` | Yes | Includes API key and generated MCP client configuration. |
-| Derived text/assets | `<appData>/derived.nosync/` | Rebuildable | PDF/image text extraction and bundles live outside user folders. |
-| Vector index | `<appData>/vector-store.nosync/` | Rebuildable | One per-machine Milvus Lite store and one collection. |
-| Conversion failures | `<appData>/state/state.db` | Yes | Persisted because a failed conversion looks the same on disk as one that has not run. |
-| Sidebar order | `<appData>/file-order/` | Rebuildable | Optional manual ordering keyed by folder path. Removed with folder membership. |
-| In-flight work | Process memory | No | Rediscovered by reconcile after restart. |
-
-The rule is simple: user-visible files belong to the user. StashBase-owned state lives in AppData and can be rebuilt unless it records a user-visible failure.
+This is not a second architecture document. `architecture.md` explains where modules live and how flows connect. This document explains the correctness contracts that must hold when user operations meet conversion, indexing, AppData, process memory, and failure recovery.
 
 ---
 
-# 2. Library Membership
+# 1. Operation Risk Map
 
-`recentFolders` is the searchable library membership. Opening a folder adds its absolute path to the list. Removing a folder:
-
-- clears semantic index rows under that folder path
-- deletes AppData-derived text/assets for sources under that folder
-- removes AppData sidebar ordering for that folder
-- unbinds the folder from the daemon
-- clears conversion/runtime state for that path prefix
-- removes it from `recentFolders`
-- never deletes the folder on disk
-
-Each `recentFolders` entry may also store a short `description`, with optional `descriptionSource` (`user` or `ai`) and `descriptionUpdatedAt`. This metadata is for orientation only. `library_info()` can expose it so Agents know what each folder is likely to contain before searching. Search and indexing do not depend on it.
-
-At boot, `bootBindAllFolders` binds every member folder into the daemon so MCP search can cover the whole library even before the user opens each folder in the UI.
-
-The active window still shows one folder at a time. That is UI scope only. MCP library scope is all member folders by default.
-
----
-
-# 3. Identity
-
-The index identity is the **absolute POSIX source path**.
-
-```text
-/Users/me/Notes/paper.md
-/Users/me/Research/paper.pdf
-```
-
-Folder-relative paths exist only at UI and filesystem route boundaries. Once data enters conversion, indexing, search, or daemon calls, it is identified by absolute source path.
-
-Content identity is separate:
-
-- `file_hash`: BLAKE3 hash of the source file content, used by daemon diffing.
-- chunk hash: used internally by MFS/Milvus for chunk reuse.
-
-Path identity answers "where should this result open?" Content identity answers "did this file really change?"
+| User operation | What can go wrong | Data-layer contract |
+|-|-|-|
+| Open a folder | A previous run was interrupted; derived state may be missing, stale, or partial. | Reconcile must rediscover missing or incomplete work before treating the folder as settled. |
+| Land on Welcome | The user may not open any specific folder, but previous library work may still be incomplete. | Welcome must trigger folder-explicit library reconcile in the background; status polling alone is not recovery. |
+| Go Home / close the active folder | Conversion may still be running, while the UI leaves the folder view. | In-flight work is process-owned. Welcome may keep a display snapshot, but it is not data truth. |
+| Reopen a folder | Old derived Markdown may exist from a partial or legacy conversion. | Completion must be verified, not inferred from file existence alone. |
+| Import or copy in a large PDF | Some PDF batches may finish before the app exits or the extractor is killed. | Batch scratch can be reused, but the final PDF note is complete only with the completion marker. |
+| Import several PDFs, including scans | Scanned PDFs can monopolize conversion time because OCR is slow. | PDF scheduling probes for a text layer and runs text-layer PDFs before scanned PDFs. |
+| Import an image | OCR may fail or produce empty text. | Empty OCR text is a preparation failure for search; the source image remains viewable. |
+| Search immediately after import | Conversion completion and semantic indexing completion are different clocks. | Keyword search can use completed derived text; semantic search depends on daemon index status only when embeddings are enabled. |
+| Reprocess a failed file | Stale derived artifacts or stale failure rows may poison the next attempt. | Reprocess clears the failure row. PDF/image sources clear stale final artifacts and queue extraction; directly readable files trigger reconcile/index from source. |
+| Edit or replace a source file externally | Existing index rows or derived notes may describe old content. | Reconcile compares source identity and content state; stale derived/index state must not be treated as current. |
+| Rename or move a file | Old source identity may leave derived artifacts, failure rows, or index rows behind. | Source identity is absolute path; rename/move must remap or clean old app-owned state. |
+| Delete a source file | Derived text, failure rows, and index rows may become orphaned. | Cleanup must remove app-owned state for the deleted source. |
+| Remove a folder from the library | User files must remain, but app state for that subtree must disappear. | Clear index rows, derived artifacts, preparation rows, sidebar order, runtime bindings, and library membership. |
+| App restart | Process-memory in-flight state is gone. | Persisted failures survive; incomplete work is rediscovered by reconcile. |
+| MCP `reindex` on an unopened folder | There may be no active UI folder context. | Reindex/status must be folder-explicit and must not depend on the current window. |
 
 ---
 
-# 4. Derived Data
+# 2. Completion Contracts
 
-Structured files:
+Completion is format-specific. A file or row existing somewhere is not always enough.
 
-- Markdown is indexed directly.
-- HTML stays as HTML on disk and is read as HTML; StashBase extracts clean text before indexing.
+## Markdown
 
-Files with derived text layers:
+Markdown is complete when the source file exists and is readable. It is indexed directly from the source file.
 
-- PDFs and images produce derived Markdown under `<appData>/derived.nosync/`.
-- PDF derived Markdown is used for both Agent text reading and indexing.
-- Image OCR Markdown is used for indexing; the image remains the read/view source.
-- Search results map back to the visible source PDF/image. PDF hits use derived Markdown as text context; image hits use OCR text as search evidence.
+## HTML
 
-Derived notes are app-maintained. They are hidden from normal file listings and should not be edited by users or agents as source files.
+HTML remains the source file for reading. The extracted text used for indexing is an internal indexing input. HTML extraction is not a user-visible conversion artifact.
 
----
+## Images
 
-# 5. Reconcile
+Images remain the source file for viewing and Agent reading. OCR-derived Markdown exists to make image text searchable.
 
-The index is eventually consistent with the filesystem. StashBase does not run a global background crawler.
+An image conversion is complete when the derived Markdown is current for the source, contains extractable text, and includes the StashBase OCR completion marker. If OCR produces no searchable text, the conversion records a failure instead of pretending the image is searchable.
 
-Reconcile is triggered by definite events:
+## PDFs
 
-- opening or switching a folder
-- app focus returning
-- an Agent turn ending
-- manual Sync
-- MCP `reindex`
+PDFs are different: the derived Markdown is both the searchable text and the Agent-readable text form.
 
-Reconcile asks the daemon for a content-hash diff, then:
+A PDF conversion is complete only when:
 
-- indexes added files
-- re-indexes modified files
-- deletes rows for removed files
-- fast-paths renames when the content hash matches
-- discovers PDF/image sources that need conversion
+- the derived Markdown exists under `<appData>/derived.nosync/`
+- it is current for the source PDF
+- it includes the StashBase PDF completion marker
 
-Only changed content is embedded. A no-op reconcile should not burn embedding tokens.
+PDF batch scratch is not completion. A marker-less PDF derived note is treated as incomplete and is rediscovered.
 
-There are two write paths:
+## Semantic Index
 
-- Writes through StashBase HTTP/MCP file helpers are app-owned writes. They update or schedule index maintenance as part of the operation when possible.
-- Writes through external filesystem tools, editors, Git, cloud sync, or an Agent's own sandbox are external writes. They become searchable only after reconcile, so Agents should call `reindex` when they need those changes in search.
+Conversion completion is not semantic indexing completion.
+
+If embedding is unavailable or a daemon index write fails after extraction, conversion can still be complete: derived text exists and keyword search can use it. Semantic availability is determined by daemon index status.
+
+Without an OpenAI API key, semantic search is disabled, not pending. `/api/index-status` reports semantic readiness separately from conversion readiness so the UI can keep keyword search available while showing semantic setup copy instead of an endless preparing state.
 
 ---
 
-# 6. Conversion State
+# 3. Conversion State & Recovery
 
 Conversion has three practical states:
 
-- **in-flight**: process memory only
-- **failed**: persisted in `<appData>/state/state.db`
-- **done**: represented by the derived Markdown existing on disk
+| State | Stored where | Recovery rule |
+|-|-|-|
+| Queued | Process memory | Exposed through status for search-readiness accounting; lost on process exit and rediscovered by reconcile. |
+| In-flight | Process memory | Lost on process exit; rediscovered if derived output is missing or incomplete. |
+| Failed | `<appData>/state/state.db` | Durable until user reprocess or source/folder cleanup. |
+| Done | Complete derived output on disk | Reused until source changes or artifacts are deleted. |
 
-Failures are persisted because retry behavior needs to survive restart and because automatic retry can burn money on persistently bad files. A failed PDF/image should never become permanently stuck: the user can manually retry extraction. In-flight state is not persisted because the child extractor dies with the process; after restart, reconcile rediscovers sources whose derived note is missing.
+Transient interruption is not a durable failure. Examples include app exit, cancellation, extractor process termination, or source replacement during conversion. These clear in-flight state and allow the next reconcile to rediscover the source.
 
-Semantic indexing is not part of conversion completion. If embedding is unavailable or an index write fails after extraction, the conversion can still be done: the derived Markdown exists, keyword search can use it, and a later reconcile can add it to the semantic index.
+On graceful shutdown, StashBase cancels active extractors before closing state storage. Shutdown cancellation is transient: it must not persist a failure row, and the next reconcile must rediscover incomplete work.
 
-Retry clears the failure row, removes stale derived artifacts, and queues conversion again. Deleting a file or removing a folder clears conversion rows under the relevant absolute source path prefix.
+Persistent preparation failures are durable. They are not silently retried forever because repeated automatic retries can burn time, CPU, OCR, or embedding budget. The user can reprocess the file manually.
+
+Reprocess does this:
+
+- clears the failure row
+- for PDF/image sources, removes stale final derived artifacts and queues extraction again
+- for directly readable sources, reconciles the folder so the source can be indexed again
+
+For PDFs, reprocess and transient recovery preserve resumable batch scratch when possible, so a large PDF can continue from completed batches instead of starting from page one.
+
+PDF queue priority is an optimization, not a source of truth. Text-layer PDFs are scheduled ahead of scanned PDFs so slow OCR does not block cheaper work. Manual PDF reprocess is prioritized ahead of normal queued work.
 
 ---
 
-# 7. Process Ownership
+# 4. Incomplete Work & Resume
 
-The Node server owns app logic, file operations, conversion orchestration, and HTTP/MCP routes.
+Incomplete work must never become visible as truth.
 
-The Python daemon owns chunking, embedding, vector-store writes, and vector search. It receives absolute file paths and text; it does not decide how PDFs, images, or HTML should be prepared for indexing.
+PDF extraction is batch-based. Completed batches may exist under AppData while the final derived Markdown is still missing or incomplete. On the next run:
 
-There is one daemon for the app server. It owns one app-data vector store and one collection. Folders are registered by absolute path through the daemon's `bind_folder` wire op.
+- matching batch scratch can be reused
+- stale final note/bundle artifacts are removed before conversion
+- the final note is assembled only after all batches complete
+- the completion marker is written only at the end
 
-MCP does not open the vector store directly. It forwards retrieval, file-helper, and reindex requests to the running app server.
+If the app exits halfway through a large PDF, the next open/sync/reindex should resume the remaining work and then assemble a complete final note. Search should not treat partial derived output as complete PDF text.
+
+Images do not have batch resume. If OCR is interrupted before a valid derived note is produced, reconcile queues it again.
 
 ---
 
-# 8. Invariants
+# 5. Reconcile Rules
 
-- User files are never moved into AppData.
-- App-derived state is never written into user folders. StashBase has no folder-level config; persistent app config lives in `~/.stashbase/config.json`.
-- Search, index, and conversion identity is absolute source path, not folder-home-relative path.
-- The default folder home is only a default location, not a scope boundary.
-- Removing a folder from "Your Folders" must not delete user files, but it should delete StashBase-owned derived state for that folder.
-- Folder descriptions are app config metadata. They should be removed with folder membership and must not be treated as indexed user content.
-- A failed PDF/image conversion must remain retryable by the user; StashBase should not silently retry persistent failures forever.
-- The daemon is the source of truth for index status; Node should not maintain a second indexed-file cache.
-- Agents must call `reindex` after external file changes when they need those changes to become searchable. StashBase-owned file helper writes are responsible for their own index maintenance.
+Reconcile is the operation that catches the system up with disk reality.
+
+It runs on:
+
+- app boot for all member folders
+- Welcome loading the library list
+- opening or switching a folder
+- manual Sync
+- MCP `reindex`
+- app focus returning
+- Agent turn completion
+
+Reconcile must be folder-explicit. It must not rely on an active window when the caller already names a folder.
+
+For each folder, reconcile checks:
+
+- source files added, modified, deleted, or renamed
+- derived Markdown missing, stale, or incomplete
+- durable preparation failures that should remain blocked until manual reprocess
+- AppData-derived sources whose original source path no longer exists
+- daemon index rows that need add/update/delete
+- source paths that should no longer surface in search
+
+Only changed content should be embedded. A no-op reconcile should not spend embedding tokens.
+
+External writes are not immediately searchable. Editors, Git, cloud sync, terminal commands, and external Agents change the filesystem outside StashBase's write path. They become searchable after reconcile. StashBase-owned file helper writes should schedule or perform index maintenance as part of the write when possible.
+
+---
+
+# 6. Cleanup Rules
+
+User files belong to the user. StashBase cleanup removes only app-owned state.
+
+Removing a folder from the library:
+
+- removes it from `~/.stashbase/config.json` `recentFolders`
+- clears semantic index rows under that folder path
+- deletes AppData-derived text/assets for sources under that folder
+- clears preparation rows and in-flight state under that path prefix
+- removes AppData sidebar ordering for that folder
+- unbinds the folder from the daemon
+- never deletes the folder on disk
+
+Deleting a PDF/image source clears:
+
+- derived Markdown
+- derived bundle
+- PDF batch scratch
+- derived source manifest entries
+- preparation failure/in-flight rows
+- index rows for the source path
+
+Reprocessing a PDF/image clears stale final derived artifacts and failure rows before queueing extraction. Reprocessing a directly readable source clears the failure row and reconciles the folder. It should not leave old output available as if it belonged to the new attempt.
+
+Renames and moves use absolute source path identity. If rows can be remapped safely by content hash, the daemon may reuse embeddings; otherwise the old source identity is cleaned and the new source identity is indexed or converted.
+
+---
+
+# 7. State Ownership
+
+| State | Owner | Durable? | Review question |
+|-|-|-|-|
+| Source files | User filesystem | Yes | Are we ever moving or rewriting user files as app state? |
+| Library membership | `~/.stashbase/config.json` | Yes | Does this represent searchable membership, not just MRU? |
+| Folder descriptions | `~/.stashbase/config.json` | Yes | Are they treated as orientation metadata, not indexed source content? |
+| Derived text/assets | AppData | Rebuildable | Can stale or partial artifacts be mistaken for completion? |
+| Derived source manifest | AppData | Rebuildable | Can AppData artifacts still be traced to a source path when semantic indexing is disabled? Is the manifest updated atomically, and do failed cleanups keep enough mapping to reprocess? |
+| PDF batch scratch | AppData | Rebuildable/resumable | Is it preserved across transient interruption but removed on source cleanup? |
+| Vector index | AppData daemon store | Rebuildable | Is the daemon the source of truth for index status? |
+| Preparation failures | AppData `state.db` | Yes | Is reprocess possible, and are persistent failures not silently retried forever? |
+| In-flight conversions | Process memory | No | Can lost in-flight state be rediscovered? |
+| Search readiness snapshot | Renderer memory | No | Is it display-only and reconciled from `/api/index-status`? |
+
+---
+
+# 8. Review Checklist
+
+When reviewing code that touches conversion, indexing, sync, search, folder membership, or AppData cleanup, check these invariants:
+
+- Completion is explicit. A partial artifact cannot be mistaken for done.
+- Conversion completion and semantic indexing completion are separate states.
+- In-flight state can be lost without making work permanently stuck.
+- Persistent failures are reprocessable but not auto-retried forever.
+- Reprocess clears stale output before queueing new work.
+- Large PDF interruption can resume completed batches.
+- Derived artifacts never appear as user-editable source files.
+- Search results point to user-facing source paths, not AppData paths.
+- Source identity is absolute POSIX path once work enters conversion, indexing, search, or daemon calls.
+- Folder-explicit routes work even when no folder is open in the UI.
+- Removing a folder deletes app-owned state but never deletes user files.
+- UI status snapshots do not become data truth.
+- Background preparation is quiet by default. Files and folders show failure markers only; the Search view is where pending/failed preparation is summarized because that is where incomplete readiness affects the user.

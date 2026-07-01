@@ -27,6 +27,9 @@ import type { Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock }
 
 let blockSeq = 0;
 const nextId = () => `b${++blockSeq}`;
+const ATTACH_MAX_FILES = 50;
+const ATTACH_MAX_BYTES = 64 * 1024 * 1024;
+const ATTACH_TIMEOUT_MS = 60_000;
 
 /** A chat tab still wearing its auto-generated placeholder name, so we
  *  know it's safe to overwrite with the session's derived title. */
@@ -191,6 +194,12 @@ export function AgentView({
         setCurrentSessionId(ev.id);
         sessionIdRef.current = ev.id;
         break;
+      case 'session-title':
+        if (isDefaultChatTitle(titleRef.current)) {
+          const t = ev.title.trim();
+          if (t) dispatch({ type: 'CHAT_TAB_RENAME', id: idRef.current, title: t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : t });
+        }
+        break;
       case 'turn-start':
         openKind.current = null;
         setTurnActive(true);
@@ -317,7 +326,11 @@ export function AgentView({
     const ctx = await buildPromptContext(activeFile, atts);
     const wire = ctx.length ? `${text}${text ? '\n\n' : ''}${ctx.join('\n\n')}` : text;
     try {
-      ws.send(JSON.stringify({ t: 'prompt', text: wire }));
+      ws.send(JSON.stringify({
+        t: 'prompt',
+        text: wire,
+        ...(agent === 'codex' && isDefaultChatTitle(titleRef.current) ? { titleHint: text } : {}),
+      }));
       setAttachments([]);
     } catch (err) {
       setTurnActive(false);
@@ -351,8 +364,7 @@ export function AgentView({
     if (ctx?.kind === 'derived') {
       return [
         `Current file (open in the viewer): ${ctx.sourcePath}`,
-        `For text context, read the extracted Markdown filesystem path first: ${ctx.readPath}`,
-        `Only read the original ${ctx.sourceFormat} if you need raw visual or binary detail.`,
+        `For text context, use StashBase read_file on ${ctx.path}; it returns extracted Markdown for this ${ctx.sourceFormat}.`,
       ].join('\n');
     }
     if (ctx && !ctx.available && ctx.sourceFormat === 'pdf') {
@@ -367,7 +379,7 @@ export function AgentView({
   async function formatAttachmentContext(att: Attachment): Promise<string> {
     const ctx = await resolveFolderContext(att.path);
     if (ctx?.kind === 'derived') {
-      return `- ${ctx.sourcePath} (read extracted Markdown filesystem path first: ${ctx.readPath}; use the original ${ctx.sourceFormat} only for raw visual or binary detail)`;
+      return `- ${ctx.sourcePath} (use StashBase read_file on ${ctx.path}; it returns extracted Markdown for this ${ctx.sourceFormat})`;
     }
     if (ctx && !ctx.available && ctx.sourceFormat === 'pdf') {
       return `- ${ctx.sourcePath} (extracted Markdown is not available yet; read the original only if necessary)`;
@@ -381,10 +393,18 @@ export function AgentView({
    *  path, which the agent reads. */
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
+    const eligible = files.slice(0, ATTACH_MAX_FILES).filter((f) => f.size <= ATTACH_MAX_BYTES);
+    const skipped = files.length - eligible.length;
+    if (skipped > 0) {
+      actions.toast(`${skipped} file(s) were not attached because they are too large or exceed the batch limit.`, { level: 'warning' });
+    }
+    if (eligible.length === 0) return;
     uploadCountRef.current += 1;
     setUploading(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), ATTACH_TIMEOUT_MS);
     try {
-      const result = await api.attachFiles(files);
+      const result = await api.attachFiles(eligible, { signal: controller.signal });
       if (!mountedRef.current) return;
       // `result.files` is 1:1 with `files` (server preserves order); pull
       // image dimensions off the original File for the chip label.
@@ -394,17 +414,19 @@ export function AgentView({
       for (let i = 0; i < entries.length; i++) {
         const r = entries[i];
         if (r.error || !r.path) { failed++; continue; }
-        const orig = files[i];
+        const orig = eligible[i];
         const dims = orig && orig.type.startsWith('image/') ? await readImageDims(orig) : undefined;
         added.push({ path: r.path, name: r.name, dims });
       }
       if (!mountedRef.current) return;
       if (added.length) setAttachments((a) => mergeAttachments(a, added));
       if (failed) actions.toast(`${failed} file(s) failed to attach.`, { level: 'error' });
-    } catch {
+    } catch (err: unknown) {
       if (!mountedRef.current) return;
-      actions.toast('Attach failed.', { level: 'error' });
+      const aborted = err instanceof DOMException && err.name === 'AbortError';
+      actions.toast(aborted ? 'Attach timed out.' : 'Attach failed.', { level: 'error' });
     } finally {
+      window.clearTimeout(timeout);
       uploadCountRef.current = Math.max(0, uploadCountRef.current - 1);
       if (mountedRef.current) setUploading(uploadCountRef.current > 0);
     }

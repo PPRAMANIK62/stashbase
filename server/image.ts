@@ -11,16 +11,18 @@
  * Unlike PDFs there is no image bundle — OCR yields only text.
  *
  * Conversion status reuses the same `state.db`-backed store as PDFs
- * (`conversion-status.ts`, keyed by path) so the "Converting…" indicator and
- * the in-flight list cover images for free.
+ * (`conversion-status.ts`, keyed by path) so search readiness and persistent
+ * failures cover images and PDFs through one path.
  */
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
 import { isImageFile } from './format.ts';
 import { derivedNoteFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn } from './python-host.ts';
 import { discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
 import { spawnOptionsForExtractor, terminateExtractorTree } from './extractor-process.ts';
+
+const OCR_COMPLETE_MARKER = '<!-- stashbase-ocr-conversion: complete -->';
 
 /** App-data derived note path for an image (the OCR text layer) — never in
  *  the user's opened folder (see `derived-store.ts`). No image bundle. */
@@ -30,6 +32,25 @@ export function derivedNotePathForImage(imageAbsPath: string): string {
 
 function cleanupDerivedImage(imageAbsPath: string): void {
   rmSync(derivedNotePathForImage(imageAbsPath), { force: true });
+}
+
+function derivedImageIsComplete(_imageAbsPath: string, notePath: string): boolean {
+  let fd: number | null = null;
+  try {
+    fd = openSync(notePath, 'r');
+    const tailBytes = 2048;
+    const size = statSync(notePath).size;
+    const start = Math.max(0, size - tailBytes);
+    const buf = Buffer.alloc(size - start);
+    readSync(fd, buf, 0, buf.length, start);
+    return buf.toString('utf8').includes(OCR_COMPLETE_MARKER);
+  } catch {
+    return false;
+  } finally {
+    if (fd != null) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
+  }
 }
 
 /** Run the OCR extractor on a single image. Resolves with the note path
@@ -73,7 +94,7 @@ function convertImage(
         const tail = stderr.trim().split('\n').slice(-3).join('\n');
         if (isMissingRapidOcrError(tail)) {
           reject(new Error(
-            'OCR engine is not installed. Run `pnpm setup:python` and restart StashBase; the image still opens, but its text is not searchable yet.',
+            'OCR engine is not installed. Run `pnpm setup:python` and restart StashBase; the image still opens, but its text cannot be searched until OCR is available.',
           ));
           return;
         }
@@ -89,6 +110,7 @@ const IMAGE_SPEC: ConversionSpec = {
   kind: 'ocr_extract',
   matches: isImageFile,
   derivedNote: derivedNotePathForImage,
+  derivedReady: derivedImageIsComplete,
   convert: convertImage,
   cleanupDerived: cleanupDerivedImage,
 };

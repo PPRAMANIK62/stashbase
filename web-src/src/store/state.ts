@@ -15,7 +15,7 @@ import type {
   FileMeta,
   FolderMeta,
   KeywordSearchResult,
-  ConversionFailure,
+  PreparationFailure,
   ConversionProgress,
   IndexWarning,
   SearchHit,
@@ -26,6 +26,8 @@ export interface SaveStatus {
   text: string;
   cls: '' | 'saved' | 'error';
 }
+
+export type LibraryFolderStatus = 'ready' | 'preparing' | 'failed' | 'unknown';
 
 /** Sidebar side-panel resize bounds (px), shared by the reducer and the
  *  drag handle. The 44px activity rail is *not* part of this — it always
@@ -169,6 +171,11 @@ export interface State {
   /** OS home directory — used by the Welcome screen to render
    *  `~/foo` instead of the full `/Users/<name>/foo`. */
   homeDir: string;
+  /** Library-level search-readiness state keyed by absolute folder path. Unlike
+   *  active-folder `pendingSemanticNames` / `pendingConversions`, this survives leaving an
+   *  active folder so Welcome can surface failures without showing
+   *  background preparation as a browsing status. */
+  libraryFolderStatuses: Record<string, LibraryFolderStatus>;
 
   files: FileMeta[];
   folders: FolderMeta[];
@@ -214,18 +221,18 @@ export interface State {
    *  is empty (panel closed or just initialised). */
   activeChatTabId: string | null;
 
-  /** User-visible paths whose searchable content is still being embedded.
-   *  Usually structured notes (md/html). For PDF/image, status reports the
-   *  visible source file even though the searchable text is AppData-derived. */
-  pendingNames: Set<string>;
-  /** Folder-relative paths of PDFs the server is converting right now.
-   *  Sidebar shows a "Converting…" row per entry; transition to
-   *  empty triggers a `loadFiles` so the produced `.html` shows up
-   *  in the tree without waiting for the next user action. */
+  /** User-visible paths whose semantic-search content is still being
+   *  embedded/indexed. Keyword search ignores this state and can search
+   *  converted/source text without embeddings. */
+  pendingSemanticNames: Set<string>;
+  /** Folder-relative paths of PDFs/images the server is converting right now.
+   *  Kept for search-readiness accounting and refresh timing; Files/Welcome
+   *  do not show this as a proactive status. */
   pendingConversions: string[];
   /** Current per-file conversion progress for the active folder. Kept
-   *  separate from `pendingConversions` so the sidebar stays simple
-   *  while rich viewers can show local detail. */
+   *  separate from `pendingConversions` so rich viewers can show local
+   *  failure/retry detail without turning background preparation into
+   *  global UI chrome. */
   conversionProgress: Record<string, ConversionProgress>;
 
   syncRunning: boolean;
@@ -271,11 +278,11 @@ export interface State {
   /** Non-null when the active folder's background indexing failed.
    *  Cleared by user dismissal or the server reporting a later success. */
   indexWarning: IndexWarning | null;
-  /** Folder-relative paths of PDFs / images whose most recent conversion
-   *  failed, carried in from `/api/index-status`. Drives the failure
-   *  banner inside `PdfPreview` / `ImagePreview` and the context-menu
-   *  "Retry conversion" entry. Empty when no failures. */
-  conversionFailures: ConversionFailure[];
+  /** Folder-relative paths whose most recent preparation failed, carried
+   *  in from `/api/index-status`. Drives lightweight failure markers,
+   *  rich viewer banners where available, and the context-menu
+   *  "Reprocess" entry. Empty when no failures. */
+  preparationFailures: PreparationFailure[];
 
   ctxMenu: CtxMenu | null;
   renaming: { path: string; kind: 'file' | 'folder' } | null;
@@ -321,6 +328,7 @@ export const initialState: State = {
   folderPath: '',
   recent: [],
   homeDir: '',
+  libraryFolderStatuses: {},
   files: [],
   folders: [],
   fileOrder: {},
@@ -337,7 +345,7 @@ export const initialState: State = {
   agents: [],
   chatTabs: [],
   activeChatTabId: null,
-  pendingNames: new Set(),
+  pendingSemanticNames: new Set(),
   pendingConversions: [],
   conversionProgress: {},
   syncRunning: false,
@@ -352,7 +360,7 @@ export const initialState: State = {
   searchError: null,
   embedderHasKey: null,
   indexWarning: null,
-  conversionFailures: [],
+  preparationFailures: [],
   ctxMenu: null,
   renaming: null,
   cascadePrompt: null,
@@ -367,6 +375,8 @@ export type Action =
   | { type: 'WELCOME_SHOW'; recent: State['recent']; homeDir?: string; error?: string | null }
   | { type: 'RECENT_LOADED'; recent: State['recent']; homeDir?: string }
   | { type: 'WELCOME_ERROR'; error: string }
+  | { type: 'LIBRARY_FOLDER_STATUS'; path: string; status: LibraryFolderStatus }
+  | { type: 'LIBRARY_FOLDER_STATUS_REMOVE'; path: string }
   | { type: 'FOLDER_CONTEXT'; folder: string; folderPath: string }
   | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string }
   | { type: 'FILE_ORDER_LOADED'; order: Record<string, string[]> }
@@ -413,7 +423,7 @@ export type Action =
   /** Move the sidebar's single focus to `path`. Pure visual highlight
    *  — does not touch expand state, activeFolder, or the open file. */
   | { type: 'SELECT_PATH'; path: string }
-  | { type: 'PENDING_NAMES'; names: Set<string> }
+  | { type: 'PENDING_SEMANTIC_NAMES'; names: Set<string> }
   | { type: 'PENDING_CONVERSIONS'; paths: string[] }
   | { type: 'CONVERSION_PROGRESS'; progress: Record<string, ConversionProgress> }
   | { type: 'SAVE_STATUS'; status: SaveStatus }
@@ -430,7 +440,7 @@ export type Action =
   | { type: 'SEARCH_CASE_STRICT'; strict: boolean }
   | { type: 'SEARCH_WHOLE_WORD'; on: boolean }
   | { type: 'INDEX_WARNING'; warning: IndexWarning | null }
-  | { type: 'CONVERSION_FAILURES'; failures: ConversionFailure[] }
+  | { type: 'PREPARATION_FAILURES'; failures: PreparationFailure[] }
   | { type: 'CTX_MENU'; menu: CtxMenu | null }
   | { type: 'RENAMING'; renaming: State['renaming'] }
   /** Arm the active tab's pending scroll-to-anchor (cross-file links /
@@ -481,51 +491,11 @@ export function getActiveTab(s: State): Tab | null {
   return s.tabs.find((t) => t.id === s.activeTabId) ?? null;
 }
 
-function isHiddenStatusPath(path: string): boolean {
-  return path.split('/').some((seg) => seg.startsWith('.'));
-}
-
-export function isVisibleIndexPending(s: State, path: string): boolean {
-  // Without an OpenAI key the embedder is off, so the not-yet-embedded set
-  // never drains — those files aren't "in progress", they're as searchable
-  // as they'll get (keyword via ripgrep). Only suppress on a known missing
-  // key (false); null = not yet checked.
-  return s.embedderHasKey !== false
-    && s.pendingNames.has(path)
-    && !isHiddenStatusPath(path);
-}
-
-export function isVisibleStashing(s: State, path: string): boolean {
-  return (s.pendingConversions.includes(path) && !isHiddenStatusPath(path))
-    || isVisibleIndexPending(s, path);
-}
-
-/** Folder-relative paths that count as "stashing" — the work the user is
- *  waiting on before a dropped/imported file is fully searchable. Two
- *  sources, unioned: `pendingConversions` (slow extraction/analysis of PDF /
- *  image / recording sources) and the not-yet-indexed subset of
- *  `pendingNames` (md / html / text / code — fast embedding, but a folder
- *  drop of hundreds still wants a count). Hidden paths are dropped: the
- *  `.stem.md` derived notes conversions produce, and anything under
- *  `.stashbase/`, must never surface (a segment starting with `.` flags
- *  both). Deduped + sorted so the sidebar pill and the per-tab mark agree
- *  on one stable list. */
-export function stashingPaths(s: State): string[] {
-  const out = new Set<string>();
-  for (const p of s.pendingConversions) {
-    if (!isHiddenStatusPath(p)) out.add(p);
-  }
-  for (const p of s.pendingNames) {
-    if (isVisibleIndexPending(s, p)) out.add(p);
-  }
-  return [...out].sort();
-}
-
-/** Visible files to mark as "stashing" immediately after the user adds
- *  the first OpenAI key. The server may already be embedding by the time
+/** Visible files to mark as pending immediately after the user adds the
+ *  first OpenAI key. The server may already be embedding by the time
  *  `/api/index-status` is polled, and the daemon serialises status behind
- *  embeds; this optimistic set keeps the UI from going silent during the
- *  first-key backfill. */
+ *  embeds; this optimistic set keeps search-readiness accounting from
+ *  temporarily undercounting the backfill. */
 export function optimisticKeyBackfillPaths(files: FileMeta[]): string[] {
   return files
     .filter((f) => f.format === 'md' || f.format === 'html' || f.format === 'pdf' || f.format === 'image')
@@ -621,6 +591,21 @@ export function reducer(s: State, a: Action): State {
       };
     case 'WELCOME_ERROR':
       return { ...s, welcomeError: a.error };
+    case 'LIBRARY_FOLDER_STATUS':
+      return s.libraryFolderStatuses[a.path] === a.status
+        ? s
+        : {
+            ...s,
+            libraryFolderStatuses: {
+              ...s.libraryFolderStatuses,
+              [a.path]: a.status,
+            },
+          };
+    case 'LIBRARY_FOLDER_STATUS_REMOVE': {
+      if (!(a.path in s.libraryFolderStatuses)) return s;
+      const { [a.path]: _removed, ...rest } = s.libraryFolderStatuses;
+      return { ...s, libraryFolderStatuses: rest };
+    }
     case 'FOLDER_CONTEXT':
       return s.folder === a.folder && s.folderPath === a.folderPath
         ? s
@@ -866,8 +851,8 @@ export function reducer(s: State, a: Action): State {
       return { ...s, activeFolder: a.path, selectedPath: a.path };
     case 'SELECT_PATH':
       return { ...s, selectedPath: a.path };
-    case 'PENDING_NAMES':
-      return { ...s, pendingNames: a.names };
+    case 'PENDING_SEMANTIC_NAMES':
+      return { ...s, pendingSemanticNames: a.names };
     case 'PENDING_CONVERSIONS':
       return { ...s, pendingConversions: a.paths };
     case 'CONVERSION_PROGRESS':
@@ -907,8 +892,8 @@ export function reducer(s: State, a: Action): State {
       return { ...s, wholeWord: a.on, keywordResult: null };
     case 'INDEX_WARNING':
       return { ...s, indexWarning: a.warning };
-    case 'CONVERSION_FAILURES':
-      return { ...s, conversionFailures: a.failures };
+    case 'PREPARATION_FAILURES':
+      return { ...s, preparationFailures: a.failures };
     case 'CTX_MENU':
       return { ...s, ctxMenu: a.menu };
     case 'RENAMING':

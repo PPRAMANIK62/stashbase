@@ -25,6 +25,9 @@ import type { Indexer } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
 import { hasNoExtractableText, indexableFileSizeError, shouldIndexFilePath } from './indexable.ts';
 import { isConvertibleSource } from './format.ts';
+import { cancelConversion } from './conversion.ts';
+import { clearRecord } from './conversion-status.ts';
+import { deleteDerivedForSource, knownDerivedSourcesUnderFolder } from './derived-store.ts';
 
 const log = logger('sync');
 
@@ -36,7 +39,7 @@ function folderRelOf(root: string, abs: string): string | null {
   return abs.startsWith(`${root}/`) ? abs.slice(root.length + 1) : null;
 }
 
-/** Runtime assertion for invariant I2 "sync 不说谎" (data-layer §8.6):
+/** Runtime assertion for the Data Correctness "sync does not lie" review rule:
  *  a file this sync just claimed to have indexed must not still be in
  *  the daemon's name-only pending set. A violation is the
  *  write-black-hole fingerprint — upsert returned ok but the store has
@@ -65,7 +68,7 @@ async function assertSyncConverged(
     if (indexableFileSizeError(abs) !== null || hasNoExtractableText(abs)) continue;
     log.error(
       `sync claimed "${abs}" indexed but the daemon still reports it pending — ` +
-        'write-black-hole fingerprint (data-layer §8.6 I2). Check for a second ' +
+        'write-black-hole fingerprint. Check for a second ' +
         'stashbase daemon fighting over the Milvus lock (ps aux | grep stashbase-daemon).',
     );
   }
@@ -135,9 +138,52 @@ async function deleteStaleRenameSource(
   failed: { name: string; error: string }[],
 ): Promise<void> {
   try {
+    cleanupRemovedSource(oldPath);
     await indexer.deleteFile(oldPath);
   } catch (err: unknown) {
     failed.push({ name: oldPath, error: `stale rename cleanup failed: ${errorMessage(err)}` });
+  }
+}
+
+function discoverConvertedSources(root: string): void {
+  discoverNewPdfs(root);
+  discoverNewImages(root);
+}
+
+function cleanupRemovedSource(sourcePath: string): void {
+  if (!isConvertibleSource(sourcePath)) return;
+  try { cancelConversion(sourcePath); } catch { /* best-effort */ }
+  try { clearRecord(sourcePath); } catch { /* best-effort */ }
+  try { deleteDerivedForSource(sourcePath); } catch (err: unknown) {
+    log.warn(`removed-source cleanup failed for ${sourcePath}: ${errorMessage(err)}`);
+  }
+}
+
+function cleanupMissingConvertedSources(root: string): void {
+  for (const sourcePath of knownDerivedSourcesUnderFolder(root)) {
+    if (fs.existsSync(sourcePath)) continue;
+    cleanupRemovedSource(sourcePath);
+  }
+}
+
+async function cleanupConvertedRename(
+  indexer: Indexer,
+  oldPath: string,
+  newPath: string,
+  failed: { name: string; error: string }[],
+): Promise<void> {
+  cleanupRemovedSource(oldPath);
+  // A path can be reused by a different source between app runs. Clear the
+  // target's stale app-owned state before discovery queues a fresh conversion.
+  try { cancelConversion(newPath); } catch { /* best-effort */ }
+  try { clearRecord(newPath); } catch { /* best-effort */ }
+  try { deleteDerivedForSource(newPath); } catch (err: unknown) {
+    log.warn(`rename-target cleanup failed for ${newPath}: ${errorMessage(err)}`);
+  }
+  try {
+    await indexer.deleteFile(oldPath);
+  } catch (err: unknown) {
+    failed.push({ name: oldPath, error: `converted rename cleanup failed: ${errorMessage(err)}` });
   }
 }
 
@@ -147,22 +193,16 @@ async function deleteStaleRenameSource(
  *  them straight. */
 export async function syncIndex(indexer: Indexer, root: string, opts: SyncOptions = {}): Promise<SyncResult> {
   if (shouldStop(opts)) return emptyResult(true);
-  // Surface untracked PDFs / images before running the index diff. We
-  // don't await individual conversions — each converter indexes its
-  // derived note directly on completion; here we just start the queueing
-  // so the user sees pendingConversions populate. Discovery is decided
-  // from disk + memory truth alone (note exists / failure recorded /
-  // running now), so it is safe and idempotent on every sync.
-  discoverNewPdfs(root);
-  discoverNewImages(root);
 
   // No OpenAI key → semantic indexing is disabled by design (§5.3): the
   // daemon has no embedder/store, so every upsert would throw "no bound
   // root … set an OpenAI API key" and a whole-folder import would flood
-  // the log with one failure per file. Conversion discovery above still
+  // the log with one failure per file. Conversion discovery still
   // runs so PDFs/images can produce AppData derived text for keyword search
   // and future reindex.
   if (!getApiKey()) {
+    cleanupMissingConvertedSources(root);
+    discoverConvertedSources(root);
     log.info(`no OpenAI key — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
     return emptyResult();
   }
@@ -171,11 +211,13 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   const diff = await indexer.syncDiff(root);
   const failed: { name: string; error: string }[] = [];
   const excludedRemoved = await removeExcludedIndexedFiles(indexer, root, failed);
+  cleanupMissingConvertedSources(root);
 
   if (
     diff.added.length === 0 && diff.modified.length === 0 &&
     diff.deleted.length === 0 && diff.renamed.length === 0 && excludedRemoved.length === 0
   ) {
+    discoverConvertedSources(root);
     log.debug('index up to date');
     return emptyResult();
   }
@@ -201,6 +243,11 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
       const folderRel = folderRelOf(root, r.new);
       if (folderRel == null) {
         failed.push({ name: r.new, error: `path not under synced folder ""` });
+        continue;
+      }
+      if (isConvertibleSource(folderRel)) {
+        await cleanupConvertedRename(indexer, r.old, r.new, failed);
+        renamedDone.push(r.new);
         continue;
       }
       const tooLarge = indexableFileSizeError(r.new);
@@ -240,12 +287,19 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
         };
       }
       try {
+        cleanupRemovedSource(sourcePath);
         await indexer.deleteFile(sourcePath);
         removedDone.push(sourcePath);
       }
       catch (err: any) { failed.push({ name: sourcePath, error: errorMessage(err) }); }
     }
   }
+
+  // Surface untracked PDFs / images after stale delete/rename cleanup.
+  // This ordering matters for external Finder/Git moves: a renamed
+  // PDF/image must first clear the old source identity and any stale
+  // target artifacts, then queue a fresh conversion for the new path.
+  discoverConvertedSources(root);
 
   const convertedAddedDone = await indexFreshConvertedSources(indexer, root, diff.added, failed, opts);
   if (convertedAddedDone.cancelled) {
@@ -414,6 +468,7 @@ async function removeExcludedIndexedFiles(
     // still exists the entry is legitimate — the conversion path owns it.
     if (isConvertibleSource(folderRel) && fs.existsSync(sourcePath)) continue;
     try {
+      cleanupRemovedSource(sourcePath);
       await indexer.deleteFile(sourcePath);
       removed.push(sourcePath);
     } catch (err: unknown) {

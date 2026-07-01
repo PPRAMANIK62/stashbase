@@ -72,6 +72,8 @@ One installation has **one library**: the set of opened folders indexed into one
 
 MCP search defaults to the whole library. Calls can narrow scope by folder root or path prefix. The in-app search UI is scoped to the current window's folder.
 
+App boot and the Welcome screen reconcile library folders in the background. This keeps interrupted conversion/index work moving even when no folder is opened into the editor view.
+
 Each opened folder can carry a short optional description in app config. The description is orientation metadata for humans and Agents: it explains what the folder is for, but it is not indexed content and it does not define access scope. It can be written by the user first and later generated or refreshed by AI. Removing a folder from "Your Folders" removes its description with the folder membership record.
 
 ---
@@ -92,7 +94,7 @@ User-visible files stay in the folder tree. StashBase has one user-level config 
 
 <appData>/vector-store.nosync/    # Milvus Lite store, per-machine derived data
 <appData>/derived.nosync/         # converted text and extracted assets
-<appData>/state/state.db          # conversion failures
+<appData>/state/state.db          # durable preparation failures
 <appData>/file-order/             # sidebar ordering keyed by folder path
 ```
 
@@ -143,6 +145,8 @@ shot.png   -> <appData>/derived.nosync/<source-path-hash>.md
 Derived Markdown is stored under AppData, but indexed under the original source path when semantic indexing is available. Keyword search can also read the AppData-derived text directly. Search results still point back to the visible source file.
 
 PDF conversion extracts text and layout into Markdown. Image conversion uses OCR. If conversion fails, the original file remains available, but the file is not searchable until conversion succeeds. The failure is visible to the user and can be retried manually.
+
+PDF conversion is queued. Before a queued PDF starts, StashBase runs a cheap text-layer probe that does not OCR. PDFs with an extractable text layer run before scanned PDFs, because scanned PDFs usually take the slow OCR path. This scheduling only affects work order; completion is still defined by the derived Markdown and its completion marker.
 
 ## 4.3 Conversion Boundary
 
@@ -203,6 +207,8 @@ Search defaults to the whole library for MCP callers. It can be narrowed by fold
 
 The desktop UI search is scoped to the current folder because the UI is showing one folder at a time.
 
+The desktop UI does not surface background conversion or indexing as a general browsing status. Folder and file views stay quiet while StashBase prepares content. The Search view is where the UI summarizes search readiness and explains incomplete or failed preparation; file and folder rows only show lightweight failure markers.
+
 ## 6.3 Result Mapping
 
 Search results always use the visible source file as the identity and open target.
@@ -236,7 +242,7 @@ StashBase also exposes bounded file helpers:
 - **`move_file(path, new_path, cascade?)`**
 - **`delete_file(path)`**
 
-These helpers are not a second general-purpose filesystem. They exist because many local Agent clients run in sandboxes where the host user's files are not directly readable or writable. The helpers accept only absolute paths under opened folders, hide app-maintained derived artifacts, and update the semantic index when possible.
+These helpers are not a second general-purpose filesystem. They exist because many local Agent clients run in sandboxes where the host user's files are not directly readable or writable. The helpers accept absolute paths under opened folders, hide app-maintained derived artifacts, map PDF reads to AppData-derived Markdown, and update the semantic index when possible. The only AppData path `read_file` accepts is a manifest-known PDF derived Markdown note whose source PDF still belongs to an opened folder.
 
 The design boundary is:
 
@@ -276,6 +282,8 @@ External AI client   -> same MCP server -> same library
 ```
 
 The panel may add UI affordances such as structured messages, tool approvals, history, and attachments, but those are product/UI details rather than separate library infrastructure.
+
+Claude session titles come from the Claude SDK history metadata. Codex threads are named from the first user prompt when StashBase creates the thread so the tab title and History list do not stay on the placeholder.
 
 ---
 

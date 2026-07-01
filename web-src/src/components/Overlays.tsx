@@ -1,6 +1,6 @@
 import { api } from '../api';
 import { useApp } from '../store/AppContext';
-import { getConversionFailure } from '../store/fileReadiness';
+import { getPreparationFailure } from '../store/fileReadiness';
 import { Menu, type MenuItem } from './Menu';
 
 /** Drag-import veil. Visibility flows from the global drag handler in
@@ -21,15 +21,14 @@ export function ContextMenu() {
   const folderPathAtOpen = state.folderPath;
   const close = () => dispatch({ type: 'CTX_MENU', menu: null });
 
-  // "Retry conversion" is only meaningful when the target is a PDF or
-  // image currently in the failures list. Showing it on every such file
-  // would let the user nuke + re-convert a working one by accident — the
-  // route deletes the derived `.<stem>.md` (+ PDF `_files/`) before
-  // re-running. Membership already implies the file is a PDF / image.
-  const conversionFailure = kind === 'file'
-    ? getConversionFailure(state, target)
+  // Reprocess only appears when the file already has a persisted
+  // preparation failure. That keeps recovery off healthy files while
+  // allowing any failed source file to ask the server to rebuild its
+  // searchable representation.
+  const preparationFailure = kind === 'file'
+    ? getPreparationFailure(state, target)
     : undefined;
-  const canRetryConversion = Boolean(conversionFailure);
+  const canReprocess = Boolean(preparationFailure);
 
   const items: MenuItem[] = [
     {
@@ -37,23 +36,23 @@ export function ContextMenu() {
       onSelect: () => dispatch({ type: 'RENAMING', renaming: { path: target, kind } }),
     },
     { label: revealLabel(), onSelect: () => void api.revealFile(target) },
-    ...(canRetryConversion
+    ...(canReprocess
       ? [
           {
-            label: 'Retry conversion',
-            title: 'Re-run text extraction — clears the derived note (and PDF bundle) first',
-            // Fire-and-forget — the failures-list / banner update on the
+            label: 'Reprocess',
+            title: 'Rebuild the searchable version of this file',
+            // Fire-and-forget — the failures-list / marker updates on the
             // next index-status poll (~1.5s in pending mode). If the API
             // itself 4xx's we log; user-facing feedback comes via that
-            // banner flipping `failed` → in-flight → done.
+            // marker clearing or staying failed.
             onSelect: () => {
-              actions.toast('Retrying text extraction…', { level: 'info' });
-              void api.retryConversion(target, { folder: folderPathAtOpen || undefined })
+              actions.toast('Reprocessing…', { level: 'info' });
+              void api.reprocessFile(target, { folder: folderPathAtOpen || undefined })
                 .then(() => actions.refreshIndexState())
                 .catch((err) => {
                   const msg = err instanceof Error ? err.message : String(err);
-                  actions.toast('Retry conversion failed: ' + msg, { level: 'error' });
-                  console.warn('[ctxmenu] retry conversion failed:', msg);
+                  actions.toast('Reprocess failed: ' + msg, { level: 'error' });
+                  console.warn('[ctxmenu] reprocess failed:', msg);
                 });
             },
           } satisfies MenuItem,

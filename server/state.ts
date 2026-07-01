@@ -4,10 +4,10 @@
  * One `MfsIndexer` instance lives for the lifetime of the server
  * process. The daemon underneath owns one Milvus DB in app data with a
  * single collection (V1 fixes the embedder to OpenAI — no switching).
- * Every folder is bound into that one collection. Boot binds
- * every known folder so MCP cross-folder search has them all
- * available; opening a folder re-binds (idempotent) and runs reconcile
- * to pick up disk changes.
+ * Every folder is bound into that one collection. Boot binds every known
+ * folder so MCP cross-folder search has them all available; boot and
+ * Welcome can also reconcile known folders without opening them, so
+ * interrupted conversion work is rediscovered library-wide.
  *
  * Extracted from `server/index.ts` so route modules can import the
  * indexer without picking up the whole route registration kitchen sink.
@@ -85,12 +85,16 @@ function resolveEmbedder(): EmbedderRuntimeConfig | null {
  *  startup. With no API key, folders are still bound (registered) but the
  *  collection isn't created until a key is supplied — search just
  *  returns nothing until then. */
-export async function bootBindAllFolders(): Promise<void> {
+function libraryFolderRoots(): string[] {
   // Membership = "Your Folders" (the recents list), which can live anywhere
   // on disk. Bind every member's absolute root so MCP/Claude can search the
   // whole library without the user first opening each folder.
   const members = getRecentFolders().map((r) => toPosixAbs(r.path));
-  const roots = Array.from(new Set(members));
+  return Array.from(new Set(members));
+}
+
+export async function bootBindAllFolders(): Promise<void> {
+  const roots = libraryFolderRoots();
   if (roots.length === 0) {
     log.info('boot bind: no member folders');
     return;
@@ -102,6 +106,23 @@ export async function bootBindAllFolders(): Promise<void> {
       await indexer.bindFolder(root, cfg);
     } catch (err: unknown) {
       log.warn(`boot bind ${root} failed: ${errorMessage(err)}`);
+    }
+  }
+}
+
+/** Reconcile every library member without changing the active window folder.
+ *  This is the library-level recovery hook: after a process restart, or when
+ *  the user sits on Welcome, interrupted PDF/image conversions should resume
+ *  even if no folder is opened into the editor. */
+export async function reconcileLibraryFolders(reason: string): Promise<void> {
+  const roots = libraryFolderRoots();
+  if (roots.length === 0) return;
+  log.info(`library reconcile: ${roots.length} folder(s) (${reason})`);
+  for (const root of roots) {
+    try {
+      await syncFolderNow(root, { reason });
+    } catch (err: unknown) {
+      log.warn(`library reconcile ${root} failed: ${errorMessage(err)}`);
     }
   }
 }
@@ -133,8 +154,8 @@ export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
   // Before the first bind of this process, sweep any stashbase daemon
   // still holding the global Milvus flock: a dirty previous exit (kill -9,
   // OS shutdown) or another session's leftover daemon would otherwise
-  // wedge our bind, and the loser of a lock fight keeps "succeeding" while
-  // its writes go nowhere (data-layer §8.1). This call site is
+    // wedge our bind, and the loser of a lock fight keeps "succeeding" while
+    // its writes go nowhere. This call site is
   // deliberately the WEB SERVER's bind path only — the MCP host must never
   // run the sweep, since the GUI's daemon is the rightful lock owner it
   // would be killing.
@@ -171,8 +192,8 @@ interface PendingSwitch {
 }
 const pendingSwitches = new Set<PendingSwitch>();
 
-// Watchdog for invariant I4 (data-layer §8.6): every queue entry must
-// settle in bounded time. A hard timeout can't work here — first-index
+// Watchdog for the Data Correctness bounded-progress rule: every queue entry
+// must settle in bounded time. A hard timeout can't work here — first-index
 // of a large folder legitimately runs bind+sync for tens of minutes — so
 // we supervise instead of intervene: any entry older than 15min gets one
 // loud warning with enough context to find the wedge. Lazily started,
@@ -189,7 +210,7 @@ function ensureSwitchWatchdog(): void {
       log.warn(
         `folder-open queue entry unsettled after ${Math.round((now - p.scheduledAt) / 60_000)}min ` +
           `(${p.reason}, folder=${p.folderRoot}, window=${p.windowId}) — bind/import/sync may be wedged ` +
-          '(data-layer §8.6 I4)',
+          '(Data Correctness & Recovery: bounded progress)',
       );
     }
   }, 60_000);

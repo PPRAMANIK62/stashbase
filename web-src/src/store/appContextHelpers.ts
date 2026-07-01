@@ -15,9 +15,9 @@ export function shallowEqualIndexWarning(
   return a.message === b.message && a.at === b.at;
 }
 
-export function shallowEqualConversionFailures(
-  a: State['conversionFailures'],
-  b: State['conversionFailures'],
+export function shallowEqualPreparationFailures(
+  a: State['preparationFailures'],
+  b: State['preparationFailures'],
 ): boolean {
   if (a === b) return true;
   if (a.length !== b.length) return false;
@@ -91,10 +91,10 @@ export function isFolderFileTab(t: { file: State['tabs'][number]['file'] }, name
 
 const LANDING_FILES = ['welcome.html', 'readme.md', 'readme.html', 'index.html'];
 
-export function pickLandingFile(files: Array<{ name: string }>): string | null {
+export function pickInitialFile(files: Array<{ name: string }>): string | null {
   for (const target of LANDING_FILES) {
     const hit = files.find((f) => f.name.toLowerCase() === target);
     if (hit) return hit.name;
   }
-  return null;
+  return files[0]?.name ?? null;
 }

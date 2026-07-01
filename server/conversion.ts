@@ -20,8 +20,8 @@
  *
  * On success the derived note is pushed into the index DIRECTLY (via the
  * hook `setDerivedNoteIndexer` wires at boot) — there is no fs-watcher
- * intermediary. Failures persist for the Retry banner; in-flight state is
- * process memory (see `conversion-status.ts`).
+ * intermediary. Failures persist for reprocess affordances; in-flight
+ * state is process memory (see `conversion-status.ts`).
  */
 import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -31,6 +31,7 @@ import { fromSourcePath, relInFolder, toPosixAbs } from './folder.ts';
 import { logger, errorMessage } from './log.ts';
 import { isCloudPlaceholderName } from './indexable.ts';
 import { hasNoExtractableText, indexableFileSizeError } from './indexable.ts';
+import { registerDerivedSource } from './derived-store.ts';
 
 const log = logger('conversion');
 
@@ -50,12 +51,19 @@ export interface ConversionSpec {
   matches: (name: string) => boolean;
   /** The AppData derived-note path for a source file. */
   derivedNote: (absPath: string) => string;
+  /** Optional completeness check for formats whose derived note can be
+   *  assembled from resumable partial work. */
+  derivedReady?: (absPath: string, derivedAbsPath: string) => boolean;
   /** Run the extractor; resolve on success, reject with the stderr tail. */
   convert: (
     absPath: string,
     onProgress?: (progress: ConversionProgress) => void,
     signal?: AbortSignal,
   ) => Promise<unknown>;
+  /** Best-effort cleanup before a fresh run. Defaults to cleanupDerived.
+   *  PDF uses this to keep resumable batch scratch while deleting stale
+   *  final artifacts. */
+  cleanupBeforeConvert?: (absPath: string) => void;
   /** Best-effort cleanup for derived files if the source disappears mid-run. */
   cleanupDerived?: (absPath: string) => void;
 }
@@ -88,15 +96,17 @@ export function setDerivedNoteIndexer(fn: (sourceAbs: string, derivedAbs: string
  *  location doesn't change when the source content changes). */
 function derivedIsFresh(spec: ConversionSpec, absPath: string): boolean {
   try {
-    const derivedMtime = fs.statSync(spec.derivedNote(absPath)).mtimeMs;
+    const derivedAbs = spec.derivedNote(absPath);
+    const derivedMtime = fs.statSync(derivedAbs).mtimeMs;
     const sourceMtime = fs.statSync(absPath).mtimeMs;
-    return derivedMtime >= sourceMtime;
+    return derivedMtime >= sourceMtime && (spec.derivedReady?.(absPath, derivedAbs) ?? true);
   } catch {
     return false; // derived missing (or source gone) → not fresh
   }
 }
 
 const activeControllers = new Map<string, AbortController>();
+const activeRuns = new Map<string, Promise<void>>();
 
 export function cancelConversion(sourcePath: string): boolean {
   const controller = activeControllers.get(sourcePath);
@@ -104,6 +114,21 @@ export function cancelConversion(sourcePath: string): boolean {
   controller.abort();
   activeControllers.delete(sourcePath);
   return true;
+}
+
+export async function cancelAllConversions(timeoutMs = 2500): Promise<string[]> {
+  const sourcePaths = [...activeControllers.keys()];
+  if (sourcePaths.length === 0) return [];
+  for (const sourcePath of sourcePaths) cancelConversion(sourcePath);
+  const runs = sourcePaths
+    .map((sourcePath) => activeRuns.get(sourcePath))
+    .filter((run): run is Promise<void> => run != null);
+  if (runs.length === 0) return sourcePaths;
+  await Promise.race([
+    Promise.allSettled(runs),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+  return sourcePaths;
 }
 
 /** Absolute POSIX identity for a source path — the conversion-status key,
@@ -128,23 +153,34 @@ function sameSourceSignature(a: SourceSignature | null, b: SourceSignature | nul
 /** Run a conversion fire-and-forget, tracking in-flight in memory and
  *  persisting failures so the UI can offer Retry. On success the derived
  *  note goes straight into the index — no watcher round-trip. */
-function runConversion(absPath: string, sourcePath: string | null, spec: ConversionSpec): void {
+function runConversion(absPath: string, sourcePath: string | null, spec: ConversionSpec): Promise<void> {
   log.info(`${spec.kind}: ${absPath} → ${path.basename(spec.derivedNote(absPath))} …`);
+  registerDerivedSource(absPath);
   if (sourcePath) markInFlight(sourcePath);
   const controller = new AbortController();
   if (sourcePath) activeControllers.set(sourcePath, controller);
   const startedWith = sourceSignature(absPath);
   const t0 = Date.now();
-  // Defer the terminal status write so a 500ms-poll client catches even
-  // a sub-second conversion's "Converting…" state.
-  const settle = (fn: () => void) => {
-    if (!sourcePath) { fn(); return; }
-    setTimeout(fn, Math.max(0, MIN_VISIBLE_MS - (Date.now() - t0)));
+  // Defer the terminal status write briefly so a 500ms-poll client can
+  // observe a short conversion as pending for search-readiness accounting.
+  const settle = (fn: () => void): Promise<void> => {
+    if (!sourcePath) { fn(); return Promise.resolve(); }
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        fn();
+        resolve();
+      }, Math.max(0, MIN_VISIBLE_MS - (Date.now() - t0)));
+    });
   };
-  try { spec.cleanupDerived?.(absPath); } catch (err: unknown) {
+  try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (err: unknown) {
     log.warn(`${spec.kind}: preflight cleanup failed for ${absPath}: ${errorMessage(err)}`);
   }
-  spec.convert(absPath, (progress) => { if (sourcePath) setProgress(sourcePath, progress); }, controller.signal).then(
+  const cleanupFailedOutput = () => {
+    try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (cleanupErr: unknown) {
+      log.warn(`${spec.kind}: failed-output cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
+    }
+  };
+  const run = spec.convert(absPath, (progress) => { if (sourcePath) setProgress(sourcePath, progress); }, controller.signal).then(
     async () => {
       if (sourcePath) activeControllers.delete(sourcePath);
       log.info(`${spec.kind}: done in ${Date.now() - t0}ms (${path.basename(spec.derivedNote(absPath))})`);
@@ -153,7 +189,7 @@ function runConversion(absPath: string, sourcePath: string | null, spec: Convers
         try { spec.cleanupDerived?.(absPath); } catch (err: unknown) {
           log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}: ${errorMessage(err)}`);
         }
-        settle(() => { if (sourcePath) clearRecord(sourcePath); });
+        await settle(() => { if (sourcePath) clearRecord(sourcePath); });
         return;
       }
       if (!sameSourceSignature(startedWith, sourceSignature(absPath))) {
@@ -161,7 +197,7 @@ function runConversion(absPath: string, sourcePath: string | null, spec: Convers
         try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
           log.warn(`${spec.kind}: stale derived cleanup failed for changed source ${absPath}: ${errorMessage(cleanupErr)}`);
         }
-        settle(() => { if (sourcePath) clearRecord(sourcePath); });
+        await settle(() => { if (sourcePath) clearRecord(sourcePath); });
         return;
       }
       // Try to index the note before flipping the status. Conversion success
@@ -172,11 +208,13 @@ function runConversion(absPath: string, sourcePath: string | null, spec: Convers
         const noteAbs = spec.derivedNote(absPath);
         const indexSizeError = indexableFileSizeError(noteAbs);
         if (indexSizeError) {
-          settle(() => { if (sourcePath) markFailed(sourcePath, `extracted text could not be indexed: ${indexSizeError}`); });
+          cleanupFailedOutput();
+          await settle(() => { if (sourcePath) markFailed(sourcePath, `extracted text could not be indexed: ${indexSizeError}`); });
           return;
         }
         if (hasNoExtractableText(noteAbs)) {
-          settle(() => { if (sourcePath) markFailed(sourcePath, 'extracted text is empty, so this file is not searchable'); });
+          cleanupFailedOutput();
+          await settle(() => { if (sourcePath) markFailed(sourcePath, 'extracted text is empty, so this file is not searchable'); });
           return;
         }
         if (sourcePath) setProgress(sourcePath, { phase: 'indexing' });
@@ -185,53 +223,57 @@ function runConversion(absPath: string, sourcePath: string | null, spec: Convers
         const msg = errorMessage(err);
         log.warn(`${spec.kind}: derived-note index failed for ${absPath}: ${msg}`);
       }
-      settle(() => { if (sourcePath) markDone(sourcePath); });
+      await settle(() => { if (sourcePath) markDone(sourcePath); });
     },
-    (err: Error) => {
+    async (err: Error) => {
       if (sourcePath) activeControllers.delete(sourcePath);
       log.warn(`${spec.kind}: failed for ${absPath}: ${err.message}`);
       if (!existsSync(absPath)) {
         try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
           log.warn(`${spec.kind}: derived cleanup failed for deleted source ${absPath}: ${errorMessage(cleanupErr)}`);
         }
-        settle(() => { if (sourcePath) clearRecord(sourcePath); });
+        await settle(() => { if (sourcePath) clearRecord(sourcePath); });
         return;
       }
       if (!sameSourceSignature(startedWith, sourceSignature(absPath))) {
-        settle(() => { if (sourcePath) clearRecord(sourcePath); });
+        await settle(() => { if (sourcePath) clearRecord(sourcePath); });
         return;
       }
       if (isTransientConversionError(err)) {
-        try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
+        try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (cleanupErr: unknown) {
           log.warn(`${spec.kind}: transient-conversion cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
         }
-        settle(() => { if (sourcePath) clearRecord(sourcePath); });
+        await settle(() => { if (sourcePath) clearRecord(sourcePath); });
         return;
       }
       try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
         log.warn(`${spec.kind}: failed-conversion cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
       }
-      settle(() => { if (sourcePath) markFailed(sourcePath, err.message); });
+      await settle(() => { if (sourcePath) markFailed(sourcePath, err.message); });
     },
-  );
+  ).finally(() => {
+    if (sourcePath) activeRuns.delete(sourcePath);
+  });
+  if (sourcePath) activeRuns.set(sourcePath, run);
+  return run;
 }
 
 /** Fire-and-forget convert used by the upload / retry routes. Skips
  *  silently if the derived note already exists (re-drop of the same
  *  source). sourcePath derives from the absolute path — no window context. */
-export function maybeConvert(absPath: string, spec: ConversionSpec): void {
+export function maybeConvert(absPath: string, spec: ConversionSpec): Promise<void> | null {
   const sourcePath = sourcePathOf(absPath);
+  if (sourcePath && isPendingOrFailed(sourcePath)) return null;
   if (derivedIsFresh(spec, absPath)) {
     log.info(`${spec.kind}: skipped ${absPath} — derived note already present and current`);
     if (sourcePath) markDone(sourcePath);
-    return;
+    return null;
   }
   if (!existsSync(absPath)) {
     if (sourcePath) clearRecord(sourcePath);
-    return;
+    return null;
   }
-  if (sourcePath && isPendingOrFailed(sourcePath)) return;
-  runConversion(absPath, sourcePath, spec);
+  return runConversion(absPath, sourcePath, spec);
 }
 
 /** Reindex an already-fresh derived note under its source path. Used when a
@@ -239,6 +281,7 @@ export function maybeConvert(absPath: string, spec: ConversionSpec): void {
  *  later reconcile runs after an API key has been configured. */
 export async function indexFreshDerived(absPath: string, spec: ConversionSpec): Promise<boolean> {
   const sourcePath = sourcePathOf(absPath);
+  if (sourcePath && isPendingOrFailed(sourcePath)) return false;
   if (!derivedIsFresh(spec, absPath)) return false;
   if (sourcePath) markDone(sourcePath);
   await indexDerivedNote?.(absPath, spec.derivedNote(absPath));
@@ -250,13 +293,21 @@ export async function indexFreshDerived(absPath: string, spec: ConversionSpec): 
  *  derived note exists → nothing to do; conversion running or failure
  *  recorded → leave it (Retry is a human decision); otherwise queue.
  *  Idempotent across crashes — no persisted in-flight state to reclaim. */
-export function discoverNewSources(folderAbs: string, spec: ConversionSpec): void {
+export function discoverNewSources(
+  folderAbs: string,
+  spec: ConversionSpec,
+  queueConversion: (absPath: string) => void = (abs) => {
+    const sourcePath = sourcePathOf(abs);
+    if (sourcePath == null) return;
+    runConversion(abs, sourcePath, spec);
+  },
+): void {
   walkSources(folderAbs, '', spec, (_rel, abs) => {
     if (derivedIsFresh(spec, abs)) return;
     const sourcePath = sourcePathOf(abs);
     if (sourcePath == null || isPendingOrFailed(sourcePath)) return;
     log.info(`reconcile: queueing untracked ${spec.kind} source ${sourcePath}`);
-    runConversion(abs, sourcePath, spec);
+    queueConversion(abs);
   });
 }
 

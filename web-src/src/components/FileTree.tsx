@@ -376,18 +376,14 @@ function FileRow({
   const rowClass =
     `tree-row file format-${format}` +
     (isActive ? ' active' : '') +
-    (readiness.isIndexPending ? ' not-indexed' : '') +
-    (readiness.isTemporarilyUnsearchable ? ' temporarily-unsearchable' : '') +
-    (readiness.conversionFailure ? ' conversion-failed' : '') +
+    (readiness.preparationFailure ? ' preparation-failed' : '') +
     (dropEdge === 'above' ? ' drop-edge-above' : '') +
     (dropEdge === 'below' ? ' drop-edge-below' : '');
 
   const display = displayName(basename);
-  const title = readiness.conversionFailure
-    ? `Text extraction failed; this file is not searchable. ${path}`
-    : readiness.isTemporarilyUnsearchable
-      ? `Not searchable yet; StashBase is still processing this file. ${path}`
-        : path;
+  const title = readiness.preparationFailure
+    ? `File preparation failed; this file may not be searchable. ${path}`
+    : path;
   // Protect the extension during inline rename for every recognised
   // format — notes (md/html) *and* the binary viewer formats (pdf +
   // images). Without the binaries here, editing "photo.png" exposes the
@@ -523,11 +519,11 @@ function FileRow({
       ) : (
         <span className="label">{display}</span>
       )}
-      {readiness.conversionFailure ? (
+      {readiness.preparationFailure ? (
         <span
-          className="conversion-status-icon conversion-failure-icon"
-          aria-label="Text extraction failed"
-          title="Text extraction failed; this file is not searchable."
+          className="preparation-status-icon preparation-failure-icon"
+          aria-label="File preparation failed"
+          title="File preparation failed; this file may not be searchable."
         >
           <WarningGlyph />
         </span>
@@ -539,7 +535,8 @@ function FileRow({
 function WarningGlyph() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 1.5 15 14H1L8 1.5Zm0 3.8c-.38 0-.68.3-.66.68l.18 3.72c.01.25.22.45.48.45s.47-.2.48-.45l.18-3.72A.64.64 0 0 0 8 5.3Zm0 7.05a.8.8 0 1 0 0-1.6.8.8 0 0 0 0 1.6Z" />
+      <path className="warning-mark-shape" d="M8 2.2 14.4 13.2H1.6L8 2.2Z" />
+      <text className="warning-mark-text" x="8" y="12" textAnchor="middle">!</text>
     </svg>
   );
 }

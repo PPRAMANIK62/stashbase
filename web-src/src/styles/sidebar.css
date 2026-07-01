@@ -67,11 +67,6 @@
       background: var(--accent);
       border-radius: 0 2px 2px 0;
     }
-    /* Shared breathing pulse used by the tab / pill stashing marks. */
-    @keyframes stashing-pulse {
-      0%, 100% { opacity: 0.35; }
-      50% { opacity: 0.8; }
-    }
     /* Push the settings gear to the bottom of the rail (VSCode-style),
      * keeping the view toggles grouped at the top. */
     .activity-bar-btn-bottom {
@@ -326,22 +321,13 @@
     .mcp-client-copy {
       min-width: 0;
       display: flex;
-      flex-direction: column;
-      gap: 2px;
+      align-items: center;
     }
 
     .mcp-client-name {
       font-size: 13px;
       font-weight: 600;
       color: var(--fg);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .mcp-client-detail {
-      font-size: 11.5px;
-      color: var(--muted);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -361,18 +347,6 @@
       font-size: 11.5px;
       font-weight: 500;
       white-space: nowrap;
-    }
-
-    .mcp-status-pill.off {
-      border-color: var(--border);
-      background: var(--pane);
-      color: var(--muted);
-    }
-
-    .mcp-status-pill.on {
-      border-color: rgba(var(--accent-rgb), 0.32);
-      background: rgba(var(--accent-rgb), 0.08);
-      color: var(--accent);
     }
 
     .mcp-status-pill.pending {
@@ -699,10 +673,8 @@
       text-overflow: ellipsis;
     }
 
-    /* FOLDER header: keep the "FOLDER" label content-width so the stashing
-     * pill sits snug to its right, and push the ⋯ actions to the far
-     * right edge (they're hover-only, so left-aligning the pill is the
-     * only stable layout). */
+    /* FOLDER header: keep the "FOLDER" label content-width and push the
+     * ⋯ actions to the far right edge. */
     .folder-section-head .panel-section-title {
       flex: 0 0 auto;
     }
@@ -776,64 +748,43 @@
       text-overflow: ellipsis;
     }
 
-    /* Files not yet indexed are dimmed in the sidebar with a slow
-     * breathing pulse — visual cue that Claude / MCP can't search
-     * them yet AND that something's actively happening. Transitions
-     * smoothly back to full opacity the moment the daemon finishes
-     * embedding (polled every 1.5s while anything is pending).
-     *
-     * Hover cancels the animation and pins a static slightly-brighter
-     * opacity so the user can read the filename clearly. */
-    @keyframes indexing-pulse {
-
-      0%,
-      100% {
-        opacity: 0.30;
-      }
-
-      50% {
-        opacity: 0.65;
-      }
-    }
-
-    .tree-row.file {
-      transition: opacity .25s ease-out;
-    }
-
-    .tree-row.file.not-indexed {
-      animation: indexing-pulse 1.8s ease-in-out infinite;
-    }
-
-    .tree-row.file.not-indexed:hover {
-      animation: none;
-      opacity: 0.85;
-    }
-
-    .tree-row.file.conversion-failed {
+    .tree-row.file.preparation-failed {
       color: var(--fg);
     }
 
-    .conversion-status-icon {
-      width: 14px;
-      height: 14px;
+    .preparation-status-icon {
+      width: 20px;
+      height: 20px;
       margin-left: auto;
+      margin-right: 4px;
       padding-left: 6px;
       flex: 0 0 auto;
       display: grid;
       place-items: center;
     }
 
-    .conversion-status-icon svg {
-      width: 13px;
-      height: 13px;
+    .preparation-status-icon svg {
+      width: 16px;
+      height: 16px;
     }
 
-    .conversion-failure-icon {
-      color: #d97706;
+    .preparation-failure-icon {
+      color: #9aa0a6;
+      opacity: .9;
     }
 
-    .conversion-failure-icon svg {
+    .preparation-failure-icon .warning-mark-shape {
       fill: currentColor;
+      stroke: none;
+    }
+
+    .preparation-failure-icon .warning-mark-text {
+      fill: #fff;
+      stroke: none;
+      font-size: 9.5px;
+      font-weight: 800;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      dominant-baseline: auto;
     }
 
     .side-actions {
@@ -879,261 +830,69 @@
       animation: sync-spin 0.7s linear infinite;
     }
 
-    /* Stashing indicator. A file is "stashing" while the server is still
-     * converting it into searchable content (PyMuPDF on a PDF,
-     * RapidOCR on an image, Gemini analysis on a recording) — the slow, user-
-     * visible phase. The "N stashing" pill lives in the FOLDER header
-     * (left of ⋯) and stays visible at all times; clicking it opens the
-     * `.stashing-list` dropdown. Auto-dismisses when the conversion
-     * finishes (the index-status poll drops the entry from
-     * `pendingConversions`).
-     *
-     * Each of the 5 cyan paths draws in sequence (stroke-dashoffset),
-     * with the stagger baked into the keyframe percentages rather than
-     * animation-delay. That way all 5 paths hit their snap-off keyframe
-     * at the same point in the shared 3 s cycle and vanish together.
-     * steps(1, end) at 74% makes the wipe instantaneous.
-     *
-     */
-    /* 5 connected paths, proportional draw windows with ~3 % overlap so
-     * each stroke starts before the previous one finishes — simulates a
-     * single flowing pen rather than discrete segments. Draw 0–57%,
-     * hold 57–80%, fade 80–88%, reset 88–100%. 2.4 s cycle. */
-    @keyframes s-draw-1 {
-      0%   { stroke-dashoffset: 300; opacity: 0; animation-timing-function: ease-in-out; }
-      5%   { opacity: 1; }
-      15%  { stroke-dashoffset: 0; }
-      80%  { stroke-dashoffset: 0; opacity: 1; }
-      88%  { stroke-dashoffset: 0; opacity: 0; }
-      89%  { stroke-dashoffset: 300; opacity: 0; }
-      100% { stroke-dashoffset: 300; opacity: 0; }
-    }
-    @keyframes s-draw-2 {
-      /* starts 3 % before path-1 ends → flows through shared point 92,158 */
-      0%   { stroke-dashoffset: 400; opacity: 0; }
-      12%  { stroke-dashoffset: 400; opacity: 0; animation-timing-function: ease-in-out; }
-      17%  { opacity: 1; }
-      32%  { stroke-dashoffset: 0; }
-      80%  { stroke-dashoffset: 0; opacity: 1; }
-      88%  { stroke-dashoffset: 0; opacity: 0; }
-      89%  { stroke-dashoffset: 400; opacity: 0; }
-      100% { stroke-dashoffset: 400; opacity: 0; }
-    }
-    @keyframes s-draw-3 {
-      /* starts 3 % before path-2 ends → flows through shared point 420,158 */
-      0%   { stroke-dashoffset: 190; opacity: 0; }
-      29%  { stroke-dashoffset: 190; opacity: 0; animation-timing-function: ease-in-out; }
-      33%  { opacity: 1; }
-      41%  { stroke-dashoffset: 0; }
-      80%  { stroke-dashoffset: 0; opacity: 1; }
-      88%  { stroke-dashoffset: 0; opacity: 0; }
-      89%  { stroke-dashoffset: 190; opacity: 0; }
-      100% { stroke-dashoffset: 190; opacity: 0; }
-    }
-    @keyframes s-draw-4 {
-      /* starts 3 % before path-3 ends → flows through shared point 420,342 */
-      0%   { stroke-dashoffset: 200; opacity: 0; }
-      38%  { stroke-dashoffset: 200; opacity: 0; animation-timing-function: ease-in-out; }
-      42%  { opacity: 1; }
-      50%  { stroke-dashoffset: 0; }
-      80%  { stroke-dashoffset: 0; opacity: 1; }
-      88%  { stroke-dashoffset: 0; opacity: 0; }
-      89%  { stroke-dashoffset: 200; opacity: 0; }
-      100% { stroke-dashoffset: 200; opacity: 0; }
-    }
-    @keyframes s-draw-5 {
-      /* starts 3 % before path-4 ends → flows through shared point 256,436 */
-      0%   { stroke-dashoffset: 100; opacity: 0; }
-      47%  { stroke-dashoffset: 100; opacity: 0; animation-timing-function: ease-in-out; }
-      51%  { opacity: 1; }
-      57%  { stroke-dashoffset: 0; }
-      80%  { stroke-dashoffset: 0; opacity: 1; }
-      88%  { stroke-dashoffset: 0; opacity: 0; }
-      89%  { stroke-dashoffset: 100; opacity: 0; }
-      100% { stroke-dashoffset: 100; opacity: 0; }
-    }
-    .stashing-pill-logo,
-    .stashing-list-logo,
-    .tab-stashing-logo {
-      flex-shrink: 0;
-    }
-    .stashing-pill-logo .s-cyan > path:nth-child(1),
-    .stashing-list-logo .s-cyan > path:nth-child(1),
-    .tab-stashing-logo .s-cyan > path:nth-child(1) {
-      stroke-dasharray: 300; animation: s-draw-1 2.4s linear infinite;
-    }
-    .stashing-pill-logo .s-cyan > path:nth-child(2),
-    .stashing-list-logo .s-cyan > path:nth-child(2),
-    .tab-stashing-logo .s-cyan > path:nth-child(2) {
-      stroke-dasharray: 400; animation: s-draw-2 2.4s linear infinite;
-    }
-    .stashing-pill-logo .s-cyan > path:nth-child(3),
-    .stashing-list-logo .s-cyan > path:nth-child(3),
-    .tab-stashing-logo .s-cyan > path:nth-child(3) {
-      stroke-dasharray: 190; animation: s-draw-3 2.4s linear infinite;
-    }
-    .stashing-pill-logo .s-cyan > path:nth-child(4),
-    .stashing-list-logo .s-cyan > path:nth-child(4),
-    .tab-stashing-logo .s-cyan > path:nth-child(4) {
-      stroke-dasharray: 200; animation: s-draw-4 2.4s linear infinite;
-    }
-    .stashing-pill-logo .s-cyan > path:nth-child(5),
-    .stashing-list-logo .s-cyan > path:nth-child(5),
-    .tab-stashing-logo .s-cyan > path:nth-child(5) {
-      stroke-dasharray: 100; animation: s-draw-5 2.4s linear infinite;
-    }
-    /* Freeze paths fully assembled while hovering the pill. */
-    .stashing-pill:hover .s-cyan > path {
-      animation: none;
-      stroke-dashoffset: 0;
-      opacity: 1;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .stashing-pill-logo .s-cyan > path,
-      .stashing-list-logo .s-cyan > path,
-      .tab-stashing-logo .s-cyan > path {
-        animation: none;
-        stroke-dashoffset: 0;
-        opacity: 0.7;
-      }
-    }
-
-    .stashing-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      flex-shrink: 0;
-      border: 0;
-      background: transparent;
-      cursor: pointer;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 400;
-      letter-spacing: 0.02em;
-      padding: 2px 7px;
-      border-radius: 999px;
-      white-space: nowrap;
-    }
-    .stashing-pill:hover {
-      background: var(--hover);
-      color: var(--fg);
-    }
-    .stashing-pill-logo {
-      width: 13px;
-      height: 13px;
-    }
-
-    /* Chrome-downloads-style dropdown of in-flight stashing files.
-     * Mirrors `.menu`'s card / fade-in treatment. */
-    .stashing-list {
-      z-index: 100;
-      min-width: 220px;
-      max-width: 320px;
-      padding: 5px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.14),
-        0 2px 6px rgba(0, 0, 0, 0.07);
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      font-size: 12.5px;
-      color: var(--fg);
-      opacity: 0;
-      transform: translateY(-2px);
-      pointer-events: none;
-    }
-    .stashing-list.ready {
-      opacity: 1;
-      transform: none;
-      pointer-events: auto;
-      transition:
-        opacity 0.09s ease-out,
-        transform 0.09s ease-out;
-    }
-    .stashing-list-head {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--muted);
-      padding: 4px 8px 6px;
-    }
-    .stashing-list-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 8px;
-      border-radius: 6px;
-      min-width: 0;
-    }
-    .stashing-list-logo {
-      width: 14px;
-      height: 14px;
-    }
-    .stashing-list-name {
-      flex: 1;
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .stashing-list-phase {
-      color: var(--muted);
-      font-size: 11px;
-      flex-shrink: 0;
-    }
-
-    /* Index warning. Sits above the file tree when background indexing
-     * failed and search may be incomplete. */
-    .index-warning {
+    .search-status-banner {
       display: flex;
       align-items: flex-start;
-      gap: 8px;
-      padding: 8px 10px 9px 14px;
-      border-bottom: 1px solid #f0c060;
-      background: #fff4e0;
-      color: #5a3b00;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 12px 8px;
+      padding: 8px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--muted);
       font-size: 12px;
     }
-    .index-warning-body {
+
+    .search-status-banner.warning {
+      border-color: #f0c060;
+      background: #fff8e8;
+      color: #6b4b04;
+    }
+
+    .search-status-banner.pending {
+      border-color: rgba(var(--accent-rgb), 0.18);
+      background: rgba(var(--accent-rgb), 0.05);
+    }
+
+    .search-status-copy {
       flex: 1;
       min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 2px;
     }
-    .index-warning-title {
+
+    .search-status-title {
       font-weight: 600;
     }
-    .index-warning-msg {
+
+    .search-status-detail {
       line-height: 1.4;
       opacity: 0.92;
     }
-    .index-warning-dismiss {
+
+    .search-status-actions {
       flex-shrink: 0;
-      width: 18px;
-      height: 18px;
-      line-height: 16px;
-      padding: 0;
-      border: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .search-status-actions button {
+      border: 0;
       border-radius: 4px;
-      background: transparent;
-      color: #5a3b00;
-      font-size: 15px;
+      background: rgba(255, 255, 255, 0.55);
+      color: inherit;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 5px;
       cursor: pointer;
-      opacity: 0.6;
     }
-    .index-warning-dismiss:hover {
+
+    .search-status-actions button:hover {
       background: #fef0c5;
-      opacity: 1;
-    }
-    .index-warning-dismiss svg {
-      width: 14px;
-      height: 14px;
-      vertical-align: -2px;
     }
 
     .file-list {
@@ -1149,7 +908,7 @@
       display: flex;
       align-items: center;
       gap: 4px;
-      padding: 3px 8px 3px 0;
+      padding: 3px 12px 3px 0;
       cursor: pointer;
       border-left: 2px solid transparent;
       font-size: 13px;

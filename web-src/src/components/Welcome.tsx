@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   api,
   errorMessage,
+  type IndexStatus,
 } from '../api';
-import { CubeLogoIcon, FolderIcon, NewFolderIcon } from '../icons';
+import { ClaudeIcon, CodexIcon, CubeLogoIcon, FolderIcon, LibraryIcon, MoreHorizontalIcon, NewFolderIcon, PlugIcon } from '../icons';
 import { useApp } from '../store/AppContext';
+import type { LibraryFolderStatus } from '../store/state';
+import { Menu, type MenuItem } from './Menu';
+import { ModalShell } from './ModalShell';
 import { openSettings } from './SettingsModal';
 
 interface ElectronBridge {
@@ -16,6 +20,15 @@ interface ElectronBridge {
   }) => Promise<string | null>;
 }
 
+interface FolderIndexSnapshot {
+  state: LibraryFolderStatus;
+  total: number;
+  pending: number;
+  converting: number;
+}
+
+const WELCOME_RECONCILE_COOLDOWN_MS = 30_000;
+
 /** Shorten an absolute path for display: `/Users/foo/Notes` → `~/Notes`
  *  when it lives under the user's home dir. Falls through unchanged
  *  otherwise (e.g. `/tmp/scratch`). */
@@ -26,46 +39,50 @@ function prettifyHome(abs: string, home: string): string {
   return abs;
 }
 
+function folderIndexSnapshot(status: IndexStatus): FolderIndexSnapshot {
+  const hasError = status.indexWarning || (status.preparationFailures?.length ?? 0) > 0;
+  const pending = status.pendingCount ?? 0;
+  const converting = status.pendingConversions?.length ?? 0;
+  const total = Math.max(0, status.total ?? 0);
+  const indexReady = status.indexReady !== false;
+  const isIndexing = !indexReady
+    || status.visibleIndexingSettled === false
+    || pending > 0
+    || converting > 0;
+
+  return {
+    state: hasError ? 'failed' : isIndexing ? 'preparing' : 'ready',
+    total,
+    pending,
+    converting,
+  };
+}
+
 /**
  * Landing overlay shown when no folder is open (or after the user
- * explicitly goes home). A folder is opened in place from anywhere on
- * disk; there is no configurable folder home.
+ * explicitly goes home). The library is global; opening a folder only
+ * changes the current view into one member folder.
  *
  *   - **New folder**: native picker opened at `~/Documents/StashBase`,
  *     with the OS "New Folder" affordance available.
  *   - **Open folder**: native picker to open any folder on disk in place.
- *   - **Your Folders**: the member list (recents) — click to reopen.
+ *   - **Library folders**: the member list (recents) — click to reopen.
  */
 export function Welcome() {
   const { state, actions, dispatch } = useApp();
   const [folderHome, setFolderHome] = useState('');
-  const [sortBy, setSortBy] = useState<'recent' | 'location'>('recent');
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
+  const [folderIndexSnapshots, setFolderIndexSnapshots] = useState<Record<string, FolderIndexSnapshot>>({});
   const [removing, setRemoving] = useState(false);
-
-  // Your Folders = the knowledge-base membership. Default order is
-  // most-recently-opened (server returns it MRU); "Location" keeps folders
-  // from the same parent directory next to each other.
-  const folders = useMemo(() => {
-    const list = [...state.recent];
-    if (sortBy === 'location') {
-      list.sort((a, b) => {
-        const aSegs = a.path.split('/').filter(Boolean);
-        const bSegs = b.path.split('/').filter(Boolean);
-        const aName = aSegs.pop() ?? a.path;
-        const bName = bSegs.pop() ?? b.path;
-        const aParent = aSegs.join('/');
-        const bParent = bSegs.join('/');
-        const parentOrder = aParent.localeCompare(bParent, undefined, { sensitivity: 'base' });
-        return parentOrder || aName.localeCompare(bName, undefined, { sensitivity: 'base' });
-      });
-    }
-    return list;
-  }, [state.recent, sortBy]);
+  const welcomeReconcileStartedAt = useRef<Map<string, number>>(new Map());
 
   const removeFolder = useCallback((path: string) => {
     setRemoving(true);
     void api.removeFolder(path)
+      .then(() => {
+        dispatch({ type: 'LIBRARY_FOLDER_STATUS_REMOVE', path });
+      })
       .then(() => api.getFolder())
       .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
       .catch((e) => dispatch({ type: 'WELCOME_ERROR', error: errorMessage(e) }))
@@ -78,8 +95,8 @@ export function Welcome() {
     return r.path;
   }, []);
 
-  // Fetch folderHome so copy can show `~/Documents/StashBase` as the
-  // container path in the hints below the action buttons.
+  // Fetch folderHome so New Folder opens the native picker at the
+  // default StashBase location.
   useEffect(() => {
     void (async () => {
       try {
@@ -102,6 +119,63 @@ export function Welcome() {
     return () => { cancelled = true; };
   }, [dispatch, refreshFolderHome, state.welcomeVisible]);
 
+  useEffect(() => {
+    if (!state.welcomeVisible || state.recent.length === 0) {
+      setFolderIndexSnapshots({});
+      return;
+    }
+    let cancelled = false;
+    const paths = state.recent.map((r) => r.path);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    async function refreshFolderStates() {
+      const entries = await Promise.all(paths.map(async (path) => {
+        try {
+          const status = await api.indexStatus(path);
+          return [path, folderIndexSnapshot(status)] as const;
+        } catch {
+          return [path, {
+            state: state.libraryFolderStatuses[path] ?? 'unknown',
+            total: 0,
+            pending: 0,
+            converting: 0,
+          }] as const;
+        }
+      }));
+      if (cancelled) return;
+      const fresh = Object.fromEntries(entries) as Record<string, FolderIndexSnapshot>;
+      let nextForPolling = fresh;
+      setFolderIndexSnapshots((prev) => {
+        const merged = Object.fromEntries(Object.entries(fresh).map(([path, snapshot]) => {
+          const previous = prev[path];
+          return [path, { ...previous, ...snapshot }];
+        })) as Record<string, FolderIndexSnapshot>;
+        nextForPolling = merged;
+        return merged;
+      });
+      const keepPolling = Object.values(nextForPolling).some((s) => s.state === 'preparing' || s.state === 'unknown');
+      if (keepPolling) timer = setTimeout(refreshFolderStates, 1500);
+    }
+    void refreshFolderStates();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [state.libraryFolderStatuses, state.recent, state.welcomeVisible]);
+
+  useEffect(() => {
+    if (!state.welcomeVisible || state.recent.length === 0) return;
+    const now = Date.now();
+    for (const folder of state.recent) {
+      const lastStarted = welcomeReconcileStartedAt.current.get(folder.path) ?? 0;
+      if (now - lastStarted < WELCOME_RECONCILE_COOLDOWN_MS) continue;
+      welcomeReconcileStartedAt.current.set(folder.path, now);
+      void api.sync(folder.path)
+        .catch((err) => {
+          console.warn(`[welcome] reconcile failed for ${folder.path}:`, err);
+        });
+    }
+  }, [state.recent, state.welcomeVisible]);
+
   function openRecent(path: string) {
     void actions.openFolder(path).catch((e) => {
       const msg = errorMessage(e);
@@ -121,6 +195,15 @@ export function Welcome() {
 
   if (!state.welcomeVisible) return null;
 
+  const removeTarget = confirmRemove
+    ? (() => {
+        const segs = confirmRemove.split('/').filter(Boolean);
+        const name = segs.pop() || confirmRemove;
+        const parent = prettifyHome(segs.length ? '/' + segs.join('/') : '/', state.homeDir ?? '');
+        return { path: confirmRemove, name, parent };
+      })()
+    : null;
+
   return (
     <div className="welcome">
       <div className="welcome-inner">
@@ -130,20 +213,102 @@ export function Welcome() {
           </div>
           <div className="welcome-title">StashBase</div>
           <div className="welcome-sub">
-            Convert your local files into a knowledge base your Agents can search.
+            Open or create a folder to build your searchable library.
           </div>
         </div>
 
-        <div className="welcome-actions">
-          <OpenFolderButton />
-          <NewFolderButton folderHome={folderHome} refreshFolderHome={refreshFolderHome} />
+        <div className="welcome-recent">
+          <div className="welcome-recent-head">
+            <span className="welcome-recent-title">
+              <span className="welcome-recent-head-icon">
+                <LibraryIcon />
+              </span>
+              <span>
+                Library <span className="welcome-recent-count">· {state.recent.length} {state.recent.length === 1 ? 'folder' : 'folders'}</span>
+              </span>
+            </span>
+            <div className="welcome-recent-head-right">
+              <div className="welcome-actions welcome-actions--header">
+                <OpenFolderButton shortLabel primary />
+                <NewFolderButton shortLabel folderHome={folderHome} refreshFolderHome={refreshFolderHome} />
+              </div>
+            </div>
+          </div>
+          <div className="welcome-recent-list">
+            {state.recent.length === 0 && (
+              <div className="welcome-recent-empty">No folders yet.</div>
+            )}
+            {state.recent.length > 0 && (
+              <>
+                {state.recent.map((r) => {
+                  const segs = r.path.split('/').filter(Boolean);
+                  const name = segs.pop() || r.path;
+                  const parent = prettifyHome(segs.length ? '/' + segs.join('/') : '/', state.homeDir ?? '');
+                  const indexSnapshot = folderIndexSnapshots[r.path] ?? {
+                    state: state.libraryFolderStatuses[r.path] ?? 'unknown',
+                    total: 0,
+                    pending: 0,
+                    converting: 0,
+                  };
+                  const indexState = indexSnapshot.state;
+                  return (
+                    <div key={r.path} className="welcome-recent-row">
+                      <button
+                        type="button"
+                        className="welcome-recent-open"
+                        title={r.path}
+                        onClick={() => openRecent(r.path)}
+                      >
+                        <FolderIcon />
+                        <span className="welcome-recent-main">
+                          <span className="welcome-recent-line">
+                            <span className="welcome-recent-name">{name}</span>
+                            <span className="welcome-recent-path">{parent}</span>
+                            {indexState === 'failed' && (
+                              <span
+                                className="welcome-recent-status is-failed"
+                                aria-label="Search needs attention"
+                                title="Some files in this folder could not be prepared for search."
+                              >
+                                <WarningMark />
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="welcome-recent-more"
+                        title="More actions"
+                        aria-label={`More actions for ${name}`}
+                        aria-haspopup="menu"
+                        aria-expanded={folderMenu?.path === r.path}
+                        onClick={(e) => {
+                          setFolderMenu({ path: r.path, name, rect: e.currentTarget.getBoundingClientRect() });
+                        }}
+                      >
+                        <MoreHorizontalIcon />
+                      </button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
         </div>
 
         <div className="welcome-mcp">
+          <div className="welcome-mcp-icon">
+            <PlugIcon />
+          </div>
           <div className="welcome-mcp-text">
-            <div className="welcome-mcp-title">Connect your Agents</div>
-            <div className="welcome-mcp-sub">
-              Let Claude, Codex, and other agents search your files.
+            <div className="welcome-mcp-title">
+              <span>Connect your Agents</span>
+              <span className="welcome-mcp-agent-icons" aria-hidden="true">
+                <ClaudeIcon />
+                <CodexIcon />
+                <span className="welcome-mcp-agent-more">+</span>
+              </span>
             </div>
           </div>
           <button
@@ -155,94 +320,65 @@ export function Welcome() {
           </button>
         </div>
 
-        {state.recent.length > 0 && (
-          <div className="welcome-recent">
-            <div className="welcome-recent-head">
-              <span>
-                Your Folders <span className="welcome-recent-count">({folders.length})</span>
-              </span>
-              <div className="welcome-recent-head-right">
-                <div className="welcome-recent-sort" role="group" aria-label="Sort folders">
-                  <button
-                    type="button"
-                    className={sortBy === 'recent' ? 'is-active' : ''}
-                    onClick={() => setSortBy('recent')}
-                  >
-                    Recent
-                  </button>
-                  <button
-                    type="button"
-                    className={sortBy === 'location' ? 'is-active' : ''}
-                    onClick={() => setSortBy('location')}
-                  >
-                    Location
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="welcome-recent-list">
-              {folders.map((r) => {
-                const segs = r.path.split('/').filter(Boolean);
-                const name = segs.pop() || r.path;
-                const parent = prettifyHome(segs.length ? '/' + segs.join('/') : '/', state.homeDir ?? '');
-                if (confirmRemove === r.path) {
-                  return (
-                    <div key={r.path} className="welcome-recent-row welcome-recent-row--confirm">
-                      <span className="welcome-recent-confirm-text">
-                        Remove <strong>{name}</strong>? Its search index is cleared; the folder and its files are left untouched.
-                      </span>
-                      <button
-                        type="button"
-                        className="welcome-recent-confirm-yes"
-                        disabled={removing}
-                        onClick={() => removeFolder(r.path)}
-                      >
-                        {removing ? 'Removing…' : 'Remove'}
-                      </button>
-                      <button
-                        type="button"
-                        className="welcome-recent-confirm-no"
-                        disabled={removing}
-                        onClick={() => setConfirmRemove(null)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  );
-                }
-                return (
-                  <div key={r.path} className="welcome-recent-row">
-                    <button
-                      type="button"
-                      className="welcome-recent-open"
-                      title={r.path}
-                      onClick={() => openRecent(r.path)}
-                    >
-                      <FolderIcon />
-                      <span className="welcome-recent-name">{name}</span>
-                      <span className="welcome-recent-path">{parent}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="welcome-recent-remove"
-                      title="Remove from Your Folders"
-                      aria-label={`Remove ${name} from Your Folders`}
-                      onClick={() => setConfirmRemove(r.path)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {state.welcomeError && (
           <div className="welcome-err">{state.welcomeError}</div>
         )}
       </div>
+      {folderMenu && (
+        <Menu
+          anchor={{ rect: folderMenu.rect, align: 'right' }}
+          minWidth={190}
+          items={[
+            {
+              label: 'Remove from Library',
+              detail: 'Will not delete local files',
+              danger: true,
+              onSelect: () => setConfirmRemove(folderMenu.path),
+            },
+          ] satisfies MenuItem[]}
+          onClose={() => setFolderMenu(null)}
+        />
+      )}
+      {removeTarget && (
+        <ModalShell onCancel={removing ? () => { /* wait for removal */ } : () => setConfirmRemove(null)} top>
+          <h3>Remove from Library?</h3>
+          <p className="modal-hint">
+            StashBase will remove <strong className="welcome-remove-name">{removeTarget.name}</strong> from your Library.
+            It will <strong>not</strong> delete the folder or its files from your disk.
+          </p>
+          <div className="welcome-remove-path" title={removeTarget.path}>
+            {removeTarget.parent}
+          </div>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="modal-btn"
+              disabled={removing}
+              onClick={() => setConfirmRemove(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="modal-btn danger"
+              disabled={removing}
+              onClick={() => removeFolder(removeTarget.path)}
+            >
+              {removing ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
+        </ModalShell>
+      )}
     </div>
+  );
+}
+
+function WarningMark() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path className="warning-mark-shape" d="M8 2.2 14.4 13.2H1.6L8 2.2Z" />
+      <text className="warning-mark-text" x="8" y="12" textAnchor="middle">!</text>
+    </svg>
   );
 }
 
@@ -250,7 +386,13 @@ export function Welcome() {
  *  level) and open it in place. Nothing is copied: the folder is indexed
  *  where it lives. Browser fallback (no Electron bridge)
  *  hides the button — no portable absolute-path picker. */
-function OpenFolderButton() {
+function OpenFolderButton({
+  shortLabel = false,
+  primary = false,
+}: {
+  shortLabel?: boolean;
+  primary?: boolean;
+}) {
   const { actions, dispatch } = useApp();
   const [busy, setBusy] = useState(false);
   const bridge = useMemo<ElectronBridge | undefined>(
@@ -276,16 +418,16 @@ function OpenFolderButton() {
   }
   return (
     <button
-      className="welcome-action"
+      className={'welcome-action' + (primary ? ' is-primary' : '')}
       type="button"
       onClick={onClick}
       disabled={busy}
-      title="Open any folder on your disk — indexed in place, not copied"
+      title="Add any folder on your disk to the library — indexed in place, not copied"
     >
       <span className="welcome-action-icon">
         <FolderIcon />
       </span>
-      <span className="welcome-action-label">{busy ? 'Opening…' : 'Open folder'}</span>
+      <span className="welcome-action-label">{shortLabel ? 'Open' : 'Open folder'}</span>
     </button>
   );
 }
@@ -295,9 +437,11 @@ function OpenFolderButton() {
 function NewFolderButton({
   folderHome,
   refreshFolderHome,
+  shortLabel = false,
 }: {
   folderHome: string;
   refreshFolderHome: () => Promise<string>;
+  shortLabel?: boolean;
 }) {
   const { actions, dispatch } = useApp();
   const [busy, setBusy] = useState(false);
@@ -333,12 +477,12 @@ function NewFolderButton({
       type="button"
       onClick={onClick}
       disabled={busy}
-      title="Create or choose a folder under the default StashBase location"
+      title="Create or choose a folder under the default StashBase location and add it to the library"
     >
       <span className="welcome-action-icon">
         <NewFolderIcon />
       </span>
-      <span className="welcome-action-label">{busy ? 'Opening…' : 'New folder'}</span>
+      <span className="welcome-action-label">{shortLabel ? 'New' : 'New folder'}</span>
     </button>
   );
 }

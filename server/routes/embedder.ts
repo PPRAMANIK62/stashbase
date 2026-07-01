@@ -9,9 +9,9 @@
  */
 import express from 'express';
 import { logger, errorMessage } from '../log.ts';
-import { currentWindowId, getCurrentFolder } from '../folder.ts';
+import { getCurrentFolder } from '../folder.ts';
 import { getApiKey, getEmbedderProvider, setApiKey } from '../app-config.ts';
-import { bootBindAllFolders, resetIndexerRuntime, scheduleIndexerSync } from '../state.ts';
+import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from '../state.ts';
 import { sendError, validateOpenAIKey } from '../http.ts';
 
 const log = logger('routes/embedder');
@@ -46,9 +46,11 @@ export function mount(app: express.Express): void {
       await resetIndexerRuntime({ forgetBindings: true });
       await bootBindAllFolders();
       const cur = getCurrentFolder();
-      if (cur) {
-        scheduleIndexerSync(cur, 'embedder key set', currentWindowId());
-      }
+      log.info(`key set: starting semantic backfill${cur ? ` (active folder: ${cur})` : ''}`);
+      void reconcileLibraryFolders('embedder key set')
+        .catch((err: unknown) => {
+          log.warn(`key set: semantic backfill failed: ${errorMessage(err)}`);
+        });
     } catch (err: unknown) {
       log.warn(`key set: runtime reset/rebind failed: ${errorMessage(err)}`);
     }

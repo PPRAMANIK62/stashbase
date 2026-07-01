@@ -226,8 +226,8 @@ class MfsDaemon extends EventEmitter {
         // single source of truth for admission knowledge
         // (server/indexable.ts / format.ts) — the daemon's built-in
         // copies are only fallbacks, and silent drift between the two
-        // produces permanent pending or delete/re-embed oscillation
-        // (data-layer §8.6 I7). An old PyInstaller binary that doesn't
+        // produces permanent pending or delete/re-embed oscillation.
+        // An old PyInstaller binary that doesn't
         // know the op gets a loud warning instead of silent drift.
         this.call('set_rules', {
           excluded_dirs: [...INDEX_EXCLUDED_DIRS],

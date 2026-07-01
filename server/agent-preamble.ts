@@ -17,35 +17,17 @@
  * sibling folders — is always current.
  */
 import path from 'node:path';
-import { getLibraryInfo } from './library-info.ts';
-import { toPosixAbs } from './folder.ts';
 
 export function buildStashbasePreamble(cwd: string): string {
-  const info = getLibraryInfo();
-  const cwdAbs = toPosixAbs(cwd);
   const current = path.basename(cwd);
-  const others = info.folders.filter((f) => f.path !== cwdAbs).map((f) => f.name);
 
   const lines: string[] = [
-    `You are operating inside **StashBase**, a local file-based library. ` +
-      `This is not a generic working directory: the folder you're in (\`${cwd}\`) ` +
-      `is a StashBase *folder*, and the default folder home is \`${info.folder_home}\`.`,
+    `You are operating inside **StashBase**, a local file-based knowledge base. Current folder: **${current}** (\`${cwd}\`).`,
     '',
-    `Current folder: **${current}**.` +
-      (others.length ? ` Other folders in your library: ${others.join(', ')}.` : ''),
-    '',
-    'Beyond your normal shell/file tools you have two StashBase MCP tools that ' +
-      'the filesystem alone cannot give you:',
-    '- `search_library` — semantic / vector retrieval across the library. Finds things by ' +
-      'meaning rather than literal text, surfacing cross-file conceptual links ' +
-      'that grep/ripgrep miss.',
-    '- `reindex` — there is **no filesystem watcher**. After you create, edit, ' +
-      'delete, or move any file, call `reindex` so the change becomes searchable.',
-    '',
-    'This library likely holds relevant prior context for whatever you are asked, so a ' +
-      'quick `search_library` before answering from memory is usually worth it — but ' +
-      'you decide when retrieval helps and when your own file tools or reasoning ' +
-      'are enough.',
+    'Use the StashBase MCP tools when they fit:',
+    '- `search_library` finds relevant library content by meaning across folders; pass `folder` or `path_prefix` to narrow the search.',
+    '- `read_file` reads files through StashBase; for PDFs it returns extracted Markdown when available.',
+    '- `reindex` refreshes the index after you create, edit, delete, or move files so search reflects the latest content on disk.',
   ];
 
   return lines.join('\n');

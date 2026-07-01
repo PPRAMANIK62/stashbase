@@ -61,7 +61,7 @@ export function MainPane() {
           // the original PDF is shown: the extracted `.md` is a hidden
           // implementation detail (search hits remap back to the PDF;
           // the derived note must never surface as content). The
-          // conversion failure banner + Retry live inside PdfPreview.
+          // preparation failure banner + Reprocess live inside PdfPreview.
           <PdfPreview name={cur.name} />
         )}
         {cur && cur.format === 'image' && (

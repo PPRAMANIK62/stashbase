@@ -496,7 +496,7 @@ export function mount(app: express.Express): void {
         catch (err: unknown) { log.warn(`file-order cleanup failed for ${name}: ${errorMessage(err)}`); }
       }
       try { clearRecord(toSourcePath(name)); }
-      catch (err: unknown) { log.warn(`delete: conversion status cleanup failed for ${name}: ${errorMessage(err)}`); }
+      catch (err: unknown) { log.warn(`delete: preparation status cleanup failed for ${name}: ${errorMessage(err)}`); }
       res.json({ alreadyGone: !removed });
       for (const rel of [name, ...derivedArtifacts.notes]) {
         indexer.deleteFile(toSourcePath(rel)).catch((err) => {

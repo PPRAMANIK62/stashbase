@@ -13,9 +13,10 @@
  * to plain PyMuPDF text extraction when the richer layout pass fails.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
+import { relInFolder, toPosixAbs } from './folder.ts';
 import { derivedNoteFor, derivedBundleFor, derivedBatchesFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn } from './python-host.ts';
 import { discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
@@ -25,6 +26,20 @@ import { logger } from './log.ts';
 
 const log = logger('pdf');
 const STDERR_TAIL_BYTES = 64 * 1024;
+const PDF_COMPLETE_MARKER = '<!-- stashbase-pdf-conversion: complete -->';
+const PDF_QUEUE_DEBOUNCE_MS = 100;
+const PDF_TEXT_PROBE_TIMEOUT_MS = 5000;
+const PDF_TEXT_PROBE_CONCURRENCY = 4;
+
+interface QueuedPdf {
+  absPath: string;
+  priority?: number;
+  priorityPromise?: Promise<number>;
+}
+
+const queuedPdfs = new Map<string, QueuedPdf>();
+let pdfQueueTimer: ReturnType<typeof setTimeout> | null = null;
+let pdfQueueRunning = false;
 
 export interface ConvertResult {
   /** Absolute AppData path of the written derived Markdown. */
@@ -50,6 +65,138 @@ function cleanupDerivedPdf(pdfAbsPath: string): void {
   rmSync(notePath, { force: true });
   rmSync(bundleDir, { recursive: true, force: true });
   rmSync(derivedBatchesFor(pdfAbsPath), { recursive: true, force: true });
+}
+
+function cleanupFinalPdfArtifacts(pdfAbsPath: string): void {
+  const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
+  rmSync(notePath, { force: true });
+  rmSync(bundleDir, { recursive: true, force: true });
+}
+
+function derivedPdfIsComplete(_pdfAbsPath: string, notePath: string): boolean {
+  let fd: number | null = null;
+  try {
+    fd = openSync(notePath, 'r');
+    const tailBytes = 4096;
+    const size = statSync(notePath).size;
+    const start = Math.max(0, size - tailBytes);
+    const buf = Buffer.alloc(size - start);
+    readSync(fd, buf, 0, buf.length, start);
+    return buf.toString('utf8').includes(PDF_COMPLETE_MARKER);
+  } catch {
+    return false;
+  } finally {
+    if (fd != null) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}
+
+function pdfQueueKey(pdfAbsPath: string): string {
+  return toPosixAbs(path.resolve(pdfAbsPath));
+}
+
+function schedulePdfQueueDrain(): void {
+  if (pdfQueueTimer || pdfQueueRunning) return;
+  pdfQueueTimer = setTimeout(() => {
+    pdfQueueTimer = null;
+    void drainPdfQueue();
+  }, PDF_QUEUE_DEBOUNCE_MS);
+}
+
+async function drainPdfQueue(): Promise<void> {
+  if (pdfQueueRunning) return;
+  pdfQueueRunning = true;
+  try {
+    while (queuedPdfs.size > 0) {
+      const items = [...queuedPdfs.values()];
+      await resolvePdfPriorities(items);
+      items.sort((a, b) =>
+        (a.priority ?? 0) - (b.priority ?? 0)
+        || a.absPath.localeCompare(b.absPath),
+      );
+      const next = items[0];
+      if (!next) break;
+      queuedPdfs.delete(pdfQueueKey(next.absPath));
+      const run = maybeConvert(next.absPath, PDF_SPEC);
+      if (run) await run;
+    }
+  } finally {
+    pdfQueueRunning = false;
+    if (queuedPdfs.size > 0) schedulePdfQueueDrain();
+  }
+}
+
+async function resolvePdfPriorities(items: QueuedPdf[]): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(PDF_TEXT_PROBE_CONCURRENCY, items.length) },
+    async () => {
+      while (cursor < items.length) {
+        const item = items[cursor++];
+        if (item) await resolvePdfPriority(item);
+      }
+    },
+  );
+  await Promise.all(workers);
+}
+
+async function resolvePdfPriority(item: QueuedPdf): Promise<number> {
+  if (item.priority != null) return item.priority;
+  item.priorityPromise ??= pdfConversionPriority(item.absPath)
+    .then((priority) => {
+      item.priority = priority;
+      return priority;
+    });
+  return item.priorityPromise;
+}
+
+async function pdfConversionPriority(pdfAbsPath: string): Promise<number> {
+  const hasTextLayer = await probePdfTextLayer(pdfAbsPath);
+  // Text-layer PDFs are cheap and should run first. Scanned PDFs fall behind
+  // because their OCR path is usually the slowest conversion work.
+  return hasTextLayer ? 0 : 10;
+}
+
+function probePdfTextLayer(pdfAbsPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const { cmd, args } = extractorSpawn('pdf', 'pdf_extract.py', ['--probe-text-layer', pdfAbsPath]);
+    const proc = spawn(cmd, args, spawnOptionsForExtractor());
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const done = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    timer = setTimeout(() => {
+      terminateExtractorTree(proc);
+      // A probe that cannot finish quickly is likely not a cheap text-layer
+      // document; defer it behind definitely text-readable PDFs.
+      done(false);
+    }, PDF_TEXT_PROBE_TIMEOUT_MS);
+    proc.on('error', () => done(true));
+    proc.on('exit', (code) => {
+      if (code === 0) done(true);
+      else if (code === 10) done(false);
+      else done(true);
+    });
+  });
+}
+
+function enqueuePdf(pdfAbsPath: string, priority?: number): void {
+  const key = pdfQueueKey(pdfAbsPath);
+  const current = queuedPdfs.get(key);
+  if (current) {
+    if (priority != null && (current.priority == null || priority < current.priority)) {
+      current.priority = priority;
+      current.priorityPromise = Promise.resolve(priority);
+    }
+    return;
+  }
+  queuedPdfs.set(key, { absPath: pdfAbsPath, priority });
+  schedulePdfQueueDrain();
 }
 
 /** Given a POSIX-relative path to a legacy dot-prefixed derived note
@@ -193,23 +340,40 @@ const PDF_SPEC: ConversionSpec = {
   kind: 'pdf_extract',
   matches: (name) => /\.pdf$/i.test(name),
   derivedNote: (abs) => derivedPathsForPdf(abs).notePath,
+  derivedReady: derivedPdfIsComplete,
   convert: convertPdf,
+  cleanupBeforeConvert: cleanupFinalPdfArtifacts,
   cleanupDerived: cleanupDerivedPdf,
 };
 
 /** Fire-and-forget convert used by the upload route. Skips if the note
- *  already exists; persists in-flight → done/failed to `state.db` so the
- *  UI can show "Converting…" and a Retry banner even after restart. */
-export function maybeConvertPdf(pdfAbsPath: string): void {
-  maybeConvert(pdfAbsPath, PDF_SPEC);
+ *  already exists; persists in-flight → done/failed to `state.db` so
+ *  search-readiness accounting and retry recovery survive restart. */
+export function maybeConvertPdf(
+  pdfAbsPath: string,
+  opts: { priority?: 'immediate' } = {},
+): void {
+  enqueuePdf(pdfAbsPath, opts.priority === 'immediate' ? -10 : undefined);
 }
 
 /** Reconcile hook: convert any untracked `.pdf` under the folder (dropped
  *  in via git checkout / external copy / `mv`). */
 export function discoverNewPdfs(folderAbs: string): void {
-  discoverNewSources(folderAbs, PDF_SPEC);
+  discoverNewSources(folderAbs, PDF_SPEC, (abs) => maybeConvertPdf(abs));
 }
 
 export function indexFreshPdf(pdfAbsPath: string): Promise<boolean> {
   return indexFreshDerived(pdfAbsPath, PDF_SPEC);
+}
+
+export function getQueuedPdfConversions(folderRoot?: string): string[] {
+  const out: string[] = [];
+  for (const item of queuedPdfs.values()) {
+    if (!existsSync(item.absPath)) continue;
+    const sourcePath = toPosixAbs(item.absPath);
+    const folderRel = folderRoot ? relInFolder(sourcePath, folderRoot) : sourcePath;
+    if (folderRel != null) out.push(folderRel);
+  }
+  out.sort();
+  return out;
 }

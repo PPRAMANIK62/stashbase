@@ -20,6 +20,9 @@ import { appDataRoot } from './local-data.ts';
 import { toPosixAbs } from './folder.ts';
 import { isConvertibleSource } from './format.ts';
 import { isCloudPlaceholderName, isIndexExcludedDirName } from './indexable.ts';
+import { logger, errorMessage } from './log.ts';
+
+const log = logger('derived-store');
 
 /** The single global derived-notes directory: `<appData>/derived.nosync/`.
  *  `.nosync` keeps iCloud off it (same rationale as the vector store). */
@@ -31,9 +34,79 @@ function derivedKey(sourceAbs: string): string {
   return bytesToHex(blake3(new TextEncoder().encode(toPosixAbs(sourceAbs)))).slice(0, 32);
 }
 
+function manifestPath(): string {
+  return path.join(derivedDir(), 'manifest.json');
+}
+
+function readManifest(): Record<string, string> {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath(), 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'string') out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeManifest(manifest: Record<string, string>): void {
+  const dir = derivedDir();
+  const target = manifestPath();
+  const tmp = path.join(dir, `.manifest.${process.pid}.${Date.now()}.tmp`);
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(manifest, null, 2), 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort temp cleanup */ }
+    throw err;
+  }
+}
+
+export function registerDerivedSource(sourceAbs: string): void {
+  if (!isConvertibleSource(sourceAbs)) return;
+  const manifest = readManifest();
+  manifest[derivedKey(sourceAbs)] = toPosixAbs(sourceAbs);
+  writeManifest(manifest);
+}
+
+function forgetDerivedSource(sourceAbs: string): void {
+  const manifest = readManifest();
+  const key = derivedKey(sourceAbs);
+  if (!(key in manifest)) return;
+  delete manifest[key];
+  writeManifest(manifest);
+}
+
+export function knownDerivedSourcesUnderFolder(folderAbs: string): string[] {
+  const root = toPosixAbs(folderAbs).replace(/\/+$/, '');
+  const prefix = `${root}/`;
+  return Object.values(readManifest())
+    .map(toPosixAbs)
+    .filter((sourceAbs) => sourceAbs === root || sourceAbs.startsWith(prefix));
+}
+
 /** Absolute path of the derived markdown note for a source file. */
 export function derivedNoteFor(sourceAbs: string): string {
   return path.join(derivedDir(), `${derivedKey(sourceAbs)}.md`);
+}
+
+/** Reverse-map a derived markdown note path back to its source path.
+ *  Only manifest-known final notes are accepted; scratch/bundle files and
+ *  arbitrary AppData paths are not exposed through MCP file reads. */
+export function sourceForDerivedNote(noteAbs: string): string | null {
+  const abs = toPosixAbs(noteAbs);
+  const dir = toPosixAbs(derivedDir()).replace(/\/+$/, '');
+  if (!abs.startsWith(`${dir}/`)) return null;
+  const base = path.posix.basename(abs);
+  const match = base.match(/^([0-9a-f]{32})\.md$/i);
+  if (!match) return null;
+  const sourceAbs = readManifest()[match[1]];
+  if (!sourceAbs) return null;
+  return toPosixAbs(derivedNoteFor(sourceAbs)) === abs ? toPosixAbs(sourceAbs) : null;
 }
 
 /** Absolute path of the derived image bundle (`_files/`) for a source. */
@@ -51,25 +124,41 @@ export interface DerivedCleanupStats {
   artifacts: number;
 }
 
-function rmDerivedArtifact(absPath: string): number {
+interface DerivedRemoval {
+  artifacts: number;
+  failed: string[];
+}
+
+function rmDerivedArtifact(absPath: string): DerivedRemoval {
   try {
     const existed = fs.existsSync(absPath);
     fs.rmSync(absPath, { recursive: true, force: true });
-    return existed ? 1 : 0;
-  } catch {
-    return 0;
+    return { artifacts: existed ? 1 : 0, failed: [] };
+  } catch (err: unknown) {
+    return { artifacts: 0, failed: [`${absPath}: ${errorMessage(err)}`] };
   }
 }
 
 /** Delete all AppData-derived artifacts for one PDF/image source path. */
 export function deleteDerivedForSource(sourceAbs: string): DerivedCleanupStats {
   if (!isConvertibleSource(sourceAbs)) return { sources: 0, artifacts: 0 };
+  const removals = [
+    rmDerivedArtifact(derivedNoteFor(sourceAbs)),
+    rmDerivedArtifact(derivedBundleFor(sourceAbs)),
+    rmDerivedArtifact(derivedBatchesFor(sourceAbs)),
+  ];
+  const artifacts = removals.reduce((sum, item) => sum + item.artifacts, 0);
+  const failed = removals.flatMap((item) => item.failed);
+  if (failed.length === 0) {
+    forgetDerivedSource(sourceAbs);
+  } else {
+    log.warn(
+      `derived cleanup failed for ${sourceAbs}; keeping manifest entry for retry: ${failed.join('; ')}`,
+    );
+  }
   return {
     sources: 1,
-    artifacts:
-      rmDerivedArtifact(derivedNoteFor(sourceAbs))
-      + rmDerivedArtifact(derivedBundleFor(sourceAbs))
-      + rmDerivedArtifact(derivedBatchesFor(sourceAbs)),
+    artifacts,
   };
 }
 
@@ -110,5 +199,10 @@ export function deleteDerivedUnderFolder(folderAbs: string): DerivedCleanupStats
   }
 
   if (fs.existsSync(root)) visit(root);
+  for (const sourceAbs of knownDerivedSourcesUnderFolder(root)) {
+    if (seen.has(sourceAbs)) continue;
+    seen.add(sourceAbs);
+    add(deleteDerivedForSource(sourceAbs));
+  }
   return totals;
 }

@@ -42,7 +42,7 @@ export function EmbedderRequireKeyGate() {
         dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
         setOpen(false);
         if (warning) actions.toast(`OpenAI key saved, but validation could not reach OpenAI: ${warning}`, { level: 'warning' });
-        void actions.markVisibleFilesStashing();
+        void actions.markVisibleFilesPendingForSearch();
         void actions.refreshIndexState();
       }}
       onLater={() => setOpen(false)}

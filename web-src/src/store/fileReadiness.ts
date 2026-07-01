@@ -1,16 +1,11 @@
-import type { ConversionFailure } from '../api';
+import type { PreparationFailure } from '../api';
 import type { State } from './state';
-import { isVisibleIndexPending, isVisibleStashing } from './state';
 
 export interface FileReadiness {
-  isIndexPending: boolean;
-  isConverting: boolean;
-  isTemporarilyUnsearchable: boolean;
-  isStashing: boolean;
-  conversionFailure: ConversionFailure | undefined;
+  preparationFailure: PreparationFailure | undefined;
 }
 
-export function conversionFailureMatchesTarget(failurePath: string, target: string): boolean {
+export function preparationFailureMatchesTarget(failurePath: string, target: string): boolean {
   if (failurePath === target) return true;
   const slash = target.lastIndexOf('/');
   const dir = slash >= 0 ? target.slice(0, slash + 1) : '';
@@ -18,18 +13,12 @@ export function conversionFailureMatchesTarget(failurePath: string, target: stri
   return failurePath === `${dir}.${base}.md`;
 }
 
-export function getConversionFailure(s: State, path: string): ConversionFailure | undefined {
-  return s.conversionFailures.find((f) => conversionFailureMatchesTarget(f.path, path));
+export function getPreparationFailure(s: State, path: string): PreparationFailure | undefined {
+  return s.preparationFailures.find((f) => preparationFailureMatchesTarget(f.path, path));
 }
 
 export function getFileReadiness(s: State, path: string): FileReadiness {
-  const isIndexPending = isVisibleIndexPending(s, path);
-  const isConverting = s.pendingConversions.includes(path);
   return {
-    isIndexPending,
-    isConverting,
-    isTemporarilyUnsearchable: isIndexPending || isConverting,
-    isStashing: isVisibleStashing(s, path),
-    conversionFailure: getConversionFailure(s, path),
+    preparationFailure: getPreparationFailure(s, path),
   };
 }
