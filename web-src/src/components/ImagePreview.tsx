@@ -46,7 +46,6 @@ export function ImagePreview({ name }: { name: string }) {
   const [loadError, setLoadError] = useState(false);
   const alt = name.split('/').pop() ?? name;
   const failure = getPreparationFailure(state, name);
-  const failureMessage = failure ? imageOcrFailureMessage(failure.lastError) : '';
   // Device pixel ratio: the baseline (100%) maps one image pixel to one
   // physical pixel, so a Retina screenshot shows at captured size + sharp.
   const dpr = window.devicePixelRatio || 1;
@@ -111,9 +110,9 @@ export function ImagePreview({ name }: { name: string }) {
       {failure && (
         <div className="pdf-failure-banner" role="status">
           <span className="pdf-failure-text">
-            Searchable text is unavailable{failureMessage ? `: ${failureMessage}` : ''}. The image
-            still opens normally.
-            {retryError ? ` (${retryError})` : ''}
+            {retryError
+              ? 'Searchable text is unavailable. Reprocess could not start. Try again.'
+              : 'Searchable text is unavailable. The image still opens normally.'}
           </span>
           <button
             type="button"
@@ -158,15 +157,4 @@ export function ImagePreview({ name }: { name: string }) {
       )}
     </div>
   );
-}
-
-function imageOcrFailureMessage(raw: string | undefined): string {
-  if (!raw) return '';
-  if (/rapidocr_onnxruntime|No module named ['"]rapidocr/i.test(raw)) {
-    return 'OCR engine is missing or the app needs restart after Python setup';
-  }
-  return raw
-    .replace(/^ocr_extract exit \d+:\s*/i, '')
-    .replace(/^\[ocr_extract\]\s*OCR failed:\s*/i, '')
-    .trim();
 }

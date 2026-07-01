@@ -51,7 +51,7 @@ export function ContextMenu() {
                 .then(() => actions.refreshIndexState())
                 .catch((err) => {
                   const msg = err instanceof Error ? err.message : String(err);
-                  actions.toast('Reprocess failed: ' + msg, { level: 'error' });
+                  actions.toast('Reprocess could not start. Try again.', { level: 'error' });
                   console.warn('[ctxmenu] reprocess failed:', msg);
                 });
             },

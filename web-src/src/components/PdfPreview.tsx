@@ -287,14 +287,6 @@ function highlightRectsForMatch(p: FlatPage, idx: number, length: number): PdfHi
   });
 }
 
-export function pdfPreparationFailureMessage(raw: string): string {
-  return raw
-    .replace(/^pdf_extract exit \d+:\s*/i, '')
-    .replace(/^\[pdf_extract\]\s*/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 export function PdfPreview({ name, showConversionBanner = true }: { name: string; showConversionBanner?: boolean }) {
   const { state, actions } = useApp();
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
@@ -313,11 +305,12 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const [pageHighlight, setPageHighlight] = useState<PdfPageHighlight | null>(null);
   const readiness = getFileReadiness(state, name);
   const failure = readiness.preparationFailure;
-  const failureMessage = failure ? pdfPreparationFailureMessage(failure.lastError) : '';
   const chromeStatus = failure && showConversionBanner
     ? {
         kind: 'error' as const,
-        text: `This PDF is not searchable.${failureMessage ? ` ${failureMessage}` : ''}${retryError ? ` (${retryError})` : ''}`,
+        text: retryError
+          ? 'This PDF is not searchable. Reprocess could not start. Try again.'
+          : 'This PDF is not searchable. Reprocess it to try again.',
       }
     : null;
   const retryInProgress = retryBusy || retryStarted;
