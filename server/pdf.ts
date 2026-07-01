@@ -160,7 +160,15 @@ async function pdfConversionPriority(pdfAbsPath: string): Promise<number> {
 
 function probePdfTextLayer(pdfAbsPath: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const { cmd, args } = extractorSpawn('pdf', 'pdf_extract.py', ['--probe-text-layer', pdfAbsPath]);
+    let cmd: string;
+    let args: string[];
+    try {
+      ({ cmd, args } = extractorSpawn('pdf', 'pdf_extract.py', ['--probe-text-layer', pdfAbsPath]));
+    } catch (err: unknown) {
+      log.warn(`pdf text probe skipped for ${path.basename(pdfAbsPath)}: ${err instanceof Error ? err.message : String(err)}`);
+      resolve(true);
+      return;
+    }
     const proc = spawn(cmd, args, spawnOptionsForExtractor());
     let settled = false;
     let timer: ReturnType<typeof setTimeout>;

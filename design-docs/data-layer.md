@@ -16,6 +16,7 @@ This is not a second architecture document. `architecture.md` explains where mod
 | Reopen a folder | Old derived Markdown may exist from a partial or legacy conversion. | Completion must be verified, not inferred from file existence alone. |
 | Import or copy in a large PDF | Some PDF batches may finish before the app exits or the extractor is killed. | Batch scratch can be reused, but the final PDF note is complete only with the completion marker. |
 | Import several PDFs, including scans | Scanned PDFs can monopolize conversion time because OCR is slow. | PDF scheduling probes for a text layer and runs text-layer PDFs before scanned PDFs. |
+| Run without optional native helpers | A packaged build may be missing the PDF/OCR extractor, or a native status-store dependency may fail to load. | Optional preparation/status layers must degrade to warnings or failed preparation records; opening folders and browsing source files must keep working. |
 | Import an image | OCR may fail or produce empty text. | Empty OCR text is a preparation failure for search; the source image remains viewable. |
 | Search immediately after import | Conversion completion and semantic indexing completion are different clocks. | Keyword search can use completed derived text; semantic search depends on daemon index status only when embeddings are enabled. |
 | Reprocess a failed file | Stale derived artifacts or stale failure rows may poison the next attempt. | Reprocess clears the failure row. PDF/image sources clear stale final artifacts and queue extraction; directly readable files trigger reconcile/index from source. |
@@ -87,6 +88,8 @@ On graceful shutdown, StashBase cancels active extractors before closing state s
 
 Persistent preparation failures are durable. They are not silently retried forever because repeated automatic retries can burn time, CPU, OCR, or embedding budget. The user can reprocess the file manually.
 
+Preparation status is auxiliary. If the status store cannot load, StashBase may lose durable failure markers for that session, but it must not block folder opening, source browsing, or basic search over already available content.
+
 Reprocess does this:
 
 - clears the failure row
@@ -96,6 +99,8 @@ Reprocess does this:
 For PDFs, reprocess and transient recovery preserve resumable batch scratch when possible, so a large PDF can continue from completed batches instead of starting from page one.
 
 PDF queue priority is an optimization, not a source of truth. Text-layer PDFs are scheduled ahead of scanned PDFs so slow OCR does not block cheaper work. Manual PDF reprocess is prioritized ahead of normal queued work.
+
+PDF text-layer probing is also auxiliary. If the packaged extractor is unavailable, the probe is skipped and the conversion attempt fails quietly as preparation work; the server must not crash.
 
 ---
 

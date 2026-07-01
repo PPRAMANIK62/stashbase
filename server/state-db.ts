@@ -13,7 +13,8 @@
  * library folders and embedder config. (Earlier `files` and `index_queue`
  * tables duplicated daemon/reconcile state write-only and were removed.)
  */
-import Database from 'better-sqlite3';
+import { createRequire } from 'node:module';
+import type BetterSqlite3 from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
@@ -32,14 +33,32 @@ export interface ConversionStatusEntry {
   doneAt?: string;
 }
 
-let db: Database.Database | null = null;
+const nodeRequire = createRequire(import.meta.url);
+
+let DatabaseCtor: typeof BetterSqlite3 | null | undefined;
+let db: BetterSqlite3.Database | null = null;
 let dbPath: string | null = null;
+let stateDbUnavailable = false;
 
 function stateDbPath(): string {
   return appStateDbPath();
 }
 
-function getStateDb(): Database.Database {
+function loadDatabaseCtor(): typeof BetterSqlite3 | null {
+  if (DatabaseCtor !== undefined) return DatabaseCtor;
+  try {
+    DatabaseCtor = nodeRequire('better-sqlite3') as typeof BetterSqlite3;
+  } catch (err: unknown) {
+    DatabaseCtor = null;
+    log.warn(`state db disabled: ${errorMessage(err)}`);
+  }
+  return DatabaseCtor;
+}
+
+function getStateDb(): BetterSqlite3.Database | null {
+  if (stateDbUnavailable) return null;
+  const Database = loadDatabaseCtor();
+  if (!Database) return null;
   const target = stateDbPath();
   if (db && dbPath === target) return db;
   if (db) {
@@ -48,13 +67,21 @@ function getStateDb(): Database.Database {
   }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   migrateLegacyStateDb(target);
-  db = new Database(target);
-  dbPath = target;
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  migrate(db);
-  migrateLegacyStateDbRows(db);
-  migrateLegacyStatusJson(db);
+  try {
+    db = new Database(target);
+    dbPath = target;
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    migrate(db);
+    migrateLegacyStateDbRows(db);
+    migrateLegacyStatusJson(db);
+  } catch (err: unknown) {
+    log.warn(`state db disabled: ${errorMessage(err)}`);
+    stateDbUnavailable = true;
+    try { db?.close(); } catch { /* ignore */ }
+    db = null;
+    dbPath = null;
+  }
   return db;
 }
 
@@ -119,7 +146,7 @@ export function closeStateDb(): void {
   dbPath = null;
 }
 
-function migrate(conn: Database.Database): void {
+function migrate(conn: BetterSqlite3.Database): void {
   conn.exec(`
     CREATE TABLE IF NOT EXISTS conversions (
       path TEXT PRIMARY KEY,
@@ -156,11 +183,11 @@ function migrate(conn: Database.Database): void {
   `);
 }
 
-function migrateLegacyStateDbRows(conn: Database.Database): void {
+function migrateLegacyStateDbRows(conn: BetterSqlite3.Database): void {
   for (const legacy of legacyStateDbPaths()) migrateLegacyStateDbRowsFrom(conn, legacy);
 }
 
-function migrateLegacyStateDbRowsFrom(conn: Database.Database, legacy: string): void {
+function migrateLegacyStateDbRowsFrom(conn: BetterSqlite3.Database, legacy: string): void {
   if (!fs.existsSync(legacy)) return;
   let attached = false;
   try {
@@ -200,7 +227,7 @@ function migrateLegacyStateDbRowsFrom(conn: Database.Database, legacy: string): 
   }
 }
 
-function migrateLegacyStatusJson(conn: Database.Database): void {
+function migrateLegacyStatusJson(conn: BetterSqlite3.Database): void {
   const legacy = path.join(getFolderHome(), '.stashbase', 'pdf-status.json');
   const migrated = legacy + '.migrated';
   if (!fs.existsSync(legacy) || fs.existsSync(migrated)) return;
@@ -261,7 +288,9 @@ function sanitizeConversionEntry(v: unknown): ConversionStatusEntry | null {
 }
 
 export function readConversionStatusMap(): Record<string, ConversionStatusEntry> {
-  const rows = getStateDb().prepare(`
+  const conn = getStateDb();
+  if (!conn) return {};
+  const rows = conn.prepare(`
     SELECT path, status, attempts, last_error AS lastError,
            last_attempt_at AS lastAttemptAt, done_at AS doneAt
     FROM conversions
@@ -287,9 +316,11 @@ export function getConversionStatus(pathKey: string): ConversionStatusEntry | un
 
 
 export function setConversionStatus(pathKey: string, status: ConversionStatus, opts: { error?: string; incrementAttempts?: boolean } = {}): void {
+  const conn = getStateDb();
+  if (!conn) return;
   const prev = getConversionStatus(pathKey);
   const now = new Date().toISOString();
-  getStateDb().prepare(`
+  conn.prepare(`
     INSERT INTO conversions (path, status, attempts, last_error, last_attempt_at, done_at)
     VALUES (@path, @status, @attempts, @lastError, @lastAttemptAt, @doneAt)
     ON CONFLICT(path) DO UPDATE SET
@@ -309,20 +340,26 @@ export function setConversionStatus(pathKey: string, status: ConversionStatus, o
 }
 
 export function clearConversionStatus(pathKey: string): void {
-  getStateDb().prepare('DELETE FROM conversions WHERE path = ?').run(pathKey);
+  const conn = getStateDb();
+  if (!conn) return;
+  conn.prepare('DELETE FROM conversions WHERE path = ?').run(pathKey);
 }
 
 export function clearConversionStatusUnder(pathKey: string): void {
+  const conn = getStateDb();
+  if (!conn) return;
   const name = pathKey.replace(/\/+$/, '');
   if (!name) return;
   const prefix = name + '/';
-  getStateDb().prepare(
+  conn.prepare(
     'DELETE FROM conversions WHERE path = @name OR substr(path, 1, @plen) = @prefix',
   ).run({ name, prefix, plen: prefix.length });
 }
 
 export function listConversionStatus(status: ConversionStatus): Array<{ path: string; entry: ConversionStatusEntry }> {
-  const rows = getStateDb().prepare(`
+  const conn = getStateDb();
+  if (!conn) return [];
+  const rows = conn.prepare(`
     SELECT path, status, attempts, last_error AS lastError,
            last_attempt_at AS lastAttemptAt, done_at AS doneAt
     FROM conversions
