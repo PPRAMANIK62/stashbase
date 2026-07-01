@@ -11,13 +11,13 @@
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import type { WebSocket } from 'ws';
 import { buildStashbasePreamble } from './agent-preamble.ts';
 import { logger, errorMessage } from './log.ts';
 import { getCurrentFolder, runWithWindowId } from './folder.ts';
+import { agentCliEnv, resolveAgentCli } from './agent-cli.ts';
 
 const log = logger('codex-agent');
 
@@ -49,54 +49,27 @@ class CodexTurnCancelledError extends Error {
   }
 }
 
-function isExecutable(file: string): boolean {
-  try {
-    fs.accessSync(file, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function resolveCodexBinary(): string {
-  const explicit = [
-    process.env.STASHBASE_CODEX_BIN,
-    process.env.CODEX_CLI_BIN,
-    process.env.CODEX_CLI_PATH,
-  ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
-  for (const candidate of explicit) {
-    const resolved = path.resolve(candidate);
-    if (isExecutable(resolved)) return resolved;
-    log.warn(`Codex binary override is not executable: ${candidate}`);
-  }
-
-  const paths = [
-    ...(process.env.PATH ?? '').split(path.delimiter),
-    path.join(os.homedir(), '.npm-global', 'bin'),
-    path.join(os.homedir(), '.local', 'bin'),
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-  ];
-  for (const dir of paths) {
-    if (!dir) continue;
-    const candidate = path.join(dir, 'codex');
-    if (isExecutable(candidate)) return candidate;
-  }
-  return 'codex';
+function resolveCodexBinary(): string | null {
+  return resolveAgentCli({
+    name: 'codex',
+    envNames: ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'],
+    logLabel: 'Codex',
+  }, (message) => log.warn(message));
 }
 
 function spawnCodexAppServerProcess(cwd: string, extraEnv: NodeJS.ProcessEnv = {}): ChildProcessWithoutNullStreams {
   const command = resolveCodexBinary();
-  if (command !== 'codex') log.info(`spawning Codex app-server via ${command}`);
+  if (!command) throw new Error('Codex CLI not found. Install Codex or set STASHBASE_CODEX_BIN to the codex executable.');
+  log.info(`spawning Codex app-server via ${command}`);
   return spawn(command, ['app-server', '--listen', 'stdio://'], {
     cwd,
-    env: {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: undefined,
-      ...extraEnv,
-    } as NodeJS.ProcessEnv,
+    env: agentCliEnv(extraEnv, [pathDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+}
+
+function pathDir(command: string): string {
+  return command.includes('/') ? command.slice(0, command.lastIndexOf('/')) : '';
 }
 
 class CodexSession {

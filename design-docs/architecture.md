@@ -283,6 +283,8 @@ The built-in panel is a convenience client for the same library, not a separate 
 
 It runs the user's installed Agent CLI in the current folder and relies on the same global MCP configuration used by external clients.
 
+Packaged builds resolve the user-installed `claude` and `codex` executables explicitly, including common Homebrew and npm global paths, before launching the built-in panel. This keeps the panel aligned with the user's normal CLI setup instead of depending on optional SDK binaries bundled in `node_modules`.
+
 The key architectural point is:
 
 ```text
