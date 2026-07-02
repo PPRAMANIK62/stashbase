@@ -36,7 +36,9 @@ function run(command, args, env = {}) {
 
 function findCommand(command) {
   try {
-    return execFileSync('/usr/bin/which', [command], { encoding: 'utf8' }).trim();
+    const locator = process.platform === 'win32' ? 'where.exe' : '/usr/bin/which';
+    const out = execFileSync(locator, [command], { encoding: 'utf8' }).trim();
+    return out.split(/\r?\n/).find(Boolean) || null;
   } catch {
     return null;
   }
@@ -110,14 +112,27 @@ function preparePnpmCollectorFallback() {
   if (!realPnpm) return { env: {}, cleanup() {} };
 
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-pnpm-wrapper-'));
-  const wrapper = path.join(binDir, 'pnpm');
-  fs.writeFileSync(wrapper, `#!/bin/sh
+  const wrapper = process.platform === 'win32'
+    ? path.join(binDir, 'pnpm.cmd')
+    : path.join(binDir, 'pnpm');
+  if (process.platform === 'win32') {
+    fs.writeFileSync(wrapper, `@echo off\r
+if "%~1"=="list" (\r
+  "${process.execPath}" "${pnpmListFallback}" "${root}"\r
+  exit /b %ERRORLEVEL%\r
+)\r
+"${realPnpm}" %*\r
+exit /b %ERRORLEVEL%\r
+`);
+  } else {
+    fs.writeFileSync(wrapper, `#!/bin/sh
 if [ "$1" = "list" ]; then
   exec "${process.execPath}" "${pnpmListFallback}" "${root}"
 fi
 exec "${realPnpm}" "$@"
 `);
-  fs.chmodSync(wrapper, 0o755);
+    fs.chmodSync(wrapper, 0o755);
+  }
 
   return {
     env: {

@@ -6,19 +6,70 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag placeholder, for example v0.9.0
+        description: Release tag to attach the Windows assets to, for example v0.9.0
         required: true
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  windows-placeholder:
+  windows-installer:
     runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
     steps:
-      - name: Placeholder
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 11.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Validate release tag
         shell: pwsh
         run: |
-          Write-Host "Windows installer publishing is intentionally not enabled yet."
-          Write-Host "This placeholder keeps the release matrix shape visible until Windows is supported."
+          $version = node -p "require('./package.json').version"
+          $expected = "v$version"
+          if ($env:RELEASE_TAG -ne $expected) {
+            Write-Error "release tag $env:RELEASE_TAG does not match package.json version $expected"
+            exit 1
+          }
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows Python sidecars
+        run: pnpm build:python-extract-sidecar
+
+      - name: Build Windows installer
+        env:
+          STASHBASE_REQUIRE_EXTRACT: '1'
+          STASHBASE_SKIP_SIDECAR_BUILD: '1'
+        run: pnpm dist:win
+
+      - name: Upload Windows assets to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $artifacts = Get-ChildItem -Path release.nosync -File |
+            Where-Object { $_.Name -match '\.(exe|zip)$' -and $_.Length -gt 0 }
+
+          if (-not $artifacts) {
+            Write-Error "No Windows release artifacts found in release.nosync"
+            exit 1
+          }
+
+          $artifactPaths = @($artifacts | ForEach-Object { $_.FullName })
+          gh release upload $env:RELEASE_TAG @artifactPaths --repo $env:GITHUB_REPOSITORY --clobber
