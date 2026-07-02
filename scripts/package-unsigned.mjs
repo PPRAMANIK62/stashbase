@@ -18,11 +18,11 @@ const target = args.includes('--dir')
       : ['dmg', 'zip'];
 const xattr = fs.existsSync('/usr/bin/xattr') ? '/usr/bin/xattr' : 'xattr';
 const packageManagerCli = process.env.npm_execpath;
-const electronBuilderBin = path.join(
+const electronBuilderCli = path.join(
   root,
   'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder',
+  'electron-builder',
+  'cli.js',
 );
 const pnpmListFallback = path.join(root, 'scripts', 'pnpm-list-for-electron-builder.mjs');
 
@@ -75,13 +75,13 @@ function runScript(script) {
 }
 
 function runElectronBuilder() {
-  if (!fs.existsSync(electronBuilderBin)) {
-    throw new Error('Missing local electron-builder binary. Run your package manager install first.');
+  if (!fs.existsSync(electronBuilderCli)) {
+    throw new Error('Missing local electron-builder CLI. Run your package manager install first.');
   }
   assertPnpmCollectorInput();
   const fallback = preparePnpmCollectorFallback();
   try {
-    run(electronBuilderBin, [`--${platform}`, ...target, '--publish', 'never'], {
+    run(process.execPath, [electronBuilderCli, `--${platform}`, ...target, '--publish', 'never'], {
       ...fallback.env,
       CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     });
