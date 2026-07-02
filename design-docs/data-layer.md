@@ -10,8 +10,8 @@ This is not a second architecture document. `architecture.md` explains where mod
 
 | User operation | What can go wrong | Data-layer contract |
 |-|-|-|
-| Open a folder | A previous run was interrupted; derived state may be missing, stale, or partial. | Reconcile must rediscover missing or incomplete work before treating the folder as settled. |
-| Land on Welcome | The user may not open any specific folder, but previous library work may still be incomplete. | Welcome triggers folder-explicit reconcile in the background with a cooldown; status polling alone is not recovery. |
+| Open a folder | A previous run was interrupted; derived state may be missing, stale, or partial. Recursive listing or status calls may also be slow for large folders. | Reconcile must rediscover missing or incomplete work, but navigation must not wait for recursive listing or status snapshots before entering the folder view. |
+| Land on Welcome | The user may not open any specific folder, but previous library work may still be incomplete. | Welcome triggers folder-explicit reconcile in the background with a cooldown when idle; status polling alone is not recovery. |
 | Go Home / close the active folder | Conversion may still be running, while the UI leaves the folder view. | In-flight work is process-owned. The renderer returns to Welcome immediately; server-side folder close runs in the background and must not block navigation. Welcome may keep a display snapshot, but it is not data truth. |
 | Open a library folder from Welcome | Folder opening can fail or hang at the transport/action boundary before the folder view appears. | The Welcome opening overlay is only a UI guard: it does not block library clicks, follows the latest click, clears when the latest open action settles, and has a 20s watchdog so it cannot permanently cover the app. |
 | Reopen a folder | Old derived Markdown may exist from a partial or legacy conversion. | Completion must be verified, not inferred from file existence alone. |
@@ -227,4 +227,81 @@ When reviewing code that touches conversion, indexing, sync, search, folder memb
 - Removing a folder from the library deletes app-owned state but never deletes user files.
 - Deleting a folder in the active file tree is a real filesystem delete and must clean app-owned state for the deleted subtree.
 - UI status snapshots do not become data truth.
-- Background preparation is quiet by default. Files and folders show failure markers only; the Search view is where pending/failed preparation is summarized because that is where incomplete readiness affects the user.
+- Background preparation is quiet by default. Welcome library rows and affected file rows show failure markers only; in-folder headers do not show preparation badges. The Search view is where pending/failed preparation is summarized because that is where incomplete readiness affects the user.
+
+---
+
+# 9. Representative Failure Modes
+
+These are not historical release notes. They are recurring classes of bugs that the data layer and UI liveness rules must keep preventing.
+
+## 9.1 Navigation Blocked By Preparation
+
+Opening a folder, going Home, or clicking another library folder must feel like navigation, not like indexing.
+
+Representative failure:
+
+- A large PDF or scanned PDF is being prepared.
+- A user clicks Home or another library folder.
+- The UI waits for a folder-close request, recursive file listing, index status, or Welcome reconcile before visually moving.
+- The app appears frozen even though the background work is merely slow.
+
+Current contract:
+
+- Opening a folder establishes renderer folder identity and hides Welcome before `/api/files`, file order, or `/api/index-status` finish.
+- Going Home resets renderer folder state and shows Welcome before the server-side close request returns.
+- Welcome status polling and reconcile are deferred while a folder open is in progress.
+- The Welcome opening overlay is visual only: it must not intercept clicks, follows the latest folder click, and has a watchdog fallback.
+
+## 9.2 Search Readiness Leaking Into Browsing
+
+Preparation state is about search completeness, not file availability.
+
+Representative failure:
+
+- A folder contains files that can be opened and read immediately.
+- Some files are still being converted or embedded.
+- The folder header shows a preparation badge, making the folder look unfinished or partially unavailable.
+
+Current contract:
+
+- Browsing surfaces stay quiet while preparation is pending.
+- The in-folder header shows no preparation or failure badge.
+- A durable failure is marked on the affected file row, where the user can locate it.
+- Welcome can show a lightweight folder-level failure marker because it does not expose file rows.
+- Search is the place that explains how many files are ready and how many are still being prepared.
+
+## 9.3 Background PDF Work Starving The Active Folder
+
+PDF conversion order is a liveness concern, not a correctness source of truth.
+
+Representative failure:
+
+- Welcome or startup queues PDFs from several library folders.
+- A user opens one folder and expects its files to become searchable first.
+- Already-queued PDFs from other folders occupy the queue before the active folder's PDFs.
+
+Current contract:
+
+- Queued PDFs in the active folder are preferred over queued PDFs in other folders.
+- Within that, text-layer PDFs run before scanned PDFs.
+- Original enqueue order is the final tie-breaker.
+- Already-running conversions are not preempted; the priority rule applies to queued work.
+
+## 9.4 Status Snapshots Becoming Truth
+
+Status exists to explain the system, not to define data correctness.
+
+Representative failure:
+
+- Welcome or the sidebar shows an old readiness snapshot.
+- A retry, reprocess, file delete, or folder switch changes the real state.
+- The UI treats the old snapshot as authoritative and keeps showing stale readiness.
+
+Current contract:
+
+- Renderer status snapshots are disposable display state.
+- Durable failures live in AppData `state.db`.
+- Conversion completion is defined by complete derived artifacts and completion markers.
+- Semantic readiness is defined by daemon index status.
+- Reconcile is the operation that catches storage up with filesystem reality.

@@ -73,7 +73,9 @@ One installation has **one library**: the set of opened folders indexed into one
 
 MCP search defaults to the whole library. Calls can narrow scope by folder root or path prefix. The in-app search UI is scoped to the current window's folder.
 
-On server boot, StashBase binds every library folder into the daemon and then reconciles them in the background. The Welcome screen also reconciles library folders with a short cooldown and polls folder status. This keeps interrupted conversion/index work moving even when no folder is opened into the editor view.
+On server boot, StashBase binds every library folder into the daemon and then reconciles them in the background. The Welcome screen also reconciles library folders with a short cooldown and polls folder status when it is idle. While a folder is actively opening, Welcome status polling and reconcile are deferred so navigation does not compete with preparation work.
+
+Opening a folder is a navigation action first and a preparation action second. Once the server accepts the target folder, the renderer enters the folder view before recursive file listing, file ordering, or index status finish. Those follow in the background. Going Home follows the same rule in reverse: the renderer returns to Welcome immediately, and the server-side folder close runs in the background.
 
 Each opened folder can carry a short optional description in app config. The description is orientation metadata for humans and Agents: it explains what the folder is for, but it is not indexed content and it does not define access scope. It can be written by the user first and later generated or refreshed by AI. Removing a folder from "Your Folders" removes its description with the folder membership record.
 
@@ -214,7 +216,7 @@ Search defaults to the whole library for MCP callers. It can be narrowed by fold
 
 The desktop UI search is scoped to the current folder because the UI is showing one folder at a time.
 
-The desktop UI does not surface background conversion or indexing as a general browsing status. Folder and file views stay quiet while StashBase prepares content. Welcome, folder rows, and file rows only show lightweight failure markers. The Search view is where the UI summarizes search readiness and explains incomplete or failed preparation, because that is where incomplete readiness affects the user.
+The desktop UI does not surface background conversion or indexing as a general browsing status. Folder and file views stay quiet while StashBase prepares content. The in-folder `FOLDER` header does not show preparation badges. Welcome library rows can show a lightweight folder-level failure marker because the files are not expanded there; inside a folder, failures are shown on the affected file row. The Search view is where the UI summarizes search readiness and explains incomplete or failed preparation, because that is where incomplete readiness affects the user.
 
 ## 6.3 Result Mapping
 

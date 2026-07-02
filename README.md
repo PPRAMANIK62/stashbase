@@ -1,6 +1,6 @@
 # StashBase
 
-**Turn what you save into persistent memory.**
+**Turn local files into searchable context for Agents.**
 
 [![Website](https://img.shields.io/badge/website-stashbase.ai-0a66c2.svg)](https://stashbase.ai)
 [![Status](https://img.shields.io/badge/status-early%20alpha-orange.svg)](#status)
@@ -9,246 +9,131 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-support%20%26%20chat-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/zsRZH4PTq9)
 
-> ⭐ **If this idea interests you, drop a star.** Every item on the [build map](https://stashbase.ai/build-map/) ships with detailed design — easy to pick up if you'd like to contribute.
+📂 Open a folder in StashBase to make it searchable by Agents:
 
-StashBase is a local-first knowledge base that turns documents, screenshots, videos, and AI artifacts into persistent memory for you and your AI. You stash it. Agents organize and maintain it.
+- 📄 Turn PDFs, including scans, into Markdown.
+- 🖼️ Pull searchable text out of images with OCR.
+- 🔎 Index Markdown, HTML, PDFs, and images for semantic and keyword search.
+- 🤖 Let Claude, Codex, and other MCP clients search the same local library.
 
-📥 **Capture what matters:** Import documents, folders, and AI artifacts. Snap a screenshot and it's saved with searchable text; record your screen and it turns into a structured note.
+Your folders remain the source of truth; StashBase adds a rebuildable retrieval layer on top.
 
-🤖 **One memory, every AI:** Claude, ChatGPT, Codex — every MCP client draws on the same knowledge base.
+That is the core idea:
 
-💾 **Local-first & user-owned:** Your original files stay on your disk in open formats. No vendor lock-in. Your memory remains portable and under your control.
-
----
-
-## 🚀 Demo
-
-![Demo](.github/assets/demo_0616.gif)
-
-> Clone the CS183B starter, import it, then ask the built-in agent — it answers from all 20 Stanford startup lectures.
+```text
+Local files -> Convert -> Index -> Retrieve -> MCP -> Agents
+```
 
 ---
 
-## ⚡ Try it
+## Try It
 
 StashBase currently ships for **macOS (Apple Silicon)**, **Linux (x86_64 Debian/Ubuntu)**, and **Windows (x64)**.
 
-### macOS Install (Apple Silicon)
-
-Install with Homebrew:
+### macOS
 
 ```bash
 brew install --cask liliu-z/stashbase/stashbase
 ```
 
-### Linux Install (Debian/Ubuntu)
+### Linux
 
-Download the latest `StashBase-*-linux-amd64.deb` asset from the [Releases](https://github.com/liliu-z/stashbase/releases) page and install it:
+Download the latest `StashBase-*-linux-amd64.deb` asset from [Releases](https://github.com/liliu-z/stashbase/releases), then install it:
 
 ```bash
 sudo dpkg -i ./StashBase-*-linux-amd64.deb
 ```
 
-### Windows Install
+### Windows
 
-Download the latest `StashBase-*-win-x64.exe` installer from the [Releases](https://github.com/liliu-z/stashbase/releases) page and run it.
+Download the latest `StashBase-*-win-x64.exe` installer from [Releases](https://github.com/liliu-z/stashbase/releases), then run it.
 
-Once the app is running:
+### First Run
 
-1. **Open `👋 Start Here`**, already waiting on your Welcome screen.
-2. Open a **built-in agent** (Claude Code or Codex) and let it do the reading for you. Ask it something like *"How is StashBase different from a notes app or other knowledge bases?"*
-3. Want a real example? Clone the [CS183B starter](https://github.com/0-bingwu-0/stashbase-cs183b) (Stanford's **How to Start a Startup**, 20 lectures) and open the cloned folder:
-   ```bash
-   git clone https://github.com/0-bingwu-0/stashbase-cs183b
-   ```
-   Skim `founder_playbook.html`, then work with the agent: discuss it, or drop in a new article and let it update the playbook.
-4. Bring your own: use **New folder** to create a folder from the native picker, or **Open folder** to index an existing local folder in place.
+> Don't have an OpenAI API key? Join our [Discord](https://discord.gg/zsRZH4PTq9) and ask for a test key.
 
-Want this memory in Claude Desktop, ChatGPT, or Codex too? **Settings → MCP** → click **Connect** for a supported client, restart it when prompted, then `@stashbase` from there.
+1. Open an existing local folder, or create a new one from the native folder picker.
+2. Add an OpenAI API key when prompted if you want semantic search. Without a key, files still open and keyword search still works.
+3. Connect Claude, Codex, or another MCP client from **Settings -> MCP**.
+4. Ask the Agent to search or use your local files.
 
-**Embeddings.** StashBase asks for an OpenAI API key when you open your first folder — used **only for embeddings** (no chat completions). `text-embedding-3-small` is only $0.02 per 1M tokens. [Create a key.](https://platform.openai.com/api-keys) Without a key, files still save, preview, and stay searchable by exact keyword — only semantic search waits for the key.
-
-**Recordings.** Screen recording turns what you watched into a structured note via Gemini video understanding — the original video stays attached to the note and is linked at the bottom (it opens in your browser to play). Needs a Gemini API key — add one under **Settings → Capture**. [Create a key.](https://aistudio.google.com/apikey) `gemini-2.5-flash` runs about $0.30 per 1M input tokens — a 10-minute recording is roughly 150K tokens, so a few cents per recording.
+Your library is opt-in: only folders you open in StashBase are indexed. You can remove a folder from the library at any time; StashBase clears its index but never deletes the folder from disk.
 
 ---
 
-## Example workflow
+## What It Does
 
-Drop in a research paper. Claude Code reads it and writes an HTML note; StashBase indexes the note locally. Weeks later, in Claude or ChatGPT: *"that paper on test-time compute scaling"* — retrieved instantly.
+StashBase has two main jobs.
 
-More workflows — course archives, research landscapes, podcast notes, competitor teardowns — on [stashbase.ai](https://stashbase.ai/#gallery).
+### Convert
 
----
+Some local formats are awkward for Agents to read directly. StashBase keeps the original files in place and creates derived text only where it helps search or Agent reading.
 
-## Capture
-
-Stashing saves the content itself, not a link to it. Each format is handled its own way:
-
-| Format | Viewing | Into the index |
+| Format | Source file | Search / Agent text |
 |---|---|---|
-| Markdown | Rendered preview / source edit / live split | Indexed directly |
-| HTML | Full render; scripts and self-contained apps run | Indexed directly, split by headings |
-| PDF | Built-in reader; hits locate the passage on the page | Background extraction to a hidden Markdown companion (figures included) |
-| Images | Inline preview + lightbox | Local OCR text layer (RapidOCR, on-device) |
-| Video & screen recordings | Linked from the note, opens in the browser to play | Multimodal understanding (Gemini, key required) → summary + structured content |
+| Markdown | Read directly | Indexed directly |
+| HTML | Read as original HTML | Clean text extracted for indexing |
+| PDF | Original PDF stays on disk | Converted to derived Markdown |
+| Images | Original image stays on disk | OCR text extracted for search |
 
-Structured formats are indexed as they are; unstructured formats are extracted into searchable text first.
+PDFs are different from HTML and images: for text reading, Agents use the derived Markdown. For HTML and images, the original file remains the primary reading object; the derived text is mainly for search.
 
-### Local folders
+### Index
 
-**Open folder** points StashBase at an existing local directory and indexes it in place. **New folder** opens the same native picker at `~/Documents/StashBase`, so you can create a normal folder with the OS New Folder button and open it immediately.
+StashBase builds semantic and keyword search over:
+
+- Markdown and HTML text
+- PDF-derived Markdown
+- OCR text from images
+
+Search results point back to the user-visible source file, not hidden app data.
+
+Background preparation is intentionally quiet. Browsing a folder should feel like browsing files, not watching an indexing job. If preparation fails, StashBase shows a lightweight failure marker and lets you retry. Search is where readiness matters, so search is where StashBase explains how much content is ready.
 
 ---
 
-## Retrieval
+## MCP
 
-A StashBase library is the set of local folders you have opened. The default starting point for new folders is `~/Documents/StashBase`, but any local folder can join the library. Inside those folders: HTML, Markdown, PDF, images, plus extracted text and assets stored as rebuildable app data.
+MCP is the main interface between StashBase and Agents.
 
-User content may live in iCloud-synced Documents, but local databases do not: Milvus indexes and StashBase's SQLite state live under the per-machine app data directory and are regenerated on each device.
+While the StashBase app is running, the local MCP server exposes the same library to external clients and the built-in Agent panel.
 
-Indexing runs locally via [mfs](https://github.com/zilliztech/mfs) + [Milvus Lite](https://milvus.io/docs/milvus_lite.md). The index is **library-wide** (one collection per library), so retrieval works across all opened folders or scoped to one.
+Core tools:
 
-### When is content indexed?
+- `library_info` - return the default folder home, opened folders, optional folder descriptions, and embedder status.
+- `search_library` - search the library, optionally scoped by folder or path prefix.
+- `reindex` - reconcile disk changes and make updated files searchable.
 
-* App-internal writes (editor save, drag-and-drop) → indexed immediately
-* External writes (other editors, git, scripts, **and agents writing files directly**) → reconciled at deterministic moments: when you return to the window, when an agent finishes a turn, when you open the folder, or on manual Sync
-* Other folders → reconciled when you next open them or when an agent calls MCP `reindex`. No library-wide background scanning, so embedding spend stays predictable and visible
-* There is no filesystem watcher; an agent that wrote files calls MCP `reindex` to make them searchable (it diffs disk against the index itself)
+StashBase also exposes bounded file helpers for opened folders:
 
-Renames, moves, and unchanged-content rewrites are detected by content hash and **never re-embed**. Vectors are the only expensive thing here, and they're never computed twice for the same bytes.
+- `list_directory`
+- `read_file`
+- `write_file`
+- `edit_file`
+- `move_file`
+- `delete_file`
 
-### Embedder
+These helpers are for Agent clients that run in a sandbox and cannot directly access the user's host files. They are not a second general-purpose filesystem.
 
-OpenAI `text-embedding-3-small` is the single, fixed embedder in V1 (no provider switching). The whole library lives in one Milvus collection. Without an API key, only embedding and semantic search are disabled; files still save and preview, and keyword search (ripgrep, no index involved) keeps working.
+### Connect a Client
 
-### Search
+The normal path is **Settings -> MCP**. StashBase can write the MCP config for supported clients or copy the stdio snippet for clients that manage config themselves.
 
-Hybrid retrieval: dense vector kNN + BM25, fused server-side via RRF in a single Milvus query. Hits on PDFs and images map back to the original file; hidden extraction notes never surface. Available through:
-
-* GUI search bar (semantic by default; toggle to exact keyword via ripgrep)
-* MCP `search_library` tool for any AI client
-* The built-in chat panel (over MCP)
+The packaged MCP command is generated at:
 
 ```text
-        Built-in chat panel
-       (Claude Code / Codex)
-                │
-                ▼
-        ┌─────────────────────┐
-        │      StashBase      │
-        │  Hybrid retrieval   │
-        │  (mfs + Milvus Lite)│
-        └─────────┬───────────┘
-                  │
-              MCP (stdio)
-                  │
-                  ▼
-    Claude Desktop · ChatGPT · Gemini
-            any MCP client
+~/.stashbase/bin/stashbase-mcp
 ```
 
-### One-click MCP connector
+Manual examples:
 
-**Settings → MCP** writes the StashBase MCP server entry directly into your AI client's global config (Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Qwen Code) or copies the right stdio snippet for GUI-managed clients. One-time setup; afterwards those clients can search the library while the StashBase app is running.
-
-The tool surface is just what the filesystem can't do, since the client is on the same machine as the library:
-
-* **`library_info`** — orient: the default folder home and its member folders
-* **`search_library`** — hybrid semantic + keyword search; read the full file directly from the returned path
-* **`reindex`** — make on-disk changes searchable after you write (diffs disk against the index itself)
-
-Everything else (reading a full file, creating / editing / deleting / moving notes) the client does with its own filesystem tools directly in the folders.
-
----
-
-## Agents
-
-### Built-in chat panel (Claude Code / Codex)
-
-A structured chat panel runs Claude Code and Codex inside StashBase: message bubbles, streaming thinking, expandable tool calls, and an inline diff viewer with approve/reject. The design tracks the VS Code Claude extension closely.
-
-* Runs the CLI already on your machine: your login, your subscription, your global config. Nothing separate to install or configure.
-* `cwd` automatically set to the current folder, with the same global MCP configuration available
-* Reads pass silently; file edits and commands round-trip to you for approval
-* Claude exposes permission modes (default / accept-edits / plan / auto) plus thinking effort; Codex uses its fixed approval/sandbox policy with thinking effort in-panel
-* Sessions stored in the CLI's standard location (`~/.claude/`): start a conversation in the panel, resume it in your terminal, or the other way around
-* Multiple tabs = multiple parallel sessions; files dragged into the panel become temporary context, never library imports
-
-### Agents tidy as they work
-
-Agents organize, link, summarize, and dedupe as a side effect of the work you ask them to do — directed by you, never on a schedule. The working contract (do CRUD with file tools, reindex after writing, tag generated files) reaches the agent over MCP at connect time and through the built-in panel's preamble — there's no rules file to maintain. **No background daemon, no scheduled jobs, no tokens quietly burned.**
-
----
-
-## Build from source
-
-For contributors and developers building locally, and for platforms without a prebuilt installer (Intel Mac). End users on Apple Silicon should use the brew cask, Linux users can install the Debian package, and Windows users can run the release installer.
-
-```bash
-# Setup
-git clone https://github.com/liliu-z/stashbase
-cd stashbase
-pnpm install
-pnpm setup:python
-
-# Run the Electron app
-pnpm build:web
-pnpm electron
-
-# Development mode (hot reload) — run `pnpm electron` in a second
-# terminal and it reuses the dev server
-pnpm dev
-
-# Build distributable app
-pnpm dist          # macOS DMG + zip
-pnpm dist:win      # Windows NSIS + zip, built from Windows sidecars
-pnpm dist:linux    # Linux Debian (.deb)
-pnpm pack:mac      # macOS .app only, faster packaging smoke
-pnpm build:python-extract-sidecar # optional: include local PDF/OCR extractor
-```
-
-**Debugging.** Dev knobs are plain environment variables — prefix the command, e.g. `STASHBASE_LOG=debug pnpm dev` (daemon ops, conversion timing; also: `STASHBASE_PYTHON=/path/to/python`, `STASHBASE_BUILD_EXTRACT=1`). API keys are NOT env vars — they live in Settings. Renderer logs: View → Toggle Developer Tools. Packaged-app server logs: `~/Library/Logs/StashBase/`.
-
-Before opening a PR:
-
-```bash
-pnpm exec tsc --noEmit
-pnpm build
-```
-
-## Publishing
-
-CI runs typechecks and source builds on Linux and Windows. Installer packaging is release-only: `Release macOS` builds and uploads the DMG/zip and updates the Homebrew cask, `Release Linux` builds and uploads the Debian package, and `Release Windows` builds and uploads the NSIS installer plus zip. The macOS workflow requires a `HOMEBREW_TAP_TOKEN` secret with push access to `liliu-z/homebrew-stashbase`.
-
-`release:verify:mac` is the local preflight: build the macOS package, run packaged smoke checks, and mount the DMG to verify its helper files. `dist:brew` remains the local fallback for macOS publishing: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update. Both force-bundle the ~450MB PDF/OCR extractor sidecar (`STASHBASE_BUILD_EXTRACT=1` + `STASHBASE_REQUIRE_EXTRACT=1`) so distributed builds always support local PDF/OCR extraction — only dev builds (`pnpm build:python-sidecar`) omit it for speed. Use the release workflows' manual `tag` input to backfill an existing release.
-
-```bash
-pnpm release:verify:mac
-pnpm dist:brew
-```
-
-The cask defaults to `liliu-z/stashbase/stashbase`, backed by `git@github.com:liliu-z/homebrew-stashbase.git`; override it with `HOMEBREW_TAP`, `HOMEBREW_TAP_GIT_URL`, or `HOMEBREW_CASK` if needed. GitHub Release asset upload uses `gh` when `GITHUB_TOKEN` is not set, so run `brew install gh && gh auth login` once on a new machine. Homebrew cask publishing commits and pushes directly to the SSH tap repository.
-
----
-
-## MCP integration
-
-**Settings → MCP** is the normal path (see [Retrieval](#one-click-mcp-connector)). The manual config below is for source builds, or for inspecting the exact settings.
-
-The MCP server is a stdio command:
-
-* Homebrew / packaged app: `~/.stashbase/bin/stashbase-mcp` (generated the first time you connect a client from **Settings → MCP**)
-* Source checkout: `npx tsx /absolute/path/to/StashBase/mcp/server.ts`
-
-Point any MCP-aware client at it. Examples use the packaged path — for source builds, substitute the `npx tsx` command. Restart the client after changing MCP servers.
-
-### Claude Code
+#### Claude Code
 
 ```bash
 claude mcp add stashbase -- ~/.stashbase/bin/stashbase-mcp
 ```
 
-### Claude Desktop
+#### Claude Desktop
 
 In `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -262,9 +147,7 @@ In `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-Other JSON-configured clients take the same shape in their own MCP settings.
-
-### Codex CLI
+#### Codex CLI
 
 In `~/.codex/config.toml`:
 
@@ -273,40 +156,151 @@ In `~/.codex/config.toml`:
 command = "/Users/YOUR_USER/.stashbase/bin/stashbase-mcp"
 ```
 
+Restart the client after changing MCP config.
+
+---
+
+## Built-In Agent Panel
+
+StashBase includes a built-in panel for running local Agent CLIs such as Claude Code and Codex against the current folder.
+
+The panel uses the same library and MCP server as external clients. It does not create a separate knowledge base.
+
+It is mainly a convenience layer:
+
+- cwd is set to the current folder
+- tool calls and file edits can be reviewed in the app
+- sessions stay in the Agent CLI's normal storage
+- external clients can use the same context through MCP
+
+---
+
+## Storage Model
+
+Local files are the source of truth.
+
+```text
+~/.stashbase/config.json          # app-level config: library folders, MCP clients, embedder settings
+
+<folder>/
+  paper.pdf                       # user file
+
+<appData>/derived.nosync/         # derived Markdown and extracted assets
+<appData>/vector-store.nosync/    # Milvus Lite vector store
+<appData>/folders/.../state/      # conversion failures and local app state
+```
+
+Removing a folder from the library clears StashBase's app-owned state for that folder. It does not delete the folder or its files from disk.
+
+---
+
+## Design Docs
+
+The design docs are the source of truth for how the product is supposed to work:
+
+- [Overview](design-docs/overview.md) - product motivation and principles
+- [Architecture](design-docs/architecture.md) - system shape and module boundaries
+- [Data Layer](design-docs/data-layer.md) - correctness, recovery, cleanup, and liveness rules
+
+---
+
+## Build From Source
+
+For contributors and developers building locally, and for platforms without a prebuilt installer.
+
+```bash
+git clone https://github.com/liliu-z/stashbase
+cd stashbase
+pnpm install
+pnpm setup:python
+
+# Build the renderer and run Electron
+pnpm build:web
+pnpm electron
+
+# Development mode
+pnpm dev
+
+# Build distributable apps
+pnpm dist
+pnpm dist:win
+pnpm dist:linux
+
+# Optional: include the local PDF/OCR extractor sidecar
+pnpm build:python-extract-sidecar
+```
+
+Before opening a PR:
+
+```bash
+pnpm exec tsc --noEmit
+pnpm build
+```
+
+Debugging:
+
+- Renderer logs: **View -> Toggle Developer Tools**
+- Packaged-app server logs: `~/Library/Logs/StashBase/`
+- Useful env vars: `STASHBASE_LOG=debug`, `STASHBASE_PYTHON=/path/to/python`, `STASHBASE_BUILD_EXTRACT=1`
+
+API keys are configured in Settings, not environment variables.
+
+---
+
+## Publishing
+
+Packaging is release-only. GitHub Actions builds and uploads macOS, Linux, and Windows installers from a release tag.
+
+The release workflow:
+
+1. Commit the code and version bump.
+2. Push `main` and the `vX.Y.Z` tag.
+3. Publish the GitHub Release for that tag.
+4. Let the macOS, Linux, and Windows release workflows attach installers.
+
+Local macOS fallback:
+
+```bash
+pnpm release:verify:mac
+pnpm dist:brew
+```
+
+Do not commit packaged artifacts. Release outputs belong in `release.nosync/`.
+
 ---
 
 ## Status
 
-Early alpha. macOS arm64, Linux x86_64, and Windows x64 are the supported platforms today. Screen recording uses the native system picker on macOS 15+; on older versions you can record individual windows, but not full-screen apps.
+Early alpha.
 
-### Reasonably stable
+Supported today:
 
-* library / folder file model on disk (HTML / Markdown / PDF / images + rebuildable extracted text and assets)
-* Hybrid retrieval (semantic + keyword), with PDF/image hits mapping back to originals
-* MCP library server (stdio) — `library_info` / `search_library` / `reindex`, with everything else done via the client's own filesystem tools; one-click client connectors
-* Event-point reconcile (folder open, window focus, agent turn end, manual sync); rename/move without re-embedding
-* Conversion pipeline: PDF extraction, image OCR (local), with persisted failures + Retry
-* Screen recording → structured note with the original video attached (Gemini video understanding; key required, checked before capture starts)
-* Structured Claude/Codex chat panel: tool calls, inline diff approve/reject, shared history/resume shell, agent-specific controls
-* Multi-window, broader folder-management ergonomics, and packaging polish
+- macOS arm64
+- Linux x86_64 Debian/Ubuntu
+- Windows x64
 
-### Evolving in V1
+Reasonably stable:
 
-* **Agent chat polish** — richer controls, session ergonomics, and tighter cross-agent UI parity
-* **Recording pipeline polish** — extraction quality, noise filtering, long recordings
-* **Retrieval filters** — file type / time range, pushed down into the index query
+- Local folder library model
+- Markdown, HTML, PDF, and image handling
+- PDF extraction and image OCR, with persisted failures and retry
+- Semantic and keyword search
+- MCP server and client connectors
+- Bounded file helpers for sandboxed Agents
+- Built-in Claude Code / Codex panel
 
-### Post-V1
+Still evolving:
 
-Note-first treatment for dropped-in videos, cloud sync, multi-device, mobile access, team collaboration.
-
-Pin a commit if you're embedding StashBase into a larger workflow.
+- Agent panel polish
+- Search filters and ranking controls
+- Long-running conversion and recovery edge cases
+- Packaging polish across platforms
 
 ---
 
 ## Contributing
 
-Small focused PRs are preferred. Open an issue before larger changes so scope and direction can be discussed first. Setup, debugging, and release live in [Build from source](#build-from-source) and [Publishing](#publishing) above.
+Small focused PRs are preferred. Open an issue before larger changes so scope and direction can be discussed first.
 
 ---
 
@@ -314,10 +308,8 @@ Small focused PRs are preferred. Open an issue before larger changes so scope an
 
 Built by Li Liu.
 
-I work on [Milvus](https://github.com/milvus-io/milvus) at [Zilliz](https://zilliz.com), where I've spent the last few years building vector retrieval infrastructure for AI systems.
+I work on [Milvus](https://github.com/milvus-io/milvus) at [Zilliz](https://zilliz.com), where I have spent the last few years building vector retrieval infrastructure for AI systems.
 
-Coding with agents already feels fluid inside IDEs. Personal knowledge tools still largely don't.
+Coding with Agents already feels fluid inside IDEs. Local knowledge still does not.
 
-StashBase is my attempt at the missing layer: an agent-native, local-first workspace where papers, notes, transcripts, and saved analysis remain continuously retrievable across AI workflows.
-
-This is a personal side project built in the open. PRs, issues, and experiments are welcome.
+StashBase is my attempt at the missing layer: local-file infrastructure that makes personal documents, notes, papers, and AI outputs continuously retrievable across Agent workflows.
