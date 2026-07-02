@@ -17,17 +17,17 @@ jobs:
   linux-deb:
     runs-on: ubuntu-latest
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.5.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'

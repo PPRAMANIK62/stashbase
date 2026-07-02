@@ -134,8 +134,8 @@ part of a release.
 **When the user asks to release / package a build (in any language):
 prepare everything, then have them publish a GitHub Release for the matching
 `v<X.Y.Z>` tag.** Packaging is release-only: GitHub Actions builds and uploads
-the macOS and Linux installers from the tag; Windows has a placeholder workflow
-until it is supported. `pnpm dist:brew` remains the local macOS fallback, but it
+the macOS, Linux, and Windows installers from the tag. `pnpm dist:brew` remains
+the local macOS fallback, but it
 is no longer the default release path. The scripts under `scripts/publish-*.mjs`
 are implementation details, not the public surface.
 
@@ -151,11 +151,13 @@ Protocol, in order:
    question in the flow; everything after runs unattended.
 3. **Commit the bump** as a standalone `chore: bump to <new-version>`.
 4. **Hand off**: tell the user to publish the GitHub Release for
-   `v<version>` (or manually run the `Release macOS` / `Release Linux`
-   workflows with that tag to backfill assets). The macOS workflow requires
-   `HOMEBREW_TAP_TOKEN` with push access to `liliu-z/homebrew-stashbase`.
+   `v<version>` (or manually run the `Release macOS` / `Release Linux` /
+   `Release Windows` workflows with that tag to backfill assets). The macOS
+   workflow requires `HOMEBREW_TAP_TOKEN` with push access to
+   `liliu-z/homebrew-stashbase`.
 5. **Verify when Actions finish** (or when asked): `gh release view
-   v<version>` — DMG/zip and deb assets attached, tap commit landed.
+   v<version>` — DMG/zip, deb, and Windows exe/zip assets attached, tap commit
+   landed.
    Release notes are auto-generated and state: macOS arm64 (Apple Silicon)
    only, unsigned — first launch is blocked by Gatekeeper; run the bundled
    `Fix.sh` (user-facing instructions ship in the DMG as

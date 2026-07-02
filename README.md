@@ -31,7 +31,7 @@ StashBase is a local-first knowledge base that turns documents, screenshots, vid
 
 ## ⚡ Try it
 
-StashBase currently ships for **macOS (Apple Silicon)** and **Linux (x86_64 Debian/Ubuntu)** — Windows is on the [roadmap](#status).
+StashBase currently ships for **macOS (Apple Silicon)**, **Linux (x86_64 Debian/Ubuntu)**, and **Windows (x64)**.
 
 ### macOS Install (Apple Silicon)
 
@@ -48,6 +48,10 @@ Download the latest `StashBase-*-linux-amd64.deb` asset from the [Releases](http
 ```bash
 sudo dpkg -i ./StashBase-*-linux-amd64.deb
 ```
+
+### Windows Install
+
+Download the latest `StashBase-*-win-x64.exe` installer from the [Releases](https://github.com/liliu-z/stashbase/releases) page and run it.
 
 Once the app is running:
 
@@ -178,7 +182,7 @@ Agents organize, link, summarize, and dedupe as a side effect of the work you as
 
 ## Build from source
 
-For contributors and developers building locally, and for platforms without a prebuilt installer (Intel Mac, Windows). End users on Apple Silicon should just use the brew cask, and Linux users can install the Debian package.
+For contributors and developers building locally, and for platforms without a prebuilt installer (Intel Mac). End users on Apple Silicon should use the brew cask, Linux users can install the Debian package, and Windows users can run the release installer.
 
 ```bash
 # Setup
@@ -214,7 +218,7 @@ pnpm build
 
 ## Publishing
 
-CI runs typechecks and source builds. Installer packaging is release-only: `Release macOS` builds and uploads the DMG/zip and updates the Homebrew cask, `Release Linux` builds and uploads the Debian package, and `Release Windows` is a placeholder until Windows is supported. The macOS workflow requires a `HOMEBREW_TAP_TOKEN` secret with push access to `liliu-z/homebrew-stashbase`.
+CI runs typechecks and source builds on Linux and Windows. Installer packaging is release-only: `Release macOS` builds and uploads the DMG/zip and updates the Homebrew cask, `Release Linux` builds and uploads the Debian package, and `Release Windows` builds and uploads the NSIS installer plus zip. The macOS workflow requires a `HOMEBREW_TAP_TOKEN` secret with push access to `liliu-z/homebrew-stashbase`.
 
 `release:verify:mac` is the local preflight: build the macOS package, run packaged smoke checks, and mount the DMG to verify its helper files. `dist:brew` remains the local fallback for macOS publishing: build the macOS package, upload the current version's files in `release.nosync/` to this repository's GitHub Release, then publish the Homebrew cask update. Both force-bundle the ~450MB PDF/OCR extractor sidecar (`STASHBASE_BUILD_EXTRACT=1` + `STASHBASE_REQUIRE_EXTRACT=1`) so distributed builds always support local PDF/OCR extraction — only dev builds (`pnpm build:python-sidecar`) omit it for speed. Use the release workflows' manual `tag` input to backfill an existing release.
 
@@ -273,7 +277,7 @@ command = "/Users/YOUR_USER/.stashbase/bin/stashbase-mcp"
 
 ## Status
 
-Early alpha. macOS arm64 and Linux x86_64 are the supported platforms today; Windows is post-V1. Screen recording uses the native system picker on macOS 15+; on older versions you can record individual windows, but not full-screen apps.
+Early alpha. macOS arm64, Linux x86_64, and Windows x64 are the supported platforms today. Screen recording uses the native system picker on macOS 15+; on older versions you can record individual windows, but not full-screen apps.
 
 ### Reasonably stable
 
@@ -294,7 +298,7 @@ Early alpha. macOS arm64 and Linux x86_64 are the supported platforms today; Win
 
 ### Post-V1
 
-Windows, note-first treatment for dropped-in videos, cloud sync, multi-device, mobile access, team collaboration.
+Note-first treatment for dropped-in videos, cloud sync, multi-device, mobile access, team collaboration.
 
 Pin a commit if you're embedding StashBase into a larger workflow.
 
