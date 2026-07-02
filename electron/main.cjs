@@ -629,9 +629,11 @@ ipcMain.handle('dialog:openFolder', async (_e, opts = {}) => {
   if (opts.allowCreateDirectory !== false) properties.push('createDirectory');
   const dialogOpts = {
     title: opts.title || 'Choose a folder',
-    buttonLabel: opts.buttonLabel || 'Choose',
     properties,
   };
+  if (typeof opts.buttonLabel === 'string' && opts.buttonLabel) {
+    dialogOpts.buttonLabel = opts.buttonLabel;
+  }
   if (typeof opts.defaultPath === 'string' && opts.defaultPath) {
     dialogOpts.defaultPath = opts.defaultPath;
   }

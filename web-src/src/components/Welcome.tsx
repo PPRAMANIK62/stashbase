@@ -469,8 +469,8 @@ function OpenFolderButton({
     setBusy(true);
     try {
       const picked = await bridge!.openFolderDialog!({
-        title: 'Open folder',
-        buttonLabel: 'Open',
+        title: 'Select folder',
+        buttonLabel: 'Select folder',
         allowCreateDirectory: true,
       });
       if (picked) {
@@ -530,8 +530,8 @@ function NewFolderButton({
     try {
       const defaultPath = folderHome || await refreshFolderHome();
       const picked = await bridge!.openFolderDialog!({
-        title: 'New folder',
-        buttonLabel: 'Open',
+        title: 'Create or select folder',
+        buttonLabel: 'Select folder',
         defaultPath,
         allowCreateDirectory: true,
       });

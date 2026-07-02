@@ -201,8 +201,8 @@ function FolderMenu() {
     try {
       const { path } = await api.getFolderHome();
       const picked = await bridge.openFolderDialog({
-        title: 'New folder',
-        buttonLabel: 'Open',
+        title: 'Create or select folder',
+        buttonLabel: 'Select folder',
         defaultPath: path,
         allowCreateDirectory: true,
       });
