@@ -58,6 +58,16 @@ export function runWithWindowId<T>(windowId: string | null | undefined, fn: () =
   return requestWindow.run(normalizeWindowId(windowId), fn);
 }
 
+function notifySwitchListeners(newRoot: string, windowId: string): void {
+  setImmediate(() => {
+    for (const fn of switchListeners) {
+      try { fn(newRoot, windowId); } catch (err) {
+        log.warn(`switch listener threw: ${(err as any)?.message ?? err}`);
+      }
+    }
+  });
+}
+
 /** Run a backend operation against an arbitrary **absolute** folder root
  *  (a member of "Your Folders", which can live anywhere on disk), without
  *  changing any user window. The MCP file layer uses this so its host-side
@@ -431,11 +441,7 @@ export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exc
   currentFolders.set(windowId, normalized);
   pushRecent(normalized);
   if (changed) {
-    for (const fn of switchListeners) {
-      try { fn(normalized, windowId); } catch (err) {
-        log.warn(`switch listener threw: ${(err as any)?.message ?? err}`);
-      }
-    }
+    notifySwitchListeners(normalized, windowId);
   }
 }
 
@@ -462,11 +468,7 @@ export function replaceCurrentFolderPath(oldPath: string, newPath: string): void
   for (const [windowId, value] of currentFolders.entries()) {
     if (value === oldPath) {
       currentFolders.set(windowId, newPath);
-      for (const fn of switchListeners) {
-        try { fn(newPath, windowId); } catch (err) {
-          log.warn(`switch listener threw: ${(err as any)?.message ?? err}`);
-        }
-      }
+      notifySwitchListeners(newPath, windowId);
     }
   }
   const cfg = readConfig();

@@ -249,6 +249,7 @@ Representative failure:
 Current contract:
 
 - Opening a folder establishes renderer folder identity and hides Welcome before `/api/files`, file order, or `/api/index-status` finish.
+- Folder-switch side effects such as index sync and Agent-session cleanup are scheduled after the open-folder response, so they cannot turn navigation into a failed request.
 - Going Home resets renderer folder state and shows Welcome before the server-side close request returns.
 - Welcome status polling and reconcile are deferred while a folder open is in progress.
 - The Welcome opening overlay is visual only: it must not intercept clicks, follows the latest folder click, and has a watchdog fallback.
