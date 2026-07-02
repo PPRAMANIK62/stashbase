@@ -15,11 +15,13 @@ import { getCurrentFolderBasename } from '../files.ts';
 import {
   clearFolderPath,
   clearCurrentFolder,
+  currentWindowId,
   ensureFolderHome,
   getCurrentFolder,
   getCurrentFolderLabel,
   getFolderHome,
   getRecentFolders,
+  notifyFolderSwitch,
   removeRecent,
   setCurrentFolder,
   toPosixAbs,
@@ -110,8 +112,12 @@ export function mount(app: express.Express): void {
       target = path.join(getFolderHome(), rawName);
     }
     try {
-      setCurrentFolder(target, { create, exclusiveCreate });
+      const changed = setCurrentFolder(target, { create, exclusiveCreate });
       const folderRoot = getCurrentFolder()!;
+      const windowId = currentWindowId();
+      if (changed) {
+        res.once('finish', () => notifyFolderSwitch(folderRoot, windowId));
+      }
       res.json({ current: { path: toPosixAbs(folderRoot), name: getCurrentFolderLabel() ?? getCurrentFolderBasename() } });
     } catch (err: unknown) {
       if ((err as any)?.code === 'FOLDER_EXISTS') {

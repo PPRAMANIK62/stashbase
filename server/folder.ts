@@ -68,6 +68,10 @@ function notifySwitchListeners(newRoot: string, windowId: string): void {
   });
 }
 
+export function notifyFolderSwitch(newRoot: string, windowId = currentWindowId()): void {
+  notifySwitchListeners(newRoot, normalizeWindowId(windowId));
+}
+
 /** Run a backend operation against an arbitrary **absolute** folder root
  *  (a member of "Your Folders", which can live anywhere on disk), without
  *  changing any user window. The MCP file layer uses this so its host-side
@@ -399,9 +403,10 @@ export function requireCurrentFolder(): string {
 }
 
 /** Open a folder at the given absolute path. Creates the directory if
- *  needed. Pushes to the recents list. Notifies switch listeners so
- *  cached resources can be reset. */
-export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exclusiveCreate?: boolean }): void {
+ *  needed. Pushes to the recents list. Returns true when the active
+ *  folder changed. Callers decide when to notify switch listeners so an
+ *  HTTP route can respond before background index / Agent cleanup starts. */
+export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exclusiveCreate?: boolean }): boolean {
   if (typeof absPath !== 'string' || !absPath) throw new Error('path required');
   // Expand a leading `~` so the welcome screen can accept `~/Notes`
   // without forcing the user to spell out their home directory.
@@ -440,9 +445,7 @@ export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exc
   const changed = prev !== normalized;
   currentFolders.set(windowId, normalized);
   pushRecent(normalized);
-  if (changed) {
-    notifySwitchListeners(normalized, windowId);
-  }
+  return changed;
 }
 
 export function clearCurrentFolder(windowId = currentWindowId()): void {
@@ -468,7 +471,7 @@ export function replaceCurrentFolderPath(oldPath: string, newPath: string): void
   for (const [windowId, value] of currentFolders.entries()) {
     if (value === oldPath) {
       currentFolders.set(windowId, newPath);
-      notifySwitchListeners(newPath, windowId);
+      notifyFolderSwitch(newPath, windowId);
     }
   }
   const cfg = readConfig();
