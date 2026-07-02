@@ -16,7 +16,7 @@ import { spawn } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
-import { relInFolder, toPosixAbs } from './folder.ts';
+import { getCurrentFolder, relInFolder, toPosixAbs } from './folder.ts';
 import { derivedNoteFor, derivedBundleFor, derivedBatchesFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn } from './python-host.ts';
 import { discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
@@ -33,6 +33,7 @@ const PDF_TEXT_PROBE_CONCURRENCY = 4;
 
 interface QueuedPdf {
   absPath: string;
+  seq: number;
   priority?: number;
   priorityPromise?: Promise<number>;
 }
@@ -40,6 +41,7 @@ interface QueuedPdf {
 const queuedPdfs = new Map<string, QueuedPdf>();
 let pdfQueueTimer: ReturnType<typeof setTimeout> | null = null;
 let pdfQueueRunning = false;
+let pdfQueueSeq = 0;
 
 export interface ConvertResult {
   /** Absolute AppData path of the written derived Markdown. */
@@ -112,8 +114,9 @@ async function drainPdfQueue(): Promise<void> {
       const items = [...queuedPdfs.values()];
       await resolvePdfPriorities(items);
       items.sort((a, b) =>
-        (a.priority ?? 0) - (b.priority ?? 0)
-        || a.absPath.localeCompare(b.absPath),
+        pdfCurrentFolderPriority(a.absPath) - pdfCurrentFolderPriority(b.absPath)
+        || (a.priority ?? 0) - (b.priority ?? 0)
+        || a.seq - b.seq,
       );
       const next = items.find((item) => queuedPdfs.has(pdfQueueKey(item.absPath)));
       if (!next) break;
@@ -137,6 +140,12 @@ export function cancelQueuedPdfsUnder(folderAbs: string): string[] {
     removed.push(abs);
   }
   return removed;
+}
+
+function pdfCurrentFolderPriority(pdfAbsPath: string): number {
+  const current = getCurrentFolder();
+  if (!current) return 1;
+  return relInFolder(pdfAbsPath, current) == null ? 1 : 0;
 }
 
 async function resolvePdfPriorities(items: QueuedPdf[]): Promise<void> {
@@ -216,7 +225,7 @@ function enqueuePdf(pdfAbsPath: string, priority?: number): void {
     }
     return;
   }
-  queuedPdfs.set(key, { absPath: pdfAbsPath, priority });
+  queuedPdfs.set(key, { absPath: pdfAbsPath, seq: ++pdfQueueSeq, priority });
   schedulePdfQueueDrain();
 }
 
