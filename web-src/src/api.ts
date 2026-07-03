@@ -292,6 +292,35 @@ async function send<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string
   return parseJsonOrThrow<T>(r);
 }
 
+function isNetworkFetchError(err: unknown): boolean {
+  return err instanceof TypeError && /fetch/i.test(err.message);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function sendWithNetworkRetry<T>(
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const delays = [250, 750];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await send<T>(method, path, body);
+    } catch (err: unknown) {
+      if (!isNetworkFetchError(err) || attempt >= delays.length) {
+        if (isNetworkFetchError(err)) {
+          throw new ApiError('Could not reach the local StashBase server. Please try again.', 0, 'NETWORK_ERROR');
+        }
+        throw err;
+      }
+      await sleep(delays[attempt]);
+    }
+  }
+}
+
 async function head(path: string): Promise<void> {
   const r = await fetch(path, { method: 'HEAD', headers: requestHeaders() });
   if (!r.ok) {
@@ -332,7 +361,7 @@ export function encodePath(p: string): string {
 export const api = {
   // Folder ---------------------------------------------------------
   getFolder: () => getJson<FolderState>('/api/folder'),
-  openFolder: (path: string) => send<FolderState>('POST', '/api/folder', { path }),
+  openFolder: (path: string) => sendWithNetworkRetry<FolderState>('POST', '/api/folder', { path }),
   /** Open a direct child of the default StashBase home by name. Kept for
    *  switch / rename flows that operate on known default-home folders. */
   openFolderByName: (name: string, opts?: { create?: boolean; exclusiveCreate?: boolean }) =>
