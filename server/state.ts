@@ -242,11 +242,13 @@ export async function syncFolderNow(
   const next = prev
     .catch(() => undefined)
     .then(() => syncFolderNowInner(syncFolderRoot, opts));
-  const settled = next.finally(() => {
-    if (folderSyncQueues.get(syncFolderRoot) === settled) {
-      folderSyncQueues.delete(syncFolderRoot);
-    }
-  });
+  const settled = next
+    .catch(() => undefined)
+    .finally(() => {
+      if (folderSyncQueues.get(syncFolderRoot) === settled) {
+        folderSyncQueues.delete(syncFolderRoot);
+      }
+    });
   folderSyncQueues.set(syncFolderRoot, settled);
   return next;
 }
