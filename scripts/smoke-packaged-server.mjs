@@ -10,11 +10,7 @@ const root = path.resolve(__dirname, '..');
 const releaseDir = path.join(root, 'release.nosync');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const args = process.argv.slice(2);
-
-if (process.platform !== 'darwin') {
-  console.log('[smoke] packaged server smoke test is currently macOS-only');
-  process.exit(0);
-}
+const productName = pkg.build?.productName || pkg.name;
 
 function argValue(name) {
   const eq = args.find((arg) => arg.startsWith(`${name}=`));
@@ -28,17 +24,76 @@ function findPackagedApp() {
   const explicit = argValue('--app');
   if (explicit) return path.resolve(explicit);
 
-  const productName = pkg.build?.productName || pkg.name;
-  const candidates = [
-    path.join(releaseDir, 'mac-arm64', `${productName}.app`),
-    path.join(releaseDir, 'mac', `${productName}.app`),
-  ];
+  const candidates = packagedAppCandidates();
   const hit = candidates.find((candidate) => fs.existsSync(candidate));
   if (hit) return hit;
 
   throw new Error(
-    `No packaged ${productName}.app found. Run \`pnpm pack:mac\` or pass --app=/path/to/${productName}.app.`,
+    `No packaged ${productName} app found. Run the matching \`pnpm dist:*\` command or pass --app=/path/to/app.`,
   );
+}
+
+function packagedAppCandidates() {
+  if (process.platform === 'darwin') {
+    return [
+      path.join(releaseDir, 'mac-arm64', `${productName}.app`),
+      path.join(releaseDir, 'mac', `${productName}.app`),
+    ];
+  }
+  if (process.platform === 'win32') {
+    return [
+      path.join(releaseDir, 'win-unpacked'),
+      path.join(releaseDir, 'win-ia32-unpacked'),
+      path.join(releaseDir, 'win-arm64-unpacked'),
+    ];
+  }
+  if (process.platform === 'linux') {
+    return [
+      path.join(releaseDir, 'linux-unpacked'),
+    ];
+  }
+  throw new Error(`Unsupported packaged smoke platform: ${process.platform}`);
+}
+
+function packagedLayout(appPath) {
+  if (process.platform === 'darwin') {
+    const resourcesPath = path.join(appPath, 'Contents', 'Resources');
+    return {
+      appRoot: path.join(resourcesPath, 'app.asar'),
+      electronBin: path.join(appPath, 'Contents', 'MacOS', productName),
+      resourcesPath,
+      ripgrepPackage: `ripgrep-darwin-${process.arch}`,
+      ripgrepBinary: 'rg',
+    };
+  }
+  if (process.platform === 'win32') {
+    const resourcesPath = path.join(appPath, 'resources');
+    return {
+      appRoot: path.join(resourcesPath, 'app.asar'),
+      electronBin: path.join(appPath, `${productName}.exe`),
+      resourcesPath,
+      ripgrepPackage: `ripgrep-win32-${process.arch}`,
+      ripgrepBinary: 'rg.exe',
+    };
+  }
+  const resourcesPath = path.join(appPath, 'resources');
+  return {
+    appRoot: path.join(resourcesPath, 'app.asar'),
+    electronBin: findLinuxElectronBin(appPath),
+    resourcesPath,
+    ripgrepPackage: `ripgrep-linux-${process.arch}`,
+    ripgrepBinary: 'rg',
+  };
+}
+
+function findLinuxElectronBin(appPath) {
+  const candidates = [
+    path.join(appPath, productName),
+    path.join(appPath, pkg.name),
+    path.join(appPath, String(productName).toLowerCase()),
+    path.join(appPath, String(pkg.name).toLowerCase()),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
 }
 
 function requestJson(port, requestPath, timeoutMs) {
@@ -320,10 +375,9 @@ async function smokeDaemon(daemonBin) {
 }
 
 const appPath = findPackagedApp();
-const resourcesPath = path.join(appPath, 'Contents', 'Resources');
-const appRoot = path.join(resourcesPath, 'app.asar');
+const layout = packagedLayout(appPath);
+const { resourcesPath, appRoot, electronBin } = layout;
 const serverEntry = path.join(appRoot, 'dist', 'server', 'index.mjs');
-const electronBin = path.join(appPath, 'Contents', 'MacOS', pkg.build?.productName || pkg.name);
 const daemonBin = findSidecarExecutable(resourcesPath, 'stashbase-daemon');
 const extractBin = findSidecarExecutable(resourcesPath, 'stashbase-extract');
 const requireExtract = args.includes('--require-extract')
@@ -334,9 +388,9 @@ const rgPath = path.join(
   'app.asar.unpacked',
   'node_modules',
   '@vscode',
-  'ripgrep-darwin-arm64',
+  layout.ripgrepPackage,
   'bin',
-  'rg',
+  layout.ripgrepBinary,
 );
 
 assertFile(electronBin, 'packaged Electron binary');
@@ -360,6 +414,8 @@ if (fs.existsSync(extractBin)) {
 
 const port = Number(argValue('--port')) || 18_000 + Math.floor(Math.random() * 20_000);
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-smoke-home-'));
+const folderHome = path.join(home, 'folders');
+const localDataRoot = path.join(home, 'data');
 const output = [];
 
 console.log(`[smoke] app ${path.relative(root, appPath)}`);
@@ -372,6 +428,8 @@ const child = spawn(electronBin, [serverEntry, `--port=${port}`], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
     HOME: home,
+    STASHBASE_FOLDER_HOME: folderHome,
+    STASHBASE_LOCAL_DATA_ROOT: localDataRoot,
     STASHBASE_APP_ROOT: appRoot,
     STASHBASE_RESOURCES_PATH: resourcesPath,
   },

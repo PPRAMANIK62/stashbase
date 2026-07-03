@@ -58,6 +58,11 @@ jobs:
           STASHBASE_SKIP_SIDECAR_BUILD: '1'
         run: pnpm dist:win
 
+      - name: Smoke packaged Windows server
+        env:
+          STASHBASE_REQUIRE_EXTRACT: '1'
+        run: node scripts/smoke-packaged-server.mjs --require-extract
+
       - name: Upload Windows assets to release
         env:
           GH_TOKEN: ${{ github.token }}
