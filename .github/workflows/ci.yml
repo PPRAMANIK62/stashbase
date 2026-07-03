@@ -25,8 +25,18 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install Python sidecar dependencies
+        run: pnpm setup:python
+
+      - name: Test Python sidecars
+        run: pnpm test:python
 
       - name: Typecheck server + mcp
         run: pnpm exec tsc --noEmit

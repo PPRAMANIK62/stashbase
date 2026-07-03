@@ -239,6 +239,7 @@ Before opening a PR:
 
 ```bash
 pnpm exec tsc --noEmit
+pnpm test:python
 pnpm build
 ```
 

@@ -1276,6 +1276,14 @@ def _emit(obj: dict) -> None:
     sys.stdout.flush()
 
 
+def _termination_signals(signal_module) -> tuple[Any, ...]:
+    return tuple(
+        getattr(signal_module, name)
+        for name in ("SIGTERM", "SIGINT", "SIGHUP")
+        if hasattr(signal_module, name)
+    )
+
+
 def main() -> int:
     import atexit
     import signal
@@ -1332,7 +1340,7 @@ def main() -> int:
         except Exception:
             pass
     atexit.register(_cleanup_store)
-    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+    for sig in _termination_signals(signal):
         try:
             signal.signal(sig, lambda *_: (_cleanup_store(), sys.exit(0)))
         except (ValueError, OSError):
