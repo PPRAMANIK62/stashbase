@@ -187,7 +187,7 @@ Deleting a PDF/image source clears:
 
 Reprocessing a PDF/image clears stale final derived artifacts and failure rows before queueing extraction. Reprocessing a directly readable source clears the failure row and reconciles the folder. It should not leave old output available as if it belonged to the new attempt.
 
-Renames and moves use absolute source path identity. Structured text files can move index rows when the content remains readable. PDF/image moves clear old derived artifacts and old index rows, then queue conversion again under the new absolute source path.
+Renames and moves use absolute source path identity. A file rename request with a basename target stays in the source file's current parent folder; requests with a folder-relative target path are moves. Structured text files can move index rows when the content remains readable. PDF/image moves clear old derived artifacts and old index rows, then queue conversion again under the new absolute source path.
 
 ---
 

@@ -75,6 +75,14 @@ function fileWriteError(message: string, status = 400, code = 'INVALID_FILE_WRIT
   return err;
 }
 
+function renameTargetPath(oldName: string, requested: string): string {
+  const normalizedRequest = requested.replace(/\\/g, '/');
+  if (normalizedRequest.includes('/')) return sanitizeFilename(normalizedRequest);
+  const lastSlash = oldName.lastIndexOf('/');
+  const parent = lastSlash >= 0 ? oldName.slice(0, lastSlash + 1) : '';
+  return sanitizeFilename(parent + normalizedRequest);
+}
+
 export function validateEditableFileWrite(name: string): void {
   const normalized = name.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '');
   if (!normalized) throw fileWriteError('path required');
@@ -340,7 +348,7 @@ export function mount(app: express.Express): void {
       const oldExt = oldName.match(/\.[^./]+$/)?.[0] ?? '.md';
       newName += oldExt;
     }
-    newName = sanitizeFilename(newName);
+    newName = renameTargetPath(oldName, newName);
     if (newName === oldName) return res.json({ name: oldName, linksUpdated: 0 });
     const content = viewerOnly ? null : readText(oldName);
     if (!viewerOnly && content == null) return res.status(404).json({ error: 'not found' });
