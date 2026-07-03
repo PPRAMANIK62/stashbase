@@ -356,6 +356,7 @@ const RG_PER_FILE_CAP = 50;
 const RG_TOTAL_CAP = 500;
 const RG_TIMEOUT_MS = 8000;
 const RG_MAX_LINE_CHARS = 240;
+const RESOLVED_RG_PATH = resolveSpawnableRipgrepPath(rgPath);
 
 interface RipgrepOpts {
   /** false → `--smart-case` (case-insensitive unless query has caps);
@@ -384,7 +385,7 @@ function runRipgrep(query: string, cwd: string, opts: RipgrepOpts): Promise<Keyw
       '--glob', '*.htm',
     ];
     args.push('-e', query, '.');
-    execFile(rgPath, args, {
+    execFile(RESOLVED_RG_PATH, args, {
       cwd,
       maxBuffer: 32 * 1024 * 1024,
       timeout: RG_TIMEOUT_MS,
@@ -471,6 +472,13 @@ function runRipgrep(query: string, cwd: string, opts: RipgrepOpts): Promise<Keyw
       resolve({ files, totalMatches: total, truncated });
     });
   });
+}
+
+export function resolveSpawnableRipgrepPath(candidate: string): string {
+  const asarSegment = `${path.sep}app.asar${path.sep}`;
+  if (!candidate.includes(asarSegment)) return candidate;
+  const unpacked = candidate.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`);
+  return fs.existsSync(unpacked) ? unpacked : candidate;
 }
 
 function searchDerivedMarkdown(query: string, folderRoot: string, opts: RipgrepOpts): KeywordSearchResult {

@@ -9,7 +9,7 @@
  * Boot order matters:
  *   1. JSON body parser
  *   2. Security middleware (CSP + Origin check)
- *   3. Static web bundle (no-op in DEV_VITE; falls through on miss)
+ *   3. Static web bundle for non-data routes (no-op in DEV_VITE)
  *   4. `requireFolder` mounted on data-route prefixes
  *   5. Route modules in the order they should resolve
  *   6. Vite dev-only proxy (last — it swallows /everything/)
@@ -197,13 +197,25 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// Static layer is mounted before the API routes because it falls
-// through on miss (no file → next middleware). In dev-vite mode we
-// skip it entirely; the proxy at the end of the chain catches the
-// browser bundle requests.
+// Static layer is mounted before the API routes for renderer bundle
+// requests, but data routes must bypass it entirely. In packaged asar
+// builds, serve-static can still issue directory-normalisation redirects
+// before "falling through"; `/api/*` and `/asset/*` must always reach the
+// route handlers below as-is.
 if (!DEV_VITE) {
   if (fs.existsSync(path.join(WEB_BUILD_DIR, 'index.html'))) {
-    app.use(express.static(WEB_BUILD_DIR));
+    const webStatic = express.static(WEB_BUILD_DIR, { redirect: false });
+    app.use((req, res, next) => {
+      if (
+        req.path === '/api' ||
+        req.path.startsWith('/api/') ||
+        req.path === '/asset' ||
+        req.path.startsWith('/asset/')
+      ) {
+        return next();
+      }
+      return webStatic(req, res, next);
+    });
   } else {
     throw new Error(
       `web/dist-app/index.html not found. Run \`pnpm build:web\` first.`,

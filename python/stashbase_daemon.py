@@ -271,6 +271,96 @@ def _patch_inverted_index_skip() -> None:
     IndexParams.add_index = _add_index
 
 
+def _patch_milvus_manifest_windows_replace(*, force: bool = False) -> bool:
+    """Make Milvus Lite manifest saves overwrite atomically on Windows.
+
+    Milvus Lite persists collection/index metadata by writing
+    ``manifest.json.tmp`` and renaming it over ``manifest.json``. POSIX
+    ``rename`` replaces the target, but Windows raises ``FileExistsError``
+    when the target already exists. The first collection save can pass and
+    the following index save can then fail during ``bind_folder``. Patch the
+    upstream method before opening the store so Windows uses ``os.replace``,
+    which preserves the intended atomic-overwrite contract.
+    """
+    if not force and os.name != "nt":
+        return False
+    try:
+        from milvus_lite.storage import manifest as manifest_module  # type: ignore
+    except ImportError:
+        return False
+
+    Manifest = manifest_module.Manifest
+    if getattr(Manifest.save, "__stashbase_windows_replace__", False):
+        return True
+
+    def save(self) -> None:  # noqa: ANN001
+        manifest_module.os.makedirs(self._data_dir, exist_ok=True)
+
+        new_version = self._version + 1
+        payload = self._to_payload()
+        payload["version"] = new_version
+
+        target_path = manifest_module.os.path.join(
+            self._data_dir,
+            manifest_module.MANIFEST_FILENAME,
+        )
+        prev_path = manifest_module.os.path.join(
+            self._data_dir,
+            manifest_module.MANIFEST_PREV_FILENAME,
+        )
+        tmp_path = manifest_module.os.path.join(
+            self._data_dir,
+            manifest_module.MANIFEST_TMP_FILENAME,
+        )
+
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                manifest_module.json.dump(
+                    payload,
+                    f,
+                    indent=2,
+                    sort_keys=True,
+                    ensure_ascii=False,
+                )
+                f.flush()
+                manifest_module.os.fsync(f.fileno())
+
+            if manifest_module.os.path.exists(target_path):
+                try:
+                    manifest_module.shutil.copy2(target_path, prev_path)
+                except OSError as err:
+                    manifest_module.logger.warning(
+                        "manifest: failed to create .prev backup: %s",
+                        err,
+                    )
+
+            manifest_module.os.replace(tmp_path, target_path)
+        except BaseException:
+            try:
+                manifest_module.os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        self._version = new_version
+
+        try:
+            dir_fd = manifest_module.os.open(
+                self._data_dir,
+                manifest_module.os.O_RDONLY,
+            )
+            try:
+                manifest_module.os.fsync(dir_fd)
+            finally:
+                manifest_module.os.close(dir_fd)
+        except OSError:
+            pass
+
+    save.__stashbase_windows_replace__ = True  # type: ignore[attr-defined]
+    Manifest.save = save
+    return True
+
+
 def _patch_scanner_blake3() -> None:
     """Make MFS's ``Scanner.compute_file_hash`` use BLAKE3, not SHA256.
 
@@ -435,6 +525,7 @@ class StashbaseStore:
         config = MilvusConfig(uri=str(self._db_path), collection_name=_collection_name(dim))
         store = MilvusStore(config, dim)
         _patch_inverted_index_skip()
+        _patch_milvus_manifest_windows_replace()
         try:
             store.connect()
         except Exception as err:

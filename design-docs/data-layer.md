@@ -224,6 +224,13 @@ When reviewing code that touches conversion, indexing, sync, search, folder memb
 - Search results point to user-facing source paths, not AppData paths.
 - Source identity is absolute POSIX path once work enters conversion, indexing, search, or daemon calls.
 - Folder-explicit routes work even when no folder is open in the UI.
+- HTTP static serving must not intercept or redirect `/api/*` or `/asset/*`;
+  file paths need to reach data-route handlers unchanged.
+- Packaged native helpers such as ripgrep must spawn from the real unpacked
+  filesystem, not from virtual `app.asar` paths.
+- Vector-index initialization must preserve atomic-overwrite semantics on every
+  platform; Windows must not fail folder open because a rebuildable Milvus Lite
+  manifest target already exists.
 - Removing a folder from the library deletes app-owned state but never deletes user files.
 - Deleting a folder in the active file tree is a real filesystem delete and must clean app-owned state for the deleted subtree.
 - UI status snapshots do not become data truth.
@@ -307,3 +314,26 @@ Current contract:
 - Conversion completion is defined by complete derived artifacts and completion markers.
 - Semantic readiness is defined by daemon index status.
 - Reconcile is the operation that catches storage up with filesystem reality.
+
+## 9.5 Rebuildable Vector State Blocking Folder Open
+
+The vector index is derived state. Initializing it must not prevent browsing a
+folder that otherwise exists on disk.
+
+Representative failure:
+
+- A packaged Windows daemon starts with a fresh AppData vector store.
+- Milvus Lite creates the collection and then persists index metadata.
+- Its manifest update writes `manifest.json.tmp` and renames it over an
+  existing `manifest.json`.
+- Windows rejects the rename because the target exists, so `bind_folder` fails
+  before the server can mark semantic indexing as unavailable or degraded.
+
+Current contract:
+
+- The daemon applies platform compatibility patches before opening Milvus Lite.
+- Manifest commits keep the upstream crash-safety shape: write a temporary file,
+  keep a `.prev` backup when possible, and atomically replace the current
+  manifest.
+- If the vector store still fails, the Node server records an index warning; it
+  must not turn source-file browsing into a startup crash.
