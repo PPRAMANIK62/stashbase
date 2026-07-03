@@ -17,7 +17,7 @@ import type { WebSocket } from 'ws';
 import { buildStashbasePreamble } from './agent-preamble.ts';
 import { logger, errorMessage } from './log.ts';
 import { getCurrentFolder, runWithWindowId } from './folder.ts';
-import { agentCliEnv, resolveAgentCli } from './agent-cli.ts';
+import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 
 const log = logger('codex-agent');
 
@@ -63,13 +63,10 @@ function spawnCodexAppServerProcess(cwd: string, extraEnv: NodeJS.ProcessEnv = {
   log.info(`spawning Codex app-server via ${command}`);
   return spawn(command, ['app-server', '--listen', 'stdio://'], {
     cwd,
-    env: agentCliEnv(extraEnv, [pathDir(command)]),
+    env: agentCliEnv(extraEnv, [commandDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
+    shell: agentCliNeedsShell(command),
   });
-}
-
-function pathDir(command: string): string {
-  return command.includes('/') ? command.slice(0, command.lastIndexOf('/')) : '';
 }
 
 class CodexSession {

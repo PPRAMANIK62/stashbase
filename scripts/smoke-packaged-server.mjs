@@ -96,10 +96,25 @@ function findLinuxElectronBin(appPath) {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
 }
 
-function requestJson(port, requestPath, timeoutMs) {
+function encodePath(p) {
+  return p.split('/').map(encodeURIComponent).join('/');
+}
+
+function requestJson(port, requestPath, timeoutMs, options = {}) {
   return new Promise((resolve) => {
+    const body = options.body == null ? undefined : JSON.stringify(options.body);
     const req = http.request(
-      { host: '127.0.0.1', port, path: requestPath, method: 'GET', timeout: timeoutMs },
+      {
+        host: '127.0.0.1',
+        port,
+        path: requestPath,
+        method: options.method ?? 'GET',
+        timeout: timeoutMs,
+        headers: {
+          ...(body ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } : {}),
+          ...(options.headers ?? {}),
+        },
+      },
       (res) => {
         let body = '';
         res.setEncoding('utf8');
@@ -120,6 +135,7 @@ function requestJson(port, requestPath, timeoutMs) {
       req.destroy();
       resolve({ ok: false, statusCode: 0, body: null });
     });
+    if (body) req.write(body);
     req.end();
   });
 }
@@ -127,6 +143,18 @@ function requestJson(port, requestPath, timeoutMs) {
 async function requestOk(port, timeoutMs) {
   const res = await requestJson(port, '/api/folder', timeoutMs);
   return res.ok && res.statusCode >= 200 && res.statusCode < 500;
+}
+
+async function requestApi(port, method, requestPath, body) {
+  const res = await requestJson(port, requestPath, 5_000, {
+    method,
+    body,
+    headers: { 'x-stashbase-window-id': 'packaged-smoke' },
+  });
+  if (!res.ok || res.statusCode < 200 || res.statusCode >= 300) {
+    throw new Error(`${method} ${requestPath} failed: status=${res.statusCode} body=${JSON.stringify(res.body)}`);
+  }
+  return res.body;
 }
 
 function sleep(ms) {
@@ -178,6 +206,80 @@ async function assertPackagedHealth(port, expected) {
       );
     }
   }
+}
+
+async function assertPackagedUserFlow(port, home) {
+  const folderRoot = path.join(home, 'User Yuan Li', 'Documents', 'StashBase Demo');
+  fs.mkdirSync(path.join(folderRoot, '项目 A', '子目录'), { recursive: true });
+  fs.writeFileSync(path.join(folderRoot, 'README Windows.md'), '# Hello Windows\n\nkeyword-one body\n', 'utf8');
+  fs.writeFileSync(path.join(folderRoot, '项目 A', '测试 file.md'), '# Nested Note\n\nkeyword-two nested\n', 'utf8');
+  fs.writeFileSync(path.join(folderRoot, 'page with space.html'), '<h1>HTML Test</h1> keyword-one', 'utf8');
+  fs.writeFileSync(path.join(folderRoot, '项目 A', '子目录', 'deep.md'), '# Deep\n\nkeyword-three\n', 'utf8');
+
+  const opened = await requestApi(port, 'POST', '/api/folder', { path: folderRoot });
+  if (opened?.current?.name !== 'StashBase Demo') {
+    throw new Error(`open folder returned unexpected payload: ${JSON.stringify(opened)}`);
+  }
+
+  const listing = await requestApi(port, 'GET', '/api/files');
+  const files = (listing?.files ?? []).map((file) => file.name).sort();
+  const folders = (listing?.folders ?? []).map((folder) => folder.path).sort();
+  for (const expected of ['README Windows.md', 'page with space.html', '项目 A/测试 file.md', '项目 A/子目录/deep.md']) {
+    if (!files.includes(expected)) throw new Error(`file listing missing ${expected}: ${JSON.stringify(listing)}`);
+  }
+  for (const expected of ['项目 A', '项目 A/子目录']) {
+    if (!folders.includes(expected)) throw new Error(`folder listing missing ${expected}: ${JSON.stringify(listing)}`);
+  }
+
+  const nested = await requestApi(port, 'GET', `/api/files/${encodePath('项目 A/测试 file.md')}`);
+  if (!/Nested Note/.test(nested?.content ?? '')) throw new Error(`nested file read failed: ${JSON.stringify(nested)}`);
+
+  const html = await requestApi(port, 'GET', `/api/files/${encodePath('page with space.html')}`);
+  if (html?.format !== 'html') throw new Error(`HTML file read failed: ${JSON.stringify(html)}`);
+
+  await requestApi(port, 'POST', '/api/folders', { path: 'New Folder' });
+  const created = await requestApi(port, 'POST', '/api/files', {
+    name: 'draft windows',
+    dir: 'New Folder',
+    content: '# Draft\n\nkeyword-four',
+  });
+  if (created?.name !== 'New Folder/draft windows.md') {
+    throw new Error(`create note returned unexpected name: ${JSON.stringify(created)}`);
+  }
+
+  const renamed = await requestApi(port, 'PATCH', `/api/files/${encodePath(created.name)}`, {
+    new_name: 'renamed windows.md',
+    cascade: false,
+    async_index: true,
+  });
+  if (renamed?.name !== 'New Folder/renamed windows.md') {
+    throw new Error(`basename rename did not preserve parent folder: ${JSON.stringify(renamed)}`);
+  }
+
+  const moved = await requestApi(port, 'PATCH', `/api/files/${encodePath(renamed.name)}`, {
+    new_name: '项目 A/moved windows.md',
+    cascade: false,
+    async_index: true,
+  });
+  if (moved?.name !== '项目 A/moved windows.md') {
+    throw new Error(`full-path move returned unexpected name: ${JSON.stringify(moved)}`);
+  }
+
+  const movedBody = await requestApi(port, 'GET', `/api/files/${encodePath('项目 A/moved windows.md')}`);
+  if (!/keyword-four/.test(movedBody?.content ?? '')) throw new Error(`moved file read failed: ${JSON.stringify(movedBody)}`);
+
+  const keyword = await requestApi(port, 'GET', '/api/keyword-search?q=keyword-one');
+  if ((keyword?.totalMatches ?? 0) < 2) throw new Error(`keyword search missed fixture content: ${JSON.stringify(keyword)}`);
+
+  const status = await requestApi(port, 'GET', '/api/index-status');
+  if (typeof status?.treeVersion !== 'number') throw new Error(`index status missing treeVersion: ${JSON.stringify(status)}`);
+
+  const sync = await requestApi(port, 'POST', '/api/sync');
+  if (!sync || !Array.isArray(sync.failed)) throw new Error(`sync returned unexpected payload: ${JSON.stringify(sync)}`);
+
+  await requestApi(port, 'DELETE', `/api/files/${encodePath('项目 A/moved windows.md')}`);
+  await requestApi(port, 'DELETE', `/api/folders/${encodePath('New Folder')}`);
+  console.log('[smoke] packaged user file flow passed');
 }
 
 function writeTinyPdf(file) {
@@ -416,6 +518,8 @@ const port = Number(argValue('--port')) || 18_000 + Math.floor(Math.random() * 2
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-smoke-home-'));
 const folderHome = path.join(home, 'folders');
 const localDataRoot = path.join(home, 'data');
+const appData = path.join(home, 'AppData', 'Roaming');
+const localAppData = path.join(home, 'AppData', 'Local');
 const output = [];
 
 console.log(`[smoke] app ${path.relative(root, appPath)}`);
@@ -428,6 +532,11 @@ const child = spawn(electronBin, [serverEntry, `--port=${port}`], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
     HOME: home,
+    USERPROFILE: home,
+    HOMEDRIVE: path.parse(home).root.replace(/[\\/]$/, ''),
+    HOMEPATH: home.slice(path.parse(home).root.length - (path.parse(home).root.endsWith(path.sep) ? 1 : 0)),
+    APPDATA: appData,
+    LOCALAPPDATA: localAppData,
     STASHBASE_FOLDER_HOME: folderHome,
     STASHBASE_LOCAL_DATA_ROOT: localDataRoot,
     STASHBASE_APP_ROOT: appRoot,
@@ -449,6 +558,7 @@ try {
     resourcesPath,
   });
   console.log('[smoke] packaged server responded');
+  await assertPackagedUserFlow(port, home);
 } finally {
   if (child.exitCode == null) child.kill('SIGTERM');
   await Promise.race([

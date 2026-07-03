@@ -11,6 +11,12 @@ export interface AgentCliSpec {
 const CLI_SEARCH_DIRS = [
   path.join(os.homedir(), '.npm-global', 'bin'),
   path.join(os.homedir(), '.local', 'bin'),
+  ...(process.platform === 'win32'
+    ? [
+        process.env.APPDATA ? path.join(process.env.APPDATA, 'npm') : '',
+        process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'npm') : '',
+      ]
+    : []),
   '/opt/homebrew/bin',
   '/usr/local/bin',
   '/usr/bin',
@@ -19,7 +25,8 @@ const CLI_SEARCH_DIRS = [
 
 function isExecutable(file: string): boolean {
   try {
-    fs.accessSync(file, fs.constants.X_OK);
+    fs.accessSync(file, process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK);
+    if (process.platform === 'win32') return fs.statSync(file).isFile();
     return true;
   } catch {
     return false;
@@ -53,6 +60,13 @@ export function agentCliEnv(extraEnv: NodeJS.ProcessEnv = {}, extraDirs: string[
   } as NodeJS.ProcessEnv;
 }
 
+function executableCandidates(name: string): string[] {
+  if (process.platform !== 'win32') return [name];
+  const ext = path.extname(name);
+  if (ext) return [name];
+  return [name, `${name}.exe`, `${name}.cmd`, `${name}.bat`];
+}
+
 export function resolveAgentCli(spec: AgentCliSpec, warn?: (message: string) => void): string | null {
   const explicit = spec.envNames
     .map((name) => process.env[name])
@@ -64,9 +78,19 @@ export function resolveAgentCli(spec: AgentCliSpec, warn?: (message: string) => 
   }
 
   for (const dir of agentCliPath().split(path.delimiter)) {
-    const candidate = path.join(dir, spec.name);
-    if (isExecutable(candidate)) return candidate;
+    for (const name of executableCandidates(spec.name)) {
+      const candidate = path.join(dir, name);
+      if (isExecutable(candidate)) return candidate;
+    }
   }
 
   return null;
+}
+
+export function agentCliNeedsShell(command: string): boolean {
+  return process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
+}
+
+export function commandDir(command: string): string {
+  return command.includes('/') || command.includes('\\') ? path.dirname(command) : '';
 }

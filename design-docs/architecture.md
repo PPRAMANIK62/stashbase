@@ -91,7 +91,8 @@ User-visible files stay in the folder tree. StashBase has one user-level config 
 
 ```text
 ~/.stashbase/config.json          # user-level app config: library folders, descriptions, API key
-~/.stashbase/bin/stashbase-mcp    # generated MCP launcher wrapper
+~/.stashbase/bin/stashbase-mcp    # generated MCP launcher wrapper (macOS/Linux)
+%USERPROFILE%\.stashbase\bin\stashbase-mcp.cmd  # generated MCP launcher wrapper (Windows)
 
 <folder>/
   paper.pdf                       # user file
@@ -114,7 +115,7 @@ Deleting derived state may require re-conversion or re-embedding, but it should 
 
 `~/.stashbase/config.json` is the only persistent StashBase app config file. It stores user-level configuration such as the folders in the local library, optional folder descriptions, the OpenAI API key, and first-run seed state.
 
-MCP client configuration is not stored in StashBase config. The Settings UI calls the server over HTTP; the server writes the target client's own config file when one-click setup is supported and generates `~/.stashbase/bin/stashbase-mcp` as the launcher command.
+MCP client configuration is not stored in StashBase config. The Settings UI calls the server over HTTP; the server writes the target client's own config file when one-click setup is supported and generates the platform launcher command (`~/.stashbase/bin/stashbase-mcp` on macOS/Linux, `%USERPROFILE%\.stashbase\bin\stashbase-mcp.cmd` on Windows).
 
 ---
 
@@ -285,7 +286,7 @@ The built-in panel is a convenience client for the same library, not a separate 
 
 It runs the user's installed Agent CLI in the current folder and relies on the same global MCP configuration used by external clients.
 
-Packaged builds resolve the user-installed `claude` and `codex` executables explicitly, including common Homebrew and npm global paths, before launching the built-in panel. This keeps the panel aligned with the user's normal CLI setup instead of depending on optional SDK binaries bundled in `node_modules`.
+Packaged builds resolve the user-installed `claude` and `codex` executables explicitly, including common Homebrew paths, npm global paths, and Windows npm command shims, before launching the built-in panel. This keeps the panel aligned with the user's normal CLI setup instead of depending on optional SDK binaries bundled in `node_modules`.
 
 The key architectural point is:
 

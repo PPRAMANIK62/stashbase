@@ -123,6 +123,7 @@ The packaged MCP command is generated at:
 
 ```text
 ~/.stashbase/bin/stashbase-mcp
+%USERPROFILE%\.stashbase\bin\stashbase-mcp.cmd  # Windows
 ```
 
 Manual examples:
@@ -131,6 +132,8 @@ Manual examples:
 
 ```bash
 claude mcp add stashbase -- ~/.stashbase/bin/stashbase-mcp
+# Windows:
+claude mcp add stashbase -- %USERPROFILE%\.stashbase\bin\stashbase-mcp.cmd
 ```
 
 #### Claude Desktop
@@ -154,6 +157,8 @@ In `~/.codex/config.toml`:
 ```toml
 [mcp_servers.stashbase]
 command = "/Users/YOUR_USER/.stashbase/bin/stashbase-mcp"
+# Windows:
+command = "C:\\Users\\YOUR_USER\\.stashbase\\bin\\stashbase-mcp.cmd"
 ```
 
 Restart the client after changing MCP config.

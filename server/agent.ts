@@ -50,7 +50,7 @@ import {
 import { logger, errorMessage } from './log.ts';
 import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { buildStashbasePreamble } from './agent-preamble.ts';
-import { agentCliEnv, resolveAgentCli } from './agent-cli.ts';
+import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 
 const log = logger('agent');
 
@@ -73,14 +73,11 @@ function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
   }
   return spawn(command, options.args, {
     cwd: options.cwd,
-    env: agentCliEnv(options.env as NodeJS.ProcessEnv, [pathDir(command)]),
+    env: agentCliEnv(options.env as NodeJS.ProcessEnv, [commandDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
     signal: options.signal,
+    shell: agentCliNeedsShell(command),
   });
-}
-
-function pathDir(command: string): string {
-  return command.includes('/') ? command.slice(0, command.lastIndexOf('/')) : '';
 }
 
 /** Tools we run without prompting — reads, searches, listings. Anything
@@ -221,7 +218,7 @@ class AgentSession {
           // bare — no project context, no MCP.
           settingSources: ['user', 'project', 'local'],
           env: {
-            ...agentCliEnv({}, [pathDir(claudeCodeExecutable)]),
+            ...agentCliEnv({}, [commandDir(claudeCodeExecutable)]),
             // Route this session's MCP tools back to this window's host.
             STASHBASE_WINDOW_ID: this.windowId,
           } as NodeJS.ProcessEnv,

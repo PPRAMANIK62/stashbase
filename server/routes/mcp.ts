@@ -139,7 +139,12 @@ function disconnectMcpClient(client: string): Record<string, unknown> {
 }
 
 function currentMcpWrapper(): string {
-  return path.join(os.homedir(), '.stashbase', 'bin', 'stashbase-mcp');
+  return path.join(
+    os.homedir(),
+    '.stashbase',
+    'bin',
+    process.platform === 'win32' ? 'stashbase-mcp.cmd' : 'stashbase-mcp',
+  );
 }
 
 function isMcpClientConnected(client: string, wrapper: string): boolean {
@@ -195,30 +200,56 @@ function shellQuote(value: string): string {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+function cmdQuote(value: string): string {
+  return `"${cmdValue(value).replace(/"/g, '""')}"`;
+}
+
+function cmdValue(value: string): string {
+  return String(value).replace(/%/g, '%%');
+}
+
+function localBin(name: string): string {
+  return path.join(APP_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? `${name}.cmd` : name);
+}
+
 function writeMcpWrapper(): string {
   const binDir = path.join(os.homedir(), '.stashbase', 'bin');
-  const wrapper = path.join(binDir, 'stashbase-mcp');
+  const wrapper = currentMcpWrapper();
   const resourcesPath = process.env.STASHBASE_RESOURCES_PATH || APP_ROOT;
   const isBuilt = MCP_ENTRY.endsWith(path.join('dist', 'mcp', 'server.mjs'));
-  const commandLines = isBuilt
+  const content = process.platform === 'win32'
     ? [
-        'export ELECTRON_RUN_AS_NODE=1',
-        `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
-      ]
+        '@echo off',
+        `set "STASHBASE_APP_ROOT=${cmdValue(APP_ROOT)}"`,
+        `set "STASHBASE_RESOURCES_PATH=${cmdValue(resourcesPath)}"`,
+        ...(isBuilt
+          ? [
+              'set "ELECTRON_RUN_AS_NODE=1"',
+              `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %*`,
+            ]
+          : [
+              `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %*`,
+            ]),
+        '',
+      ].join('\r\n')
     : [
-        `exec ${shellQuote(path.join(APP_ROOT, 'node_modules', '.bin', 'tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
-      ];
-  const content = [
-    '#!/bin/sh',
-    'set -eu',
-    `export STASHBASE_APP_ROOT=${shellQuote(APP_ROOT)}`,
-    `export STASHBASE_RESOURCES_PATH=${shellQuote(resourcesPath)}`,
-    ...commandLines,
-    '',
-  ].join('\n');
+        '#!/bin/sh',
+        'set -eu',
+        `export STASHBASE_APP_ROOT=${shellQuote(APP_ROOT)}`,
+        `export STASHBASE_RESOURCES_PATH=${shellQuote(resourcesPath)}`,
+        ...(isBuilt
+          ? [
+              'export ELECTRON_RUN_AS_NODE=1',
+              `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
+            ]
+          : [
+              `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
+            ]),
+        '',
+      ].join('\n');
   fs.mkdirSync(binDir, { recursive: true });
   fs.writeFileSync(wrapper, content, { mode: 0o755 });
-  fs.chmodSync(wrapper, 0o755);
+  try { fs.chmodSync(wrapper, 0o755); } catch { /* best-effort on Windows/special filesystems */ }
   return wrapper;
 }
 

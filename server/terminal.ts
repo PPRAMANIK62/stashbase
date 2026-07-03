@@ -73,8 +73,9 @@ export function launchCommandFor(cli: CliDef): string {
   return [cli.bin, ...cli.launchArgs].join(' ');
 }
 
-/** Check whether a given CLI's binary is on PATH. Cheap shell probe —
- *  runs `command -v <bin>` in the user's login + INTERACTIVE shell so
+/** Check whether a given CLI's binary is on PATH. On Windows, use
+ *  `where.exe` because `command -v` is a POSIX shell builtin. On POSIX,
+ *  run `command -v <bin>` in the user's login + INTERACTIVE shell so
  *  PATH additions from `.zshrc` / `.bashrc` (where nvm, pyenv, rbenv,
  *  asdf and most version-manager bootstraps actually live) are
  *  sourced. `-l` alone is non-interactive, which on macOS only reads
@@ -84,6 +85,18 @@ export function launchCommandFor(cli: CliDef): string {
 export function checkCliInstalled(id: string): boolean {
   const cli = CLIS[id];
   if (!cli) return false;
+  if (process.platform === 'win32') {
+    try {
+      const r = spawnSync('where.exe', [cli.bin], {
+        encoding: 'utf8',
+        timeout: 5000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return r.status === 0 && r.stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
   const shell = defaultShell();
   try {
     const r = spawnSync(shell, ['-l', '-i', '-c', `command -v ${cli.bin}`], {

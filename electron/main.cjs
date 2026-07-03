@@ -116,6 +116,31 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+function cmdQuote(value) {
+  return `"${cmdValue(value).replace(/"/g, '""')}"`;
+}
+
+function cmdValue(value) {
+  return String(value).replace(/%/g, '%%');
+}
+
+function localBin(name) {
+  return path.join(PROJECT_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? `${name}.cmd` : name);
+}
+
+function needsCmdShell(command) {
+  return process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
+}
+
+function mcpWrapperPath() {
+  return path.join(
+    os.homedir(),
+    '.stashbase',
+    'bin',
+    process.platform === 'win32' ? 'stashbase-mcp.cmd' : 'stashbase-mcp',
+  );
+}
+
 function readJsonObject(file) {
   if (!fs.existsSync(file)) return {};
   try {
@@ -138,25 +163,38 @@ function writeAppConfig(cfg) {
 }
 
 function writeMcpWrapper() {
-  const binDir = path.join(os.homedir(), '.stashbase', 'bin');
-  const wrapper = path.join(binDir, 'stashbase-mcp');
+  const wrapper = mcpWrapperPath();
   const resourcesPath = RESOURCES_ROOT;
-  const commandLines = app.isPackaged
+  const content = process.platform === 'win32'
     ? [
-        'export ELECTRON_RUN_AS_NODE=1',
-        `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
-      ]
+        '@echo off',
+        `set "STASHBASE_APP_ROOT=${cmdValue(PROJECT_ROOT)}"`,
+        `set "STASHBASE_RESOURCES_PATH=${cmdValue(resourcesPath)}"`,
+        ...(app.isPackaged
+          ? [
+              'set "ELECTRON_RUN_AS_NODE=1"',
+              `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %*`,
+            ]
+          : [
+              `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %*`,
+            ]),
+        '',
+      ].join('\r\n')
     : [
-        `exec ${shellQuote(path.join(PROJECT_ROOT, 'node_modules', '.bin', 'tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
-      ];
-  const content = [
-    '#!/bin/sh',
-    'set -eu',
-    `export STASHBASE_APP_ROOT=${shellQuote(PROJECT_ROOT)}`,
-    `export STASHBASE_RESOURCES_PATH=${shellQuote(resourcesPath)}`,
-    ...commandLines,
-    '',
-  ].join('\n');
+        '#!/bin/sh',
+        'set -eu',
+        `export STASHBASE_APP_ROOT=${shellQuote(PROJECT_ROOT)}`,
+        `export STASHBASE_RESOURCES_PATH=${shellQuote(resourcesPath)}`,
+        ...(app.isPackaged
+          ? [
+              'export ELECTRON_RUN_AS_NODE=1',
+              `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
+            ]
+          : [
+              `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
+            ]),
+        '',
+      ].join('\n');
   writeFileAtomic(wrapper, content, { mode: 0o755 });
   return wrapper;
 }
@@ -199,7 +237,7 @@ async function ensureServer() {
   }
   const serverBin = app.isPackaged
     ? process.execPath
-    : path.join(PROJECT_ROOT, 'node_modules', '.bin', 'tsx');
+    : localBin('tsx');
   // `watch` mode in dev so server-side edits hot-reload without a full
   // app restart. Packaged builds run the pre-bundled Node entry through
   // Electron's embedded Node runtime. `--port=N` is appended only when
@@ -320,6 +358,7 @@ async function ensureServer() {
     // stdout + stderr go to the per-launch log file so dock launches
     // are debuggable; terminal launches can `tail -f` the same file.
     stdio: ['ignore', logFd, logFd],
+    shell: needsCmdShell(serverBin),
   });
   try { fs.closeSync(logFd); } catch { /* child owns its dup */ }
   // `spawn` can fail asynchronously (ENOENT when tsx isn't installed,
