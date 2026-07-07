@@ -341,6 +341,7 @@ const CODEX_AUTO_APPROVED_STASHBASE_TOOLS = [
   'library_info',
   'list_directory',
   'read_file',
+  'reindex',
   'search_library',
 ];
 

@@ -803,7 +803,7 @@
       max-height: 160px;
       padding: 6px 2px 0;
     }
-    /* Action bar under the textarea: + / slash / context chip … mode / send.
+    /* Action bar under the textarea: + … mode / send.
      * A full-width rule separates it from the input — the negative side
      * margins bleed past the box's 8px padding so the line spans edge to
      * edge, then the matching padding restores the content inset. */
@@ -839,29 +839,6 @@
     .agent-bar-btn svg { width: 16px; height: 16px; }
     .agent-bar-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-bar-btn:disabled { opacity: 0.5; cursor: default; }
-    /* Slash is a "coming soon" placeholder but should read identically to
-     * the + at rest (same muted colour, no dim); only the cursor + no-op
-     * click signal it's inert. Its hover still fills the framing box. */
-    .agent-bar-btn.slash:disabled { opacity: 1; }
-    .agent-bar-btn.slash:hover { opacity: 1; background: var(--hover); color: var(--fg); }
-    /* Thin vertical rule separating the action cluster from the context chip. */
-    .agent-bar-divider {
-      width: 1px;
-      align-self: stretch;
-      margin: 3px 3px;
-      background: var(--border);
-    }
-    /* Borderless context chip — just a file glyph + name, VSCode-style. */
-    .agent-ctx-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      max-width: 180px;
-      color: var(--muted);
-      font-size: 11.5px;
-    }
-    .agent-ctx-icon { width: 13px; height: 13px; flex-shrink: 0; }
-    .agent-ctx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .agent-mode-btn {
       display: inline-flex;
       align-items: center;
@@ -877,9 +854,11 @@
       white-space: nowrap;
     }
     .agent-mode-icon { width: 14px; height: 14px; flex-shrink: 0; }
+    .agent-mode-chevron { width: 12px; height: 12px; flex-shrink: 0; opacity: 0.75; margin-left: -1px; }
     .agent-mode-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-mode-btn:disabled { cursor: default; }
     .agent-effort-btn { min-width: 0; }
+    .agent-effort-btn.is-locked { opacity: 0.58; cursor: default; }
 
     /* "Modes" dropdown — opens upward from the mode button. */
     .agent-mode-wrap { position: relative; display: inline-flex; }

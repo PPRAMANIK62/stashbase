@@ -265,7 +265,7 @@ StashBase also exposes bounded file helpers:
 
 These helpers are not a second general-purpose filesystem. They exist because many local Agent clients run in sandboxes where the host user's files are not directly readable or writable. The helpers accept absolute paths under opened folders, hide app-maintained derived artifacts, map PDF/DOCX reads to AppData-derived text, and update the semantic index when possible. The only AppData paths `read_file` accepts are manifest-known derived text files whose source PDF or DOCX still belongs to an opened folder.
 
-One-click MCP setup is available only for clients with stable local config files: Claude Code, Codex CLI, and Claude Desktop on macOS. Other MCP-capable clients use the standard JSON config shown in Settings. Codex is configured with prompting as the default approval mode, while low-risk read/search tools (`library_info`, `list_directory`, `read_file`, `search_library`) are auto-approved.
+One-click MCP setup is available only for clients with stable local config files: Claude Code, Codex CLI, and Claude Desktop on macOS. Other MCP-capable clients use the standard JSON config shown in Settings. Codex is configured with prompting as the default approval mode. Low-risk tools that only orient, read, search, or refresh StashBase-owned index state (`library_info`, `list_directory`, `read_file`, `reindex`, `search_library`) are auto-approved.
 
 The design boundary is:
 
@@ -308,7 +308,7 @@ Built-in Agent panel -> same MCP server -> same library
 External AI client   -> same MCP server -> same library
 ```
 
-The panel may add UI affordances such as structured messages, tool approvals, history, and attachments, but those are product/UI details rather than separate library infrastructure.
+The panel may add UI affordances such as structured messages, tool approvals, history, and attachments, but those are product/UI details rather than separate library infrastructure. Attachments are explicit: the currently open document is not sent as Agent context unless the user adds it by drag/drop, file picker, or mention. Claude and Codex share the same composer controls: Access on the left of the right-side control group, Effort on the right. Access is an action-permission setting and remains available during a chat. Effort is a session-start setting, so the control is editable only before a chat has messages. Claude SDK permission callbacks and Codex app-server approval requests are normalized into the same renderer permission card. Codex MCP tool approval arrives as an MCP elicitation request; the adapter translates tool-call approvals into the same allow/deny flow and cancels non-approval elicitations.
 
 Claude session titles come from the Claude SDK history metadata. Codex threads are named from the first user prompt when StashBase creates the thread so the tab title and History list do not stay on the placeholder.
 

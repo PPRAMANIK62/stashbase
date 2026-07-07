@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowUpIcon, BoltIcon, CheckIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
-  FileGenericIcon, HandIcon, PlusIcon, SlashSquareIcon,
+  ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
+  FileGenericIcon, HandIcon, PlusIcon,
 } from '../../icons';
 import { useApp } from '../../store/AppContext';
 import { baseName } from './attachments';
 import type { Attachment, EffortLevel, PermMode } from './types';
 
 const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon }[] = [
-  { id: 'default', label: 'Ask before edits', desc: 'Claude will ask for approval before making each edit', Icon: HandIcon },
-  { id: 'acceptEdits', label: 'Edit automatically', desc: 'Claude will apply edits without asking each time', Icon: CodeIcon },
-  { id: 'plan', label: 'Plan mode', desc: 'Claude will explore and present a plan before editing', Icon: ClipboardListIcon },
-  { id: 'auto', label: 'Auto mode', desc: 'Claude automatically chooses the best permission mode for each task', Icon: BoltIcon },
+  { id: 'default', label: 'Ask', desc: 'Ask before edits or higher-risk actions', Icon: HandIcon },
+  { id: 'acceptEdits', label: 'Edit', desc: 'Apply file edits without asking each time', Icon: CodeIcon },
+  { id: 'plan', label: 'Plan', desc: 'Explore and propose a plan before changing files', Icon: ClipboardListIcon },
+  { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
 
 const EFFORTS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -19,17 +19,15 @@ const EFFORT_LABEL: Record<EffortLevel, string> = {
   low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-High', max: 'Max',
 };
 
-function ModeMenu({
-  mode, effort, open, disabled, wrapRef, onToggle, onPick, onSetEffort,
+function AccessMenu({
+  mode, open, disabled, wrapRef, onToggle, onPick,
 }: {
   mode: PermMode;
-  effort: EffortLevel;
   open: boolean;
   disabled: boolean;
   wrapRef: React.RefObject<HTMLDivElement | null>;
   onToggle: () => void;
   onPick: (m: PermMode) => void;
-  onSetEffort: (level: EffortLevel) => void;
 }) {
   const active = MODES.find((m) => m.id === mode) ?? MODES[0];
   const ActiveIcon = active.Icon;
@@ -38,7 +36,7 @@ function ModeMenu({
       {open && (
         <div className="agent-mode-menu" role="menu">
           <div className="agent-mode-menu-head">
-            <span>Modes</span>
+            <span>Access</span>
           </div>
           {MODES.map((m) => {
             const Icon = m.Icon;
@@ -60,7 +58,6 @@ function ModeMenu({
               </button>
             );
           })}
-          <EffortBar effort={effort} onSet={onSetEffort} />
         </div>
       )}
       <button
@@ -69,11 +66,12 @@ function ModeMenu({
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Permission mode (⇧+Tab)"
+        title="Access level (⇧+Tab)"
         onClick={onToggle}
       >
         <ActiveIcon className="agent-mode-icon" />
         {active.label}
+        <ChevronDownIcon className="agent-mode-chevron" />
       </button>
     </div>
   );
@@ -110,51 +108,58 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
 }
 
 function EffortMenu({
-  effort, open, disabled, wrapRef, onToggle, onSetEffort,
+  effort, open, disabled, locked, wrapRef, onToggle, onSetEffort,
 }: {
   effort: EffortLevel;
   open: boolean;
   disabled: boolean;
+  locked: boolean;
   wrapRef: React.RefObject<HTMLDivElement | null>;
   onToggle: () => void;
   onSetEffort: (level: EffortLevel) => void;
 }) {
+  const unavailable = disabled || locked;
   return (
     <div className="agent-mode-wrap" ref={wrapRef}>
-      {open && (
+      {open && !unavailable && (
         <div className="agent-mode-menu effort-only" role="menu">
           <EffortBar effort={effort} onSet={onSetEffort} />
         </div>
       )}
       <button
         type="button"
-        className="agent-mode-btn agent-effort-btn"
+        className={'agent-mode-btn agent-effort-btn' + (locked ? ' is-locked' : '')}
         disabled={disabled}
+        aria-disabled={unavailable}
         aria-haspopup="menu"
-        aria-expanded={open}
-        title="Effort"
-        onClick={onToggle}
+        aria-expanded={open && !unavailable}
+        title={locked ? 'Effort applies to new chats' : 'Effort'}
+        onClick={() => {
+          if (unavailable) return;
+          onToggle();
+        }}
       >
         <DumbbellIcon className="agent-mode-icon" />
         {EFFORT_LABEL[effort]}
+        <ChevronDownIcon className="agent-mode-chevron" />
       </button>
     </div>
   );
 }
 
 export function AgentComposer({
-  phase, disabled, turnActive, active, activeFile, mode, onSetMode, effort, onSetEffort,
-  attachments, uploading, agentShortName, showModeMenu, showEffortMenu, onPickFiles, onRemoveAttachment, onSend, onStop,
+  phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
+  effortLocked, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, onPickFiles, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
   turnActive: boolean;
   active: boolean;
-  activeFile: string | null;
   mode: PermMode;
   onSetMode: (mode: PermMode) => void;
   effort: EffortLevel;
   onSetEffort: (level: EffortLevel) => void;
+  effortLocked: boolean;
   attachments: Attachment[];
   uploading: boolean;
   agentShortName: string;
@@ -170,7 +175,9 @@ export function AgentComposer({
   const { state } = useApp();
   const [mention, setMention] = useState<{ q: string; from: number } | null>(null);
   const [modeOpen, setModeOpen] = useState(false);
+  const [effortOpen, setEffortOpen] = useState(false);
   const modeWrapRef = useRef<HTMLDivElement>(null);
+  const effortWrapRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (active) taRef.current?.focus(); }, [active]);
@@ -183,6 +190,19 @@ export function AgentComposer({
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [modeOpen]);
+
+  useEffect(() => {
+    if (!effortOpen) return;
+    function onDown(e: MouseEvent) {
+      if (!effortWrapRef.current?.contains(e.target as Node)) setEffortOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [effortOpen]);
+
+  useEffect(() => {
+    if (effortLocked) setEffortOpen(false);
+  }, [effortLocked]);
 
   function cycleMode() {
     const i = MODES.findIndex((m) => m.id === mode);
@@ -315,39 +335,30 @@ export function AgentComposer({
           >
             <PlusIcon />
           </button>
-          <button type="button" className="agent-bar-btn slash" title="Slash commands (coming soon)" disabled>
-            <SlashSquareIcon />
-          </button>
-          {activeFile && (
-            <>
-              <span className="agent-bar-divider" />
-              <span className="agent-ctx-chip" title={activeFile}>
-                <FileGenericIcon className="agent-ctx-icon" />
-                <span className="agent-ctx-name">{baseName(activeFile)}</span>
-              </span>
-            </>
-          )}
           <span className="agent-bar-spacer" />
           {showModeMenu && (
-            <ModeMenu
+            <AccessMenu
               mode={mode}
-              effort={effort}
               open={modeOpen}
               disabled={disabled}
               wrapRef={modeWrapRef}
-              onToggle={() => setModeOpen((o) => !o)}
+              onToggle={() => { setModeOpen((o) => !o); setEffortOpen(false); }}
               onPick={(m) => { onSetMode(m); setModeOpen(false); }}
-              onSetEffort={onSetEffort}
             />
           )}
           {showEffortMenu && (
             <EffortMenu
               effort={effort}
-              open={modeOpen}
+              open={effortOpen}
               disabled={disabled}
-              wrapRef={modeWrapRef}
-              onToggle={() => setModeOpen((o) => !o)}
-              onSetEffort={onSetEffort}
+              locked={effortLocked}
+              wrapRef={effortWrapRef}
+              onToggle={() => {
+                if (effortLocked) return;
+                setEffortOpen((o) => !o);
+                setModeOpen(false);
+              }}
+              onSetEffort={(level) => { onSetEffort(level); setEffortOpen(false); }}
             />
           )}
           {turnActive ? (

@@ -29,7 +29,7 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     supportsHistory: true,
     supportsModes: true,
     supportsEffort: true,
-    controlsNote: 'Modes apply live · Effort on new session',
+    controlsNote: 'Access applies live · Effort on new session',
     Icon: ClaudeIcon,
   },
   codex: {
@@ -40,9 +40,9 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     endpoint: '/ws/codex',
     mcpClientId: 'codex-cli',
     supportsHistory: true,
-    supportsModes: false,
+    supportsModes: true,
     supportsEffort: true,
-    controlsNote: 'Approvals on request · Workspace write',
+    controlsNote: 'Access and effort apply on new session',
     Icon: CodexIcon,
   },
 };

@@ -17,7 +17,7 @@ import { AGENT_META, type AgentKind } from '../agentCatalog';
 import { FILE_MIME } from '../dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
 import { useApp } from '../store/AppContext';
-import { getActiveTab, type ChatTab } from '../store/state';
+import type { ChatTab } from '../store/state';
 import { NewChatIcon } from '../icons';
 import { AgentComposer } from './agent/AgentComposer';
 import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
@@ -70,6 +70,7 @@ export function AgentView({
   // Permission mode for this session — drives the composer's Modes
   // dropdown. Switching it sends `set-mode` so the SDK applies it live.
   const [mode, setMode] = useState<PermMode>('default');
+  const modeRef = useRef<PermMode>('default');
   // Thinking effort — fixed per session (no live SDK setter), so it rides
   // the connect URL. `effortRef` lets the connect effect read the latest
   // value without resubscribing on every change.
@@ -109,6 +110,7 @@ export function AgentView({
     resumeIdRef.current = null;
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${meta.endpoint}`
       + `?windowId=${encodeURIComponent(getWindowId())}&effort=${effortRef.current}`
+      + `&access=${modeRef.current}`
       + (resume ? `&resume=${encodeURIComponent(resume)}` : '');
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -321,13 +323,10 @@ export function AgentView({
     setBlocks((bs) => [...bs, { kind: 'user', id: nextId(), text, attachments: atts.length ? atts : undefined }]);
     setTurnActive(true);
     openKind.current = null;
-    // Build the wire prompt: the user's text, plus context lines the agent
-    // resolves with Read. The file currently open in the viewer rides along
-    // as ambient context (like Cursor's "current file"); explicit
-    // attachments (temp uploads = absolute, sidebar files = folder-relative)
-    // are listed too. Both kept out of the displayed header — chips show
-    // the attachments; the composer chip signals the active file.
-    const ctx = await buildPromptContext(activeFile, atts);
+    // Build the wire prompt from explicit context only. The current viewer
+    // file is not attached automatically; users drag files in or pick them
+    // when they want the Agent to use a document as context.
+    const ctx = await buildPromptContext(atts);
     const wire = ctx.length ? `${text}${text ? '\n\n' : ''}${ctx.join('\n\n')}` : text;
     try {
       ws.send(JSON.stringify({
@@ -342,11 +341,8 @@ export function AgentView({
     }
   }
 
-  async function buildPromptContext(openFile: string | null, atts: Attachment[]): Promise<string[]> {
+  async function buildPromptContext(atts: Attachment[]): Promise<string[]> {
     const lines: string[] = [];
-    if (openFile && !atts.some((a) => a.path === openFile)) {
-      lines.push(await formatCurrentFileContext(openFile));
-    }
     if (atts.length) {
       const rendered = await Promise.all(atts.map((a) => formatAttachmentContext(a)));
       lines.push(`Attached files:\n${rendered.join('\n')}`);
@@ -361,23 +357,6 @@ export function AgentView({
     } catch {
       return null;
     }
-  }
-
-  async function formatCurrentFileContext(path: string): Promise<string> {
-    const ctx = await resolveFolderContext(path);
-    if (ctx?.kind === 'derived') {
-      return [
-        `Current file (open in the viewer): ${ctx.sourcePath}`,
-        `For text context, use StashBase read_file on ${ctx.path}; it returns extracted Markdown for this ${ctx.sourceFormat}.`,
-      ].join('\n');
-    }
-    if (ctx && !ctx.available && ctx.sourceFormat === 'pdf') {
-      return [
-        `Current file (open in the viewer): ${ctx.sourcePath}`,
-        `Extracted Markdown is not available yet for this ${ctx.sourceFormat}; read the original only if necessary.`,
-      ].join('\n');
-    }
-    return `Current file (open in the viewer): ${path}`;
   }
 
   async function formatAttachmentContext(att: Attachment): Promise<string> {
@@ -458,7 +437,9 @@ export function AgentView({
    *  the selected backend supports it. */
   function changeMode(m: PermMode) {
     setMode(m);
+    modeRef.current = m;
     if (agent === 'claude') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: m }));
+    else if (blocks.length === 0) reconnect();
   }
 
   /** Change thinking effort. The SDK fixes effort at session construction
@@ -466,9 +447,10 @@ export function AgentView({
    *  chat is still empty, so we never discard a real conversation. With
    *  history present it takes effect on the next new chat. */
   function changeEffort(level: EffortLevel) {
+    if (blocks.length > 0 || turnActive) return;
     setEffort(level);
     effortRef.current = level;
-    if (blocks.length === 0) reconnect();
+    reconnect();
   }
 
   /** Rename this tab from the session's server-derived title once the
@@ -498,10 +480,7 @@ export function AgentView({
     dispatch({ type: 'CHAT_TAB_NEW', tab });
   }
 
-  // The document the user is currently looking at — shown as a context
-  // chip in the composer and sent along as ambient context on each
-  // message (see `send`), unless it's already an explicit attachment.
-  const activeFile = getActiveTab(state)?.file?.name ?? null;
+  const effortLocked = blocks.length > 0 || turnActive;
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
     wsRef.current?.send(JSON.stringify({ t: 'permission-reply', id: permId, allow }));
@@ -610,13 +589,13 @@ export function AgentView({
         disabled={phase !== 'live'}
         turnActive={turnActive}
         active={active}
-        activeFile={activeFile}
         mode={mode}
         onSetMode={changeMode}
         effort={effort}
         onSetEffort={changeEffort}
+        effortLocked={effortLocked}
         showModeMenu={meta.supportsModes}
-        showEffortMenu={meta.supportsEffort && !meta.supportsModes}
+        showEffortMenu={meta.supportsEffort}
         agentShortName={meta.shortName}
         attachments={attachments}
         uploading={uploading}

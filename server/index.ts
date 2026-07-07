@@ -335,7 +335,7 @@ agentWss.on('connection', (ws, req) => {
 });
 const codexWss = new WebSocketServer({ noServer: true });
 codexWss.on('connection', (ws, req) => {
-  attachCodexWebSocket(ws, windowIdOf(req), effortOf(req), resumeOf(req));
+  attachCodexWebSocket(ws, windowIdOf(req), effortOf(req), resumeOf(req), accessOf(req));
 });
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {
@@ -355,6 +355,18 @@ function effortOf(req: import('node:http').IncomingMessage): string | undefined 
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
     const e = u.searchParams.get('effort');
     return ['low', 'medium', 'high', 'xhigh', 'max'].includes(e ?? '') ? e! : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Read the Agent access mode off the WS URL. Claude applies it live after
+ *  connect; Codex consumes it when the app-server thread starts. */
+function accessOf(req: import('node:http').IncomingMessage): string | undefined {
+  try {
+    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
+    const access = u.searchParams.get('access');
+    return ['default', 'acceptEdits', 'plan', 'auto'].includes(access ?? '') ? access! : undefined;
   } catch {
     return undefined;
   }

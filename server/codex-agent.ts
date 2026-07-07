@@ -96,6 +96,7 @@ class CodexSession {
     windowId: string,
     private effort?: string,
     resume?: string,
+    private accessMode?: string,
     private onDispose?: (session: CodexSession) => void,
   ) {
     this.windowId = normalizeWindowId(windowId);
@@ -250,11 +251,12 @@ class CodexSession {
     if (!this.cwd) throw new Error('No folder open.');
     await this.ensureAppServer();
     const isNewThread = !this.resumeThreadId;
+    const access = codexAccessOptions(this.accessMode);
     const common = {
       cwd: this.cwd,
-      approvalPolicy: 'on-request',
-      approvalsReviewer: 'user',
-      sandbox: 'workspace-write',
+      approvalPolicy: access.approvalPolicy,
+      approvalsReviewer: access.approvalsReviewer,
+      sandbox: access.sandbox,
       developerInstructions: buildStashbasePreamble(this.cwd),
     };
     const result = await this.request(
@@ -413,10 +415,25 @@ class CodexSession {
         });
         break;
       }
-      case 'mcpServer/elicitation/request':
+      case 'mcpServer/elicitation/request': {
+        const approval = mcpToolApprovalFromElicitation(params);
+        if (approval) {
+          const approvalId = `codex-${String(id)}`;
+          this.pendingApprovals.set(approvalId, { requestId: id, method, params });
+          this.send({
+            t: 'permission',
+            id: approvalId,
+            toolUseId: approval.toolUseId || approvalId,
+            name: approval.name,
+            title: approval.title,
+            input: approval.input,
+          });
+          break;
+        }
         this.respond(id, { action: 'cancel', content: null, _meta: null });
         this.sendThinking(protocolNoticeFromParams(params) || 'Codex requested MCP user input; StashBase cancelled that prompt. Send the requested details as a follow-up message if needed.');
         break;
+      }
       case 'item/tool/requestUserInput':
         this.respond(id, { answers: {} });
         this.sendThinking(protocolNoticeFromParams(params) || 'Codex requested additional user input; send the details as a follow-up message if needed.');
@@ -460,6 +477,14 @@ class CodexSession {
       this.respond(pending.requestId, {
         permissions: allow ? requestedPermissions(pending.params) : {},
         scope: always ? 'session' : 'turn',
+      });
+      return;
+    }
+    if (pending.method === 'mcpServer/elicitation/request') {
+      this.respond(pending.requestId, {
+        action: allow ? 'accept' : 'decline',
+        content: allow ? {} : null,
+        _meta: null,
       });
       return;
     }
@@ -742,6 +767,53 @@ function fileChangeApprovalInput(params: JsonObject): JsonObject {
   };
 }
 
+function mcpToolApprovalFromElicitation(params: JsonObject): {
+  toolUseId: string;
+  name: string;
+  title: string;
+  input: JsonObject;
+} | null {
+  const meta = objectValue(params._meta);
+  const kind = stringValue(meta.codex_approval_kind) || stringValue(meta.approval_kind);
+  const tool = stringValue(meta.tool_name)
+    || stringValue(meta.toolName)
+    || stringValue(meta.tool)
+    || stringValue(params.tool_name)
+    || stringValue(params.toolName)
+    || stringValue(params.tool);
+  if (kind !== 'mcp_tool_call' && !tool) return null;
+
+  const server = stringValue(meta.connector_name)
+    || stringValue(meta.server_name)
+    || stringValue(meta.server)
+    || stringValue(params.server_name)
+    || stringValue(params.server);
+  const toolTitle = stringValue(meta.tool_title) || stringValue(meta.title);
+  const name = [server, toolTitle || tool].filter(Boolean).join(':') || 'MCP tool';
+  const prompt = protocolNoticeFromParams(params);
+  const toolUseId = stringValue(meta.codex_mcp_tool_call_id)
+    || stringValue(meta.codex_call_id)
+    || stringValue(meta.call_id)
+    || stringValue(params.itemId)
+    || stringValue(params.item_id)
+    || stringValue(params.toolUseId)
+    || stringValue(params.tool_use_id);
+  const args = objectValue(meta.tool_params);
+
+  return {
+    toolUseId,
+    name,
+    title: prompt || `Allow Codex to use ${name}?`,
+    input: {
+      server,
+      tool,
+      arguments: args,
+      prompt,
+      requestedSchema: params.requestedSchema ?? params.requested_schema ?? null,
+    },
+  };
+}
+
 function requestedPermissions(params: JsonObject | undefined): JsonObject {
   const permissions = objectValue(params?.permissions);
   const granted: JsonObject = {};
@@ -769,6 +841,24 @@ function codexEffortOption(effort: string | undefined): { effort?: string } {
   if (!effort) return {};
   if (effort === 'max') return { effort: 'xhigh' };
   return ['low', 'medium', 'high', 'xhigh'].includes(effort) ? { effort } : {};
+}
+
+function codexAccessOptions(mode: string | undefined): {
+  approvalPolicy: string;
+  approvalsReviewer: string;
+  sandbox: string;
+} {
+  switch (mode) {
+    case 'acceptEdits':
+      return { approvalPolicy: 'never', approvalsReviewer: 'user', sandbox: 'workspace-write' };
+    case 'plan':
+      return { approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: 'read-only' };
+    case 'auto':
+      return { approvalPolicy: 'on-request', approvalsReviewer: 'auto', sandbox: 'workspace-write' };
+    case 'default':
+    default:
+      return { approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: 'workspace-write' };
+  }
 }
 
 function titleFromPrompt(prompt: string): string {
@@ -1142,8 +1232,8 @@ function secondsToMillis(value: unknown): number {
 
 const sessions = new Set<CodexSession>();
 
-export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string): void {
-  const session = new CodexSession(ws, windowId, effort, resume, (s) => sessions.delete(s));
+export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: string): void {
+  const session = new CodexSession(ws, windowId, effort, resume, access, (s) => sessions.delete(s));
   sessions.add(session);
   session.begin();
 }

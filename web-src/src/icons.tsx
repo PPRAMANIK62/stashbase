@@ -42,9 +42,8 @@ export function HistoryIcon({ className }: IconProps) {
 }
 
 /** Up arrow — the composer send button. An SVG (not the "↑" glyph, which
- *  renders thin and baseline-low); slim + tall, stroke matched to
- *  SlashSquareIcon's visual weight. Symmetric in x about 12 so grid
- *  centring lands it dead-centre. */
+ *  renders thin and baseline-low); slim + tall, symmetric in x about 12
+ *  so grid centring lands it dead-centre. */
 export function ArrowUpIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={1.8} {...stroke}>
@@ -82,19 +81,6 @@ export function CodeIcon({ className }: IconProps) {
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <polyline points="16 18 22 12 16 6" />
       <polyline points="8 6 2 12 8 18" />
-    </svg>
-  );
-}
-
-/** Rounded square with a slash — the slash-command button glyph (the box
- *  is part of the icon, not a CSS border). The square nearly fills the
- *  viewBox so a hover background sized to the button reads as the box
- *  filling in, not an off-centre halo around a small glyph. */
-export function SlashSquareIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <rect x="2" y="2" width="20" height="20" rx="5" />
-      <line x1="14" y1="7" x2="10" y2="17" />
     </svg>
   );
 }
