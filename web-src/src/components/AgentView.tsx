@@ -185,6 +185,10 @@ export function AgentView({
       case 'ready':
         readyRef.current = true;
         setPhase('live');
+        // Starting a built-in agent can create root-level instruction files
+        // (`AGENTS.md`, and for Claude the `CLAUDE.md` bridge). Refresh the
+        // tree immediately instead of waiting for the next index-status poll.
+        void actions.loadFiles(folderPathRef.current || undefined);
         // A fresh session always starts at permissionMode 'default'; if the
         // user had picked a non-default mode, re-apply it so a reconnect
         // (Retry / effort change) doesn't silently reset it.

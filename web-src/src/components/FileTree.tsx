@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
-import { ChevronDownIcon, ClaudeIcon, CodexIcon } from '../icons';
+import { BotIcon, ChevronDownIcon, ClaudeIcon } from '../icons';
 import type { FileMeta, FolderMeta } from '../api';
 import { FILE_MIME, FOLDER_MIME } from '../dragMime';
 import { useApp } from '../store/AppContext';
@@ -365,13 +365,9 @@ function FileRow({
   const [dropEdge, setDropEdge] = useState<DropEdge>(null);
 
   const basename = path.split('/').pop() ?? path;
-  // Named agent rules-books are tagged by their owner's logo —
-  // CLAUDE.md → Claude, AGENTS.md → Codex. They are ordinary notes that
-  // merely borrow a brand logo, so they keep normal row styling.
-  const metaIcon =
-    basename === 'CLAUDE.md' ? <ClaudeIcon />
-    : basename === 'AGENTS.md' ? <CodexIcon />
-    : null;
+  // Named agent rules-books are tagged by their owner's logo. They are still
+  // ordinary Markdown files in the tree; only the glyph changes.
+  const metaIcon = agentRulesIcon(basename);
 
   const rowClass =
     `tree-row file format-${format}` +
@@ -389,7 +385,7 @@ function FileRow({
   // images). Without the binaries here, editing "photo.png" exposes the
   // whole name and a user can drop ".png", which silently breaks format
   // detection (the row vanishes) and orphans the derived OCR note.
-  const extMatch = basename.match(/\.(md|markdown|html|htm|pdf|png|jpe?g|webp)$/i);
+  const extMatch = basename.match(/\.(md|markdown|html|htm|pdf|png|jpe?g|webp|docx)$/i);
   const ext = extMatch ? extMatch[0] : '';
 
   function onDragStart(e: DragEvent<HTMLDivElement>) {
@@ -530,6 +526,13 @@ function FileRow({
       ) : null}
     </div>
   );
+}
+
+function agentRulesIcon(basename: string) {
+  const normalized = basename.toLowerCase();
+  if (normalized === 'claude.md') return <ClaudeIcon />;
+  if (normalized === 'agents.md') return <BotIcon className="agent-rules-icon" />;
+  return null;
 }
 
 function WarningGlyph() {

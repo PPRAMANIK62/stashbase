@@ -18,6 +18,8 @@ import { buildStashbasePreamble } from './agent-preamble.ts';
 import { logger, errorMessage } from './log.ts';
 import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
+import { ensureAgentsFile } from './agent-rules.ts';
+import { noteTreeChanged } from './watcher.ts';
 
 const log = logger('codex-agent');
 
@@ -115,6 +117,7 @@ class CodexSession {
       this.finish();
       return;
     }
+    if (ensureAgentsFile(cwd)) noteTreeChanged();
     this.cwd = cwd;
     this.ready = true;
     this.send({ t: 'ready' });

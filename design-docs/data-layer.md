@@ -11,6 +11,7 @@ This is not a second architecture document. `architecture.md` explains where mod
 | User operation | What can go wrong | Data-layer contract |
 |-|-|-|
 | Open a folder | A previous run was interrupted; derived state may be missing, stale, or partial. Recursive listing or status calls may also be slow for large folders. | Reconcile must rediscover missing or incomplete work, but navigation must not wait for recursive listing or status snapshots before entering the folder view. |
+| Open a folder with no `AGENTS.md` | The folder becomes an Agent workspace without a stable local instruction entry. | Create a short root-level `AGENTS.md` if missing. Use create-only writes; never overwrite an existing file. The file is user-owned source content, not app-owned state. |
 | Land on Welcome | The user may not open any specific folder, but previous library work may still be incomplete. | Welcome triggers folder-explicit reconcile in the background with a cooldown when idle; status polling alone is not recovery. |
 | Go Home / close the active folder | Conversion may still be running, while the UI leaves the folder view. | In-flight work is process-owned. The renderer returns to Welcome immediately; server-side folder close runs in the background and must not block navigation. Welcome may keep a display snapshot, but it is not data truth. |
 | Open a library folder from Welcome | Folder opening can fail or hang at the transport/action boundary before the folder view appears. | The Welcome opening overlay is only a UI guard: it does not block library clicks, follows the latest click, clears when the latest open action settles, and has a 20s watchdog so it cannot permanently cover the app. |
@@ -30,6 +31,7 @@ This is not a second architecture document. `architecture.md` explains where mod
 | Remove a folder from the library | User files must remain, but app state for that subtree must disappear. | Cancel queued/running conversions, then clear index rows, derived artifacts, preparation rows, sidebar order, runtime bindings, and library membership. |
 | Delete a folder inside the active tree | The user intends a real filesystem delete, but app-owned state can become orphaned. | Delete the folder on disk only through the explicit file-tree delete path, then clean derived state, preparation rows, file order, and index rows for that subtree. |
 | App restart | Process-memory in-flight state is gone. | Persisted failures survive; incomplete work is rediscovered by reconcile. |
+| Start built-in Claude in a folder | Claude Code expects `CLAUDE.md`, while StashBase uses `AGENTS.md` as the shared folder contract. | Create `CLAUDE.md` only when missing, with `@AGENTS.md` as a bridge. Never overwrite an existing `CLAUDE.md`. |
 | MCP `reindex` on an unopened folder | There may be no active UI folder context. | Reindex/status must be folder-explicit and must not depend on the current window. |
 | Sync after PDF/image/DOCX conversion | The daemon's direct text-file scan may report a converted source row as deleted because the raw source is not directly indexable. | If the source PDF/image/DOCX still exists under the synced folder, sync must preserve the converted index row and its derived artifacts. |
 
@@ -209,6 +211,7 @@ Renames and moves use absolute source path identity. A file rename request with 
 | State | Owner | Durable? | Review question |
 |-|-|-|-|
 | Source files | User filesystem | Yes | Are we ever moving or rewriting user files as app state? |
+| Agent rules files | User filesystem (`AGENTS.md`, `CLAUDE.md`) | Yes | Are they created only when missing, never overwritten, and treated as ordinary visible Markdown source files? |
 | Library membership | `~/.stashbase/config.json` `recentFolders` | Yes | Does this represent searchable membership, not just MRU? |
 | Folder descriptions | `~/.stashbase/config.json` | Yes | Are they treated as orientation metadata, not indexed source content? |
 | Derived text/assets | AppData | Rebuildable | Can stale or partial artifacts be mistaken for completion? |
@@ -246,6 +249,7 @@ When reviewing code that touches conversion, indexing, sync, search, folder memb
   manifest target already exists.
 - Removing a folder from the library deletes app-owned state but never deletes user files.
 - Deleting a folder in the active file tree is a real filesystem delete and must clean app-owned state for the deleted subtree.
+- `AGENTS.md` and `CLAUDE.md` are not hidden config or derived state. They are ordinary root-level Markdown files and create-only writes must not overwrite user edits.
 - UI status snapshots do not become data truth.
 - Background preparation is quiet by default. Welcome library rows and affected file rows show failure markers only; in-folder headers do not show preparation badges. The Search view is where pending/failed preparation is summarized because that is where incomplete readiness affects the user.
 

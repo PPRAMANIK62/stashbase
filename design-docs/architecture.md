@@ -62,6 +62,7 @@ StashBase does not introduce a new workspace model. A user points it at ordinary
 ## 2.1 Input Paths
 
 - Opening a folder adds that local directory to the indexed set.
+- Opening a folder also ensures a root-level `AGENTS.md` exists. This is a normal user-visible Markdown file that defines the folder's Agent contract; StashBase creates it only when missing and never overwrites user content.
 - Removing a folder from the library clears StashBase-owned state for that folder — index rows, derived text/assets, preparation state, runtime bindings, file-order state, and membership. It never deletes the user's files.
 - Deleting a folder from inside an opened folder is different: that is a normal filesystem delete, guarded by the app's confirmation flow.
 - New Folder opens the native folder picker at `~/Documents/StashBase`. The picker creates or selects a normal local folder; the location is a default, not a boundary.
@@ -96,6 +97,8 @@ User-visible files stay in the folder tree. StashBase has one user-level config 
 
 <folder>/
   paper.pdf                       # user file
+  AGENTS.md                       # user-visible folder Agent contract
+  CLAUDE.md                       # optional Claude bridge: @AGENTS.md
 
 <appData>/vector-store.nosync/    # Milvus Lite store, per-machine derived data
 <appData>/derived.nosync/         # converted text, extracted assets, manifest, PDF batch scratch
@@ -106,6 +109,7 @@ User-visible files stay in the folder tree. StashBase has one user-level config 
 The important ownership rule is simple:
 
 - **Original files** belong to the user.
+- **Agent rules files** (`AGENTS.md`, `CLAUDE.md`) are original files too: visible, editable, indexable, and never treated as app-owned derived state.
 - **Converted text and extracted assets** are caches that make non-text formats Agent-readable.
 - **Vector indexes and bookkeeping** are rebuildable machine state.
 
@@ -292,6 +296,8 @@ Hosted or multi-user versions would need a different permission model.
 The built-in panel is a convenience client for the same library, not a separate architecture path.
 
 It runs the user's installed Agent CLI in the current folder and relies on the same global MCP configuration used by external clients.
+
+Each opened folder has one root-level `AGENTS.md` file for durable Agent instructions about that folder. Built-in Codex uses it directly through the normal folder context. Built-in Claude uses a root-level `CLAUDE.md` bridge that contains only `@AGENTS.md`; the bridge is created on first Claude launch if missing. Both files are ordinary Markdown source files, so the user can edit or delete them.
 
 Packaged builds resolve the user-installed `claude` and `codex` executables explicitly, including common Homebrew paths, npm global paths, and Windows npm command shims, before launching the built-in panel. This keeps the panel aligned with the user's normal CLI setup instead of depending on optional SDK binaries bundled in `node_modules`.
 

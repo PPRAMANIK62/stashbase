@@ -312,11 +312,24 @@ export function CheckIcon({ className }: IconProps) {
   );
 }
 
-/* Agent rules-books are tagged with the logo of the agent that owns
- * them: CLAUDE.md → Claude, AGENTS.md → OpenAI/Codex. Each keeps its
- * brand mark recognisable rather than sharing one generic "rules" glyph.
- * The marks carry explicit colour except Codex, whose mono mark follows
- * `--fg` to read on either theme. */
+/** Neutral bot glyph for AGENTS.md, the folder-level agent contract shared
+ *  across built-in and external agents. Shape follows Lucide's `bot`
+ *  proportions so it feels native next to the other line icons. */
+export function BotIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M12 8V4H8" />
+      <rect x="4" y="8" width="16" height="12" rx="2" />
+      <path d="M2 14h2" />
+      <path d="M20 14h2" />
+      <path d="M9 13v2" />
+      <path d="M15 13v2" />
+    </svg>
+  );
+}
+
+/* Agent rules-books are tagged with the logo of the agent contract they
+ * represent: AGENTS.md → neutral bot, Claude.md / CLAUDE.md → Claude. */
 
 /** StashBase mark — the app's own cube logo (`build/icon.svg`, minus
  *  the rounded background plate that would render as a white square at
@@ -347,7 +360,7 @@ export function StashBaseIcon({ className }: IconProps) {
 }
 
 /** Claude mark (Simple Icons, CC0) in the Claude brand coral. File
- *  glyph for CLAUDE.md, the Claude Code rules file. */
+ *  glyph for Claude.md / CLAUDE.md, the Claude Code rules file. */
 export function ClaudeIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="#D97757">
@@ -357,8 +370,7 @@ export function ClaudeIcon({ className }: IconProps) {
 }
 
 /** OpenAI / Codex mark (Simple Icons, CC0). Monochrome, so it follows
- *  `--fg` to stay legible on light and dark. File glyph for AGENTS.md,
- *  the Codex agent rules file. The mark fills its native 24-box almost
+ *  `--fg` to stay legible on light and dark. The mark fills its native 24-box almost
  *  edge-to-edge, so the viewBox is padded to ~78% fill — otherwise it
  *  reads visibly larger than the other glyphs in the same 16px slot. */
 export function CodexIcon({ className }: IconProps) {

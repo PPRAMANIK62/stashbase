@@ -51,6 +51,8 @@ import { logger, errorMessage } from './log.ts';
 import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
+import { ensureClaudeBridgeFile } from './agent-rules.ts';
+import { noteTreeChanged } from './watcher.ts';
 
 const log = logger('agent');
 
@@ -182,6 +184,7 @@ class AgentSession {
       this.finish();
       return;
     }
+    if (ensureClaudeBridgeFile(cwd)) noteTreeChanged();
     try {
       this.q = query({
         prompt: this.input,
