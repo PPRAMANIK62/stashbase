@@ -31,8 +31,7 @@ import { useHoverTip } from './hooks/useHoverTip';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppProvider, useApp } from './store/AppContext';
 import {
-  CHAT_MAX_WIDTH,
-  CHAT_MIN_WIDTH,
+  clampChatWidth,
   SIDEBAR_COLLAPSE_AT,
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_MAX_WIDTH,
@@ -386,13 +385,9 @@ function ChatSplitter() {
   const pendingWidthRef = useRef<number | null>(null);
   const frameRef = useRef<number | null>(null);
 
-  function clampWidth(width: number) {
-    return Math.max(CHAT_MIN_WIDTH, Math.min(width, CHAT_MAX_WIDTH));
-  }
-
   function widthAt(e: ReactPointerEvent<HTMLDivElement>) {
     const start = startRef.current;
-    return start ? clampWidth(start.w - (e.clientX - start.x)) : null;
+    return start ? clampChatWidth(start.w - (e.clientX - start.x)) : null;
   }
 
   function writePendingWidth() {
