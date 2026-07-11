@@ -37,6 +37,10 @@ export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 520;
 export const SIDEBAR_COLLAPSE_AT = 100;
 
+/** Chat-panel resize bounds (px), shared by the reducer and drag handle. */
+export const CHAT_MIN_WIDTH = 280;
+export const CHAT_MAX_WIDTH = 1200;
+
 /** One chat tab in the right-side chat panel. The tab's `agent` is
  *  locked at creation time so starting a new tab with a different agent
  *  doesn't restart open conversations. */
@@ -815,7 +819,7 @@ export function reducer(s: State, a: Action): State {
     case 'CHAT_WIDTH':
       // Clamp to sensible bounds. Below ~280 the prompt wraps every
       // word; above ~70% of viewport leaves no room for content.
-      return { ...s, chatWidth: Math.max(280, Math.min(a.width, 1200)) };
+      return { ...s, chatWidth: Math.max(CHAT_MIN_WIDTH, Math.min(a.width, CHAT_MAX_WIDTH)) };
     case 'AGENTS_LOADED':
       return { ...s, agents: a.agents };
     case 'CHAT_TAB_NEW':
