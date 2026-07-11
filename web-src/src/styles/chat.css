@@ -953,21 +953,18 @@
     .agent-input {
       border: 0;
       background: transparent;
-      resize: none;
       outline: none;
-      font: inherit;
-      font-size: 13px;
-      line-height: 1.5;
       color: var(--fg);
-      /* Grow with content natively (Chromium 123+, Electron 30+): taller
-       * only when the text wraps, up to the max. `rows={1}` is the fallback
-       * height if field-sizing is ever unavailable. The min-height floors
-       * the empty input a touch taller than the button row below it (the
-       * 28px send button) so the composer isn't top-light. */
-      field-sizing: content;
-      min-height: 36px;
-      max-height: 160px;
-      padding: 6px 2px 0;
+    }
+    .agent-file-mention {
+      display: inline-block;
+      padding: 0 4px;
+      border-radius: 4px;
+      background: var(--active);
+      color: var(--fg);
+      line-height: inherit;
+      vertical-align: baseline;
+      white-space: nowrap;
     }
     /* Action bar under the textarea: + … mode / send.
      * A full-width rule separates it from the input — the negative side
@@ -1156,7 +1153,8 @@
       right: 8px;
       bottom: calc(100% - 4px);
       max-height: 220px;
-      overflow-y: auto;
+      overflow: hidden;
+      box-sizing: border-box;
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -1164,9 +1162,11 @@
       padding: 4px;
       z-index: 30;
     }
+    .agent-mention-list { max-height: 210px; overflow-y: auto; }
     .agent-mention-item {
       display: flex;
-      flex-direction: column;
+      align-items: flex-start;
+      gap: 7px;
       width: 100%;
       border: 0;
       background: transparent;
@@ -1175,6 +1175,9 @@
       border-radius: 5px;
       cursor: pointer;
     }
-    .agent-mention-item:hover { background: var(--hover); }
+    .agent-mention-item:hover,
+    .agent-mention-item.active { background: var(--hover); }
+    .agent-mention-icon { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--muted); }
+    .agent-mention-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
     .agent-mention-name { font-size: 12.5px; color: var(--fg); }
     .agent-mention-path { font-size: 11px; color: var(--muted); }
