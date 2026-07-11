@@ -39,7 +39,7 @@ export const SIDEBAR_COLLAPSE_AT = 100;
 
 /** Chat-panel resize bounds (px), shared by the reducer and drag handle. */
 export const CHAT_MIN_WIDTH = 280;
-export const CHAT_MAX_WIDTH = 1200;
+export const CHAT_MAX_WIDTH = 640;
 
 export function clampChatWidth(width: number) {
   return Math.max(CHAT_MIN_WIDTH, Math.min(width, CHAT_MAX_WIDTH));
