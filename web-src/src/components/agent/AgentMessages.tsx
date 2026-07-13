@@ -12,9 +12,10 @@ export interface QueuedTurnPreview {
 }
 
 export function MessageList({
-  blocks, queuedTurns, turnActive, phase, fatal, agentName, agentShortName, Icon, editableUserMessageIds, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry,
+  blocks, historyToolIds, queuedTurns, turnActive, phase, fatal, agentName, agentShortName, Icon, editableUserMessageIds, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
 }: {
   blocks: Block[];
+  historyToolIds: Set<string>;
   queuedTurns: QueuedTurnPreview[];
   turnActive: boolean;
   phase: 'connecting' | 'live' | 'closed';
@@ -28,18 +29,24 @@ export function MessageList({
   onCopyUserMessage: (text: string) => void;
   onResendUserMessage: (text: string) => void;
   onRetry: () => void;
+  onOpenArtifact: (path: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const [showJump, setShowJump] = useState(false);
 
   function onScroll() {
     const el = ref.current;
     if (!el) return;
     stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    setShowJump(!stick.current);
   }
 
   useEffect(() => {
-    if (stick.current && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+    if (stick.current && ref.current) {
+      ref.current.scrollTop = ref.current.scrollHeight;
+      setShowJump(false);
+    }
   });
 
   const turns = useMemo(() => groupTurns(blocks), [blocks]);
@@ -63,7 +70,7 @@ export function MessageList({
               onSendEdit={onResendUserMessage}
             />
           )}
-          {turn.body.map((b) => <BlockView key={b.id} block={b} onPermission={onPermission} />)}
+          <TurnBody blocks={turn.body} historyToolIds={historyToolIds} onPermission={onPermission} onOpenArtifact={onOpenArtifact} />
         </div>
       ))}
       {queuedTurns.map((turn) => (
@@ -77,6 +84,13 @@ export function MessageList({
         <FatalInline fatal={fatal} agentShortName={agentShortName} onRetry={onRetry} />
       )}
       {turnActive && <div className="agent-working"><span className="agent-dot" />{agentShortName} is working…</div>}
+      {showJump && (
+        <button type="button" className="agent-jump-latest" onClick={() => {
+          if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+          stick.current = true;
+          setShowJump(false);
+        }}>Jump to latest ↓</button>
+      )}
     </div>
   );
 }
@@ -96,6 +110,31 @@ function groupTurns(blocks: Block[]): Turn[] {
     }
   }
   return turns;
+}
+
+function TurnBody({ blocks, historyToolIds, onPermission, onOpenArtifact }: {
+  blocks: Block[];
+  historyToolIds: Set<string>;
+  onPermission: (t: string, p: string, a: boolean) => void;
+  onOpenArtifact: (path: string) => void;
+}) {
+  const groups: Array<Block | ToolBlock[]> = [];
+  for (const block of blocks) {
+    // Permission requests are actions, not background activity. Keep each
+    // one outside the collapsible activity stream so its Allow/Reject controls
+    // remain visible even when the preceding tool group is collapsed.
+    if (block.kind !== 'tool' || block.status === 'awaiting') {
+      groups.push(block);
+      continue;
+    }
+    const previous = groups[groups.length - 1];
+    if (Array.isArray(previous)) previous.push(block);
+    else groups.push([block]);
+  }
+  return <>{groups.map((group) => Array.isArray(group)
+    ? <ToolActivityGroup key={`activity-${group[0].id}`} tools={group} initiallyOpen={group.some((tool) => historyToolIds.has(tool.id))} onPermission={onPermission} onOpenArtifact={onOpenArtifact} />
+    : <BlockView key={group.id} block={group} onPermission={onPermission} onOpenArtifact={onOpenArtifact} />
+  )}</>;
 }
 
 function UserTurnHead({
@@ -401,14 +440,25 @@ function PixelMascot() {
   );
 }
 
-function BlockView({ block, onPermission }: { block: Block; onPermission: (t: string, p: string, a: boolean) => void }) {
+function BlockView({ block, onPermission, onOpenArtifact }: { block: Block; onPermission: (t: string, p: string, a: boolean) => void; onOpenArtifact: (path: string) => void }) {
   switch (block.kind) {
     case 'user':
       return <UserTurnHead block={block} />;
     case 'assistant':
       return (
         <div className="agent-msg assistant">
-          <div className="agent-prose" dangerouslySetInnerHTML={{ __html: renderMarkdownInline(block.text) }} />
+          <div
+            className="agent-prose"
+            onClick={(event) => {
+              const target = event.target;
+              const anchor = target instanceof Element ? target.closest('a') : null;
+              const path = localAssistantLinkPath(anchor?.getAttribute('href') ?? null);
+              if (!path) return;
+              event.preventDefault();
+              onOpenArtifact(path);
+            }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdownInline(block.text) }}
+          />
         </div>
       );
     case 'thinking':
@@ -418,6 +468,47 @@ function BlockView({ block, onPermission }: { block: Block; onPermission: (t: st
     case 'tool':
       return <ToolCard block={block} onPermission={onPermission} />;
   }
+}
+
+/** Local Markdown links in an agent response open files in the workspace;
+ * external URLs and in-document anchors retain their ordinary browser action. */
+function localAssistantLinkPath(href: string | null): string | null {
+  if (!href || href.startsWith('#') || href.startsWith('//') || /^[a-z][a-z\d+.-]*:/i.test(href)) return null;
+  const path = href.split('#', 1)[0];
+  if (!path) return null;
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
+function ToolActivityGroup({ tools, initiallyOpen, onPermission, onOpenArtifact }: {
+  tools: ToolBlock[];
+  initiallyOpen: boolean;
+  onPermission: (t: string, p: string, a: boolean) => void;
+  onOpenArtifact: (path: string) => void;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const active = tools.find((tool) => tool.status === 'running');
+  const failures = tools.filter((tool) => tool.status === 'error' || tool.status === 'denied').length;
+  const summary = active
+    ? `${activityLabel(active)}…`
+    : failures
+      ? `${failures} step${failures === 1 ? '' : 's'} need attention`
+      : `${tools.length} step${tools.length === 1 ? '' : 's'} completed`;
+  return (
+    <section className={'agent-activity' + (active ? ' active' : '')}>
+      <button type="button" className="agent-activity-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+        <ChevronDownIcon className={'agent-activity-chev' + (open ? ' open' : '')} />
+        {active && <span className="agent-dot" />}
+        <strong>{active ? 'Working' : failures ? 'Attention needed' : 'Completed'}</strong>
+        <span>{summary}</span>
+      </button>
+      {open && <div className="agent-activity-body">{tools.map((tool) => <ToolCard key={tool.id} block={tool} onPermission={onPermission} />)}</div>}
+      <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
+    </section>
+  );
 }
 
 function ThinkingView({ text }: { text: string }) {
@@ -486,6 +577,38 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
       )}
     </div>
   );
+}
+
+function ArtifactCards({ changes, onOpen }: { changes: Array<{ path: string; kind: string }>; onOpen: (path: string) => void }) {
+  if (!changes.length) return null;
+  return <div className="agent-artifacts">{changes.map((change) => (
+    <div className="agent-artifact" key={change.path}>
+      <FileGenericIcon className="agent-artifact-icon" />
+      <span className="agent-artifact-path" title={change.path}>{change.path}</span>
+      <span className="agent-artifact-kind">{change.kind}</span>
+      <button type="button" onClick={() => onOpen(change.path)}>Open</button>
+    </div>
+  ))}</div>;
+}
+
+function fileChanges(block: ToolBlock): Array<{ path: string; kind: string }> {
+  if (block.name !== 'File change') return [];
+  const raw = Array.isArray(block.input.changes) ? block.input.changes : [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const change = item as Record<string, unknown>;
+    const path = [change.path, change.filePath, change.file_path].find((value): value is string => typeof value === 'string' && value.length > 0);
+    if (!path) return [];
+    const kind = typeof change.kind === 'string' ? change.kind : typeof change.type === 'string' ? change.type : 'Changed';
+    return [{ path, kind }];
+  });
+}
+
+function activityLabel(tool: ToolBlock): string {
+  if (tool.name === 'File change') return 'Editing files';
+  if (tool.name === 'Bash') return 'Verifying changes';
+  if (/search|read/i.test(tool.name)) return 'Reading library';
+  return tool.name;
 }
 
 type DiffRow = { type: 'ctx' | 'del' | 'add'; text: string };

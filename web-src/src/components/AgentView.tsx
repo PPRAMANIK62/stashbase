@@ -71,6 +71,11 @@ export function AgentView({
   const mountedRef = useRef(true);
   const uploadCountRef = useRef(0);
   const [blocks, setBlocks] = useState<Block[]>([]);
+  // Tool calls are present in a resumed transcript but, unlike a live turn,
+  // have no visual arrival sequence to draw attention to them. Keep their ids
+  // so MessageList can reveal restored activity once without expanding new
+  // live tool groups.
+  const [historyToolIds, setHistoryToolIds] = useState<Set<string>>(() => new Set());
   const [editableUserMessageIds, setEditableUserMessageIds] = useState<Set<string>>(() => new Set());
   const [turnActive, setTurnActive] = useState(false);
   const turnActiveRef = useRef(false);
@@ -169,6 +174,7 @@ export function AgentView({
    *  reopens a folder). */
   function reconnect() {
     setBlocks([]);
+    setHistoryToolIds(new Set());
     setEditableUserMessageIds(new Set());
     setFatal(null);
     queuedPromptsRef.current = [];
@@ -196,6 +202,7 @@ export function AgentView({
       return;
     }
     setBlocks(hist);
+    setHistoryToolIds(new Set(hist.flatMap((block) => block.kind === 'tool' ? [block.id] : [])));
     setEditableUserMessageIds(new Set());
     setFatal(null);
     queuedPromptsRef.current = [];
@@ -305,6 +312,14 @@ export function AgentView({
         break;
       case 'turn-end':
         openKind.current = null;
+        // A completed turn cannot retain an in-flight tool. Codex normally
+        // emits `item/completed` for every tool, but an omitted or unmatched
+        // notification must not leave the transcript permanently "Running".
+        setBlocks((bs) => bs.map((block) =>
+          block.kind === 'tool' && block.status === 'running'
+            ? { ...block, status: ev.isError ? 'error' : 'done' }
+            : block));
+        toolNamesRef.current.clear();
         // Name the tab from the session's derived title (first prompt /
         // SDK summary) once the first turn lands — keeps it in sync with
         // the History list instead of staying "Untitled".
@@ -599,6 +614,15 @@ export function AgentView({
     dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
   }
 
+  /** Deleting the session currently shown in this tab leaves the tab open as
+   * a fresh chat. Its old history title must not leak into that new session. */
+  function resetAfterActiveSessionDeleted() {
+    const otherAgentTabs = state.chatTabs.filter((tab) => tab.agent === agent && tab.id !== id);
+    const freshTitle = otherAgentTabs.length === 0 ? 'Untitled' : `Untitled ${otherAgentTabs.length + 1}`;
+    dispatch({ type: 'CHAT_TAB_RENAME', id, title: freshTitle });
+    reconnect();
+  }
+
   const effortLocked = blocks.length > 0 || turnActive;
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
@@ -667,7 +691,7 @@ export function AgentView({
               onToggle={() => setHistoryOpen((o) => !o)}
               onClose={() => setHistoryOpen(false)}
               onResume={resumeSession}
-              onActiveDeleted={reconnect}
+              onActiveDeleted={resetAfterActiveSessionDeleted}
             />
           )}
           <button type="button" className="agent-head-btn" title={`New ${meta.name} chat`} onClick={newChat}>
@@ -677,6 +701,7 @@ export function AgentView({
       </div>
       <MessageList
         blocks={blocks}
+        historyToolIds={historyToolIds}
         queuedTurns={queuedTurns}
         turnActive={turnActive}
         phase={phase}
@@ -690,6 +715,11 @@ export function AgentView({
         onCopyUserMessage={copyUserMessage}
         onResendUserMessage={send}
         onRetry={reconnect}
+        onOpenArtifact={(path) => {
+          const folder = folderPathRef.current;
+          const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
+          if (isSafeFolderRelativePath(rel)) void actions.selectFile(rel);
+        }}
       />
       {phase === 'closed' && (
         !fatal && (
