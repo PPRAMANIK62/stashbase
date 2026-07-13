@@ -70,7 +70,15 @@ export function MessageList({
               onSendEdit={onResendUserMessage}
             />
           )}
-          <TurnBody blocks={turn.body} historyToolIds={historyToolIds} onPermission={onPermission} onOpenArtifact={onOpenArtifact} />
+          <TurnBody
+            blocks={turn.body}
+            historyToolIds={historyToolIds}
+            editableUserMessageIds={editableUserMessageIds}
+            onPermission={onPermission}
+            onCopyUserMessage={onCopyUserMessage}
+            onResendUserMessage={onResendUserMessage}
+            onOpenArtifact={onOpenArtifact}
+          />
         </div>
       ))}
       {queuedTurns.map((turn) => (
@@ -112,10 +120,13 @@ function groupTurns(blocks: Block[]): Turn[] {
   return turns;
 }
 
-function TurnBody({ blocks, historyToolIds, onPermission, onOpenArtifact }: {
+function TurnBody({ blocks, historyToolIds, editableUserMessageIds, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
   blocks: Block[];
   historyToolIds: Set<string>;
+  editableUserMessageIds: Set<string>;
   onPermission: (t: string, p: string, a: boolean) => void;
+  onCopyUserMessage: (text: string) => void;
+  onResendUserMessage: (text: string) => void;
   onOpenArtifact: (path: string) => void;
 }) {
   const groups: Array<Block | ToolBlock[]> = [];
@@ -133,7 +144,15 @@ function TurnBody({ blocks, historyToolIds, onPermission, onOpenArtifact }: {
   }
   return <>{groups.map((group) => Array.isArray(group)
     ? <ToolActivityGroup key={`activity-${group[0].id}`} tools={group} initiallyOpen={group.some((tool) => historyToolIds.has(tool.id))} onPermission={onPermission} onOpenArtifact={onOpenArtifact} />
-    : <BlockView key={group.id} block={group} onPermission={onPermission} onOpenArtifact={onOpenArtifact} />
+    : <BlockView
+      key={group.id}
+      block={group}
+      canEditUserMessage={editableUserMessageIds.has(group.id)}
+      onPermission={onPermission}
+      onCopyUserMessage={onCopyUserMessage}
+      onResendUserMessage={onResendUserMessage}
+      onOpenArtifact={onOpenArtifact}
+    />
   )}</>;
 }
 
@@ -440,10 +459,22 @@ function PixelMascot() {
   );
 }
 
-function BlockView({ block, onPermission, onOpenArtifact }: { block: Block; onPermission: (t: string, p: string, a: boolean) => void; onOpenArtifact: (path: string) => void }) {
+function BlockView({ block, canEditUserMessage, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
+  block: Block;
+  canEditUserMessage: boolean;
+  onPermission: (t: string, p: string, a: boolean) => void;
+  onCopyUserMessage: (text: string) => void;
+  onResendUserMessage: (text: string) => void;
+  onOpenArtifact: (path: string) => void;
+}) {
   switch (block.kind) {
     case 'user':
-      return <UserTurnHead block={block} />;
+      return <UserTurnHead
+        block={block}
+        canEdit={canEditUserMessage}
+        onCopy={onCopyUserMessage}
+        onSendEdit={onResendUserMessage}
+      />;
     case 'assistant':
       return (
         <div className="agent-msg assistant">
