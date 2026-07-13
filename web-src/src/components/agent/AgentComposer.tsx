@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
   FileGenericIcon, HandIcon, PlusIcon,
 } from '../../icons';
 import { useApp } from '../../store/AppContext';
 import { baseName } from './attachments';
+import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import type { Attachment, EffortLevel, PermMode } from './types';
 
 const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon }[] = [
@@ -171,16 +172,19 @@ export function AgentComposer({
   onStop: () => void;
 }) {
   const [text, setText] = useState('');
-  const taRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<MentionComposerHandle>(null);
+  const mentionListboxId = useId();
   const { state } = useApp();
-  const [mention, setMention] = useState<{ q: string; from: number } | null>(null);
+  const [mention, setMention] = useState<MentionQuery>(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [modeOpen, setModeOpen] = useState(false);
   const [effortOpen, setEffortOpen] = useState(false);
   const modeWrapRef = useRef<HTMLDivElement>(null);
   const effortWrapRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeMentionRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => { if (active) taRef.current?.focus(); }, [active]);
+  useEffect(() => { if (active) composerRef.current?.focus(); }, [active]);
 
   useEffect(() => {
     if (!modeOpen) return;
@@ -217,6 +221,12 @@ export function AgentComposer({
       .slice(0, 8);
   }, [mention, state.files]);
 
+  const activeSuggestionIndex = Math.min(activeMentionIndex, Math.max(suggestions.length - 1, 0));
+
+  useEffect(() => {
+    activeMentionRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [activeSuggestionIndex]);
+
   const placeholder = phase === 'connecting'
     ? 'Connecting…'
     : phase === 'closed'
@@ -225,65 +235,51 @@ export function AgentComposer({
         ? 'Ask for follow-up changes'
         : `Message ${agentShortName}…`;
 
-  function onChange(v: string, caret: number) {
-    setText(v);
-    const upto = v.slice(0, caret);
-    const m = /(^|\s)@([^\s@]*)$/.exec(upto);
-    if (m) setMention({ q: m[2], from: caret - m[2].length });
-    else setMention(null);
-  }
-
   function pickMention(path: string) {
-    const ta = taRef.current;
-    if (!ta || !mention) return;
-    const before = text.slice(0, mention.from);
-    const after = text.slice(ta.selectionStart);
-    const next = before + path + ' ' + after;
-    setText(next);
-    setMention(null);
-    requestAnimationFrame(() => {
-      ta.focus();
-      const c = (before + path + ' ').length;
-      ta.setSelectionRange(c, c);
-    });
-  }
-
-  function submit() {
-    const t = text.trim();
-    if ((!t && attachments.length === 0) || disabled || uploading) return;
-    onSend(t);
-    setText('');
+    if (!mention) return;
+    composerRef.current?.insertMention(path, mention);
     setMention(null);
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (mention && suggestions.length && (e.key === 'Enter' || e.key === 'Tab')) {
-      e.preventDefault();
-      pickMention(suggestions[0].name);
-      return;
-    }
-    if (showModeMenu && e.key === 'Tab' && e.shiftKey && !disabled) {
-      e.preventDefault();
-      cycleMode();
-      return;
-    }
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      submit();
-    }
-    if (e.key === 'Escape' && mention) setMention(null);
+  function submit(t: string) {
+    const trimmed = t.trim();
+    if ((!trimmed && attachments.length === 0) || disabled || uploading) return false;
+    onSend(trimmed);
+    setMention(null);
+    return true;
+  }
+
+  function moveMention(direction: 1 | -1) {
+    if (!suggestions.length) return;
+    setActiveMentionIndex((index) => (index + direction + suggestions.length) % suggestions.length);
   }
 
   return (
     <div className="agent-composer">
       {mention && suggestions.length > 0 && (
         <div className="agent-mention">
-          {suggestions.map((f) => (
-            <button key={f.name} type="button" className="agent-mention-item" onClick={() => pickMention(f.name)}>
-              <span className="agent-mention-name">{baseName(f.name)}</span>
-              <span className="agent-mention-path">{f.name}</span>
-            </button>
-          ))}
+          <div id={mentionListboxId} className="agent-mention-list" role="listbox" aria-label="Matching library files">
+            {suggestions.map((f, index) => (
+              <button
+                key={f.name}
+                ref={index === activeSuggestionIndex ? activeMentionRef : null}
+                id={`${mentionListboxId}-option-${index}`}
+                type="button"
+                role="option"
+                aria-selected={index === activeSuggestionIndex}
+                tabIndex={-1}
+                className={'agent-mention-item' + (index === activeSuggestionIndex ? ' active' : '')}
+                onMouseEnter={() => setActiveMentionIndex(index)}
+                onClick={() => pickMention(f.name)}
+              >
+                <FileGenericIcon className="agent-mention-icon" />
+                <span className="agent-mention-text">
+                  <span className="agent-mention-name">{baseName(f.name)}</span>
+                  <span className="agent-mention-path">{f.name}</span>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div className="agent-composer-box">
@@ -305,15 +301,31 @@ export function AgentComposer({
             {uploading && <span className="agent-attach-loading">Uploading…</span>}
           </div>
         )}
-        <textarea
-          ref={taRef}
-          className="agent-input"
-          rows={1}
+        <MentionComposer
+          ref={composerRef}
           placeholder={placeholder}
-          value={text}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
-          onKeyDown={onKeyDown}
+          onChange={setText}
+          onMentionChange={(next) => {
+            setMention(next);
+            setActiveMentionIndex(0);
+          }}
+          onMentionNavigate={moveMention}
+          onMentionAccept={() => {
+            if (!suggestions.length) return false;
+            pickMention(suggestions[activeSuggestionIndex].name);
+            return true;
+          }}
+          onMentionDismiss={() => setMention(null)}
+          onShiftTab={() => {
+            if (!showModeMenu || disabled) return false;
+            cycleMode();
+            return true;
+          }}
+          onSubmit={submit}
+          mentionOpen={Boolean(mention && suggestions.length)}
+          mentionListboxId={mention && suggestions.length ? mentionListboxId : undefined}
+          activeMentionOptionId={mention && suggestions.length ? `${mentionListboxId}-option-${activeSuggestionIndex}` : undefined}
         />
         <input
           ref={fileInputRef}
@@ -369,7 +381,7 @@ export function AgentComposer({
               className="agent-send"
               title="Send"
               disabled={disabled || uploading || (!text.trim() && attachments.length === 0)}
-              onClick={submit}
+              onClick={() => composerRef.current?.submit()}
             >
               <ArrowUpIcon />
             </button>
