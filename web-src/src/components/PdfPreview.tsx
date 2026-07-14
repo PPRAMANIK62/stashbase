@@ -486,7 +486,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
           const target = fallbackPage
             ? root?.querySelector(`[data-page="${fallbackPage}"]`) as HTMLElement | null
             : null;
-          if (root && target) {
+          if (root && target && fallbackPage) {
             setPageHighlight(null);
             setCurrentPage(fallbackPage);
             root.scrollTo({
