@@ -8,7 +8,12 @@ The renderer recognizes `.md` and `.markdown` files as the `md` viewer format. T
 
 The implementation is split across these renderer modules:
 
-- [`web-src/src/markdown.ts`](../web-src/src/markdown.ts) owns Marked configuration, Markdown-to-HTML conversion, the document allowlist, heading IDs, and the preview document's inline CSS.
+- [`web-src/src/markdown.ts`](../web-src/src/markdown.ts) is the stable rendering seam. It exports only the document and inline rendering functions used by callers.
+- [`web-src/src/markdown/documentRenderer.ts`](../web-src/src/markdown/documentRenderer.ts) owns the ordered document transformation pipeline.
+- [`web-src/src/markdown/footnotes.ts`](../web-src/src/markdown/footnotes.ts) owns document-only footnote extraction, Marked configuration, reference state, and footnote-section rendering.
+- [`web-src/src/markdown/headingIds.ts`](../web-src/src/markdown/headingIds.ts) owns deterministic heading IDs and the shared slug shape.
+- [`web-src/src/markdown/sanitization.ts`](../web-src/src/markdown/sanitization.ts) owns the document HTML allowlist and task-checkbox normalization.
+- [`web-src/src/markdown/previewDocument.ts`](../web-src/src/markdown/previewDocument.ts) owns the complete iframe document wrapper and preview-local CSS.
 - [`web-src/src/components/MarkdownPreview.tsx`](../web-src/src/components/MarkdownPreview.tsx) owns iframe installation and preview-specific DOM integration.
 - [`web-src/src/lib/previewIframe.ts`](../web-src/src/lib/previewIframe.ts) injects the local asset base and interprets link and image clicks.
 - [`web-src/src/components/findIframe.ts`](../web-src/src/components/findIframe.ts) implements in-preview find with the CSS Custom Highlight API.
@@ -17,7 +22,7 @@ The implementation is split across these renderer modules:
 - [`web-src/src/store/AppContext.tsx`](../web-src/src/store/AppContext.tsx) loads source content and owns navigation, pending anchors, pending search highlights, and find-controller registration.
 - [`web-src/src/App.tsx`](../web-src/src/App.tsx) receives preview navigation, image, and external-open messages.
 
-`web-src/src/markdown.ts` also exports `renderMarkdownInline()` for Agent response bodies. Document preview and inline rendering use separate configured `Marked` instances so changes to document parsing cannot alter the chat contract. Inline rendering keeps single-newline line breaks and returns only an HTML fragment rendered in the app DOM. It does not use the Markdown preview iframe, heading-ID pass, preview CSS, asset base, or preview interactions described below.
+`web-src/src/markdown.ts` also exports `renderMarkdownInline()` for Agent response bodies. Document preview and inline rendering use separate configured `Marked` instances so changes to document parsing cannot alter the chat contract. Inline rendering keeps single-newline line breaks and returns only an HTML fragment rendered in the app DOM. It does not use the Markdown preview iframe, document transformation pipeline, preview CSS, asset base, or preview interactions described below.
 
 ## 2. View selection and source loading
 
@@ -37,7 +42,9 @@ The read-only render path is synchronous until the browser installs the generate
 ```text
 folder-relative name + source Markdown
   -> renderMarkdown(content)
-       -> documentMarkdown.parse(content)
+       -> extract document-only footnote definitions
+       -> configured document Marked instance parses content and footnote references
+       -> append the referenced footnote section and backlinks
        -> sanitize parsed body fragment
        -> heading-ID post-pass
        -> complete HTML document + inline preview CSS
@@ -56,10 +63,14 @@ React's iframe `onLoad` prop is not used. A native `load` listener is installed 
 
 ## 4. Markdown parser and emitted HTML
 
-The parser is `marked` 18.0.3. The module owns two isolated parser instances:
+The parser is `marked` 18.0.3. Inline parsing keeps its own configured instance; each document render creates a configured parser with a preview-only footnote reference extension:
 
 ```ts
-const documentMarkdown = new Marked({ gfm: true, breaks: false });
+const documentMarkdown = new Marked({
+  gfm: true,
+  breaks: false,
+  extensions: [footnotes.referenceExtension()],
+});
 const inlineMarkdown = new Marked({ gfm: true, breaks: true });
 ```
 
@@ -78,9 +89,13 @@ The current preview renders Marked's standard block and inline constructs:
 - GFM tables and alignment attributes.
 - Escapes, entities, and allowlisted raw HTML.
 
+Document preview additionally recognizes named `[^label]` references and `[^label]: definition` blocks. Footnote extraction normalizes CRLF and CR source to LF before scanning. A definition can continue on four-space- or tab-indented lines, including blank-separated paragraphs and block Markdown. Definitions inside fenced code or raw HTML blocks, references inside code, escaped or malformed references, references nested inside another footnote body, and references without a matching definition remain literal. Labels are matched case-insensitively after whitespace normalization.
+
+Only referenced definitions appear in one trailing `<section aria-label="Footnotes">`. Footnote numbers follow first-reference order. Each definition has a stable slug-based entry ID; slug collisions receive deterministic numeric suffixes. Every reference gets its own ID, repeated references point to the same definition without duplicating its body, and the definition ends with an accessible backlink to every originating reference. This extension exists only on the document parser, so inline Agent output treats footnote syntax as ordinary text.
+
 Fenced-code language labels are retained as `language-*` classes. No syntax-highlighting pass runs over those classes.
 
-Marked passes raw HTML into the parsed body, then `sanitize-html` applies a document-oriented allowlist before the preview document is assembled. It preserves ordinary structural and presentational elements, including tables, links, images, `details`, `summary`, `kbd`, `mark`, `sub`, and `sup`. It removes scripts, styles, frames and embedded content, forms, metadata, event-handler and inline-style attributes, frame targets, and non-HTTP(S) image protocols. Relative URLs remain valid; links additionally allow `mailto:`. Task-list inputs are normalized to disabled checkboxes. YAML frontmatter has no preview-specific handling, and the renderer has no implementations for footnotes, wikilinks, embeds, callouts, math, Mermaid, definition lists, emoji shortcodes, MDX, or explicit heading-attribute syntax.
+Marked passes raw HTML into the parsed body, then `sanitize-html` applies a document-oriented allowlist before the preview document is assembled. It preserves ordinary structural and presentational elements, including tables, links, images, `details`, `summary`, `kbd`, `mark`, `sub`, and `sup`. It removes scripts, styles, frames and embedded content, forms, metadata, event-handler and inline-style attributes, frame targets, and non-HTTP(S) image protocols. Relative URLs remain valid; links additionally allow `mailto:`. Task-list inputs are normalized to disabled checkboxes. YAML frontmatter has no preview-specific handling, and the renderer has no implementations for wikilinks, embeds, callouts, math, Mermaid, definition lists, emoji shortcodes, MDX, or explicit heading-attribute syntax.
 
 ## 5. Heading IDs and anchors
 
@@ -125,6 +140,7 @@ The iframe does not inherit the host page's styles, so all Markdown typography i
 - Content is centered with a maximum width of `820px` and `32px 56px 80px` padding.
 - Headings use a compact line height, bold weight, and increasing top margins; H1 and H2 have bottom borders.
 - Links use an underlined teal color with a stronger underline on hover.
+- Footnote references use compact superscript links. The trailing footnote section uses smaller muted text, highlights the targeted entry, and gives references and backlinks a visible keyboard-focus outline.
 - Inline code and code blocks use the system monospace stack and warm/light-gray surfaces.
 - Code blocks scroll horizontally.
 - Blockquotes use a dark left border.
@@ -166,7 +182,7 @@ The parent installs one delegated click listener on the iframe document. `previe
 
 Anchor behavior is based on the raw `href` and the browser-resolved URL:
 
-- `#fragment` sends `stashbase-nav` for the current Markdown path and requested anchor.
+- `#fragment` preserves the iframe's fragment state, then sends `stashbase-nav` for the current Markdown path and requested anchor. The fragment keeps native `:target` presentation active while app state owns the scroll request.
 - Same-origin `/asset/*` links ending in `.md`, `.markdown`, `.html`, or `.htm` send `stashbase-nav` with the decoded folder-relative path and optional fragment.
 - Other same-origin `/asset/*` links send `stashbase-open-external`; linked PDFs, media, images, and other assets therefore open through the system external-open path rather than changing the app shell.
 - HTTP and HTTPS links send `stashbase-open-external`.
