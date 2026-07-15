@@ -137,7 +137,7 @@ Different formats have different read and search paths. The product rule is: kee
 | PDF | Derived Markdown | Derived Markdown |
 | DOCX | Derived HTML | Extracted clean text from derived HTML |
 
-Markdown is edited, read, and indexed directly.
+Markdown is edited, read, and indexed directly. The renderer's read-only preview pipeline, iframe boundary, asset resolution, and navigation behavior are described in [markdown-rendering.md](markdown-rendering.md).
 
 HTML stays as the source file. StashBase extracts clean text from HTML only as an indexing representation, so embedding and change tracking can operate on stable text. When an Agent reads an HTML file, it reads the original HTML.
 

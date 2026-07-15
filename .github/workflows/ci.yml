@@ -41,6 +41,9 @@ jobs:
       - name: Test release CI gate
         run: pnpm test:release-gate
 
+      - name: Test renderer
+        run: pnpm test:renderer
+
       - name: Typecheck server + mcp
         run: pnpm exec tsc --noEmit
 
