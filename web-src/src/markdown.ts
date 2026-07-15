@@ -3,36 +3,32 @@
  * legacy `editor-src/code-editor.js:renderMarkdown` so visual parity
  * is preserved across the migration.
  *
- * Headings get stable `id="h-N"` attributes so in-doc anchor links can
- * scroll-to via fragment nav. Styles are inlined because the iframe is
- * sandboxed and wouldn't inherit the host page's CSS anyway.
+ * Headings get stable, duplicate-safe slug IDs so in-doc anchor links can
+ * scroll to fragment targets. Styles are inlined because the iframe is
+ * sandboxed and would not inherit the host page's CSS anyway.
  */
-import { marked } from 'marked';
+import { Marked } from 'marked';
 
-// `breaks: true` makes single newlines render as <br> instead of
-// collapsing to folders. Matches GitHub / Obsidian default and "what you
-// see in the editor is what you see in the preview" — important for
-// transcripts and other line-per-thought notes where the author meant
-// the line break literally. Prose with soft-wrap at 72 columns is
-// uncommon enough in this app's audience to make it the right trade.
-marked.use({ gfm: true, breaks: true });
+const documentMarkdown = new Marked({ gfm: true, breaks: false });
+const inlineMarkdown = new Marked({ gfm: true, breaks: true });
 
 /** Markdown → HTML *fragment* (no `<html>`/`<style>` wrapper), for
  *  rendering inline inside the app's own DOM — chat bubbles use this so
  *  assistant prose, code blocks, and lists render in place rather than
  *  in a sandboxed iframe. Styling comes from the host page's CSS. */
 export function renderMarkdownInline(md: string): string {
-  return marked.parse(md ?? '', { async: false }) as string;
+  return inlineMarkdown.parse(md ?? '', { async: false }) as string;
 }
 
 export function renderMarkdown(md: string): string {
-  let html = marked.parse(md ?? '', { async: false }) as string;
-  const taken = new Map<string, number>();
+  let html = documentMarkdown.parse(md ?? '', { async: false }) as string;
+  const nextSuffix = new Map<string, number>();
+  const usedSlugs = new Set<string>();
   html = html.replace(
     /<h([1-6])(\s[^>]*)?>([\s\S]*?)<\/h\1>/g,
     (_match, level: string, attrs: string | undefined, inner: string) => {
       const text = stripInlineTags(inner).trim();
-      const id = nextSlug(text, taken);
+      const id = nextSlug(text, nextSuffix, usedSlugs);
       return `<h${level} id="${id}"${attrs ?? ''}>${inner}</h${level}>`;
     },
   );
@@ -51,11 +47,21 @@ export function slugifyHeading(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
-function nextSlug(text: string, taken: Map<string, number>): string {
+function nextSlug(
+  text: string,
+  nextSuffix: Map<string, number>,
+  usedSlugs: Set<string>,
+): string {
   const base = slugifyHeading(text) || 'section';
-  const n = taken.get(base) ?? 0;
-  taken.set(base, n + 1);
-  return n === 0 ? base : `${base}-${n}`;
+  let suffix = nextSuffix.get(base) ?? 0;
+  let candidate = suffix === 0 ? base : `${base}-${suffix}`;
+  while (usedSlugs.has(candidate)) {
+    suffix += 1;
+    candidate = `${base}-${suffix}`;
+  }
+  nextSuffix.set(base, suffix + 1);
+  usedSlugs.add(candidate);
+  return candidate;
 }
 
 function stripInlineTags(html: string): string {
@@ -124,4 +130,3 @@ img { max-width: 100%; height: auto; border-radius: 3px; }
 img[data-stashbase-previewable="true"] { cursor: zoom-in; }
 hr { border: 0; border-top: 1px solid rgb(236, 238, 241); margin: 1em 0; }
 `;
-
