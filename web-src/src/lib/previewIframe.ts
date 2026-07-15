@@ -51,6 +51,10 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
     const hash = raw.slice(1);
     if (!currentPath || !hash) return; // in-doc anchor without app context → let iframe handle it
     e.preventDefault();
+    // The app owns scrolling for same-file navigation, but preserve the
+    // iframe's native fragment state so :target styles and URL semantics work.
+    const iframeWindow = anchor.ownerDocument.defaultView;
+    if (iframeWindow) iframeWindow.location.hash = hash;
     window.postMessage({ type: 'stashbase-nav', path: currentPath, anchor: hash }, window.location.origin);
     return;
   }
