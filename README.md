@@ -293,7 +293,7 @@ Supported today:
 Reasonably stable:
 
 - Local folder library model
-- Markdown, HTML, PDF, and image handling
+- Markdown preview with accessible footnotes, plus HTML, PDF, and image handling
 - PDF extraction and image OCR, with persisted failures and retry
 - Semantic and keyword search
 - MCP server and client connectors
