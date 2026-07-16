@@ -2,7 +2,14 @@ import sanitizeHtml from 'sanitize-html';
 
 /** Applies the document-preview trust policy to parsed Markdown HTML. */
 export function sanitizeMarkdownHtml(html: string): string {
-  return sanitizeHtml(html, MARKDOWN_SANITIZE_OPTIONS);
+  return addAlertLandmarks(sanitizeHtml(html, MARKDOWN_SANITIZE_OPTIONS));
+}
+
+function addAlertLandmarks(html: string): string {
+  return html.replace(
+    /<div class="markdown-alert markdown-alert-(note|tip|important|warning|caution)">/g,
+    (_match, variant: string) => `<div class="markdown-alert markdown-alert-${variant}" role="note" aria-label="${variant[0].toUpperCase()}${variant.slice(1)}">`,
+  );
 }
 
 const MARKDOWN_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
@@ -12,11 +19,11 @@ const MARKDOWN_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     'div', 'dl', 'dt', 'em', 'figcaption', 'figure', 'h1', 'h2', 'h3',
     'h4', 'h5', 'h6', 'hr', 'i', 'img', 'input', 'ins', 'kbd', 'li',
     'main', 'mark', 'ol', 'p', 'pre', 'q', 's', 'samp', 'section', 'small',
-    'span', 'strong', 'sub', 'summary', 'sup', 'table', 'tbody', 'td',
-    'tfoot', 'th', 'thead', 'tr', 'u', 'ul', 'var',
+    'span', 'strong', 'sub', 'summary', 'sup', 'svg', 'table', 'tbody', 'td',
+    'tfoot', 'th', 'thead', 'tr', 'u', 'ul', 'var', 'path',
   ],
   allowedAttributes: {
-    '*': ['id', 'title', 'dir', 'lang', 'aria-*'],
+    '*': ['id', 'title', 'dir', 'lang', 'aria-*', 'role'],
     a: ['href', 'data-footnote:ref', 'data-footnote:backref', 'aria-describedby'],
     blockquote: ['cite'],
     code: ['class'],
@@ -33,11 +40,16 @@ const MARKDOWN_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     td: ['colspan', 'rowspan', 'headers', 'align'],
     th: ['colspan', 'rowspan', 'headers', 'scope', 'align'],
     section: ['class', 'data-footnotes'],
+    svg: ['class', 'viewbox', 'width', 'height', 'aria-hidden'],
+    path: ['d'],
     ul: ['class'],
   },
   allowedClasses: {
     section: ['footnotes'],
     h2: ['sr-only'],
+    div: [/^markdown-alert(?:-(?:note|tip|important|warning|caution))?$/],
+    p: ['markdown-alert-title'],
+    svg: ['octicon', 'mr-2', /^octicon-[a-z-]+$/],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   allowedSchemesByTag: {
