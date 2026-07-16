@@ -91,7 +91,7 @@ The file system is the source of truth. Converted content, indexes, and app stat
 User-visible files stay in the folder tree. StashBase has one user-level config file under the user's home directory. Derived state stays in AppData.
 
 ```text
-~/.stashbase/config.json          # user-level app config: library folders, descriptions, API key
+~/.stashbase/config.json          # user-level app config: library folders, descriptions, API key, HTTP MCP settings
 ~/.stashbase/bin/stashbase-mcp    # generated MCP launcher wrapper (macOS/Linux)
 %USERPROFILE%\.stashbase\bin\stashbase-mcp.cmd  # generated MCP launcher wrapper (Windows)
 
@@ -117,7 +117,7 @@ Deleting derived state may require re-conversion or re-embedding, but it should 
 
 ## 3.2 App Config
 
-`~/.stashbase/config.json` is the only persistent StashBase app config file. It stores user-level configuration such as the folders in the local library, optional folder descriptions, the OpenAI API key, and first-run seed state.
+`~/.stashbase/config.json` is the only persistent StashBase app config file. It stores user-level configuration such as the folders in the local library, optional folder descriptions, the OpenAI API key, the HTTP MCP bearer token, Docker-access preference and port, and first-run seed state. Settings is the management surface for credentials. Config writes use owner-only file and directory modes on POSIX; Windows uses the user's profile ACL rather than POSIX mode bits.
 
 MCP client configuration is not stored in StashBase config. The Settings UI calls the server over HTTP; the server writes the target client's own config file when one-click setup is supported and generates the platform launcher command (`~/.stashbase/bin/stashbase-mcp` on macOS/Linux, `%USERPROFILE%\.stashbase\bin\stashbase-mcp.cmd` on Windows).
 
@@ -281,13 +281,13 @@ One machine runs one StashBase library through one MCP server.
 
 External clients and the built-in Agent panel use the same MCP server while the StashBase app is running. CLI-backed panels rely on the same local client configuration that Settings writes; there is no separate built-in MCP path.
 
-The server is reachable over two transports that share one implementation: `mcp/library-server.ts` owns the tool definitions and handlers, `mcp/server.ts` connects them to stdio for spawned clients, and `server/routes/mcp-http.ts` serves them at `POST /mcp` (Streamable HTTP, stateless) for clients that can only attach to a URL. Both paths forward every tool call to the same `/api/library/*` routes. The HTTP endpoint stays on the loopback bind and requires a bearer token from `~/.stashbase/mcp-http-token`; same-machine Docker clients reach it as `http://host.docker.internal:<port>/mcp`.
+The server is reachable over two transports that share one implementation: `mcp/library-server.ts` owns the tool definitions and handlers, `mcp/server.ts` connects them to stdio for spawned clients, and `server/routes/mcp-http.ts` serves stateless Streamable HTTP at `POST /mcp`. Both paths forward every tool call to the same `/api/library/*` routes. `server/mcp-http-settings.ts` owns the Settings-managed bearer token, Docker preference, and configurable Docker port in `config.json`; `server/mcp-http-service.ts` owns listener lifecycle. The app server always mounts the token-gated endpoint on its loopback port. Docker access is explicit opt-in and uses a separate `0.0.0.0` listener whose Express app mounts only `/mcp`, so enabling it does not expose the rest of the StashBase API. Listener transitions are serialized and persistence failures roll exposure changes back. Settings reports desired/active state and bind/config errors, and token rotation takes effect on the next request without a restart. `server/shutdown-cleanup.ts` isolates listener, conversion, state database, and indexer cleanup so one failed close cannot skip later owners.
 
 If the StashBase app is not running, the MCP server is unavailable in V1. This keeps process ownership simple.
 
 ## 7.3 Permissions
 
-The stdio transport has no separate auth layer. This follows the local-first assumption: a spawned stdio server is reachable only by the client that spawned it, which is trusted as the local user. The HTTP transport is different: a loopback URL can be probed by any local process or rebound browser page without spawning anything, so `POST /mcp` requires the bearer token from `~/.stashbase/mcp-http-token` (0600) — possession of the token file is what marks a caller as the local user.
+The stdio transport has no separate auth layer. This follows the local-first assumption: a spawned stdio server is reachable only by the client that spawned it, which is trusted as the local user. The HTTP transport is different: every `POST /mcp` requires the bearer token shown in Settings. The loopback app server retains its Origin allowlist, and the Docker-only listener does not enable browser CORS, so this is a server-client transport rather than a browser-page API. Enabling Docker access makes the MCP-only port reachable on host interfaces; the explicit toggle and bearer token are therefore both required.
 
 The practical permission boundary in V1 is the opened-folder set. MCP file helpers cannot read or write outside those folders.
 

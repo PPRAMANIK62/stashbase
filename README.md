@@ -166,14 +166,15 @@ command = "C:\\Users\\YOUR_USER\\.stashbase\\bin\\stashbase-mcp.cmd"
 
 #### URL-based clients (Streamable HTTP)
 
-Clients that cannot spawn a local process (self-hosted agent platforms in Docker, web-based agents) can attach to the same tool surface at:
+Server-side clients that cannot spawn a local process can use Streamable HTTP. Open **Settings -> MCP -> URL access** to copy the current URL and bearer token. Requests send:
 
 ```text
-http://127.0.0.1:8090/mcp                    # same machine
-http://host.docker.internal:8090/mcp         # from a Docker container on this machine
+Authorization: Bearer <token shown in Settings>
 ```
 
-Requests need `Authorization: Bearer <token>`; the token is generated on first use at `~/.stashbase/mcp-http-token`. The endpoint listens on the loopback interface only and is stateless (plain JSON-RPC over POST).
+Same-machine access uses `http://127.0.0.1:8090/mcp` and stays on loopback. Docker access is disabled by default. Enabling it in Settings opens a separate token-gated, MCP-only listener at `http://host.docker.internal:8091/mcp` by default; disable Docker access first to choose another port in Settings. No other StashBase API is exposed on that port. Docker Desktop or the host firewall must allow the selected port. Native Linux Docker Engine also needs `--add-host=host.docker.internal:host-gateway` (or the equivalent Compose `extra_hosts` entry). Browser-page clients are intentionally unsupported by the Origin/CORS boundary.
+
+The token is stored in `~/.stashbase/config.json`, shown and rotated only through Settings, and checked on every request. The endpoint is stateless JSON-RPC over POST; rotating the token immediately invalidates the old value.
 
 Restart the client after changing MCP config.
 
@@ -199,7 +200,7 @@ It is mainly a convenience layer:
 Local files are the source of truth.
 
 ```text
-~/.stashbase/config.json          # app-level config: library folders, MCP clients, embedder settings
+~/.stashbase/config.json          # app-level config: library folders, embedder key, HTTP MCP settings
 
 <folder>/
   paper.pdf                       # user file
