@@ -55,13 +55,13 @@ test('document renderer preserves links, images, escapes, entities, and code', (
   assert.match(document, /<pre><code>indented code\n<\/code><\/pre>/);
 });
 
-test('document headings have deterministic duplicate-safe Unicode anchors', () => {
-  const document = renderMarkdown('# Café 世界\n\n# Café 世界\n\n# !!!\n\n# !!!');
+test('document headings have deterministic duplicate-safe GitHub anchors', () => {
+  const document = renderMarkdown('# Café 世界\n\n# Café 世界\n\n# Release notes!\n\n# Release notes!');
 
   assert.match(document, /<h1 id="café-世界">Café 世界<\/h1>/);
   assert.match(document, /<h1 id="café-世界-1">Café 世界<\/h1>/);
-  assert.match(document, /<h1 id="section">!!!<\/h1>/);
-  assert.match(document, /<h1 id="section-1">!!!<\/h1>/);
+  assert.match(document, /<h1 id="release-notes">Release notes!<\/h1>/);
+  assert.match(document, /<h1 id="release-notes-1">Release notes!<\/h1>/);
 });
 
 test('document heading anchors avoid collisions with generated suffixes', () => {

@@ -17,7 +17,7 @@ const MARKDOWN_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   ],
   allowedAttributes: {
     '*': ['id', 'title', 'dir', 'lang', 'aria-*'],
-    a: ['href', 'class'],
+    a: ['href', 'data-footnote-ref', 'data-footnote-backref', 'aria-describedby'],
     blockquote: ['cite'],
     code: ['class'],
     col: ['span'],
@@ -32,14 +32,12 @@ const MARKDOWN_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
     q: ['cite'],
     td: ['colspan', 'rowspan', 'headers', 'align'],
     th: ['colspan', 'rowspan', 'headers', 'scope', 'align'],
-    section: ['class'],
-    sup: ['class'],
+    section: ['class', 'data-footnotes'],
     ul: ['class'],
   },
   allowedClasses: {
-    a: ['footnote-backref'],
     section: ['footnotes'],
-    sup: ['footnote-ref'],
+    h2: ['sr-only'],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   allowedSchemesByTag: {
