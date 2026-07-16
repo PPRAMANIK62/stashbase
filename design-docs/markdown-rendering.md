@@ -66,7 +66,7 @@ const documentMarkdown = new Marked({
   gfm: true,
   breaks: false,
 });
-documentMarkdown.use(markedFootnote(), gfmHeadingId());
+documentMarkdown.use(markedFootnote({ prefixId: 'footnote:' }), gfmHeadingId(), markedAlert());
 const inlineMarkdown = new Marked({ gfm: true, breaks: true });
 ```
 
@@ -85,11 +85,13 @@ The current preview renders Marked's standard block and inline constructs:
 - GFM tables and alignment attributes.
 - Escapes, entities, and allowlisted raw HTML.
 
-Document preview additionally recognizes `marked-footnote`'s GFM `[^label]` references and `[^label]: definition` blocks. Referenced definitions appear in one trailing semantic footnote section. Its `footnote:` ID prefix is disjoint from GitHub heading slugs, so footnote targets cannot collide with generated heading anchors. The package generates a screen-reader-only section label, reference and backlink data attributes, unique repeated-reference IDs, and backlinks to every originating reference. This extension exists only on the document parser, so inline Agent output treats footnote syntax as ordinary text.
+Document preview removes valid, explicitly closed leading YAML frontmatter before parsing. It leaves malformed or unterminated delimiters as visible source. It additionally recognizes `marked-footnote`'s GFM `[^label]` references and `[^label]: definition` blocks. Referenced definitions appear in one trailing semantic footnote section. Its `footnote:` ID prefix is disjoint from GitHub heading slugs, so footnote targets cannot collide with generated heading anchors. The package generates a screen-reader-only section label, reference and backlink data attributes, unique repeated-reference IDs, and backlinks to every originating reference. This extension exists only on the document parser, so inline Agent output treats footnote syntax as ordinary text.
+
+The document parser also uses `marked-alert` for standard GitHub alert blockquotes: `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, and `CAUTION`. Their package-native icon and title markup survives the sanitizer; the outer alert receives a readable landmark label and preview-local color treatment. Alert parsing and styling are document-only, so Agent-message Markdown keeps the source blockquote syntax.
 
 Fenced-code language labels are retained as `language-*` classes. No syntax-highlighting pass runs over those classes.
 
-Marked passes raw HTML into the parsed body, then `sanitize-html` applies a document-oriented allowlist before the preview document is assembled. It preserves ordinary structural and presentational elements, including tables, links, images, `details`, `summary`, `kbd`, `mark`, `sub`, and `sup`. It removes scripts, styles, frames and embedded content, forms, metadata, event-handler and inline-style attributes, frame targets, and non-HTTP(S) image protocols. Relative URLs remain valid; links additionally allow `mailto:`. Task-list inputs are normalized to disabled checkboxes. YAML frontmatter has no preview-specific handling, and the renderer has no implementations for wikilinks, embeds, callouts, math, Mermaid, definition lists, emoji shortcodes, MDX, or explicit heading-attribute syntax.
+Marked passes raw HTML into the parsed body, then `sanitize-html` applies a document-oriented allowlist before the preview document is assembled. It preserves ordinary structural and presentational elements, including tables, links, images, `details`, `summary`, `kbd`, `mark`, `sub`, and `sup`, plus the restricted SVG elements and classes emitted by `marked-alert`. It removes scripts, styles, frames and embedded content, forms, metadata, event-handler and inline-style attributes, frame targets, and non-HTTP(S) image protocols. Relative URLs remain valid; links additionally allow `mailto:`. Task-list inputs are normalized to disabled checkboxes. The renderer has no implementations for wikilinks, embeds, math, Mermaid, definition lists, emoji shortcodes, MDX, or explicit heading-attribute syntax.
 
 ## 5. Heading IDs and anchors
 
@@ -125,7 +127,7 @@ The iframe does not inherit the host page's styles, so all Markdown typography i
 - Footnote references use compact superscript links. The trailing footnote section uses smaller muted text, highlights the targeted entry, and gives references and backlinks a visible keyboard-focus outline.
 - Inline code and code blocks use the system monospace stack and warm/light-gray surfaces.
 - Code blocks scroll horizontally.
-- Blockquotes use a dark left border.
+- Blockquotes use a dark left border. GitHub alert blocks use preview-local colored borders, backgrounds, icons, and readable titles.
 - Lists, tables, table headers, images, and horizontal rules receive preview-local spacing and borders.
 - Images are limited to the reading-column width and keep their aspect ratio.
 - Images marked previewable use a zoom-in cursor.

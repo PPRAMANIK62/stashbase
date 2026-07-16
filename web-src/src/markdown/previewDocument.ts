@@ -61,6 +61,20 @@ blockquote {
   border-left: 3px solid rgb(55, 53, 47);
   color: inherit;
 }
+.markdown-alert {
+  --alert-color: #0969da;
+  --alert-background: #ddf4ff;
+  margin: 1em 0; padding: 12px 16px;
+  border-left: 4px solid var(--alert-color); border-radius: 4px;
+  background: var(--alert-background);
+}
+.markdown-alert-title { display: flex; align-items: center; gap: 0.45em; margin: 0; font-weight: 700; color: var(--alert-color); }
+.markdown-alert-title svg { width: 1em; height: 1em; fill: currentColor; flex: 0 0 auto; }
+.markdown-alert > :not(.markdown-alert-title) { margin: 0.55em 0 0; }
+.markdown-alert-tip { --alert-color: #1a7f37; --alert-background: #dafbe1; }
+.markdown-alert-important { --alert-color: #8250df; --alert-background: #fbefff; }
+.markdown-alert-warning { --alert-color: #9a6700; --alert-background: #fff8c5; }
+.markdown-alert-caution { --alert-color: #cf222e; --alert-background: #ffebe9; }
 ul, ol { padding-left: 1.6em; margin: 0.9em 0; }
 li { margin: 0.35em 0; }
 table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.95em; }
