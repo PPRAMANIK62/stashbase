@@ -10,8 +10,6 @@ The implementation is split across these renderer modules:
 
 - [`web-src/src/markdown.ts`](../web-src/src/markdown.ts) is the stable rendering seam. It exports only the document and inline rendering functions used by callers.
 - [`web-src/src/markdown/documentRenderer.ts`](../web-src/src/markdown/documentRenderer.ts) owns the ordered document transformation pipeline.
-- [`web-src/src/markdown/footnotes.ts`](../web-src/src/markdown/footnotes.ts) owns document-only footnote extraction, Marked configuration, reference state, and footnote-section rendering.
-- [`web-src/src/markdown/headingIds.ts`](../web-src/src/markdown/headingIds.ts) owns deterministic heading IDs and the shared slug shape.
 - [`web-src/src/markdown/sanitization.ts`](../web-src/src/markdown/sanitization.ts) owns the document HTML allowlist and task-checkbox normalization.
 - [`web-src/src/markdown/previewDocument.ts`](../web-src/src/markdown/previewDocument.ts) owns the complete iframe document wrapper and preview-local CSS.
 - [`web-src/src/components/MarkdownPreview.tsx`](../web-src/src/components/MarkdownPreview.tsx) owns iframe installation and preview-specific DOM integration.
@@ -42,11 +40,9 @@ The read-only render path is synchronous until the browser installs the generate
 ```text
 folder-relative name + source Markdown
   -> renderMarkdown(content)
-       -> extract document-only footnote definitions
-       -> configured document Marked instance parses content and footnote references
-       -> append the referenced footnote section and backlinks
+       -> configured document Marked instance parses content with package-native footnotes and heading IDs
        -> sanitize parsed body fragment
-       -> heading-ID post-pass
+       -> normalize raw HTML and generated heading IDs in one GitHub-style namespace
        -> complete HTML document + inline preview CSS
   -> injectAssetBase(document, assetBaseUrl(name))
   -> iframe srcDoc
@@ -63,14 +59,14 @@ React's iframe `onLoad` prop is not used. A native `load` listener is installed 
 
 ## 4. Markdown parser and emitted HTML
 
-The parser is `marked` 18.0.3. Inline parsing keeps its own configured instance; each document render creates a configured parser with a preview-only footnote reference extension:
+The parser is `marked` 18.0.3. Inline parsing keeps its own configured instance; each document render creates a configured parser with the document-only `marked-footnote` and `marked-gfm-heading-id` extensions:
 
 ```ts
 const documentMarkdown = new Marked({
   gfm: true,
   breaks: false,
-  extensions: [footnotes.referenceExtension()],
 });
+documentMarkdown.use(markedFootnote(), gfmHeadingId());
 const inlineMarkdown = new Marked({ gfm: true, breaks: true });
 ```
 
@@ -89,9 +85,7 @@ The current preview renders Marked's standard block and inline constructs:
 - GFM tables and alignment attributes.
 - Escapes, entities, and allowlisted raw HTML.
 
-Document preview additionally recognizes named `[^label]` references and `[^label]: definition` blocks. Footnote extraction normalizes CRLF and CR source to LF before scanning. A definition can continue on four-space- or tab-indented lines, including blank-separated paragraphs and block Markdown. Definitions inside fenced code or raw HTML blocks, references inside code, escaped or malformed references, references nested inside another footnote body, and references without a matching definition remain literal. Labels are matched case-insensitively after whitespace normalization.
-
-Only referenced definitions appear in one trailing `<section aria-label="Footnotes">`. Footnote numbers follow first-reference order. Each definition has a stable slug-based entry ID; slug collisions receive deterministic numeric suffixes. Every reference gets its own ID, repeated references point to the same definition without duplicating its body, and the definition ends with an accessible backlink to every originating reference. This extension exists only on the document parser, so inline Agent output treats footnote syntax as ordinary text.
+Document preview additionally recognizes `marked-footnote`'s GFM `[^label]` references and `[^label]: definition` blocks. Referenced definitions appear in one trailing semantic footnote section. Its `footnote:` ID prefix is disjoint from GitHub heading slugs, so footnote targets cannot collide with generated heading anchors. The package generates a screen-reader-only section label, reference and backlink data attributes, unique repeated-reference IDs, and backlinks to every originating reference. This extension exists only on the document parser, so inline Agent output treats footnote syntax as ordinary text.
 
 Fenced-code language labels are retained as `language-*` classes. No syntax-highlighting pass runs over those classes.
 
@@ -99,19 +93,7 @@ Marked passes raw HTML into the parsed body, then `sanitize-html` applies a docu
 
 ## 5. Heading IDs and anchors
 
-After Marked returns HTML and the body fragment is sanitized, `renderMarkdown()` runs a regular-expression pass over every `<h1>` through `<h6>`. It strips inline HTML tags from the heading body, decodes a small fixed set of HTML entities, and builds a slug from the resulting text. Any author-supplied heading `id` is removed before the generated ID is installed.
-
-Slug generation:
-
-1. Lowercases the text.
-2. Retains Unicode letters, Unicode numbers, spaces, and hyphens.
-3. Removes other punctuation.
-4. Converts whitespace runs to `-`.
-5. Collapses repeated hyphens.
-6. Removes leading and trailing hyphens.
-7. Uses `section` when the result is empty.
-
-The first heading with a slug uses the base ID. Later duplicates append `-1`, `-2`, and so on, skipping any candidate already emitted for another heading base. Both the duplicate counters and the emitted-ID set are local to one document render, so every generated ID is deterministic and unique within that document.
+`marked-gfm-heading-id` generates GitHub-style IDs during document parsing. The raw-HTML renderer removes author-supplied heading IDs before sanitization, then a post-sanitization pass regenerates raw HTML and Markdown heading IDs in one GitHub-style namespace and suffixes collisions. The package footnote label retains its reserved ID so references and accessible descriptions remain intact. Inline Agent output does not install the extension and therefore does not gain heading IDs.
 
 The generated ID is used by same-file links, cross-file links with fragments, outline/search-driven pending anchors, and `scrollIntoView()`. The renderer does not recognize `{#custom-id}` as explicit heading metadata; it remains heading text and contributes to the generated slug.
 
