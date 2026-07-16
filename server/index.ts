@@ -51,7 +51,8 @@ import { mount as mountIndexingRoutes } from './routes/indexing.ts';
 import { mount as mountLibraryFileRoutes } from './routes/library-files.ts';
 import { mount as mountTerminalRoutes } from './routes/terminal.ts';
 import { mount as mountMcpRoutes } from './routes/mcp.ts';
-import { mount as mountMcpHttpRoutes } from './routes/mcp-http.ts';
+import { createMcpHttpService } from './mcp-http-service.ts';
+import { runShutdownCleanup } from './shutdown-cleanup.ts';
 import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 
@@ -109,6 +110,7 @@ ensureFolderHome();
 // spawning its own (clean Milvus lock).
 
 const app = express();
+const mcpHttpService = createMcpHttpService({ webPort: PORT });
 app.use(express.json({ limit: '10mb' }));
 app.use(withWindowContext);
 
@@ -211,7 +213,8 @@ if (!DEV_VITE) {
         req.path === '/api' ||
         req.path.startsWith('/api/') ||
         req.path === '/asset' ||
-        req.path.startsWith('/asset/')
+        req.path.startsWith('/asset/') ||
+        req.path === '/mcp'
       ) {
         return next();
       }
@@ -252,8 +255,8 @@ mountAttachRoutes(app);
 mountIndexingRoutes(app);
 mountLibraryFileRoutes(app);
 mountTerminalRoutes(app);
-mountMcpRoutes(app);
-mountMcpHttpRoutes(app, PORT); // POST /mcp — token-gated Streamable HTTP for URL-only MCP clients
+mountMcpRoutes(app, mcpHttpService);
+mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in and MCP-only
 mountSessionsRoutes(app); // global (no requireFolder) — lists all local sessions
 mountCodexSessionsRoutes(app); // global (no requireFolder) — filters to current folder when open
 
@@ -293,6 +296,9 @@ if (viteProxy) app.use(viteProxy);
 
 const server = app.listen(PORT, '127.0.0.1', () => {
   log.info(`listening on http://127.0.0.1:${PORT}`);
+  void mcpHttpService.start().catch((err: unknown) => {
+    log.warn(`MCP HTTP startup failed: ${err instanceof Error ? err.message : String(err)}`);
+  });
   if (DEV_VITE) log.info(`dev-proxy → vite at http://localhost:${VITE_PORT}`);
   // We own :8090 now → we're THE server. Reap any orphan daemon left by a
   // previous server that died hard (kill -9 / crash / lost the startup
@@ -461,12 +467,18 @@ async function shutdown(reason: string): Promise<void> {
   // another ~3.5 s. Exit anyway if either side wedges.
   const exitTimer = setTimeout(() => process.exit(0), 6500);
   try {
-    const cancelled = await cancelAllConversions();
-    if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} conversion(s)`);
-    try { closeStateDb(); } catch { /* swallow */ }
-    await indexer.close();
-  } catch (err: unknown) {
-    log.warn(`shutdown: indexer.close failed: ${err instanceof Error ? err.message : String(err)}`);
+    await runShutdownCleanup({
+      closeMcp: () => mcpHttpService.close(),
+      cancelConversions: cancelAllConversions,
+      closeStateDb,
+      closeIndexer: () => indexer.close(),
+      onCancelled: (cancelled) => {
+        if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} conversion(s)`);
+      },
+      onError: (step, err) => {
+        log.warn(`shutdown: ${step} cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    });
   } finally {
     clearTimeout(exitTimer);
     process.exit(0);

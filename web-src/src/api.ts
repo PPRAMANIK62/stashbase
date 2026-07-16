@@ -219,6 +219,17 @@ export interface EmbedderState {
   hasKey: boolean;
 }
 
+export interface McpHttpStatus {
+  loopbackUrl: string;
+  dockerUrl: string;
+  dockerPort: number;
+  token: string | null;
+  dockerAccess: boolean;
+  dockerActive: boolean;
+  dockerError?: string;
+  settingsError?: string;
+}
+
 
 export interface Agent {
   id: string;
@@ -511,7 +522,14 @@ export const api = {
       clients: Record<string, boolean | { configured?: boolean; cliInstalled?: boolean; restartRequired?: boolean }>;
       command: string;
       config: unknown;
+      http: McpHttpStatus;
     }>('/api/mcp/status'),
+  rotateMcpHttpToken: () =>
+    send<{ ok: true; http: McpHttpStatus }>('POST', '/api/mcp/http/token'),
+  setMcpDockerAccess: (enabled: boolean) =>
+    send<{ ok: true; http: McpHttpStatus }>('PUT', '/api/mcp/http/docker-access', { enabled }),
+  setMcpDockerPort: (port: number) =>
+    send<{ ok: true; http: McpHttpStatus }>('PUT', '/api/mcp/http/docker-port', { port }),
   // `send` throws ApiError on any non-2xx, so a resolved value is always
   // the success shape — no `error` field, `ok` is always true.
   configureMcp: (client: string) =>

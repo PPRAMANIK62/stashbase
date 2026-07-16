@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { sendError } from '../http.ts';
 import { checkCliInstalled } from '../terminal.ts';
+import type { McpHttpService } from '../mcp-http-service.ts';
 
 const APP_ROOT = process.env.STASHBASE_APP_ROOT
   ? path.resolve(process.env.STASHBASE_APP_ROOT)
@@ -13,7 +14,7 @@ const MCP_ENTRY = fs.existsSync(path.join(APP_ROOT, 'dist', 'mcp', 'server.mjs')
   ? path.join(APP_ROOT, 'dist', 'mcp', 'server.mjs')
   : path.join(APP_ROOT, 'mcp', 'server.ts');
 
-export function mount(app: express.Express): void {
+export function mount(app: express.Express, httpService: McpHttpService): void {
   app.get('/api/mcp/status', (_req, res) => {
     try {
       // Ensure the launcher exists so the inline config we hand back actually
@@ -25,10 +26,43 @@ export function mount(app: express.Express): void {
         ),
         command: wrapper,
         config: getStandardMcpJson(wrapper),
+        http: httpService.status(),
       });
     } catch (err: unknown) {
       sendError(res, err);
     }
+  });
+
+  app.post('/api/mcp/http/token', (_req, res) => {
+    try {
+      res.json({ ok: true, http: httpService.rotateToken() });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  app.put('/api/mcp/http/docker-access', (req, res) => {
+    if (typeof req.body?.enabled !== 'boolean') {
+      res.status(400).json({ error: '`enabled` must be a boolean', code: 'BAD_REQUEST' });
+      return;
+    }
+    void httpService.setDockerAccess(req.body.enabled)
+      .then((http) => res.json({ ok: true, http }))
+      .catch((err: unknown) => sendError(res, err));
+  });
+
+  app.put('/api/mcp/http/docker-port', (req, res) => {
+    const port = req.body?.port;
+    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
+      res.status(400).json({
+        error: '`port` must be an integer from 1024 to 65535',
+        code: 'BAD_REQUEST',
+      });
+      return;
+    }
+    void httpService.setDockerPort(port)
+      .then((http) => res.json({ ok: true, http }))
+      .catch((err: unknown) => sendError(res, err));
   });
 
   app.post('/api/mcp/configure', (req, res) => {

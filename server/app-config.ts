@@ -1,6 +1,7 @@
 /**
- * App-level config persistence — the single `~/.stashbase/config.json`
- * (0600). This module owns the file primitives and the user-preference
+ * App-level config persistence — the single `~/.stashbase/config.json`.
+ * Writes enforce owner-only POSIX permissions; Windows relies on the user's
+ * profile ACL. This module owns the file primitives and the user-preference
  * accessors (API keys, terminal CLI, embedder provider); `folder.ts`
  * reuses the same primitives for library membership. Extracted from folder.ts:
  * credentials and preferences have nothing to do with the folder registry, and
@@ -54,19 +55,40 @@ export interface AppConfigFile {
    *  it stays true even if the user later deletes the folder, so we
    *  never recreate it behind their back. See `seedBuiltinFolder`. */
   builtinSeeded?: boolean;
+  /** Settings-managed bearer credential and explicit exposure preference for
+   *  the Streamable HTTP MCP transport. The token lives beside the existing
+   *  API key so config.json remains the only persistent app config file. */
+  mcpHttp?: {
+    token?: string;
+    dockerAccess?: boolean;
+    dockerPort?: number;
+  };
 }
 
-export function readAppConfig(): AppConfigFile {
+export function readAppConfigStrict(): AppConfigFile {
   try {
     const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(`${CONFIG_FILE} must contain a JSON object`);
+    }
     // Migrate `recentVaults` → `recentFolders` on read so legacy users
     // don't lose their list when the rename rolls out.
     if (parsed.recentVaults && !parsed.recentFolders) {
       parsed.recentFolders = parsed.recentVaults;
     }
     return parsed as AppConfigFile;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return {};
+    const detail = err instanceof SyntaxError ? `invalid JSON: ${err.message}`
+      : err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not read ${CONFIG_FILE}: ${detail}`, { cause: err });
+  }
+}
+
+export function readAppConfig(): AppConfigFile {
+  try {
+    return readAppConfigStrict();
   } catch {
     return {};
   }
@@ -88,11 +110,17 @@ export function writeAppConfig(cfg: AppConfigFile): void {
 
 export function writeAppConfigStrict(cfg: AppConfigFile): void {
   fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  if (process.platform !== 'win32') {
+    try { fs.chmodSync(CONFIG_DIR, 0o700); } catch { /* best effort on special filesystems */ }
+  }
   const tmp = `${CONFIG_FILE}.${process.pid}.${Date.now()}.tmp`;
   try {
     // 0600 — config may carry API keys; keep it owner-only.
     fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmp, CONFIG_FILE);
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(CONFIG_FILE, 0o600); } catch { /* best effort on special filesystems */ }
+    }
   } catch (err) {
     try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
     throw err;

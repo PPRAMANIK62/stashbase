@@ -408,6 +408,63 @@
       line-height: 1.45;
     }
 
+    .mcp-http-settings {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+
+    .mcp-http-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-top: 10px;
+    }
+
+    .mcp-http-field > label {
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+
+    .mcp-http-field-controls {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .mcp-http-field-controls .settings-text-input {
+      height: 32px;
+    }
+
+    .mcp-config-copy.mcp-http-copy {
+      width: 32px;
+      height: 32px;
+      flex: 0 0 32px;
+    }
+
+    .mcp-http-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .mcp-http-docker-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--fg);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .mcp-http-docker-toggle input {
+      accent-color: var(--accent);
+    }
+
     .mcp-other {
       margin-top: 18px;
       display: flex;
