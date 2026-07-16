@@ -42,6 +42,7 @@ folder-relative name + source Markdown
   -> renderMarkdown(content)
        -> configured document Marked instance parses content with package-native footnotes and heading IDs
        -> sanitize parsed body fragment
+       -> normalize raw HTML and generated heading IDs in one GitHub-style namespace
        -> complete HTML document + inline preview CSS
   -> injectAssetBase(document, assetBaseUrl(name))
   -> iframe srcDoc
@@ -92,7 +93,7 @@ Marked passes raw HTML into the parsed body, then `sanitize-html` applies a docu
 
 ## 5. Heading IDs and anchors
 
-`marked-gfm-heading-id` generates GitHub-style IDs during document parsing. The extension resets its slugger for each document render, so IDs are deterministic within a preview; duplicate headings receive numeric suffixes. Inline Agent output does not install the extension and therefore does not gain heading IDs.
+`marked-gfm-heading-id` generates GitHub-style IDs during document parsing. The raw-HTML renderer removes author-supplied heading IDs before sanitization, then a post-sanitization pass regenerates raw HTML and Markdown heading IDs in one GitHub-style namespace and suffixes collisions. The package footnote label retains its reserved ID so references and accessible descriptions remain intact. Inline Agent output does not install the extension and therefore does not gain heading IDs.
 
 The generated ID is used by same-file links, cross-file links with fragments, outline/search-driven pending anchors, and `scrollIntoView()`. The renderer does not recognize `{#custom-id}` as explicit heading metadata; it remains heading text and contributes to the generated slug.
 

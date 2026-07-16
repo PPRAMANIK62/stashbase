@@ -71,3 +71,21 @@ test('document heading anchors avoid collisions with generated suffixes', () => 
   assert.match(document, /<h1 id="foo-1">Foo-1<\/h1>/);
   assert.match(document, /<h1 id="foo-2">Foo<\/h1>/);
 });
+
+test('raw HTML and Markdown headings share one duplicate-safe ID registry', () => {
+  const document = renderMarkdown('<h1 id="raw-heading">Raw Heading</h1>\n\n# Raw Heading\n\n<h1 id="foo-1">Foo</h1>\n\n# Foo\n\n# Foo');
+
+  assert.equal(document.match(/id="raw-heading"/g)?.length, 1);
+  assert.match(document, /<h1 id="raw-heading-1">Raw Heading<\/h1>/);
+  assert.equal(document.match(/id="foo-1"/g)?.length, 1);
+  assert.match(document, /<h1 id="foo">Foo<\/h1>/);
+  assert.match(document, /<h1 id="foo-2">Foo<\/h1>/);
+});
+
+test('raw heading IDs cannot collide with package footnote targets', () => {
+  const document = renderMarkdown('<section class="footnotes" data-footnotes><h2 id="footnote:label" class="sr-only">Raw Heading</h2></section>\n\nText[^note].\n\n[^note]: Detail.');
+
+  assert.match(document, /<h2 id="raw-heading" class="sr-only">Raw Heading<\/h2>/);
+  assert.match(document, /aria-describedby="footnote:label"/);
+  assert.equal(document.match(/id="footnote:label"/g)?.length, 1);
+});
