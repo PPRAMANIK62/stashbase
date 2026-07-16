@@ -84,7 +84,7 @@ The current preview renders Marked's standard block and inline constructs:
 - GFM tables and alignment attributes.
 - Escapes, entities, and allowlisted raw HTML.
 
-Document preview additionally recognizes `marked-footnote`'s GFM `[^label]` references and `[^label]: definition` blocks. Referenced definitions appear in one trailing semantic footnote section. The package generates a screen-reader-only section label, reference and backlink data attributes, unique repeated-reference IDs, and backlinks to every originating reference. This extension exists only on the document parser, so inline Agent output treats footnote syntax as ordinary text.
+Document preview additionally recognizes `marked-footnote`'s GFM `[^label]` references and `[^label]: definition` blocks. Referenced definitions appear in one trailing semantic footnote section. Its `footnote:` ID prefix is disjoint from GitHub heading slugs, so footnote targets cannot collide with generated heading anchors. The package generates a screen-reader-only section label, reference and backlink data attributes, unique repeated-reference IDs, and backlinks to every originating reference. This extension exists only on the document parser, so inline Agent output treats footnote syntax as ordinary text.
 
 Fenced-code language labels are retained as `language-*` classes. No syntax-highlighting pass runs over those classes.
 

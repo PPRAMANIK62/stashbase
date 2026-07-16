@@ -8,7 +8,9 @@ import { sanitizeMarkdownHtml } from './sanitization';
 /** Owns the ordered document-preview transformation pipeline. */
 export function renderDocumentMarkdown(markdown: string): string {
   const documentMarkdown = new Marked({ gfm: true, breaks: false });
-  documentMarkdown.use(markedFootnote(), gfmHeadingId());
+  // GitHub heading slugs omit colons, so this keeps package-generated
+  // footnote targets disjoint from document heading anchors.
+  documentMarkdown.use(markedFootnote({ prefixId: 'footnote:' }), gfmHeadingId());
   const parsed = documentMarkdown.parse(markdown, { async: false }) as string;
   return createPreviewDocument(sanitizeMarkdownHtml(parsed));
 }

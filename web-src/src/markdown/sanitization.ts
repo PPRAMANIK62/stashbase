@@ -17,7 +17,7 @@ const MARKDOWN_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   ],
   allowedAttributes: {
     '*': ['id', 'title', 'dir', 'lang', 'aria-*'],
-    a: ['href', 'data-footnote-ref', 'data-footnote-backref', 'aria-describedby'],
+    a: ['href', 'data-footnote:ref', 'data-footnote:backref', 'aria-describedby'],
     blockquote: ['cite'],
     code: ['class'],
     col: ['span'],
