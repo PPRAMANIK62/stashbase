@@ -22,6 +22,7 @@ import { errorCode, errorMessage, logger } from './log.ts';
 const log = logger('files');
 import { detectFormat, detectViewerFormat, isDerivedNoteName, isImageFile, matchNoteStem, NOTE_EXTS, type FileFormat, type ViewerFormat } from './format.ts';
 import { isCloudPlaceholderName, isIndexExcludedDirName, shouldIndexFilePath } from './indexable.ts';
+import { filesystemPath, type PathAccess } from './filesystem-path.ts';
 
 export { detectFormat, type FileFormat } from './format.ts';
 
@@ -83,50 +84,9 @@ function safePath(rel: string): string {
 
 /** Resolve relative-to-folder path to an absolute filesystem path AND
  *  defend against any edge case where the result escapes the folder root. */
-function resolveSafe(rel: string): string {
-  const root = folderRoot();
+function resolveSafe(rel: string, access: PathAccess = 'lexical', label = 'path'): string {
   const safe = safePath(rel);
-  const full = path.join(root, safe);
-  const back = path.relative(root, full);
-  if (back.startsWith('..') || path.isAbsolute(back)) {
-    throw new Error('path escapes folder');
-  }
-  return full;
-}
-
-function isPathInsideOrSame(parent: string, child: string): boolean {
-  const rel = path.relative(parent, child);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-}
-
-function realFolderRoot(): string {
-  return fs.realpathSync.native(folderRoot());
-}
-
-function assertRealPathInsideFolder(absPath: string, label = 'path'): void {
-  const real = fs.realpathSync.native(absPath);
-  if (!isPathInsideOrSame(realFolderRoot(), real)) {
-    throw new Error(`${label} escapes folder through symlink`);
-  }
-}
-
-function assertCreatablePathInsideFolder(absPath: string, label = 'path'): void {
-  const root = folderRoot();
-  const rootReal = realFolderRoot();
-  let probe = path.resolve(path.dirname(absPath));
-  while (!fs.existsSync(probe)) {
-    const parent = path.dirname(probe);
-    if (parent === probe) break;
-    probe = parent;
-  }
-  const probeRel = path.relative(root, probe);
-  if (probeRel.startsWith('..') || path.isAbsolute(probeRel)) {
-    throw new Error(`${label} escapes folder`);
-  }
-  const probeReal = fs.realpathSync.native(probe);
-  if (!isPathInsideOrSame(rootReal, probeReal)) {
-    throw new Error(`${label} escapes folder through symlink`);
-  }
+  return filesystemPath.resolveUnder(folderRoot(), safe, { access, label });
 }
 
 export function saveText(relPath: string, content: string): void {
@@ -135,9 +95,8 @@ export function saveText(relPath: string, content: string): void {
 
 export function fileVersion(relPath: string): string | null {
   let target: string;
-  try { target = resolveSafe(relPath); } catch { return null; }
+  try { target = resolveSafe(relPath, 'existing'); } catch { return null; }
   try {
-    assertRealPathInsideFolder(target);
     const st = fs.statSync(target);
     if (!st.isFile()) return null;
     return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex')}`;
@@ -151,9 +110,8 @@ export function fileVersion(relPath: string): string | null {
  * the filesystem object or its bytes are replaced. */
 export function fileStatVersion(relPath: string): string | null {
   let target: string;
-  try { target = resolveSafe(relPath); } catch { return null; }
+  try { target = resolveSafe(relPath, 'existing'); } catch { return null; }
   try {
-    assertRealPathInsideFolder(target);
     const st = fs.statSync(target, { bigint: true });
     if (!st.isFile()) return null;
     return `stat:${st.dev}:${st.ino}:${st.size}:${st.mtimeNs}:${st.ctimeNs}`;
@@ -167,10 +125,9 @@ export function fileStatVersion(relPath: string): string | null {
  *  saveText so partial writes don't leave a half-baked file in the
  *  folder. */
 export function saveBytes(relPath: string, bytes: Buffer): void {
-  const target = resolveSafe(relPath);
-  assertCreatablePathInsideFolder(target);
+  const target = resolveSafe(relPath, 'creatable');
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  assertCreatablePathInsideFolder(target);
+  resolveSafe(relPath, 'creatable');
   const tmp = path.join(
     path.dirname(target),
     `.${path.basename(target)}.${process.pid}.${crypto.randomUUID()}.tmp`,
@@ -189,10 +146,9 @@ export function saveBytes(relPath: string, bytes: Buffer): void {
  *  clicks can't race-pick the same `untitled-N.md`. Creates intermediate
  *  directories if needed. */
 export function createTextExclusive(relPath: string, content: string): boolean {
-  const target = resolveSafe(relPath);
-  assertCreatablePathInsideFolder(target);
+  const target = resolveSafe(relPath, 'creatable');
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  assertCreatablePathInsideFolder(target);
+  resolveSafe(relPath, 'creatable');
   try {
     fs.writeFileSync(target, content, { encoding: 'utf8', flag: 'wx' });
     return true;
@@ -206,17 +162,16 @@ export function createTextExclusive(relPath: string, content: string): boolean {
  *  parent dirs as needed (moving across folders works). */
 export function renameOnDisk(oldRel: string, newRel: string): void {
   const o = resolveSafe(oldRel);
-  const n = resolveSafe(newRel);
+  const n = resolveSafe(newRel, 'creatable', 'target file');
   if (!fs.existsSync(o) || !fs.statSync(o).isFile()) {
     throw new Error('source file not found');
   }
-  assertRealPathInsideFolder(o, 'source file');
-  assertCreatablePathInsideFolder(n, 'target file');
+  resolveSafe(oldRel, 'existing', 'source file');
   if (fs.existsSync(n)) {
     throw new Error('target already exists');
   }
   fs.mkdirSync(path.dirname(n), { recursive: true });
-  assertCreatablePathInsideFolder(n, 'target file');
+  resolveSafe(newRel, 'creatable', 'target file');
   fs.renameSync(o, n);
   // Notes carry an implicit "<stem>_files/" attachment bundle (browser
   // "Save Page As Complete" output for HTML, paste/drag image targets
@@ -237,9 +192,8 @@ export function renameOnDisk(oldRel: string, newRel: string): void {
  *  or isn't a regular file. Safe to pass to `fs.createReadStream`. */
 export function resolveAsset(relPath: string): string | null {
   let target: string;
-  try { target = resolveSafe(relPath); } catch { return null; }
+  try { target = resolveSafe(relPath, 'existing'); } catch { return null; }
   try {
-    assertRealPathInsideFolder(target);
     const st = fs.statSync(target);
     if (!st.isFile()) return null;
   } catch { return null; }
@@ -248,9 +202,8 @@ export function resolveAsset(relPath: string): string | null {
 
 export function readText(relPath: string): string | null {
   let target: string;
-  try { target = resolveSafe(relPath); } catch { return null; }
+  try { target = resolveSafe(relPath, 'existing'); } catch { return null; }
   try {
-    assertRealPathInsideFolder(target);
     return fs.readFileSync(target, 'utf8');
   } catch { return null; }
 }
@@ -258,8 +211,8 @@ export function readText(relPath: string): string | null {
 /** True if a file or directory exists at the folder-relative path. */
 export function pathExists(relPath: string): boolean {
   let target: string;
-  try { target = resolveSafe(relPath); } catch { return false; }
-  try { assertRealPathInsideFolder(target); fs.statSync(target); return true; } catch { return false; }
+  try { target = resolveSafe(relPath, 'existing'); } catch { return false; }
+  try { fs.statSync(target); return true; } catch { return false; }
 }
 
 /** Resolve to an absolute path if anything exists at the folder-relative
@@ -267,8 +220,8 @@ export function pathExists(relPath: string): boolean {
  *  needs to accept both files and folders. */
 export function resolveExisting(relPath: string): string | null {
   let target: string;
-  try { target = resolveSafe(relPath); } catch { return null; }
-  try { assertRealPathInsideFolder(target); fs.statSync(target); return target; } catch { return null; }
+  try { target = resolveSafe(relPath, 'existing'); } catch { return null; }
+  try { fs.statSync(target); return target; } catch { return null; }
 }
 
 /** Delete a file at the given folder-relative path. Returns false only
@@ -280,7 +233,7 @@ export function deleteFile(relPath: string): boolean {
   let removed = false;
   try {
     if (!fs.existsSync(target)) return false;
-    assertRealPathInsideFolder(target, 'file');
+    resolveSafe(relPath, 'existing', 'file');
     fs.unlinkSync(target);
     removed = true;
   } catch (err: any) {
@@ -316,7 +269,10 @@ function renameBundleSibling(oldNoteRel: string, newNoteRel: string): void {
   if (!oldBundle || !newBundle || oldBundle === newBundle) return;
   let oldAbs: string;
   let newAbs: string;
-  try { oldAbs = resolveSafe(oldBundle); newAbs = resolveSafe(newBundle); }
+  try {
+    oldAbs = resolveSafe(oldBundle, 'existing');
+    newAbs = resolveSafe(newBundle, 'creatable');
+  }
   catch { return; }
   try {
     if (!fs.statSync(oldAbs).isDirectory()) return;
@@ -443,11 +399,10 @@ function renameFirstExistingArtifact(oldRels: string[], newRel: string | undefin
 /** Create a (possibly nested) folder inside the folder. Returns false if
  *  the folder already exists, throws on other errors. */
 export function createFolder(relPath: string): boolean {
-  const target = resolveSafe(relPath);
+  const target = resolveSafe(relPath, 'creatable', 'folder');
   if (fs.existsSync(target)) return false;
-  assertCreatablePathInsideFolder(target, 'folder');
   fs.mkdirSync(target, { recursive: true });
-  assertRealPathInsideFolder(target, 'folder');
+  resolveSafe(relPath, 'existing', 'folder');
   return true;
 }
 
@@ -457,17 +412,16 @@ export function createFolder(relPath: string): boolean {
  *  target. */
 export function renameFolder(oldRel: string, newRel: string): void {
   const oldAbs = resolveSafe(oldRel);
-  const newAbs = resolveSafe(newRel);
-  assertRealPathInsideFolder(oldAbs, 'source folder');
-  assertCreatablePathInsideFolder(newAbs, 'target folder');
+  const newAbs = resolveSafe(newRel, 'creatable', 'target folder');
   if (!fs.existsSync(oldAbs) || !fs.statSync(oldAbs).isDirectory()) {
     throw new Error('source folder not found');
   }
+  resolveSafe(oldRel, 'existing', 'source folder');
   if (fs.existsSync(newAbs)) {
     throw new Error('target already exists');
   }
   fs.mkdirSync(path.dirname(newAbs), { recursive: true });
-  assertCreatablePathInsideFolder(newAbs, 'target folder');
+  resolveSafe(newRel, 'creatable', 'target folder');
   fs.renameSync(oldAbs, newAbs);
 }
 
@@ -482,7 +436,7 @@ export function deleteFolder(relPath: string): boolean {
   try { target = resolveSafe(relPath); } catch { return false; }
   try {
     if (!fs.existsSync(target)) return false;
-    assertRealPathInsideFolder(target, 'folder');
+    resolveSafe(relPath, 'existing', 'folder');
     fs.rmSync(target, { recursive: true, force: true });
     return true;
   } catch (err: any) {
@@ -605,8 +559,7 @@ export function listFolders(): FolderEntry[] {
  *  PDF/image AppData-derived notes are handled by conversion/index reconcile. */
 export function listIndexableTextFilesUnder(relPrefix: string): Array<{ name: string; content: string }> {
   const safePrefix = safePath(relPrefix);
-  const start = resolveSafe(safePrefix);
-  assertRealPathInsideFolder(start, 'folder');
+  const start = resolveSafe(safePrefix, 'existing', 'folder');
   const out: Array<{ name: string; content: string }> = [];
   walk(start, safePrefix, (rel, full, ent) => {
     if (!ent.isFile()) return;

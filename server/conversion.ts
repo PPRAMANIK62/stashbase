@@ -26,7 +26,8 @@ import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
 import { isPendingOrFailed, markDone, markFailed, markInFlight, setProgress, type ConversionProgress } from './conversion-status.ts';
 import { clearRecord } from './conversion-status.ts';
-import { fromSourcePath, getActiveFolders, memberRootForAbs, onClose, onSwitch, relInFolder, toPosixAbs } from './folder.ts';
+import { fromSourcePath, getActiveFolders, memberRootForAbs, onClose, onSwitch } from './folder.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import { logger, errorMessage } from './log.ts';
 import { isCloudPlaceholderName } from './indexable.ts';
 import { hasNoExtractableText, indexableFileSizeError } from './indexable.ts';
@@ -119,7 +120,7 @@ function isSourceInActiveFolder(sourcePath: string): boolean {
     // `runWithFolderRoot` creates short-lived internal bindings for MCP and
     // cross-folder operations. They are execution context, not user windows.
     if (windowId.startsWith('__folder:')) continue;
-    if (relInFolder(sourcePath, folderRoot) != null) return true;
+    if (filesystemPath.relative(folderRoot, sourcePath) != null) return true;
   }
   return false;
 }
@@ -135,7 +136,7 @@ onSwitch(() => scheduler.prioritiesChanged());
 onClose(() => scheduler.prioritiesChanged());
 
 export function cancelConversion(sourcePath: string): boolean {
-  return scheduler.cancel(toPosixAbs(sourcePath), 'source-change') != null;
+  return scheduler.cancel(filesystemPath.absolute(sourcePath), 'source-change') != null;
 }
 
 export async function cancelAllConversions(timeoutMs = 2500): Promise<string[]> {
@@ -150,7 +151,7 @@ export async function cancelAllConversions(timeoutMs = 2500): Promise<string[]> 
 }
 
 export async function cancelConversionsUnder(sourcePathPrefix: string, timeoutMs = 2500): Promise<string[]> {
-  const cancelled = scheduler.cancelUnder(toPosixAbs(sourcePathPrefix), 'folder-removed');
+  const cancelled = scheduler.cancelUnder(filesystemPath.absolute(sourcePathPrefix), 'folder-removed');
   const sourcePaths = cancelled.map((item) => item.key);
   if (cancelled.length === 0) return [];
   await Promise.race([
@@ -161,22 +162,22 @@ export async function cancelConversionsUnder(sourcePathPrefix: string, timeoutMs
 }
 
 export function isConversionPending(sourcePath: string): boolean {
-  return scheduler.has(toPosixAbs(sourcePath));
+  return scheduler.has(filesystemPath.absolute(sourcePath));
 }
 
 /** True when derived text must not be served as current: queued/running work
  *  or a durable preparation failure owns the source. */
 export function isConversionTextUnavailable(sourcePath: string): boolean {
-  const key = toPosixAbs(sourcePath);
+  const key = filesystemPath.absolute(sourcePath);
   return scheduler.has(key) || isPendingOrFailed(key);
 }
 
 export function hasConversionsUnder(sourcePathPrefix: string): boolean {
-  return scheduler.hasUnder(toPosixAbs(sourcePathPrefix));
+  return scheduler.hasUnder(filesystemPath.absolute(sourcePathPrefix));
 }
 
 export function hasRunningConversionsUnder(sourcePathPrefix: string): boolean {
-  return scheduler.hasRunningUnder(toPosixAbs(sourcePathPrefix));
+  return scheduler.hasRunningUnder(filesystemPath.absolute(sourcePathPrefix));
 }
 
 export function getConversionSchedulerSnapshot(): ConversionSchedulerSnapshot {
@@ -184,17 +185,17 @@ export function getConversionSchedulerSnapshot(): ConversionSchedulerSnapshot {
 }
 
 export function getScheduledConversion(sourcePath: string): ScheduledConversion | null {
-  return scheduler.get(toPosixAbs(sourcePath));
+  return scheduler.get(filesystemPath.absolute(sourcePath));
 }
 
 export function promoteConversion(sourcePath: string, urgency: ConversionUrgency): boolean {
-  return scheduler.promote(toPosixAbs(sourcePath), urgency);
+  return scheduler.promote(filesystemPath.absolute(sourcePath), urgency);
 }
 
 /** Absolute POSIX identity for a source path — the conversion-status key,
  *  matching what `toSourcePath` produces and what the daemon stores. */
 function sourcePathOf(absPath: string): string {
-  return toPosixAbs(absPath);
+  return filesystemPath.absolute(absPath);
 }
 
 function sourceSignature(absPath: string): SourceSignature | null {
@@ -443,7 +444,7 @@ export function discoverNewSources(
 export function getInFlightConversions(folderRoot?: string): string[] {
   const out: string[] = [];
   for (const { key: sourcePath } of scheduler.snapshot().tasks) {
-    const folderRel = folderRoot ? relInFolder(sourcePath, folderRoot) : fromSourcePath(sourcePath);
+    const folderRel = folderRoot ? filesystemPath.relative(folderRoot, sourcePath) : fromSourcePath(sourcePath);
     if (folderRel != null) out.push(folderRel);
   }
   out.sort();

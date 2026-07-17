@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { logger, errorMessage } from './log.ts';
 import { copyDirectoryDereferenced } from './fs-move.ts';
 import { isIndexExcludedDirName } from './indexable.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import {
   readAppConfig as readConfig,
   writeAppConfig as writeConfig,
@@ -104,25 +105,25 @@ export function currentWindowId(): string {
 /** Absolute POSIX roots of every member folder ("Your Folders"). The MCP
  *  layer scopes file/search ops to these — a path must live under one. */
 export function memberFolderRoots(): string[] {
-  return getRecentFolders().map((r) => toPosixAbs(r.path));
+  return getRecentFolders().map((r) => filesystemPath.absolute(r.path));
 }
 
 /** Return the stored spelling of an exact library-member root. Windows callers
  * may supply drive, separator, or component case variants; downstream path-
  * keyed stores must continue from the one spelling kept in membership. */
 export function exactMemberFolderRoot(abs: string): string | null {
-  const target = toPosixAbs(abs);
-  return memberFolderRoots().find((root) => sameFilesystemPath(root, target)) ?? null;
+  const target = filesystemPath.absolute(abs);
+  return memberFolderRoots().find((root) => filesystemPath.equal(root, target)) ?? null;
 }
 
 /** The member folder (longest-prefix) that contains `abs`, or null when
  *  the path isn't inside any member folder. The longest-prefix rule keeps
  *  nested members (`<root>/foo` and `<root>/foo/bar` both opened) correct. */
 export function memberRootForAbs(abs: string): string | null {
-  const target = toPosixAbs(abs);
+  const target = filesystemPath.absolute(abs);
   let best: string | null = null;
   for (const root of memberFolderRoots()) {
-    if (isAtOrUnderRoot(target, root)) {
+    if (filesystemPath.contains(root, target)) {
       if (!best || root.length > best.length) best = root;
     }
   }
@@ -139,8 +140,7 @@ export function resolveFolderRoot(ref: string): string {
     (err as any).code = 'FOLDER_NOT_FOUND';
     throw err;
   }
-  const abs = path.isAbsolute(ref) ? ref : path.join(getFolderHome(), ref);
-  const root = toPosixAbs(abs);
+  const root = filesystemPath.absolute(ref, getFolderHome());
   try {
     if (fs.statSync(root).isDirectory()) return root;
   } catch {
@@ -175,10 +175,9 @@ export function getFolderHome(): string {
  *  Used when validating absolute paths against the default folder home. */
 export function isInsideFolderHome(absPath: string): boolean {
   const root = getFolderHome();
-  const target = path.resolve(absPath);
-  if (sameFilesystemPath(target, root)) return false;
-  const rel = path.relative(root, target);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  const target = filesystemPath.absolute(absPath);
+  const rel = filesystemPath.relative(root, target);
+  return rel != null && rel !== '';
 }
 
 /** Validate a user-supplied folder name. Names must be a single,
@@ -222,43 +221,14 @@ function listDefaultHomeFolderNames(): string[] {
   return listFolderNamesUnder(getFolderHome());
 }
 
-/** Normalise any path to an absolute POSIX string — the canonical form
- *  the indexer/daemon use as a file's `source` and a folder's bound root.
- *  `path.resolve` collapses `.`/`..` and trailing slashes so two callers
- *  deriving the same folder agree byte-for-byte. */
-export function toPosixAbs(p: string): string {
-  return path.resolve(p).split(path.sep).join('/');
-}
-
-/** Filesystem path equality for canonical paths and external path references.
- * Windows callers may use native separators or case variants, so preserve the
- * original spelling for I/O and display while comparing a folded identity key
- * for membership, deduplication, and subtree checks. */
-export function sameFilesystemPath(a: string, b: string): boolean {
-  return pathComparisonKey(a) === pathComparisonKey(b);
-}
-
-export function isFilesystemPathAtOrUnder(target: string, root: string): boolean {
-  return sameFilesystemPath(target, root)
-    || pathComparisonKey(target).startsWith(pathComparisonKey(rootChildPrefix(root)));
-}
-
-function pathComparisonKey(value: string): string {
-  return process.platform === 'win32'
-    ? value.replace(/\\/g, '/').toLowerCase()
-    : value;
-}
-
 /** Human-facing label for the open folder: relative display text when under
  *  the default home, else the folder basename. null if no folder is open. */
 export function getCurrentFolderLabel(): string | null {
   const cs = getCurrentFolder();
   if (!cs) return null;
   const root = getFolderHome();
-  const rel = path.relative(root, cs);
-  if (!sameFilesystemPath(cs, root) && rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)) {
-    return rel.split(path.sep).join('/');
-  }
+  const rel = filesystemPath.relative(root, cs);
+  if (rel != null && rel !== '') return rel;
   return path.basename(cs);
 }
 
@@ -272,71 +242,14 @@ export function getCurrentFolderLabel(): string | null {
 export function toSourcePath(folderRel: string): string {
   const cs = getCurrentFolder();
   if (!cs) throw new Error('no folder open');
-  return joinUnderRoot(toPosixAbs(cs), folderRel);
-}
-
-/** Join a folder-relative source identity without creating `//child` at `/`
- * or `C://child` at a drive/share root. */
-export function sourcePathInFolder(folderRoot: string, folderRel: string): string {
-  return joinUnderRoot(toPosixAbs(folderRoot), folderRel);
-}
-
-/** Restore the on-disk component spelling for Windows path identities without
- * changing the source/root relationship. Missing suffixes keep caller spelling
- * so create/move targets remain valid. */
-export function canonicalFolderRelativePath(folderRoot: string, folderRel: string): string {
-  const segments = (folderRel ?? '').split(/[\\/]+/).filter(Boolean);
-  if (process.platform !== 'win32' || segments.length === 0) return segments.join('/');
-  const canonical: string[] = [];
-  let cursor = folderRoot;
-  for (const segment of segments) {
-    let spelling = segment;
-    try {
-      const found = fs.readdirSync(cursor).find((entry) => entry.toLowerCase() === segment.toLowerCase());
-      if (found) spelling = found;
-    } catch {
-      // Once a create target reaches a missing parent, retain its requested suffix.
-    }
-    canonical.push(spelling);
-    cursor = path.join(cursor, spelling);
-  }
-  return canonical.join('/');
+  return filesystemPath.join(cs, folderRel);
 }
 
 /** Convert an absolute path (a daemon reply) back to a path relative to
  *  the currently-open folder, or null if it doesn't fall under it. */
 export function fromSourcePath(sourcePath: string): string | null {
   const cs = getCurrentFolder();
-  return cs ? relUnderRoot(sourcePath, toPosixAbs(cs)) : null;
-}
-
-/** Convert an absolute path to a path relative to `folderRoot` (an
- *  **absolute** folder root), without consulting the current window
- *  binding. Use this when a route accepts an explicit folder scope.
- *  Use this instead of ambient window context when the caller already has
- *  the folder root. */
-export function relInFolder(abs: string, folderRoot: string): string | null {
-  return folderRoot ? relUnderRoot(abs, toPosixAbs(folderRoot)) : null;
-}
-
-function joinUnderRoot(root: string, rel: string): string {
-  const r = (rel ?? '').split(path.sep).join('/').replace(/^\/+/, '');
-  return r ? `${rootChildPrefix(root)}${r}` : root;
-}
-
-function relUnderRoot(abs: string, root: string): string | null {
-  if (sameFilesystemPath(abs, root)) return '';
-  const prefix = rootChildPrefix(root);
-  if (!pathComparisonKey(abs).startsWith(pathComparisonKey(prefix))) return null;
-  return abs.slice(prefix.length);
-}
-
-function rootChildPrefix(root: string): string {
-  return root.endsWith('/') ? root : `${root}/`;
-}
-
-function isAtOrUnderRoot(target: string, root: string): boolean {
-  return isFilesystemPathAtOrUnder(target, root);
+  return cs ? filesystemPath.relative(cs, sourcePath) : null;
 }
 
 /** Idempotent startup hook:
@@ -413,7 +326,7 @@ export function seedBuiltinFolder(): void {
   // (1) Already on disk → ensure it's in recents, regardless of the latch.
   if (fs.existsSync(dest)) {
     try {
-      const inRecents = (readConfig().recentFolders ?? []).some((r) => sameFilesystemPath(r.path, dest));
+      const inRecents = (readConfig().recentFolders ?? []).some((r) => filesystemPath.equal(r.path, dest));
       if (!inRecents) pushRecent(dest);
     } catch (err) {
       log.warn(`failed to surface built-in folder: ${errorMessage(err)}`);
@@ -478,7 +391,7 @@ export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exc
     expanded = path.join(os.homedir(), expanded.slice(1));
   }
   if (!path.isAbsolute(expanded)) throw new Error('path must be absolute');
-  const normalized = path.resolve(expanded);
+  const normalized = filesystemPath.absolute(expanded);
   // A Folder can be opened from anywhere on disk — there is no unified root
   // constraint. The folder home is only the default location for the built-in
   // folder and new-folder-by-name; opening an arbitrary folder is the
@@ -505,7 +418,7 @@ export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exc
 
   const windowId = currentWindowId();
   const prev = currentFolders.get(windowId) ?? null;
-  const changed = prev == null || !sameFilesystemPath(prev, normalized);
+  const changed = prev == null || !filesystemPath.equal(prev, normalized);
   currentFolders.set(windowId, normalized);
   pushRecent(normalized);
   return changed;
@@ -526,13 +439,13 @@ export function clearCurrentFolder(windowId = currentWindowId()): void {
 
 export function clearFolderPath(absPath: string): void {
   for (const [windowId, value] of [...currentFolders.entries()]) {
-    if (sameFilesystemPath(value, absPath)) clearCurrentFolder(windowId);
+    if (filesystemPath.equal(value, absPath)) clearCurrentFolder(windowId);
   }
 }
 
 export function replaceCurrentFolderPath(oldPath: string, newPath: string): void {
   for (const [windowId, value] of currentFolders.entries()) {
-    if (sameFilesystemPath(value, oldPath)) {
+    if (filesystemPath.equal(value, oldPath)) {
       currentFolders.set(windowId, newPath);
       notifyFolderSwitch(newPath, windowId);
     }
@@ -540,7 +453,7 @@ export function replaceCurrentFolderPath(oldPath: string, newPath: string): void
   const cfg = readConfig();
   if (cfg.recentFolders?.length) {
     cfg.recentFolders = cfg.recentFolders.map((r) => (
-      sameFilesystemPath(r.path, oldPath) ? { ...r, path: newPath } : r
+      filesystemPath.equal(r.path, oldPath) ? { ...r, path: newPath } : r
     ));
     writeConfig(cfg);
   }
@@ -579,9 +492,9 @@ function pushRecent(absPath: string): void {
   // entries whose target folder no longer exists — keeps the persisted
   // recents from accumulating dead tmp dirs / deleted folders over
   // time. Opportunistic cleanup on every write.
-  const existing = list.find((v) => sameFilesystemPath(v.path, absPath));
+  const existing = list.find((v) => filesystemPath.equal(v.path, absPath));
   const filtered = list.filter((v) => {
-    if (sameFilesystemPath(v.path, absPath)) return false;
+    if (filesystemPath.equal(v.path, absPath)) return false;
     try { return fs.statSync(v.path).isDirectory(); } catch { return false; }
   });
   filtered.unshift({ ...(existing ?? {}), path: absPath, openedAt: new Date().toISOString() });
@@ -600,10 +513,10 @@ function pushRecent(absPath: string): void {
  *  touch the folder on disk — removal only forgets it from the knowledge
  *  base; the caller clears its index rows separately. No-op if absent. */
 export function removeRecent(absPath: string): void {
-  const target = toPosixAbs(absPath);
+  const target = filesystemPath.absolute(absPath);
   const cfg = readConfig();
   const list = cfg.recentFolders ?? [];
-  const filtered = list.filter((v) => !sameFilesystemPath(toPosixAbs(v.path), target));
+  const filtered = list.filter((v) => !filesystemPath.equal(v.path, target));
   if (filtered.length === list.length) return;
   cfg.recentFolders = filtered;
   writeConfig(cfg);

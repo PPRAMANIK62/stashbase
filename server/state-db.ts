@@ -20,6 +20,7 @@ import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
 import { getFolderHome } from './folder.ts';
 import { appStateDbPath, stateDbPathForRoot } from './local-data.ts';
+import { filesystemPath } from './filesystem-path.ts';
 
 const log = logger('state-db');
 
@@ -90,7 +91,7 @@ function legacyFolderStateDbPath(): string {
 }
 
 function legacyStateDbPaths(): string[] {
-  const target = path.resolve(stateDbPath());
+  const target = filesystemPath.absolute(stateDbPath());
   const candidates = [
     stateDbPathForRoot(getFolderHome()),
     legacyFolderStateDbPath(),
@@ -98,9 +99,10 @@ function legacyStateDbPaths(): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const candidate of candidates) {
-    const resolved = path.resolve(candidate);
-    if (resolved === target || seen.has(resolved)) continue;
-    seen.add(resolved);
+    const resolved = filesystemPath.absolute(candidate);
+    const identity = filesystemPath.identity(resolved);
+    if (filesystemPath.equal(resolved, target) || seen.has(identity)) continue;
+    seen.add(identity);
     out.push(candidate);
   }
   return out;
@@ -311,7 +313,9 @@ export function readConversionStatusMap(): Record<string, ConversionStatusEntry>
 }
 
 export function getConversionStatus(pathKey: string): ConversionStatusEntry | undefined {
-  return readConversionStatusMap()[pathKey];
+  const statuses = readConversionStatusMap();
+  const storedPath = Object.keys(statuses).find((candidate) => filesystemPath.equal(candidate, pathKey));
+  return storedPath ? statuses[storedPath] : undefined;
 }
 
 
@@ -319,6 +323,12 @@ export function setConversionStatus(pathKey: string, status: ConversionStatus, o
   const conn = getStateDb();
   if (!conn) return;
   const prev = getConversionStatus(pathKey);
+  const sourcePath = filesystemPath.absolute(pathKey);
+  for (const storedPath of Object.keys(readConversionStatusMap())) {
+    if (storedPath !== sourcePath && filesystemPath.equal(storedPath, sourcePath)) {
+      conn.prepare('DELETE FROM conversions WHERE path = ?').run(storedPath);
+    }
+  }
   const now = new Date().toISOString();
   conn.prepare(`
     INSERT INTO conversions (path, status, attempts, last_error, last_attempt_at, done_at)
@@ -330,7 +340,7 @@ export function setConversionStatus(pathKey: string, status: ConversionStatus, o
       last_attempt_at = excluded.last_attempt_at,
       done_at = excluded.done_at
   `).run({
-    path: pathKey,
+    path: sourcePath,
     status,
     attempts: opts.incrementAttempts ? (prev?.attempts ?? 0) + 1 : (prev?.attempts ?? 1),
     lastError: opts.error ?? null,
@@ -342,18 +352,21 @@ export function setConversionStatus(pathKey: string, status: ConversionStatus, o
 export function clearConversionStatus(pathKey: string): void {
   const conn = getStateDb();
   if (!conn) return;
-  conn.prepare('DELETE FROM conversions WHERE path = ?').run(pathKey);
+  for (const storedPath of Object.keys(readConversionStatusMap())) {
+    if (filesystemPath.equal(storedPath, pathKey)) {
+      conn.prepare('DELETE FROM conversions WHERE path = ?').run(storedPath);
+    }
+  }
 }
 
 export function clearConversionStatusUnder(pathKey: string): void {
   const conn = getStateDb();
   if (!conn) return;
-  const name = pathKey === '/' ? '/' : pathKey.replace(/\/+$/, '');
-  if (!name) return;
-  const prefix = name === '/' ? '/' : name + '/';
-  conn.prepare(
-    'DELETE FROM conversions WHERE path = @name OR substr(path, 1, @plen) = @prefix',
-  ).run({ name, prefix, plen: prefix.length });
+  for (const storedPath of Object.keys(readConversionStatusMap())) {
+    if (filesystemPath.contains(pathKey, storedPath)) {
+      conn.prepare('DELETE FROM conversions WHERE path = ?').run(storedPath);
+    }
+  }
 }
 
 export function listConversionStatus(status: ConversionStatus): Array<{ path: string; entry: ConversionStatusEntry }> {

@@ -323,7 +323,7 @@ test('filesystem root cancellation includes every absolute task', async () => {
 test('Windows drive and UNC roots match descendants without matching sibling names', async () => {
   const scheduler = new ConversionScheduler({
     laneCapacity: { light: 4 },
-    caseSensitivePaths: false,
+    pathPlatform: 'win32',
   });
   const waitForAbort = (signal: AbortSignal) => new Promise<void>((resolve) => {
     signal.addEventListener('abort', () => resolve(), { once: true });

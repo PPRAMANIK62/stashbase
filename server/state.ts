@@ -14,7 +14,8 @@
  */
 import { MfsIndexer } from './indexer.mfs.ts';
 import type { Indexer, EmbedderRuntimeConfig } from './indexer.ts';
-import { getCurrentFolder, getRecentFolders, onClose, onSwitch, runWithWindowId, sameFilesystemPath, toPosixAbs } from './folder.ts';
+import { getCurrentFolder, getRecentFolders, onClose, onSwitch, runWithWindowId } from './folder.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import { getApiKey } from './app-config.ts';
 import { syncIndex, type SyncResult } from './sync.ts';
 import { getDaemon } from './mfs-daemon.ts';
@@ -22,7 +23,6 @@ import { clearStaleMilvusLock } from './stale-lock.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { logger, errorMessage } from './log.ts';
 import { globalVectorStoreDir } from './local-data.ts';
-import path from 'node:path';
 
 const log = logger('state');
 
@@ -35,25 +35,25 @@ export interface IndexSyncWarning {
 }
 const indexWarnings = new Map<string, IndexSyncWarning>();
 export function getIndexWarning(folder: string): IndexSyncWarning | null {
-  return indexWarnings.get(folder) ?? null;
+  return indexWarnings.get(filesystemPath.identity(folder)) ?? null;
 }
 export function clearIndexWarning(folder: string): void {
-  indexWarnings.delete(folder);
+  indexWarnings.delete(filesystemPath.identity(folder));
 }
 function recordIndexWarning(folder: string, message: string): void {
-  indexWarnings.set(folder, { message, at: new Date().toISOString() });
+  indexWarnings.set(filesystemPath.identity(folder), { message, at: new Date().toISOString() });
 }
 
 const folderSyncGeneration = new Map<string, number>();
 
 export function invalidateFolderSync(folderRoot: string): void {
-  const root = toPosixAbs(folderRoot);
+  const root = filesystemPath.identity(folderRoot);
   if (!root) return;
   folderSyncGeneration.set(root, (folderSyncGeneration.get(root) ?? 0) + 1);
 }
 
 function currentFolderSyncGeneration(folderRoot: string): number {
-  return folderSyncGeneration.get(folderRoot) ?? 0;
+  return folderSyncGeneration.get(filesystemPath.identity(folderRoot)) ?? 0;
 }
 
 function shouldContinueFolderSync(
@@ -65,7 +65,7 @@ function shouldContinueFolderSync(
 }
 
 export async function deleteFolderRuntimeState(folderRoot: string): Promise<void> {
-  const root = toPosixAbs(folderRoot);
+  const root = filesystemPath.identity(folderRoot);
   indexWarnings.delete(root);
   folderSyncGeneration.delete(root);
 }
@@ -89,8 +89,14 @@ function libraryFolderRoots(): string[] {
   // Membership = "Your Folders" (the recents list), which can live anywhere
   // on disk. Bind every member's absolute root so MCP/Claude can search the
   // whole library without the user first opening each folder.
-  const members = getRecentFolders().map((r) => toPosixAbs(r.path));
-  return Array.from(new Set(members));
+  const members = new Map<string, string>();
+  for (const recent of getRecentFolders()) {
+    const source = filesystemPath.absolute(recent.path);
+    if (!members.has(filesystemPath.identity(source))) {
+      members.set(filesystemPath.identity(source), source);
+    }
+  }
+  return [...members.values()];
 }
 
 export async function bootBindAllFolders(): Promise<void> {
@@ -140,7 +146,7 @@ export async function resetIndexerRuntime(opts: { forgetBindings?: boolean } = {
 const staleLockSweptStores = new Set<string>();
 
 function claimStaleLockSweep(storeRoot: string): boolean {
-  const key = path.resolve(storeRoot);
+  const key = filesystemPath.identity(storeRoot);
   if (staleLockSweptStores.has(key)) return false;
   staleLockSweptStores.add(key);
   return true;
@@ -169,7 +175,7 @@ export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
   if (!cfg) {
     log.warn(`embedder: no OpenAI key set — ${folderAbs} bound but indexing/search disabled until a key is added`);
   }
-  await indexer.bindFolder(toPosixAbs(folderAbs), runtime);
+  await indexer.bindFolder(filesystemPath.absolute(folderAbs), runtime);
 }
 
 
@@ -237,19 +243,20 @@ export async function syncFolderNow(
   folderRoot: string,
   opts: { reason?: string; shouldContinue?: () => boolean } = {},
 ): Promise<SyncResult> {
-  const syncFolderRoot = toPosixAbs(folderRoot);
-  const prev = folderSyncQueues.get(syncFolderRoot) ?? Promise.resolve();
+  const syncFolderRoot = filesystemPath.absolute(folderRoot);
+  const queueKey = filesystemPath.identity(syncFolderRoot);
+  const prev = folderSyncQueues.get(queueKey) ?? Promise.resolve();
   const next = prev
     .catch(() => undefined)
     .then(() => syncFolderNowInner(syncFolderRoot, opts));
   const settled = next
     .catch(() => undefined)
     .finally(() => {
-      if (folderSyncQueues.get(syncFolderRoot) === settled) {
-        folderSyncQueues.delete(syncFolderRoot);
+      if (folderSyncQueues.get(queueKey) === settled) {
+        folderSyncQueues.delete(queueKey);
       }
     });
-  folderSyncQueues.set(syncFolderRoot, settled);
+  folderSyncQueues.set(queueKey, settled);
   return next;
 }
 
@@ -290,7 +297,7 @@ export function scheduleIndexerSync(folderRoot: string, reason: string, windowId
     .then(async () => {
       await runWithWindowId(windowId, async () => {
         const current = getCurrentFolder();
-        if (!current || !sameFilesystemPath(current, folderRoot)) return;
+        if (!current || !filesystemPath.equal(current, folderRoot)) return;
         try {
           // Full content-hash diff — the only reconcile tier. Hashing
           // is milliseconds for a personal library; embedding still only
@@ -303,7 +310,7 @@ export function scheduleIndexerSync(folderRoot: string, reason: string, windowId
             shouldContinue: () => {
               const active = getCurrentFolder();
               return !!active
-                && sameFilesystemPath(active, folderRoot)
+                && filesystemPath.equal(active, folderRoot)
                 && seq === indexerSwitchSeq.get(windowId);
             },
           });

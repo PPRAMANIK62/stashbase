@@ -29,6 +29,7 @@ import {
   type ConversionStatus,
   type ConversionStatusEntry,
 } from './state-db.ts';
+import { filesystemPath } from './filesystem-path.ts';
 
 export type { ConversionStatus, ConversionStatusEntry };
 export type ConversionStatusMap = Record<string, ConversionStatusEntry>;
@@ -50,45 +51,46 @@ export function readAll(): ConversionStatusMap {
  *  conversion is running right now, or a persisted failure says a human
  *  must press Retry first. */
 export function isPendingOrFailed(sourcePath: string): boolean {
-  return inFlight.has(sourcePath) || getConversionStatus(sourcePath) !== undefined;
+  return inFlight.has(filesystemPath.identity(sourcePath)) || getConversionStatus(sourcePath) !== undefined;
 }
 
 export function markInFlight(sourcePath: string): void {
-  inFlight.add(sourcePath);
-  progress.set(sourcePath, { phase: 'extracting' });
+  const key = filesystemPath.identity(sourcePath);
+  inFlight.add(key);
+  progress.set(key, { phase: 'extracting' });
 }
 
 /** Success: drop the in-flight marker and clear any stale failure row
  *  from a previous attempt. */
 export function markDone(sourcePath: string): void {
-  inFlight.delete(sourcePath);
-  progress.delete(sourcePath);
+  const key = filesystemPath.identity(sourcePath);
+  inFlight.delete(key);
+  progress.delete(key);
   clearConversionStatus(sourcePath);
 }
 
 export function markFailed(sourcePath: string, errorMsg: string): void {
-  inFlight.delete(sourcePath);
-  progress.delete(sourcePath);
+  const key = filesystemPath.identity(sourcePath);
+  inFlight.delete(key);
+  progress.delete(key);
   setConversionStatus(sourcePath, 'failed', { error: errorMsg, incrementAttempts: true });
 }
 
 export function clearRecord(sourcePath: string): void {
-  inFlight.delete(sourcePath);
-  progress.delete(sourcePath);
+  const key = filesystemPath.identity(sourcePath);
+  inFlight.delete(key);
+  progress.delete(key);
   clearConversionStatus(sourcePath);
 }
 
 export function clearRecordsUnder(sourcePathPrefix: string): void {
-  const name = sourcePathPrefix === '/' ? '/' : sourcePathPrefix.replace(/\/+$/, '');
-  if (!name) return;
-  const prefix = name === '/' ? '/' : `${name}/`;
-  for (const path of [...inFlight]) {
-    if (path === name || path.startsWith(prefix)) {
-      inFlight.delete(path);
-      progress.delete(path);
+  for (const key of [...inFlight]) {
+    if (filesystemPath.contains(sourcePathPrefix, key)) {
+      inFlight.delete(key);
+      progress.delete(key);
     }
   }
-  clearConversionStatusUnder(name);
+  clearConversionStatusUnder(sourcePathPrefix);
 }
 
 export function listFailed(): Array<{ path: string; entry: ConversionStatusEntry }> {
@@ -96,10 +98,11 @@ export function listFailed(): Array<{ path: string; entry: ConversionStatusEntry
 }
 
 export function setProgress(sourcePath: string, next: ConversionProgress): void {
-  if (!inFlight.has(sourcePath)) return;
-  progress.set(sourcePath, next);
+  const key = filesystemPath.identity(sourcePath);
+  if (!inFlight.has(key)) return;
+  progress.set(key, next);
 }
 
 export function readProgress(sourcePath: string): ConversionProgress | undefined {
-  return progress.get(sourcePath);
+  return progress.get(filesystemPath.identity(sourcePath));
 }

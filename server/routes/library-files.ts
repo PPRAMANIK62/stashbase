@@ -10,18 +10,14 @@ import path from 'node:path';
 import { deleteDerivedForSource, derivedNoteFor, sourceForDerivedText } from '../derived-store.ts';
 import { errorMessage, logger } from '../log.ts';
 import {
-  canonicalFolderRelativePath,
   exactMemberFolderRoot,
   getFolderHome,
   memberFolderRoots,
   memberRootForAbs,
-  relInFolder,
   resolveFolderRoot,
   runWithFolderRoot,
-  sameFilesystemPath,
-  sourcePathInFolder,
-  toPosixAbs,
 } from '../folder.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import { indexer, syncFolderNow } from '../state.ts';
 import { remapSearchHitsForDisplay } from '../search-display.ts';
 import { getLibraryInfo } from '../library-info.ts';
@@ -102,7 +98,7 @@ export function mount(app: express.Express): void {
       const rawHits = await indexer.search(query, topK, folderRoot, pathPrefix);
       const hits = remapSearchHitsForDisplay(
         rawHits.filter((hit) => !isConversionTextUnavailable(hit.fileName)),
-        toPosixAbs(getFolderHome()),
+        filesystemPath.absolute(getFolderHome()),
       );
       res.json({ hits });
     } catch (err: unknown) {
@@ -267,9 +263,9 @@ function normalizeLibraryPathPrefix(value: string): string {
   if (!folderRoot) {
     throw routeError('path_prefix must live under one of your folders', 400);
   }
-  const requestedRel = relInFolder(requestedAbs, folderRoot);
+  const requestedRel = filesystemPath.relative(folderRoot, requestedAbs);
   if (requestedRel == null) throw routeError('path_prefix must live under one of your folders', 400);
-  return sourcePathInFolder(folderRoot, canonicalFolderRelativePath(folderRoot, requestedRel));
+  return filesystemPath.join(folderRoot, filesystemPath.canonicalRelative(folderRoot, requestedRel));
 }
 
 interface LibraryPath {
@@ -306,28 +302,21 @@ export interface AgentContextFile {
   reason: string;
 }
 
-/** Resolve a raw path to an absolute POSIX path, rejecting traversal, native
- *  separators, and control chars. Absolute paths are the normal API; non-absolute values are
- *  compatibility refs under the default folder home. Does NOT check membership;
- *  callers do via `memberRootForAbs`. */
+/** Resolve a raw native or POSIX-spelled path to an absolute POSIX path,
+ *  rejecting traversal and control chars. Absolute paths are the normal API;
+ *  non-absolute values are compatibility refs under the default folder home.
+ *  Does NOT check membership; callers do via `memberRootForAbs`. */
 function resolveLibraryAbs(raw: unknown, opts: { allowEmpty: boolean }): string {
   const value = typeof raw === 'string' ? raw.trim() : '';
   if (!value) {
     if (opts.allowEmpty) return '';
     throw routeError('path required', 400);
   }
-  if (value.includes('\\')) {
-    throw routeError('path must be a POSIX path', 400);
-  }
-  if (/^[A-Za-z]:\//.test(value) && process.platform !== 'win32') {
-    throw routeError('Windows drive paths are only valid on Windows', 400);
-  }
   if (/[\x00-\x1f'"]/.test(value)) throw routeError('path contains invalid characters', 400);
-  for (const seg of value.split('/')) {
+  for (const seg of value.replace(/\\/g, '/').split('/')) {
     if (seg === '.' || seg === '..') throw routeError('path contains an invalid segment', 400);
   }
-  const abs = path.isAbsolute(value) ? value : path.join(getFolderHome(), value);
-  return toPosixAbs(abs);
+  return filesystemPath.absolute(value, getFolderHome());
 }
 
 export function normalizeLibraryFilePath(raw: unknown): LibraryPath {
@@ -336,17 +325,17 @@ export function normalizeLibraryFilePath(raw: unknown): LibraryPath {
   if (!folderRoot) {
     throw routeError('path must live under one of your folders (call library_info to list them)', 400);
   }
-  const requestedRel = relInFolder(requestedAbs, folderRoot);
+  const requestedRel = filesystemPath.relative(folderRoot, requestedAbs);
   const folderRel = requestedRel == null
     ? null
-    : canonicalFolderRelativePath(folderRoot, requestedRel);
+    : filesystemPath.canonicalRelative(folderRoot, requestedRel);
   if (folderRel == null || folderRel === '') {
     throw routeError('path must include a file path, not just the folder root', 400);
   }
   if (isDerivedNoteName(folderRel)) {
     throw routeError('app-maintained derived notes are hidden; use the visible source file path', 403);
   }
-  return { abs: sourcePathInFolder(folderRoot, folderRel), folderRoot, folderRel };
+  return { abs: filesystemPath.join(folderRoot, folderRel), folderRoot, folderRel };
 }
 
 function normalizeLibraryDirectoryPath(raw: unknown): { abs?: string; folderRoot?: string; folderRel?: string } {
@@ -356,12 +345,12 @@ function normalizeLibraryDirectoryPath(raw: unknown): { abs?: string; folderRoot
   if (!folderRoot) {
     throw routeError('path must live under one of your folders (call library_info to list them)', 400);
   }
-  const requestedRel = relInFolder(requestedAbs, folderRoot);
+  const requestedRel = filesystemPath.relative(folderRoot, requestedAbs);
   const folderRel = requestedRel == null
     ? null
-    : canonicalFolderRelativePath(folderRoot, requestedRel);
+    : filesystemPath.canonicalRelative(folderRoot, requestedRel);
   if (folderRel == null) throw routeError('path must live under one of your folders', 400);
-  return { abs: sourcePathInFolder(folderRoot, folderRel), folderRoot, folderRel };
+  return { abs: filesystemPath.join(folderRoot, folderRel), folderRoot, folderRel };
 }
 
 function validateLibraryWritableFolderRel(folderRel: string): void {
@@ -476,7 +465,7 @@ export async function listLibraryDirectory(rawPath: unknown): Promise<{ path: st
     for (const folder of listFolders()) {
       const child = immediateChild(prefix, folder.path);
       if (!child) continue;
-      const entryPath = sourcePathInFolder(folderRoot, child.path);
+      const entryPath = filesystemPath.join(folderRoot, child.path);
       children.set(`d:${child.path}`, {
         name: child.name,
         path: entryPath,
@@ -486,7 +475,7 @@ export async function listLibraryDirectory(rawPath: unknown): Promise<{ path: st
     for (const file of listFiles()) {
       const child = immediateFileChild(prefix, file.name);
       if (!child) continue;
-      const entryPath = sourcePathInFolder(folderRoot, child.path);
+      const entryPath = filesystemPath.join(folderRoot, child.path);
       children.set(`f:${child.path}`, {
         name: child.name,
         path: entryPath,
@@ -634,7 +623,7 @@ function readDerivedLibraryFile(derivedAbs: string, sourceAbs: string, folderRoo
   if (isConversionTextUnavailable(sourceAbs)) {
     throw routeError('derived text is pending or preparation failed; retry after completion or reprocess the source', 409, 'CONVERSION_NOT_READY');
   }
-  const folderRel = relInFolder(sourceAbs, folderRoot);
+  const folderRel = filesystemPath.relative(folderRoot, sourceAbs);
   if (folderRel == null || folderRel === '') {
     throw routeError('derived source path is invalid for its folder', 400);
   }
@@ -717,7 +706,7 @@ export async function moveLibraryFile(
 ): Promise<{ path: string; oldPath: string; linksUpdated: number; indexWarning?: string }> {
   const oldTarget = normalizeLibraryFilePath(rawPath);
   const newTarget = normalizeLibraryFilePath(rawNewPath);
-  if (!sameFilesystemPath(oldTarget.folderRoot, newTarget.folderRoot)) {
+  if (!filesystemPath.equal(oldTarget.folderRoot, newTarget.folderRoot)) {
     throw routeError('move_file currently supports moves within the same folder only', 400);
   }
   validateLibraryWritableFolderRel(newTarget.folderRel);
@@ -764,7 +753,7 @@ export async function moveLibraryFile(
           log.warn(`library move: failed to remove old source index row ${oldTarget.abs}: ${errorMessage(err)}`);
         });
         for (const rel of oldDerivedArtifacts.notes) {
-          const sourcePath = sourcePathInFolder(oldTarget.folderRoot, rel);
+          const sourcePath = filesystemPath.join(oldTarget.folderRoot, rel);
           await indexer.deleteFile(sourcePath).catch((err) => {
             log.warn(`library move: failed to remove legacy derived index row ${sourcePath}: ${errorMessage(err)}`);
           });
@@ -795,7 +784,7 @@ export async function moveLibraryFile(
         if (!getApiKey()) break;
         if (u.name === newTarget.folderRel) continue;
         const body = readText(u.name);
-        if (body != null) await indexer.upsertFile(sourcePathInFolder(oldTarget.folderRoot, u.name), body);
+        if (body != null) await indexer.upsertFile(filesystemPath.join(oldTarget.folderRoot, u.name), body);
       }
     } catch (err) {
       // The disk move has already happened; keep the user's file move
@@ -826,7 +815,7 @@ export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: strin
     catch (err: unknown) { log.warn(`library delete: preparation status cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
     if (removed && getApiKey()) {
       for (const rel of [target.folderRel, ...derivedArtifacts.notes]) {
-        const sourcePath = sourcePathInFolder(target.folderRoot, rel);
+        const sourcePath = filesystemPath.join(target.folderRoot, rel);
         indexer.deleteFile(sourcePath).catch((err) => {
           log.warn(`library delete: index cleanup failed for ${sourcePath}: ${errorMessage(err)}`);
         });

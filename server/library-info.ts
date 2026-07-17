@@ -10,7 +10,8 @@
  * `search_library`.
  */
 import path from 'node:path';
-import { getFolderHome, getRecentFolders, toPosixAbs } from './folder.ts';
+import { getFolderHome, getRecentFolders } from './folder.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import { getEmbedderProvider } from './app-config.ts';
 
 export interface LibraryInfo {
@@ -39,7 +40,7 @@ export function getLibraryInfo(): LibraryInfo {
   return {
     folder_home: getFolderHome(),
     folders: getRecentFolders().map((folder) => ({
-      path: toPosixAbs(folder.path),
+      path: filesystemPath.absolute(folder.path),
       name: path.basename(folder.path),
       provider,
       ...(folder.description ? { description: folder.description } : {}),

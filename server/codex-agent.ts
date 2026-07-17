@@ -21,6 +21,7 @@ import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
+import { filesystemPath } from './filesystem-path.ts';
 
 const log = logger('codex-agent');
 
@@ -1001,7 +1002,7 @@ export async function getCodexSessionMessages(threadId: string, folder: string |
     includeTurns: true,
   })) as JsonObject;
   const thread = objectValue(result.thread);
-  if (folder && path.resolve(stringValue(thread.cwd)) !== path.resolve(folder)) {
+  if (folder && !filesystemPath.equal(stringValue(thread.cwd), folder)) {
     throw httpError(404, 'session not found for current folder');
   }
   return codexThreadToBlocks(thread, codexRolloutToolsByTurn(stringValue(thread.path)));
@@ -1149,7 +1150,7 @@ async function withSharedCodexHistoryAppServer<T>(
   cwd: string,
   fn: (request: (method: string, params: unknown) => Promise<unknown>) => Promise<T>,
 ): Promise<T> {
-  const key = path.resolve(cwd);
+  const key = filesystemPath.identity(cwd);
   let entry = codexHistoryClients.get(key);
   if (!entry || entry.client.isClosed()) {
     const client = new CodexHistoryAppServer(cwd, () => {
@@ -1284,8 +1285,7 @@ function rolloutToolInput(value: unknown): JsonObject {
 }
 
 function isPathInside(candidate: string, parent: string): boolean {
-  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
-  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+  return !filesystemPath.equal(parent, candidate) && filesystemPath.contains(parent, candidate);
 }
 
 function rolloutToolName(name: string): string {

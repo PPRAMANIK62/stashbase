@@ -17,7 +17,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { appDataRoot } from './local-data.ts';
-import { isFilesystemPathAtOrUnder, toPosixAbs } from './folder.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import { isConvertibleSource } from './format.ts';
 import { isCloudPlaceholderName, isIndexExcludedDirName } from './indexable.ts';
 import { logger, errorMessage } from './log.ts';
@@ -31,7 +31,11 @@ export function derivedDir(): string {
 }
 
 function derivedKey(sourceAbs: string): string {
-  return bytesToHex(blake3(new TextEncoder().encode(toPosixAbs(sourceAbs)))).slice(0, 32);
+  // Preserve the canonical source spelling in the durable cache key so an
+  // upgrade does not invalidate existing Windows derived artifacts. External
+  // paths are canonicalized before this seam; comparison-only state uses
+  // `filesystemPath.identity()` elsewhere.
+  return bytesToHex(blake3(new TextEncoder().encode(filesystemPath.absolute(sourceAbs)))).slice(0, 32);
 }
 
 function manifestPath(): string {
@@ -69,7 +73,7 @@ function writeManifest(manifest: Record<string, string>): void {
 export function registerDerivedSource(sourceAbs: string): void {
   if (!isConvertibleSource(sourceAbs)) return;
   const manifest = readManifest();
-  manifest[derivedKey(sourceAbs)] = toPosixAbs(sourceAbs);
+  manifest[derivedKey(sourceAbs)] = filesystemPath.absolute(sourceAbs);
   writeManifest(manifest);
 }
 
@@ -82,10 +86,10 @@ function forgetDerivedSource(sourceAbs: string): void {
 }
 
 export function knownDerivedSourcesUnderFolder(folderAbs: string): string[] {
-  const root = toPosixAbs(folderAbs).replace(/\/+$/, '');
+  const root = filesystemPath.absolute(folderAbs);
   return Object.values(readManifest())
-    .map(toPosixAbs)
-    .filter((sourceAbs) => isFilesystemPathAtOrUnder(sourceAbs, root));
+    .map((sourceAbs) => filesystemPath.absolute(sourceAbs))
+    .filter((sourceAbs) => filesystemPath.contains(root, sourceAbs));
 }
 
 /** Absolute path of the derived markdown note for a source file. */
@@ -106,16 +110,19 @@ function derivedTextPathFor(sourceAbs: string, ext: '.md' | '.html'): string {
  *  Only manifest-known final text files are accepted; scratch/bundle files and
  *  arbitrary AppData paths are not exposed through MCP file reads. */
 export function sourceForDerivedText(noteAbs: string): string | null {
-  const abs = toPosixAbs(noteAbs);
-  const dir = toPosixAbs(derivedDir()).replace(/\/+$/, '');
-  if (!abs.startsWith(`${dir}/`)) return null;
+  const abs = filesystemPath.absolute(noteAbs);
+  const dir = filesystemPath.absolute(derivedDir());
+  if (!filesystemPath.contains(dir, abs) || filesystemPath.equal(dir, abs)) return null;
   const base = path.posix.basename(abs);
   const match = base.match(/^([0-9a-f]{32})\.(md|html)$/i);
   if (!match) return null;
   const sourceAbs = readManifest()[match[1]];
   if (!sourceAbs) return null;
-  return toPosixAbs(derivedTextPathFor(sourceAbs, match[2].toLowerCase() === 'html' ? '.html' : '.md')) === abs
-    ? toPosixAbs(sourceAbs)
+  return filesystemPath.equal(
+    derivedTextPathFor(sourceAbs, match[2].toLowerCase() === 'html' ? '.html' : '.md'),
+    abs,
+  )
+    ? filesystemPath.absolute(sourceAbs)
     : null;
 }
 
@@ -179,7 +186,7 @@ export function deleteDerivedForSource(sourceAbs: string): DerivedCleanupStats {
  *  a folder. This is used when a folder leaves the library; user files stay
  *  in place, but AppData-derived text/assets for those sources should go. */
 export function deleteDerivedUnderFolder(folderAbs: string): DerivedCleanupStats {
-  const root = toPosixAbs(folderAbs);
+  const root = filesystemPath.absolute(folderAbs);
   const seen = new Set<string>();
   const totals: DerivedCleanupStats = { sources: 0, artifacts: 0 };
 
@@ -204,17 +211,19 @@ export function deleteDerivedUnderFolder(folderAbs: string): DerivedCleanupStats
         continue;
       }
       if (!ent.isFile() || !isConvertibleSource(ent.name)) continue;
-      const sourceAbs = toPosixAbs(abs);
-      if (seen.has(sourceAbs)) continue;
-      seen.add(sourceAbs);
+      const sourceAbs = filesystemPath.absolute(abs);
+      const sourceKey = filesystemPath.identity(sourceAbs);
+      if (seen.has(sourceKey)) continue;
+      seen.add(sourceKey);
       add(deleteDerivedForSource(sourceAbs));
     }
   }
 
   if (fs.existsSync(root)) visit(root);
   for (const sourceAbs of knownDerivedSourcesUnderFolder(root)) {
-    if (seen.has(sourceAbs)) continue;
-    seen.add(sourceAbs);
+    const sourceKey = filesystemPath.identity(sourceAbs);
+    if (seen.has(sourceKey)) continue;
+    seen.add(sourceKey);
     add(deleteDerivedForSource(sourceAbs));
   }
   return totals;

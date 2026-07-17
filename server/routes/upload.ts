@@ -30,10 +30,9 @@ import {
   exactMemberFolderRoot,
   resolveFolderRoot,
   runWithWindowId,
-  sourcePathInFolder,
-  toPosixAbs,
   WINDOW_ID_HEADER,
 } from '../folder.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import { maybeConvertImage } from '../image.ts';
 import { maybeConvertPdf } from '../pdf.ts';
 import { maybeConvertDocx } from '../docx.ts';
@@ -108,62 +107,21 @@ function sendUploadError(res: express.Response, err: unknown): void {
   res.status(400).json({ error: errorMessage(err) });
 }
 
-function resolveInFolder(folderRoot: string, relPath: string): string {
-  validateUploadPath(relPath);
-  const full = path.join(folderRoot, relPath);
-  const back = path.relative(folderRoot, full);
-  if (back.startsWith('..') || path.isAbsolute(back)) throw new Error('path escapes folder');
-  return full;
-}
-
-function isPathInsideOrSame(parent: string, child: string): boolean {
-  const rel = path.relative(parent, child);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-}
-
-function realFolderRoot(folderRoot: string): string {
-  return fs.realpathSync.native(folderRoot);
-}
-
-function assertRealPathInsideFolder(folderRoot: string, absPath: string, label = 'path'): void {
-  const real = fs.realpathSync.native(absPath);
-  if (!isPathInsideOrSame(realFolderRoot(folderRoot), real)) {
-    throw new Error(`${label} escapes folder through symlink`);
-  }
-}
-
-function assertCreatablePathInsideFolder(folderRoot: string, absPath: string, label = 'path'): void {
-  const rootReal = realFolderRoot(folderRoot);
-  let probe = path.resolve(path.dirname(absPath));
-  while (!fs.existsSync(probe)) {
-    const parent = path.dirname(probe);
-    if (parent === probe) break;
-    probe = parent;
-  }
-  const probeRel = path.relative(folderRoot, probe);
-  if (probeRel.startsWith('..') || path.isAbsolute(probeRel)) throw new Error(`${label} escapes folder`);
-  const probeReal = fs.realpathSync.native(probe);
-  if (!isPathInsideOrSame(rootReal, probeReal)) {
-    throw new Error(`${label} escapes folder through symlink`);
-  }
-}
-
 function pathExistsInFolder(folderRoot: string, relPath: string): boolean {
   try {
-    const target = resolveInFolder(folderRoot, relPath);
-    if (!fs.existsSync(target)) return false;
-    assertRealPathInsideFolder(folderRoot, target);
-    return true;
+    validateUploadPath(relPath);
+    const target = filesystemPath.resolveUnder(folderRoot, relPath, { access: 'existing' });
+    return fs.existsSync(target);
   } catch {
     return false;
   }
 }
 
-function saveBytesInFolder(folderRoot: string, relPath: string, bytes: Buffer): void {
-  const target = resolveInFolder(folderRoot, relPath);
-  assertCreatablePathInsideFolder(folderRoot, target);
+function saveBytesInFolder(folderRoot: string, relPath: string, bytes: Buffer): string {
+  validateUploadPath(relPath);
+  const target = filesystemPath.resolveUnder(folderRoot, relPath, { access: 'creatable' });
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  assertCreatablePathInsideFolder(folderRoot, target);
+  filesystemPath.resolveUnder(folderRoot, relPath, { access: 'creatable' });
   const tmp = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${Date.now()}.tmp`);
   try {
     fs.writeFileSync(tmp, bytes);
@@ -172,6 +130,7 @@ function saveBytesInFolder(folderRoot: string, relPath: string, bytes: Buffer): 
     try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort */ }
     throw err;
   }
+  return target;
 }
 
 async function handleUpload(req: express.Request, res: express.Response): Promise<void> {
@@ -196,7 +155,7 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
     res.status(400).json({ error: errorMessage(err) });
     return;
   }
-  const folderRoot = toPosixAbs(folderAbs);
+  const folderRoot = filesystemPath.absolute(folderAbs);
   // Optional `dir` form field: folder-relative path of the folder to
   // drop the files into. Sanitised the same way we treat any other
   // write path so a stray `..` or absolute path can't escape the folder.
@@ -229,7 +188,7 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
       // shipped alongside an arxiv HTML) are needed by the iframe even
       // though they're not indexable. Only indexable formats go to
       // the indexer.
-      saveBytesInFolder(folderAbs, name, f.buffer);
+      const savedAbs = saveBytesInFolder(folderAbs, name, f.buffer);
       out.push({ file: name });
       if (detectFormat(name)) {
         // Structured notes (Markdown / HTML) are saved and indexed
@@ -239,20 +198,20 @@ async function handleUpload(req: express.Request, res: express.Response): Promis
         // memory). This honours the "don't modify the opened folder" rule
         // now that any folder on disk can be opened in place.
         const text = f.buffer.toString('utf8');
-        toIndex.push({ name, sourcePath: sourcePathInFolder(folderRoot, name), text });
+        toIndex.push({ name, sourcePath: filesystemPath.join(folderRoot, name), text });
       } else if (folderAbs && /\.pdf$/i.test(name)) {
         // PDFs run through the PyMuPDF pipeline so the
         // app gets AppData-derived Markdown + extracted assets, then pushes
         // the derived text into the index when semantic indexing is available.
-        toConvertPdf.push({ abs: path.join(folderAbs, name), rel: name });
+        toConvertPdf.push({ abs: savedAbs, rel: name });
       } else if (folderAbs && isImageFile(name)) {
         // Images run through RapidOCR so any text in a screenshot /
         // photo becomes AppData-derived OCR Markdown for search.
-        toOcrImage.push({ abs: path.join(folderAbs, name), rel: name });
+        toOcrImage.push({ abs: savedAbs, rel: name });
       } else if (folderAbs && isDocxFile(name)) {
         // DOCX is converted to AppData-derived semantic HTML for preview,
         // search, and Agent reads. The source .docx stays unchanged.
-        toConvertDocx.push({ abs: path.join(folderAbs, name), rel: name });
+        toConvertDocx.push({ abs: savedAbs, rel: name });
       }
     } catch (err: unknown) {
       log.warn(`upload: save failed for ${name}: ${errorMessage(err)}`);

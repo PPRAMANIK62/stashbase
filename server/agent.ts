@@ -33,6 +33,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { filesystemPath } from './filesystem-path.ts';
 import type { WebSocket } from 'ws';
 import {
   getSessionInfo,
@@ -434,7 +435,7 @@ export async function resumeMatchesCwd(sessionId: string, cwd: string): Promise<
 }
 
 export function sessionInfoMatchesCwd(info: { cwd?: unknown } | null | undefined, cwd: string): boolean {
-  return !!(info && typeof info.cwd === 'string' && path.resolve(info.cwd) === path.resolve(cwd));
+  return !!(info && typeof info.cwd === 'string' && filesystemPath.equal(info.cwd, cwd));
 }
 
 /** Stringify a tool_result `content` (string, or an array of text/other

@@ -27,6 +27,7 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { logger } from './log.ts';
 import { globalVectorStoreDir } from './local-data.ts';
+import { filesystemPath } from './filesystem-path.ts';
 
 const log = logger('mfs');
 
@@ -86,7 +87,7 @@ class MfsDaemon extends EventEmitter {
   /** Every folder root the server has asked us to bind. Keyed by the
    *  absolute POSIX folder root. Persisted in memory so we can replay them
    *  after a respawn — the Python child loses its bound set on exit. */
-  private bindings = new Map<string, BindFolderArgs>();
+  private bindings = new Map<string, { folder: string; cfg: BindFolderArgs }>();
 
   /** Spawn (idempotent) and resolve once the daemon emits `ready`. */
   async ensureReady(): Promise<void> {
@@ -105,9 +106,10 @@ class MfsDaemon extends EventEmitter {
    *  later respawn. Safe to call repeatedly with the same args (the
    *  daemon-side op is idempotent). */
   async bindFolder(folder: string, cfg: BindFolderArgs): Promise<void> {
-    this.bindings.set(folder, cfg);
+    const source = filesystemPath.absolute(folder);
+    this.bindings.set(filesystemPath.identity(source), { folder: source, cfg });
     await this.call('bind_folder', {
-      folder,
+      folder: source,
       provider: cfg.provider,
       ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
       ...(cfg.model ? { model: cfg.model } : {}),
@@ -119,16 +121,17 @@ class MfsDaemon extends EventEmitter {
    *  routing new files for the folder. Existing rows stay searchable
    *  until explicit delete. */
   async unbindFolder(folder: string): Promise<void> {
-    this.bindings.delete(folder);
+    const source = filesystemPath.absolute(folder);
+    this.bindings.delete(filesystemPath.identity(source));
     if (this.proc) {
-      try { await this.call('unbind_folder', { folder }); }
-      catch (err) { log.warn(`unbind_folder ${folder} failed: ${(err as Error).message}`); }
+      try { await this.call('unbind_folder', { folder: source }); }
+      catch (err) { log.warn(`unbind_folder ${source} failed: ${(err as Error).message}`); }
     }
   }
 
   /** Snapshot of every folder currently bound on the renderer side. */
   knownBindings(): ReadonlyMap<string, BindFolderArgs> {
-    return this.bindings;
+    return new Map([...this.bindings.values()].map(({ folder, cfg }) => [folder, cfg]));
   }
 
   /** Forget every recorded binding. Used when the global embedder
@@ -250,7 +253,7 @@ class MfsDaemon extends EventEmitter {
         // and-forget; if any individual rebind fails, the next user op
         // for that folder surfaces the error.
         if (this.bindings.size > 0) {
-          for (const [folder, cfg] of this.bindings) {
+          for (const { folder, cfg } of this.bindings.values()) {
             this.call('bind_folder', {
               folder,
               provider: cfg.provider,

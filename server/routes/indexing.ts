@@ -10,11 +10,9 @@ import { rgPath } from '@vscode/ripgrep';
 import { logger } from '../log.ts';
 import { analyzeHtml } from '../html.ts';
 import {
-  relInFolder,
   getCurrentFolder,
   exactMemberFolderRoot,
   resolveFolderRoot,
-  toPosixAbs,
 } from '../folder.ts';
 import { getApiKey } from '../app-config.ts';
 import { hasNoExtractableText, isCloudPlaceholderName, isIndexExcludedDirName, shouldIndexFilePath } from '../indexable.ts';
@@ -29,6 +27,7 @@ import { clearIndexWarning, getIndexWarning, indexer, syncFolderNow } from '../s
 import { noteTreeChanged } from '../watcher.ts';
 import { sendError } from '../http.ts';
 import { derivedNoteFor } from '../derived-store.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import {
   remapKeywordFilesForDisplay,
   remapSearchHitsForDisplay,
@@ -67,24 +66,21 @@ function requireRequestFolder(explicit?: string): { folderRoot: string } {
     (err as any).code = 'NO_FOLDER';
     throw err;
   }
-  return { folderRoot: toPosixAbs(folderRoot) };
+  return { folderRoot: filesystemPath.absolute(folderRoot) };
 }
 
 function sourcePathForAbs(absPath: string): string {
-  return toPosixAbs(absPath);
-}
-
-function relativePathEscapesRoot(rel: string): boolean {
-  return rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+  return filesystemPath.absolute(absPath);
 }
 
 /** Resolve an explicit-folder request without allowing a symlink inside the
  * library folder to redirect preparation/extraction outside that folder. */
 function requireExistingFileInFolder(folderRoot: string, rel: string): string {
-  const abs = path.resolve(folderRoot, rel);
-  const folderRel = path.relative(folderRoot, abs);
-  if (relativePathEscapesRoot(folderRel)) {
-    const err = new Error('path escapes folder');
+  let abs: string;
+  try {
+    abs = filesystemPath.resolveUnder(folderRoot, rel);
+  } catch (cause) {
+    const err = new Error('path escapes folder', { cause });
     (err as any).status = 400;
     throw err;
   }
@@ -95,11 +91,10 @@ function requireExistingFileInFolder(folderRoot: string, rel: string): string {
     throw err;
   }
 
-  const rootReal = fs.realpathSync.native(folderRoot);
-  const sourceReal = fs.realpathSync.native(abs);
-  const realRel = path.relative(rootReal, sourceReal);
-  if (relativePathEscapesRoot(realRel)) {
-    const err = new Error('path escapes folder through symlink');
+  try {
+    filesystemPath.resolveUnder(folderRoot, rel, { access: 'existing' });
+  } catch (cause) {
+    const err = new Error('path escapes folder through symlink', { cause });
     (err as any).status = 400;
     throw err;
   }
@@ -112,10 +107,10 @@ function requireExistingFileInFolder(folderRoot: string, rel: string): string {
 }
 
 export function preparationFailuresForFolder(folderRoot: string): Array<{ path: string; lastError: string; attempts: number }> {
-  const root = toPosixAbs(folderRoot);
+  const root = filesystemPath.absolute(folderRoot);
   const out: Array<{ path: string; lastError: string; attempts: number }> = [];
   for (const { path: sourcePath, entry } of listFailed()) {
-    const rel = relInFolder(sourcePath, root);
+    const rel = filesystemPath.relative(root, sourcePath);
     if (rel == null) continue;
     if (!fs.existsSync(sourcePath)) {
       clearRecord(sourcePath);
@@ -132,10 +127,10 @@ export function conversionProgressForFolder(
   folderRoot: string,
   snapshot: SchedulerSnapshot = getConversionSchedulerSnapshot(),
 ): Record<string, ConversionProgress> {
-  const root = toPosixAbs(folderRoot);
+  const root = filesystemPath.absolute(folderRoot);
   const out: Record<string, ConversionProgress> = {};
   for (const task of snapshot.tasks) {
-    const rel = relInFolder(task.key, root);
+    const rel = filesystemPath.relative(root, task.key);
     if (rel == null) continue;
     if (task.state === 'queued') {
       out[rel] = { phase: 'queued', lane: task.lane, tasksAhead: task.tasksAhead ?? 0 };
@@ -151,10 +146,10 @@ export function conversionVersionsForFolder(
   folderRoot: string,
   snapshot: SchedulerSnapshot = getConversionSchedulerSnapshot(),
 ): Record<string, number> {
-  const root = toPosixAbs(folderRoot);
+  const root = filesystemPath.absolute(folderRoot);
   const out: Record<string, number> = {};
   for (const [sourcePath, version] of Object.entries(snapshot.versions)) {
-    const rel = relInFolder(sourcePath, root);
+    const rel = filesystemPath.relative(root, sourcePath);
     if (rel != null) out[rel] = version;
   }
   return out;
@@ -282,7 +277,7 @@ export function mount(app: express.Express): void {
       }
       const explicit = parseFolderParam(req.body?.folder);
       const { folderRoot } = requireRequestFolder(explicit);
-      const root = toPosixAbs(folderRoot);
+      const root = filesystemPath.absolute(folderRoot);
       const hits = await indexer.search(query, topK, root);
       // Daemon hits arrive as absolute paths; translate fileName back to
       // folder-relative for the sidebar (which only knows the current
@@ -294,7 +289,7 @@ export function mount(app: express.Express): void {
         hits
           .filter((hit) => !isConversionTextUnavailable(hit.fileName))
           .map((h) => {
-            const rel = relInFolder(h.fileName, root);
+            const rel = filesystemPath.relative(root, h.fileName);
             return rel == null ? null : { ...h, fileName: rel };
           })
           .filter((h): h is NonNullable<typeof h> => h !== null),
@@ -345,7 +340,7 @@ export function mount(app: express.Express): void {
   app.get('/api/index-status', async (req, res) => {
     try {
       const { folderRoot: cur } = requireRequestFolder(parseFolderParam(req.query.folder));
-      const curRoot = toPosixAbs(cur);
+      const curRoot = filesystemPath.absolute(cur);
       const status = await indexer.status(curRoot);
       const semanticEnabled = !!getApiKey();
       // Convert absolute paths back to folder-relative for the UI.
@@ -359,16 +354,16 @@ export function mount(app: express.Express): void {
       // never enter Milvus, and would otherwise remain pending forever.
       const pendingSet = new Set<string>();
       for (const sourcePath of status.pending) {
-        const rel = relInFolder(sourcePath, curRoot);
+        const rel = filesystemPath.relative(curRoot, sourcePath);
         if (rel == null) continue;
         if (!shouldIndexFilePath(rel)) continue;
-        if (hasNoExtractableText(path.join(cur, rel))) continue;
+        if (hasNoExtractableText(filesystemPath.join(cur, rel))) continue;
         const visible = displayPathForHit(rel, cur);
         if (visible) pendingSet.add(visible);
       }
       const pending = semanticEnabled ? [...pendingSet].sort() : [];
       const orphaned = status.orphaned
-        .map((p) => relInFolder(p, curRoot))
+        .map((p) => filesystemPath.relative(curRoot, p))
         .filter((p): p is string => p != null);
       // File preparation status: folder-scoped. `pendingConversions`
       // feeds search-readiness accounting, while `preparationFailures`

@@ -31,7 +31,8 @@ import {
   attachCodexWebSocket,
   killActiveCodex,
 } from './codex-agent.ts';
-import { onClose, onSwitch, ensureFolderHome, toPosixAbs } from './folder.ts';
+import { onClose, onSwitch, ensureFolderHome } from './folder.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import { getApiKey, migrateLegacyEmbedderConfig } from './app-config.ts';
 import { bootBindAllFolders, reconcileLibraryFolders } from './state.ts';
 import { reapOrphanDaemons } from './stale-lock.ts';
@@ -69,7 +70,7 @@ setDerivedNoteIndexer(async (sourceAbs, derivedAbs) => {
   // it as unchanged rather than re-converting in a loop.
   const derivedContent = fs.readFileSync(derivedAbs, 'utf8');
   const sourceHash = bytesToHex(blake3(fs.readFileSync(sourceAbs)));
-  await indexer.upsertConvertedFile(toPosixAbs(sourceAbs), derivedContent, sourceHash, path.extname(derivedAbs));
+  await indexer.upsertConvertedFile(filesystemPath.absolute(sourceAbs), derivedContent, sourceHash, path.extname(derivedAbs));
   noteTreeChanged();
 });
 

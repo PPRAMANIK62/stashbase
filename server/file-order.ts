@@ -16,7 +16,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { logger, errorMessage, errorCode } from './log.ts';
-import { getFolderHome, requireCurrentFolder, toPosixAbs } from './folder.ts';
+import { getFolderHome, requireCurrentFolder } from './folder.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import { fileOrderDir, localDataDirForRoot } from './local-data.ts';
 
 const log = logger('file-order');
@@ -24,7 +25,7 @@ const log = logger('file-order');
 export type FileOrderMap = Record<string, string[]>;
 
 function orderFileName(root: string): string {
-  const abs = toPosixAbs(root);
+  const abs = filesystemPath.absolute(root);
   const hash = crypto.createHash('sha256').update(abs).digest('hex').slice(0, 16);
   const base = path.basename(abs).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'folder';
   return `${base}-${hash}.json`;

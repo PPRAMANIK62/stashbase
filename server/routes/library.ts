@@ -23,11 +23,10 @@ import {
   getRecentFolders,
   notifyFolderSwitch,
   removeRecent,
-  sameFilesystemPath,
   setCurrentFolder,
-  toPosixAbs,
   validateFolderName,
 } from '../folder.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import { errorMessage, logger } from '../log.ts';
 import { deleteFolderRuntimeState, indexer } from '../state.ts';
 import { clearRecordsUnder } from '../conversion-status.ts';
@@ -85,7 +84,7 @@ export function mount(app: express.Express): void {
   app.get('/api/folder', (_req, res) => {
     const current = getCurrentFolder();
     res.json({
-      current: current ? { path: toPosixAbs(current), name: getCurrentFolderLabel() ?? path.basename(current) } : null,
+      current: current ? { path: filesystemPath.absolute(current), name: getCurrentFolderLabel() ?? path.basename(current) } : null,
       recent: getRecentFolders(),
       homeDir: os.homedir(),
     });
@@ -117,7 +116,7 @@ export function mount(app: express.Express): void {
       if (changed) {
         res.once('finish', () => notifyFolderSwitch(folderRoot, windowId));
       }
-      res.json({ current: { path: toPosixAbs(folderRoot), name: getCurrentFolderLabel() ?? getCurrentFolderBasename() } });
+      res.json({ current: { path: filesystemPath.absolute(folderRoot), name: getCurrentFolderLabel() ?? getCurrentFolderBasename() } });
     } catch (err: unknown) {
       if ((err as any)?.code === 'FOLDER_EXISTS') {
         return res.status(409).json({ error: errorMessage(err), code: 'FOLDER_EXISTS' });
@@ -160,8 +159,8 @@ export function mount(app: express.Express): void {
     try {
       const raw = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
       if (!raw) return res.status(400).json({ error: 'path required' });
-      const abs = toPosixAbs(raw);
-      if (!getRecentFolders().some((r) => sameFilesystemPath(toPosixAbs(r.path), abs))) {
+      const abs = filesystemPath.absolute(raw);
+      if (!getRecentFolders().some((r) => filesystemPath.equal(r.path, abs))) {
         return res.status(404).json({ error: 'folder is not in your folders' });
       }
       // Tear down any live window bound to it FIRST (kills terminal sessions

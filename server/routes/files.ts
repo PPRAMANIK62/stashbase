@@ -31,7 +31,8 @@ import {
 import { detectViewerFormat, isDerivedNoteName, isImageFile, isNoteName } from '../format.ts';
 import { readFileOrder, remapFileOrderPath, removeFileOrderPath, setFolderOrder } from '../file-order.ts';
 import { applyRenamePlan, planRenameLinks, type RenameEntry } from '../links.ts';
-import { getCurrentFolder, getCurrentFolderLabel, runWithFolderRoot, toPosixAbs, toSourcePath } from '../folder.ts';
+import { getCurrentFolder, getCurrentFolderLabel, runWithFolderRoot, toSourcePath } from '../folder.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import { getApiKey } from '../app-config.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
@@ -685,7 +686,7 @@ export function mount(app: express.Express): void {
       const { preparedHtml } = analyzeHtml(raw);
       res.type('text/html').send(preparedHtml);
     } catch {
-      let sourcePath: string | null = sourceAbs ? toPosixAbs(sourceAbs) : null;
+      let sourcePath: string | null = sourceAbs ? filesystemPath.absolute(sourceAbs) : null;
       if (!sourcePath) {
         try { sourcePath = toSourcePath(rel); } catch { /* no active folder context */ }
       }

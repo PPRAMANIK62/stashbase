@@ -19,7 +19,6 @@
  * the transcript the client paints before reconnecting.
  */
 import express from 'express';
-import path from 'node:path';
 import {
   listSessions,
   getSessionMessages,
@@ -28,7 +27,8 @@ import {
   deleteSession,
   type SDKSessionInfo,
 } from '@anthropic-ai/claude-agent-sdk';
-import { getCurrentFolder, sameFilesystemPath } from '../folder.ts';
+import { getCurrentFolder } from '../folder.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
 
 /** Trimmed session row sent to the client. */
@@ -61,10 +61,10 @@ export function mount(app: express.Express): void {
     try {
       const sessions = await listSessions();
       const folder = getCurrentFolder();
-      const cur = folder ? path.resolve(folder) : null;
+      const cur = folder ? filesystemPath.absolute(folder) : null;
       const rows = sessions
         .map(toRow)
-        .filter((r) => !cur || (r.cwd != null && sameFilesystemPath(path.resolve(r.cwd), cur)))
+        .filter((r) => !cur || (r.cwd != null && filesystemPath.equal(r.cwd, cur)))
         .sort((a, b) => b.lastModified - a.lastModified);
       res.json(rows);
     } catch (err: unknown) {
@@ -133,7 +133,7 @@ async function sessionBelongsToCurrentFolder(id: string): Promise<boolean> {
 
 export function sessionInfoMatchesFolder(info: { cwd?: unknown } | null | undefined, folder: string): boolean {
   return !!(info && typeof info.cwd === 'string'
-    && sameFilesystemPath(path.resolve(info.cwd), path.resolve(folder)));
+    && filesystemPath.equal(info.cwd, folder));
 }
 
 // ----- transcript → panel blocks ----------------------------------------

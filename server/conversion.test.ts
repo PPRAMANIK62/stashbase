@@ -54,23 +54,17 @@ test('stale final output is invalidated synchronously when conversion is queued'
 });
 
 test('filesystem-root folder paths retain one separator', async () => {
-  const {
-    relInFolder,
-    runWithFolderRoot,
-    sameFilesystemPath,
-    sourcePathInFolder,
-    toPosixAbs,
-    toSourcePath,
-  } = await import('./folder.ts');
+  const { runWithFolderRoot, toSourcePath } = await import('./folder.ts');
+  const { filesystemPath } = await import('./filesystem-path.ts');
   const filesystemRoot = path.parse(process.cwd()).root;
   const child = path.resolve(filesystemRoot, 'nested', 'report.docx');
-  assert.equal(relInFolder(toPosixAbs(child), toPosixAbs(filesystemRoot)), 'nested/report.docx');
-  assert.equal(sourcePathInFolder(filesystemRoot, 'nested/report.docx'), toPosixAbs(child));
+  assert.equal(filesystemPath.relative(filesystemRoot, child), 'nested/report.docx');
+  assert.equal(filesystemPath.join(filesystemRoot, 'nested/report.docx'), filesystemPath.absolute(child));
   await runWithFolderRoot(filesystemRoot, () => {
-    assert.equal(toSourcePath('nested/report.docx'), toPosixAbs(child));
+    assert.equal(toSourcePath('nested/report.docx'), filesystemPath.absolute(child));
   });
   if (process.platform === 'win32') {
-    assert.equal(sameFilesystemPath(child, toPosixAbs(child).toUpperCase()), true);
+    assert.equal(filesystemPath.equal(child, filesystemPath.absolute(child).toUpperCase()), true);
   }
 });
 
@@ -87,7 +81,8 @@ test('running conversions protect file operations while queued work stays usable
   fs.writeFileSync(queuedSource, 'source');
   try {
     const { cancelConversion, getScheduledConversion, maybeConvert } = await import('./conversion.ts');
-    const { canonicalFolderRelativePath, runWithFolderRoot } = await import('./folder.ts');
+    const { runWithFolderRoot } = await import('./folder.ts');
+    const { filesystemPath } = await import('./filesystem-path.ts');
     const { inFlightFileOperationError } = await import('./routes/files.ts');
     const spec = {
       kind: 'guard_test',
@@ -113,7 +108,7 @@ test('running conversions protect file operations while queued work stays usable
     assert.equal(getScheduledConversion(source)?.state, 'running');
     assert.equal(getScheduledConversion(queuedSource)?.state, 'queued');
     if (process.platform === 'win32') {
-      assert.equal(canonicalFolderRelativePath(root, 'REPORT.DOCX'), 'report.docx');
+      assert.equal(filesystemPath.canonicalRelative(root, 'REPORT.DOCX'), 'report.docx');
     }
     await runWithFolderRoot(root, () => {
       assert.equal(inFlightFileOperationError('report.docx', 'rename')?.body.code, 'CONVERSION_IN_FLIGHT');

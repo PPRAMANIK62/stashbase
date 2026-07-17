@@ -29,7 +29,7 @@ import { isConvertibleSource } from './format.ts';
 import { cancelConversion } from './conversion.ts';
 import { clearRecord } from './conversion-status.ts';
 import { deleteDerivedForSource, knownDerivedSourcesUnderFolder } from './derived-store.ts';
-import { relInFolder } from './folder.ts';
+import { filesystemPath } from './filesystem-path.ts';
 
 const log = logger('sync');
 
@@ -38,7 +38,7 @@ const log = logger('sync');
  *  surprise). Deliberately NOT `fromSourcePath()` — that resolves the folder
  *  from the ambient window context, which the sync caller may not have. */
 function folderRelOf(root: string, abs: string): string | null {
-  const rel = relInFolder(abs, root);
+  const rel = filesystemPath.relative(root, abs);
   return rel === '' ? null : rel;
 }
 
@@ -81,7 +81,7 @@ async function assertSyncConverged(
  *  Null on escape or read failure — same contract as `files.ts:readText`,
  *  minus the current-folder resolution. */
 function readTextAt(root: string, abs: string): string | null {
-  const rel = relInFolder(abs, root);
+  const rel = filesystemPath.relative(root, abs);
   if (rel == null || rel === '') return null;
   try { return fs.readFileSync(abs, 'utf8'); } catch { return null; }
 }

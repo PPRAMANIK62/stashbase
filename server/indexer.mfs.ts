@@ -20,6 +20,7 @@ import { detectFormat } from './format.ts';
 import { contentSizeError, shouldIndexSourcePath } from './indexable.ts';
 import { logger } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import type {
   EmbedderRuntimeConfig,
   Indexer,
@@ -35,8 +36,8 @@ const log = logger('index');
 // already passes absolute paths/roots (`state.ts` binds absolute roots) and accepts absolute paths
 // back, so this module is a straight pass-through. `toAbs`/`fromAbs` are
 // kept as identity seams in case a future model needs translation again.
-const toAbs = (p: string): string => p;
-const fromAbs = (p: string): string => p;
+const toAbs = (p: string): string => filesystemPath.absolute(p);
+const fromAbs = (p: string): string => filesystemPath.absolute(p);
 
 /** Convert (path, raw content) into the (text, ext, fileHash) tuple
  *  the daemon expects. HTML gets pre-flattened to markdown-shaped
@@ -95,26 +96,30 @@ export class MfsIndexer implements Indexer {
 
   async bindFolder(folder: string, cfg: EmbedderRuntimeConfig): Promise<void> {
     const daemon = getDaemon();
-    await daemon.bindFolder(toAbs(folder), {
+    const source = toAbs(folder);
+    const key = filesystemPath.identity(source);
+    await daemon.bindFolder(source, {
       provider: cfg.provider,
       apiKey: cfg.apiKey,
       model: cfg.model,
       dimension: cfg.dimension,
     });
-    this.folderReady.delete(folder);
+    this.folderReady.delete(key);
     const bindingKey = `${cfg.provider}:${cfg.model ?? ''}:${cfg.dimension ?? ''}`;
-    if (this.loggedBindings.get(folder) === bindingKey) {
-      log.debug(`bound ${folder} → ${cfg.provider}`);
+    if (this.loggedBindings.get(key) === bindingKey) {
+      log.debug(`bound ${source} → ${cfg.provider}`);
     } else {
-      this.loggedBindings.set(folder, bindingKey);
-      log.info(`bound ${folder} → ${cfg.provider}`);
+      this.loggedBindings.set(key, bindingKey);
+      log.info(`bound ${source} → ${cfg.provider}`);
     }
   }
 
   async unbindFolder(folder: string): Promise<void> {
-    await getDaemon().unbindFolder(toAbs(folder));
-    this.folderReady.delete(folder);
-    this.loggedBindings.delete(folder);
+    const source = toAbs(folder);
+    const key = filesystemPath.identity(source);
+    await getDaemon().unbindFolder(source);
+    this.folderReady.delete(key);
+    this.loggedBindings.delete(key);
   }
 
   async upsertFile(filePath: string, content: string): Promise<number> {
@@ -283,7 +288,7 @@ export class MfsIndexer implements Indexer {
       up_to_date: boolean;
     }>('status', args);
     if (folder) {
-      this.folderReady.add(folder);
+      this.folderReady.add(filesystemPath.identity(folder));
     }
     return {
       total: res.total,
@@ -293,7 +298,7 @@ export class MfsIndexer implements Indexer {
       orphanedCount: res.orphaned_count,
       orphaned: res.orphaned.map(fromAbs),
       upToDate: res.up_to_date,
-      indexReady: !folder ? true : this.folderReady.has(folder),
+      indexReady: !folder ? true : this.folderReady.has(filesystemPath.identity(folder)),
     };
   }
 

@@ -6,6 +6,11 @@
  * revisions. Conversion correctness (derived markers, source signatures,
  * durable failures, indexing, cleanup) stays in `conversion.ts`.
  */
+import {
+  createFilesystemPath,
+  type FilesystemPathModule,
+  type FilesystemPlatform,
+} from './filesystem-path.ts';
 
 export type ConversionLane = 'light' | 'heavy';
 export type ConversionUrgency = 'interactive' | 'active-folder' | 'background';
@@ -61,9 +66,8 @@ interface SchedulerOptions {
   ageingMs?: number;
   now?: () => number;
   isActive?: (key: string) => boolean;
-  /** Defaults to false on Windows, whose normal filesystem identity is
-   * case-insensitive. Exposed for deterministic cross-platform tests. */
-  caseSensitivePaths?: boolean;
+  /** Overrides production platform semantics for deterministic tests. */
+  pathPlatform?: FilesystemPlatform;
 }
 
 interface Task extends ConversionJob {
@@ -98,31 +102,13 @@ const URGENCY_RANK: Record<ConversionUrgency, number> = {
   background: 2,
 };
 
-/** Match canonical POSIX task identities at or below a path. Keep `/` as a
- * real root instead of trimming it to the empty string. */
-function subtreeMatcher(
-  prefix: string,
-  caseSensitive: boolean,
-): ((key: string) => boolean) | null {
-  const compare = (value: string) => caseSensitive ? value : value.toLowerCase();
-  const normalizedPrefix = compare(prefix);
-  const root = normalizedPrefix === '/' ? '/' : normalizedPrefix.replace(/\/+$/, '');
-  if (!root) return null;
-  if (root === '/') return (key) => compare(key).startsWith('/');
-  const childPrefix = `${root}/`;
-  return (key) => {
-    const candidate = compare(key);
-    return candidate === root || candidate.startsWith(childPrefix);
-  };
-}
-
 export class ConversionScheduler {
   private readonly capacity: Record<ConversionLane, number>;
   private readonly classifierCapacity: number;
   private readonly ageingMs: number;
   private readonly now: () => number;
   private readonly isActive: (key: string) => boolean;
-  private readonly caseSensitivePaths: boolean;
+  private readonly paths: FilesystemPathModule;
   private readonly tasks = new Map<string, Task>();
   private readonly versions = new Map<string, number>();
   private readonly classifierRuns = new Set<ClassifierRun>();
@@ -146,7 +132,7 @@ export class ConversionScheduler {
     this.ageingMs = Math.max(0, options.ageingMs ?? DEFAULT_AGEING_MS);
     this.now = options.now ?? Date.now;
     this.isActive = options.isActive ?? (() => false);
-    this.caseSensitivePaths = options.caseSensitivePaths ?? process.platform !== 'win32';
+    this.paths = createFilesystemPath({ platform: options.pathPlatform });
   }
 
   schedule(job: ConversionJob): ScheduleResult {
@@ -219,19 +205,15 @@ export class ConversionScheduler {
   }
 
   hasUnder(prefix: string): boolean {
-    const matches = subtreeMatcher(prefix, this.caseSensitivePaths);
-    if (!matches) return false;
-    for (const key of this.tasks.keys()) {
-      if (matches(key)) return true;
+    for (const task of this.tasks.values()) {
+      if (this.paths.contains(prefix, task.key)) return true;
     }
     return false;
   }
 
   hasRunningUnder(prefix: string): boolean {
-    const matches = subtreeMatcher(prefix, this.caseSensitivePaths);
-    if (!matches) return false;
     for (const task of this.tasks.values()) {
-      if (task.state === 'running' && matches(task.key)) return true;
+      if (task.state === 'running' && this.paths.contains(prefix, task.key)) return true;
     }
     return false;
   }
@@ -262,14 +244,12 @@ export class ConversionScheduler {
   }
 
   cancelUnder(prefix: string, reason?: ConversionCancellationReason): Array<{ key: string; completion: Promise<void> }> {
-    const matches = subtreeMatcher(prefix, this.caseSensitivePaths);
-    if (!matches) return [];
     const keys = new Set<string>();
     for (const task of this.tasks.values()) {
-      if (matches(task.key)) keys.add(task.key);
+      if (this.paths.contains(prefix, task.key)) keys.add(task.key);
     }
     for (const run of this.classifierRuns) {
-      if (matches(run.key)) keys.add(run.key);
+      if (this.paths.contains(prefix, run.key)) keys.add(run.key);
     }
     return [...keys].map((key) => ({
       key,
@@ -505,7 +485,7 @@ export class ConversionScheduler {
   }
 
   private identity(key: string): string {
-    return this.caseSensitivePaths ? key : key.toLowerCase();
+    return this.paths.identity(key);
   }
 }
 

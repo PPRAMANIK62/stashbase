@@ -2,7 +2,7 @@ import { displayPathForHit } from './pdf.ts';
 import { derivedNoteFor } from './derived-store.ts';
 import type { SearchHit } from './indexer.ts';
 import fs from 'node:fs';
-import path from 'node:path';
+import { filesystemPath } from './filesystem-path.ts';
 
 export interface KeywordMatch {
   line: number;
@@ -34,7 +34,7 @@ export function remapKeywordFilesForDisplay(
     const display = displayPathForHit(file.path, baseAbs);
     if (display == null) continue;
     const pageMap = pdfSourceLineMap(display, baseAbs)
-      ?? (display !== file.path ? pdfLineMapForPath(path.resolve(baseAbs, file.path), baseAbs) : null);
+      ?? (display !== file.path ? pdfLineMapForPath(filesystemPath.absolute(file.path, baseAbs), baseAbs) : null);
     let bucket = byPath.get(display);
     if (!bucket) {
       bucket = { path: display, matches: [], totalMatches: 0 };
@@ -76,7 +76,7 @@ export function remapSearchHitsForDisplay(hits: SearchHit[], baseAbs: string): S
     const display = displayPathForHit(hit.fileName, baseAbs);
     if (display == null) continue;
     const pageMap = pdfSourceLineMap(display, baseAbs)
-      ?? (display !== hit.fileName ? pdfLineMapForPath(path.resolve(baseAbs, hit.fileName), baseAbs) : null);
+      ?? (display !== hit.fileName ? pdfLineMapForPath(filesystemPath.absolute(hit.fileName, baseAbs), baseAbs) : null);
     const next = {
       ...hit,
       fileName: display,
@@ -106,14 +106,13 @@ interface PdfDerivedLineMap {
 
 function pdfSourceLineMap(displayPath: string, baseAbs: string): PdfDerivedLineMap | null {
   if (!/\.pdf$/i.test(displayPath)) return null;
-  const sourceAbs = path.resolve(baseAbs, displayPath);
+  const sourceAbs = filesystemPath.absolute(displayPath, baseAbs);
   return pdfLineMapForPath(derivedNoteFor(sourceAbs), undefined);
 }
 
 function pdfLineMapForPath(full: string, baseAbs?: string): PdfDerivedLineMap | null {
   if (baseAbs) {
-    const back = path.relative(baseAbs, full);
-    if (back.startsWith('..') || path.isAbsolute(back)) return null;
+    if (!filesystemPath.contains(baseAbs, full)) return null;
   }
   let text: string;
   try { text = fs.readFileSync(full, 'utf8'); } catch { return null; }
