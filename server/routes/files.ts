@@ -7,9 +7,6 @@
  * share the MIME table + HTML scroll-bootstrap behaviour.
  */
 import express from 'express';
-import fs from 'node:fs';
-import path from 'node:path';
-import { analyzeHtml } from '../html.ts';
 import { contentSizeError } from '../indexable.ts';
 import {
   createTextExclusive,
@@ -24,15 +21,13 @@ import {
   pathExists,
   readText,
   renameOnDisk,
-  resolveAsset,
   resolveExisting,
   sanitizeFilename,
 } from '../files.ts';
 import { detectViewerFormat, isImageFile, isNoteName } from '../format.ts';
-import { readFileOrder, remapFileOrderPath, removeFileOrderPath, setFolderOrder } from '../file-order.ts';
+import { remapFileOrderPath, removeFileOrderPath } from '../file-order.ts';
 import { applyRenamePlan, planRenameLinks, type RenameEntry } from '../links.ts';
 import { getCurrentFolder, getCurrentFolderLabel, runWithFolderRoot, toSourcePath } from '../folder.ts';
-import { filesystemPath } from '../filesystem-path.ts';
 import { getApiKey } from '../app-config.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
@@ -40,13 +35,15 @@ import { sendError, revealInOsFileManager } from '../http.ts';
 import { bundleRenameEntry, renameWithRollback } from '../rename-helpers.ts';
 import { maybeConvertImage } from '../image.ts';
 import { maybeConvertPdf } from '../pdf.ts';
-import { derivedHtmlPathForDocx, maybeConvertDocx } from '../docx.ts';
-import { cancelConversion, getScheduledConversion, isConversionTextUnavailable } from '../conversion.ts';
+import { maybeConvertDocx } from '../docx.ts';
+import { cancelConversion } from '../conversion.ts';
 import { noteTreeChanged } from '../watcher.ts';
-import { clearRecord, hasFailed } from '../conversion-status.ts';
+import { clearRecord } from '../conversion-status.ts';
 import { deleteDerivedForSource } from '../derived-store.ts';
 import { inFlightFileOperationError } from '../file-operation-guard.ts';
 import { saveFileContent, upsertSavedFile } from '../file-save.ts';
+import { mountFileAssetRoutes } from './file-assets.ts';
+import { mountFileOrderRoutes } from './file-order.ts';
 
 export {
   inFlightFileOperationError,
@@ -102,29 +99,6 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
     sendError(res, err);
   }
 }
-
-/** Asset content-type table, used by /asset/*. Anything outside the
- *  table falls back to application/octet-stream — the renderer's
- *  iframe / image tags hint MIME via attribute and rarely care. */
-const MIME: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.svg': 'image/svg+xml',
-  '.css': 'text/css',
-  '.js': 'application/javascript',
-  '.mjs': 'application/javascript',
-  '.json': 'application/json',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.otf': 'font/otf',
-  '.pdf': 'application/pdf',
-  '.mp3': 'audio/mpeg',
-  '.mp4': 'video/mp4',
-};
 
 export function mount(app: express.Express): void {
   // ----- list -----
@@ -509,116 +483,6 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // ----- per-folder manual ordering -----
-  // `GET` returns the whole map so the renderer can hand it to
-  // `buildTree` once on folder load. `PUT` updates one folder atomically
-  // (renderer fires this after each successful drag-to-reorder).
-  app.get('/api/file-order', (_req, res) => {
-    if (!getCurrentFolder()) {
-      return res.status(412).json({ error: 'no folder open', code: 'NO_FOLDER' });
-    }
-    try {
-      res.json(readFileOrder());
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
-  });
-
-  app.put('/api/file-order', (req, res) => {
-    if (!getCurrentFolder()) {
-      return res.status(412).json({ error: 'no folder open', code: 'NO_FOLDER' });
-    }
-    const parentPath = typeof req.body?.parentPath === 'string' ? req.body.parentPath : null;
-    const names = req.body?.names;
-    if (parentPath == null) {
-      return res.status(400).json({ error: 'parentPath required (string, "" for root)' });
-    }
-    if (!Array.isArray(names) || !names.every((s) => typeof s === 'string')) {
-      return res.status(400).json({ error: 'names must be string[]' });
-    }
-    try {
-      setFolderOrder(parentPath, names);
-      res.json({});
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
-  });
-
-  // ----- asset streaming -----
-  // Serves files in the folder directly (HTML, images, CSS, fonts, …).
-  // Used as the `src` of the HTML preview iframe so relative URLs like
-  // `<img src="X_files/figure.png">` resolve to other files in the
-  // same `_files/` bundle (arxiv "Save Page As Complete" layout). HTML
-  // responses go through `analyzeHtml` so the prepared bytes carry the
-  // scroll-bootstrap script + heading ids for in-doc anchor scrolling.
-  app.get('/asset/*', (req, res) => {
-    const rel = stripAssetWindowPrefix((req.params as any)[0] as string);
-    const abs = resolveAsset(rel);
-    if (!abs) return res.status(404).end();
-    const ext = path.extname(abs).toLowerCase();
-    if (ext === '.html' || ext === '.htm') {
-      try {
-        const raw = fs.readFileSync(abs, 'utf8');
-        const { preparedHtml } = analyzeHtml(raw);
-        res.type('text/html').send(preparedHtml);
-      } catch (err: unknown) {
-        sendError(res, err);
-      }
-      return;
-    }
-    if (ext === '.webm' || ext === '.mp4' || ext === '.mov' || ext === '.m4v') {
-      // Video needs Range support for seeking — sendFile handles
-      // Accept-Ranges / 206 responses; a piped stream can't seek.
-      return res.sendFile(abs);
-    }
-    res.type(MIME[ext] ?? 'application/octet-stream');
-    fs.createReadStream(abs).pipe(res);
-  });
-
-  // Serves AppData-derived DOCX HTML as a fallback when renderer-side source
-  // conversion cannot produce the immediate preview. The source path is still
-  // folder-relative; this route only swaps the served bytes.
-  app.get('/asset-derived/*', (req, res) => {
-    const rel = stripAssetWindowPrefix((req.params as any)[0] as string);
-    if (detectViewerFormat(rel) !== 'docx') return res.status(415).end();
-    let sourceAbs: string | null = null;
-    try {
-      sourceAbs = resolveExisting(rel);
-      if (!sourceAbs) return res.status(404).end();
-      if (isConversionTextUnavailable(sourceAbs)) throw new Error('document conversion unavailable');
-      const htmlAbs = derivedHtmlPathForDocx(sourceAbs);
-      const raw = fs.readFileSync(htmlAbs, 'utf8');
-      const { preparedHtml } = analyzeHtml(raw);
-      res.type('text/html').send(preparedHtml);
-    } catch {
-      let sourcePath: string | null = sourceAbs ? filesystemPath.absolute(sourceAbs) : null;
-      if (!sourcePath) {
-        try { sourcePath = toSourcePath(rel); } catch { /* no active folder context */ }
-      }
-      const scheduled = sourcePath ? getScheduledConversion(sourcePath) : null;
-      let failed = false;
-      if (sourcePath) {
-        try { failed = hasFailed(sourcePath); }
-        catch { /* preparation status is auxiliary */ }
-      }
-      let message = 'Preparing document preview…';
-      if (failed) {
-        message = 'Document preparation failed. Use Reprocess to try again.';
-      } else if (scheduled?.state === 'queued') {
-        const ahead = scheduled.tasksAhead ?? 0;
-        message = ahead > 0
-          ? `Waiting for document conversion — ${ahead} light-lane task${ahead === 1 ? '' : 's'} ahead.`
-          : 'Waiting for document conversion…';
-      }
-      res.status(409).type('text/html').send(
-        `<!doctype html><meta charset="utf-8"><body>${message}</body>`,
-      );
-    }
-  });
-}
-
-function stripAssetWindowPrefix(rel: string): string {
-  if (!rel.startsWith('__window/')) return rel;
-  const slash = rel.indexOf('/', '__window/'.length);
-  return slash >= 0 ? rel.slice(slash + 1) : '';
+  mountFileOrderRoutes(app);
+  mountFileAssetRoutes(app);
 }
