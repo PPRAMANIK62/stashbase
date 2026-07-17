@@ -73,7 +73,7 @@ const log = logger('server');
 registerAgentAdapter({
   id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
   capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, steering: false, titleHint: false },
-  attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume),
+  attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access),
   stop: killActiveAgent,
   history: claudeHistoryActions(),
 });
