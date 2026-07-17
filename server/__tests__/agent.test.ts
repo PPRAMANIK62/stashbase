@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { claudePermissionMode } from './agent.ts';
+import { claudePermissionMode } from '../agent.ts';
 
 test('Claude adapter preserves supported Shared Agent Contract access modes', () => {
   assert.equal(claudePermissionMode('default'), 'default');

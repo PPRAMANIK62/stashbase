@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { permanentlyDeleteCodexThread } from './codex-agent.ts';
+import { permanentlyDeleteCodexThread } from '../codex-agent.ts';
 
 test('Codex Delete Chat uses the native irreversible thread/delete operation', async () => {
   const requests: Array<{ method: string; params: unknown }> = [];
