@@ -318,6 +318,64 @@
       background: #fff;
     }
 
+    /* DOCX renders directly from the source in the renderer. Search/Agent
+     * preparation continues independently and occupies only the slim status
+     * row, never the document viewport. */
+    .docx-preview {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .docx-preparation-status {
+      flex: 0 0 auto;
+      min-height: 30px;
+      padding: 6px 14px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      background: var(--bg);
+      font-size: 12px;
+    }
+    .docx-preparation-status.error {
+      color: #5a3b00;
+      background: #fff4e0;
+      border-bottom-color: #f0c060;
+    }
+    .docx-preparation-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .docx-preview-body {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      background: #fff;
+    }
+    .docx-preview-body > iframe,
+    .docx-preview-body > .viewer-shell {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    .docx-preview-loading {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
     /* PdfPreview ------------------------------------------------------ */
     .pdf-preview {
       position: relative;
@@ -344,6 +402,31 @@
       padding-top: 44px; /* clear the breadcrumb / chrome row */
       box-sizing: border-box;
       overflow: hidden;
+    }
+    .image-preparation-status {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 6px 14px;
+      box-sizing: border-box;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .image-preparation-dot {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: var(--accent, #4f7cff);
+      animation: image-preparation-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes image-preparation-pulse {
+      0%, 100% { opacity: 0.35; }
+      50% { opacity: 1; }
     }
     /* The scroll viewport. Defaults to actual-size content, so a large
      * image scrolls here rather than being squeezed to fit. */
@@ -442,6 +525,9 @@
     }
     .pdf-search-status.error {
       color: #a23a24;
+    }
+    .pdf-search-status.working {
+      color: var(--muted);
     }
     .pdf-search-retry {
       margin-left: 10px;

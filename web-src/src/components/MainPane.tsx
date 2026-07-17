@@ -8,6 +8,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { PdfPreview } from './PdfPreview';
 import { CodeEditor } from './CodeEditor';
 import { TabStrip } from './TabStrip';
+import { DocxPreview } from './DocxPreview';
 
 /**
  * Right rail. Layout from top to bottom:
@@ -57,7 +58,7 @@ export function MainPane() {
           <HtmlPreview name={cur.name} />
         )}
         {cur && cur.format === 'docx' && (
-          <HtmlPreview name={cur.name} derived />
+          <DocxPreview name={cur.name} />
         )}
         {cur && cur.format === 'pdf' && (
           // PDFs have no edit mode — the source is a binary file. Only

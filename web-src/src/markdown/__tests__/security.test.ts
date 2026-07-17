@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { renderMarkdown } from '../../markdown.ts';
+import { sanitizeDocxHtml } from '../sanitization.ts';
 
 test('document renderer removes executable and navigation-breaking HTML', () => {
   const document = renderMarkdown(`
@@ -57,4 +58,20 @@ test('document renderer preserves ordinary HTML and safe URLs', () => {
   assert.match(document, /x<sup>2<\/sup>/);
   assert.match(document, /href="other\.md#section"/);
   assert.match(document, /src="images\/example\.png"/);
+});
+
+test('DOCX preview keeps embedded images but strips executable markup', () => {
+  const body = sanitizeDocxHtml(`
+    <script>alert('script')</script>
+    <a href="javascript:alert('link')" onclick="alert('click')">unsafe link</a>
+    <img src="data:image/png;base64,iVBORw0KGgo=" onerror="alert('image')">
+    <img src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+">
+    <img src="javascript:alert('image')">
+    <p style="position:fixed">visible text</p>
+  `);
+
+  assert.doesNotMatch(body, /<script\b|javascript:|onclick=|onerror=|style=/i);
+  assert.doesNotMatch(body, /data:image\/svg/i);
+  assert.match(body, /src="data:image\/png;base64,iVBORw0KGgo="/);
+  assert.match(body, /visible text/);
 });

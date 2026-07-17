@@ -40,8 +40,20 @@ export function shallowEqualConversionProgress(
     if (av.phase === 'extracting' && bv.phase === 'extracting') {
       return av.currentPage === bv.currentPage;
     }
+    if (av.phase === 'queued' && bv.phase === 'queued') {
+      return av.lane === bv.lane && av.tasksAhead === bv.tasksAhead;
+    }
     return true;
   });
+}
+
+export function shallowEqualNumberRecord(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): boolean {
+  const ak = Object.keys(a);
+  const bk = Object.keys(b);
+  return ak.length === bk.length && ak.every((key) => a[key] === b[key]);
 }
 
 export function filterGuiSemanticHits(hits: SearchHit[]): SearchHit[] {

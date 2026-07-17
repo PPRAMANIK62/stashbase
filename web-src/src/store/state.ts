@@ -61,7 +61,7 @@ export interface OpenFile {
   name: string;
   format: 'md' | 'html' | 'pdf' | 'image' | 'docx';
   /** Last on-disk content — diff target for the autosave path. Empty
-   *  string for binary files (PDF / image; the viewer loads them
+   *  string for binary files (PDF / image / DOCX; the viewer loads them
    *  directly from `/asset/*`). */
   content: string;
   /** Opaque server-side file version used to reject stale autosaves
@@ -236,15 +236,15 @@ export interface State {
    *  embedded/indexed. Keyword search ignores this state and can search
    *  converted/source text without embeddings. */
   pendingSemanticNames: Set<string>;
-  /** Folder-relative paths of PDFs/images the server is converting right now.
-   *  Kept for search-readiness accounting and refresh timing; Files/Welcome
-   *  do not show this as a proactive status. */
+  /** Folder-relative paths of PDF/image/DOCX conversions that are queued or
+   *  running. Kept for search-readiness accounting and refresh timing. */
   pendingConversions: string[];
-  /** Current per-file conversion progress for the active folder. Kept
-   *  separate from `pendingConversions` so rich viewers can show local
-   *  failure/retry detail without turning background preparation into
-   *  global UI chrome. */
+  /** Current per-file conversion state for the active folder, including
+   *  queued lane position and running extractor progress. */
   conversionProgress: Record<string, ConversionProgress>;
+  /** Scheduler notification state for precise derived-preview reloads. */
+  conversionRevision: number;
+  conversionVersions: Record<string, number>;
 
   syncRunning: boolean;
 
@@ -360,6 +360,8 @@ export const initialState: State = {
   pendingSemanticNames: new Set(),
   pendingConversions: [],
   conversionProgress: {},
+  conversionRevision: 0,
+  conversionVersions: {},
   syncRunning: false,
   activeSidebarView: 'files',
   filterQuery: '',
@@ -441,6 +443,7 @@ export type Action =
   | { type: 'PENDING_SEMANTIC_NAMES'; names: Set<string> }
   | { type: 'PENDING_CONVERSIONS'; paths: string[] }
   | { type: 'CONVERSION_PROGRESS'; progress: Record<string, ConversionProgress> }
+  | { type: 'CONVERSION_SCHEDULER_STATE'; revision: number; versions: Record<string, number> }
   | { type: 'SAVE_STATUS'; status: SaveStatus }
   | { type: 'SYNC_RUNNING'; running: boolean }
   | { type: 'FILTER'; q: string }
@@ -576,7 +579,7 @@ function splitPath(path: string): { parent: string; base: string } {
 }
 
 export function renamedFilePath(oldName: string, newBaseName: string): string {
-  const extMatch = oldName.match(/\.(md|markdown|html|htm|pdf|png|jpe?g|webp)$/i);
+  const extMatch = oldName.match(/\.(md|markdown|html|htm|pdf|png|jpe?g|webp|docx)$/i);
   const ext = extMatch ? extMatch[0] : '';
   const lastSlash = oldName.lastIndexOf('/');
   const dir = lastSlash >= 0 ? oldName.slice(0, lastSlash + 1) : '';
@@ -954,6 +957,8 @@ export function reducer(s: State, a: Action): State {
       return { ...s, pendingConversions: a.paths };
     case 'CONVERSION_PROGRESS':
       return { ...s, conversionProgress: a.progress };
+    case 'CONVERSION_SCHEDULER_STATE':
+      return { ...s, conversionRevision: a.revision, conversionVersions: a.versions };
     case 'SAVE_STATUS':
       return patchActiveTab(s, { saveStatus: a.status });
     case 'SYNC_RUNNING':

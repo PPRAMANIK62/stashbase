@@ -11,7 +11,7 @@ import {
 // `lib/pdfWorker.ts` / `lib/pdfPolyfill.ts`). `?worker` bundles the
 // worker for both dev and the packaged build, unlike a bare `?url`.
 import PdfWorker from '../lib/pdfWorker?worker';
-import { api, assetUrl, errorMessage } from '../api';
+import { api, errorMessage, versionedAssetUrl } from '../api';
 import { useApp } from '../store/AppContext';
 import { getFileReadiness } from '../store/fileReadiness';
 
@@ -288,8 +288,7 @@ function highlightRectsForMatch(p: FlatPage, idx: number, length: number): PdfHi
 }
 
 export function PdfPreview({ name, showConversionBanner = true }: { name: string; showConversionBanner?: boolean }) {
-  const { state, actions } = useApp();
-  const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
+  const { state, actions, activeTab } = useApp();
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef({ folderPath: state.folderPath, name });
@@ -306,6 +305,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const [pageHighlight, setPageHighlight] = useState<PdfPageHighlight | null>(null);
   const readiness = getFileReadiness(state, name);
   const failure = readiness.preparationFailure;
+  const conversionProgress = state.conversionProgress[name];
   const chromeStatus = failure && showConversionBanner
     ? {
         kind: 'error' as const,
@@ -313,7 +313,20 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
           ? 'This PDF is not searchable. Reprocess could not start. Try again.'
           : 'This PDF is not searchable. Reprocess it to try again.',
       }
-    : null;
+    : showConversionBanner && conversionProgress
+      ? {
+          kind: 'working' as const,
+          text: conversionProgress.phase === 'queued'
+            ? conversionProgress.tasksAhead > 0
+              ? `Waiting for searchable text · ${conversionProgress.tasksAhead} heavy-lane task${conversionProgress.tasksAhead === 1 ? '' : 's'} ahead`
+              : 'Waiting for searchable text…'
+            : conversionProgress.phase === 'indexing'
+              ? 'Indexing searchable text…'
+              : conversionProgress.currentPage
+                ? `Reading page ${conversionProgress.currentPage}…`
+                : 'Preparing searchable text…',
+        }
+      : null;
   const retryInProgress = retryBusy || retryStarted;
   // Sampled page 1 viewport at 1× scale. Used as the per-page
   // placeholder height so the lazy-rendered pages reserve the
@@ -326,7 +339,11 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
 
   // Stable URL for this PDF + cache-bust so reopening after a Retry
   // re-fetches the binary instead of the stale 404 / failed body.
-  const fileUrl = useMemo(() => assetUrl(name), [name]);
+  const sourceVersion = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
+  const fileUrl = useMemo(
+    () => versionedAssetUrl(name, sourceVersion),
+    [name, sourceVersion],
+  );
 
   function scrollToPage(pageNumber: number, behavior: ScrollBehavior = 'smooth') {
     const root = containerRef.current;
@@ -703,7 +720,7 @@ function PdfChromePortal({
   scale: number;
   currentPage: number;
   numPages: number;
-  status: { kind: 'error'; text: string } | null;
+  status: { kind: 'error' | 'working'; text: string } | null;
   retryLabel: string;
   retryDisabled: boolean;
   onRetry?: () => void;

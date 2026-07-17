@@ -9,10 +9,11 @@
  */
 
 /** Viewer format the renderer uses for tab routing. `md` / `html` are
- *  text formats loaded from `/api/files/*`; `pdf` and `image` are
- *  binary viewers rendered from `/asset/*`; `docx` is rendered from
- *  AppData-derived HTML. Their searchable text lives in AppData-derived
- *  text, so this type is wider than the server's editable text format on purpose. */
+ *  text formats loaded from `/api/files/*`; `pdf`, `image`, and `docx` load
+ *  their source bytes from `/asset/*`. DOCX visible preview conversion happens
+ *  in the renderer, while its searchable/Agent-readable text and preview
+ *  fallback live in AppData-derived HTML. This type is therefore wider than
+ *  the server's editable text format on purpose. */
 export type FileFormat = 'md' | 'html' | 'pdf' | 'image' | 'docx';
 
 export interface ApiKeySaveResult {
@@ -92,13 +93,17 @@ export interface IndexStatus {
   visibleIndexingSettled?: boolean;
   /** False while the server is still loading the index cache for a folder. */
   indexReady?: boolean;
-  /** Folder-relative paths of PDFs the server is currently converting
-   *  into a readable note + bundle. Empty when no conversions are in
-   *  flight. Used by the sidebar to render a transient indicator. */
+  /** Folder-relative paths of PDF/image/DOCX sources that are queued or
+   *  running. Empty when no conversions are pending. */
   pendingConversions?: string[];
   /** Folder-relative conversion progress keyed by visible source path.
-   *  Used by PDF preview banners for "Reading page X" / indexing copy. */
+   *  Used by PDF/image preview banners for queue/extraction/indexing copy. */
   conversionProgress?: Record<string, ConversionProgress>;
+  /** Global in-memory scheduler change counter. Display-only notification;
+   *  derived artifacts remain the conversion source of truth. */
+  conversionRevision?: number;
+  /** Folder-relative per-source refresh tokens for derived previews. */
+  conversionVersions?: Record<string, number>;
   /** Persistent file preparation failures. Survives app restart (read
    *  back from AppData `state.db`). Empty when no failures. Drives
    *  lightweight row markers, rich viewer banners where available, and
@@ -117,6 +122,7 @@ export interface IndexStatus {
 }
 
 export type ConversionProgress =
+  | { phase: 'queued'; lane: 'light' | 'heavy'; tasksAhead: number }
   | { phase: 'extracting'; currentPage?: number }
   | { phase: 'indexing' };
 
@@ -332,7 +338,7 @@ async function sendWithNetworkRetry<T>(
   }
 }
 
-async function head(path: string): Promise<void> {
+async function head(path: string): Promise<{ version?: string }> {
   const r = await fetch(path, { method: 'HEAD', headers: requestHeaders() });
   if (!r.ok) {
     const msg = r.status === 404 ? 'not found'
@@ -340,6 +346,8 @@ async function head(path: string): Promise<void> {
         : `HTTP ${r.status}`;
     throw new ApiError(msg, r.status);
   }
+  const version = r.headers.get('x-stashbase-file-version');
+  return version ? { version } : {};
 }
 
 async function parseJsonOrThrow<T>(r: Response): Promise<T> {
@@ -509,6 +517,10 @@ export const api = {
    *  failure row and trigger reconcile/index. */
   reprocessFile: (path: string, opts?: { folder?: string }) =>
     send<{ ok: boolean; mode?: 'conversion' | 'index' }>('POST', '/api/files/reprocess', { path, folder: opts?.folder }),
+  /** Prepare an opened DOCX's searchable/Agent-readable text at interactive
+   *  scheduler priority. Visible preview does not wait for this request. */
+  prepareDocx: (path: string, opts?: { folder?: string }) =>
+    send<{ ok: boolean }>('POST', '/api/files/prepare', { path, folder: opts?.folder }),
   // Embedder ----------------------------------------------------
   getEmbedder: () => getJson<EmbedderState>('/api/embedder'),
 

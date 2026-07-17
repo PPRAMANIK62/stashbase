@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, assetUrl, errorMessage } from '../api';
+import { api, errorMessage, versionedAssetUrl } from '../api';
 import { useApp } from '../store/AppContext';
 import { getPreparationFailure } from '../store/fileReadiness';
 
@@ -34,8 +34,9 @@ const MAX_SCALE = 8;
 const clampScale = (v: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
 
 export function ImagePreview({ name }: { name: string }) {
-  const { state } = useApp();
-  const src = useMemo(() => assetUrl(name), [name]);
+  const { state, activeTab } = useApp();
+  const sourceVersion = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
+  const src = useMemo(() => versionedAssetUrl(name, sourceVersion), [name, sourceVersion]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef({ folderPath: state.folderPath, name });
   currentRef.current = { folderPath: state.folderPath, name };
@@ -46,6 +47,16 @@ export function ImagePreview({ name }: { name: string }) {
   const [loadError, setLoadError] = useState(false);
   const alt = name.split('/').pop() ?? name;
   const failure = getPreparationFailure(state, name);
+  const conversionProgress = state.conversionProgress[name];
+  const preparationStatus = !failure && conversionProgress
+    ? conversionProgress.phase === 'queued'
+      ? conversionProgress.tasksAhead > 0
+        ? `Waiting for searchable text · ${conversionProgress.tasksAhead} heavy-lane task${conversionProgress.tasksAhead === 1 ? '' : 's'} ahead`
+        : 'Waiting for searchable text…'
+      : conversionProgress.phase === 'indexing'
+        ? 'Indexing searchable text…'
+        : 'Reading image text…'
+    : null;
   // Device pixel ratio: the baseline (100%) maps one image pixel to one
   // physical pixel, so a Retina screenshot shows at captured size + sharp.
   const dpr = window.devicePixelRatio || 1;
@@ -122,6 +133,12 @@ export function ImagePreview({ name }: { name: string }) {
           >
             {retryBusy ? 'Reprocessing…' : 'Reprocess'}
           </button>
+        </div>
+      )}
+      {preparationStatus && (
+        <div className="image-preparation-status" role="status">
+          <span className="image-preparation-dot" aria-hidden="true" />
+          {preparationStatus}
         </div>
       )}
       <div className="image-preview-scroll" ref={scrollRef}>

@@ -52,7 +52,7 @@ export function HtmlPreview({ name, derived = false }: { name: string; derived?:
   // change React keeps the same `src`, so the iframe never refetches).
   // djb2 over the whole content; usable as a 32-bit base36 token.
   const derivedStateToken = derived
-    ? `${state.pendingConversions.includes(name) ? 'pending' : 'settled'}:${state.preparationFailures.some((f) => f.path === name) ? 'failed' : 'ok'}`
+    ? `${state.pendingConversions.includes(name) ? 'pending' : 'settled'}:${state.preparationFailures.some((f) => f.path === name) ? 'failed' : 'ok'}:${state.conversionVersions[name] ?? 0}`
     : '';
   const fingerprint = useMemo(() => {
     let h = 5381;

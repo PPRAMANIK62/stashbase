@@ -46,6 +46,7 @@ import {
   shallowEqualPreparationFailures,
   shallowEqualConversionProgress,
   shallowEqualIndexWarning,
+  shallowEqualNumberRecord,
   waitForNextFrame,
 } from './appContextHelpers';
 
@@ -287,7 +288,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const lastTreeVersion = useRef<number>(-1);
   /** Recently imported convertible files awaiting server confirmation:
    *  folder-relative path → grace deadline (ms). On import we include a
-   *  PDF/image in search-readiness accounting immediately, but the server
+   *  PDF/image/DOCX in search-readiness accounting immediately, but the server
    *  only registers the conversion after responding. `refreshIndexState`
    *  keeps these in `pendingConversions` until the server starts reporting
    *  them (hand-off) or the grace expires. */
@@ -511,6 +512,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const folderPathAtStart = stateRef.current.folderPath;
     const name = tab.file.name;
     try {
+      if (tab.file.format === 'pdf' || tab.file.format === 'image' || tab.file.format === 'docx') {
+        const stat = await api.statFile(name);
+        if (stateRef.current.folderPath !== folderPathAtStart) return;
+        const latestActive = getActiveTab(stateRef.current);
+        const latestFile = latestActive?.file;
+        if (!latestFile || latestFile.name !== name || latestActive.editMode) return;
+        if (stat.version !== latestFile.version) {
+          dispatch({ type: 'FILE_PATCH', patch: { version: stat.version } });
+        }
+        if (opts.force) {
+          dispatch({ type: 'SAVE_STATUS', status: { text: 'Reloaded from disk', cls: 'saved' } });
+        }
+        return;
+      }
       const body = await api.getFile(name);
       // The active tab may have been swapped (or the file renamed) in
       // the time it took to fetch — re-check before patching.
@@ -541,6 +556,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
       /* swallow — sidebar will reflect a delete on the next poll */
     }
   }, []);
+
+  // An inactive binary tab can miss a watcher refresh while another tab is
+  // visible. Re-stat it whenever it becomes active so PDF/image/DOCX viewers
+  // never reuse source bytes from before an external replacement.
+  const versionRefreshTab = getActiveTab(state);
+  const activeBinaryName = versionRefreshTab?.file
+    && (versionRefreshTab.file.format === 'pdf'
+      || versionRefreshTab.file.format === 'image'
+      || versionRefreshTab.file.format === 'docx')
+    ? versionRefreshTab.file.name
+    : null;
+  const activeBinaryTabId = activeBinaryName ? versionRefreshTab?.id ?? null : null;
+  useEffect(() => {
+    if (!activeBinaryName || !activeBinaryTabId) return;
+    const tabId = activeBinaryTabId;
+    const folderPathAtStart = state.folderPath;
+    void api.statFile(activeBinaryName).then((stat) => {
+      if (stateRef.current.folderPath !== folderPathAtStart) return;
+      const latest = getActiveTab(stateRef.current);
+      if (latest?.id !== tabId || latest.file?.name !== activeBinaryName) return;
+      if (latest.file.version !== stat.version) {
+        dispatch({ type: 'FILE_PATCH', patch: { version: stat.version } });
+      }
+    }).catch(() => {
+      // The tree/sidebar refresh owns deletion and error presentation.
+    });
+  }, [activeBinaryName, activeBinaryTabId, state.folderPath]);
 
   const refreshIndexState = useCallback(async (folderPathOverride?: string) => {
     let nextDelay = POLL_IDLE_MS;
@@ -652,6 +694,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!shallowEqualConversionProgress(prev.conversionProgress, incomingProgress)) {
         dispatch({ type: 'CONVERSION_PROGRESS', progress: incomingProgress });
       }
+      const incomingConversionRevision = s.conversionRevision ?? 0;
+      const incomingConversionVersions = s.conversionVersions ?? {};
+      if (
+        prev.conversionRevision !== incomingConversionRevision
+        || !shallowEqualNumberRecord(prev.conversionVersions, incomingConversionVersions)
+      ) {
+        dispatch({
+          type: 'CONVERSION_SCHEDULER_STATE',
+          revision: incomingConversionRevision,
+          versions: incomingConversionVersions,
+        });
+      }
       const incomingIndexWarning = s.indexWarning ?? null;
       if (!shallowEqualIndexWarning(prev.indexWarning, incomingIndexWarning)) {
         dispatch({ type: 'INDEX_WARNING', warning: incomingIndexWarning });
@@ -739,6 +793,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
         dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
         dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
+        dispatch({ type: 'CONVERSION_SCHEDULER_STATE', revision: 0, versions: {} });
         dispatch({ type: 'INDEX_WARNING', warning: null });
         dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
         dispatch({ type: 'SYNC_RUNNING', running: false });
@@ -957,36 +1012,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // the tab / nav / save-status machinery treats it like any
       // other open file.
       try {
-        await api.statFile(name);
+        const stat = await api.statFile(name);
+        body = { name, format: 'pdf' as const, content: '', version: stat.version };
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         dispatch({ type: 'SAVE_STATUS', status: { text: msg, cls: 'error' } });
         return;
       }
-      body = { name, format: 'pdf' as const, content: '' };
     } else if (isDocxName(name)) {
-      // DOCX previews use AppData-derived HTML. The source .docx stays
-      // untouched and is not fetched as text through /api/files.
+      // DocxPreview fetches and converts the untouched source binary directly;
+      // it is not loaded as text through /api/files. Opening also promotes the
+      // independent search/Agent derivation to interactive light-lane priority.
       try {
-        await api.statFile(name);
+        const stat = await api.statFile(name);
+        body = { name, format: 'docx' as const, content: '', version: stat.version };
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         dispatch({ type: 'SAVE_STATUS', status: { text: msg, cls: 'error' } });
         return;
       }
-      body = { name, format: 'docx' as const, content: '' };
+      const folder = opts.expectedFolder ?? stateRef.current.folderPath;
+      void api.prepareDocx(name, { folder: folder || undefined })
+        .then(() => refreshIndexState(folder || undefined))
+        .catch((err: unknown) => {
+          // Preparation is auxiliary to navigation and visible preview. The
+          // document remains readable if this priority hint cannot be sent.
+          console.warn('[docx] interactive preparation request failed:', err);
+        });
     } else if (/\.(png|jpe?g|webp)$/i.test(name)) {
       // Images, same story as PDFs — ImagePreview loads the binary from
       // `/asset/*`. The searchable text lives in the hidden `.<stem>.md`
       // OCR note, never opened directly.
       try {
-        await api.statFile(name);
+        const stat = await api.statFile(name);
+        body = { name, format: 'image' as const, content: '', version: stat.version };
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         dispatch({ type: 'SAVE_STATUS', status: { text: msg, cls: 'error' } });
         return;
       }
-      body = { name, format: 'image' as const, content: '' };
     } else {
       try {
         body = await api.getFile(name);
@@ -1008,7 +1072,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       preview: opts.preview,
     });
     dispatch({ type: 'PENDING_SCROLL', anchor: opts.anchor ?? null });
-  }, [flushSave]);
+  }, [flushSave, refreshIndexState]);
 
   /** Single-click in the sidebar = open as PREVIEW. VS Code semantics:
    *    1. File already in any tab → activate it, keep its preview/
@@ -1607,9 +1671,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Optimistically include convertible imports in search-readiness
       // accounting the instant the drop lands. The server registers each
       // conversion only after responding, so the immediate status poll can
-      // otherwise briefly undercount pending PDF/image work.
+      // otherwise briefly undercount pending PDF/image/DOCX work.
       const converting = (j.files || [])
-        .filter((x) => !x.error && /\.(pdf|png|jpe?g|webp)$/i.test(x.file))
+        .filter((x) => !x.error && /\.(pdf|png|jpe?g|webp|docx)$/i.test(x.file))
         .map((x) => x.file);
       if (converting.length) {
         // Protect the optimistic entries from being wiped by an index
@@ -1634,7 +1698,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         for (const name of indexing) merged.add(name);
         dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: merged });
       }
-      // Now the server has fired any PDF/image conversions. Poll
+      // Now the server has fired any PDF/image/DOCX conversions. Poll
       // immediately so search-readiness accounting catches up even when a
       // conversion finishes inside the regular poll window.
       void refreshIndexState();
@@ -1642,10 +1706,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // import was a deliberate user action, so showing what landed is
       // expected (mirrors dropping a file into an editor). Limited to
       // formats the viewer can actually render (md/html via getFile,
-      // pdf + image synthesized in `loadFile`). Opens at most ONE file,
+      // pdf + image + DOCX synthesized in `loadFile`). Opens at most ONE file,
       // so a batch drop doesn't explode into tabs.
       const first = j.files?.find(
-        (x) => !x.error && /\.(md|markdown|html|htm|pdf|png|jpe?g|webp)$/i.test(x.file),
+        (x) => !x.error && /\.(md|markdown|html|htm|pdf|png|jpe?g|webp|docx)$/i.test(x.file),
       );
       // Pinned, not preview: a drop is a deliberate, committed gesture
       // (the double-click analog), so the imported file should stay open
@@ -1716,6 +1780,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'ACTIVE_FOLDER', path: '' });
     dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
     dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
+    dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
+    dispatch({ type: 'CONVERSION_SCHEDULER_STATE', revision: 0, versions: {} });
     dispatch({ type: 'INDEX_WARNING', warning: null });
     dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
     dispatch({ type: 'SYNC_RUNNING', running: false });
