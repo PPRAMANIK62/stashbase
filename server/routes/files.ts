@@ -43,7 +43,7 @@ import { maybeConvertPdf } from '../pdf.ts';
 import { derivedHtmlPathForDocx, maybeConvertDocx } from '../docx.ts';
 import { cancelConversion, getScheduledConversion, isConversionTextUnavailable } from '../conversion.ts';
 import { noteTreeChanged } from '../watcher.ts';
-import { clearRecord, readAll as readConversionStatus } from '../conversion-status.ts';
+import { clearRecord, hasFailed } from '../conversion-status.ts';
 import { deleteDerivedForSource } from '../derived-store.ts';
 
 const log = logger('routes/files');
@@ -693,7 +693,7 @@ export function mount(app: express.Express): void {
       const scheduled = sourcePath ? getScheduledConversion(sourcePath) : null;
       let failed = false;
       if (sourcePath) {
-        try { failed = readConversionStatus()[sourcePath]?.status === 'failed'; }
+        try { failed = hasFailed(sourcePath); }
         catch { /* preparation status is auxiliary */ }
       }
       let message = 'Preparing document preview…';

@@ -4,7 +4,7 @@
  * `getLibraryInfo()` is the agent's orientation card: where the default
  * folder home is and which folders ("Your Folders") are in the library.
  * Members can live anywhere on disk, so each is reported by its ABSOLUTE
- * path (the MCP-facing identity) plus a short label. Everything else
+ * source spelling (the path exposed through MCP) plus a short label. Everything else
  * (reading/writing notes, listing files) the agent does with the StashBase
  * file tools against those absolute paths; semantic facts come from
  * `search_library`.
@@ -20,7 +20,7 @@ export interface LibraryInfo {
   folder_home: string;
   /** The library folders ("Your Folders"): every folder the user has
    *  opened and not removed. `path` is the ABSOLUTE folder root — the
-   *  identity the file tools and `search_library` use. `name` is a display label
+   *  source spelling the file tools and `search_library` use. `name` is a display label
    *  (basename). */
   folders: Array<{
     path: string;

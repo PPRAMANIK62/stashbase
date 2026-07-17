@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { filesystemPath } from './filesystem-path.ts';
 
 const APP_NAME = 'StashBase';
 
@@ -26,11 +26,13 @@ export function localDataDirForRoot(root: string): string {
 }
 
 function canonicalRoot(root: string): string {
-  const resolved = path.resolve(root);
+  const resolved = filesystemPath.absolute(root);
   try {
-    return fs.realpathSync.native(resolved);
+    // This legacy hash historically used native separators. Keep that byte
+    // representation while delegating realpath/platform semantics centrally.
+    return path.normalize(filesystemPath.real(resolved));
   } catch {
-    return resolved;
+    return path.normalize(resolved);
   }
 }
 

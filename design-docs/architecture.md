@@ -70,14 +70,25 @@ StashBase does not introduce a new workspace model. A user points it at ordinary
 
 `server/filesystem-path.ts` is the single platform-path seam for user files and
 folder roots. It converts native or source input into an absolute POSIX-spelled
-source path, derives a comparison identity (case-folded on Windows), performs
+source path and derives a separate comparison identity (case-folded on Windows).
+It rejects foreign absolute drive syntax and unsupported Windows namespaces, performs
 component-safe root/relative/join operations for POSIX, drive, and UNC roots,
-restores existing Windows component spelling, and resolves existing or
-creatable paths without allowing symlink escape. Filesystem I/O, upload,
-explicit-folder preparation, scheduler/status keys, folder membership, and the
-Node-to-daemon adapter all cross this seam rather than implementing their own
-separator, case, or prefix rules. Durable records retain canonical source
-spelling for display and compatibility; comparison-only maps use the identity.
+restores existing Windows component spelling, and checks existing or creatable
+filesystem targets against real paths so symlinks cannot escape a folder.
+Filesystem I/O, upload, explicit-folder preparation, scheduler/status keys,
+folder membership, local-data realpath handling, and Node-to-daemon routing all
+cross this seam rather than implementing separator, case, or prefix rules.
+Durable records and daemon bindings retain the first established source
+spelling; comparison-only maps and database indexes use the identity. Node
+passes that identity to Python as an opaque routing key, so the sidecar never
+reimplements Unicode case mapping with a potentially different runtime. The
+Python protocol adapter mirrors only child-prefix and join mechanics so
+POSIX `/`, Windows drive roots, and UNC roots survive daemon routing and disk
+scans without becoming relative or double-prefixed paths. On a Windows bind,
+indexed source rows with an equivalent root identity but different historical
+spelling are selected by Node and rebased by the store adapter, reusing vectors
+when possible; this keeps scoped search, reconcile, and removal on one source
+channel.
 
 ## 2.2 Library Scope
 

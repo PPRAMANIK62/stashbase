@@ -84,9 +84,8 @@ class MfsDaemon extends EventEmitter {
    *  the value at config time — if it changed, re-issue the config op. */
   private generation = 0;
 
-  /** Every folder root the server has asked us to bind. Keyed by the
-   *  absolute POSIX folder root. Persisted in memory so we can replay them
-   *  after a respawn — the Python child loses its bound set on exit. */
+  /** Every folder root the server has asked us to bind. Keyed by comparison
+   *  identity while retaining the first source spelling for daemon replay. */
   private bindings = new Map<string, { folder: string; cfg: BindFolderArgs }>();
 
   /** Spawn (idempotent) and resolve once the daemon emits `ready`. */
@@ -106,10 +105,13 @@ class MfsDaemon extends EventEmitter {
    *  later respawn. Safe to call repeatedly with the same args (the
    *  daemon-side op is idempotent). */
   async bindFolder(folder: string, cfg: BindFolderArgs): Promise<void> {
-    const source = filesystemPath.absolute(folder);
-    this.bindings.set(filesystemPath.identity(source), { folder: source, cfg });
+    const requested = filesystemPath.absolute(folder);
+    const key = filesystemPath.identity(requested);
+    const source = this.bindings.get(key)?.folder ?? requested;
+    this.bindings.set(key, { folder: source, cfg });
     await this.call('bind_folder', {
       folder: source,
+      folder_identity: key,
       provider: cfg.provider,
       ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
       ...(cfg.model ? { model: cfg.model } : {}),
@@ -121,10 +123,12 @@ class MfsDaemon extends EventEmitter {
    *  routing new files for the folder. Existing rows stay searchable
    *  until explicit delete. */
   async unbindFolder(folder: string): Promise<void> {
-    const source = filesystemPath.absolute(folder);
-    this.bindings.delete(filesystemPath.identity(source));
+    const requested = filesystemPath.absolute(folder);
+    const key = filesystemPath.identity(requested);
+    const source = this.bindings.get(key)?.folder ?? requested;
+    this.bindings.delete(key);
     if (this.proc) {
-      try { await this.call('unbind_folder', { folder: source }); }
+      try { await this.call('unbind_folder', { folder: source, folder_identity: key }); }
       catch (err) { log.warn(`unbind_folder ${source} failed: ${(err as Error).message}`); }
     }
   }
@@ -256,6 +260,7 @@ class MfsDaemon extends EventEmitter {
           for (const { folder, cfg } of this.bindings.values()) {
             this.call('bind_folder', {
               folder,
+              folder_identity: filesystemPath.identity(folder),
               provider: cfg.provider,
               ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
               ...(cfg.model ? { model: cfg.model } : {}),

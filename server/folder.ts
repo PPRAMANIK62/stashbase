@@ -108,6 +108,14 @@ export function memberFolderRoots(): string[] {
   return getRecentFolders().map((r) => filesystemPath.absolute(r.path));
 }
 
+/** Config JSON is external durable input. Keep malformed/legacy empty path
+ * values from reaching the strict filesystem-path API; valid path semantics
+ * still come exclusively from that module. */
+function storedFolderPathEquals(value: unknown, target: string): boolean {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try { return filesystemPath.equal(value, target); } catch { return false; }
+}
+
 /** Return the stored spelling of an exact library-member root. Windows callers
  * may supply drive, separator, or component case variants; downstream path-
  * keyed stores must continue from the one spelling kept in membership. */
@@ -233,12 +241,11 @@ export function getCurrentFolderLabel(): string | null {
 }
 
 /** Convert a folder-relative path (`topic/note.md`) to the **absolute
- *  POSIX** path the indexer/daemon use as identity, rooted at the
+ *  POSIX-spelled source path the indexer/daemon use, rooted at the
  *  currently-open folder (`getCurrentFolder()`), which may live anywhere on
  *  disk. Throws if no folder is open — every call site should already be
  *  inside a request that has folder context. (Name kept for call-site
- *  stability; the value is now absolute — the daemon
- *  speaks absolute paths, see `indexer.mfs.ts`.) */
+ *  stability; the daemon speaks absolute paths, see `indexer.mfs.ts`.) */
 export function toSourcePath(folderRel: string): string {
   const cs = getCurrentFolder();
   if (!cs) throw new Error('no folder open');
@@ -326,7 +333,7 @@ export function seedBuiltinFolder(): void {
   // (1) Already on disk → ensure it's in recents, regardless of the latch.
   if (fs.existsSync(dest)) {
     try {
-      const inRecents = (readConfig().recentFolders ?? []).some((r) => filesystemPath.equal(r.path, dest));
+      const inRecents = (readConfig().recentFolders ?? []).some((r) => storedFolderPathEquals(r.path, dest));
       if (!inRecents) pushRecent(dest);
     } catch (err) {
       log.warn(`failed to surface built-in folder: ${errorMessage(err)}`);
@@ -453,7 +460,7 @@ export function replaceCurrentFolderPath(oldPath: string, newPath: string): void
   const cfg = readConfig();
   if (cfg.recentFolders?.length) {
     cfg.recentFolders = cfg.recentFolders.map((r) => (
-      filesystemPath.equal(r.path, oldPath) ? { ...r, path: newPath } : r
+      storedFolderPathEquals(r.path, oldPath) ? { ...r, path: newPath } : r
     ));
     writeConfig(cfg);
   }
@@ -492,12 +499,18 @@ function pushRecent(absPath: string): void {
   // entries whose target folder no longer exists — keeps the persisted
   // recents from accumulating dead tmp dirs / deleted folders over
   // time. Opportunistic cleanup on every write.
-  const existing = list.find((v) => filesystemPath.equal(v.path, absPath));
+  const existing = list.find((v) => storedFolderPathEquals(v.path, absPath));
   const filtered = list.filter((v) => {
-    if (filesystemPath.equal(v.path, absPath)) return false;
+    if (storedFolderPathEquals(v.path, absPath)) return false;
     try { return fs.statSync(v.path).isDirectory(); } catch { return false; }
   });
-  filtered.unshift({ ...(existing ?? {}), path: absPath, openedAt: new Date().toISOString() });
+  // Reopening the same Windows folder through a separator/case variant must
+  // not rewrite the durable source spelling: index rows, derived keys, and
+  // daemon replay all continue from the first established root.
+  const retainedPath = existing
+    ? filesystemPath.absolute(existing.path)
+    : filesystemPath.absolute(absPath);
+  filtered.unshift({ ...(existing ?? {}), path: retainedPath, openedAt: new Date().toISOString() });
   // No cap: this list IS the knowledge-base membership ("Your Folders"),
   // not a transient recency log. Opening a folder joins it; the only way
   // out is an explicit remove (`removeRecent`). A hard cap would silently
@@ -516,7 +529,7 @@ export function removeRecent(absPath: string): void {
   const target = filesystemPath.absolute(absPath);
   const cfg = readConfig();
   const list = cfg.recentFolders ?? [];
-  const filtered = list.filter((v) => !filesystemPath.equal(v.path, target));
+  const filtered = list.filter((v) => !storedFolderPathEquals(v.path, target));
   if (filtered.length === list.length) return;
   cfg.recentFolders = filtered;
   writeConfig(cfg);

@@ -21,6 +21,8 @@ export interface FilesystemPathModule {
   readonly platform: FilesystemPlatform;
   /** Absolute source spelling with POSIX separators. */
   absolute(input: string, base?: string): string;
+  /** Existing realpath, normalized back to source spelling. */
+  real(input: string): string;
   /** Stable comparison/map identity. Case-folded only on Windows. */
   identity(input: string): string;
   equal(a: string, b: string): boolean;
@@ -56,6 +58,11 @@ export function createFilesystemPath(
   function identity(input: string): string {
     const source = absolute(input);
     return platform === 'win32' ? source.toLowerCase() : source;
+  }
+
+  function real(input: string): string {
+    const source = absolute(input);
+    return absolute(fs.realpathSync.native(toNative(source, platform)));
   }
 
   function equal(a: string, b: string): boolean {
@@ -115,7 +122,10 @@ export function createFilesystemPath(
     const access = options.access ?? 'lexical';
     const label = options.label ?? 'path';
     const rootSource = absolute(root);
-    const targetSource = join(rootSource, relativePath);
+    const resolvedRelative = access === 'lexical'
+      ? relativePath
+      : canonicalRelative(rootSource, relativePath);
+    const targetSource = join(rootSource, resolvedRelative);
     const rootNative = toNative(rootSource, platform);
     const targetNative = toNative(targetSource, platform);
     if (access === 'lexical') return targetSource;
@@ -129,7 +139,11 @@ export function createFilesystemPath(
       return targetSource;
     }
 
-    let probe = pathApi.dirname(targetNative);
+    // Start at the target itself. If it already exists as a symlink, checking
+    // only its parent would approve a subsequent write that follows outside
+    // the folder. Missing suffixes naturally walk up to their first existing
+    // ancestor.
+    let probe = targetNative;
     while (!fs.existsSync(probe)) {
       const parent = pathApi.dirname(probe);
       if (parent === probe) break;
@@ -146,6 +160,7 @@ export function createFilesystemPath(
   return {
     platform,
     absolute,
+    real,
     identity,
     equal,
     contains,
@@ -168,7 +183,12 @@ function defaultCwdFor(platform: FilesystemPlatform): string {
 }
 
 function prepareInput(input: string, platform: FilesystemPlatform): string {
-  if (platform === 'posix') return input;
+  if (platform === 'posix') {
+    if (/^[A-Za-z]:[\\/]/.test(input)) {
+      throw new Error('Windows drive paths are only valid on Windows');
+    }
+    return input;
+  }
   const native = input.replace(/\//g, '\\');
   if (/^\\\\\.\\/.test(native)) throw new Error('Windows device paths are not supported');
   if (/^[A-Za-z]:($|[^\\])/.test(native)) {
@@ -176,6 +196,9 @@ function prepareInput(input: string, platform: FilesystemPlatform): string {
   }
   if (/^\\\\\?\\UNC\\/i.test(native)) return `\\\\${native.slice(8)}`;
   if (/^\\\\\?\\[A-Za-z]:\\/.test(native)) return native.slice(4);
+  if (/^\\\\\?\\/.test(native) || /^\\(?:\?\?|GLOBALROOT)\\/i.test(native)) {
+    throw new Error('unsupported Windows namespace path');
+  }
   return native;
 }
 

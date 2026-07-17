@@ -92,7 +92,7 @@ function requireExistingFileInFolder(folderRoot: string, rel: string): string {
   }
 
   try {
-    filesystemPath.resolveUnder(folderRoot, rel, { access: 'existing' });
+    abs = filesystemPath.resolveUnder(folderRoot, rel, { access: 'existing' });
   } catch (cause) {
     const err = new Error('path escapes folder through symlink', { cause });
     (err as any).status = 400;

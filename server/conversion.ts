@@ -192,8 +192,8 @@ export function promoteConversion(sourcePath: string, urgency: ConversionUrgency
   return scheduler.promote(filesystemPath.absolute(sourcePath), urgency);
 }
 
-/** Absolute POSIX identity for a source path — the conversion-status key,
- *  matching what `toSourcePath` produces and what the daemon stores. */
+/** Absolute POSIX source spelling used by conversion status and the daemon.
+ *  Comparison-only keys are derived by `filesystemPath.identity()`. */
 function sourcePathOf(absPath: string): string {
   return filesystemPath.absolute(absPath);
 }

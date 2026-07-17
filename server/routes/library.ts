@@ -21,6 +21,7 @@ import {
   getCurrentFolderLabel,
   getFolderHome,
   getRecentFolders,
+  exactMemberFolderRoot,
   notifyFolderSwitch,
   removeRecent,
   setCurrentFolder,
@@ -159,8 +160,9 @@ export function mount(app: express.Express): void {
     try {
       const raw = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
       if (!raw) return res.status(400).json({ error: 'path required' });
-      const abs = filesystemPath.absolute(raw);
-      if (!getRecentFolders().some((r) => filesystemPath.equal(r.path, abs))) {
+      const requested = filesystemPath.absolute(raw);
+      const abs = exactMemberFolderRoot(requested);
+      if (!abs) {
         return res.status(404).json({ error: 'folder is not in your folders' });
       }
       // Tear down any live window bound to it FIRST (kills terminal sessions

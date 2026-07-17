@@ -435,7 +435,10 @@ export async function resumeMatchesCwd(sessionId: string, cwd: string): Promise<
 }
 
 export function sessionInfoMatchesCwd(info: { cwd?: unknown } | null | undefined, cwd: string): boolean {
-  return !!(info && typeof info.cwd === 'string' && filesystemPath.equal(info.cwd, cwd));
+  return !!(info
+    && typeof info.cwd === 'string'
+    && info.cwd.trim()
+    && filesystemPath.equal(info.cwd, cwd));
 }
 
 /** Stringify a tool_result `content` (string, or an array of text/other

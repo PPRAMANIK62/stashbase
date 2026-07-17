@@ -1002,7 +1002,8 @@ export async function getCodexSessionMessages(threadId: string, folder: string |
     includeTurns: true,
   })) as JsonObject;
   const thread = objectValue(result.thread);
-  if (folder && !filesystemPath.equal(stringValue(thread.cwd), folder)) {
+  const threadCwd = stringValue(thread.cwd);
+  if (folder && (!threadCwd.trim() || !filesystemPath.equal(threadCwd, folder))) {
     throw httpError(404, 'session not found for current folder');
   }
   return codexThreadToBlocks(thread, codexRolloutToolsByTurn(stringValue(thread.path)));

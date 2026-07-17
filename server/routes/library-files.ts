@@ -269,7 +269,7 @@ function normalizeLibraryPathPrefix(value: string): string {
 }
 
 interface LibraryPath {
-  /** Absolute POSIX path — the MCP-facing identity + indexer/conversion key. */
+  /** Absolute POSIX source spelling exposed through MCP and passed to workers. */
   abs: string;
   /** Absolute root of the member folder that contains it. */
   folderRoot: string;
@@ -287,7 +287,7 @@ interface LibraryDirectoryEntry {
 }
 
 export interface AgentContextFile {
-  /** Absolute source path — the MCP/file-tool identity. */
+  /** Absolute source spelling exposed to MCP/file tools. */
   path: string;
   /** Display label of the member folder containing the source. */
   folder: string;

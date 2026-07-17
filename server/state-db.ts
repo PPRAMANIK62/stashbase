@@ -76,6 +76,7 @@ function getStateDb(): BetterSqlite3.Database | null {
     migrate(db);
     migrateLegacyStateDbRows(db);
     migrateLegacyStatusJson(db);
+    reconcileConversionPathIdentities(db);
   } catch (err: unknown) {
     log.warn(`state db disabled: ${errorMessage(err)}`);
     stateDbUnavailable = true;
@@ -152,6 +153,7 @@ function migrate(conn: BetterSqlite3.Database): void {
   conn.exec(`
     CREATE TABLE IF NOT EXISTS conversions (
       path TEXT PRIMARY KEY,
+      path_identity TEXT,
       status TEXT NOT NULL CHECK (status IN ('in-flight', 'done', 'failed', 'cancelled')),
       attempts INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
@@ -182,6 +184,49 @@ function migrate(conn: BetterSqlite3.Database): void {
     DROP TABLE IF EXISTS pdf_conversions;
     DROP TABLE IF EXISTS files;
     DROP TABLE IF EXISTS index_queue;
+  `);
+  const columns = conn.prepare('PRAGMA table_info(conversions)').all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'path_identity')) {
+    conn.exec('ALTER TABLE conversions ADD COLUMN path_identity TEXT');
+  }
+}
+
+function reconcileConversionPathIdentities(conn: BetterSqlite3.Database): void {
+  const rows = conn.prepare(`
+    SELECT rowid, path, attempts
+    FROM conversions
+    ORDER BY last_attempt_at DESC, rowid DESC
+  `).all() as Array<{ rowid: number; path: string; attempts: number }>;
+  const groups = new Map<string, typeof rows>();
+  const invalidRowIds: number[] = [];
+  for (const row of rows) {
+    try {
+      const identity = filesystemPath.identity(row.path);
+      const group = groups.get(identity) ?? [];
+      group.push(row);
+      groups.set(identity, group);
+    } catch {
+      invalidRowIds.push(row.rowid);
+    }
+  }
+  const deleteRow = conn.prepare('DELETE FROM conversions WHERE rowid = ?');
+  const updateRow = conn.prepare(`
+    UPDATE conversions
+    SET path_identity = ?, attempts = ?
+    WHERE rowid = ?
+  `);
+  const tx = conn.transaction(() => {
+    for (const rowid of invalidRowIds) deleteRow.run(rowid);
+    for (const [identity, group] of groups) {
+      const [keeper, ...duplicates] = group;
+      for (const duplicate of duplicates) deleteRow.run(duplicate.rowid);
+      updateRow.run(identity, Math.max(...group.map((row) => row.attempts)), keeper.rowid);
+    }
+  });
+  tx();
+  conn.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS conversions_path_identity_idx
+    ON conversions(path_identity)
   `);
 }
 
@@ -313,9 +358,23 @@ export function readConversionStatusMap(): Record<string, ConversionStatusEntry>
 }
 
 export function getConversionStatus(pathKey: string): ConversionStatusEntry | undefined {
-  const statuses = readConversionStatusMap();
-  const storedPath = Object.keys(statuses).find((candidate) => filesystemPath.equal(candidate, pathKey));
-  return storedPath ? statuses[storedPath] : undefined;
+  const conn = getStateDb();
+  if (!conn) return undefined;
+  const row = conn.prepare(`
+    SELECT status, attempts, last_error AS lastError,
+           last_attempt_at AS lastAttemptAt, done_at AS doneAt
+    FROM conversions
+    WHERE path_identity = ?
+    LIMIT 1
+  `).get(filesystemPath.identity(pathKey)) as ConversionStatusEntry | undefined;
+  if (!row) return undefined;
+  return {
+    status: row.status,
+    attempts: row.attempts,
+    lastAttemptAt: row.lastAttemptAt,
+    ...(row.lastError ? { lastError: row.lastError } : {}),
+    ...(row.doneAt ? { doneAt: row.doneAt } : {}),
+  };
 }
 
 
@@ -324,16 +383,12 @@ export function setConversionStatus(pathKey: string, status: ConversionStatus, o
   if (!conn) return;
   const prev = getConversionStatus(pathKey);
   const sourcePath = filesystemPath.absolute(pathKey);
-  for (const storedPath of Object.keys(readConversionStatusMap())) {
-    if (storedPath !== sourcePath && filesystemPath.equal(storedPath, sourcePath)) {
-      conn.prepare('DELETE FROM conversions WHERE path = ?').run(storedPath);
-    }
-  }
+  const pathIdentity = filesystemPath.identity(sourcePath);
   const now = new Date().toISOString();
   conn.prepare(`
-    INSERT INTO conversions (path, status, attempts, last_error, last_attempt_at, done_at)
-    VALUES (@path, @status, @attempts, @lastError, @lastAttemptAt, @doneAt)
-    ON CONFLICT(path) DO UPDATE SET
+    INSERT INTO conversions (path, path_identity, status, attempts, last_error, last_attempt_at, done_at)
+    VALUES (@path, @pathIdentity, @status, @attempts, @lastError, @lastAttemptAt, @doneAt)
+    ON CONFLICT(path_identity) DO UPDATE SET
       status = excluded.status,
       attempts = excluded.attempts,
       last_error = excluded.last_error,
@@ -341,6 +396,7 @@ export function setConversionStatus(pathKey: string, status: ConversionStatus, o
       done_at = excluded.done_at
   `).run({
     path: sourcePath,
+    pathIdentity,
     status,
     attempts: opts.incrementAttempts ? (prev?.attempts ?? 0) + 1 : (prev?.attempts ?? 1),
     lastError: opts.error ?? null,
@@ -352,21 +408,23 @@ export function setConversionStatus(pathKey: string, status: ConversionStatus, o
 export function clearConversionStatus(pathKey: string): void {
   const conn = getStateDb();
   if (!conn) return;
-  for (const storedPath of Object.keys(readConversionStatusMap())) {
-    if (filesystemPath.equal(storedPath, pathKey)) {
-      conn.prepare('DELETE FROM conversions WHERE path = ?').run(storedPath);
-    }
-  }
+  conn.prepare('DELETE FROM conversions WHERE path_identity = ?')
+    .run(filesystemPath.identity(pathKey));
 }
 
 export function clearConversionStatusUnder(pathKey: string): void {
   const conn = getStateDb();
   if (!conn) return;
-  for (const storedPath of Object.keys(readConversionStatusMap())) {
-    if (filesystemPath.contains(pathKey, storedPath)) {
-      conn.prepare('DELETE FROM conversions WHERE path = ?').run(storedPath);
-    }
-  }
+  const rows = conn.prepare('SELECT path_identity AS pathIdentity FROM conversions')
+    .all() as Array<{ pathIdentity: string }>;
+  const matches = rows
+    .map((row) => row.pathIdentity)
+    .filter((identity) => filesystemPath.contains(pathKey, identity));
+  if (matches.length === 0) return;
+  const remove = conn.prepare('DELETE FROM conversions WHERE path_identity = ?');
+  conn.transaction((identities: string[]) => {
+    for (const identity of identities) remove.run(identity);
+  })(matches);
 }
 
 export function listConversionStatus(status: ConversionStatus): Array<{ path: string; entry: ConversionStatusEntry }> {

@@ -64,7 +64,7 @@ export function mount(app: express.Express): void {
       const cur = folder ? filesystemPath.absolute(folder) : null;
       const rows = sessions
         .map(toRow)
-        .filter((r) => !cur || (r.cwd != null && filesystemPath.equal(r.cwd, cur)))
+        .filter((r) => !cur || sessionInfoMatchesFolder(r, cur))
         .sort((a, b) => b.lastModified - a.lastModified);
       res.json(rows);
     } catch (err: unknown) {
@@ -133,6 +133,7 @@ async function sessionBelongsToCurrentFolder(id: string): Promise<boolean> {
 
 export function sessionInfoMatchesFolder(info: { cwd?: unknown } | null | undefined, folder: string): boolean {
   return !!(info && typeof info.cwd === 'string'
+    && info.cwd.trim()
     && filesystemPath.equal(info.cwd, folder));
 }
 

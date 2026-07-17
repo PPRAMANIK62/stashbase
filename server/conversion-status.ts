@@ -54,6 +54,10 @@ export function isPendingOrFailed(sourcePath: string): boolean {
   return inFlight.has(filesystemPath.identity(sourcePath)) || getConversionStatus(sourcePath) !== undefined;
 }
 
+export function hasFailed(sourcePath: string): boolean {
+  return getConversionStatus(sourcePath)?.status === 'failed';
+}
+
 export function markInFlight(sourcePath: string): void {
   const key = filesystemPath.identity(sourcePath);
   inFlight.add(key);

@@ -1,10 +1,11 @@
 /**
  * Indexer impl backed by the Python MFS sidecar. Each method translates
  * a logical op into one JSON request and reshapes the reply to match
- * the `Indexer` contract. The `Indexer` API speaks absolute POSIX paths;
- * this module is the daemon boundary and currently passes those identities
- * through unchanged (`toAbs`/`fromAbs`). The daemon keys one global
- * collection by absolute path and scopes by an absolute folder root.
+ * the `Indexer` contract. The `Indexer` API speaks absolute POSIX-spelled
+ * source paths; this module is the daemon boundary and sends Node-generated
+ * comparison identities separately wherever Python needs routing keys. The
+ * daemon keys one global collection by retained absolute source path and
+ * scopes by an absolute folder root.
  *
  * HTML special-case: we feed MFS a markdown-shaped plaintext (see
  * `server/html.ts:analyzeHtml`) so its markdown chunker keeps respecting
@@ -21,6 +22,7 @@ import { contentSizeError, shouldIndexSourcePath } from './indexable.ts';
 import { logger } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import type { FilesystemPathModule } from './filesystem-path.ts';
 import type {
   EmbedderRuntimeConfig,
   Indexer,
@@ -34,10 +36,29 @@ const log = logger('index');
 // The daemon keys its single global collection by **absolute POSIX path**
 // and binds absolute folder roots. Under the Folder model every caller
 // already passes absolute paths/roots (`state.ts` binds absolute roots) and accepts absolute paths
-// back, so this module is a straight pass-through. `toAbs`/`fromAbs` are
-// kept as identity seams in case a future model needs translation again.
+// back. This adapter normalizes every crossing so daemon calls never acquire
+// a second separator or relative-path convention.
 const toAbs = (p: string): string => filesystemPath.absolute(p);
 const fromAbs = (p: string): string => filesystemPath.absolute(p);
+
+/** Rebase one indexed source onto the retained spelling of its longest bound
+ * member root. Identity is deliberately computed only by filesystemPath;
+ * Python receives the resulting old/new pair and does no Unicode case map. */
+export function retainedIndexedSource(
+  root: string,
+  source: string,
+  boundRoots: readonly string[],
+  paths: FilesystemPathModule = filesystemPath,
+): string | null {
+  const owner = boundRoots
+    .filter((candidate) => paths.contains(candidate, source))
+    .sort((a, b) => paths.identity(b).length - paths.identity(a).length)[0];
+  if (!owner || !paths.equal(owner, root)) return null;
+  const rel = paths.relative(root, source);
+  if (!rel) return null;
+  const retained = paths.join(root, rel);
+  return retained === source ? null : retained;
+}
 
 /** Convert (path, raw content) into the (text, ext, fileHash) tuple
  *  the daemon expects. HTML gets pre-flattened to markdown-shaped
@@ -93,6 +114,8 @@ export class MfsIndexer implements Indexer {
   /** Folders that have successfully received at least one daemon status
    *  response in this process. */
   private folderReady = new Set<string>();
+  private legacySources: Map<string, string> | null = null;
+  private legacySourceGeneration = -1;
 
   async bindFolder(folder: string, cfg: EmbedderRuntimeConfig): Promise<void> {
     const daemon = getDaemon();
@@ -104,6 +127,14 @@ export class MfsIndexer implements Indexer {
       model: cfg.model,
       dimension: cfg.dimension,
     });
+    if (cfg.apiKey) {
+      try { await this.reconcileLegacySourceSpelling(source); }
+      catch (err) {
+        // Legacy spelling repair is auxiliary. A list/read failure must not
+        // turn an otherwise valid daemon bind into an indexing outage.
+        log.warn(`indexed source spelling inspection failed for ${source}: ${(err as Error).message}`);
+      }
+    }
     this.folderReady.delete(key);
     const bindingKey = `${cfg.provider}:${cfg.model ?? ''}:${cfg.dimension ?? ''}`;
     if (this.loggedBindings.get(key) === bindingKey) {
@@ -147,7 +178,14 @@ export class MfsIndexer implements Indexer {
     }
     const t0 = Date.now();
     const res = await getDaemon().call<{ chunks: number; embed_ms: number; total_ms: number }>(
-      'upsert', { path: toAbs(filePath), content: text, ext, file_hash: fileHash, metadata: {} },
+      'upsert', {
+        path: toAbs(filePath),
+        path_identity: filesystemPath.identity(filePath),
+        content: text,
+        ext,
+        file_hash: fileHash,
+        metadata: {},
+      },
     );
     log.info(
       `upsert ${filePath}: ${res.chunks} chunks ` +
@@ -170,7 +208,14 @@ export class MfsIndexer implements Indexer {
       return 0;
     }
     const res = await getDaemon().call<{ chunks: number; embed_ms: number; total_ms: number }>(
-      'upsert', { path: toAbs(sourceAbs), content, ext: '.md', file_hash: sourceHash, metadata: {} },
+      'upsert', {
+        path: toAbs(sourceAbs),
+        path_identity: filesystemPath.identity(sourceAbs),
+        content,
+        ext: '.md',
+        file_hash: sourceHash,
+        metadata: {},
+      },
     );
     log.info(`upsert(converted) ${sourceAbs}: ${res.chunks} chunks (embed ${fmtMs(res.embed_ms)})`);
     return res.chunks;
@@ -181,9 +226,9 @@ export class MfsIndexer implements Indexer {
   }
 
   async deletePathPrefix(prefix: string): Promise<void> {
-    const norm = prefix.replace(/\/+$/, '');
+    const norm = toAbs(prefix);
     const res = await getDaemon().call<{ removed: number }>(
-      'delete_prefix', { prefix: toAbs(norm) },
+      'delete_prefix', { prefix: norm },
     );
     log.info(`delete_prefix ${prefix}: removed ${res.removed} chunk(s) from index`);
   }
@@ -192,7 +237,15 @@ export class MfsIndexer implements Indexer {
     const { text, ext, fileHash } = prepareForIndex(newPath, content);
     const t0 = Date.now();
     const res = await getDaemon().call<{ chunks: number; embed_ms: number; fast_path?: boolean }>(
-      'rename', { old: toAbs(oldPath), new: toAbs(newPath), content: text, ext, file_hash: fileHash, metadata: {} },
+      'rename', {
+        old: toAbs(oldPath),
+        new: toAbs(newPath),
+        new_identity: filesystemPath.identity(newPath),
+        content: text,
+        ext,
+        file_hash: fileHash,
+        metadata: {},
+      },
     );
     // Fast path reuses the cached vectors (embed_ms == 0); only the
     // fallback actually re-embeds. Log which one ran so a slow rename
@@ -210,19 +263,30 @@ export class MfsIndexer implements Indexer {
     newPrefix: string,
     files: Array<{ path: string; content: string }>,
   ): Promise<void> {
+    const oldRoot = toAbs(oldPrefix);
+    const newRoot = toAbs(newPrefix);
     if (files.length === 0) {
-      await getDaemon().call('rename_prefix', { old: toAbs(oldPrefix), new: toAbs(newPrefix), files: [] });
+      await getDaemon().call('rename_prefix', { old: oldRoot, new: newRoot, files: [] });
       return;
     }
     const payload = files.map((f) => {
-      const rel = f.path.slice(oldPrefix.length + 1);
-      const newP = `${newPrefix}/${rel}`;
+      const rel = filesystemPath.relative(oldRoot, toAbs(f.path));
+      if (rel == null || rel === '') {
+        throw new Error(`rename source is outside prefix: ${f.path}`);
+      }
+      const newP = filesystemPath.join(newRoot, rel);
       const { text, ext, fileHash } = prepareForIndex(newP, f.content);
-      return { path: toAbs(newP), content: text, ext, file_hash: fileHash };
+      return {
+        path: toAbs(newP),
+        path_identity: filesystemPath.identity(newP),
+        content: text,
+        ext,
+        file_hash: fileHash,
+      };
     });
     const t0 = Date.now();
     const res = await getDaemon().call<{ files: number; chunks: number; fast_path_files?: number }>(
-      'rename_prefix', { old: toAbs(oldPrefix), new: toAbs(newPrefix), files: payload },
+      'rename_prefix', { old: oldRoot, new: newRoot, files: payload },
     );
     const fast = res.fast_path_files ?? 0;
     log.info(
@@ -320,10 +384,40 @@ export class MfsIndexer implements Indexer {
       await daemon.close();
     }
     this.folderReady.clear();
+    this.legacySources = null;
+    this.legacySourceGeneration = -1;
   }
 
   async close(): Promise<void> {
     await getDaemon().close();
+  }
+
+  private async reconcileLegacySourceSpelling(root: string): Promise<void> {
+    const daemon = getDaemon();
+    const generation = daemon.currentGeneration();
+    if (this.legacySources === null || this.legacySourceGeneration !== generation) {
+      const listed = await daemon.call<{ files: Record<string, string> }>('list', {});
+      this.legacySources = new Map(Object.entries(listed.files));
+      this.legacySourceGeneration = generation;
+    }
+
+    const boundRoots = [...daemon.knownBindings().keys()];
+    for (const [oldSource, fileHash] of [...this.legacySources.entries()]) {
+      const retained = retainedIndexedSource(root, oldSource, boundRoots);
+      if (!retained) continue;
+      try {
+        const result = await daemon.call<{ reused: boolean }>('reconcile_source', {
+          old: oldSource,
+          new: retained,
+          file_hash: fileHash,
+        });
+        this.legacySources.delete(oldSource);
+        if (result.reused) this.legacySources.set(retained, fileHash);
+        log.info(`reconciled indexed source spelling ${oldSource} → ${retained}`);
+      } catch (err) {
+        log.warn(`indexed source spelling reconcile failed for ${oldSource}: ${(err as Error).message}`);
+      }
+    }
   }
 }
 

@@ -26,6 +26,28 @@ test('Windows drive paths share one identity across separator and case variants'
   assert.equal(paths.resolveUnder('C:\\Users\\Alice', 'Notes\\File.md'), 'C:/Users/Alice/Notes/File.md');
 });
 
+test('Windows existing resolution restores actual component spelling', (t) => {
+  const originalReaddir = fs.readdirSync;
+  const originalRealpath = fs.realpathSync.native;
+  (fs.readdirSync as unknown as (cursor: string) => string[]) = ((cursor: string) => {
+    const normalized = cursor.replace(/\\/g, '/').toLowerCase();
+    if (normalized === 'c:/users/alice') return ['Docs'];
+    if (normalized === 'c:/users/alice/docs') return ['Report.docx'];
+    return [];
+  }) as typeof fs.readdirSync;
+  fs.realpathSync.native = ((value: fs.PathLike) => String(value)) as typeof fs.realpathSync.native;
+  t.after(() => {
+    fs.readdirSync = originalReaddir;
+    fs.realpathSync.native = originalRealpath;
+  });
+
+  const paths = createFilesystemPath({ platform: 'win32', cwd: 'C:\\workspace' });
+  assert.equal(
+    paths.resolveUnder('C:/Users/Alice', 'docs/report.docx', { access: 'existing' }),
+    'C:/Users/Alice/Docs/Report.docx',
+  );
+});
+
 test('Windows UNC and extended-length spellings normalize without losing share roots', () => {
   const paths = createFilesystemPath({ platform: 'win32', cwd: 'C:\\workspace' });
   assert.equal(paths.absolute('\\\\server\\share\\Folder'), '//server/share/Folder');
@@ -40,8 +62,17 @@ test('ambiguous Windows and escaping relative paths are rejected', () => {
   const paths = createFilesystemPath({ platform: 'win32', cwd: 'C:\\workspace' });
   assert.throws(() => paths.absolute('C:relative\\file.md'), /drive-relative/);
   assert.throws(() => paths.absolute('\\\\.\\PhysicalDrive0'), /device paths/);
+  assert.throws(() => paths.absolute('\\\\?\\GLOBALROOT\\Device\\HarddiskVolume1'), /namespace/);
+  assert.throws(() => paths.absolute('\\\\?\\Volume{abc}\\Folder'), /namespace/);
   assert.throws(() => paths.join('C:/Root', '../escape.md'), /invalid path segment/);
   assert.throws(() => paths.join('C:/Root', 'D:/escape.md'), /relative/);
+});
+
+test('POSIX paths reject foreign Windows absolute drive syntax but keep valid colon names', () => {
+  const paths = createFilesystemPath({ platform: 'posix', cwd: '/workspace' });
+  assert.throws(() => paths.absolute('C:/Users/Alice/File.docx'), /Windows drive paths/);
+  assert.throws(() => paths.absolute('C:\\Users\\Alice\\File.docx'), /Windows drive paths/);
+  assert.equal(paths.absolute('A:notes.md'), '/workspace/A:notes.md');
 });
 
 test('resolveUnder blocks existing and creatable symlink escapes', (t) => {
@@ -57,6 +88,7 @@ test('resolveUnder blocks existing and creatable symlink escapes', (t) => {
   fs.writeFileSync(path.join(root, 'inside.md'), 'inside');
   fs.writeFileSync(path.join(outside, 'outside.md'), 'outside');
   fs.symlinkSync(outside, path.join(root, 'link'));
+  fs.symlinkSync(path.join(outside, 'outside.md'), path.join(root, 'linked-file.md'));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
 
   assert.equal(
@@ -71,8 +103,13 @@ test('resolveUnder blocks existing and creatable symlink escapes', (t) => {
     () => filesystemPath.resolveUnder(root, 'link/new.md', { access: 'creatable' }),
     /escapes folder through symlink/,
   );
+  assert.throws(
+    () => filesystemPath.resolveUnder(root, 'linked-file.md', { access: 'creatable' }),
+    /escapes folder through symlink/,
+  );
   assert.equal(
     filesystemPath.resolveUnder(root, 'new/child.md', { access: 'creatable' }),
     path.join(root, 'new', 'child.md'),
   );
+  assert.equal(filesystemPath.real(path.join(root, 'link')), fs.realpathSync.native(outside));
 });

@@ -73,10 +73,12 @@ name to keep the protocol surface small).
 Paths
 -----
 ``path`` / ``prefix`` / ``old`` / ``new`` in every op are **absolute
-POSIX paths** (``/Users/me/notes/lecture-01.md``). The daemon matches each
-to the bound folder root that is its longest prefix. The Node side
-translates between folder-relative (its native representation) and absolute
-at the indexer boundary.
+POSIX-spelled paths** (``/Users/me/notes/lecture-01.md`` or
+``C:/Users/me/notes/lecture-01.md``). The daemon matches each to the bound
+folder root that is its longest identity prefix. Node owns platform/Unicode
+identity and sends opaque comparison keys while Python retains the first bound
+source spelling. The Node side normalizes every daemon crossing through its
+filesystem-path seam.
 """
 
 from __future__ import annotations
@@ -467,12 +469,31 @@ def _collection_name(dim: int) -> str:
 
 
 def _norm_root(root: str) -> str:
-    """Normalise an absolute folder root: drop trailing slashes (keep a
-    bare ``/`` as ``/``). Folder roots and file sources are resolved
-    absolute POSIX paths on the Node side, so this is all the daemon
-    needs to make prefix matching consistent."""
+    """Normalize an absolute POSIX-spelled source without destroying a
+    filesystem root. ``/``, Windows drive roots such as ``C:/``, and UNC
+    share roots keep their trailing slash; other paths drop trailing slashes."""
     r = root.rstrip("/")
-    return r or "/"
+    if not r:
+        return "/"
+    if len(r) == 2 and r[0].isalpha() and r[1] == ":" and len(root) > 2:
+        return r + "/"
+    if r.startswith("//") and len([part for part in r.split("/") if part]) == 2:
+        return r + "/"
+    return r
+
+
+def _source_child_prefix(root: str) -> str:
+    source = _norm_root(root)
+    return source if source.endswith("/") else source + "/"
+
+
+def _path_identity_contains(root_identity: str, path_identity: str) -> bool:
+    prefix = _source_child_prefix(root_identity)
+    return path_identity == root_identity or path_identity.startswith(prefix)
+
+
+def _join_source_path(root: str, relative: str) -> str:
+    return root + relative if root.endswith("/") else root + "/" + relative
 
 
 class StashbaseStore:
@@ -509,9 +530,10 @@ class StashbaseStore:
         self._embedder: Any = None
         self._store: Any = None
         self._dim: int = 0
-        # Absolute folder roots Node has bound (normalised, no trailing
-        # slash). Membership only — they all share the single collection.
-        self._bound: set[str] = set()
+        # Opaque Node-generated comparison identity -> retained source spelling.
+        # Node's filesystem-path module is the single identity owner; Python
+        # never repeats Unicode/platform case mapping with a drifting runtime.
+        self._bound: dict[str, str] = {}
 
     def _ensure_store(self, embedder):
         """Open the single Milvus collection. Idempotent: reuses the
@@ -566,7 +588,16 @@ class StashbaseStore:
         self._dim = dim
         return store
 
-    def bind_root(self, root: str, provider: str, *, api_key=None, model=None, dimension=None) -> dict:
+    def bind_root(
+        self,
+        root: str,
+        provider: str,
+        *,
+        root_identity: str | None = None,
+        api_key=None,
+        model=None,
+        dimension=None,
+    ) -> dict:
         # First bind with a key builds the embedder + collection; later
         # binds reuse them. Without a key the root is still registered
         # but the collection isn't created — indexing stays disabled until
@@ -574,8 +605,9 @@ class StashbaseStore:
         if self._store is None and api_key:
             embedder = make_embedder(provider, model=model, api_key=api_key, dimension=dimension)
             self._ensure_store(embedder)
-        root = _norm_root(root)
-        self._bound.add(root)
+        requested = _norm_root(root)
+        identity = root_identity or requested
+        root = self._bound.setdefault(identity, requested)
         return {
             "root": root,
             "provider": "openai",
@@ -584,27 +616,32 @@ class StashbaseStore:
             "collection": _collection_name(self._dim) if self._dim else None,
         }
 
-    def unbind_root(self, root: str) -> dict:
-        root = _norm_root(root)
-        had = root in self._bound
-        self._bound.discard(root)
+    def unbind_root(self, root: str, *, root_identity: str | None = None) -> dict:
+        requested = _norm_root(root)
+        identity = root_identity or requested
+        retained = self._bound.pop(identity, None)
+        had = retained is not None
+        root = retained or requested
         return {"root": root, "was_bound": had}
 
-    def root_for_path(self, path: str) -> str | None:
+    def root_for_path(self, path: str, *, path_identity: str | None = None) -> str | None:
         """Return the bound absolute root that contains ``path`` (the
         longest matching prefix, so a nested bound root wins), or None."""
         best = None
-        for r in self._bound:
-            if path == r or path.startswith(r.rstrip("/") + "/"):
-                if best is None or len(r) > len(best):
-                    best = r
+        best_identity = None
+        identity = path_identity or _norm_root(path)
+        for root_identity, source in self._bound.items():
+            if _path_identity_contains(root_identity, identity):
+                if best_identity is None or len(root_identity) > len(best_identity):
+                    best = source
+                    best_identity = root_identity
         return best
 
-    def store_for_path(self, path: str):
+    def store_for_path(self, path: str, *, path_identity: str | None = None):
         """Return ``(embedder, store)`` for ``path`` (absolute POSIX).
         Every folder shares the one collection; the path still has to
         live under a bound root."""
-        if self.root_for_path(path) is None or self._store is None:
+        if self.root_for_path(path, path_identity=path_identity) is None or self._store is None:
             raise RuntimeError(
                 f"no bound root matches path '{path}'; call bind_root first "
                 "(or set an OpenAI API key)",
@@ -622,7 +659,7 @@ class StashbaseStore:
     def bound_roots(self) -> list[str]:
         """Absolute folder roots Node has registered, sorted. Used by
         whole-library disk walks."""
-        return sorted(self._bound)
+        return sorted(self._bound.values())
 
     def require_current(self):
         """Return ``(embedder, store, dim)``; raise if no embedder is
@@ -695,6 +732,7 @@ def op_bind_folder(svc: StashbaseStore, args: dict) -> dict:
     return svc.bind_root(
         args["folder"],
         args["provider"],
+        root_identity=args.get("folder_identity"),
         api_key=args.get("api_key"),
         model=args.get("model"),
         dimension=args.get("dimension"),
@@ -703,7 +741,10 @@ def op_bind_folder(svc: StashbaseStore, args: dict) -> dict:
 
 def op_unbind_folder(svc: StashbaseStore, args: dict) -> dict:
     _require(args, "folder")
-    return svc.unbind_root(args["folder"])
+    return svc.unbind_root(
+        args["folder"],
+        root_identity=args.get("folder_identity"),
+    )
 
 
 def op_upsert(svc: StashbaseStore, args: dict) -> dict:
@@ -730,7 +771,10 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
     file_metadata = args.get("metadata") or {}
     if not isinstance(file_metadata, dict):
         file_metadata = {}
-    embedder, store = svc.store_for_path(path)
+    embedder, store = svc.store_for_path(
+        path,
+        path_identity=args.get("path_identity"),
+    )
     chunks = _chunk(path, content, ext)
     file_hash = args.get("file_hash") or _hash_text(content)
     t0 = time.time()
@@ -837,6 +881,7 @@ def op_rename(svc: StashbaseStore, args: dict) -> dict:
             pass
     return op_upsert(svc, {
         "path": new,
+        "path_identity": args.get("new_identity"),
         "content": args["content"],
         "ext": args.get("ext", ".md"),
         "file_hash": arg_hash,
@@ -925,6 +970,24 @@ def _try_rename_without_reembed(
     return total
 
 
+def op_reconcile_source(svc: StashbaseStore, args: dict) -> dict:
+    """Rebase one legacy source spelling chosen by Node's path identity.
+
+    Python deliberately does no path comparison here. Node owns Unicode and
+    platform identity, while this operation owns the vector-preserving copy
+    and stale-row fallback at the store boundary.
+    """
+    _require(args, "old", "new", "file_hash")
+    old = args["old"]
+    new = args["new"]
+    copied = _try_rename_without_reembed(svc, old, new, args["file_hash"])
+    if copied is None:
+        for _pk, _emb, store in svc.stores():
+            store.delete_by_source(old)
+        return {"reused": False, "chunks": 0}
+    return {"reused": True, "chunks": copied}
+
+
 def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
     """Folder rename — move every file under ``old`` to ``new``.
 
@@ -942,8 +1005,8 @@ def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
     That case takes the original wipe-then-reembed route.
     """
     _require(args, "old", "new")
-    old_prefix = args["old"].rstrip("/") + "/"
-    new_prefix = args["new"].rstrip("/") + "/"
+    old_prefix = _source_child_prefix(args["old"])
+    new_prefix = _source_child_prefix(args["new"])
     files = args.get("files", [])
     nested = new_prefix.startswith(old_prefix) or old_prefix.startswith(new_prefix)
 
@@ -960,7 +1023,7 @@ def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
         for f in files:
             res = op_upsert(svc, {
                 "path": f["path"], "content": f["content"], "ext": f.get("ext", ".md"),
-                "file_hash": f.get("file_hash"),
+                "file_hash": f.get("file_hash"), "path_identity": f.get("path_identity"),
             })
             total += int(res.get("chunks", 0))
         return {"files": len(files), "chunks": total, "fast_path_files": 0}
@@ -990,7 +1053,7 @@ def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
                 pass
         res = op_upsert(svc, {
             "path": new_path, "content": f["content"], "ext": f.get("ext", ".md"),
-            "file_hash": arg_hash,
+            "file_hash": arg_hash, "path_identity": f.get("path_identity"),
         })
         total += int(res.get("chunks", 0))
 
@@ -1008,7 +1071,7 @@ def op_delete_prefix(svc: StashbaseStore, args: dict) -> dict:
     """Drop every chunk row whose source starts with ``prefix/`` from
     every collection."""
     _require(args, "prefix")
-    prefix = args["prefix"].rstrip("/") + "/"
+    prefix = _source_child_prefix(args["prefix"])
     removed = 0
     for _pk, _emb, store in svc.stores():
         try:
@@ -1042,9 +1105,9 @@ def op_search(svc: StashbaseStore, args: dict) -> dict:
     # Otherwise fall back to folder-only scoping; both omitted = whole
     # library.
     if explicit_prefix:
-        path_filter = explicit_prefix if explicit_prefix.endswith("/") else explicit_prefix.rstrip("/") + "/"
+        path_filter = _source_child_prefix(explicit_prefix)
     elif folder:
-        path_filter = folder.rstrip("/") + "/"
+        path_filter = _source_child_prefix(folder)
     else:
         path_filter = None
 
@@ -1086,7 +1149,7 @@ def op_list(svc: StashbaseStore, args: dict) -> dict:
     skip re-embedding under the current embedder, leaving the file
     unsearchable. See build-map 04-indexing #03."""
     folder = args.get("folder")
-    prefix = (folder.rstrip("/") + "/") if folder else ""
+    prefix = _source_child_prefix(folder) if folder else ""
     out: dict[str, str] = {}
     for _pk, _emb, store in svc.stores():
         try:
@@ -1146,7 +1209,7 @@ def _walk_disk(root: Path, rel_prefix: str = "") -> dict:
             rel_local = str(f.path.relative_to(root)).replace(os.sep, "/")
         except ValueError:
             continue
-        full_rel = f"{rel_prefix}/{rel_local}" if rel_prefix else rel_local
+        full_rel = _join_source_path(rel_prefix, rel_local) if rel_prefix else rel_local
         raw.append((full_rel, rel_local, f))
 
     # Note-stem detection runs against the local-relative path; only
@@ -1239,7 +1302,7 @@ def op_scan_diff(svc: StashbaseStore, args: dict) -> dict:
     # reconcile loop would then skip re-embedding it under the current
     # embedder and the file would stay unsearchable.
     indexed: dict[str, str] = {}
-    prefix = (folder.rstrip("/") + "/") if folder else ""
+    prefix = _source_child_prefix(folder) if folder else ""
     for _pk, _emb, store in svc.stores():
         try:
             for src, fh in store.get_indexed_files(prefix).items():
@@ -1315,7 +1378,7 @@ def op_status(svc: StashbaseStore, args: dict) -> dict:
     actually still need to be re-embedded under the current embedder."""
     folder = args.get("folder")
     on_disk = set(_walk_for_scope(svc, folder).keys())
-    prefix = (folder.rstrip("/") + "/") if folder else ""
+    prefix = _source_child_prefix(folder) if folder else ""
     indexed: set[str] = set()
     for _pk, _emb, store in svc.stores():
         try:
@@ -1352,6 +1415,7 @@ OPS = {
     "delete": op_delete,
     "delete_prefix": op_delete_prefix,
     "rename": op_rename,
+    "reconcile_source": op_reconcile_source,
     "rename_prefix": op_rename_prefix,
     "search": op_search,
     "scan_diff": op_scan_diff,
