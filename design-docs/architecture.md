@@ -79,8 +79,11 @@ library write, edit, move, and delete transactions. `server/file-save.ts`
 provides the shared editable-file save and index-update path, while
 `server/file-operation-guard.ts` prevents rename/delete only while conversion
 is running. `server/routes/library-files.ts` keeps request and response
-orchestration. Filesystem, scheduler, membership, state, and daemon adapters
-cross these modules. Identity, containment, migration, and protocol invariants live in
+orchestration. The active-folder surface composes note CRUD and rename in
+`server/routes/files.ts`, asset and derived-preview serving in
+`server/routes/file-assets.ts`, and sidebar-order HTTP handling in
+`server/routes/file-order.ts`. Filesystem, scheduler, membership, state, and
+daemon adapters cross these modules. Identity, containment, migration, and protocol invariants live in
 [data-layer §8.2](data-layer.md#82-conversion-scheduler-and-renderer-notification).
 
 ## 2.2 Library Scope

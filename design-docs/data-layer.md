@@ -271,7 +271,7 @@ Review invariants:
 - Extractor cancellation owns the whole descendant tree: POSIX signals the detached process group, while Windows uses `taskkill /T /F` (`server/extractor-process.ts:38-79`).
 - A stale final artifact is unavailable for the entire queued interval; resumable PDF batches never count as a final artifact.
 - Folder removal, source delete, rename guards, and shutdown consult the scheduler so queued work is not invisible.
-- File/folder rename and delete remain available while work is only queued. The shared guard blocks only a running conversion (`server/file-operation-guard.ts:14-24`). Successful operations cancel old queued identities, clean stale derived ownership, and rediscover sources at new paths in both the active-folder surface and the library/MCP surface (`server/routes/files.ts:254-425`, `server/routes/files.ts:429-460`, `server/library-file-mutations.ts:81-205`, `server/routes/folders.ts:44-54`, `server/routes/folders.ts:168-204`).
+- File/folder rename and delete remain available while work is only queued. The shared guard blocks only a running conversion (`server/file-operation-guard.ts:14-24`). Successful operations cancel old queued identities, clean stale derived ownership, and rediscover sources at new paths in both the active-folder surface and the library/MCP surface (`server/routes/files.ts:228-399`, `server/routes/files.ts:403-434`, `server/library-file-mutations.ts:81-205`, `server/routes/folders.ts:44-54`, `server/routes/folders.ts:168-204`).
 - Revision/version counters are disposable notifications and may reset on restart.
 
 ## 8.3 Built-in Codex process lifecycle
