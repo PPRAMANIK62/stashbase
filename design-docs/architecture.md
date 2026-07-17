@@ -101,6 +101,8 @@ Each opened folder can carry a short optional description in app config. The des
 
 Renderer state orchestration lives under `web-src/src/store/`. `state.ts` is the stable state-model and action-contract facade, `stateHelpers.ts` owns reusable pure transitions and layout bounds, and `stateReducer.ts` applies the action union. `AppContext.tsx` is the composition seam exposed to views. Async behavior is grouped by ownership: document persistence and tabs in `useDocumentActions.ts`, visible file mutations in `useFileActions.ts`, index polling/search/sync in `useSearchActions.ts`, folder-session transitions in `useFolderActions.ts`, and transient find/feedback protocols in `useFindActions.ts` and `useFeedbackActions.ts`. These hooks share refs only through the Provider composition and preserve one `AppActions` interface for renderer callers.
 
+The renderer's local HTTP boundary keeps `web-src/src/api.ts` as the stable endpoint facade. `apiTypes.ts` owns request and response contracts, while `apiTransport.ts` owns per-window request identity, JSON/error normalization, retry policy, and folder-relative path encoding.
+
 ---
 
 # 3. Storage
