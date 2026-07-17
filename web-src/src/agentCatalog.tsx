@@ -4,16 +4,28 @@ import { ClaudeIcon, CodexIcon } from './icons';
 export type AgentKind = 'claude' | 'codex';
 export type McpClientId = 'claude-code' | 'codex-cli' | 'claude-desktop';
 
+/** Bootstrap contract used until the server has returned live runtime
+ * discovery. The server descriptor takes precedence once available. */
+export interface AgentPanelCapabilities {
+  connection: true;
+  prompts: true;
+  interrupt: true;
+  transcript: true;
+  approvals: true;
+  history: true;
+  modes: boolean;
+  effort: boolean;
+  steering: boolean;
+  titleHint: boolean;
+}
+
 export interface AgentMeta {
   id: AgentKind;
   name: string;
   shortName: string;
   launcherLabel: string;
-  endpoint: string;
   mcpClientId: McpClientId;
-  supportsHistory: boolean;
-  supportsModes: boolean;
-  supportsEffort: boolean;
+  capabilities: AgentPanelCapabilities;
   controlsNote: string;
   Icon: ComponentType<{ className?: string }>;
 }
@@ -24,11 +36,8 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     name: 'Claude Code',
     shortName: 'Claude',
     launcherLabel: 'Claude Code',
-    endpoint: '/ws/agent',
     mcpClientId: 'claude-code',
-    supportsHistory: true,
-    supportsModes: true,
-    supportsEffort: true,
+    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, steering: false, titleHint: false },
     controlsNote: 'Access applies live · Effort on new session',
     Icon: ClaudeIcon,
   },
@@ -37,11 +46,8 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     name: 'Codex',
     shortName: 'Codex',
     launcherLabel: 'Codex',
-    endpoint: '/ws/codex',
     mcpClientId: 'codex-cli',
-    supportsHistory: true,
-    supportsModes: true,
-    supportsEffort: true,
+    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, steering: true, titleHint: true },
     controlsNote: 'Access and effort apply on new session',
     Icon: CodexIcon,
   },

@@ -14,11 +14,12 @@ import {
   listCodexSessions,
   renameCodexSession,
 } from '../codex-agent.ts';
+import { agentAdapter, type AgentHistoryActions } from '../agent-contract.ts';
 
 export function mount(app: express.Express): void {
   app.get('/api/codex/sessions', async (_req, res) => {
     try {
-      res.json(await listCodexSessions(getCurrentFolder()));
+      res.json(await codexHistory().list(getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -26,7 +27,7 @@ export function mount(app: express.Express): void {
 
   app.get('/api/codex/sessions/:id/messages', async (req, res) => {
     try {
-      res.json(await getCodexSessionMessages(req.params.id, getCurrentFolder()));
+      res.json(await codexHistory().messages(req.params.id, getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -39,7 +40,7 @@ export function mount(app: express.Express): void {
       return;
     }
     try {
-      res.json(await renameCodexSession(req.params.id, title, getCurrentFolder()));
+      res.json(await codexHistory().rename(req.params.id, title, getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -47,10 +48,23 @@ export function mount(app: express.Express): void {
 
   app.delete('/api/codex/sessions/:id', async (req, res) => {
     try {
-      await deleteCodexSession(req.params.id, getCurrentFolder());
+      await codexHistory().remove(req.params.id, getCurrentFolder());
       res.json({});
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
+}
+
+export function codexHistoryActions(): AgentHistoryActions {
+  return {
+    list: (folder) => listCodexSessions(folder),
+    messages: (id, folder) => getCodexSessionMessages(id, folder),
+    rename: (id, title, folder) => renameCodexSession(id, title, folder),
+    remove: (id, folder) => deleteCodexSession(id, folder),
+  };
+}
+
+function codexHistory(): AgentHistoryActions {
+  return agentAdapter('codex')?.history ?? codexHistoryActions();
 }
