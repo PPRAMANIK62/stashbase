@@ -53,7 +53,7 @@ import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeBridgeFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
-import { reportAgentRuntimeFailure } from './agent-contract.ts';
+import { isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode } from './agent-contract.ts';
 import type { AgentClientEvent, AgentServerEvent } from './agent-contract.ts';
 
 const log = logger('agent');
@@ -70,17 +70,11 @@ function missingClaudeMessage(): string {
   return 'Claude CLI not found. Install Claude Code or set STASHBASE_CLAUDE_BIN to the claude executable.';
 }
 
-const CLAUDE_PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto'] as const satisfies readonly PermissionMode[];
-
-function isClaudePermissionMode(access: string): access is PermissionMode {
-  return (CLAUDE_PERMISSION_MODES as readonly string[]).includes(access);
-}
-
 /** Map the Shared Agent Contract's Access value to the native Claude SDK
  * permission mode. Keep the validation at this adapter boundary so callers
  * cannot turn an arbitrary WebSocket query value into a native setting. */
-export function claudePermissionMode(access?: string): PermissionMode {
-  return typeof access === 'string' && isClaudePermissionMode(access) ? access : 'default';
+export function claudePermissionMode(access?: string): AgentAccessMode {
+  return isAgentAccessMode(access) ? access : 'default';
 }
 
 function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
@@ -406,7 +400,7 @@ class AgentSession {
         // (Bash still prompts via canUseTool), 'plan' = read-only planning,
         // 'auto' = model classifier decides. We don't expose the dangerous
         // 'bypassPermissions' / 'dontAsk'.
-        if (isClaudePermissionMode(msg.mode)) {
+        if (isAgentAccessMode(msg.mode)) {
           void this.q?.setPermissionMode(msg.mode).catch((err) => log.debug(errorMessage(err)));
         }
         break;
@@ -485,7 +479,7 @@ export function attachAgentWebSocket(
   windowId = 'default',
   effort?: string,
   resume?: string,
-  access?: string,
+  access?: AgentAccessMode,
 ): void {
   const session = new AgentSession(
     ws,
