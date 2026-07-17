@@ -28,8 +28,8 @@ h6 { font-size: 0.85em; color: rgba(55, 53, 47, 0.65); }
 p { margin: 0.9em 0; }
 a { color: #0e7490; text-decoration: underline; text-decoration-color: rgba(14, 116, 144, 0.4); }
 a:hover { text-decoration-color: rgba(14, 116, 144, 0.85); }
-.footnote-ref { font-size: 0.75em; line-height: 0; vertical-align: super; }
-.footnote-ref a { padding: 0 0.12em; text-decoration: none; }
+sup:has([data-footnote\\:ref]) { font-size: 0.75em; line-height: 0; vertical-align: super; }
+[data-footnote\\:ref] { padding: 0 0.12em; text-decoration: none; }
 .footnotes {
   margin-top: 2.5em; color: rgba(55, 53, 47, 0.78); font-size: 0.875em;
 }
@@ -38,9 +38,9 @@ a:hover { text-decoration-color: rgba(14, 116, 144, 0.85); }
 .footnotes li { padding-left: 0.25em; scroll-margin-top: 1em; }
 .footnotes li:target { background: rgba(14, 116, 144, 0.08); }
 .footnotes p { margin: 0.45em 0; }
-.footnote-backref { display: inline-block; margin-left: 0.3em; padding: 0 0.2em; text-decoration: none; }
-.footnote-ref a:focus-visible,
-.footnote-backref:focus-visible {
+[data-footnote\\:backref] { display: inline-block; margin-left: 0.3em; padding: 0 0.2em; text-decoration: none; }
+[data-footnote\\:ref]:focus-visible,
+[data-footnote\\:backref]:focus-visible {
   outline: 2px solid #0e7490; outline-offset: 2px; border-radius: 2px;
 }
 code {
@@ -61,6 +61,20 @@ blockquote {
   border-left: 3px solid rgb(55, 53, 47);
   color: inherit;
 }
+.markdown-alert {
+  --alert-color: #0969da;
+  --alert-background: #ddf4ff;
+  margin: 1em 0; padding: 12px 16px;
+  border-left: 4px solid var(--alert-color); border-radius: 4px;
+  background: var(--alert-background);
+}
+.markdown-alert-title { display: flex; align-items: center; gap: 0.45em; margin: 0; font-weight: 700; color: var(--alert-color); }
+.markdown-alert-title svg { width: 1em; height: 1em; fill: currentColor; flex: 0 0 auto; }
+.markdown-alert > :not(.markdown-alert-title) { margin: 0.55em 0 0; }
+.markdown-alert-tip { --alert-color: #1a7f37; --alert-background: #dafbe1; }
+.markdown-alert-important { --alert-color: #8250df; --alert-background: #fbefff; }
+.markdown-alert-warning { --alert-color: #9a6700; --alert-background: #fff8c5; }
+.markdown-alert-caution { --alert-color: #cf222e; --alert-background: #ffebe9; }
 ul, ol { padding-left: 1.6em; margin: 0.9em 0; }
 li { margin: 0.35em 0; }
 table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.95em; }

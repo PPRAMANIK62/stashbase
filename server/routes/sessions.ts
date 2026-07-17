@@ -30,6 +30,7 @@ import {
 import { getCurrentFolder } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
+import { agentAdapter, type AgentHistoryActions } from '../agent-contract.ts';
 
 /** Trimmed session row sent to the client. */
 interface SessionRow {
@@ -38,6 +39,11 @@ interface SessionRow {
   lastModified: number;
   cwd?: string;
   gitBranch?: string;
+}
+
+class SessionNotFoundError extends Error {
+  readonly status = 404;
+  constructor() { super('session not found for current folder'); }
 }
 
 function toRow(s: SDKSessionInfo): SessionRow {
@@ -59,14 +65,7 @@ export function mount(app: express.Express): void {
   // the panel needs one) → fall back to listing all so it's never blank.
   app.get('/api/agent/sessions', async (_req, res) => {
     try {
-      const sessions = await listSessions();
-      const folder = getCurrentFolder();
-      const cur = folder ? filesystemPath.absolute(folder) : null;
-      const rows = sessions
-        .map(toRow)
-        .filter((r) => !cur || sessionInfoMatchesFolder(r, cur))
-        .sort((a, b) => b.lastModified - a.lastModified);
-      res.json(rows);
+      res.json(await claudeHistory().list(getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -76,12 +75,7 @@ export function mount(app: express.Express): void {
   // so the client renders it with its existing BlockView untouched.
   app.get('/api/agent/sessions/:id/messages', async (req, res) => {
     try {
-      if (!(await sessionBelongsToCurrentFolder(req.params.id))) {
-        res.status(404).json({ error: 'session not found for current folder' });
-        return;
-      }
-      const msgs = await getSessionMessages(req.params.id);
-      res.json(transcriptToBlocks(msgs));
+      res.json(await claudeHistory().messages(req.params.id, getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -95,13 +89,7 @@ export function mount(app: express.Express): void {
       return;
     }
     try {
-      if (!(await sessionBelongsToCurrentFolder(req.params.id))) {
-        res.status(404).json({ error: 'session not found for current folder' });
-        return;
-      }
-      await renameSession(req.params.id, title);
-      const info = await getSessionInfo(req.params.id);
-      res.json(info ? toRow(info) : { id: req.params.id, title, lastModified: 0 });
+      res.json(await claudeHistory().rename(req.params.id, title, getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -110,11 +98,7 @@ export function mount(app: express.Express): void {
   // Delete (the trash) — removes the `{id}.jsonl` transcript.
   app.delete('/api/agent/sessions/:id', async (req, res) => {
     try {
-      if (!(await sessionBelongsToCurrentFolder(req.params.id))) {
-        res.status(404).json({ error: 'session not found for current folder' });
-        return;
-      }
-      await deleteSession(req.params.id);
+      await claudeHistory().remove(req.params.id, getCurrentFolder());
       res.json({});
     } catch (err: unknown) {
       sendError(res, err);
@@ -122,8 +106,38 @@ export function mount(app: express.Express): void {
   });
 }
 
-async function sessionBelongsToCurrentFolder(id: string): Promise<boolean> {
-  const folder = getCurrentFolder();
+/** Claude's compatibility adapter delegates the panel's history actions to
+ * the SDK store without exposing those SDK details to routes or renderer. */
+export function claudeHistoryActions(): AgentHistoryActions {
+  return {
+    async list(folder) {
+      const sessions = await listSessions();
+      return sessions.map(toRow)
+        .filter((row) => !folder || sessionInfoMatchesFolder(row, folder))
+        .sort((a, b) => b.lastModified - a.lastModified);
+    },
+    async messages(id, folder) {
+      if (!(await sessionBelongsToFolder(id, folder))) throw new SessionNotFoundError();
+      return transcriptToBlocks(await getSessionMessages(id));
+    },
+    async rename(id, title, folder) {
+      if (!(await sessionBelongsToFolder(id, folder))) throw new SessionNotFoundError();
+      await renameSession(id, title);
+      const info = await getSessionInfo(id);
+      return info ? toRow(info) : { id, title, lastModified: 0 };
+    },
+    async remove(id, folder) {
+      if (!(await sessionBelongsToFolder(id, folder))) throw new SessionNotFoundError();
+      await deleteSession(id);
+    },
+  };
+}
+
+function claudeHistory(): AgentHistoryActions {
+  return agentAdapter('claude')?.history ?? claudeHistoryActions();
+}
+
+async function sessionBelongsToFolder(id: string, folder: string | null): Promise<boolean> {
   // When no folder is open, the list route intentionally falls back to
   // all sessions; keep direct actions global before a folder is open.
   if (!folder) return true;

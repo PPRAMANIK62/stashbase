@@ -31,6 +31,14 @@ import {
   attachCodexWebSocket,
   killActiveCodex,
 } from './codex-agent.ts';
+import {
+  attachAgentRuntime,
+  isAgentAccessMode,
+  registerAgentAdapter,
+  stopAgentRuntime,
+  type AgentAccessMode,
+  type AgentConnectionOptions,
+} from './agent-contract.ts';
 import { onClose, onSwitch, ensureFolderHome } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { getApiKey, migrateLegacyEmbedderConfig } from './app-config.ts';
@@ -56,8 +64,29 @@ import { createMcpHttpService } from './mcp-http-service.ts';
 import { runShutdownCleanup } from './shutdown-cleanup.ts';
 import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
+import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
+import { claudeHistoryActions } from './routes/sessions.ts';
+import { codexHistoryActions } from './routes/codex-sessions.ts';
 
 const log = logger('server');
+
+// Compatibility adapters preserve the established Claude SDK and Codex
+// app-server behaviour behind one panel contract.  Their native protocols
+// stay in their bridge modules; new renderer code should use the contract.
+registerAgentAdapter({
+  id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
+  capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, steering: false, titleHint: false },
+  attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access),
+  stop: killActiveAgent,
+  history: claudeHistoryActions(),
+});
+registerAgentAdapter({
+  id: 'codex', label: 'Codex', vendor: 'OpenAI',
+  capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, steering: true, titleHint: true },
+  attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access),
+  stop: killActiveCodex,
+  history: codexHistoryActions(),
+});
 
 // Converters push their derived notes straight into the index on
 // completion — there is no fs-watcher intermediary anymore. Wired here
@@ -262,6 +291,7 @@ mountMcpRoutes(app, mcpHttpService);
 mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in and MCP-only
 mountSessionsRoutes(app); // global (no requireFolder) — lists all local sessions
 mountCodexSessionsRoutes(app); // global (no requireFolder) — filters to current folder when open
+mountAgentSessionsRoutes(app); // shared contract history surface for the built-in panel
 
 // Renderer error sink. The root `ErrorBoundary` POSTs render-time
 // exceptions here so they appear in the same server log developers
@@ -342,12 +372,21 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // because we share the existing http.Server with Vite's HMR proxy.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
-  attachAgentWebSocket(ws, windowIdOf(req), effortOf(req), resumeOf(req));
+  attachAgentRuntime(agentIdOf(req), ws, connectionOptionsOf(req));
 });
-const codexWss = new WebSocketServer({ noServer: true });
-codexWss.on('connection', (ws, req) => {
-  attachCodexWebSocket(ws, windowIdOf(req), effortOf(req), resumeOf(req), accessOf(req));
-});
+
+function agentIdOf(req: import('node:http').IncomingMessage): string {
+  try {
+    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
+    return u.searchParams.get('agent') || (u.pathname === '/ws/codex' ? 'codex' : 'claude');
+  } catch {
+    return 'claude';
+  }
+}
+
+function connectionOptionsOf(req: import('node:http').IncomingMessage): AgentConnectionOptions {
+  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req) };
+}
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {
   try {
@@ -373,11 +412,11 @@ function effortOf(req: import('node:http').IncomingMessage): string | undefined 
 
 /** Read the Agent access mode off the WS URL. Claude applies it live after
  *  connect; Codex consumes it when the app-server thread starts. */
-function accessOf(req: import('node:http').IncomingMessage): string | undefined {
+function accessOf(req: import('node:http').IncomingMessage): AgentAccessMode | undefined {
   try {
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
     const access = u.searchParams.get('access');
-    return ['default', 'acceptEdits', 'plan', 'auto'].includes(access ?? '') ? access! : undefined;
+    return isAgentAccessMode(access) ? access : undefined;
   } catch {
     return undefined;
   }
@@ -400,12 +439,12 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 // bound to the old cwd; the renderer reconnects for the new folder when
 // the user opens the panel again.
 onSwitch((newRoot, windowId) => {
-  killActiveAgent(windowId);
-  killActiveCodex(windowId);
+  stopAgentRuntime('claude', windowId);
+  stopAgentRuntime('codex', windowId);
 });
 onClose((_oldRoot, windowId) => {
-  killActiveAgent(windowId);
-  killActiveCodex(windowId);
+  stopAgentRuntime('claude', windowId);
+  stopAgentRuntime('codex', windowId);
 });
 // Hook WebSocket upgrades. `/ws/agent` and `/ws/codex` go to our
 // structured chat bridges; everything else (Vite HMR in dev) falls
@@ -422,15 +461,9 @@ server.on('upgrade', (req, socket, head) => {
     return;
   }
   const url = req.url ?? '';
-  if (url.startsWith('/ws/agent')) {
+  if (url.startsWith('/ws/agent') || url.startsWith('/ws/codex')) {
     agentWss.handleUpgrade(req, socket, head, (ws) => {
       agentWss.emit('connection', ws, req);
-    });
-    return;
-  }
-  if (url.startsWith('/ws/codex')) {
-    codexWss.handleUpgrade(req, socket, head, (ws) => {
-      codexWss.emit('connection', ws, req);
     });
     return;
   }
@@ -463,8 +496,8 @@ async function shutdown(reason: string): Promise<void> {
   log.info(`shutdown: ${reason}`);
   // Stop accepting new connections immediately; in-flight ones drain.
   try { server.close(); } catch { /* already gone */ }
-  try { killActiveAgent(); } catch { /* swallow */ }
-  try { killActiveCodex(); } catch { /* swallow */ }
+  try { stopAgentRuntime('claude'); } catch { /* swallow */ }
+  try { stopAgentRuntime('codex'); } catch { /* swallow */ }
   // Hard ceiling: conversion cancellation may spend up to 2.5 s waiting for
   // extractor process groups to exit, and the daemon close ladder can spend
   // another ~3.5 s. Exit anyway if either side wedges.

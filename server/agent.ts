@@ -54,6 +54,8 @@ import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeBridgeFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
+import { isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode } from './agent-contract.ts';
+import type { AgentClientEvent, AgentServerEvent } from './agent-contract.ts';
 
 const log = logger('agent');
 
@@ -67,6 +69,13 @@ function resolveClaudeBinary(): string | null {
 
 function missingClaudeMessage(): string {
   return 'Claude CLI not found. Install Claude Code or set STASHBASE_CLAUDE_BIN to the claude executable.';
+}
+
+/** Map the Shared Agent Contract's Access value to the native Claude SDK
+ * permission mode. Keep the validation at this adapter boundary so callers
+ * cannot turn an arbitrary WebSocket query value into a native setting. */
+export function claudePermissionMode(access?: string): AgentAccessMode {
+  return isAgentAccessMode(access) ? access : 'default';
 }
 
 function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
@@ -149,6 +158,7 @@ class AgentSession {
     windowId: string,
     private effort?: EffortLevel,
     private resume?: string,
+    private access: PermissionMode = 'default',
     private onDispose?: (session: AgentSession) => void,
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
@@ -192,7 +202,9 @@ class AgentSession {
         options: {
           cwd,
           includePartialMessages: true,
-          permissionMode: 'default',
+          // Apply the shared Access choice when the native session starts.
+          // Later changes still use the SDK's live setPermissionMode API.
+          permissionMode: this.access,
           // Orient the panel inside StashBase. settingSources below loads
           // CLAUDE.md / skills / MCP, but nothing tells the model it's in a
           // StashBase folder, what search_library/reindex are for, or the house
@@ -232,6 +244,7 @@ class AgentSession {
         },
       });
     } catch (err: unknown) {
+      reportAgentRuntimeFailure('claude', err);
       this.send({ t: 'error', message: errorMessage(err) });
       this.finish();
       return;
@@ -250,7 +263,10 @@ class AgentSession {
     try {
       for await (const msg of this.q) this.onSdkMessage(msg);
     } catch (err: unknown) {
-      if (!this.closed) this.send({ t: 'error', message: errorMessage(err) });
+      if (!this.closed) {
+        reportAgentRuntimeFailure('claude', err);
+        this.send({ t: 'error', message: errorMessage(err) });
+      }
     }
     this.finish();
   }
@@ -284,7 +300,10 @@ class AgentSession {
         const content = (msg.message.content ?? []) as unknown as Array<Record<string, unknown>>;
         for (const block of content) {
           if (block.type === 'tool_use') {
-            this.send({ t: 'tool', id: block.id, name: block.name, input: block.input });
+            this.send({
+              t: 'tool', id: String(block.id ?? ''), name: String(block.name ?? ''),
+              input: (block.input as Record<string, unknown>) ?? {},
+            });
           }
         }
         break;
@@ -297,7 +316,7 @@ class AgentSession {
             if (block.type === 'tool_result') {
               this.send({
                 t: 'tool-result',
-                id: block.tool_use_id,
+                id: String(block.tool_use_id ?? ''),
                 content: stringifyToolResult(block.content),
                 isError: block.is_error === true,
               });
@@ -345,7 +364,7 @@ class AgentSession {
   }
 
   private onMessage(text: string): void {
-    let msg: { t: string; [k: string]: unknown };
+    let msg: AgentClientEvent;
     try { msg = JSON.parse(text); } catch { return; }
     switch (msg.t) {
       case 'prompt': {
@@ -382,10 +401,8 @@ class AgentSession {
         // (Bash still prompts via canUseTool), 'plan' = read-only planning,
         // 'auto' = model classifier decides. We don't expose the dangerous
         // 'bypassPermissions' / 'dontAsk'.
-        const allowed: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'auto'];
-        const mode = msg.mode as PermissionMode;
-        if (allowed.includes(mode)) {
-          void this.q?.setPermissionMode(mode).catch((err) => log.debug(errorMessage(err)));
+        if (isAgentAccessMode(msg.mode)) {
+          void this.q?.setPermissionMode(msg.mode).catch((err) => log.debug(errorMessage(err)));
         }
         break;
       }
@@ -398,7 +415,7 @@ class AgentSession {
     }
   }
 
-  private send(obj: unknown): void {
+  private send(obj: AgentServerEvent): void {
     if (this.ws.readyState !== 1 /* OPEN */) return;
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
@@ -461,12 +478,19 @@ function stringifyToolResult(content: unknown): string {
  *  them all down (the SDK cwd is then meaningless). */
 const sessions = new Set<AgentSession>();
 
-export function attachAgentWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string): void {
+export function attachAgentWebSocket(
+  ws: WebSocket,
+  windowId = 'default',
+  effort?: string,
+  resume?: string,
+  access?: AgentAccessMode,
+): void {
   const session = new AgentSession(
     ws,
     windowId,
     effort as EffortLevel | undefined,
     resume,
+    claudePermissionMode(access),
     (s) => sessions.delete(s),
   );
   sessions.add(session);

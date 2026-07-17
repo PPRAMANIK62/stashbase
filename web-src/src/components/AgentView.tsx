@@ -1,8 +1,7 @@
 /**
  * Structured chat view for an agent tab — the VSCode-extension-style
- * panel. Claude connects to `/ws/agent` (Claude Agent SDK, see
- * server/agent.ts); Codex connects to `/ws/codex` (Codex app-server
- * structured session, see server/codex-agent.ts).
+ * panel. Both Claude (Agent SDK) and Codex (app-server) connect through the
+ * Shared Agent Contract at `/ws/agent`; their adapters live in server.
  * Both render the event stream as ordered blocks:
  * user / assistant bubbles, collapsible thinking, tool cards with
  * inline diffs + approve/reject, and error notices. A composer at the
@@ -12,7 +11,7 @@
  * See design-docs/architecture.md §8 for the shared library path.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, getWindowId, type AgentContextFile } from '../api';
+import { api, getWindowId, type AgentContextFile, type AgentsResponse } from '../api';
 import { AGENT_META, type AgentKind } from '../agentCatalog';
 import { FILE_MIME } from '../dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
@@ -66,6 +65,8 @@ export function AgentView({
 }) {
   const { state, dispatch, actions } = useApp();
   const meta = AGENT_META[agent];
+  const runtime = state.agents.find((candidate) => candidate.id === agent);
+  const capabilities = runtime?.capabilities ?? meta.capabilities;
   const folderPathRef = useRef(state.folderPath);
   folderPathRef.current = state.folderPath;
   const mountedRef = useRef(true);
@@ -133,9 +134,11 @@ export function AgentView({
     // re-resuming.
     const resume = resumeIdRef.current;
     resumeIdRef.current = null;
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${meta.endpoint}`
+    const endpoint = runtime?.endpoint ?? '/ws/agent';
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${endpoint}`
       + `?windowId=${encodeURIComponent(getWindowId())}&effort=${effortRef.current}`
       + `&access=${modeRef.current}`
+      + `&agent=${encodeURIComponent(agent)}`
       + (resume ? `&resume=${encodeURIComponent(resume)}` : '');
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -152,7 +155,10 @@ export function AgentView({
       // Closing before the session was ever ready is a startup failure,
       // not a normal end — surface it (with a Retry) rather than a quiet
       // "session ended".
-      if (!readyRef.current) setFatal((f) => f ?? `Connection closed before ${meta.shortName} started.`);
+      if (!readyRef.current) {
+        setFatal((f) => f ?? `Connection closed before ${meta.shortName} started.`);
+        refreshRuntimes();
+      }
       setPhase('closed');
     };
 
@@ -163,7 +169,7 @@ export function AgentView({
       try { ws.send(JSON.stringify({ t: 'close' })); } catch { /* gone */ }
       ws.close();
     };
-  }, [nonce, meta.endpoint, meta.shortName]);
+  }, [nonce, runtime?.endpoint, agent, meta.shortName]);
 
   /** Tear down and start a fresh session (Retry button / after the user
    *  reopens a folder). */
@@ -180,6 +186,14 @@ export function AgentView({
     openKind.current = null;
     setPhase('connecting');
     setNonce((n) => n + 1);
+  }
+
+  /** Refresh after a failed or successful connection so the chrome reflects
+   * the contract's in-memory available/failed state. */
+  function refreshRuntimes() {
+    void api.listAgents().then((result: AgentsResponse) => {
+      dispatch({ type: 'AGENTS_LOADED', agents: result.clis });
+    }).catch(() => { /* retain the last known catalog */ });
   }
 
   /** Open a past session from the History dropdown: paint its transcript,
@@ -220,6 +234,7 @@ export function AgentView({
       case 'ready':
         readyRef.current = true;
         setPhase('live');
+        refreshRuntimes();
         // Starting a built-in agent can create root-level instruction files
         // (`AGENTS.md`, and for Claude the `CLAUDE.md` bridge). Refresh the
         // tree immediately instead of waiting for the next index-status poll.
@@ -333,6 +348,11 @@ export function AgentView({
         break;
       case 'error':
         openKind.current = null;
+        // Runtime bridges record terminal failures in the shared catalog.
+        // Refresh for both startup and active-session errors: regular turn
+        // errors leave the descriptor unchanged, while an app-server exit
+        // immediately changes the launcher from available to failed.
+        refreshRuntimes();
         // An error before the session is ready is fatal (e.g. no folder
         // open / not authenticated); mid-session it's just a notice.
         if (!readyRef.current) {
@@ -373,7 +393,7 @@ export function AgentView({
       text: p.text,
       attachments: p.attachments.length ? p.attachments : undefined,
       status: p.status,
-      canSteer: agent === 'codex',
+      canSteer: capabilities?.steering === true,
     }));
   }
 
@@ -384,7 +404,7 @@ export function AgentView({
 
   function send(text: string) {
     const atts = attachments;
-    const titleHint = agent === 'codex' && isDefaultChatTitle(titleRef.current) ? text : undefined;
+    const titleHint = capabilities?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
     if (turnActiveRef.current) {
       const id = nextId();
       queuedPromptsRef.current.push({ id, text, attachments: atts, titleHint, status: 'waiting' });
@@ -407,7 +427,7 @@ export function AgentView({
   }
 
   async function steerQueuedPrompt(id: string) {
-    if (agent !== 'codex') return;
+    if (!capabilities?.steering) return;
     const prompt = queuedPromptsRef.current.find((p) => p.id === id && p.status === 'waiting');
     const ws = wsRef.current;
     if (!prompt || !ws || ws.readyState !== WebSocket.OPEN) return;
@@ -674,7 +694,7 @@ export function AgentView({
       <div className="agent-head">
         <span className="agent-head-title">{title}</span>
         <div className="agent-head-actions">
-          {meta.supportsHistory && (
+          {capabilities?.history && (
             <AgentHistoryMenu
               open={historyOpen}
               currentSessionId={currentSessionId}
@@ -729,8 +749,8 @@ export function AgentView({
         effort={effort}
         onSetEffort={changeEffort}
         effortLocked={effortLocked}
-        showModeMenu={meta.supportsModes}
-        showEffortMenu={meta.supportsEffort}
+        showModeMenu={capabilities?.modes === true}
+        showEffortMenu={capabilities?.effort === true}
         agentShortName={meta.shortName}
         attachments={attachments}
         uploading={uploading}

@@ -27,7 +27,15 @@ Local files -> Convert -> Index -> Retrieve -> MCP -> Agents
 
 ---
 
-## Try It
+## 🚀 Demo
+
+Curious about StashBase but not sure what to try first? Open this repo's `design-docs/` folder in StashBase and ask the built-in Agent how the project is designed.
+
+![StashBase demo: opening local design docs and asking the Agent about architecture and roadmap](assets/readme/demo.gif)
+
+---
+
+## 💡 Try It
 
 StashBase currently ships for **macOS (Apple Silicon)**, **Linux (x86_64 Debian/Ubuntu)**, and **Windows (x64)**.
 
@@ -221,6 +229,7 @@ The design docs are the source of truth for how the product is supposed to work:
 - [Overview](design-docs/overview.md) - product motivation and principles
 - [Architecture](design-docs/architecture.md) - system shape and module boundaries
 - [Data Layer](design-docs/data-layer.md) - correctness, recovery, cleanup, and liveness rules
+- [Roadmap](design-docs/roadmap.md) - future contribution areas and design priorities
 
 ---
 
@@ -268,30 +277,6 @@ API keys are configured in Settings, not environment variables.
 
 ---
 
-## Publishing
-
-Packaging is release-only. GitHub Actions builds and uploads macOS, Linux, and Windows installers from a release tag.
-
-The release workflow:
-
-1. Commit the code and version bump.
-2. Push `main` and wait for `CI` to succeed for the version-bump commit.
-3. Create and push the matching `vX.Y.Z` tag, then publish the GitHub Release for that tag.
-4. Let the macOS, Linux, and Windows release workflows verify that exact tag commit and attach installers.
-
-Release packaging fails closed when the tag commit has no successful `ci.yml` push run. If CI is still running, the release gate waits for it before packaging starts.
-
-Local macOS fallback:
-
-```bash
-pnpm release:verify:mac
-pnpm dist:brew
-```
-
-Do not commit packaged artifacts. Release outputs belong in `release.nosync/`.
-
----
-
 ## Status
 
 Early alpha.
@@ -324,6 +309,8 @@ Still evolving:
 ## Contributing
 
 Small focused PRs are preferred. Open an issue before larger changes so scope and direction can be discussed first.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local development, validation, and release-maintainer notes.
 
 ---
 

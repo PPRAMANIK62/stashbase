@@ -1,9 +1,9 @@
 /**
  * Codex thread-history routes for the chat panel's History dropdown.
  *
- * Backed by Codex app-server's structured thread APIs. Delete maps to
- * archive because app-server exposes archive/unarchive rather than a hard
- * transcript deletion endpoint.
+ * Backed by Codex app-server's structured thread APIs. Delete maps to the
+ * native irreversible thread/delete operation so it has the same meaning as
+ * Delete Chat for every built-in agent.
  */
 import express from 'express';
 import { getCurrentFolder } from '../folder.ts';
@@ -14,11 +14,12 @@ import {
   listCodexSessions,
   renameCodexSession,
 } from '../codex-agent.ts';
+import { agentAdapter, type AgentHistoryActions } from '../agent-contract.ts';
 
 export function mount(app: express.Express): void {
   app.get('/api/codex/sessions', async (_req, res) => {
     try {
-      res.json(await listCodexSessions(getCurrentFolder()));
+      res.json(await codexHistory().list(getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -26,7 +27,7 @@ export function mount(app: express.Express): void {
 
   app.get('/api/codex/sessions/:id/messages', async (req, res) => {
     try {
-      res.json(await getCodexSessionMessages(req.params.id, getCurrentFolder()));
+      res.json(await codexHistory().messages(req.params.id, getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -39,7 +40,7 @@ export function mount(app: express.Express): void {
       return;
     }
     try {
-      res.json(await renameCodexSession(req.params.id, title, getCurrentFolder()));
+      res.json(await codexHistory().rename(req.params.id, title, getCurrentFolder()));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -47,10 +48,23 @@ export function mount(app: express.Express): void {
 
   app.delete('/api/codex/sessions/:id', async (req, res) => {
     try {
-      await deleteCodexSession(req.params.id, getCurrentFolder());
+      await codexHistory().remove(req.params.id, getCurrentFolder());
       res.json({});
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
+}
+
+export function codexHistoryActions(): AgentHistoryActions {
+  return {
+    list: (folder) => listCodexSessions(folder),
+    messages: (id, folder) => getCodexSessionMessages(id, folder),
+    rename: (id, title, folder) => renameCodexSession(id, title, folder),
+    remove: (id, folder) => deleteCodexSession(id, folder),
+  };
+}
+
+function codexHistory(): AgentHistoryActions {
+  return agentAdapter('codex')?.history ?? codexHistoryActions();
 }
