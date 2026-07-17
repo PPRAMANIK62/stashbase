@@ -47,7 +47,7 @@
     "build:desktop": "pnpm build && pnpm build:python-sidecar",
     "setup:python": "node scripts/setup-python.mjs",
     "test:python": "node scripts/test-python.mjs",
-    "test:renderer": "node --import tsx --test web-src/src/markdown/__tests__/*.test.ts web-src/src/store/__tests__/*.test.ts",
+    "test:renderer": "node --import tsx --test web-src/src/__tests__/*.test.ts web-src/src/markdown/__tests__/*.test.ts web-src/src/store/__tests__/*.test.ts",
     "test:conversion-scheduler": "node --import tsx --test server/filesystem-path.test.ts server/folder-relative-path.test.ts server/files.test.ts server/indexer-mfs-path.test.ts server/session-path.test.ts server/conversion-scheduler.test.ts server/conversion-status.test.ts server/conversion.test.ts server/extractor-process.test.ts",
     "test:agent": "node --import tsx --test server/__tests__/agent.test.ts server/__tests__/codex-agent.test.ts",
     "test:mcp": "node --import tsx --test server/__tests__/mcp-http-settings.test.ts server/__tests__/mcp-http-service.test.ts server/__tests__/mcp-http-transport.test.ts server/__tests__/shutdown-cleanup.test.ts",
