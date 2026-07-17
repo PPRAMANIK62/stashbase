@@ -11,7 +11,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from '../html.ts';
 import { contentSizeError } from '../indexable.ts';
-import { normalizeFolderRelativePath } from '../folder-relative-path.ts';
 import {
   createTextExclusive,
   derivedArtifactsForSource,
@@ -28,9 +27,8 @@ import {
   resolveAsset,
   resolveExisting,
   sanitizeFilename,
-  saveText,
 } from '../files.ts';
-import { detectViewerFormat, isDerivedNoteName, isImageFile, isNoteName } from '../format.ts';
+import { detectViewerFormat, isImageFile, isNoteName } from '../format.ts';
 import { readFileOrder, remapFileOrderPath, removeFileOrderPath, setFolderOrder } from '../file-order.ts';
 import { applyRenamePlan, planRenameLinks, type RenameEntry } from '../links.ts';
 import { getCurrentFolder, getCurrentFolderLabel, runWithFolderRoot, toSourcePath } from '../folder.ts';
@@ -47,37 +45,16 @@ import { cancelConversion, getScheduledConversion, isConversionTextUnavailable }
 import { noteTreeChanged } from '../watcher.ts';
 import { clearRecord, hasFailed } from '../conversion-status.ts';
 import { deleteDerivedForSource } from '../derived-store.ts';
+import { inFlightFileOperationError } from '../file-operation-guard.ts';
+import { saveFileContent, upsertSavedFile } from '../file-save.ts';
+
+export {
+  inFlightFileOperationError,
+  type InFlightRouteError,
+} from '../file-operation-guard.ts';
+export { saveFileContent, validateEditableFileWrite } from '../file-save.ts';
 
 const log = logger('routes/files');
-
-type InFlightFileAction = 'rename' | 'delete';
-
-export interface InFlightRouteError {
-  status: 409;
-  body: {
-    error: string;
-    code: 'CONVERSION_IN_FLIGHT';
-  };
-}
-
-export function inFlightFileOperationError(name: string, action: InFlightFileAction): InFlightRouteError | null {
-  if (getScheduledConversion(toSourcePath(name))?.state !== 'running') return null;
-  const verb = action === 'rename' ? 'Rename' : 'Delete';
-  return {
-    status: 409,
-    body: {
-      error: `This file is still processing. ${verb} it after processing finishes.`,
-      code: 'CONVERSION_IN_FLIGHT',
-    },
-  };
-}
-
-function fileWriteError(message: string, status = 400, code = 'INVALID_FILE_WRITE'): Error {
-  const err = new Error(message);
-  (err as any).status = status;
-  (err as any).code = code;
-  return err;
-}
 
 function renameTargetPath(oldName: string, requested: string): string {
   const normalizedRequest = requested.replace(/\\/g, '/');
@@ -102,79 +79,11 @@ function queueViewerConversion(
   }
 }
 
-export function validateEditableFileWrite(name: string): void {
-  let normalized: string;
-  try {
-    normalized = normalizeFolderRelativePath(name, { writable: true, allowQuotes: true });
-  } catch (err: unknown) {
-    throw fileWriteError(errorMessage(err));
-  }
-  if (isDerivedNoteName(normalized)) {
-    throw fileWriteError('cannot edit app-maintained derived notes');
-  }
-  if (!detectFormat(normalized)) {
-    throw fileWriteError('unsupported editable format', 415, 'UNSUPPORTED_FORMAT');
-  }
-}
-
 export function fileHeadStatus(name: string): number {
   const format = detectViewerFormat(name);
   if (!format) return 415;
   if (!pathExists(name)) return 404;
   return 204;
-}
-
-async function upsertSavedFile(name: string, content: string): Promise<string | undefined> {
-  if (!getApiKey()) {
-    log.info(`save: skipped index update for ${name} because no OpenAI key is configured`);
-    return undefined;
-  }
-  if (!content.trim()) {
-    await indexer.deleteFile(toSourcePath(name)).catch((err) => {
-      log.warn(`save: failed to remove empty file from index ${name}: ${errorMessage(err)}`);
-    });
-    return undefined;
-  }
-  const tooLarge = contentSizeError(content);
-  if (tooLarge) {
-    await indexer.deleteFile(toSourcePath(name)).catch((err) => {
-      log.warn(`save: failed to remove oversized file from index ${name}: ${errorMessage(err)}`);
-    });
-    log.warn(`save: skipped index update for ${name}: ${tooLarge}`);
-    return `${tooLarge}. Semantic search will skip it until you split or reduce it and run sync.`;
-  }
-  try {
-    await indexer.upsertFile(toSourcePath(name), content);
-    return undefined;
-  } catch (err: unknown) {
-    const msg = errorMessage(err);
-    log.warn(`save: index update failed for ${name}: ${msg}`);
-    return `Saved, but semantic index update failed: ${msg}`;
-  }
-}
-
-export async function saveFileContent(
-  name: string,
-  content: string,
-  opts: { baseVersion?: string } = {},
-): Promise<{ indexWarning?: string; version?: string }> {
-  validateEditableFileWrite(name);
-  if (opts.baseVersion !== undefined) {
-    const currentVersion = fileVersion(name);
-    if (currentVersion !== opts.baseVersion) {
-      if (readText(name) === content) {
-        return { version: currentVersion ?? undefined };
-      }
-      const err = new Error('file changed on disk; reload before saving');
-      (err as any).code = 'FILE_CHANGED';
-      (err as any).currentVersion = currentVersion;
-      throw err;
-    }
-  }
-  saveText(name, content);
-  const indexWarning = await upsertSavedFile(name, content);
-  noteTreeChanged();
-  return { indexWarning, version: fileVersion(name) ?? undefined };
 }
 
 async function handleWriteFile(req: express.Request, res: express.Response): Promise<void> {

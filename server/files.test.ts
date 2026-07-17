@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { validateEditableFileWrite } from './file-save.ts';
 import { runWithFolderRoot } from './folder.ts';
 import {
   createFolder,
@@ -67,6 +68,13 @@ test('quoted imported filenames remain readable, writable, and deletable', async
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('editable file writes apply portable path, hidden-derived, and format policy', () => {
+  assert.doesNotThrow(() => validateEditableFileWrite("John's Notes.md"));
+  assert.throws(() => validateEditableFileWrite('../escape.md'), /invalid segment/);
+  assert.throws(() => validateEditableFileWrite('.report.pdf.md'), /app-maintained derived notes/);
+  assert.throws(() => validateEditableFileWrite('report.pdf'), /unsupported editable format/);
 });
 
 test('createFolder applies writable protected-segment policy', async () => {
