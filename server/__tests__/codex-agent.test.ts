@@ -4,6 +4,34 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { codexAccessOptions, isStashbaseWorkspaceEdit, isWorkspaceFileChange, permanentlyDeleteCodexThread } from '../codex-agent.ts';
+import { CodexRpcPeer } from '../codex-rpc-transport.ts';
+
+test('Codex RPC peer correlates responses and dispatches inbound messages', async () => {
+  const writes: string[] = [];
+  const requests: string[] = [];
+  const notifications: string[] = [];
+  const peer = new CodexRpcPeer((line) => writes.push(line), {
+    onRequest: ({ method }) => requests.push(method),
+    onNotification: (method) => notifications.push(method),
+  });
+
+  const pending = peer.request('thread/read', { threadId: 'thread-123' });
+  const request = JSON.parse(writes[0]!) as { id: number };
+  peer.receiveLine(JSON.stringify({ id: request.id, result: { ok: true } }));
+  peer.receiveLine(JSON.stringify({ id: 99, method: 'approval/request', params: {} }));
+  peer.receiveLine(JSON.stringify({ method: 'turn/started', params: {} }));
+
+  assert.deepEqual(await pending, { ok: true });
+  assert.deepEqual(requests, ['approval/request']);
+  assert.deepEqual(notifications, ['turn/started']);
+});
+
+test('Codex RPC peer rejects pending work when its owner closes', async () => {
+  const peer = new CodexRpcPeer(() => {});
+  const pending = peer.request('turn/start', {});
+  peer.close(new Error('session closed'));
+  await assert.rejects(pending, /session closed/);
+});
 
 test('Codex Delete Chat uses the native irreversible thread/delete operation', async () => {
   const requests: Array<{ method: string; params: unknown }> = [];
