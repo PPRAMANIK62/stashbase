@@ -33,8 +33,10 @@ import {
 } from './codex-agent.ts';
 import {
   attachAgentRuntime,
+  isAgentAccessMode,
   registerAgentAdapter,
   stopAgentRuntime,
+  type AgentAccessMode,
   type AgentConnectionOptions,
 } from './agent-contract.ts';
 import { onClose, onSwitch, ensureFolderHome, toPosixAbs } from './folder.ts';
@@ -73,7 +75,7 @@ const log = logger('server');
 registerAgentAdapter({
   id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
   capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, steering: false, titleHint: false },
-  attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume),
+  attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access),
   stop: killActiveAgent,
   history: claudeHistoryActions(),
 });
@@ -407,11 +409,11 @@ function effortOf(req: import('node:http').IncomingMessage): string | undefined 
 
 /** Read the Agent access mode off the WS URL. Claude applies it live after
  *  connect; Codex consumes it when the app-server thread starts. */
-function accessOf(req: import('node:http').IncomingMessage): string | undefined {
+function accessOf(req: import('node:http').IncomingMessage): AgentAccessMode | undefined {
   try {
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
     const access = u.searchParams.get('access');
-    return ['default', 'acceptEdits', 'plan', 'auto'].includes(access ?? '') ? access! : undefined;
+    return isAgentAccessMode(access) ? access : undefined;
   } catch {
     return undefined;
   }

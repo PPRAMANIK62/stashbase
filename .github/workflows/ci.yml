@@ -44,6 +44,9 @@ jobs:
       - name: Test renderer
         run: pnpm test:renderer
 
+      - name: Test agent adapters
+        run: pnpm test:agent
+
       - name: Test MCP transports
         run: pnpm test:mcp
 

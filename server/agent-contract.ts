@@ -11,6 +11,12 @@ import { resolveAgentCli } from './agent-cli.ts';
 
 export type AgentId = 'claude' | 'codex';
 export type AgentRuntimeState = 'available' | 'unavailable' | 'failed';
+export const AGENT_ACCESS_MODES = ['default', 'acceptEdits', 'plan', 'auto'] as const;
+export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
+
+export function isAgentAccessMode(value: unknown): value is AgentAccessMode {
+  return typeof value === 'string' && (AGENT_ACCESS_MODES as readonly string[]).includes(value);
+}
 
 export interface AgentCapabilities {
   connection: true;
@@ -29,7 +35,7 @@ export interface AgentConnectionOptions {
   windowId: string;
   effort?: string;
   resume?: string;
-  access?: string;
+  access?: AgentAccessMode;
 }
 
 /** The stable panel wire protocol. Adapters may translate native events,

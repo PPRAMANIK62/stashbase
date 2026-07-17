@@ -53,7 +53,7 @@ import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeBridgeFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
-import { reportAgentRuntimeFailure } from './agent-contract.ts';
+import { isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode } from './agent-contract.ts';
 import type { AgentClientEvent, AgentServerEvent } from './agent-contract.ts';
 
 const log = logger('agent');
@@ -68,6 +68,13 @@ function resolveClaudeBinary(): string | null {
 
 function missingClaudeMessage(): string {
   return 'Claude CLI not found. Install Claude Code or set STASHBASE_CLAUDE_BIN to the claude executable.';
+}
+
+/** Map the Shared Agent Contract's Access value to the native Claude SDK
+ * permission mode. Keep the validation at this adapter boundary so callers
+ * cannot turn an arbitrary WebSocket query value into a native setting. */
+export function claudePermissionMode(access?: string): AgentAccessMode {
+  return isAgentAccessMode(access) ? access : 'default';
 }
 
 function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
@@ -150,6 +157,7 @@ class AgentSession {
     windowId: string,
     private effort?: EffortLevel,
     private resume?: string,
+    private access: PermissionMode = 'default',
     private onDispose?: (session: AgentSession) => void,
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
@@ -193,7 +201,9 @@ class AgentSession {
         options: {
           cwd,
           includePartialMessages: true,
-          permissionMode: 'default',
+          // Apply the shared Access choice when the native session starts.
+          // Later changes still use the SDK's live setPermissionMode API.
+          permissionMode: this.access,
           // Orient the panel inside StashBase. settingSources below loads
           // CLAUDE.md / skills / MCP, but nothing tells the model it's in a
           // StashBase folder, what search_library/reindex are for, or the house
@@ -390,10 +400,8 @@ class AgentSession {
         // (Bash still prompts via canUseTool), 'plan' = read-only planning,
         // 'auto' = model classifier decides. We don't expose the dangerous
         // 'bypassPermissions' / 'dontAsk'.
-        const allowed: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'auto'];
-        const mode = msg.mode as PermissionMode;
-        if (allowed.includes(mode)) {
-          void this.q?.setPermissionMode(mode).catch((err) => log.debug(errorMessage(err)));
+        if (isAgentAccessMode(msg.mode)) {
+          void this.q?.setPermissionMode(msg.mode).catch((err) => log.debug(errorMessage(err)));
         }
         break;
       }
@@ -466,12 +474,19 @@ function stringifyToolResult(content: unknown): string {
  *  them all down (the SDK cwd is then meaningless). */
 const sessions = new Set<AgentSession>();
 
-export function attachAgentWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string): void {
+export function attachAgentWebSocket(
+  ws: WebSocket,
+  windowId = 'default',
+  effort?: string,
+  resume?: string,
+  access?: AgentAccessMode,
+): void {
   const session = new AgentSession(
     ws,
     windowId,
     effort as EffortLevel | undefined,
     resume,
+    claudePermissionMode(access),
     (s) => sessions.delete(s),
   );
   sessions.add(session);
