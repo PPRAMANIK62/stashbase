@@ -1,9 +1,9 @@
 /**
  * Codex thread-history routes for the chat panel's History dropdown.
  *
- * Backed by Codex app-server's structured thread APIs. Delete maps to
- * archive because app-server exposes archive/unarchive rather than a hard
- * transcript deletion endpoint.
+ * Backed by Codex app-server's structured thread APIs. Delete maps to the
+ * native irreversible thread/delete operation so it has the same meaning as
+ * Delete Chat for every built-in agent.
  */
 import express from 'express';
 import { getCurrentFolder } from '../folder.ts';

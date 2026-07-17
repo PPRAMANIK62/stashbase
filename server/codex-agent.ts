@@ -21,8 +21,7 @@ import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
-import { reportAgentRuntimeFailure } from './agent-contract.ts';
-import type { AgentClientEvent, AgentServerEvent } from './agent-contract.ts';
+import { isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode, type AgentClientEvent, type AgentServerEvent } from './agent-contract.ts';
 
 const log = logger('codex-agent');
 
@@ -99,7 +98,7 @@ class CodexSession {
     windowId: string,
     private effort?: string,
     resume?: string,
-    private accessMode?: string,
+    private accessMode?: AgentAccessMode,
     private onDispose?: (session: CodexSession) => void,
   ) {
     this.windowId = normalizeWindowId(windowId);
@@ -208,7 +207,7 @@ class CodexSession {
         this.dispose();
         break;
       case 'set-mode':
-        this.accessMode = isPermMode(msg.mode) ? msg.mode : this.accessMode;
+        this.accessMode = isAgentAccessMode(msg.mode) ? msg.mode : this.accessMode;
         break;
     }
   }
@@ -919,10 +918,6 @@ function titleFromPrompt(prompt: string): string {
   return compact.length > 60 ? `${compact.slice(0, 60).trimEnd()}…` : compact;
 }
 
-function isPermMode(value: unknown): value is 'default' | 'acceptEdits' | 'plan' | 'auto' {
-  return value === 'default' || value === 'acceptEdits' || value === 'plan' || value === 'auto';
-}
-
 function objectValue(value: unknown): JsonObject {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonObject : {};
 }
@@ -1024,7 +1019,16 @@ export async function deleteCodexSession(threadId: string, folder: string | null
   if (folder) {
     await getCodexSessionMessages(threadId, folder);
   }
-  await withTemporaryCodexAppServer(cwd, (request) => request('thread/archive', { threadId }));
+  await withTemporaryCodexAppServer(cwd, (request) => permanentlyDeleteCodexThread(request, threadId));
+}
+
+/** Delete is irreversible in the shared panel, so use Codex's native
+ * thread/delete operation rather than merely removing it from history. */
+export async function permanentlyDeleteCodexThread(
+  request: (method: string, params: unknown) => Promise<unknown>,
+  threadId: string,
+): Promise<void> {
+  await request('thread/delete', { threadId });
 }
 
 async function withTemporaryCodexAppServer<T>(
@@ -1396,7 +1400,7 @@ function secondsToMillis(value: unknown): number {
 
 const sessions = new Set<CodexSession>();
 
-export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: string): void {
+export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode): void {
   const session = new CodexSession(ws, windowId, effort, resume, access, (s) => sessions.delete(s));
   sessions.add(session);
   session.begin();
