@@ -44,6 +44,9 @@ jobs:
       - name: Test renderer
         run: pnpm test:renderer
 
+      - name: Test conversion scheduler
+        run: pnpm test:conversion-scheduler
+
       - name: Test MCP transports
         run: pnpm test:mcp
 

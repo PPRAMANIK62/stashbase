@@ -140,6 +140,37 @@ function requestJson(port, requestPath, timeoutMs, options = {}) {
   });
 }
 
+function requestText(port, requestPath, timeoutMs, options = {}) {
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: requestPath,
+        method: options.method ?? 'GET',
+        timeout: timeoutMs,
+        headers: options.headers ?? {},
+      },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => resolve({
+          ok: true,
+          statusCode: res.statusCode ?? 0,
+          body,
+        }));
+      },
+    );
+    req.on('error', () => resolve({ ok: false, statusCode: 0, body: '' }));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({ ok: false, statusCode: 0, body: '' });
+    });
+    req.end();
+  });
+}
+
 async function requestOk(port, timeoutMs) {
   const res = await requestJson(port, '/api/folder', timeoutMs);
   return res.ok && res.statusCode >= 200 && res.statusCode < 500;
@@ -208,6 +239,24 @@ async function assertPackagedHealth(port, expected) {
   }
 }
 
+async function assertPackagedRendererWorkers(port) {
+  const page = await requestText(port, '/', 5_000);
+  const entryPath = page.body.match(/<script[^>]+src="([^"]+\.js)"/)?.[1];
+  if (!page.ok || page.statusCode !== 200 || !entryPath) {
+    throw new Error(`packaged renderer entry is unavailable: status=${page.statusCode}`);
+  }
+  const entry = await requestText(port, entryPath, 5_000);
+  const workerName = entry.body.match(/docxPreview\.worker-[A-Za-z0-9_-]+\.js/)?.[0];
+  if (!entry.ok || entry.statusCode !== 200 || !workerName) {
+    throw new Error(`packaged renderer does not reference the DOCX worker: status=${entry.statusCode}`);
+  }
+  const worker = await requestText(port, `/assets/${workerName}`, 5_000);
+  if (!worker.ok || worker.statusCode !== 200 || !/convertToHtml/.test(worker.body)) {
+    throw new Error(`packaged DOCX renderer worker is unavailable: status=${worker.statusCode}`);
+  }
+  console.log('[smoke] packaged renderer serves the DOCX worker asset from app.asar');
+}
+
 async function assertPackagedUserFlow(port, home) {
   const folderRoot = path.join(home, 'User Yuan Li', 'Documents', 'StashBase Demo');
   fs.mkdirSync(path.join(folderRoot, '项目 A', '子目录'), { recursive: true });
@@ -215,6 +264,7 @@ async function assertPackagedUserFlow(port, home) {
   fs.writeFileSync(path.join(folderRoot, '项目 A', '测试 file.md'), '# Nested Note\n\nkeyword-two nested\n', 'utf8');
   fs.writeFileSync(path.join(folderRoot, 'page with space.html'), '<h1>HTML Test</h1> keyword-one', 'utf8');
   fs.writeFileSync(path.join(folderRoot, '项目 A', '子目录', 'deep.md'), '# Deep\n\nkeyword-three\n', 'utf8');
+  writeDocxFixture(path.join(folderRoot, 'report smoke.docx'));
 
   const opened = await requestApi(port, 'POST', '/api/folder', { path: folderRoot });
   if (opened?.current?.name !== 'StashBase Demo') {
@@ -224,7 +274,7 @@ async function assertPackagedUserFlow(port, home) {
   const listing = await requestApi(port, 'GET', '/api/files');
   const files = (listing?.files ?? []).map((file) => file.name).sort();
   const folders = (listing?.folders ?? []).map((folder) => folder.path).sort();
-  for (const expected of ['README Windows.md', 'page with space.html', '项目 A/测试 file.md', '项目 A/子目录/deep.md']) {
+  for (const expected of ['README Windows.md', 'page with space.html', 'report smoke.docx', '项目 A/测试 file.md', '项目 A/子目录/deep.md']) {
     if (!files.includes(expected)) throw new Error(`file listing missing ${expected}: ${JSON.stringify(listing)}`);
   }
   for (const expected of ['项目 A', '项目 A/子目录']) {
@@ -236,6 +286,33 @@ async function assertPackagedUserFlow(port, home) {
 
   const html = await requestApi(port, 'GET', `/api/files/${encodePath('page with space.html')}`);
   if (html?.format !== 'html') throw new Error(`HTML file read failed: ${JSON.stringify(html)}`);
+
+  await requestApi(port, 'POST', '/api/files/prepare', { path: 'report smoke.docx' });
+  const derivedUrl = `/asset-derived/__window/packaged-smoke/${encodePath('report smoke.docx')}`;
+  const docxDeadline = Date.now() + 20_000;
+  let docxPreview = null;
+  while (Date.now() < docxDeadline) {
+    docxPreview = await requestText(port, derivedUrl, 2_000);
+    if (docxPreview.ok && docxPreview.statusCode === 200) break;
+    if (docxPreview.statusCode !== 409) {
+      throw new Error(`packaged DOCX preview failed: status=${docxPreview.statusCode} body=${docxPreview.body.slice(0, 1_000)}`);
+    }
+    await sleep(100);
+  }
+  if (!docxPreview?.ok || docxPreview.statusCode !== 200) {
+    const conversionStatus = await requestApi(port, 'GET', '/api/index-status');
+    throw new Error(`packaged DOCX conversion did not finish: ${JSON.stringify(conversionStatus)}`);
+  }
+  if (!/Hello StashBase DOCX smoke/.test(docxPreview.body)) {
+    throw new Error(`packaged DOCX preview lost fixture content: ${docxPreview.body.slice(0, 1_000)}`);
+  }
+  if (!/stashbase-docx-conversion: complete/.test(docxPreview.body)) {
+    throw new Error('packaged DOCX preview is missing the durable completion marker');
+  }
+  if (/\son[a-z]+\s*=/i.test(docxPreview.body)) {
+    throw new Error('packaged DOCX preview contains an inline event handler');
+  }
+  console.log('[smoke] packaged DOCX worker converted a fixture from app.asar');
 
   await requestApi(port, 'POST', '/api/folders', { path: 'New Folder' });
   const created = await requestApi(port, 'POST', '/api/files', {
@@ -280,6 +357,13 @@ async function assertPackagedUserFlow(port, home) {
   await requestApi(port, 'DELETE', `/api/files/${encodePath('项目 A/moved windows.md')}`);
   await requestApi(port, 'DELETE', `/api/folders/${encodePath('New Folder')}`);
   console.log('[smoke] packaged user file flow passed');
+}
+
+function writeDocxFixture(file) {
+  const docxBase64 = [
+    'UEsDBBQAAAAIAKaK8VzXeYTq8QAAALgBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH2QzU7DMBCE730Ky9cqccoBIZSkB36OwKE8wMreJFb9J69b2rdn00KREOVozXwz62nXB+/EHjPZGDq5qhspMOhobBg7+b55ru6koALBgIsBO3lEkut+0W6OCUkwHKiTUynpXinSE3qgOiYMrAwxeyj8zKNKoLcworppmlulYygYSlXmDNkvhGgfcYCdK+LpwMr5loyOpHg4e+e6TkJKzmoorKt9ML+Kqq+SmsmThyabaMkGqa6VzOL1jh/0lSfK1qB4g1xewLNRfcRslIl65xmu/0/649o4DFbjhZ/TUo4aiXh77+qL4sGG71+06jR8/wlQSwMEFAAAAAgAporxXCAbhuqyAAAALgEAAAsAAABfcmVscy8ucmVsc43Puw6CMBQG4J2naM4uBQdjDIXFmLAafICmPZRGeklbL7y9HRzEODie23fyN93TzOSOIWpnGdRlBQStcFJbxeAynDZ7IDFxK/nsLDJYMELXFs0ZZ57yTZy0jyQjNjKYUvIHSqOY0PBYOo82T0YXDE+5DIp6Lq5cId1W1Y6GTwPagpAVS3rJIPSyBjIsHv/h3ThqgUcnbgZt+vHlayPLPChMDB4uSCrf7TKzQHNKuorZvgBQSwMEFAAAAAgAporxXBosGbe8AAAA8wAAABEAAAB3b3JkL2RvY3VtZW50LnhtbDWOQWvDMAyF7/kVwvfV6Q5jhMSFtozdNlgHu3q22oTaUrC8Zf33tQO7fNLTQ0/qd38xwC8mmZgGtd20CpAc+4kug/o8vTw8K5BsydvAhIO6oaidafql8+x+IlKGkkDSLYMac547rcWNGK1seEYq3plTtLnIdNELJz8ndihSDsSgH9v2SUc7kTINQEn9Zn8zpc4VqSKbVwyB4SNbGfdWEI5vhy+QyFfsdfUr08p1S9Dl96TXwRrX1O7/XXMHUEsBAhQDFAAAAAgAporxXNd5hOrxAAAAuAEAABMAAAAAAAAAAAAAAIABAAAAAFtDb250ZW50X1R5cGVzXS54bWxQSwECFAMUAAAACACmivFcIBuG6rIAAAAuAQAACwAAAAAAAAAAAAAAgAEiAQAAX3JlbHMvLnJlbHNQSwECFAMUAAAACACmivFcGiwZt7wAAADzAAAAEQAAAAAAAAAAAAAAgAH9AQAAd29yZC9kb2N1bWVudC54bWxQSwUGAAAAAAMAAwC5AAAA6AIAAAAA',
+  ].join('');
+  fs.writeFileSync(file, Buffer.from(docxBase64, 'base64'));
 }
 
 function writeTinyPdf(file) {
@@ -558,6 +642,7 @@ try {
     resourcesPath,
   });
   console.log('[smoke] packaged server responded');
+  await assertPackagedRendererWorkers(port);
   await assertPackagedUserFlow(port, home);
 } finally {
   if (child.exitCode == null) child.kill('SIGTERM');
