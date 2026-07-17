@@ -21,6 +21,8 @@ import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
+import { reportAgentRuntimeFailure } from './agent-contract.ts';
+import type { AgentClientEvent, AgentServerEvent } from './agent-contract.ts';
 
 const log = logger('codex-agent');
 
@@ -159,6 +161,7 @@ class CodexSession {
     });
 
     proc.once('error', (err) => {
+      reportAgentRuntimeFailure('codex', err);
       this.rejectAll(errorFromUnknown(err));
       if (!this.closed) {
         this.send({ t: 'error', message: errorMessage(err) });
@@ -169,14 +172,16 @@ class CodexSession {
       this.proc = null;
       this.rejectAll(new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`));
       if (!this.closed) {
-        this.send({ t: 'error', message: `Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.` });
+        const error = new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`);
+        reportAgentRuntimeFailure('codex', error);
+        this.send({ t: 'error', message: error.message });
         this.handleAppServerExit(true);
       }
     });
   }
 
   private onMessage(text: string): void {
-    let msg: { t: string; [k: string]: unknown };
+    let msg: AgentClientEvent;
     try { msg = JSON.parse(text); } catch { return; }
     switch (msg.t) {
       case 'prompt': {
@@ -624,7 +629,7 @@ class CodexSession {
     if (typeof delta === 'string' && delta) this.send({ t: 'thinking', delta });
   }
 
-  private send(obj: unknown): void {
+  private send(obj: AgentServerEvent): void {
     if (this.ws.readyState !== 1 /* OPEN */) return;
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }

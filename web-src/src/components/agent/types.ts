@@ -28,20 +28,7 @@ export type Block =
   | { kind: 'error'; id: string; text: string }
   | ToolBlock;
 
-export type ServerEvent =
-  | { t: 'ready' }
-  | { t: 'session-id'; id: string }
-  | { t: 'session-title'; title: string }
-  | { t: 'turn-start' }
-  | { t: 'text'; delta: string }
-  | { t: 'thinking'; delta: string }
-  | { t: 'tool'; id: string; name: string; input: Record<string, unknown> }
-  | { t: 'tool-delta'; id: string; delta: string }
-  | { t: 'tool-result'; id: string; content: string; isError: boolean }
-  | { t: 'permission'; id: string; toolUseId: string; name: string; title: string | null; input: Record<string, unknown> }
-  | { t: 'steer-result'; id: string; ok: boolean; message?: string }
-  | { t: 'turn-end'; isError: boolean }
-  | { t: 'error'; message: string }
-  | { t: 'exit' };
+export type ServerEvent = AgentServerEvent;
 
 export type AgentKind = 'claude' | 'codex';
+import type { AgentServerEvent } from '../../../../server/agent-contract.ts';

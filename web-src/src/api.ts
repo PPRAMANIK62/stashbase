@@ -241,6 +241,23 @@ export interface Agent {
    *  (e.g. `claude --theme light`). Built by the server from the agent
    *  registry so the renderer doesn't have to track per-agent flags. */
   launchCommand: string;
+  /** Shared Agent Contract endpoint. Both current adapters use this common
+   * bridge; `id` selects the native runtime. */
+  endpoint?: string;
+  state?: 'available' | 'unavailable' | 'failed';
+  error?: string;
+  capabilities?: {
+    connection: true;
+    prompts: true;
+    interrupt: true;
+    transcript: true;
+    approvals: true;
+    history: true;
+    modes: boolean;
+    effort: boolean;
+    steering: boolean;
+    titleHint: boolean;
+  };
 }
 
 export interface AgentsResponse {
@@ -570,7 +587,7 @@ export const api = {
 };
 
 function agentSessionBase(agent: 'claude' | 'codex'): string {
-  return agent === 'codex' ? '/api/codex/sessions' : '/api/agent/sessions';
+  return `/api/agents/${encodeURIComponent(agent)}/sessions`;
 }
 
 /** Asset URL for HTML files (used by the preview iframe so relative

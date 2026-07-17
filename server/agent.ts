@@ -53,6 +53,8 @@ import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeBridgeFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
+import { reportAgentRuntimeFailure } from './agent-contract.ts';
+import type { AgentClientEvent, AgentServerEvent } from './agent-contract.ts';
 
 const log = logger('agent');
 
@@ -231,6 +233,7 @@ class AgentSession {
         },
       });
     } catch (err: unknown) {
+      reportAgentRuntimeFailure('claude', err);
       this.send({ t: 'error', message: errorMessage(err) });
       this.finish();
       return;
@@ -249,7 +252,10 @@ class AgentSession {
     try {
       for await (const msg of this.q) this.onSdkMessage(msg);
     } catch (err: unknown) {
-      if (!this.closed) this.send({ t: 'error', message: errorMessage(err) });
+      if (!this.closed) {
+        reportAgentRuntimeFailure('claude', err);
+        this.send({ t: 'error', message: errorMessage(err) });
+      }
     }
     this.finish();
   }
@@ -283,7 +289,10 @@ class AgentSession {
         const content = (msg.message.content ?? []) as unknown as Array<Record<string, unknown>>;
         for (const block of content) {
           if (block.type === 'tool_use') {
-            this.send({ t: 'tool', id: block.id, name: block.name, input: block.input });
+            this.send({
+              t: 'tool', id: String(block.id ?? ''), name: String(block.name ?? ''),
+              input: (block.input as Record<string, unknown>) ?? {},
+            });
           }
         }
         break;
@@ -296,7 +305,7 @@ class AgentSession {
             if (block.type === 'tool_result') {
               this.send({
                 t: 'tool-result',
-                id: block.tool_use_id,
+                id: String(block.tool_use_id ?? ''),
                 content: stringifyToolResult(block.content),
                 isError: block.is_error === true,
               });
@@ -344,7 +353,7 @@ class AgentSession {
   }
 
   private onMessage(text: string): void {
-    let msg: { t: string; [k: string]: unknown };
+    let msg: AgentClientEvent;
     try { msg = JSON.parse(text); } catch { return; }
     switch (msg.t) {
       case 'prompt': {
@@ -397,7 +406,7 @@ class AgentSession {
     }
   }
 
-  private send(obj: unknown): void {
+  private send(obj: AgentServerEvent): void {
     if (this.ws.readyState !== 1 /* OPEN */) return;
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }

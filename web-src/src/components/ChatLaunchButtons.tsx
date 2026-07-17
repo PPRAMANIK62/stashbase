@@ -6,7 +6,7 @@
  *
  */
 import { useEffect, useRef } from 'react';
-import { api, type AgentsResponse } from '../api';
+import { api, type Agent, type AgentsResponse } from '../api';
 import { AGENTS, type AgentMeta } from '../agentCatalog';
 import { useApp } from '../store/AppContext';
 import { useHoverTip } from '../hooks/useHoverTip';
@@ -16,9 +16,8 @@ export function ChatLaunchButtons() {
   const { state, dispatch } = useApp();
   const refreshedRef = useRef(false);
 
-  // Pull the agent registry once per session so the chat panel's agent
-  // picker reflects what's installed. (The launchers themselves render a
-  // fixed Claude + Codex pair regardless.)
+  // Prime the agent registry once. AgentView refreshes it after every
+  // connection outcome so runtime failures and retries stay visible.
   useEffect(() => {
     if (refreshedRef.current) return;
     refreshedRef.current = true;
@@ -44,6 +43,7 @@ export function ChatLaunchButtons() {
         <LaunchButton
           key={agent.id}
           agent={agent}
+          runtime={state.agents.find((runtime) => runtime.id === agent.id)}
           active={state.chatOpen && activeTab?.agent === agent.id}
           onClick={() => toggleAgent(agent.id)}
         />
@@ -58,14 +58,19 @@ export function ChatLaunchButtons() {
  *  appears. Tip drops below — they sit at the top-right of the window. */
 function LaunchButton({
   agent,
+  runtime,
   active,
   onClick,
 }: {
   agent: AgentMeta;
+  runtime?: Agent;
   active: boolean;
   onClick: () => void;
 }) {
-  const label = active ? `Hide ${agent.launcherLabel} chat` : `Show ${agent.launcherLabel} chat`;
+  const unavailable = runtime?.state === 'unavailable';
+  const label = runtime?.state && runtime.state !== 'available'
+    ? `${agent.launcherLabel} is ${runtime.state}${runtime.error ? `: ${runtime.error}` : ''}`
+    : active ? `Hide ${agent.launcherLabel} chat` : `Show ${agent.launcherLabel} chat`;
   const Icon = agent.Icon;
   const { tipProps, tip } = useHoverTip(label, 'bottom');
   return (
@@ -74,6 +79,7 @@ function LaunchButton({
       type="button"
       aria-label={label}
       onClick={onClick}
+      disabled={unavailable}
       {...tipProps}
     >
       <Icon />
