@@ -1,5 +1,7 @@
 import {
   useEffect,
+  lazy,
+  Suspense,
   useRef,
   useState,
   type CSSProperties,
@@ -23,7 +25,6 @@ import { ClipboardImportModal, type ClipboardOffer } from './components/Clipboar
 import { CascadePromptModal } from './components/CascadePromptModal';
 import { AlertConfirmModal } from './components/AlertConfirmModal';
 import { Toasts } from './components/Toasts';
-import { ChatPane } from './components/ChatPane';
 import { ChatLaunchButtons } from './components/ChatLaunchButtons';
 import { SettingsPortal, openSettings } from './components/SettingsModal';
 import { HomeIcon } from './icons';
@@ -39,6 +40,8 @@ import {
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { getWindowId } from './api';
 import { isTrustedPreviewSource } from './lib/previewMessages';
+
+const LazyChatPane = lazy(() => import('./components/ChatPane').then((mod) => ({ default: mod.ChatPane })));
 
 /**
  * Top-level shell. Wraps everything in <AppProvider> (the single
@@ -224,7 +227,11 @@ function AppBody() {
         {!state.welcomeVisible && <SidebarSplitter />}
         <MainPane />
         {chatMounted && <ChatSplitter />}
-        {chatMounted && <ChatPane />}
+        {chatMounted && (
+          <Suspense fallback={<aside className="chat-pane" aria-label="Agent chat" />}>
+            <LazyChatPane />
+          </Suspense>
+        )}
       </div>
       <DropVeil hot={veilHot} />
       <ContextMenu />

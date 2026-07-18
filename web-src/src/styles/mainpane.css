@@ -669,7 +669,7 @@
       color: var(--muted);
       font-size: 12px;
     }
-    .pdf-loading, .pdf-error {
+    .doc-loading, .pdf-loading, .pdf-error {
       padding: 16px;
       color: var(--muted);
       font-size: 13px;

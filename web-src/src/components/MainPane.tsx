@@ -1,14 +1,16 @@
+import { lazy, Suspense } from 'react';
 import { EditIcon, PreviewIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { EmptyTabLanding } from './EmptyTabLanding';
 import { FindBar } from './FindBar';
 import { HtmlPreview } from './HtmlPreview';
 import { ImagePreview } from './ImagePreview';
-import { MarkdownPreview } from './MarkdownPreview';
-import { PdfPreview } from './PdfPreview';
-import { CodeEditor } from './CodeEditor';
 import { TabStrip } from './TabStrip';
-import { DocxPreview } from './DocxPreview';
+
+const LazyMarkdownPreview = lazy(() => import('./MarkdownPreview').then((mod) => ({ default: mod.MarkdownPreview })));
+const LazyPdfPreview = lazy(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
+const LazyDocxPreview = lazy(() => import('./DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
+const LazyCodeEditor = lazy(() => import('./CodeEditor').then((mod) => ({ default: mod.CodeEditor })));
 
 /**
  * Right rail. Layout from top to bottom:
@@ -52,13 +54,17 @@ export function MainPane() {
         )}
         {emptyTab && <EmptyTabLanding />}
         {cur && !editMode && cur.format === 'md' && (
-          <MarkdownPreview name={cur.name} content={cur.content} />
+          <Suspense fallback={<div className="doc-loading">Loading preview…</div>}>
+            <LazyMarkdownPreview name={cur.name} content={cur.content} />
+          </Suspense>
         )}
         {cur && !editMode && cur.format === 'html' && (
           <HtmlPreview name={cur.name} />
         )}
         {cur && cur.format === 'docx' && (
-          <DocxPreview name={cur.name} />
+          <Suspense fallback={<div className="docx-preview-loading">Opening document…</div>}>
+            <LazyDocxPreview name={cur.name} />
+          </Suspense>
         )}
         {cur && cur.format === 'pdf' && (
           // PDFs have no edit mode — the source is a binary file. Only
@@ -66,7 +72,9 @@ export function MainPane() {
           // implementation detail (search hits remap back to the PDF;
           // the derived note must never surface as content). The
           // preparation failure banner + Reprocess live inside PdfPreview.
-          <PdfPreview name={cur.name} />
+          <Suspense fallback={<div className="pdf-loading">Loading PDF…</div>}>
+            <LazyPdfPreview name={cur.name} />
+          </Suspense>
         )}
         {cur && cur.format === 'image' && (
           // Images, like PDFs, are binary — no edit mode.
@@ -77,12 +85,14 @@ export function MainPane() {
           // read-only viewers. The editor is a single CodeMirror pane
           // (no source+preview split); save is scheduled on every edit.
           <div className="md-editor">
-            <CodeEditor
-              key={cur.name}
-              name={cur.name}
-              initialContent={cur.content}
-              onChange={() => actions.scheduleSave()}
-            />
+            <Suspense fallback={<div className="doc-loading">Loading editor…</div>}>
+              <LazyCodeEditor
+                key={cur.name}
+                name={cur.name}
+                initialContent={cur.content}
+                onChange={() => actions.scheduleSave()}
+              />
+            </Suspense>
           </div>
         )}
       </div>
