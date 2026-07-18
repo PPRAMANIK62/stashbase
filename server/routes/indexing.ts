@@ -3,19 +3,15 @@
  * lightweight status poll the UI uses to grey out pending files.
  */
 import express from 'express';
-import { execFile } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
-import { rgPath } from '@vscode/ripgrep';
 import { logger } from '../log.ts';
-import { analyzeHtml } from '../html.ts';
 import {
   getCurrentFolder,
   exactMemberFolderRoot,
   resolveFolderRoot,
 } from '../folder.ts';
 import { getApiKey } from '../app-config.ts';
-import { hasNoExtractableText, isCloudPlaceholderName, isIndexExcludedDirName, shouldIndexFilePath } from '../indexable.ts';
+import { hasNoExtractableText, shouldIndexFilePath } from '../indexable.ts';
 import { derivedPathsForPdf, displayPathForHit, maybeConvertPdf } from '../pdf.ts';
 import { derivedNotePathForImage, maybeConvertImage } from '../image.ts';
 import { derivedHtmlPathForDocx, maybeConvertDocx } from '../docx.ts';
@@ -26,14 +22,11 @@ import { getFsChangeCounter } from '../watcher.ts';
 import { clearIndexWarning, getIndexWarning, indexer, syncFolderNow } from '../state.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { sendError } from '../http.ts';
-import { derivedNoteFor } from '../derived-store.ts';
 import { filesystemPath } from '../filesystem-path.ts';
+import { runKeywordSearch } from '../keyword-search.ts';
 import {
   remapKeywordFilesForDisplay,
   remapSearchHitsForDisplay,
-  type KeywordHitFile,
-  type KeywordMatch,
-  type KeywordSearchResult,
 } from '../search-display.ts';
 
 const log = logger('routes/indexing');
@@ -315,10 +308,7 @@ export function mount(app: express.Express): void {
       const { folderRoot: folderDir } = requireRequestFolder(explicit);
       const caseStrict = req.query.case_strict === '1' || req.query.case_strict === 'true';
       const wholeWord = req.query.whole_word === '1' || req.query.whole_word === 'true';
-      const result = mergeKeywordResults(
-        await runRipgrep(query, folderDir, { caseStrict, wholeWord }),
-        searchDerivedMarkdown(query, folderDir, { caseStrict, wholeWord }),
-      );
+      const result = await runKeywordSearch(query, folderDir, { caseStrict, wholeWord });
       // ripgrep's `*.md` glob may also match legacy hidden dot-prefixed
       // derived notes (`.paper.pdf.md` / `.shot.png.md`). Apply the same
       // remap-or-drop rule as the semantic routes so a hit's row points
@@ -436,339 +426,4 @@ export function mount(app: express.Express): void {
     }
   });
 }
-
-
-
-// ---------- keyword search (ripgrep) ----------
-
-const RG_PER_FILE_CAP = 50;
-const RG_TOTAL_CAP = 500;
-const RG_TIMEOUT_MS = 8000;
-const RG_MAX_LINE_CHARS = 240;
-const RESOLVED_RG_PATH = resolveSpawnableRipgrepPath(rgPath);
-
-interface RipgrepOpts {
-  /** false → `--smart-case` (case-insensitive unless query has caps);
-   *  true → `--case-sensitive` regardless of query shape. */
-  caseStrict: boolean;
-  /** true → Unicode-aware app-side whole-token filtering. We do not use
-   *  ripgrep's `--word-regexp`: its boundary semantics do not line up
-   *  with the renderer and are especially poor for CJK text. */
-  wholeWord: boolean;
-}
-
-/** Spawn ripgrep on `cwd` with `query` as a literal pattern (no shell).
- *  `--json` gives structured `match` events; we group them into
- *  per-file buckets, applying caps and truncations. */
-function runRipgrep(query: string, cwd: string, opts: RipgrepOpts): Promise<KeywordSearchResult> {
-  return new Promise((resolve, reject) => {
-    const args = [
-      '--json',
-      opts.caseStrict ? '--case-sensitive' : '--smart-case',
-      '--fixed-strings',
-      '--max-count', String(RG_PER_FILE_CAP),
-      '--max-filesize', '5M',
-      '--glob', '*.md',
-      '--glob', '*.markdown',
-      '--glob', '*.html',
-      '--glob', '*.htm',
-    ];
-    args.push('-e', query, '.');
-    execFile(RESOLVED_RG_PATH, args, {
-      cwd,
-      maxBuffer: 32 * 1024 * 1024,
-      timeout: RG_TIMEOUT_MS,
-      // Ripgrep exits 1 when no matches — execFile treats non-zero as
-      // error, so we have to inspect `code` ourselves.
-    }, (err, stdout) => {
-      // ripgrep exits 1 when no matches — execFile treats non-zero as
-      // error, so we have to inspect `code` ourselves. 2 means bad
-      // regex; report that as a user error rather than 500.
-      if (err) {
-        const code = (err as NodeJS.ErrnoException & { code?: number | string }).code;
-        const codeStr = String(code ?? '');
-        if (codeStr !== '1') {
-          if (codeStr === '2') {
-            return reject(new Error(`invalid query: ${query}`));
-          }
-          return reject(new Error(`ripgrep failed (code ${codeStr}): ${err.message}`));
-        }
-      }
-      const byFile = new Map<string, KeywordHitFile>();
-      let total = 0;
-      let truncated = false;
-      for (const line of stdout.split('\n')) {
-        if (!line) continue;
-        let evt: any;
-        try { evt = JSON.parse(line); } catch { continue; }
-        if (evt.type !== 'match') continue;
-        const dataPath = evt.data?.path?.text;
-        const lineNum = evt.data?.line_number;
-        const rawText = evt.data?.lines?.text;
-        if (typeof dataPath !== 'string' || typeof lineNum !== 'number' || typeof rawText !== 'string') continue;
-        // ripgrep paths are relative to cwd already (we passed `.`),
-        // but normalise just in case.
-        const relPath = dataPath.replace(/^\.\//, '').replace(/\\/g, '/');
-        // Drop trailing newline that ripgrep includes in `lines.text`.
-        const stripped = rawText.replace(/\r?\n$/, '');
-        const subs = Array.isArray(evt.data?.submatches) ? evt.data.submatches : [];
-        const matchRanges = normalizeRipgrepSubmatches(stripped, subs)
-          .filter(([start, end]) => !opts.wholeWord || hasWholeTokenBoundaries(stripped, start, end));
-        if (matchRanges.length === 0) continue;
-        // Center the visible snippet around the first match so highlight
-        // ranges stay inside the window for long lines (e.g. 500-char
-        // markdown paragraphs). Without this, a match at position 400
-        // gets truncated away and the user sees no `<mark>`.
-        let windowStart = 0;
-        if (stripped.length > RG_MAX_LINE_CHARS && matchRanges.length > 0) {
-          const firstStart = matchRanges[0]?.[0] ?? 0;
-          windowStart = Math.max(0, Math.min(
-            stripped.length - RG_MAX_LINE_CHARS,
-            firstStart - Math.floor(RG_MAX_LINE_CHARS / 3),
-          ));
-        }
-        const windowEnd = Math.min(stripped.length, windowStart + RG_MAX_LINE_CHARS);
-        const leading = windowStart > 0 ? '…' : '';
-        const trailing = windowEnd < stripped.length ? '…' : '';
-        const text = leading + stripped.slice(windowStart, windowEnd) + trailing;
-        const ranges: Array<[number, number]> = [];
-        for (const [start, end] of matchRanges) {
-          // Shift each match into snippet-local coordinates and skip
-          // anything that fell entirely outside the visible window.
-          const localStart = start - windowStart + leading.length;
-          const localEnd = end - windowStart + leading.length;
-          if (localEnd <= leading.length) continue;
-          if (localStart >= text.length - trailing.length) continue;
-          ranges.push([
-            Math.max(leading.length, localStart),
-            Math.min(text.length - trailing.length, localEnd),
-          ]);
-        }
-        let bucket = byFile.get(relPath);
-        if (!bucket) {
-          bucket = { path: relPath, matches: [], totalMatches: 0 };
-          byFile.set(relPath, bucket);
-        }
-        bucket.totalMatches += matchRanges.length;
-        if (total < RG_TOTAL_CAP) {
-          bucket.matches.push({ line: lineNum, text, ranges });
-          total += matchRanges.length;
-        } else {
-          truncated = true;
-        }
-      }
-      const files = Array.from(byFile.values()).sort((a, b) => a.path.localeCompare(b.path));
-      resolve({ files, totalMatches: total, truncated });
-    });
-  });
-}
-
-export function resolveSpawnableRipgrepPath(candidate: string): string {
-  const asarSegment = `${path.sep}app.asar${path.sep}`;
-  if (!candidate.includes(asarSegment)) return candidate;
-  const unpacked = candidate.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`);
-  return fs.existsSync(unpacked) ? unpacked : candidate;
-}
-
-function searchDerivedMarkdown(query: string, folderRoot: string, opts: RipgrepOpts): KeywordSearchResult {
-  const files: KeywordHitFile[] = [];
-  let total = 0;
-  let truncated = false;
-  const caseSensitive = opts.caseStrict || /[A-Z]/.test(query);
-
-  walkConvertibleSources(folderRoot, '', (rel, abs) => {
-    if (total >= RG_TOTAL_CAP) {
-      truncated = true;
-      return;
-    }
-    const text = readDerivedSearchText(rel, abs);
-    if (text == null) return;
-    const lines = text.split(/\r?\n/);
-    const matches: KeywordMatch[] = [];
-    let fileMatches = 0;
-    lines.forEach((line, i) => {
-      if (fileMatches >= RG_PER_FILE_CAP || total >= RG_TOTAL_CAP) {
-        truncated = true;
-        return;
-      }
-      const ranges = findLiteralRanges(line, query, caseSensitive)
-        .filter(([start, end]) => !opts.wholeWord || hasWholeTokenBoundaries(line, start, end));
-      if (ranges.length === 0) return;
-      const snippet = snippetForLine(line, ranges);
-      matches.push({
-        line: i + 1,
-        text: snippet.text,
-        ranges: snippet.ranges,
-        ...(/\.pdf$/i.test(rel) ? { pdfPage: pdfPageForDerivedLine(lines, i + 1) } : {}),
-      });
-      fileMatches += ranges.length;
-      total += ranges.length;
-    });
-    if (matches.length > 0) {
-      files.push({ path: rel, matches, totalMatches: fileMatches });
-    }
-  });
-
-  files.sort((a, b) => a.path.localeCompare(b.path));
-  return { files, totalMatches: total, truncated };
-}
-
-function readDerivedSearchText(rel: string, abs: string): string | null {
-  if (isConversionTextUnavailable(abs)) return null;
-  try {
-    if (isDocxFile(rel)) {
-      const raw = fs.readFileSync(derivedHtmlPathForDocx(abs), 'utf8');
-      return analyzeHtml(raw).plaintext;
-    }
-    return fs.readFileSync(derivedNoteFor(abs), 'utf8');
-  } catch {
-    return null;
-  }
-}
-
-function walkConvertibleSources(
-  dir: string,
-  prefix: string,
-  fn: (rel: string, abs: string) => void,
-): void {
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-  for (const ent of entries) {
-    if (isCloudPlaceholderName(ent.name)) continue;
-    if (ent.name.startsWith('.')) continue;
-    if (ent.isDirectory() && isIndexExcludedDirName(ent.name)) continue;
-    if (ent.isDirectory() && ent.name.endsWith('_files')) continue;
-    const rel = prefix ? `${prefix}/${ent.name}` : ent.name;
-    const abs = path.join(dir, ent.name);
-    if (ent.isDirectory()) {
-      walkConvertibleSources(abs, rel, fn);
-    } else if (ent.isFile() && (/\.pdf$/i.test(ent.name) || isImageFile(ent.name) || isDocxFile(ent.name))) {
-      fn(rel, abs);
-    }
-  }
-}
-
-function findLiteralRanges(line: string, query: string, caseSensitive: boolean): Array<[number, number]> {
-  const haystack = caseSensitive ? line : line.toLocaleLowerCase();
-  const needle = caseSensitive ? query : query.toLocaleLowerCase();
-  const ranges: Array<[number, number]> = [];
-  let offset = 0;
-  while (needle) {
-    const idx = haystack.indexOf(needle, offset);
-    if (idx < 0) break;
-    ranges.push([idx, idx + needle.length]);
-    offset = idx + Math.max(needle.length, 1);
-  }
-  return ranges;
-}
-
-function snippetForLine(line: string, matchRanges: Array<[number, number]>): { text: string; ranges: Array<[number, number]> } {
-  let windowStart = 0;
-  if (line.length > RG_MAX_LINE_CHARS && matchRanges.length > 0) {
-    const firstStart = matchRanges[0]?.[0] ?? 0;
-    windowStart = Math.max(0, Math.min(
-      line.length - RG_MAX_LINE_CHARS,
-      firstStart - Math.floor(RG_MAX_LINE_CHARS / 3),
-    ));
-  }
-  const windowEnd = Math.min(line.length, windowStart + RG_MAX_LINE_CHARS);
-  const leading = windowStart > 0 ? '…' : '';
-  const trailing = windowEnd < line.length ? '…' : '';
-  const text = leading + line.slice(windowStart, windowEnd) + trailing;
-  const ranges: Array<[number, number]> = [];
-  for (const [start, end] of matchRanges) {
-    const localStart = start - windowStart + leading.length;
-    const localEnd = end - windowStart + leading.length;
-    if (localEnd <= leading.length) continue;
-    if (localStart >= text.length - trailing.length) continue;
-    ranges.push([
-      Math.max(leading.length, localStart),
-      Math.min(text.length - trailing.length, localEnd),
-    ]);
-  }
-  return { text, ranges };
-}
-
-function pdfPageForDerivedLine(lines: string[], lineNumber: number): number | undefined {
-  let page: number | undefined;
-  for (let i = 0; i < Math.min(lines.length, lineNumber); i++) {
-    const line = lines[i] ?? '';
-    const marker = line.match(/stashbase-pdf-pages?:\s*(\d+)(?:\s*-\s*(\d+))?/i);
-    const pageHeading = line.match(/^#{1,6}\s+Page\s+(\d+)\b/i);
-    const next = marker ? Number(marker[1]) : pageHeading ? Number(pageHeading[1]) : NaN;
-    if (Number.isFinite(next) && next > 0) page = next;
-  }
-  return page;
-}
-
-function mergeKeywordResults(a: KeywordSearchResult, b: KeywordSearchResult): KeywordSearchResult {
-  const byPath = new Map<string, KeywordHitFile>();
-  for (const file of [...a.files, ...b.files]) {
-    const existing = byPath.get(file.path);
-    if (!existing) {
-      byPath.set(file.path, { ...file, matches: [...file.matches] });
-      continue;
-    }
-    existing.matches.push(...file.matches);
-    existing.matches.sort((x, y) => x.line - y.line);
-    existing.totalMatches += file.totalMatches;
-  }
-  const files = [...byPath.values()].sort((x, y) => x.path.localeCompare(y.path));
-  return {
-    files,
-    totalMatches: files.reduce((sum, file) => sum + file.totalMatches, 0),
-    truncated: a.truncated || b.truncated,
-  };
-}
-
-function normalizeRipgrepSubmatches(line: string, subs: unknown[]): Array<[number, number]> {
-  const ranges: Array<[number, number]> = [];
-  for (const s of subs) {
-    if (!s || typeof s !== 'object') continue;
-    const start = (s as { start?: unknown }).start;
-    const end = (s as { end?: unknown }).end;
-    if (typeof start !== 'number' || typeof end !== 'number') continue;
-    ranges.push([
-      utf8ByteOffsetToUtf16Index(line, start),
-      utf8ByteOffsetToUtf16Index(line, end),
-    ]);
-  }
-  return ranges;
-}
-
-function utf8ByteOffsetToUtf16Index(text: string, byteOffset: number): number {
-  if (byteOffset <= 0) return 0;
-  let bytes = 0;
-  let index = 0;
-  for (const ch of text) {
-    const next = bytes + Buffer.byteLength(ch, 'utf8');
-    if (next > byteOffset) return index;
-    index += ch.length;
-    bytes = next;
-    if (bytes === byteOffset) return index;
-  }
-  return text.length;
-}
-
-function hasWholeTokenBoundaries(text: string, start: number, end: number): boolean {
-  const before = charBefore(text, start);
-  const after = charAt(text, end);
-  return !isKeywordWordChar(before) && !isKeywordWordChar(after);
-}
-
-function charBefore(text: string, index: number): string {
-  if (index <= 0) return '';
-  const prev = Array.from(text.slice(0, index)).pop();
-  return prev ?? '';
-}
-
-function charAt(text: string, index: number): string {
-  if (index >= text.length) return '';
-  return Array.from(text.slice(index))[0] ?? '';
-}
-
-function isKeywordWordChar(ch: string): boolean {
-  return ch !== '' && /[\p{L}\p{N}_]/u.test(ch);
-}
-
 // ---------- recent-files walk ----------
