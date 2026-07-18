@@ -79,7 +79,14 @@ library write, edit, move, and delete transactions. `server/file-save.ts`
 provides the shared editable-file save and index-update path, while
 `server/file-operation-guard.ts` prevents rename/delete only while conversion
 is running. `server/routes/library-files.ts` keeps request and response
-orchestration. The active-folder surface composes note CRUD and reveal in
+orchestration. The active-folder filesystem facade is `server/files.ts`;
+`server/file-paths.ts` owns current-root resolution, portable filename
+sanitization, folder-relative containment, and case-only rename hops,
+`server/active-file-operations.ts` owns active-folder reads, writes, file/folder
+mutations, asset resolution, and legacy derived-artifact cleanup, and
+`server/file-listing.ts` owns recursive sidebar listing, preview metadata
+caching, attachment-bundle hiding, and folder-rename scan inputs. The
+active-folder HTTP surface composes note CRUD and reveal in
 `server/routes/files.ts`, rename/delete/preview transactions in
 `server/routes/file-mutations.ts`, asset and derived-preview serving in
 `server/routes/file-assets.ts`, and sidebar-order HTTP handling in
