@@ -9,6 +9,9 @@ import {
   createFolder,
   deleteFile,
   isSameExistingPath,
+  listFiles,
+  listFolders,
+  listIndexableTextFilesUnder,
   readText,
   renameFolder,
   renameOnDisk,
@@ -93,4 +96,43 @@ test('createFolder applies writable protected-segment policy', async () => {
 
 test('sanitizeFilename keeps folder creation names portable', () => {
   assert.equal(sanitizeFilename('Research:2026/Question?A'), 'Research-2026/Question-A');
+});
+
+test('folder listing hides note bundles and legacy derived artifacts', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-hidden-'));
+  try {
+    fs.writeFileSync(path.join(root, 'note.md'), '# Note\n\nVisible');
+    fs.mkdirSync(path.join(root, 'note_files'));
+    fs.writeFileSync(path.join(root, 'note_files', 'image.png'), 'asset');
+    fs.writeFileSync(path.join(root, 'paper.pdf'), 'pdf bytes');
+    fs.writeFileSync(path.join(root, '.paper.md'), 'legacy stem text');
+    fs.writeFileSync(path.join(root, '.paper.pdf.md'), 'legacy basename text');
+    fs.mkdirSync(path.join(root, '.stashbase'));
+
+    await runWithFolderRoot(root, () => {
+      assert.deepEqual(listFiles().map((entry) => entry.name), ['note.md', 'paper.pdf']);
+      assert.deepEqual(listFolders().map((entry) => entry.path), []);
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('folder rename scan includes legacy derived notes for stale index cleanup', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-derived-scan-'));
+  try {
+    fs.mkdirSync(path.join(root, 'Research'));
+    fs.writeFileSync(path.join(root, 'Research', 'paper.pdf'), 'pdf bytes');
+    fs.writeFileSync(path.join(root, 'Research', '.paper.md'), 'legacy stem text');
+    fs.writeFileSync(path.join(root, 'Research', '.paper.pdf.md'), 'legacy basename text');
+
+    await runWithFolderRoot(root, () => {
+      assert.deepEqual(
+        listIndexableTextFilesUnder('Research').map((entry) => entry.name),
+        ['Research/.paper.md', 'Research/.paper.pdf.md'],
+      );
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
