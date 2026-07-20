@@ -150,7 +150,7 @@ test('resolveUnder blocks existing and creatable symlink or junction escapes', (
 
   assert.equal(
     filesystemPath.resolveUnder(root, 'inside.md', { access: 'existing' }),
-    path.join(root, 'inside.md'),
+    filesystemPath.join(root, 'inside.md'),
   );
   assert.throws(
     () => filesystemPath.resolveUnder(root, 'link/outside.md', { access: 'existing' }),
@@ -168,7 +168,7 @@ test('resolveUnder blocks existing and creatable symlink or junction escapes', (
   }
   assert.equal(
     filesystemPath.resolveUnder(root, 'new/child.md', { access: 'creatable' }),
-    path.join(root, 'new', 'child.md'),
+    filesystemPath.join(root, 'new/child.md'),
   );
   assert.equal(filesystemPath.real(path.join(root, 'link')), fs.realpathSync.native(outside));
 });
