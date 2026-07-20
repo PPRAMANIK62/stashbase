@@ -9,6 +9,7 @@ import {
   getCurrentFolderBasename,
   listFilesAndFolders,
   pathExists,
+  readEditableText,
   readText,
   resolveExisting,
   sanitizeFilename,
@@ -142,7 +143,7 @@ export function mount(app: express.Express): void {
       // garbled UTF-8 to render.
       const format = detectFormat(name);
       if (!format) return res.status(415).json({ error: 'unsupported format' });
-      const content = readText(name);
+      const content = format === 'md' ? readEditableText(name) : readText(name);
       if (content == null) return res.status(404).json({ error: 'not found' });
       // Raw HTML in `content` (what the editor needs); the preview iframe
       // loads its prepared version via `/asset/*` — keeping injected ids +

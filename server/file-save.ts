@@ -2,7 +2,7 @@ import { getApiKey } from './app-config.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { toSourcePath } from './folder.ts';
 import { detectFormat, isDerivedNoteName } from './format.ts';
-import { fileVersion, readText, saveText } from './files.ts';
+import { fileVersion, readEditableText, readText, saveEditableText, saveText } from './files.ts';
 import { contentSizeError } from './indexable.ts';
 import { errorMessage, logger } from './log.ts';
 import { indexer } from './state.ts';
@@ -67,10 +67,12 @@ export async function saveFileContent(
   opts: { baseVersion?: string } = {},
 ): Promise<{ indexWarning?: string; version?: string }> {
   validateEditableFileWrite(name);
+  const preservesMarkdownSourceFormat = detectFormat(name) === 'md';
+  const currentEditableContent = () => (preservesMarkdownSourceFormat ? readEditableText(name) : readText(name));
   if (opts.baseVersion !== undefined) {
     const currentVersion = fileVersion(name);
     if (currentVersion !== opts.baseVersion) {
-      if (readText(name) === content) {
+      if (currentEditableContent() === content) {
         return { version: currentVersion ?? undefined };
       }
       const err = new Error('file changed on disk; reload before saving');
@@ -79,8 +81,19 @@ export async function saveFileContent(
       throw err;
     }
   }
-  saveText(name, content);
-  const indexWarning = await upsertSavedFile(name, content);
+  // A caller can legitimately submit the canonical editor text during an
+  // autosave or view transition. Never turn that no-op into an atomic replace
+  // of the source bytes merely because the source uses a BOM or CRLF.
+  if (currentEditableContent() === content) {
+    return { version: fileVersion(name) ?? undefined };
+  }
+  if (preservesMarkdownSourceFormat) saveEditableText(name, content);
+  else saveText(name, content);
+  // Index the serialized source, not the editor's canonical presentation.
+  // This keeps indexing on the same source-of-truth bytes that the user
+  // asked us to preserve.
+  const savedContent = readText(name) ?? content;
+  const indexWarning = await upsertSavedFile(name, savedContent);
   noteTreeChanged();
   return { indexWarning, version: fileVersion(name) ?? undefined };
 }

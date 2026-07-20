@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { validateEditableFileWrite } from './file-save.ts';
+import { saveFileContent, validateEditableFileWrite } from './file-save.ts';
 import { runWithFolderRoot } from './folder.ts';
 import {
   createFolder,
@@ -12,6 +12,7 @@ import {
   listFiles,
   listFolders,
   listIndexableTextFilesUnder,
+  readEditableText,
   readText,
   renameFolder,
   renameOnDisk,
@@ -68,6 +69,57 @@ test('quoted imported filenames remain readable, writable, and deletable', async
       assert.equal(deleteFile(name), true);
       assert.equal(readText(name), null);
     });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('editable markdown preserves BOM and CRLF while presenting canonical editor text', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-source-format-'));
+  const source = path.join(root, 'note.md');
+  const original = Buffer.from('\uFEFF---\r\ntitle: test\r\n---\r\n\r\n<div data-x="raw">broken *markdown\r\n::: unsupported-extension\r\n', 'utf8');
+  try {
+    fs.writeFileSync(source, original);
+    await runWithFolderRoot(root, async () => {
+      assert.equal(
+        readEditableText('note.md'),
+        '---\ntitle: test\n---\n\n<div data-x="raw">broken *markdown\n::: unsupported-extension\n',
+      );
+      // Loading is a read-only operation: the exact source bytes stay put.
+      assert.deepEqual(fs.readFileSync(source), original);
+
+      await saveFileContent('note.md', readEditableText('note.md')!);
+      assert.deepEqual(fs.readFileSync(source), original);
+
+      await saveFileContent(
+        'note.md',
+        '---\ntitle: test\n---\n\n<div data-x="raw">broken *markdown\n::: unsupported-extension\nupdated\n',
+      );
+    });
+    assert.deepEqual(
+      fs.readFileSync(source),
+      Buffer.from('\uFEFF---\r\ntitle: test\r\n---\r\n\r\n<div data-x="raw">broken *markdown\r\n::: unsupported-extension\r\nupdated\r\n', 'utf8'),
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('editable markdown keeps uniform LF and normalizes mixed endings only on save', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-line-endings-'));
+  try {
+    fs.writeFileSync(path.join(root, 'lf.md'), 'one\ntwo\n');
+    fs.writeFileSync(path.join(root, 'mixed.md'), 'one\r\ntwo\nthree\n');
+    await runWithFolderRoot(root, async () => {
+      await saveFileContent('lf.md', 'one\ntwo\nthree\n');
+      const mixedBeforeEdit = fs.readFileSync(path.join(root, 'mixed.md'));
+      await saveFileContent('mixed.md', readEditableText('mixed.md')!);
+      assert.deepEqual(fs.readFileSync(path.join(root, 'mixed.md')), mixedBeforeEdit);
+      await saveFileContent('mixed.md', 'one\ntwo\nthree\nfour\n');
+    });
+    assert.equal(fs.readFileSync(path.join(root, 'lf.md'), 'utf8'), 'one\ntwo\nthree\n');
+    // LF is dominant in the source, and is chosen only for the edited save.
+    assert.equal(fs.readFileSync(path.join(root, 'mixed.md'), 'utf8'), 'one\ntwo\nthree\nfour\n');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
