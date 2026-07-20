@@ -12,6 +12,43 @@ export function saveText(relPath: string, content: string): void {
   saveBytes(relPath, Buffer.from(content, 'utf8'));
 }
 
+/**
+ * The editor works with one canonical representation: no UTF-8 BOM and LF
+ * line breaks.  CodeMirror uses LF internally, so exposing raw CRLF bytes
+ * here would make an untouched document appear dirty as soon as it mounts.
+ *
+ * This is deliberately a presentation boundary only. `saveEditableText`
+ * restores the source file's encoding markers and newline convention when a
+ * real edit is written.
+ */
+export function readEditableText(relPath: string): string | null {
+  const content = readText(relPath);
+  if (content == null) return null;
+  return content.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+}
+
+/** Save canonical editor text while retaining source-level Markdown format.
+ * Unsupported syntax remains opaque text: the only serialization decisions
+ * made here are BOM presence and line endings. */
+export function saveEditableText(relPath: string, content: string): void {
+  const target = resolveSafe(relPath, 'existing');
+  const existing = fs.readFileSync(target);
+  const hasBom = existing.length >= 3
+    && existing[0] === 0xef
+    && existing[1] === 0xbb
+    && existing[2] === 0xbf;
+  const source = existing.toString('utf8').replace(/^\uFEFF/, '');
+  const lineEnding = preferredLineEnding(source);
+  const canonical = content.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  saveBytes(relPath, Buffer.from((hasBom ? '\uFEFF' : '') + canonical.replace(/\n/g, lineEnding), 'utf8'));
+}
+
+function preferredLineEnding(content: string): '\n' | '\r\n' {
+  const crlf = (content.match(/\r\n/g) ?? []).length;
+  const lf = (content.match(/(^|[^\r])\n/g) ?? []).length;
+  return crlf > lf ? '\r\n' : '\n';
+}
+
 export function fileVersion(relPath: string): string | null {
   let target: string;
   try { target = resolveSafe(relPath, 'existing'); } catch { return null; }
