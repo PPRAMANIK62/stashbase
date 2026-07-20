@@ -15,7 +15,6 @@ export interface LibrarySearchScope {
   /** Absolute path prefix to narrow to, or undefined. */
   pathPrefix?: string;
 }
-
 function requireMemberFolderRoot(ref: string): string {
   const root = resolveFolderRoot(ref);
   const memberRoot = exactMemberFolderRoot(root);
@@ -152,4 +151,3 @@ export function routeError(message: string, status = 400, code?: string): Error 
   if (code) (err as any).code = code;
   return err;
 }
-

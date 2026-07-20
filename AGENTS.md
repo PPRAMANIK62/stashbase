@@ -109,7 +109,7 @@ without hand-holding:
    sync/conversion, hidden derived notes never surface, single-daemon
    ownership, credentials only in Settings — never env).
 3. **Verify — never report done without this**:
-   - `npx tsc --noEmit` (always)
+   - `pnpm typecheck` (always; covers server, MCP, and renderer)
    - `npx vite build --config web-src/vite.config.ts` (renderer changes)
 4. **Update the affected design docs in the same change** (local
    `design-docs/` only — there is no external mirror). Update README /

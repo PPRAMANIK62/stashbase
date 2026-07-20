@@ -27,19 +27,17 @@ pnpm dev
 
 ## Before Opening a PR
 
-Run the checks that match your change. For most source changes:
+Run the same source checks used by CI:
 
 ```bash
-pnpm exec tsc --noEmit
-pnpm test:python
-pnpm build
+pnpm check
 ```
 
 For Markdown renderer changes:
 
 ```bash
 pnpm test:renderer
-pnpm exec tsc --noEmit
+pnpm typecheck
 pnpm build:web
 ```
 

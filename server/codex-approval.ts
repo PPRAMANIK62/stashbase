@@ -9,7 +9,6 @@ export interface CodexMcpToolApproval {
   title: string;
   input: CodexJsonObject;
 }
-
 export function approvalTitle(reason: unknown, detail: unknown, fallback: string): string {
   const normalizedReason = stringValue(reason);
   if (normalizedReason) return normalizedReason;
@@ -171,4 +170,3 @@ function objectValue(value: unknown): CodexJsonObject {
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
-

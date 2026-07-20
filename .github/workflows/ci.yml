@@ -53,11 +53,8 @@ jobs:
       - name: Test MCP transports
         run: pnpm test:mcp
 
-      - name: Typecheck server + mcp
-        run: pnpm exec tsc --noEmit
-
-      - name: Typecheck renderer (web-src)
-        run: pnpm exec tsc --noEmit -p web-src/tsconfig.json
+      - name: Typecheck server + mcp + renderer
+        run: pnpm typecheck
 
       - name: Build web + server
         run: pnpm build

@@ -674,6 +674,22 @@
       color: var(--muted);
       font-size: 13px;
     }
+    .lazy-load-error {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 72px;
+    }
+    .lazy-load-reload {
+      border: 1px solid var(--border);
+      background: var(--pane);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .lazy-load-reload:hover { border-color: var(--accent); }
     .pdf-error { color: #c83a3a; }
     .pdf-failure-banner {
       position: sticky;

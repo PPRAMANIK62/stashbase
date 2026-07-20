@@ -1,6 +1,5 @@
 import {
   useEffect,
-  lazy,
   Suspense,
   useRef,
   useState,
@@ -29,7 +28,7 @@ import { ChatLaunchButtons } from './components/ChatLaunchButtons';
 import { SettingsPortal, openSettings } from './components/SettingsModal';
 import { HomeIcon } from './icons';
 import { useHoverTip } from './hooks/useHoverTip';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
 import { AppProvider, useApp } from './store/AppContext';
 import {
   clampChatWidth,
@@ -41,7 +40,7 @@ import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { getWindowId } from './api';
 import { isTrustedPreviewSource } from './lib/previewMessages';
 
-const LazyChatPane = lazy(() => import('./components/ChatPane').then((mod) => ({ default: mod.ChatPane })));
+const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane').then((mod) => ({ default: mod.ChatPane })));
 
 /**
  * Top-level shell. Wraps everything in <AppProvider> (the single
@@ -228,9 +227,11 @@ function AppBody() {
         <MainPane />
         {chatMounted && <ChatSplitter />}
         {chatMounted && (
-          <Suspense fallback={<aside className="chat-pane" aria-label="Agent chat" />}>
-            <LazyChatPane />
-          </Suspense>
+          <LazyLoadBoundary className="chat-pane-shell" label="Agent chat">
+            <Suspense fallback={<aside className="chat-pane-shell" aria-label="Agent chat" />}>
+              <LazyChatPane />
+            </Suspense>
+          </LazyLoadBoundary>
         )}
       </div>
       <DropVeil hot={veilHot} />

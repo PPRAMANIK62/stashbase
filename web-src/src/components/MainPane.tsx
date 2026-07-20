@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { EditIcon, PreviewIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { EmptyTabLanding } from './EmptyTabLanding';
@@ -6,11 +6,12 @@ import { FindBar } from './FindBar';
 import { HtmlPreview } from './HtmlPreview';
 import { ImagePreview } from './ImagePreview';
 import { TabStrip } from './TabStrip';
+import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 
-const LazyMarkdownPreview = lazy(() => import('./MarkdownPreview').then((mod) => ({ default: mod.MarkdownPreview })));
-const LazyPdfPreview = lazy(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
-const LazyDocxPreview = lazy(() => import('./DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
-const LazyCodeEditor = lazy(() => import('./CodeEditor').then((mod) => ({ default: mod.CodeEditor })));
+const LazyMarkdownPreview = lazyWithRetry(() => import('./MarkdownPreview').then((mod) => ({ default: mod.MarkdownPreview })));
+const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
+const LazyDocxPreview = lazyWithRetry(() => import('./DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
+const LazyCodeEditor = lazyWithRetry(() => import('./CodeEditor').then((mod) => ({ default: mod.CodeEditor })));
 
 /**
  * Right rail. Layout from top to bottom:
@@ -54,17 +55,21 @@ export function MainPane() {
         )}
         {emptyTab && <EmptyTabLanding />}
         {cur && !editMode && cur.format === 'md' && (
-          <Suspense fallback={<div className="doc-loading">Loading preview…</div>}>
-            <LazyMarkdownPreview name={cur.name} content={cur.content} />
-          </Suspense>
+          <LazyLoadBoundary className="doc-loading" label="Markdown preview">
+            <Suspense fallback={<div className="doc-loading">Loading preview…</div>}>
+              <LazyMarkdownPreview name={cur.name} content={cur.content} />
+            </Suspense>
+          </LazyLoadBoundary>
         )}
         {cur && !editMode && cur.format === 'html' && (
           <HtmlPreview name={cur.name} />
         )}
         {cur && cur.format === 'docx' && (
-          <Suspense fallback={<div className="docx-preview-loading">Opening document…</div>}>
-            <LazyDocxPreview name={cur.name} />
-          </Suspense>
+          <LazyLoadBoundary className="docx-preview-loading" label="document preview">
+            <Suspense fallback={<div className="docx-preview-loading">Opening document…</div>}>
+              <LazyDocxPreview name={cur.name} />
+            </Suspense>
+          </LazyLoadBoundary>
         )}
         {cur && cur.format === 'pdf' && (
           // PDFs have no edit mode — the source is a binary file. Only
@@ -72,9 +77,11 @@ export function MainPane() {
           // implementation detail (search hits remap back to the PDF;
           // the derived note must never surface as content). The
           // preparation failure banner + Reprocess live inside PdfPreview.
-          <Suspense fallback={<div className="pdf-loading">Loading PDF…</div>}>
-            <LazyPdfPreview name={cur.name} />
-          </Suspense>
+          <LazyLoadBoundary className="pdf-loading" label="PDF preview">
+            <Suspense fallback={<div className="pdf-loading">Loading PDF…</div>}>
+              <LazyPdfPreview name={cur.name} />
+            </Suspense>
+          </LazyLoadBoundary>
         )}
         {cur && cur.format === 'image' && (
           // Images, like PDFs, are binary — no edit mode.
@@ -85,14 +92,16 @@ export function MainPane() {
           // read-only viewers. The editor is a single CodeMirror pane
           // (no source+preview split); save is scheduled on every edit.
           <div className="md-editor">
-            <Suspense fallback={<div className="doc-loading">Loading editor…</div>}>
-              <LazyCodeEditor
-                key={cur.name}
-                name={cur.name}
-                initialContent={cur.content}
-                onChange={() => actions.scheduleSave()}
-              />
-            </Suspense>
+            <LazyLoadBoundary className="doc-loading" label="Markdown editor">
+              <Suspense fallback={<div className="doc-loading">Loading editor…</div>}>
+                <LazyCodeEditor
+                  key={cur.name}
+                  name={cur.name}
+                  initialContent={cur.content}
+                  onChange={() => actions.scheduleSave()}
+                />
+              </Suspense>
+            </LazyLoadBoundary>
           </div>
         )}
       </div>

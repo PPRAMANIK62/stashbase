@@ -10,7 +10,6 @@ interface PendingRpc {
   reject: (error: Error) => void;
   timer?: NodeJS.Timeout;
 }
-
 export interface CodexRpcPeerOptions {
   requestTimeoutMs?: number;
   onRequest?: (message: { id: JsonRpcId; method: string; params: JsonObject }) => void;
@@ -113,4 +112,3 @@ export class CodexRpcPeer {
     else pending.resolve(message.result);
   }
 }
-

@@ -18,7 +18,6 @@ function resolveCodexBinary(): string | null {
     logLabel: 'Codex',
   }, (message) => log.warn(message));
 }
-
 export function spawnCodexAppServerProcess(
   cwd: string,
   extraEnv: NodeJS.ProcessEnv = {},
@@ -45,4 +44,3 @@ export function appVersion(): string {
     return '0.0.0';
   }
 }
-

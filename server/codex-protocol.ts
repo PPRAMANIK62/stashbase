@@ -6,7 +6,6 @@ export interface ThreadItem {
   id?: unknown;
   [key: string]: unknown;
 }
-
 export function toolStartFromItem(item: ThreadItem): { id: string; name: string; input: JsonObject } | null {
   const type = stringValue(item.type);
   const id = stringValue(item.id);
@@ -119,4 +118,3 @@ export function stringifyCodexValue(value: unknown): string {
     return String(value);
   }
 }
-

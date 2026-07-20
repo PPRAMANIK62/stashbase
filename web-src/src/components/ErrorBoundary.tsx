@@ -1,4 +1,10 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import {
+  Component,
+  lazy,
+  type ComponentType,
+  type ErrorInfo,
+  type ReactNode,
+} from 'react';
 
 interface Props {
   children: ReactNode;
@@ -7,6 +13,65 @@ interface Props {
 interface State {
   error: Error | null;
   componentStack: string | null;
+}
+
+interface LazyLoadBoundaryProps {
+  children: ReactNode;
+  className: string;
+  label: string;
+}
+
+interface LazyLoadBoundaryState {
+  error: Error | null;
+}
+
+export async function loadWithRetry<T>(
+  loader: () => Promise<T>,
+  retries = 1,
+  delayMs = 250,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await loader();
+    } catch (error: unknown) {
+      lastError = error;
+      if (attempt < retries && delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
+export function lazyWithRetry<T extends ComponentType<any>>(
+  loader: () => Promise<{ default: T }>,
+) {
+  return lazy(() => loadWithRetry(loader));
+}
+
+export class LazyLoadBoundary extends Component<LazyLoadBoundaryProps, LazyLoadBoundaryState> {
+  state: LazyLoadBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): LazyLoadBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    reportClientError(error, info);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className={`${this.props.className} lazy-load-error`} role="alert">
+        <span>Could not open {this.props.label}.</span>
+        <button type="button" className="lazy-load-reload" onClick={() => window.location.reload()}>
+          Reload
+        </button>
+      </div>
+    );
+  }
 }
 
 /**
@@ -33,22 +98,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     this.setState({ componentStack: info.componentStack ?? null });
-    // Fire-and-forget — we don't want a logging failure to mask the
-    // underlying render error. Server logs this at warn level so
-    // it shows up next to fs / sync warnings, where the developer
-    // is already looking.
-    void fetch('/api/log/client-error', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        message: error.message,
-        stack: error.stack ?? null,
-        componentStack: info.componentStack ?? null,
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        at: new Date().toISOString(),
-      }),
-    }).catch(() => { /* swallow */ });
+    reportClientError(error, info);
   }
 
   reset = () => window.location.reload();
@@ -85,4 +135,20 @@ export class ErrorBoundary extends Component<Props, State> {
       </div>
     );
   }
+}
+
+function reportClientError(error: Error, info: ErrorInfo): void {
+  // Fire-and-forget so a logging failure never masks the renderer error.
+  void fetch('/api/log/client-error', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      message: error.message,
+      stack: error.stack ?? null,
+      componentStack: info.componentStack ?? null,
+      url: window.location.href,
+      userAgent: navigator.userAgent,
+      at: new Date().toISOString(),
+    }),
+  }).catch(() => { /* swallow */ });
 }

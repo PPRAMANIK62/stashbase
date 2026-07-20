@@ -276,8 +276,8 @@ Review invariants:
 
 ## 8.3 Built-in Codex process lifecycle
 
-- Each live Codex chat session owns one app-server process and one persistent thread. The session runtime creates the process lazily before the first turn, correlates turns and interrupts, and closes pending RPC work before terminating the process (`server/codex-session-runtime.ts:57-167`, `server/codex-session-runtime.ts:599-624`).
-- Live sessions and history clients share `CodexRpcPeer`. It owns request ids, pending response correlation, optional deadlines, inbound request/notification dispatch, and rejection of pending work on close (`server/codex-rpc-transport.ts:20-115`). The process adapters own stdin/stdout and process exit; the RPC module does not spawn or retain child processes.
+- Each live Codex chat session owns one app-server process and one persistent thread. The process is created lazily before the first turn; the session owns turn and interrupt state, and disposal rejects pending RPC work before terminating the process (`server/codex-session-runtime.ts:57-319`, `server/codex-session-runtime.ts:599-624`).
+- Live sessions and history clients share request correlation and inbound dispatch without sharing process ownership (`server/codex-rpc-transport.ts:20-115`). Their adapters independently own stdin/stdout and process exit (`server/codex-session-runtime.ts:127-167`, `server/codex-history.ts:62-168`). Module placement is described in [architecture §8](architecture.md#8-built-in-agent-panel).
 - History calls share one app-server client per filesystem comparison identity. Active calls increment a reference count; the client stays warm for 15 seconds after the final call, then terminates. Closed clients and transport failures are evicted immediately, so later calls create a fresh process (`server/codex-history.ts:166-221`).
 
 Review invariants:
