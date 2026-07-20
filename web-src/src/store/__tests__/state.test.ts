@@ -42,6 +42,7 @@ test('document tab lifecycle reuses a blank tab and selects a neighbor on close'
   const firstId = state.activeTabId!;
   assert.equal(state.tabs.length, 1);
   assert.equal(state.tabs[0].preview, true);
+  assert.equal(state.tabs[0].editMode, true);
   assert.equal(state.selectedPath, 'one.md');
 
   state = reducer(state, { type: 'NEW_TAB' });
@@ -57,6 +58,14 @@ test('document tab lifecycle reuses a blank tab and selects a neighbor on close'
   state = reducer(state, { type: 'CLOSE_TAB', id: blankId });
   assert.equal(state.activeTabId, firstId);
   assert.equal(state.selectedPath, 'one.md');
+});
+
+test('only Markdown files enter Live Editing when opened', () => {
+  const state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'page.html', format: 'html', content: '<p>read only</p>' },
+  });
+  assert.equal(state.tabs[0].editMode, false);
 });
 
 test('folder path remap updates files, tabs, expansion, focus, and manual order together', () => {

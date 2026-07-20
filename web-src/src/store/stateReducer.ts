@@ -99,6 +99,7 @@ export function reducer(s: State, a: Action): State {
       if (a.newTab || s.activeTabId == null || !getActiveTab(s)) {
         const tab = makeTab();
         tab.file = file;
+        tab.editMode = file.format === 'md';
         tab.preview = a.preview ?? false;
         return {
           ...s,
@@ -110,7 +111,7 @@ export function reducer(s: State, a: Action): State {
       return {
         ...patchActiveTab(s, {
           file,
-          editMode: false,
+          editMode: file.format === 'md',
           saveStatus: { text: '', cls: '' },
           pendingAnchor: null,
           pendingHighlight: null,

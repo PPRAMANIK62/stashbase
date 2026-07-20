@@ -42,10 +42,12 @@ import { useApp, type MatchInfo } from '../store/AppContext';
 export function CodeEditor({
   name,
   initialContent,
+  active,
   onChange,
 }: {
   name: string;
   initialContent: string;
+  active: boolean;
   onChange?: (doc: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -130,31 +132,8 @@ export function CodeEditor({
       parent: host,
     });
     viewRef.current = view;
-    actions.registerEditor({
-      getValue: () => view.state.doc.toString(),
-      focus: () => view.focus(),
-    });
-    actions.registerFindController({
-      setQuery: (q, opts) => applyEditorQuery(view, q, opts.wholeWord, opts.caseSensitive),
-      next: () => { findNext(view); return matchInfoFor(view); },
-      prev: () => { findPrevious(view); return matchInfoFor(view); },
-      close: () => {
-        view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: '' })) });
-      },
-    });
-    // If the find bar is already open when this view mounts (e.g. the
-    // user switched tabs while it was visible), re-apply the active
-    // query against the freshly mounted document so the count + first
-    // match update immediately.
-    const snap = findAtMount.current;
-    if (snap.open && snap.query) {
-      applyEditorQuery(view, snap.query, snap.wholeWord, snap.caseSensitive);
-    }
-    if (!renamingAtMountRef.current) view.focus();
 
     return () => {
-      actions.registerFindController(null);
-      actions.registerEditor(null);
       view.destroy();
       viewRef.current = null;
     };
@@ -163,14 +142,39 @@ export function CodeEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name]);
 
+  // Every Markdown tab stays mounted so CodeMirror retains its cursor,
+  // scroll position, and undo history. Only the visible tab owns the shared
+  // persistence and Find handles.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!active || !view) return;
+    actions.registerEditor({
+      getValue: () => view.state.doc.toString(),
+      focus: () => view.focus(),
+    });
+    actions.registerFindController({
+      setQuery: (q, opts) => applyEditorQuery(view, q, opts.wholeWord, opts.caseSensitive),
+      next: () => { findNext(view); return matchInfoFor(view); },
+      prev: () => { findPrevious(view); return matchInfoFor(view); },
+      close: () => view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: '' })) }),
+    });
+    const snap = findAtMount.current;
+    if (snap.open && snap.query) applyEditorQuery(view, snap.query, snap.wholeWord, snap.caseSensitive);
+    if (!renamingAtMountRef.current) view.focus();
+    return () => {
+      actions.registerFindController(null);
+      actions.registerEditor(null);
+    };
+  }, [active, actions]);
+
   // Re-focus the editor when an inline rename ends (commit or cancel).
   useEffect(() => {
     const isRenaming = state.renaming != null;
-    if (prevRenamingRef.current && !isRenaming) {
+    if (active && prevRenamingRef.current && !isRenaming) {
       viewRef.current?.focus();
     }
     prevRenamingRef.current = isRenaming;
-  }, [state.renaming]);
+  }, [active, state.renaming]);
 
   // Chunk-highlight after a SearchHit click. We pick the line range
   // (1-based) from pendingHighlight, then dispatch a scroll + select
@@ -178,7 +182,7 @@ export function CodeEditor({
   // Sufficient for V1; a fading line decoration is V2.
   const pendingHighlight = state.tabs.find((t) => t.id === state.activeTabId)?.pendingHighlight ?? null;
   useEffect(() => {
-    if (!pendingHighlight?.startLine) return;
+    if (!active || !pendingHighlight?.startLine) return;
     const view = viewRef.current;
     if (!view) return;
     const startLine = Math.max(1, Math.min(view.state.doc.lines, pendingHighlight.startLine));
@@ -190,7 +194,7 @@ export function CodeEditor({
       effects: EditorView.scrollIntoView(from, { y: 'center' }),
     });
     actions.consumePendingHighlight();
-  }, [pendingHighlight, actions]);
+  }, [active, pendingHighlight, actions]);
 
   return <div ref={hostRef} style={{ height: '100%' }} />;
 }

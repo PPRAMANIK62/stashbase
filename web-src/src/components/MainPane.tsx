@@ -88,23 +88,25 @@ export function MainPane() {
           // Images, like PDFs, are binary — no edit mode.
           <ImagePreview name={cur.name} />
         )}
-        {cur && editMode && cur.format === 'md' && (
-          // Markdown is the only editable format — HTML/PDF/image/DOCX are
-          // read-only viewers. The editor is a single CodeMirror pane
-          // (no source+preview split); save is scheduled on every edit.
-          <div className="md-editor">
-            <LazyLoadBoundary className="doc-loading" label="Markdown editor" resetKey={resourceResetKey}>
-              <Suspense fallback={<div className="doc-loading">Loading editor…</div>}>
-                <LazyCodeEditor
-                  key={cur.name}
-                  name={cur.name}
-                  initialContent={cur.content}
-                  onChange={() => actions.scheduleSave()}
-                />
-              </Suspense>
-            </LazyLoadBoundary>
-          </div>
-        )}
+        {state.tabs.map((tab) => {
+          const file = tab.file;
+          if (!file || file.format !== 'md') return null;
+          const visible = tab.id === activeTab?.id && tab.editMode;
+          return (
+            <div key={tab.id} className="md-editor" hidden={!visible}>
+              <LazyLoadBoundary className="doc-loading" label="Markdown editor" resetKey={`${file.name}:${file.version ?? ''}`}>
+                <Suspense fallback={<div className="doc-loading">Loading editor…</div>}>
+                  <LazyCodeEditor
+                    name={file.name}
+                    initialContent={file.content}
+                    active={visible}
+                    onChange={() => actions.scheduleSave()}
+                  />
+                </Suspense>
+              </LazyLoadBoundary>
+            </div>
+          );
+        })}
       </div>
       {emptyTab && (
         <div className="main-breadcrumb empty">
@@ -122,7 +124,7 @@ export function MainPane() {
           <button
             className={'icon-btn edit-toggle' + (editMode ? ' editing' : '')}
             type="button"
-            title={editMode ? 'Preview (read-only)' : 'Edit'}
+            title={editMode ? 'Reading View' : 'Live Editing'}
             onClick={() => { void actions.toggleEditMode(); }}
           >
             <EditIcon className="icon-edit" />
