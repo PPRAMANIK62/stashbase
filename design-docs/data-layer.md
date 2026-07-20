@@ -45,7 +45,7 @@ Completion is format-specific. A file or row existing somewhere is not always en
 
 ## Markdown
 
-Markdown is complete when the source file exists and is readable. It is indexed directly from the source file.
+Markdown is complete when the source file exists and is readable. It is indexed directly from the source file. The editor loads a canonical no-BOM/LF presentation without writing the source; an edited save restores the source's UTF-8 BOM presence and uniform LF or CRLF convention. A mixed-ending source adopts its dominant convention only when an edit is saved. Raw HTML, frontmatter, malformed Markdown, and unsupported syntax remain opaque source text throughout this path.
 
 ## HTML
 
