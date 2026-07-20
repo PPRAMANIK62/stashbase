@@ -123,7 +123,7 @@ test('loading a different folder clears stale search state', () => {
     activeSidebarView: 'search',
     filterQuery: 'needle',
     searching: true,
-    searchHits: [{ fileName: 'old.md', score: 1, chunk: 'old' }],
+    searchHits: [{ fileName: 'old.md', chunkIndex: 0, content: 'old', heading: '', score: 1 }],
     searchError: 'stale',
   });
   const next = reducer(state, {

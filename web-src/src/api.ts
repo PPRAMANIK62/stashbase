@@ -23,6 +23,7 @@ import type {
 } from './apiTypes';
 import {
   encodePath,
+  getWindowId,
   getJson,
   head,
   parseJsonOrThrow,
