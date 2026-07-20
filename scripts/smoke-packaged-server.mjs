@@ -246,9 +246,21 @@ async function assertPackagedRendererWorkers(port) {
     throw new Error(`packaged renderer entry is unavailable: status=${page.statusCode}`);
   }
   const entry = await requestText(port, entryPath, 5_000);
-  const workerName = entry.body.match(/docxPreview\.worker-[A-Za-z0-9_-]+\.js/)?.[0];
-  if (!entry.ok || entry.statusCode !== 200 || !workerName) {
-    throw new Error(`packaged renderer does not reference the DOCX worker: status=${entry.statusCode}`);
+  if (!entry.ok || entry.statusCode !== 200) {
+    throw new Error(`packaged renderer entry is unavailable: status=${entry.statusCode}`);
+  }
+
+  let workerName = entry.body.match(/\bdocxPreview\.worker-[A-Za-z0-9_-]+\.js\b/)?.[0];
+  if (!workerName) {
+    const docxChunkName = entry.body.match(/\bDocxPreview-[A-Za-z0-9_-]+\.js\b/)?.[0];
+    if (!docxChunkName) {
+      throw new Error('packaged renderer does not reference the DOCX preview chunk');
+    }
+    const docxChunk = await requestText(port, `/assets/${docxChunkName}`, 5_000);
+    workerName = docxChunk.body.match(/\bdocxPreview\.worker-[A-Za-z0-9_-]+\.js\b/)?.[0];
+    if (!docxChunk.ok || docxChunk.statusCode !== 200 || !workerName) {
+      throw new Error(`packaged DOCX preview chunk does not reference its worker: status=${docxChunk.statusCode}`);
+    }
   }
   const worker = await requestText(port, `/assets/${workerName}`, 5_000);
   if (!worker.ok || worker.statusCode !== 200 || !/convertToHtml/.test(worker.body)) {
