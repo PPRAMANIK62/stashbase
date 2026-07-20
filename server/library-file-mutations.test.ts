@@ -17,6 +17,7 @@ test('MCP library mutations work outside an active folder and enforce versions',
   const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-library-mutations-'));
   const originalEnv = new Map(isolatedEnvNames.map((name) => [name, process.env[name]]));
   let clearCurrentFolder: (() => void) | undefined;
+  let closeStateDb: (() => void) | undefined;
   let server: HttpServer | undefined;
 
   t.after(async () => {
@@ -24,6 +25,7 @@ test('MCP library mutations work outside an active folder and enforce versions',
       await new Promise<void>((resolve) => server?.close(() => resolve()));
     }
     clearCurrentFolder?.();
+    closeStateDb?.();
     for (const [name, value] of originalEnv) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -42,13 +44,16 @@ test('MCP library mutations work outside an active folder and enforce versions',
     folder,
     libraryRoutes,
     mcpRoutes,
+    stateDb,
   ] = await Promise.all([
     import('express'),
     import('./folder.ts'),
     import('./routes/library-files.ts'),
     import('./routes/mcp-http.ts'),
+    import('./state-db.ts'),
   ]);
   clearCurrentFolder = folder.clearCurrentFolder;
+  closeStateDb = stateDb.closeStateDb;
 
   const root = path.join(testHome, 'Library Folder');
   const source = path.join(root, 'Drafts', 'Note.md');
