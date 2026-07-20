@@ -125,6 +125,18 @@ test('editable markdown keeps uniform LF and normalizes mixed endings only on sa
   }
 });
 
+test('editable markdown creates a new file with canonical source formatting', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-new-markdown-'));
+  try {
+    await runWithFolderRoot(root, async () => {
+      await saveFileContent('Drafts/Note.md', 'one\ntwo\n');
+    });
+    assert.equal(fs.readFileSync(path.join(root, 'Drafts', 'Note.md'), 'utf8'), 'one\ntwo\n');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('editable file writes apply portable path, hidden-derived, and format policy', () => {
   assert.doesNotThrow(() => validateEditableFileWrite("John's Notes.md"));
   assert.throws(() => validateEditableFileWrite('../escape.md'), /invalid segment/);

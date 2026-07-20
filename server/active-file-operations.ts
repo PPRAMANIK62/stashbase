@@ -31,13 +31,16 @@ export function readEditableText(relPath: string): string | null {
  * Unsupported syntax remains opaque text: the only serialization decisions
  * made here are BOM presence and line endings. */
 export function saveEditableText(relPath: string, content: string): void {
-  const target = resolveSafe(relPath, 'existing');
-  const existing = fs.readFileSync(target);
-  const hasBom = existing.length >= 3
+  const target = resolveSafe(relPath, 'creatable');
+  const existing = fs.existsSync(target)
+    ? fs.readFileSync(resolveSafe(relPath, 'existing'))
+    : null;
+  const hasBom = existing != null
+    && existing.length >= 3
     && existing[0] === 0xef
     && existing[1] === 0xbb
     && existing[2] === 0xbf;
-  const source = existing.toString('utf8').replace(/^\uFEFF/, '');
+  const source = existing?.toString('utf8').replace(/^\uFEFF/, '') ?? '';
   const lineEnding = preferredLineEnding(source);
   const canonical = content.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   saveBytes(relPath, Buffer.from((hasBom ? '\uFEFF' : '') + canonical.replace(/\n/g, lineEnding), 'utf8'));
