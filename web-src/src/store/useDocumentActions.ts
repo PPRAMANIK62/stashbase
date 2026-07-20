@@ -1,6 +1,6 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { api, ApiError } from '../api';
-import type { EditorHandle } from './actionTypes';
+import type { EditorHandle, EditorSession } from './actionTypes';
 import {
   isFolderFileTab,
   keywordFindCaseSensitive,
@@ -19,6 +19,7 @@ interface DocumentActionRefs {
   editor: MutableRefObject<EditorHandle | null>;
   saveTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   saveInFlight: MutableRefObject<Promise<boolean> | null>;
+  editorSessions: MutableRefObject<Map<string, EditorSession>>;
 }
 
 interface DocumentActionDependencies {
@@ -39,7 +40,7 @@ export function useDocumentActions(
   dependencies: DocumentActionDependencies,
   dispatch: Dispatch,
 ) {
-  const { editor, saveInFlight, saveTimer, state } = refs;
+  const { editor, editorSessions, saveInFlight, saveTimer, state } = refs;
   const { loadFiles, refreshIndexState, toast, primeFind } = dependencies;
 
   const flushSave = useCallback(async () => {
@@ -59,8 +60,10 @@ export function useDocumentActions(
       const tabId = tabAtStart?.id ?? null;
       const handle = editor.current;
       if (!currentFile || !handle) return true;
+      if (!tabAtStart?.dirty) return true;
       const content = handle.getValue();
       if (content === currentFile.content) {
+        dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
         return true;
       }
@@ -68,19 +71,19 @@ export function useDocumentActions(
       const saveContent = async (baseVersion?: string) => {
         const result = await api.putFile(currentFile.name, content, baseVersion);
         if (result.indexWarning) toast(result.indexWarning, { level: 'warning' });
-        return result.version;
+        return result;
       };
       try {
-        let savedVersion: string | undefined;
+        let savedResult: Awaited<ReturnType<typeof saveContent>>;
         try {
-          savedVersion = await saveContent(currentFile.version);
+          savedResult = await saveContent(currentFile.version);
         } catch (err: unknown) {
           if (!(err instanceof ApiError && err.status === 409)) throw err;
           const latestTab = getActiveTab(state.current);
           const sameTab = latestTab?.id === tabId && latestTab.file?.name === currentFile.name;
           const liveValue = editor.current?.getValue();
           if (!sameTab || liveValue !== content) return false;
-          savedVersion = await saveContent(undefined);
+          savedResult = await saveContent(undefined);
           toast('Saved over a newer disk copy from sync.', { level: 'info' });
         }
         const latestTab = getActiveTab(state.current);
@@ -88,8 +91,9 @@ export function useDocumentActions(
         if (!sameTab) return true;
 
         const liveValue = editor.current?.getValue();
-        dispatch({ type: 'FILE_PATCH', patch: { content, version: savedVersion } });
+        dispatch({ type: 'FILE_PATCH', patch: { content: savedResult.content, version: savedResult.version } });
         if (liveValue === content) {
+          dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
           dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
         } else {
           dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
@@ -118,6 +122,7 @@ export function useDocumentActions(
   }, [dispatch, editor, loadFiles, saveInFlight, saveTimer, state, toast]);
 
   const scheduleSave = useCallback(() => {
+    dispatch({ type: 'DOCUMENT_DIRTY', dirty: true });
     dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
@@ -309,6 +314,11 @@ export function useDocumentActions(
     editor.current = handle;
   }, [editor]);
 
+  const getEditorSession = useCallback((tabId: string) => editorSessions.current.get(tabId), [editorSessions]);
+  const setEditorSession = useCallback((tabId: string, session: EditorSession) => {
+    editorSessions.current.set(tabId, session);
+  }, [editorSessions]);
+
   return {
     activateTab,
     closeActiveTab,
@@ -320,10 +330,11 @@ export function useDocumentActions(
     newTab,
     openInNewTab,
     registerEditor,
+    getEditorSession,
+    setEditorSession,
     scheduleSave,
     selectFile,
     selectFileWithHighlight,
     toggleEditMode,
   };
 }
-
