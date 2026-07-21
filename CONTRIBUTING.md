@@ -4,10 +4,10 @@ Thanks for helping improve StashBase. Small focused PRs are easiest to review. F
 
 Good places to start:
 
-- [Roadmap and contribution areas](design-docs/roadmap.md)
+- [Design docs guide and contribution areas](design-docs/README.md)
 - [Architecture](design-docs/architecture.md)
-- [Markdown rendering](design-docs/markdown-rendering.md)
-- [Agent panel design](design-docs/agent-panel.md)
+- [Markdown design](design-docs/design/markdown.md)
+- [Agent panel design](design-docs/design/agent-panel.md)
 
 ## Local Development
 

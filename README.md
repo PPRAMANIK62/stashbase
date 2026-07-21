@@ -89,7 +89,7 @@ Some local formats are awkward for Agents to read directly. StashBase keeps the 
 | Images | Original image stays on disk | OCR text extracted for search |
 | Audio | Original audio stays on disk | Transcribed locally to timestamped Markdown |
 
-For PDF, DOCX, and audio, Agents read the derived text while the original remains the visible source file. Audio plays directly when supported and gets a local compatible preview otherwise. Large drag imports stream to disk instead of being held in renderer memory. See [architecture](design-docs/architecture.md) for the format data paths.
+For PDF, DOCX, and audio, Agents read derived text while the original remains the visible source file. Audio plays directly when supported and gets a local compatible preview otherwise. Large drag imports stream to disk instead of being held in renderer memory. See [Architecture](design-docs/architecture.md) and [Preparation](design-docs/design/preparation.md) for the product and system contracts.
 
 ### Index
 
@@ -229,12 +229,14 @@ Removing a folder from the library clears StashBase's app-owned state for that f
 
 ## Design Docs
 
-The design docs are the source of truth for how the product is supposed to work:
+The design docs explain the product intent, system contracts, and contribution
+areas without duplicating the source tree:
 
-- [Overview](design-docs/overview.md) - product motivation and principles
-- [Architecture](design-docs/architecture.md) - system shape and module boundaries
-- [Data Layer](design-docs/data-layer.md) - correctness, recovery, cleanup, and liveness rules
-- [Roadmap](design-docs/roadmap.md) - future contribution areas and design priorities
+- [Design docs guide](design-docs/README.md) - contribution map and maintenance rules
+- [Overview](design-docs/overview.md) - product thesis
+- [Principles](design-docs/principles.md) - durable decision rules
+- [Architecture](design-docs/architecture.md) - system boundaries and invariants
+- [Product direction](design-docs/product-direction.md) - intended product shape
 
 ---
 
