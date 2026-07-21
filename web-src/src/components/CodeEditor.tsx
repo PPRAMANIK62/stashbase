@@ -23,7 +23,12 @@ import {
 } from '@codemirror/search';
 import { markdown as mdLang, markdownLanguage } from '@codemirror/lang-markdown';
 import { useApp, type MatchInfo } from '../store/AppContext';
-import { liveMarkdownProjection, toggleMarkdownEmphasis, toggleMarkdownStrong } from './liveMarkdown';
+import {
+  liveMarkdownCompositionGuard,
+  liveMarkdownProjection,
+  toggleMarkdownEmphasis,
+  toggleMarkdownStrong,
+} from './liveMarkdown';
 
 /**
  * CodeMirror 6 host. Mounts a CM EditorView into a div the first time,
@@ -85,6 +90,7 @@ export function CodeEditor({
       bracketMatching(),
       indentOnInput(),
       EditorView.lineWrapping,
+      liveMarkdownCompositionGuard,
       liveMarkdownProjection,
       highlightSelectionMatches(),
       // search() owns the SearchQuery state + match decorations even

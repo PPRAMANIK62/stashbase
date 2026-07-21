@@ -9,6 +9,10 @@ import { applyEditorQuery } from '../components/CodeEditor.tsx';
 import {
   describeLiveMarkdownProjection,
   hiddenMarkdownMarkupRanges,
+  isLiveMarkdownComposition,
+  liveMarkdownCompositionGuard,
+  setLiveMarkdownComposition,
+  shouldRefreshLiveMarkdownProjection,
   toggleMarkdownEmphasis,
   toggleMarkdownStrong,
 } from '../components/liveMarkdown.ts';
@@ -90,6 +94,56 @@ test('inactive Markdown constructs hide only recognized syntax and reveal every 
     { from: 14, to: 18 },
     { from: 25, to: 29 },
   ]);
+});
+
+test('Live projection limits work to visible parsed ranges and falls back to source while composing', () => {
+  const lines = Array.from({ length: 400 }, (_, index) => `# Heading ${index}\n\nparagraph ${index}`);
+  const doc = lines.join('\n\n');
+  const target = doc.indexOf('# Heading 0');
+  const state = markdownState(doc, { anchor: target + 3 });
+
+  const visible = describeLiveMarkdownProjection(state, {
+    ranges: [{ from: target, to: target + 24 }],
+  });
+  assert.deepEqual(visible.map(({ kind, from }) => ({ kind, from })), [{ kind: 'heading', from: target }]);
+
+  const composing = describeLiveMarkdownProjection(state, {
+    ranges: [{ from: target, to: target + 24 }],
+    sourceFallbackRanges: [{ from: target, to: target + 12 }],
+  });
+  assert.deepEqual(composing, []);
+
+  assert.deepEqual(describeLiveMarkdownProjection(state, { ranges: [] }), []);
+});
+
+test('Live projection starts and ends source fallback through composition lifecycle effects', () => {
+  let state = EditorState.create({ extensions: [liveMarkdownCompositionGuard] });
+  const view = { get state() { return state; }, compositionStarted: false } as Pick<EditorView, 'state' | 'compositionStarted'>;
+  assert.equal(isLiveMarkdownComposition(view), false);
+
+  state = state.update({ effects: setLiveMarkdownComposition.of(true) }).state;
+  assert.equal(isLiveMarkdownComposition(view), true);
+
+  state = state.update({ effects: setLiveMarkdownComposition.of(false) }).state;
+  assert.equal(isLiveMarkdownComposition(view), false);
+});
+
+test('Live projection refreshes after a background parse-tree update', () => {
+  assert.equal(shouldRefreshLiveMarkdownProjection({
+    docChanged: false,
+    selectionSet: false,
+    viewportChanged: false,
+    treeChanged: true,
+  }), true);
+});
+
+test('Live projection keeps RTL source offsets and cross-direction selections authoritative', () => {
+  const doc = 'قبل **مهم** אחרי';
+  const start = doc.indexOf('**');
+  const state = markdownState(doc, { anchor: start + 3, head: start + 7 });
+  const projection = describeLiveMarkdownProjection(state);
+  assert.deepEqual(projection, [{ kind: 'strong', from: start, to: start + 7, active: true }]);
+  assert.equal(state.doc.toString(), doc);
 });
 
 test('Markdown strong and emphasis commands wrap, toggle, insert pairs, and undo as one edit', () => {
