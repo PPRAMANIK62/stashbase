@@ -23,15 +23,20 @@
  */
 
 import {
+  AUDIO_SOURCE_EXTENSIONS,
   AUDIO_SOURCE_EXTENSION_ALTERNATION,
   CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION,
+  DOCX_EXTENSIONS,
   DOCX_EXTENSION_ALTERNATION,
   HTML_NOTE_EXTENSIONS,
+  IMAGE_SOURCE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSION_ALTERNATION,
   LEGACY_DERIVED_SOURCE_EXTENSIONS,
   MARKDOWN_NOTE_EXTENSIONS,
+  PDF_EXTENSIONS,
   PDF_EXTENSION_ALTERNATION,
 } from '../shared/file-formats.ts';
+import { SEARCH_TYPE_CATEGORIES, type SearchTypeCategory } from '../shared/search-types.ts';
 
 /** Structured note formats — indexed directly (the file is the source). */
 export type FileFormat = 'md' | 'html';
@@ -148,6 +153,32 @@ export function isConvertibleSource(name: string): boolean {
   if (!CONVERTIBLE_SOURCE_PATTERN.test(base)) return false;
   // Office lock files share the `.docx` suffix but are never user documents.
   return !DOCX_PATTERN.test(base) || isDocxFile(base);
+}
+
+const SEARCH_TYPE_EXTENSIONS: Record<SearchTypeCategory, readonly string[]> = {
+  notes: NOTE_EXTS,
+  pdf: PDF_EXTENSIONS,
+  image: IMAGE_SOURCE_EXTENSIONS,
+  docx: DOCX_EXTENSIONS,
+  audio: AUDIO_SOURCE_EXTENSIONS,
+};
+
+/** Lowercase dot-prefixed source extensions for a set of search
+ *  categories. Returns null when the set is empty or covers every
+ *  category — both mean "no extension filter". */
+export function searchExtensionsForTypes(types: readonly SearchTypeCategory[]): string[] | null {
+  const unique = [...new Set(types)];
+  if (unique.length === 0 || unique.length === SEARCH_TYPE_CATEGORIES.length) return null;
+  return unique.flatMap((t) => SEARCH_TYPE_EXTENSIONS[t].map((ext) => `.${ext}`));
+}
+
+/** True when `name`'s extension belongs to one of the given categories. */
+export function matchesSearchTypes(name: string, types: readonly SearchTypeCategory[]): boolean {
+  if (types.length === 0) return true;
+  const exts = searchExtensionsForTypes(types);
+  if (exts == null) return true;
+  const lower = name.toLowerCase();
+  return exts.some((ext) => lower.endsWith(ext));
 }
 
 function pathBasename(name: string): string {

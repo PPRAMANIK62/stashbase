@@ -14,6 +14,7 @@ import {
 } from './state';
 import type { ToastOptions } from './useFeedbackActions';
 import { hasAggregatePreparationFailure } from './fileReadiness';
+import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 
 const SEMANTIC_SEARCH_CANDIDATES = 30;
 const POLL_PENDING_MS = 1500;
@@ -337,7 +338,12 @@ export function useSearchActions(
   const runSearch = useCallback(async (
     query: string,
     modeOverride?: 'semantic' | 'keyword',
-    opts?: { caseStrict?: boolean; wholeWord?: boolean },
+    opts?: {
+      caseStrict?: boolean;
+      wholeWord?: boolean;
+      scope?: string | null;
+      types?: SearchTypeCategory[];
+    },
   ) => {
     const myGen = ++searchGen.current;
     const q = query.trim();
@@ -361,10 +367,13 @@ export function useSearchActions(
         // process-wide `currentFolder` singleton, which would pick the
         // wrong folder in multi-window sessions.
         const s = stateRef.current;
+        const scope = opts?.scope !== undefined ? opts.scope : s.searchScope;
         const result = await api.keywordSearch(q, {
           caseStrict: opts?.caseStrict ?? s.caseStrict,
           wholeWord: opts?.wholeWord ?? s.wholeWord,
           folder: folderPathAtStart || undefined,
+          pathPrefix: scope ?? undefined,
+          types: opts?.types ?? s.searchTypes,
         });
         if (isStaleSearch()) return;
         dispatch({ type: 'SEARCH_KEYWORD', result });
@@ -379,8 +388,12 @@ export function useSearchActions(
           });
           return;
         }
+        const s = stateRef.current;
+        const scope = opts?.scope !== undefined ? opts.scope : s.searchScope;
         const { hits } = await api.search(q, SEMANTIC_SEARCH_CANDIDATES, {
           folder: folderPathAtStart || undefined,
+          pathPrefix: scope ?? undefined,
+          types: opts?.types ?? s.searchTypes,
         });
         if (isStaleSearch()) return;
         dispatch({ type: 'SEARCH_HITS', hits: filterGuiSemanticHits(hits) });
