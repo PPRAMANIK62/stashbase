@@ -26,12 +26,14 @@ The implementation is split across these renderer modules:
 
 `server/format.ts` maps both `md` and `markdown` extensions to the `md` format. `GET /api/files/*` accepts Markdown and HTML note paths, reads their source bytes as text, and returns `{ name, format, content, version }`. Binary bundle assets are rejected by that route and remain available only through `/asset/*`.
 
-`AppContext.loadFile()` calls `api.getFile(name)` for Markdown files and stores the returned source content in the open tab. `MainPane` selects between two mutually exclusive Markdown surfaces:
+`AppContext.loadFile()` calls `api.getFile(name)` for Markdown files and stores the returned source content in the open tab. New Markdown tabs enter **Live Editing** by default; the only alternative is explicit **Reading View**. `MainPane` selects between those two mutually exclusive Markdown surfaces:
 
-- When the tab is not in edit mode, `MainPane` mounts `MarkdownPreview` with the file's folder-relative name and source content.
-- When the tab is in edit mode, `MainPane` mounts the single-pane CodeMirror `CodeEditor`.
+- In Reading View, `MainPane` mounts `MarkdownPreview` with the file's folder-relative name and saved source content.
+- In Live Editing, `MainPane` mounts the single-pane CodeMirror `CodeEditor`.
 
-The edit/preview toggle flushes any pending save before leaving edit mode. There is no split source/preview surface and no live-preview renderer.
+The mode control flushes a pending save before entering Reading View. A failed save leaves the tab and its buffer in Live Editing. Returning to Live Editing restores that tab's CodeMirror cursor, selection, scroll position, and undo/redo history; sessions are independent per tab, survive path renames, and are invalidated when a tab is assigned another document, when a clean tab receives an external source update, or when it is closed. There is no split source/preview surface and no separate source-editing mode.
+
+Live Editing is a CodeMirror syntax-tree projection over the same Markdown buffer. Its internal rule registry owns parser-node recognition, source reveal ranges, inactive decorations, and optional semantic attributes for each supported construct. It uses the GFM parser so headings, emphasis, strong emphasis, strikethrough, inline code, and horizontal rules receive document typography while inactive. Their source markers are concealed only while a cursor or selection does not intersect the construct; intersecting any part reveals the complete construct source. Decoration work is bounded to CodeMirror's visible parsed ranges; no visible range means no projection work. A range that has not been parsed, is incomplete, malformed, or unrecognized remains ordinary editable source rather than forcing a synchronous full-document parse. During native IME composition, the projection is source-only from composition start through completion, so no replacement widget is rebuilt inside browser-owned composition DOM. The projection does not rewrite or offset the Markdown buffer. Cmd/Ctrl+B and Cmd/Ctrl+I are CodeMirror commands that respectively toggle strong emphasis and emphasis; each selected-text wrap/removal or empty-cursor paired insertion is one editor transaction. Future interactive widgets must retain exact source mapping, dispatch a normal undoable editor transaction, expose an accessible keyboard interaction, and use source fallback when they cannot preserve those guarantees.
 
 ## 3. Render pipeline
 
@@ -232,9 +234,11 @@ The application's global drag/drop path receives that event and processes it the
 Markdown preview is a renderer-only projection of the current source content:
 
 - Editing happens only in CodeMirror and saves source Markdown through `/api/files/*`.
-- Leaving edit mode flushes the pending save before remounting preview.
+- Live Editing presentation is a renderer-only CodeMirror decoration layer derived from the Markdown syntax tree. It never serializes a display model back to Markdown; revealing syntax changes only ephemeral decorations, not the source buffer or selection offsets.
+- Entering Reading View flushes the pending save before remounting preview; a failed save keeps Live Editing mounted.
 - Preview HTML, generated heading IDs, injected styles, find styles, and highlight ranges are ephemeral and never written into the source file.
 - Source Markdown, not preview HTML, is the index input.
 - Search results refer back to the source Markdown path; pending anchors and chunk text are renderer navigation state stored on the open tab.
+- Loading, viewing, searching, or navigating away never writes a Markdown file. A clean Live Editing tab remains eligible for external-deletion pruning; only an edited buffer is retained for recovery. On an actual save, the server retains a source file's UTF-8 BOM presence and its uniform LF or CRLF convention; mixed endings use their dominant convention, and skips the write when that serialization is byte-identical to the source. Raw HTML, frontmatter, malformed Markdown, and unsupported syntax pass through the editor as source text rather than preview serialization.
 
 The parser, preview document, and iframe interactions are entirely renderer-side. The server participates only in source loading/saving and folder-scoped asset streaming.

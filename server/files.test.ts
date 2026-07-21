@@ -3,13 +3,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { EditorState } from '@codemirror/state';
 import {
   AUDIO_SOURCE_EXTENSIONS,
   DOCX_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS,
   PDF_EXTENSIONS,
 } from '../shared/file-formats.ts';
-import { validateEditableFileWrite } from './file-save.ts';
+import { saveFileContent, validateEditableFileWrite } from './file-save.ts';
 import { detectViewerFormat, isConvertibleSource } from './format.ts';
 import { runWithFolderRoot } from './folder.ts';
 import {

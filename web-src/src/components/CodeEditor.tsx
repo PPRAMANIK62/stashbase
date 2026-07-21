@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import {
   defaultKeymap,
   history,
@@ -8,11 +8,8 @@ import {
   indentWithTab,
 } from '@codemirror/commands';
 import {
-  syntaxHighlighting,
-  defaultHighlightStyle,
   bracketMatching,
   indentOnInput,
-  foldGutter,
 } from '@codemirror/language';
 import {
   searchKeymap,
@@ -24,8 +21,14 @@ import {
   findNext,
   findPrevious,
 } from '@codemirror/search';
-import { markdown as mdLang } from '@codemirror/lang-markdown';
+import { markdown as mdLang, markdownLanguage } from '@codemirror/lang-markdown';
 import { useApp, type MatchInfo } from '../store/AppContext';
+import {
+  liveMarkdownCompositionGuard,
+  liveMarkdownProjection,
+  toggleMarkdownEmphasis,
+  toggleMarkdownStrong,
+} from './liveMarkdown';
 
 /**
  * CodeMirror 6 host. Mounts a CM EditorView into a div the first time,
@@ -34,16 +37,19 @@ import { useApp, type MatchInfo } from '../store/AppContext';
  * prop-drilling refs around.
  *
  * Markdown is the only editable format, so the editor is md-only.
- * Editor identity is keyed by `name` — switching files destroys the
- * view + makes a new one (no state to migrate, the new content comes
- * in fresh). Initial content is read once from props at mount time and
- * never thereafter — CM owns the buffer.
+ * Editor identity is keyed by the tab plus its document generation, so
+ * replacing a tab's file starts fresh while renames preserve its state.
+ * Initial content is read once per document generation; CM owns it after.
  */
 export function CodeEditor({
+  tabId,
+  sessionVersion,
   name,
   initialContent,
   onChange,
 }: {
+  tabId: string;
+  sessionVersion: number;
   name: string;
   initialContent: string;
   onChange?: (doc: string) => void;
@@ -65,59 +71,60 @@ export function CodeEditor({
   // captures whatever's current at mount time). Refs side-step that.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  // Snapshot the find-bar state at mount time so a new editor view
-  // (tab/format switch with the bar already open) immediately
-  // re-applies the current query against the new buffer.
-  const findAtMount = useRef(state.find);
-  findAtMount.current = state.find;
-
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    const lang = mdLang({ addKeymap: false });
+    const lang = mdLang({ base: markdownLanguage, addKeymap: false });
     // Strip CM's built-in Cmd-F binding — we route Cmd+F to our own
     // FindBar component instead. Cmd-G / Shift-Cmd-G (find next/prev)
     // stay so the bar's hotkeys still work when focus is in the editor.
     const editorSearchKeymap = searchKeymap.filter((b) => b.key !== 'Mod-f');
-    const linkKeymap = [{ key: 'Mod-k', run: insertMarkdownLink }];
+    const writingKeymap = [
+      { key: 'Mod-b', run: toggleMarkdownStrong },
+      { key: 'Mod-i', run: toggleMarkdownEmphasis },
+      { key: 'Mod-k', run: insertMarkdownLink },
+    ];
     const extensions = [
-      lineNumbers(),
-      foldGutter(),
       history(),
       bracketMatching(),
       indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-      highlightActiveLine(),
       EditorView.lineWrapping,
+      liveMarkdownCompositionGuard,
+      liveMarkdownProjection,
       highlightSelectionMatches(),
       // search() owns the SearchQuery state + match decorations even
       // though we never call openSearchPanel — our FindBar drives it
       // imperatively via setSearchQuery / findNext / findPrevious.
       search(),
-      keymap.of([indentWithTab, ...linkKeymap, ...defaultKeymap, ...historyKeymap, ...editorSearchKeymap]),
+      keymap.of([indentWithTab, ...writingKeymap, ...defaultKeymap, ...historyKeymap, ...editorSearchKeymap]),
       EditorView.theme({
-        '&': { height: '100%', fontSize: '13px' },
+        '&': { height: '100%', fontSize: '16px' },
         '.cm-scroller': {
           fontFamily:
-            '"SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace',
-          lineHeight: '1.55',
+            'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          lineHeight: '1.7',
         },
         '.cm-line': {
           overflowWrap: 'anywhere',
         },
-        '.cm-content': { padding: '12px 0 12px 8px' },
-        '.cm-gutters': {
-          // Opaque so content scrolling horizontally doesn't show
-          // through the line-number column — matches `.md-editor`'s
-          // background (`var(--bg)`).
-          background: 'var(--bg)',
-          color: '#9aa0a6',
-          border: 'none',
-          padding: '0 8px 0 12px',
+        '.cm-content': { maxWidth: '820px', width: '100%', margin: '0 auto', padding: '32px 56px 80px' },
+        '.cm-live-heading': { fontWeight: '700', lineHeight: '1.25' },
+        '.cm-live-heading-1': { fontSize: '2em' },
+        '.cm-live-heading-2': { fontSize: '1.5em' },
+        '.cm-live-heading-3': { fontSize: '1.25em' },
+        '.cm-live-heading-4, .cm-live-heading-5, .cm-live-heading-6': { fontSize: '1.1em' },
+        '.cm-live-emphasis': { fontStyle: 'italic' },
+        '.cm-live-strong': { fontWeight: '700' },
+        '.cm-live-inline-code': {
+          fontFamily: '"SF Mono", "JetBrains Mono", Menlo, Consolas, monospace',
+          fontSize: '0.9em',
+          backgroundColor: 'rgba(175, 184, 193, 0.2)',
+          borderRadius: '4px',
+          padding: '0.1em 0.25em',
         },
-        '.cm-activeLine': { background: 'rgba(0,0,0,0.025)' },
-        '.cm-activeLineGutter': { background: 'transparent', color: '#5f6368' },
+        '.cm-live-strikethrough': { textDecoration: 'line-through' },
+        '.cm-live-horizontal-rule': { border: '0', borderTop: '1px solid #d0d7de', margin: '1.25em 0', width: '100%' },
       }),
       lang,
       EditorView.updateListener.of((u) => {
@@ -125,10 +132,16 @@ export function CodeEditor({
       }),
     ];
 
+    const session = actions.getEditorSession(tabId);
+    const savedSession = session?.version === sessionVersion ? session : undefined;
     const view = new EditorView({
-      state: EditorState.create({ doc: initialContent, extensions }),
+      state: savedSession?.state ?? EditorState.create({ doc: initialContent, extensions }),
       parent: host,
     });
+    if (savedSession) {
+      view.scrollDOM.scrollTop = savedSession.scrollTop;
+      view.scrollDOM.scrollLeft = savedSession.scrollLeft;
+    }
     viewRef.current = view;
     actions.registerEditor({
       getValue: () => view.state.doc.toString(),
@@ -136,32 +149,31 @@ export function CodeEditor({
     });
     actions.registerFindController({
       setQuery: (q, opts) => applyEditorQuery(view, q, opts.wholeWord, opts.caseSensitive),
+      restoreQuery: (q, opts) => applyEditorQuery(view, q, opts.wholeWord, opts.caseSensitive, false),
       next: () => { findNext(view); return matchInfoFor(view); },
       prev: () => { findPrevious(view); return matchInfoFor(view); },
       close: () => {
         view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: '' })) });
       },
     });
-    // If the find bar is already open when this view mounts (e.g. the
-    // user switched tabs while it was visible), re-apply the active
-    // query against the freshly mounted document so the count + first
-    // match update immediately.
-    const snap = findAtMount.current;
-    if (snap.open && snap.query) {
-      applyEditorQuery(view, snap.query, snap.wholeWord, snap.caseSensitive);
-    }
     if (!renamingAtMountRef.current) view.focus();
 
     return () => {
+      actions.setEditorSession(tabId, {
+        version: sessionVersion,
+        state: view.state,
+        scrollTop: view.scrollDOM.scrollTop,
+        scrollLeft: view.scrollDOM.scrollLeft,
+      });
       actions.registerFindController(null);
       actions.registerEditor(null);
       view.destroy();
       viewRef.current = null;
     };
-  // Mount once per file; initialContent and onChange are captured via
+  // Mount once per document generation; initialContent and onChange are captured via
   // refs so they don't trigger re-mounts.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name]);
+  }, [sessionVersion, tabId]);
 
   // Re-focus the editor when an inline rename ends (commit or cancel).
   useEffect(() => {
@@ -195,10 +207,16 @@ export function CodeEditor({
   return <div ref={hostRef} style={{ height: '100%' }} />;
 }
 
-/** Push a new SearchQuery and land selection on the first match at or
- *  after the current cursor. Returns the post-jump match info so the
- *  find bar's counter reflects the visible "N of M". */
-function applyEditorQuery(view: EditorView, q: string, wholeWord: boolean, caseSensitive: boolean): MatchInfo {
+/** Push a new SearchQuery and, for an interactive query, land selection on
+ * the first match at or after the current cursor. Restored sessions keep
+ * their saved selection while regaining query decorations and match counts. */
+export function applyEditorQuery(
+  view: EditorView,
+  q: string,
+  wholeWord: boolean,
+  caseSensitive: boolean,
+  selectMatch = true,
+): MatchInfo {
   const query = new SearchQuery({
     search: q,
     caseSensitive,
@@ -206,7 +224,7 @@ function applyEditorQuery(view: EditorView, q: string, wholeWord: boolean, caseS
     wholeWord,
   });
   view.dispatch({ effects: setSearchQuery.of(query) });
-  if (q && query.valid) findNext(view);
+  if (selectMatch && q && query.valid) findNext(view);
   return matchInfoFor(view);
 }
 
