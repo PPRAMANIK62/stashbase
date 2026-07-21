@@ -6,6 +6,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { search } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { applyEditorQuery } from '../components/CodeEditor.tsx';
+import { renderMarkdown } from '../markdown.ts';
 import {
   describeLiveMarkdownProjection,
   hiddenMarkdownMarkupRanges,
@@ -53,6 +54,65 @@ function testView(state: EditorState) {
     },
   } as unknown as EditorView;
 }
+
+test('Live Editing and Reading View share the supported Markdown construct subset', () => {
+  const doc = [
+    '# ATX heading',
+    '',
+    '## Second-level ATX heading',
+    '',
+    '### Third-level ATX heading',
+    '',
+    '#### Fourth-level ATX heading',
+    '',
+    '##### Fifth-level ATX heading',
+    '',
+    '###### Sixth-level ATX heading',
+    '',
+    'Setext level one heading',
+    '===',
+    '',
+    'Setext level two heading',
+    '---',
+    '',
+    '*emphasis* **strong** ~~strikethrough~~ `inline code`',
+    '',
+    '---',
+  ].join('\n');
+
+  const projectedKinds = new Set(
+    describeLiveMarkdownProjection(markdownState(doc, { anchor: doc.length }))
+      .map((construct) => construct.kind),
+  );
+  assert.deepEqual(projectedKinds, new Set([
+    'heading',
+    'emphasis',
+    'strong',
+    'strikethrough',
+    'inline-code',
+    'horizontal-rule',
+  ]));
+  assert.equal(
+    describeLiveMarkdownProjection(markdownState(doc, { anchor: doc.length }))
+      .filter((construct) => construct.kind === 'heading').length,
+    8,
+  );
+
+  const readingView = renderMarkdown(doc);
+  assert.match(readingView, /<h1 id="atx-heading">ATX heading<\/h1>/);
+  assert.match(readingView, /<h2 id="second-level-atx-heading">Second-level ATX heading<\/h2>/);
+  assert.match(readingView, /<h3 id="third-level-atx-heading">Third-level ATX heading<\/h3>/);
+  assert.match(readingView, /<h4 id="fourth-level-atx-heading">Fourth-level ATX heading<\/h4>/);
+  assert.match(readingView, /<h5 id="fifth-level-atx-heading">Fifth-level ATX heading<\/h5>/);
+  assert.match(readingView, /<h6 id="sixth-level-atx-heading">Sixth-level ATX heading<\/h6>/);
+  assert.match(readingView, /<h1 id="setext-level-one-heading">Setext level one heading<\/h1>/);
+  assert.match(readingView, /<h2 id="setext-level-two-heading">Setext level two heading<\/h2>/);
+  assert.match(readingView, /<em>emphasis<\/em>/);
+  assert.match(readingView, /<strong>strong<\/strong>/);
+  assert.match(readingView, /<del>strikethrough<\/del>/);
+  assert.match(readingView, /<code>inline code<\/code>/);
+  assert.match(readingView, /<hr\s*\/?>/);
+});
 
 test('inactive Markdown constructs hide only recognized syntax and reveal every intersected construct', () => {
   const doc = '# Heading *em* **strong** ~~strike~~ `code`\n\n---\n\n**open';
