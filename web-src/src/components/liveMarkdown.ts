@@ -2,7 +2,7 @@ import { syntaxTree } from '@codemirror/language';
 import { StateEffect, StateField, type EditorState } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, type ViewUpdate, ViewPlugin, WidgetType } from '@codemirror/view';
 
-type ConstructKind = 'heading' | 'emphasis' | 'strong' | 'strikethrough' | 'inline-code' | 'horizontal-rule';
+type ConstructKind = 'heading' | 'emphasis' | 'strong' | 'strikethrough' | 'inline-code' | 'horizontal-rule' | 'link';
 
 export type ProjectionRange = { from: number; to: number };
 
@@ -13,6 +13,12 @@ type Construct = {
   markers: ProjectionRange[];
   rule: ProjectionRule;
   level?: number;
+  link?: LiveMarkdownLink;
+};
+
+export type LiveMarkdownLink = {
+  label: string;
+  href: string;
 };
 
 type ProjectionRule = {
@@ -23,6 +29,8 @@ type ProjectionRule = {
   sourceRanges?: (state: EditorState, construct: Construct) => ProjectionRange[];
   decorations: (construct: Construct, active: boolean) => Decoration[];
 };
+
+export type LiveMarkdownLinkActivation = (link: LiveMarkdownLink) => void;
 
 export type LiveMarkdownProjection = Pick<Construct, 'kind' | 'from' | 'to'> & { active: boolean };
 
@@ -84,6 +92,13 @@ const horizontalRuleDecoration = Decoration.replace({ widget: new HorizontalRule
  */
 const projectionRules: readonly ProjectionRule[] = [
   {
+    kind: 'link',
+    nodeNames: ['Link'],
+    markerNames: [],
+    sourceRanges: (state, construct) => inlineLinkFor(state, construct) ? [{ from: construct.from, to: construct.to }] : [],
+    decorations: () => [],
+  },
+  {
     kind: 'heading',
     nodeNames: ['ATXHeading1', 'ATXHeading2', 'ATXHeading3', 'ATXHeading4', 'ATXHeading5', 'ATXHeading6', 'SetextHeading1', 'SetextHeading2'],
     markerNames: ['HeaderMark'],
@@ -137,6 +152,7 @@ export function describeLiveMarkdownProjection(
   const selection = state.selection.main;
   return collectConstructs(state, options.ranges)
     .filter((construct) => !intersectsAny(construct, options.sourceFallbackRanges))
+    .filter((construct) => construct.kind !== 'link' || !!inlineLinkFor(state, construct))
     .map((construct) => ({
       kind: construct.kind,
       from: construct.from,
@@ -148,12 +164,13 @@ export function describeLiveMarkdownProjection(
 /** A selection-aware, syntax-tree-derived presentation layer. It adds no
  * document changes: malformed or unsupported Markdown has no recognized tree
  * node and stays ordinary editable source. */
-export const liveMarkdownProjection = ViewPlugin.fromClass(class {
+export function createLiveMarkdownProjection(onLinkActivate: LiveMarkdownLinkActivation) {
+  return ViewPlugin.fromClass(class {
   decorations: DecorationSet;
   private composing = false;
 
   constructor(view: EditorView) {
-    this.decorations = buildDecorations(view);
+    this.decorations = buildDecorations(view, onLinkActivate);
   }
 
   update(update: ViewUpdate) {
@@ -173,13 +190,17 @@ export const liveMarkdownProjection = ViewPlugin.fromClass(class {
       viewportChanged: update.viewportChanged,
       treeChanged,
     })) {
-      this.decorations = buildDecorations(update.view);
+      this.decorations = buildDecorations(update.view, onLinkActivate);
     }
     this.composing = false;
   }
-}, {
-  decorations: (value) => value.decorations,
-});
+  }, {
+    decorations: (value) => value.decorations,
+  });
+}
+
+/** The default projection is kept for test and non-interactive callers. */
+export const liveMarkdownProjection = createLiveMarkdownProjection(() => {});
 
 export function toggleMarkdownStrong(view: EditorView): boolean {
   return toggleMarkdownDelimiter(view, '**', 'StrongEmphasis');
@@ -187,6 +208,37 @@ export function toggleMarkdownStrong(view: EditorView): boolean {
 
 export function toggleMarkdownEmphasis(view: EditorView): boolean {
   return toggleMarkdownDelimiter(view, '*', 'Emphasis');
+}
+
+/** Cmd/Ctrl+K is deliberately source-first: selection wrapping inserts a
+ * writable destination, an existing link selects its destination, and an
+ * empty cursor receives paired syntax with a writable label. */
+export function toggleMarkdownLink(view: EditorView): boolean {
+  const selection = view.state.selection.main;
+  const existing = enclosingConstruct(view.state, 'Link', selection.from, selection.to);
+  if (existing) {
+    const target = linkTargetRange(view.state, existing);
+    if (target) {
+      view.dispatch({ selection: { anchor: target.from, head: target.to } });
+      return true;
+    }
+  }
+  if (selection.empty) {
+    const inserted = '[link text](url)';
+    view.dispatch({
+      changes: { from: selection.from, insert: inserted },
+      selection: { anchor: selection.from + 1, head: selection.from + 'link text'.length + 1 },
+    });
+    return true;
+  }
+  const selected = view.state.sliceDoc(selection.from, selection.to);
+  const inserted = `[${selected}](url)`;
+  const targetFrom = selection.from + inserted.length - 'url)'.length;
+  view.dispatch({
+    changes: { from: selection.from, to: selection.to, insert: inserted },
+    selection: { anchor: targetFrom, head: targetFrom + 3 },
+  });
+  return true;
 }
 
 /** The explicit state effect covers the start/end events, while the view flag
@@ -204,12 +256,30 @@ export function shouldRefreshLiveMarkdownProjection(change: {
   return change.docChanged || change.selectionSet || change.viewportChanged || change.treeChanged;
 }
 
-function buildDecorations(view: EditorView): DecorationSet {
+function buildDecorations(view: EditorView, onLinkActivate: LiveMarkdownLinkActivation): DecorationSet {
   const state = view.state;
   const selection = state.selection.main;
   const markers: Array<{ from: number; to: number; decoration: Decoration }> = [];
-  for (const construct of collectConstructs(state, view.visibleRanges)) {
+  const constructs = collectConstructs(state, view.visibleRanges);
+  const inactiveLinks = constructs.filter((construct) => construct.kind === 'link'
+    && !intersectsSelection(construct, selection.from, selection.to)
+    && inlineLinkFor(state, construct));
+  for (const construct of constructs) {
+    // A presented link replaces its full source range. Nested presentation
+    // would make the source only partly visible when the link is activated.
+    if (construct.kind !== 'link' && inactiveLinks.some((link) => link.from <= construct.from && link.to >= construct.to)) continue;
     const active = intersectsSelection(construct, selection.from, selection.to);
+    if (construct.kind === 'link') {
+      const link = inlineLinkFor(state, construct);
+      if (!active && link) {
+        markers.push({
+          from: construct.from,
+          to: construct.to,
+          decoration: Decoration.replace({ widget: new LiveLinkWidget(construct.from, construct.to, link, onLinkActivate) }),
+        });
+      }
+      continue;
+    }
     for (const decoration of construct.rule.decorations(construct, active)) {
       markers.push({ from: construct.from, to: construct.to, decoration });
     }
@@ -221,6 +291,47 @@ function buildDecorations(view: EditorView): DecorationSet {
   }
   markers.sort((a, b) => a.from - b.from || b.to - a.to);
   return Decoration.set(markers.map(({ from, to, decoration }) => decoration.range(from, to)), true);
+}
+
+class LiveLinkWidget extends WidgetType {
+  constructor(
+    private readonly from: number,
+    private readonly to: number,
+    private readonly link: LiveMarkdownLink,
+    private readonly onActivate: LiveMarkdownLinkActivation,
+  ) { super(); }
+
+  eq(other: LiveLinkWidget) {
+    return this.from === other.from && this.to === other.to
+      && this.link.label === other.link.label && this.link.href === other.link.href;
+  }
+
+  toDOM(view: EditorView) {
+    const anchor = document.createElement('a');
+    anchor.className = 'cm-live-link';
+    anchor.href = this.link.href;
+    anchor.textContent = this.link.label;
+    anchor.setAttribute('aria-label', `Open link: ${this.link.label}`);
+    const activate = (event: MouseEvent | KeyboardEvent) => {
+      event.preventDefault();
+      if ((event instanceof MouseEvent && (event.metaKey || event.ctrlKey || event.detail === 0)) || event instanceof KeyboardEvent) {
+        this.onActivate(this.link);
+        return;
+      }
+      view.dispatch({ selection: { anchor: this.from, head: this.to } });
+      view.focus();
+    };
+    anchor.addEventListener('click', activate);
+    anchor.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') activate(event);
+    });
+    return anchor;
+  }
+
+  /** The editor's pointer-down selection handler would otherwise reveal and
+   * remove this widget before the subsequent Cmd/Ctrl click reaches the
+   * anchor. The widget itself owns both reveal and follow interactions. */
+  ignoreEvent() { return true; }
 }
 
 /** Returns source ranges that inactive constructs conceal. */
@@ -279,6 +390,7 @@ function collectConstructsInRange(state: EditorState, range: ProjectionRange, co
           };
           constructs.set(key, construct);
         }
+        if (rule.kind === 'link') construct.link = inlineLinkFor(state, construct) ?? undefined;
         stack.push(construct);
         return;
       }
@@ -291,6 +403,38 @@ function collectConstructsInRange(state: EditorState, range: ProjectionRange, co
       if (ruleByNodeName.has(node.name)) stack.pop();
     },
   });
+}
+
+function inlineLinkFor(state: EditorState, construct: Construct): LiveMarkdownLink | null {
+  const source = state.sliceDoc(construct.from, construct.to);
+  const match = /^\[([^\]\n]+)\]\(([^()\s]+)\)$/.exec(source);
+  if (!match) return null;
+  const [, label, href] = match;
+  return isSupportedLiveLinkTarget(href) ? { label, href } : null;
+}
+
+function isSupportedLiveLinkTarget(href: string) {
+  if (href.startsWith('#') || /\.(md|markdown|html|htm)(?:#.*)?$/i.test(href)) return true;
+  try {
+    const url = new URL(href);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname;
+  } catch {
+    return false;
+  }
+}
+
+function linkTargetRange(state: EditorState, link: ProjectionRange): ProjectionRange | null {
+  let target: ProjectionRange | null = null;
+  syntaxTree(state).iterate({
+    from: link.from,
+    to: link.to,
+    enter(node) {
+      if (node.name === 'URL' && node.from >= link.from && node.to <= link.to) {
+        target = { from: node.from, to: node.to };
+      }
+    },
+  });
+  return target;
 }
 
 function intersectsAny(construct: ProjectionRange, ranges: readonly ProjectionRange[] | undefined): boolean {
