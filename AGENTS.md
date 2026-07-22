@@ -1,24 +1,28 @@
 # Agent maintenance contract for this repo
 
-**Before writing code, consult `design-docs/` first** — especially:
-module placement and data flows → `architecture.md` (its module map marks
-🔴 files; touching one means reading the matching `data-layer.md` §8
-section first); anything about consistency, caches, or process lifecycle →
-`data-layer.md`. The docs encode constraints (context-free sync, hidden
-derived notes never surface, single-daemon ownership, …) that code review
-will enforce.
+**Before writing code, consult the relevant documents in `design-docs/` and
+`code-review/`.** `design-docs/` defines product intent, system boundaries,
+and contribution areas. `code-review/` preserves deeper engineering
+invariants, high-risk paths, and validation expectations for maintainers and
+AI reviewers. Neither folder replaces the codebase as the source of truth for
+the current implementation.
 
-You are responsible for keeping the relevant docs under `design-docs/` up to
-date. Update them as a side effect of relevant code changes — never as a
-standalone "documentation pass". If a change touches the surface area one of
-these docs covers, edit that doc in the same change.
+You are responsible for keeping the relevant docs under `design-docs/` and
+`code-review/` up to date. Update them as a side effect of relevant code
+changes — never as a standalone "documentation pass". If a change touches the
+surface area one of these docs covers, edit that doc in the same change.
 
-## The design docs are the source of truth
+## Documentation structure
 
 `design-docs/` is the single, committed home of the design docs — there is
 no external mirror to keep in sync. When you change behaviour, update the
 affected doc **in the same change** (see the development loop below); reading
 and writing them is purely local file work.
+
+`code-review/` is the committed home for maintainer-facing review contracts.
+Use it for implementation invariants, liveness rules, risky state machines,
+and validation expectations that are too detailed for contributor-facing
+design docs.
 
 Keep them in **English** — these files are committed, so do not introduce
 Chinese prose into them.
@@ -28,63 +32,74 @@ separate, manually-run process (`update-use-cases.md`, gitignored) and are
 **out of scope for the automatic doc-update loop** — never touch them as a
 side effect of a code change.
 
-## The core current-state documents
+## The design-document structure
 
-### 1. `design-docs/overview.md` — product motivation & vision
+### `design-docs/README.md` — guide and contribution map
 
-What it covers: the problem, product principles, the solution shape, and the
-competitive read — "why StashBase exists and what it is" at a product level.
+Start here. It explains document status labels and points contributors to the
+right product area. It is an orientation map, not a ticket tracker.
 
-Update it when: positioning shifts, a principle changes, or the solution's
-scope / core model changes. Not for incremental features or implementation
-detail.
+### `design-docs/overview.md` and `principles.md` — product intent
 
-### 2. `design-docs/architecture.md` — system design
+`overview.md` explains what StashBase is and who it serves. `principles.md`
+records stable decision rules. Update them only when product positioning,
+scope, or a durable principle changes.
 
-What it covers: the module map, where each concern lives, how data flows
-between TS / Python / MCP / Electron, the load-bearing extension points, the
-indexing / store / embedder technical details (MFS behaviour, Milvus schema,
-chunker).
+### `design-docs/product-direction.md` — strategic direction
 
-**Describe only the current state.** No changelog / before-after / "we
-removed X" / "now fixed" / "V2 may add Y" framing — state what the system
-*is* today; if something no longer exists, simply don't mention it. (One
-machine = one environment = one library; there is no multi-library model.)
+This records the intended product shape and broad investment themes. It is not
+a promise list or a substitute for issues.
 
-Update it when: module boundaries change (new file under `server/` or
-`web-src/src/`), a data flow shifts (e.g. a route moves from sync to fire-and-
-forget), a key abstraction changes (the `Indexer` interface, the store shape),
-MFS upstream changes something we depend on, the embedder default or Milvus
-schema changes, or a workflow someone else would need to find by reading is
-introduced.
+### `design-docs/architecture.md` — system contracts
 
-Do **not** put: user-visible use-case flows (those are maintained separately,
-see above) or product motivation (that goes in overview.md).
+This describes runtime shape, ownership, major data flows, access boundaries,
+and correctness invariants. Update it when one of those contracts changes. Do
+not add a module inventory, file paths, function descriptions, exact line
+references, or implementation chronology.
 
-### 3. `design-docs/data-layer.md` — data ownership & liveness
+### `design-docs/design/*.md` — product-area design and contribution map
 
-What it covers: the data seen as data — classification & ownership, the
-consistency / reconcile model, identity (hashing), sync & export, lifecycle /
-deletion / recovery, AND the as-is concurrency layer (§8: process topology,
-runtime caches & invalidation, state machines, the await graph, timing
-windows, the invariant list I1-I7, incident archive). architecture.md says
-where things live and how flows connect; data-layer.md says when data can go
-wrong and who guarantees it doesn't.
+Each area document describes the user outcome, current experience, constraints,
+next contributions, and work that needs coordination. Update the affected area
+when user-visible behaviour or its contribution guidance changes. Do not
+record every implementation detail or use it as a changelog.
 
-Update it when: a source of truth or cache changes (new derived copy, new
-invalidation signal), a process/lifecycle state machine gains or loses a
-state or edge, an await/barrier/queue is added or gets a timeout, a timing
-window (debounce/TTL) changes, an invariant gains or loses enforcement, or a
-liveness incident teaches something (append to the incident archive).
+The code is the source of truth for implementation details. Tests should carry
+precise behavioural and regression coverage; do not duplicate them as a
+file-by-file architecture narrative.
 
-Discipline specific to §8: as-is only, claims carry `file:line`, suspect
-behaviour is tagged `⚠️` instead of silently rationalised.
+## The code-review contract structure
+
+### `code-review/README.md` — review-contract guide
+
+Start here before working in a high-risk implementation area.
+
+### `code-review/architecture.md` — detailed engineering map
+
+Use this when changing runtime ownership, process boundaries, MCP/Agent
+integration, renderer/server/Python flows, or other cross-cutting system
+structure.
+
+### `code-review/data-layer.md` — correctness and liveness invariants
+
+Use this when changing conversion, indexing, derived artifacts, cleanup,
+reconcile, state caches, queues, cancellation, or recovery behaviour.
+
+### `code-review/markdown-rendering.md` — renderer preview invariants
+
+Use this when changing Markdown parsing, sanitization, iframe rendering,
+asset resolution, navigation, find/highlight, or preview trust boundaries.
+
+### `code-review/agent-panel.md` — built-in Agent panel constraints
+
+Use this when changing Claude/Codex panel UI, permissions, transcript state,
+attachments, tool activity, or Agent context handoff.
 
 ## Norms across the docs
 
-- **Source-of-truth precedence**: code > docs. If you change behaviour, fix
-  the doc in the same change. Don't write a doc for behaviour that isn't
-  shipping yet.
+- **Source-of-truth precedence**: code > docs. If you change a documented
+  behaviour or contract, fix the doc in the same change. Don't write a doc for
+  behaviour that is not shipping, except clearly labelled product direction.
 - **Concision**: every paragraph should pay rent. Cut whatever doesn't.
 - **No duplication across the docs**: each topic lives in one doc and is
   cross-referenced from the others.
@@ -101,19 +116,19 @@ design docs above.
 When the user reports a bug or asks for a feature, run the full loop
 without hand-holding:
 
-1. **Locate & diagnose** — reproduce from code reading; for 🔴-marked
-   files (architecture.md module map) read the matching data-layer §8
-   section first. Report root cause when the user asked a question;
-   fix directly when they asked for a fix.
+1. **Locate & diagnose** — consult the relevant design contract, then use code
+   reading and tests to find the current implementation. Report root cause when
+   the user asked a question; fix directly when they asked for a fix.
 2. **Implement**, respecting the documented constraints (context-free
    sync/conversion, hidden derived notes never surface, single-daemon
    ownership, credentials only in Settings — never env).
 3. **Verify — never report done without this**:
    - `pnpm typecheck` (always; covers server, MCP, and renderer)
    - `npx vite build --config web-src/vite.config.ts` (renderer changes)
-4. **Update the affected design docs in the same change** (local
-   `design-docs/` only — there is no external mirror). Update README /
-   build map copy when user-visible behaviour changed.
+4. **Update the affected documentation in the same change** (local
+   `design-docs/` and, when implementation invariants change,
+   `code-review/`). Update README / build map copy when user-visible
+   behaviour changed.
 5. Leave the work **uncommitted** — committing happens when the user
    says so (next section).
 

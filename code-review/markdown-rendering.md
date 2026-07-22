@@ -1,5 +1,7 @@
 # Markdown Rendering
 
+> Code review contract: this document preserves renderer, iframe, navigation, and preview-safety invariants for maintainers and AI reviewers. For contributor-facing Markdown direction, see [design-docs/design/markdown.md](../design-docs/design/markdown.md).
+
 This document describes the current read-only Markdown rendering path in the desktop app. It covers source loading, parsing, iframe installation, styling, navigation, find/highlight behavior, drag-and-drop forwarding, and the preview trust boundary. Markdown indexing and data ownership remain in [architecture.md](architecture.md) and [data-layer.md](data-layer.md).
 
 ## 1. Scope and ownership

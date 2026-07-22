@@ -1,5 +1,7 @@
 # Data Correctness & Recovery
 
+> Code review contract: this document preserves liveness, recovery, and data-ownership invariants for maintainers and AI reviewers. For contributor-facing product orientation, see [design-docs](../design-docs/README.md).
+
 > StashBase looks simple at the product surface: open a folder, import files, search the library. The hard part is underneath. Conversion and indexing can be interrupted, partially completed, retried, or made stale by external file changes. This document defines how the system avoids lying to itself.
 
 This is not a second architecture document. `architecture.md` explains where modules live and how flows connect. This document explains the correctness contracts that must hold when user operations meet conversion, indexing, AppData, process memory, and failure recovery.
