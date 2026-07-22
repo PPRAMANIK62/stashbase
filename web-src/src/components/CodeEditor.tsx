@@ -22,12 +22,16 @@ import {
   findPrevious,
 } from '@codemirror/search';
 import { markdown as mdLang, markdownLanguage } from '@codemirror/lang-markdown';
+import { ensureSyntaxTree } from '@codemirror/language';
+import GithubSlugger from 'github-slugger';
 import { useApp, type MatchInfo } from '../store/AppContext';
 import {
+  createLiveMarkdownProjection,
   liveMarkdownCompositionGuard,
-  liveMarkdownProjection,
   toggleMarkdownEmphasis,
+  toggleMarkdownLink,
   toggleMarkdownStrong,
+  type LiveMarkdownLink,
 } from './liveMarkdown';
 
 /**
@@ -57,6 +61,10 @@ export function CodeEditor({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const { state, actions } = useApp();
+  // A session survives renames, so interactive link navigation must read the
+  // current path instead of the name captured when CodeMirror first mounted.
+  const nameRef = useRef(name);
+  nameRef.current = name;
   // Snapshot at mount time: if a rename is in progress (newNote starts
   // edit-mode AND rename together), let the RenameInput keep focus —
   // grabbing it here would blur the input, fire its onBlur commit,
@@ -83,7 +91,7 @@ export function CodeEditor({
     const writingKeymap = [
       { key: 'Mod-b', run: toggleMarkdownStrong },
       { key: 'Mod-i', run: toggleMarkdownEmphasis },
-      { key: 'Mod-k', run: insertMarkdownLink },
+      { key: 'Mod-k', run: toggleMarkdownLink },
     ];
     const extensions = [
       history(),
@@ -91,7 +99,7 @@ export function CodeEditor({
       indentOnInput(),
       EditorView.lineWrapping,
       liveMarkdownCompositionGuard,
-      liveMarkdownProjection,
+      createLiveMarkdownProjection((link) => followLiveMarkdownLink(link, nameRef.current, actions.navigateTo)),
       highlightSelectionMatches(),
       // search() owns the SearchQuery state + match decorations even
       // though we never call openSearchPanel — our FindBar drives it
@@ -124,6 +132,13 @@ export function CodeEditor({
           padding: '0.1em 0.25em',
         },
         '.cm-live-strikethrough': { textDecoration: 'line-through' },
+        '.cm-live-link': {
+          color: '#0e7490',
+          cursor: 'pointer',
+          textDecoration: 'underline',
+          textDecorationColor: 'rgba(14, 116, 144, 0.5)',
+        },
+        '.cm-live-link:focus-visible': { outline: '2px solid #0e7490', outlineOffset: '2px', borderRadius: '2px' },
         '.cm-live-horizontal-rule': { border: '0', borderTop: '1px solid #d0d7de', margin: '1.25em 0', width: '100%' },
       }),
       lang,
@@ -204,6 +219,37 @@ export function CodeEditor({
     actions.consumePendingHighlight();
   }, [pendingHighlight, actions]);
 
+  const pendingAnchor = state.tabs.find((t) => t.id === state.activeTabId)?.pendingAnchor ?? null;
+  useEffect(() => {
+    if (!pendingAnchor) return;
+    const view = viewRef.current;
+    if (!view) return;
+    let retryTimer: number | undefined;
+    let cancelled = false;
+    const scrollToAnchor = () => {
+      const result = resolveLiveHeadingPosition(view.state, pendingAnchor);
+      if (!result.ready) {
+        // CodeMirror intentionally parses outside the viewport in the
+        // background. Keep the app-owned anchor until that parse can cover
+        // the whole document rather than treating an unseen heading as absent.
+        retryTimer = window.setTimeout(scrollToAnchor, 50);
+        return;
+      }
+      if (cancelled) return;
+      if (result.position != null) {
+        view.dispatch({ effects: EditorView.scrollIntoView(result.position, { y: 'start', yMargin: 24 }) });
+      }
+      // A missing heading is consumed only after the complete source has been
+      // checked, so an invalid anchor cannot retry forever.
+      actions.consumePendingScroll();
+    };
+    scrollToAnchor();
+    return () => {
+      cancelled = true;
+      if (retryTimer != null) window.clearTimeout(retryTimer);
+    };
+  }, [pendingAnchor, actions]);
+
   return <div ref={hostRef} style={{ height: '100%' }} />;
 }
 
@@ -248,21 +294,92 @@ function matchInfoFor(view: EditorView): MatchInfo {
   return { current, total };
 }
 
-function insertMarkdownLink(view: EditorView): boolean {
-  const target = window.prompt('Link target: note.md, folder/note.md#heading, #heading, or https://...');
-  if (target == null) return true;
-  const href = target.trim();
-  if (!href) return true;
-  const sel = view.state.selection.main;
-  const selected = view.state.sliceDoc(sel.from, sel.to);
-  const text = selected || 'link text';
-  const inserted = `[${text}](${href})`;
-  const textFrom = sel.from + 1;
-  const textTo = textFrom + text.length;
-  view.dispatch({
-    changes: { from: sel.from, to: sel.to, insert: inserted },
-    selection: selected ? { anchor: sel.from + inserted.length } : { anchor: textFrom, head: textTo },
+/** Dispatches through the same app navigation and system-browser boundaries
+ * used by Reading View. The projection only calls this for supported targets. */
+export function followLiveMarkdownLink(
+  link: LiveMarkdownLink,
+  currentPath: string,
+  navigateTo: (path: string, anchor?: string) => Promise<void>,
+) {
+  if (/^https?:\/\//i.test(link.href)) {
+    const bridge = (window as { electron?: { openExternal?: (url: string) => Promise<boolean> } }).electron;
+    if (bridge?.openExternal) void bridge.openExternal(link.href);
+    else window.open(link.href, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  const [pathPart, fragment = ''] = link.href.split('#', 2);
+  const path = pathPart ? resolveNotePath(currentPath, pathPart) : currentPath;
+  const anchor = decodeLinkComponent(fragment);
+  if (path && anchor != null) void navigateTo(path, anchor || undefined);
+}
+
+/** Mirrors Reading View's GitHub-style generated heading IDs so internal
+ * Live Editing links can scroll without serializing or changing source. */
+export function liveHeadingPosition(state: EditorState, anchor: string): number | null {
+  return resolveLiveHeadingPosition(state, anchor).position;
+}
+
+function resolveLiveHeadingPosition(state: EditorState, anchor: string): { ready: boolean; position: number | null } {
+  // `syntaxTree` is permitted to be viewport-only. Anchor navigation instead
+  // needs a complete tree so an off-screen heading is distinguishable from a
+  // missing one. The bounded parse keeps this work responsive; the effect
+  // above retries until the background parser catches up.
+  const tree = ensureSyntaxTree(state, state.doc.length, 20);
+  if (!tree) return { ready: false, position: null };
+  const slugger = new GithubSlugger();
+  let position: number | null = null;
+  tree.iterate({
+    enter(node) {
+      if (!/^((ATX|Setext)Heading[1-6])$/.test(node.name) || position != null) return;
+      const heading = liveHeadingText(state.sliceDoc(node.from, node.to));
+      if (slugger.slug(heading.toLowerCase()) === anchor) position = node.from;
+    },
   });
-  view.focus();
-  return true;
+  return { ready: true, position };
+}
+
+function liveHeadingText(source: string) {
+  const firstLine = source.split('\n')[0]
+    .replace(/^ {0,3}#{1,6}[ \t]*/, '')
+    .replace(/[ \t]+#+[ \t]*$/, '');
+  // Reading View generates IDs from rendered heading text. Remove inline
+  // destinations and tags first, so e.g. `[Guide](note.md)` and `Guide`
+  // share `#guide`, without pulling the full preview renderer into the editor.
+  return decodeHeadingEntities(firstLine
+    .replace(/!\[[^\]\n]*\]\([^\n)]*\)/g, '')
+    .replace(/\[([^\]\n]*)\]\([^\n)]*\)/g, '$1')
+    .replace(/\[([^\]\n]*)\]\[[^\]\n]*\]/g, '$1')
+    .replace(/<[^>]*>/g, '')).trim();
+}
+
+function decodeHeadingEntities(html: string) {
+  return html.replace(/&(#(?:\d+)|(?:#x[0-9A-Fa-f]+)|(?:\w+));?/ig, (_match, entity: string) => {
+    const normalized = entity.toLowerCase();
+    if (normalized === 'colon') return ':';
+    if (normalized.startsWith('#x')) return String.fromCharCode(parseInt(normalized.slice(2), 16));
+    if (normalized.startsWith('#')) return String.fromCharCode(Number(normalized.slice(1)));
+    return '';
+  });
+}
+
+function resolveNotePath(currentPath: string, href: string) {
+  const parts = currentPath.split('/').slice(0, -1);
+  for (const rawSegment of href.split('/')) {
+    const segment = decodeLinkComponent(rawSegment);
+    if (segment == null || segment.includes('/') || segment.includes('\\')) return null;
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (!parts.length) return null;
+      parts.pop();
+      continue;
+    }
+    parts.push(segment);
+  }
+  return parts.join('/');
+}
+
+/** Markdown destinations are URLs: decode percent-encoded filenames only
+ * after splitting path segments, never before. */
+function decodeLinkComponent(value: string) {
+  try { return decodeURIComponent(value); } catch { return null; }
 }

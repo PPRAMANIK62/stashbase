@@ -10,6 +10,10 @@ without a conversion layer becoming the product.
 - Users can switch between a writing surface and a rendered document preview.
 - Preview supports common document conventions: headings, lists, tables, task
   lists, code blocks, links, images, footnotes, and GitHub-flavoured Markdown.
+- In Live Editing, complete supported links present readable text without
+  changing their source offsets: click reveals source, modifier-click or
+  keyboard activation follows safe local links in StashBase and HTTP(S) links
+  through the system browser.
 - Safe local links remain in StashBase; external links retain their normal
   browser behaviour.
 - Agent responses and Markdown documents remain distinct presentation contexts.
@@ -21,6 +25,9 @@ without a conversion layer becoming the product.
   editor.
 - Editing should increasingly feel calm, typographic, and focused on document
   structure.
+- Interactive editing presentation must remain a projection over Markdown:
+  link navigation never writes source or becomes an undo step, and malformed
+  or unsupported links remain ordinary source.
 - Rich preview support must preserve the local preview trust boundary.
 - Links, anchors, assets, find, and search-result navigation should preserve
   the reader's place and lead to the intended source context.

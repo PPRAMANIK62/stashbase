@@ -3,9 +3,10 @@ import test from 'node:test';
 import { EditorState } from '@codemirror/state';
 import { history, undo } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { ensureSyntaxTree } from '@codemirror/language';
 import { search } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
-import { applyEditorQuery } from '../components/CodeEditor.tsx';
+import { applyEditorQuery, followLiveMarkdownLink, liveHeadingPosition } from '../components/CodeEditor.tsx';
 import { renderMarkdown } from '../markdown.ts';
 import {
   describeLiveMarkdownProjection,
@@ -15,6 +16,7 @@ import {
   setLiveMarkdownComposition,
   shouldRefreshLiveMarkdownProjection,
   toggleMarkdownEmphasis,
+  toggleMarkdownLink,
   toggleMarkdownStrong,
 } from '../components/liveMarkdown.ts';
 
@@ -38,11 +40,16 @@ test('restoring an open find query preserves a saved editor selection', () => {
 });
 
 function markdownState(doc: string, selection?: { anchor: number; head?: number }) {
-  return EditorState.create({
+  const state = EditorState.create({
     doc,
     selection,
     extensions: [markdown({ base: markdownLanguage }), history()],
   });
+  // The production projection is intentionally viewport-bounded and can wait
+  // for a background parse. These complete-document assertions need a stable
+  // parsed tree instead of racing that background work.
+  ensureSyntaxTree(state, state.doc.length, 1_000);
+  return state;
 }
 
 function testView(state: EditorState) {
@@ -78,6 +85,7 @@ test('Live Editing and Reading View share the supported Markdown construct subse
     '*emphasis* **strong** ~~strikethrough~~ `inline code`',
     '',
     '---',
+    '',
   ].join('\n');
 
   const projectedKinds = new Set(
@@ -233,4 +241,83 @@ test('Markdown strong and emphasis commands wrap, toggle, insert pairs, and undo
   assert.equal(toggleMarkdownEmphasis(insertView), true);
   assert.equal(insertView.state.doc.toString(), '**');
   assert.equal(insertView.state.selection.main.anchor, 1);
+});
+
+test('Live links are projected only when complete and reveal their entire source on selection', () => {
+  const doc = 'Before [StashBase](docs/guide.md#start) after [bad](javascript:alert(1)) [open](';
+  const start = doc.indexOf('[StashBase]');
+  const inactive = describeLiveMarkdownProjection(markdownState(doc, { anchor: 0 }));
+  assert.deepEqual(inactive.filter((item) => item.kind === 'link'), [
+    { kind: 'link', from: start, to: start + '[StashBase](docs/guide.md#start)'.length, active: false },
+  ]);
+  assert.deepEqual(
+    describeLiveMarkdownProjection(markdownState(doc, { anchor: start + 3 }))
+      .filter((item) => item.kind === 'link'),
+    [{ kind: 'link', from: start, to: start + '[StashBase](docs/guide.md#start)'.length, active: true }],
+  );
+  assert.equal(markdownState(doc).doc.toString(), doc);
+});
+
+test('Markdown link command wraps selections, edits an enclosing destination, and inserts paired source', () => {
+  const wrapView = testView(markdownState('alpha', { anchor: 0, head: 5 }));
+  assert.equal(toggleMarkdownLink(wrapView), true);
+  assert.equal(wrapView.state.doc.toString(), '[alpha](url)');
+  assert.equal(wrapView.state.selection.main.from, 8);
+  assert.equal(wrapView.state.selection.main.to, 11);
+  assert.equal(undo(wrapView), true);
+  assert.equal(wrapView.state.doc.toString(), 'alpha');
+
+  const editView = testView(markdownState('[alpha](note.md)', { anchor: 3 }));
+  assert.equal(toggleMarkdownLink(editView), true);
+  assert.equal(editView.state.selection.main.from, 8);
+  assert.equal(editView.state.selection.main.to, 15);
+
+  const titledView = testView(markdownState('[alpha](note.md "A title")', { anchor: 3 }));
+  assert.equal(toggleMarkdownLink(titledView), true);
+  assert.equal(titledView.state.selection.main.from, 8);
+  assert.equal(titledView.state.selection.main.to, 15);
+
+  const insertView = testView(markdownState('', { anchor: 0 }));
+  assert.equal(toggleMarkdownLink(insertView), true);
+  assert.equal(insertView.state.doc.toString(), '[link text](url)');
+  assert.equal(insertView.state.selection.main.from, 1);
+  assert.equal(insertView.state.selection.main.to, 10);
+});
+
+test('Live link activation uses in-app note navigation and the system-browser boundary', () => {
+  const calls: Array<[string, string | undefined]> = [];
+  followLiveMarkdownLink({ label: 'Section', href: '../other.md#section' }, 'docs/note.md', async (path, anchor) => {
+    calls.push([path, anchor]);
+  });
+  assert.deepEqual(calls, [['other.md', 'section']]);
+
+  followLiveMarkdownLink({ label: 'Same heading', href: '#heading' }, 'renamed/note.md', async (path, anchor) => {
+    calls.push([path, anchor]);
+  });
+  followLiveMarkdownLink({ label: 'Spaced note', href: 'StashBase%20Features.md' }, 'Examples/footnotes.md', async (path, anchor) => {
+    calls.push([path, anchor]);
+  });
+  assert.deepEqual(calls, [
+    ['other.md', 'section'],
+    ['renamed/note.md', 'heading'],
+    ['Examples/StashBase Features.md', undefined],
+  ]);
+});
+
+test('Live Editing resolves same-note GitHub heading anchors without changing source', () => {
+  const doc = '# Footnote verification\n\n## [Footnote verification](other.md)\n\n# &nbsp; Entity heading\n\nBody';
+  const state = markdownState(doc);
+  assert.equal(liveHeadingPosition(state, 'footnote-verification'), 0);
+  assert.equal(liveHeadingPosition(state, 'footnote-verification-1'), doc.indexOf('##'));
+  assert.equal(liveHeadingPosition(state, 'entity-heading'), doc.indexOf('# &nbsp; Entity heading'));
+  assert.equal(liveHeadingPosition(state, 'missing'), null);
+  assert.equal(state.doc.toString(), doc);
+
+  // Anchor navigation cannot rely on the viewport-driven parser having
+  // reached the destination already.
+  const unparsed = EditorState.create({
+    doc: '# Off-screen heading',
+    extensions: [markdown({ base: markdownLanguage })],
+  });
+  assert.equal(liveHeadingPosition(unparsed, 'off-screen-heading'), 0);
 });
