@@ -9,7 +9,10 @@ import {
 } from '@codemirror/commands';
 import {
   bracketMatching,
+  defaultHighlightStyle,
+  ensureSyntaxTree,
   indentOnInput,
+  syntaxHighlighting,
 } from '@codemirror/language';
 import {
   searchKeymap,
@@ -21,10 +24,11 @@ import {
   findPrevious,
 } from '@codemirror/search';
 import { markdown as mdLang, markdownLanguage } from '@codemirror/lang-markdown';
-import { ensureSyntaxTree } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
 import GithubSlugger from 'github-slugger';
 import { useApp, type MatchInfo } from '../store/AppContext';
 import {
+  completeMarkdownBacktick,
   createLiveMarkdownProjection,
   liveMarkdownCompositionGuard,
   toggleMarkdownEmphasis,
@@ -33,6 +37,15 @@ import {
   type LiveMarkdownLink,
 } from './liveMarkdown';
 import { setSourceFindQuery, sourceMatchHighlighter, sourceMatchState } from './editorMatches';
+
+// Keep Live Editing's fenced-code language support aligned with CodeMirror's
+// maintained language registry. Parsers load only for a recognised fence
+// label, while unknown labels remain ordinary, editable source.
+export const liveMarkdownLanguage = mdLang({
+  base: markdownLanguage,
+  addKeymap: false,
+  codeLanguages: languages,
+});
 
 /**
  * CodeMirror 6 host. Mounts a CM EditorView into a div the first time,
@@ -83,7 +96,6 @@ export function CodeEditor({
     const host = hostRef.current;
     if (!host) return;
 
-    const lang = mdLang({ base: markdownLanguage, addKeymap: false });
     // Strip CM's built-in Cmd-F binding — we route Cmd+F to our own
     // FindBar component instead. Cmd-G / Shift-Cmd-G (find next/prev)
     // stay so the bar's hotkeys still work when focus is in the editor.
@@ -99,9 +111,11 @@ export function CodeEditor({
       history(),
       bracketMatching(),
       indentOnInput(),
+      syntaxHighlighting(defaultHighlightStyle),
       EditorView.lineWrapping,
       liveMarkdownCompositionGuard,
       createLiveMarkdownProjection((link) => followLiveMarkdownLink(link, nameRef.current, actions.navigateTo)),
+      EditorView.inputHandler.of(completeMarkdownBacktick),
       // Live Editing is a presentation layer over Markdown, so native DOM
       // selection must never copy a replacement widget's displayed label.
       // These handlers read and edit CodeMirror's source ranges directly.
@@ -148,7 +162,19 @@ export function CodeEditor({
           fontFamily: '"SF Mono", "JetBrains Mono", Menlo, Consolas, monospace',
           fontSize: '0.9em',
           backgroundColor: 'rgba(175, 184, 193, 0.16)',
+          paddingLeft: '0.85rem',
+          paddingRight: '8rem',
+          position: 'relative',
         },
+        '.cm-live-code-block-start': { borderTopLeftRadius: '8px', borderTopRightRadius: '8px', paddingTop: '0.3rem' },
+        '.cm-live-code-block-end': { borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px', paddingBottom: '0.3rem' },
+        '.cm-live-code-copy': {
+          appearance: 'none', background: 'transparent', border: '0', borderRadius: '4px', color: '#57606a', cursor: 'pointer',
+          fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', fontSize: '0.72em', fontWeight: '600',
+          letterSpacing: '0.025em', padding: '0.2em 0.45em', position: 'absolute', right: '0.65rem', top: '0.35rem',
+        },
+        '.cm-live-code-copy:hover': { backgroundColor: 'rgba(175, 184, 193, 0.32)', color: '#24292f' },
+        '.cm-live-code-copy:focus-visible': { outline: '2px solid #0e7490', outlineOffset: '2px' },
         '.cm-live-strikethrough': { textDecoration: 'line-through' },
         '.cm-live-link': {
           color: '#0e7490',
@@ -167,7 +193,7 @@ export function CodeEditor({
           width: '100%',
         },
       }),
-      lang,
+      liveMarkdownLanguage,
       EditorView.updateListener.of((u) => {
         if (u.docChanged) onChangeRef.current?.(u.state.doc.toString());
       }),

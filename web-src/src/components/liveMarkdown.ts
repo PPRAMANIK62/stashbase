@@ -17,6 +17,8 @@ type Construct = {
   link?: LiveMarkdownLink;
 };
 
+type FencedCodeInfo = { code: string; language: string };
+
 export type LiveMarkdownLink = {
   label: string;
   href: string;
@@ -268,6 +270,49 @@ export function shouldRefreshLiveMarkdownProjection(change: {
   return change.docChanged || change.selectionSet || change.viewportChanged || change.treeChanged || !!change.searchChanged;
 }
 
+/** Source-first Markdown conveniences. A single backtick pairs inline code;
+ * three typed at an otherwise empty line add the closing fence on the next line. */
+export function completeMarkdownBacktick(view: EditorView, from: number, to: number, text: string): boolean {
+  if (text !== '`') return false;
+  // A fence being typed inside an existing block is its closing delimiter,
+  // not a request to open a nested block. Let CodeMirror insert each tick
+  // normally so the closing fence remains ordinary Markdown source.
+  if (enclosingConstruct(view.state, 'FencedCode', from, to)) return false;
+  const selection = view.state.selection.main;
+  const line = view.state.doc.lineAt(from);
+  const before = view.state.sliceDoc(line.from, from);
+  const after = view.state.sliceDoc(to, line.to);
+  if (from === to && before === '``' && after === '') {
+    const start = from - 2;
+    view.dispatch({
+      changes: { from: start, to, insert: '```\n```' },
+      // Put the cursor directly after the opening fence so the next text is
+      // its language label (for example, ```ts) before the code body starts.
+      selection: { anchor: start + 3 },
+      userEvent: 'input.type',
+    });
+    return true;
+  }
+  // Leave the first two fence characters untouched so the third can expand
+  // them into a complete block rather than producing an inline pair.
+  if (from === to && before === '`' && after === '') return false;
+  if (from === to && view.state.sliceDoc(from, from + 1) === '`') {
+    view.dispatch({ selection: { anchor: from + 1 }, userEvent: 'input.type' });
+    return true;
+  }
+  if (!selection.empty) {
+    const selected = view.state.sliceDoc(from, to);
+    view.dispatch({
+      changes: { from, to, insert: `\`${selected}\`` },
+      selection: { anchor: from + 1, head: from + 1 + selected.length },
+      userEvent: 'input.type',
+    });
+    return true;
+  }
+  view.dispatch({ changes: { from, to, insert: '``' }, selection: { anchor: from + 1 }, userEvent: 'input.type' });
+  return true;
+}
+
 function buildDecorations(view: EditorView, onLinkActivate: LiveMarkdownLinkActivation): DecorationSet {
   const state = view.state;
   const markers: Array<{ from: number; to?: number; decoration: Decoration }> = [];
@@ -305,15 +350,32 @@ function buildDecorations(view: EditorView, onLinkActivate: LiveMarkdownLinkActi
       });
     }
     if (construct.rule.lineClass) {
-      const lineDecoration = Decoration.line({ class: construct.rule.lineClass });
+      const firstLine = state.doc.lineAt(construct.from).from;
+      const lastLine = state.doc.lineAt(construct.to).from;
       for (let pos = construct.from; pos <= construct.to;) {
         const line = state.doc.lineAt(pos);
+        const lineDecoration = Decoration.line({
+          class: [
+            construct.rule.lineClass,
+            line.from === firstLine ? 'cm-live-code-block-start' : '',
+            line.from === lastLine ? 'cm-live-code-block-end' : '',
+          ].filter(Boolean).join(' '),
+        });
         markers.push({ from: line.from, to: line.from, decoration: lineDecoration });
         if (line.to >= construct.to) break;
         pos = line.to + 1;
       }
     }
     if (!active) {
+      if (construct.kind === 'fenced-code') {
+        const code = fencedCodeInfo(state, construct);
+        const lineStart = state.doc.lineAt(construct.from).from;
+        markers.push({
+          from: lineStart,
+          to: lineStart,
+          decoration: Decoration.widget({ widget: new FencedCodeCopyWidget(code), side: 1 }),
+        });
+      }
       for (const marker of sourceRangesFor(state, construct)) {
         // ViewPlugin replacement decorations cannot span a line break. Setext
         // heading markers can include their leading newline, so conceal every
@@ -326,6 +388,52 @@ function buildDecorations(view: EditorView, onLinkActivate: LiveMarkdownLinkActi
   }
   markers.sort((a, b) => a.from - b.from || (b.to ?? b.from) - (a.to ?? a.from));
   return Decoration.set(markers.map(({ from, to, decoration }) => decoration.range(from, to)), true);
+}
+
+/** The Markdown parser owns these ranges, so copying does not depend on
+ * brittle fence matching and never includes the concealed delimiters. */
+function fencedCodeInfo(state: EditorState, construct: Construct): FencedCodeInfo {
+  let code = '';
+  let language = '';
+  syntaxTree(state).iterate({
+    from: construct.from,
+    to: construct.to,
+    enter: (node) => {
+      if (node.name === 'CodeText') code = state.sliceDoc(node.from, node.to);
+      if (node.name === 'CodeInfo') language = state.sliceDoc(node.from, node.to).trim();
+    },
+  });
+  return { code, language };
+}
+
+class FencedCodeCopyWidget extends WidgetType {
+  constructor(private readonly block: FencedCodeInfo) { super(); }
+
+  eq(other: FencedCodeCopyWidget) {
+    return this.block.code === other.block.code && this.block.language === other.block.language;
+  }
+
+  toDOM() {
+    const button = document.createElement('button');
+    const language = displayCodeLanguage(this.block.language);
+    button.className = 'cm-live-code-copy';
+    button.type = 'button';
+    button.textContent = language;
+    button.title = `Copy ${language} code`;
+    button.setAttribute('aria-label', `Copy ${language} code block`);
+    button.addEventListener('click', () => { void navigator.clipboard?.writeText(this.block.code); });
+    return button;
+  }
+
+  ignoreEvent() { return true; }
+}
+
+function displayCodeLanguage(language: string): string {
+  const labels: Record<string, string> = {
+    ts: 'TypeScript', typescript: 'TypeScript', js: 'JavaScript', javascript: 'JavaScript', jsx: 'JSX',
+    py: 'Python', python: 'Python', sh: 'Shell', shell: 'Shell', bash: 'Bash',
+  };
+  return labels[language.toLowerCase()] ?? (language || 'Code');
 }
 
 class LiveLinkWidget extends WidgetType {
