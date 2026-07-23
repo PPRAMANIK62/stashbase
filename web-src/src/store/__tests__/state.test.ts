@@ -27,7 +27,6 @@ function documentTab(id: string, name: string | null, preview = false): Tab {
     file: name ? { name, format: 'md', content: name } : null,
     editMode: false,
     dirty: false,
-    editorSessionVersion: 0,
     preview,
     pendingAnchor: null,
     pendingHighlight: null,
@@ -76,6 +75,17 @@ test('Markdown opens in Live Editing while read-only formats remain out of edit 
   assert.equal(html.tabs[0].editMode, false);
 });
 
+test('a save acknowledgement advances the version without replacing the live document source', () => {
+  const state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'note.md', format: 'md', content: '```ts\nconst live = true\n```', version: 'before' },
+  });
+  const next = reducer(state, { type: 'FILE_PATCH', patch: { version: 'after' } });
+
+  assert.equal(next.tabs[0].file?.content, '```ts\nconst live = true\n```');
+  assert.equal(next.tabs[0].file?.version, 'after');
+});
+
 test('only dirty missing document tabs survive sidebar pruning', () => {
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',
@@ -93,35 +103,6 @@ test('only dirty missing document tabs survive sidebar pruning', () => {
   assert.equal(state.tabs[0].file?.name, 'draft.md');
 });
 
-test('renames retain an editor session generation while replacements invalidate it', () => {
-  let state = reducer(freshState(), {
-    type: 'FILE_OPEN',
-    body: { name: 'draft.md', format: 'md', content: '# Draft' },
-  });
-  const version = state.tabs[0].editorSessionVersion;
-  state = reducer(state, { type: 'REMAP_PATHS', from: 'draft.md', to: 'renamed.md', kind: 'file' });
-  assert.equal(state.tabs[0].editorSessionVersion, version);
-  state = reducer(state, {
-    type: 'FILE_OPEN',
-    body: { name: 'replacement.md', format: 'md', content: '# Replacement' },
-  });
-  assert.equal(state.tabs[0].editorSessionVersion, version + 1);
-});
-
-test('external content patches invalidate an editor session', () => {
-  let state = reducer(freshState(), {
-    type: 'FILE_OPEN',
-    body: { name: 'note.md', format: 'md', content: '# Before' },
-  });
-  const version = state.tabs[0].editorSessionVersion;
-  state = reducer(state, {
-    type: 'FILE_PATCH',
-    patch: { content: '# After' },
-    invalidateEditorSession: true,
-  });
-  assert.equal(state.tabs[0].file?.content, '# After');
-  assert.equal(state.tabs[0].editorSessionVersion, version + 1);
-});
 
 test('folder path remap updates files, tabs, expansion, focus, and manual order together', () => {
   const state = freshState({

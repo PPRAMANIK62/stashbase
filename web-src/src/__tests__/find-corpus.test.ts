@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildFindCorpus, type CorpusNode } from '../components/findIframe.ts';
+import { buildFindCorpus, scrollRangeIntoView, type CorpusNode } from '../components/findIframe.ts';
 
 function el(tagName: string, ...children: CorpusNode[]): CorpusNode {
   for (let i = 0; i < children.length; i++) {
@@ -78,4 +78,22 @@ test('segment starts map every text node to its corpus offset', () => {
   assert.equal(joined.slice(segments[0].start, segments[0].start + 3), 'foo');
   assert.equal(segments[1].node, second);
   assert.equal(joined.slice(segments[1].start, segments[1].start + 3), 'bar');
+});
+
+test('find navigation scrolls the supplied document container instead of the window', () => {
+  const calls: ScrollToOptions[] = [];
+  const container = {
+    clientHeight: 200,
+    clientWidth: 300,
+    getBoundingClientRect: () => ({ top: 100, left: 40 } as DOMRect),
+    scrollBy: (options: ScrollToOptions) => calls.push(options),
+  } as unknown as HTMLElement;
+  const range = {
+    getClientRects: () => [{ top: 500, left: 90, width: 20, height: 20 } as DOMRect],
+    getBoundingClientRect: () => ({ top: 500, left: 90, width: 20, height: 20 } as DOMRect),
+  } as unknown as Range;
+
+  scrollRangeIntoView(null, range, container);
+
+  assert.deepEqual(calls, [{ top: 310, left: -90, behavior: 'auto' }]);
 });

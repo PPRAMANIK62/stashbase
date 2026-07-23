@@ -1,15 +1,5 @@
-import type { EditorState } from '@codemirror/state';
-
-/** A tab-local CodeMirror snapshot retained while Reading View is mounted. */
-export interface EditorSession {
-  version: number;
-  state: EditorState;
-  scrollTop: number;
-  scrollLeft: number;
-}
-
-/** Imperative handle a `<CodeEditor>` registers on mount so save,
- * rename, and file-switch actions can pull the live buffer. */
+/** Imperative handle a Markdown document registers so save, rename, and file
+ * switches can pull the live serialized Markdown. */
 export interface EditorHandle {
   getValue: () => string;
   focus: () => void;

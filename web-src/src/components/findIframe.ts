@@ -9,7 +9,7 @@
  *
  * Realm-aware: every Range / Highlight is built against the supplied
  * window so the highlight registers in that document's `CSS.highlights`
- * registry — not the parent's. Used by `MarkdownPreview` where the
+ * registry — not the parent's. Used by document preview surfaces where the
  * parent reaches into a `sandbox="allow-same-origin"` iframe directly;
  * `server/html.ts`'s injected bootstrap for the sandboxed `HtmlPreview`
  * (which the parent cannot touch, so the iframe runs its own copy)
@@ -31,6 +31,8 @@ const STYLE_ID = 'stash-find-style';
 export function makeIframeFindController(
   getDoc: () => Document | null,
   getWin: () => Window | null,
+  getRoot: () => HTMLElement | null = () => null,
+  getScrollContainer: () => HTMLElement | null = () => null,
 ): FindController {
   let matches: Range[] = [];
   let cursor = -1; // index into `matches`, -1 = nothing selected
@@ -49,7 +51,7 @@ export function makeIframeFindController(
     const re = buildRegex(query, wholeWord, caseSensitive);
     if (!re) return clearAndReport(win);
 
-    matches = collectMatches(doc, re);
+    matches = collectMatches(doc, re, getRoot() ?? doc.body);
     if (matches.length === 0) {
       paint(win, [], null);
       return { current: 0, total: 0 };
@@ -72,15 +74,7 @@ export function makeIframeFindController(
   function scrollToCurrent(): void {
     const r = matches[cursor];
     if (!r) return;
-    const win = getWin();
-    if (!win) return;
-    const rect = firstVisibleRect(r);
-    if (!rect) return;
-    win.scrollBy({
-      top: rect.top + rect.height / 2 - win.innerHeight / 2,
-      left: rect.left + rect.width / 2 - win.innerWidth / 2,
-      behavior: 'auto',
-    });
+    scrollRangeIntoView(getWin(), r, getScrollContainer());
   }
 
   return {
@@ -172,8 +166,8 @@ export function buildFindCorpus(root: CorpusNode): { joined: string; segments: A
 
 /** Runs the query over the flattened corpus and maps each match back to
  *  a (possibly multi-node) Range. */
-function collectMatches(doc: Document, re: RegExp): Range[] {
-  const corpus = buildFindCorpus(doc.body as unknown as CorpusNode);
+function collectMatches(doc: Document, re: RegExp, root: HTMLElement): Range[] {
+  const corpus = buildFindCorpus(root as unknown as CorpusNode);
   const joined = corpus.joined;
   // Every corpus node with nodeType 3 in a live document is a Text node.
   const segments = corpus.segments as unknown as TextSegment[];
@@ -214,6 +208,32 @@ function firstVisibleRect(r: Range): DOMRect | null {
   if (rects.length > 0) return rects[0];
   const rect = r.getBoundingClientRect();
   return rect.width > 0 || rect.height > 0 ? rect : null;
+}
+
+/** Scroll the active find range inside a supplied document scroller when one
+ * exists. Milkdown scrolls inside `.crepe-shell`, not the renderer window. */
+export function scrollRangeIntoView(
+  win: Window | null,
+  range: Range,
+  scrollContainer: HTMLElement | null = null,
+): void {
+  const rect = firstVisibleRect(range);
+  if (!rect) return;
+  if (scrollContainer) {
+    const containerRect = scrollContainer.getBoundingClientRect();
+    scrollContainer.scrollBy({
+      top: rect.top - containerRect.top + rect.height / 2 - scrollContainer.clientHeight / 2,
+      left: rect.left - containerRect.left + rect.width / 2 - scrollContainer.clientWidth / 2,
+      behavior: 'auto',
+    });
+    return;
+  }
+  if (!win) return;
+  win.scrollBy({
+    top: rect.top + rect.height / 2 - win.innerHeight / 2,
+    left: rect.left + rect.width / 2 - win.innerWidth / 2,
+    behavior: 'auto',
+  });
 }
 
 /** Inject highlight styles into the iframe doc once. Scoped to our two

@@ -119,7 +119,6 @@ export function reducer(s: State, a: Action): State {
           file,
           editMode: liveEditing,
           dirty: false,
-          editorSessionVersion: getActiveTab(s)!.editorSessionVersion + 1,
           saveStatus: { text: '', cls: '' },
           pendingAnchor: null,
           pendingHighlight: null,
@@ -139,9 +138,6 @@ export function reducer(s: State, a: Action): State {
       return {
         ...patchActiveTab(s, {
           file,
-          ...(a.invalidateEditorSession
-            ? { editorSessionVersion: tab.editorSessionVersion + 1 }
-            : {}),
         }),
         selectedPath: renamed ? a.patch.name! : s.selectedPath,
       };

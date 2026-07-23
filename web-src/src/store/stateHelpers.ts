@@ -35,7 +35,6 @@ export function makeTab(): Tab {
     file: null,
     editMode: false,
     dirty: false,
-    editorSessionVersion: 0,
     preview: false,
     pendingAnchor: null,
     pendingHighlight: null,

@@ -1,6 +1,6 @@
 /**
  * Shared helpers for the same-origin (`sandbox=allow-same-origin`)
- * preview iframes used by `MarkdownPreview` and `Split`'s live-preview
+ * preview iframes used by legacy-compatible document previews and `Split`'s live-preview
  * pane. Both inject a `<base>` so relative asset URLs resolve under
  * `/asset/`, and both intercept in-iframe `<img>` / `<a>` clicks to
  * forward them to the host (image lightbox / in-app nav / external open)
