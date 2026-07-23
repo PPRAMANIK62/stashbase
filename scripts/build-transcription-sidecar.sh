@@ -75,7 +75,7 @@ if [[ "$HOST_PLATFORM" == "darwin" ]]; then
   export MACOSX_DEPLOYMENT_TARGET="$MACOS_DEPLOYMENT_TARGET"
 fi
 
-for command in cmake git curl tar make; do
+for command in cmake git curl tar make pkg-config; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "missing build dependency: $command" >&2
     exit 1

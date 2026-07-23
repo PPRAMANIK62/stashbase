@@ -7,6 +7,9 @@ StashBase builds three native executables for each release target:
 pnpm build:transcription-sidecar
 ```
 
+The local build requires `cmake`, `git`, `curl`, `tar`, `make`, and
+`pkg-config` on `PATH`.
+
 The build is host-native and supports `darwin-arm64`, `linux-x64`, and
 `win32-x64` (the Windows build runs in an MSYS2 MINGW64 shell). Outputs live
 under the gitignored `sidecar.nosync/<platform>-<arch>/` directory and are
