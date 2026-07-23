@@ -3,7 +3,8 @@ import test from 'node:test';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { history, undo } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { ensureSyntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
 import { search } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import {
@@ -12,12 +13,14 @@ import {
   cutLiveMarkdownSource,
   followLiveMarkdownLink,
   liveHeadingPosition,
+  liveMarkdownLanguage,
   pasteLiveMarkdownPlainText,
   selectedMarkdownSource,
 } from '../components/CodeEditor.tsx';
 import { renderMarkdown } from '../markdown.ts';
 import {
   describeLiveMarkdownProjection,
+  completeMarkdownBacktick,
   hiddenMarkdownMarkupRanges,
   isLiveMarkdownComposition,
   liveMarkdownCompositionGuard,
@@ -392,6 +395,53 @@ test('Live fenced code stays safe across labels, unknown languages, and fenced c
 
   // Reading View remains the independent authority for fenced rendering.
   assert.match(renderMarkdown('```ts\nconst x = 1;\n```'), /<pre><code class="language-ts">/);
+});
+
+test('Live fenced TypeScript loads a parser and exposes highlighted syntax tokens', async () => {
+  const typescript = languages.find((language) => language.name === 'TypeScript');
+  assert.ok(typescript);
+  await typescript.load();
+
+  const doc = '```ts\nconst value = 42;\n```';
+  const state = EditorState.create({ doc, extensions: [liveMarkdownLanguage] });
+  ensureSyntaxTree(state, state.doc.length, 1_000);
+
+  // resolveInner reaches the mounted code-language tree, whereas resolve()
+  // returns the Markdown host node. This is the syntax source consumed by
+  // CodeMirror's static token highlighter.
+  assert.equal(syntaxTree(state).resolveInner(doc.indexOf('const'), 1).name, 'const');
+  assert.equal(syntaxTree(state).resolveInner(doc.indexOf('value'), 1).name, 'VariableDefinition');
+});
+
+test('Live Editing completes inline backticks and empty-line fences', () => {
+  const inline = testView(markdownState('', { anchor: 0 }));
+  assert.equal(completeMarkdownBacktick(inline, 0, 0, '`'), true);
+  assert.equal(inline.state.doc.toString(), '``');
+  assert.equal(inline.state.selection.main.anchor, 1);
+
+  const wrapped = testView(markdownState('hello', { anchor: 0, head: 5 }));
+  assert.equal(completeMarkdownBacktick(wrapped, 0, 5, '`'), true);
+  assert.equal(wrapped.state.doc.toString(), '`hello`');
+  assert.deepEqual([wrapped.state.selection.main.from, wrapped.state.selection.main.to], [1, 6]);
+
+  const fenced = testView(markdownState('', { anchor: 0 }));
+  fenced.dispatch({ changes: { from: 0, insert: '`' }, selection: { anchor: 1 } });
+  assert.equal(completeMarkdownBacktick(fenced, 1, 1, '`'), false);
+  fenced.dispatch({ changes: { from: 1, insert: '`' }, selection: { anchor: 2 } });
+  assert.equal(completeMarkdownBacktick(fenced, 2, 2, '`'), true);
+  assert.equal(fenced.state.doc.toString(), '```\n```');
+  assert.equal(fenced.state.selection.main.anchor, 3);
+
+  // Inside an existing block, three ticks close that block; they must not
+  // trigger a second auto-completed fence.
+  const unterminated = '```ts\nconst value = 42;\n';
+  const closing = testView(markdownState(unterminated, { anchor: unterminated.length }));
+  for (let index = 0; index < 3; index++) {
+    const position = closing.state.selection.main.from;
+    assert.equal(completeMarkdownBacktick(closing, position, position, '`'), false);
+    closing.dispatch({ changes: { from: position, insert: '`' }, selection: { anchor: position + 1 } });
+  }
+  assert.equal(closing.state.doc.toString(), `${unterminated}\`\`\``);
 });
 
 test('Find and undo operate on fenced-code source through Live Editing concealment', () => {
