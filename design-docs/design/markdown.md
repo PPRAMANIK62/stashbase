@@ -15,11 +15,15 @@ without a conversion layer becoming the product.
   keyboard activation follows safe local links in StashBase and HTTP(S) links
   through the system browser.
 - In Live Editing, fenced code presents as an inert monospace block with its
-  fences and language label concealed; entering or selecting inside reveals
+  fences and language label concealed; recognized language labels receive
+  static editor syntax highlighting. Entering or selecting inside reveals
   them as one editable construct and leaving restores the block, all without
   changing source. The parser owns block boundaries, so backticks inside
-  content and unterminated fences do not corrupt them, and the language label
-  is only concealed markup — never parsed or executed.
+  content and unterminated fences do not corrupt them; unknown labels remain
+  ordinary source and no code is executed. Inactive blocks expose their
+  language label as an accessible copy control for the code contents; typing
+  an opening triple fence completes its closing fence and a single inline
+  backtick pairs its closing delimiter.
 - Live Editing copy, cut, paste, and Find operate on Markdown source even
   where the writing surface conceals syntax or presents a widget; Reading
   View retains its rendered-text clipboard and Find behaviour.
