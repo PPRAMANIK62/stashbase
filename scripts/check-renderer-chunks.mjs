@@ -8,11 +8,10 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
 const initialJsBudgetBytes = 400 * 1024;
 const expectedEntries = [
   'src/components/ChatPane.tsx',
-  'src/components/MarkdownPreview.tsx',
+  'src/components/CrepeDocument.tsx',
   'src/components/PdfPreview.tsx',
   'src/components/DocxPreview.tsx',
   'src/components/AudioPreview.tsx',
-  'src/components/CodeEditor.tsx',
 ];
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
