@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type RefObject } from 'react';
+import { Button } from 'react-aria-components';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
-import { renderMarkdownInline } from '../../markdown';
+import { AgentMarkdown } from './AgentMarkdown';
 import { ChevronDownIcon, CopyIcon, EditIcon, FileGenericIcon } from '../../icons';
 import type { Attachment, Block, ToolBlock, ToolStatus } from './types';
 
@@ -92,11 +93,11 @@ export function MessageList({
       )}
       {turnActive && <div className="agent-working"><span className="agent-dot" />{agentShortName} is working…</div>}
       {showJump && (
-        <button type="button" className="agent-jump-latest" onClick={() => {
+        <Button className="agent-jump-latest" onPress={() => {
           if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
           stick.current = true;
           setShowJump(false);
-        }}>Jump to latest ↓</button>
+        }}>Jump to latest ↓</Button>
       )}
     </div>
   );
@@ -267,9 +268,9 @@ function QueuedTurn({
               {label}
             </span>
             {turn.canSteer && turn.status === 'waiting' && (
-              <button type="button" className="agent-turn-steer" onClick={() => onSteer(turn.id)}>
+              <Button className="agent-turn-steer" onPress={() => onSteer(turn.id)}>
                 Steer
-              </button>
+              </Button>
             )}
           </span>
         </div>
@@ -320,8 +321,8 @@ function InlineUserMessageEditor({
         }}
       />
       <div className="agent-turn-edit-actions">
-        <button type="button" className="agent-btn" onClick={onCancel}>Cancel</button>
-        <button type="button" className="agent-btn primary" onClick={onSave}>{saveLabel}</button>
+        <Button className="agent-btn" onPress={onCancel}>Cancel</Button>
+        <Button className="agent-btn primary" onPress={onSave}>{saveLabel}</Button>
       </div>
     </div>
   );
@@ -343,17 +344,13 @@ function UserMessageText({ text }: { text: string }) {
       {renderUserFileMentions(open || !collapsible ? text : preview)}
       {collapsible && !open && <span className="agent-turn-ellipsis">…</span>}
       {collapsible && (
-        <button
-          type="button"
+        <Button
           className="agent-turn-expand"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen((v) => !v);
-          }}
+          onPress={() => setOpen((v) => !v)}
         >
           {open ? 'Show less' : 'Show more'}
           <ChevronDownIcon className={'agent-turn-expand-icon' + (open ? ' open' : '')} />
-        </button>
+        </Button>
       )}
     </span>
   );
@@ -393,13 +390,13 @@ function UserMessageActions({
 }) {
   return (
     <div className="agent-turn-user-actions" aria-label="Message actions">
-      <button type="button" title="Copy message" onClick={() => onCopy(text)}>
+      <Button aria-label="Copy message" onPress={() => onCopy(text)}>
         <CopyIcon />
-      </button>
+      </Button>
       {canEdit && (
-        <button type="button" title="Edit and resend" onClick={onEdit}>
+        <Button aria-label="Edit and resend" onPress={onEdit}>
           <EditIcon />
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -433,7 +430,7 @@ function FatalState({
       <div className="agent-fatal-card">
         <div className="agent-fatal-title">{copy.title}</div>
         <div className="agent-fatal-detail">{copy.detail}</div>
-        <button type="button" className="agent-btn" onClick={onRetry}>Retry</button>
+        <Button className="agent-btn" onPress={onRetry}>Retry</Button>
       </div>
     </div>
   );
@@ -453,7 +450,7 @@ function FatalInline({
         <div className="agent-fatal-title">{copy.title}</div>
         <div className="agent-fatal-detail">{copy.detail}</div>
       </div>
-      <button type="button" className="agent-btn" onClick={onRetry}>Retry</button>
+      <Button className="agent-btn" onPress={onRetry}>Retry</Button>
     </div>
   );
 }
@@ -504,18 +501,7 @@ function BlockView({ block, canEditUserMessage, onPermission, onCopyUserMessage,
     case 'assistant':
       return (
         <div className="agent-msg assistant">
-          <div
-            className="agent-prose"
-            onClick={(event) => {
-              const target = event.target;
-              const anchor = target instanceof Element ? target.closest('a') : null;
-              const path = localAssistantLinkPath(anchor?.getAttribute('href') ?? null);
-              if (!path) return;
-              event.preventDefault();
-              onOpenArtifact(path);
-            }}
-            dangerouslySetInnerHTML={{ __html: renderMarkdownInline(block.text) }}
-          />
+          <div className="agent-prose"><AgentMarkdown markdown={block.text} onOpenArtifact={onOpenArtifact} /></div>
         </div>
       );
     case 'thinking':
@@ -524,19 +510,6 @@ function BlockView({ block, canEditUserMessage, onPermission, onCopyUserMessage,
       return <div className="agent-error">{block.text}</div>;
     case 'tool':
       return <ToolCard block={block} onPermission={onPermission} />;
-  }
-}
-
-/** Local Markdown links in an agent response open files in the workspace;
- * external URLs and in-document anchors retain their ordinary browser action. */
-function localAssistantLinkPath(href: string | null): string | null {
-  if (!href || href.startsWith('#') || href.startsWith('//') || /^[a-z][a-z\d+.-]*:/i.test(href)) return null;
-  const path = href.split('#', 1)[0];
-  if (!path) return null;
-  try {
-    return decodeURIComponent(path);
-  } catch {
-    return path;
   }
 }
 
@@ -553,11 +526,11 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
     : activitySummary(tools, active);
   return (
     <section className={'agent-activity' + (active ? ' active' : '') + (failures ? ' attention' : '')}>
-      <button type="button" className="agent-activity-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+      <Button className="agent-activity-head" onPress={() => setOpen((value) => !value)} aria-expanded={open}>
         <ChevronDownIcon className={'agent-activity-chev' + (open ? ' open' : '')} />
         {active && <span className="agent-dot" />}
         <span>{summary}</span>
-      </button>
+      </Button>
       {open && <div className="agent-activity-body">{tools.map((tool) => <ToolCard key={tool.id} block={tool} onPermission={onPermission} />)}</div>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
     </section>
@@ -568,10 +541,10 @@ function ThinkingView({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={'agent-thinking' + (open ? ' open' : '')}>
-      <button type="button" className="agent-thinking-head" onClick={() => setOpen((o) => !o)}>
+      <Button className="agent-thinking-head" onPress={() => setOpen((o) => !o)}>
         <ChevronDownIcon className="agent-thinking-chev" />
         <span>Thinking</span>
-      </button>
+      </Button>
       {open && <div className="agent-thinking-body">{text}</div>}
     </div>
   );
@@ -587,12 +560,19 @@ const STATUS_LABEL: Record<ToolStatus, string> = {
 
 function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t: string, p: string, a: boolean) => void }) {
   const [open, setOpen] = useState(false);
+  const headRef = useRef<HTMLButtonElement>(null);
   const diff = useMemo(() => buildDiff(block.name, block.input), [block.name, block.input]);
   const summary = toolSummary(block.name, block.input);
+  function replyPermission(allow: boolean) {
+    onPermission(block.id, block.permId!, allow);
+    // The permission buttons disappear when the Agent updates this card.
+    // Return keyboard focus to the persistent card trigger instead of body.
+    requestAnimationFrame(() => headRef.current?.focus());
+  }
 
   return (
     <div className={'agent-tool status-' + block.status}>
-      <button type="button" className="agent-tool-head" onClick={() => setOpen((o) => !o)}>
+      <Button ref={headRef} className="agent-tool-head" onPress={() => setOpen((o) => !o)}>
         <ChevronDownIcon className="agent-tool-chev" />
         <span className="agent-tool-name">{toolActivityTitle(block.name, block.input)}</span>
         {summary && <span className="agent-tool-summary">{summary}</span>}
@@ -600,7 +580,7 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
           {block.status === 'running' && <span className="agent-dot" />}
           {STATUS_LABEL[block.status]}
         </span>
-      </button>
+      </Button>
 
       {block.status === 'awaiting' && block.permId && (
         <div className="agent-perm">
@@ -610,8 +590,8 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
             <pre className="agent-bash">{String(block.input.command ?? '')}</pre>
           )}
           <div className="agent-perm-actions">
-            <button type="button" className="agent-btn ghost" onClick={() => onPermission(block.id, block.permId!, false)}>Reject</button>
-            <button type="button" className="agent-btn primary" onClick={() => onPermission(block.id, block.permId!, true)}>Allow</button>
+            <Button className="agent-btn ghost" onPress={() => replyPermission(false)}>Reject</Button>
+            <Button className="agent-btn primary" onPress={() => replyPermission(true)}>Allow</Button>
           </div>
         </div>
       )}
@@ -639,7 +619,7 @@ function ArtifactCards({ changes, onOpen }: { changes: Array<{ path: string; kin
       <FileGenericIcon className="agent-artifact-icon" />
       <span className="agent-artifact-path" title={change.path}>{change.path}</span>
       <span className="agent-artifact-kind">{change.kind}</span>
-      <button type="button" onClick={() => onOpen(change.path)}>Open</button>
+      <Button onPress={() => onOpen(change.path)}>Open</Button>
     </div>
   ))}</div>;
 }

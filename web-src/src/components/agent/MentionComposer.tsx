@@ -149,7 +149,6 @@ export function MentionComposer({
   onShiftTab,
   onSubmit,
   mentionListboxId,
-  activeMentionOptionId,
   mentionOpen,
   ref,
 }: {
@@ -163,7 +162,6 @@ export function MentionComposer({
   onShiftTab: () => boolean;
   onSubmit: (text: string) => boolean;
   mentionListboxId?: string;
-  activeMentionOptionId?: string;
   mentionOpen: boolean;
   ref: React.Ref<MentionComposerHandle>;
 }) {
@@ -289,10 +287,10 @@ export function MentionComposer({
             }
           }),
           EditorView.theme({
-            '&': { minHeight: '36px', maxHeight: '160px', font: 'inherit', fontSize: '13px' },
+            '&': { minHeight: '44px', maxHeight: '144px', font: 'inherit', fontSize: '13px' },
             '&.cm-focused': { outline: 'none' },
             '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.5' },
-            '.cm-content': { minHeight: '30px', padding: '6px 2px 0', caretColor: 'var(--fg)' },
+            '.cm-content': { minHeight: '38px', padding: '8px 2px 0', caretColor: 'var(--fg)' },
             '.cm-placeholder': { color: 'var(--muted)' },
           }),
           EditorView.contentAttributes.of({ 'aria-label': 'Message agent' }),
@@ -326,7 +324,6 @@ export function MentionComposer({
       input.removeAttribute('aria-haspopup');
       input.removeAttribute('aria-controls');
       input.removeAttribute('aria-expanded');
-      input.removeAttribute('aria-activedescendant');
       return;
     }
     input.setAttribute('role', 'combobox');
@@ -334,8 +331,7 @@ export function MentionComposer({
     input.setAttribute('aria-haspopup', 'listbox');
     input.setAttribute('aria-expanded', String(Boolean(mentionListboxId)));
     if (mentionListboxId) input.setAttribute('aria-controls', mentionListboxId);
-    if (activeMentionOptionId) input.setAttribute('aria-activedescendant', activeMentionOptionId);
-  }, [activeMentionOptionId, mentionListboxId, mentionOpen]);
+  }, [mentionListboxId, mentionOpen]);
 
   return <div ref={hostRef} className="agent-input" />;
 }
