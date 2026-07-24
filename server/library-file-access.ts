@@ -8,6 +8,7 @@ import {
 import { filesystemPath } from './filesystem-path.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { isDerivedNoteName } from './format.ts';
+import { libraryOperationError } from './library-operations/errors.ts';
 
 export interface LibrarySearchScope {
   /** Absolute root of the folder to scope to, or undefined for whole-library. */
@@ -146,8 +147,5 @@ export function validateLibraryWritableFolderRel(folderRel: string): void {
 }
 
 export function routeError(message: string, status = 400, code?: string): Error {
-  const err = new Error(message);
-  (err as any).status = status;
-  if (code) (err as any).code = code;
-  return err;
+  return libraryOperationError(message, status, code);
 }

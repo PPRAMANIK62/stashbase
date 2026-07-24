@@ -5,6 +5,7 @@ import express from 'express';
 import { mount } from '../routes/mcp-http.ts';
 import { createDockerMcpApp, createMcpHttpService } from '../mcp-http-service.ts';
 import type { McpHttpSettingsStore } from '../mcp-http-settings.ts';
+import { createLibraryOperations } from '../library-operations/index.ts';
 
 const initRequest = {
   jsonrpc: '2.0',
@@ -42,7 +43,11 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   const address = server.address();
   assert.ok(address && typeof address === 'object');
   const base = `http://127.0.0.1:${address.port}`;
-  mount(app, { webBase: base, getToken: () => token });
+  mount(app, {
+    webBase: base,
+    getToken: () => token,
+    operations: createLibraryOperations({ getLibraryInfo: () => ({ folder_home: '/tmp', folders: [] }) }),
+  });
 
   try {
     const unauthorized = await post(base, initRequest);

@@ -7,31 +7,13 @@
 import express from 'express';
 import fs from 'node:fs';
 import { errorMessage, logger } from '../log.ts';
-import {
-  getFolderHome,
-  memberFolderRoots,
-} from '../folder.ts';
-import { filesystemPath } from '../filesystem-path.ts';
-import { indexer, syncFolderNow } from '../state.ts';
-import { remapSearchHitsForDisplay } from '../search-display.ts';
-import { getLibraryInfo } from '../library-info.ts';
+import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
-import { getApiKey } from '../app-config.ts';
-import { isConversionTextUnavailable } from '../conversion.ts';
-import { isAudioTranscriptTextUnavailable } from '../audio-transcription.ts';
 import {
-  normalizeLibrarySearchScope,
   requireLibraryStatusFolder,
-  routeError,
 } from '../library-file-access.ts';
-import { listLibraryDirectory } from '../library-directory.ts';
-import { agentContextFile, readLibraryFile } from '../library-file-reader.ts';
-import {
-  deleteLibraryFile,
-  editLibraryFile,
-  moveLibraryFile,
-  writeLibraryFile,
-} from '../library-file-mutations.ts';
+import { agentContextFile } from '../library-file-reader.ts';
+import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
 
 export {
   normalizeLibraryFilePath,
@@ -52,32 +34,16 @@ export {
 const log = logger('routes/library-files');
 
 
-export function mount(app: express.Express): void {
+export function mount(app: express.Express, operations: LibraryOperations = createLibraryOperations()): void {
   // Hybrid search over the whole library (optional `folder` / `path_prefix`
   // filter). Powers MCP's `search_library`. Hidden `.md` files are remapped or
   // dropped (same rule as /api/search) so an external client never sees
   // an internal path.
   app.post('/api/library/search', async (req, res) => {
     try {
-      const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
+      const query = typeof req.body?.query === 'string' ? req.body.query : '';
       const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
-      const { folderRoot, pathPrefix } = normalizeLibrarySearchScope(req.body?.folder, req.body?.path_prefix);
-      if (!query) return res.status(400).json({ error: 'query required' });
-      if (!getApiKey()) {
-        return res.status(412).json({
-          error: 'semantic search is disabled until you add an embedding API key',
-          code: 'EMBEDDER_KEY_REQUIRED',
-        });
-      }
-      // Members live anywhere, so hits carry their ABSOLUTE source path —
-      // the unambiguous MCP identity the file tools accept. The base only
-      // drives PDF page-marker resolution; absolute hits resolve regardless.
-      const rawHits = await indexer.search(query, topK, folderRoot, pathPrefix);
-      const hits = remapSearchHitsForDisplay(
-        rawHits.filter((hit) => !isConversionTextUnavailable(hit.fileName) && !isAudioTranscriptTextUnavailable(hit.fileName)),
-        filesystemPath.absolute(getFolderHome()),
-      );
-      res.json({ hits });
+      res.json(await operations.search({ query, topK, folder: req.body?.folder, pathPrefix: req.body?.path_prefix }));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -122,24 +88,8 @@ export function mount(app: express.Express): void {
   // MCP host.
   app.post('/api/library/reindex', async (req, res) => {
     try {
-      const folderRoot = requireLibraryStatusFolder(req.body?.folder ?? req.query.folder);
-      const targets = folderRoot ? [folderRoot] : memberFolderRoots();
-      const folders: Array<{ folder: string; added?: unknown; modified?: unknown; removed?: unknown; renamed?: unknown; failed?: unknown; error?: string }> = [];
-      for (const target of targets) {
-        try {
-          const result = await syncFolderNow(target, { reason: 'mcp reindex' });
-          folders.push({ folder: target, ...result });
-        } catch (err: unknown) {
-          folders.push({ folder: target, error: errorMessage(err) });
-        }
-      }
-      let status: object = {};
-      try {
-        status = await indexer.status(folderRoot);
-      } catch (err: unknown) {
-        log.warn(`reindex status failed: ${errorMessage(err)}`);
-      }
-      res.json({ folders, ...status });
+      const folder = req.body?.folder ?? req.query.folder;
+      res.json(await operations.reindex({ folder: typeof folder === 'string' ? folder : undefined }));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -147,9 +97,9 @@ export function mount(app: express.Express): void {
 
   // Library info = folder_home + folders. Powers MCP's `library_info` tool — the agent's
   // orientation card at the start of a session.
-  app.get('/api/library/info', (_req, res) => {
+  app.get('/api/library/info', async (_req, res) => {
     try {
-      res.json(getLibraryInfo());
+      res.json(await operations.info());
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -169,7 +119,7 @@ export function mount(app: express.Express): void {
 
   app.get('/api/library/directory', async (req, res) => {
     try {
-      res.json(await listLibraryDirectory(req.query.path));
+      res.json(await operations.listDirectory(req.query.path));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -177,7 +127,7 @@ export function mount(app: express.Express): void {
 
   app.get('/api/library/file', async (req, res) => {
     try {
-      res.json(await readLibraryFile(req.query.path));
+      res.json(await operations.read(req.query.path));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -187,9 +137,8 @@ export function mount(app: express.Express): void {
     try {
       const filePath = req.body?.path;
       const content = req.body?.content;
-      if (typeof content !== 'string') throw routeError('content (string) required', 400);
       const baseVersion = typeof req.body?.baseVersion === 'string' ? req.body.baseVersion : undefined;
-      res.json(await writeLibraryFile(filePath, content, { baseVersion }));
+      res.json(await operations.write({ path: filePath, content, baseVersion }));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -200,13 +149,8 @@ export function mount(app: express.Express): void {
       const filePath = req.body?.path;
       const oldText = req.body?.old_text;
       const newText = req.body?.new_text;
-      if (typeof oldText !== 'string') throw routeError('old_text (string) required', 400);
-      if (typeof newText !== 'string') throw routeError('new_text (string) required', 400);
       const baseVersion = typeof req.body?.baseVersion === 'string' ? req.body.baseVersion : undefined;
-      res.json(await editLibraryFile(filePath, oldText, newText, {
-        replaceAll: req.body?.replace_all === true,
-        baseVersion,
-      }));
+      res.json(await operations.edit({ path: filePath, oldText, newText, replaceAll: req.body?.replace_all === true, baseVersion }));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -214,9 +158,7 @@ export function mount(app: express.Express): void {
 
   app.patch('/api/library/file/move', async (req, res) => {
     try {
-      res.json(await moveLibraryFile(req.body?.path, req.body?.new_path, {
-        cascade: req.body?.cascade !== false,
-      }));
+      res.json(await operations.move({ path: req.body?.path, newPath: req.body?.new_path, cascade: req.body?.cascade !== false }));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -224,7 +166,7 @@ export function mount(app: express.Express): void {
 
   app.delete('/api/library/file', async (req, res) => {
     try {
-      res.json(await deleteLibraryFile(req.query.path));
+      res.json(await operations.delete(req.query.path));
     } catch (err: unknown) {
       sendError(res, err);
     }

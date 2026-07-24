@@ -2,10 +2,10 @@
  * Streamable HTTP transport for the library MCP server.
  *
  * URL-only server clients attach at `POST /mcp`. Transport plumbing only:
- * each request gets
- * a stateless server instance from the shared factory in
- * `mcp/library-server.ts`, whose handlers forward to the same
- * `/api/library/*` routes the stdio shim uses.
+ * each request gets a stateless server instance from the shared factory in
+ * `mcp/library-server.ts`, backed directly by the app's Library Operations
+ * module. The separately spawned stdio shim reaches those operations through
+ * the `/api/library/*` HTTP adapter.
  *
  * Every request must carry the Settings-managed bearer token. The loopback
  * route is mounted on the app server; an optional Docker-facing listener
@@ -20,12 +20,15 @@ import crypto from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createLibraryMcpServer } from '../../mcp/library-server.ts';
 import { logger, errorMessage } from '../log.ts';
+import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
 
 const log = logger('mcp-http');
 
 export interface McpHttpTransportOptions {
   webBase: string;
   getToken(): string;
+  /** Test-only or composition-root override for the in-process adapter. */
+  operations?: LibraryOperations;
 }
 
 export function mount(app: express.Express, options: McpHttpTransportOptions): void {
@@ -61,7 +64,10 @@ async function handleMcpPost(
     });
     return;
   }
-  const server = createLibraryMcpServer({ webBase: options.webBase });
+  const server = createLibraryMcpServer({
+    webBase: options.webBase,
+    operations: options.operations ?? createLibraryOperations(),
+  });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

@@ -3,26 +3,29 @@
  *
  * `mcp/server.ts` (stdio, spawned per client) and `server/routes/mcp-http.ts`
  * (Streamable HTTP on the app server) build their `Server` instances here, so
- * the tool definitions and handlers exist exactly once. Every handler forwards
- * over HTTP to the StashBase app server (`/api/library/*` endpoints, absolute
- * member paths) — the single execution path both transports share.
+ * the tool definitions and handlers exist exactly once. Callers provide either
+ * the in-process Library Operations adapter (HTTP MCP) or the HTTP adapter
+ * used by the separately spawned stdio host.
  *
  * This module must stay transport-free: no stdio-guard (the app server needs
- * its console), no Express, no process-level state. Callers pass the web base
- * URL and the optional window id instead of reading argv/env here.
+ * its console), no Express, no process-level state. Callers pass the adapter
+ * and optional window id instead of reading argv/env here.
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { type LibraryInfo } from '../server/library-info.ts';
+import type { LibraryOperations } from '../server/library-operations/index.ts';
+import { createHttpLibraryOperations } from './library-operations-http.ts';
 
 export interface LibraryMcpServerOptions {
   /** App server base URL, e.g. `http://127.0.0.1:8090`. */
   webBase: string;
   /** Optional window id forwarded as `x-stashbase-window-id`. */
   windowId?: string;
+  /** Direct in-process adapter used by the app's HTTP MCP transport. */
+  operations?: LibraryOperations;
 }
 
 const DEFAULT_TOP_K = 8;
@@ -30,132 +33,12 @@ const MAX_TOP_K = 25;
 
 export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
   const { webBase, windowId } = opts;
-
-  function webHeaders(extra?: Record<string, string>): Record<string, string> {
-    const headers: Record<string, string> = { ...(extra ?? {}) };
-    if (windowId) headers['x-stashbase-window-id'] = windowId;
-    return headers;
-  }
-
-  /** Run a web call through the already-running StashBase desktop app. */
-  async function viaWeb<T>(label: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
-    } catch (err: unknown) {
-      if (!(err instanceof TypeError)) throw err;
-      throw new Error(
-        `StashBase app is not reachable for ${label}. Open the StashBase desktop app and try again.`,
-      );
-    }
-  }
-
-  async function searchViaWeb(
-    query: string,
-    topK: number,
-    folder: string | undefined,
-    pathPrefix?: string,
-  ): Promise<unknown[]> {
-    const body: Record<string, unknown> = { query, top_k: topK };
-    if (folder) body.folder = folder;
-    if (pathPrefix) body.path_prefix = pathPrefix;
-    const r = await fetch(`${webBase}/api/library/search`, {
-      method: 'POST',
-      headers: webHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error(`web /api/library/search failed: ${r.status}`);
-    const j = await r.json() as { hits: unknown[] };
-    return j.hits;
-  }
-
-  async function libraryInfoViaWeb(): Promise<LibraryInfo> {
-    const r = await fetch(`${webBase}/api/library/info`);
-    if (!r.ok) throw new Error(`web /api/library/info failed: ${r.status}`);
-    return r.json() as Promise<LibraryInfo>;
-  }
-
-  async function reindexViaWeb(folder: string | undefined): Promise<unknown> {
-    const body = folder ? { folder } : {};
-    const r = await fetch(`${webBase}/api/library/reindex`, {
-      method: 'POST',
-      headers: webHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error(`web POST /api/library/reindex failed: ${r.status}`);
-    return r.json();
-  }
-
-  async function webJson<T>(url: string, init?: RequestInit): Promise<T> {
-    const r = await fetch(url, init);
-    if (!r.ok) {
-      const detail = await r.text().catch(() => '');
-      throw new Error(`web ${init?.method ?? 'GET'} ${url.replace(webBase, '')} failed: ${r.status}${detail ? ` ${detail.slice(0, 500)}` : ''}`);
-    }
-    return r.json() as Promise<T>;
-  }
-
-  function pathQuery(pathValue: unknown): string {
-    const pathParam = typeof pathValue === 'string' ? pathValue : '';
-    return `path=${encodeURIComponent(pathParam)}`;
-  }
+  const operations = withMcpErrors(opts.operations ?? createHttpLibraryOperations(webBase, windowId));
 
   function filePathArg(args: Record<string, unknown>): unknown {
     return typeof args.path === 'string' && args.path.trim()
       ? args.path
       : args.file_path;
-  }
-
-  async function listDirectoryViaWeb(pathValue: unknown): Promise<unknown> {
-    return webJson(`${webBase}/api/library/directory?${pathQuery(pathValue)}`, { headers: webHeaders() });
-  }
-
-  async function readFileViaWeb(pathValue: unknown): Promise<unknown> {
-    return webJson(`${webBase}/api/library/file?${pathQuery(pathValue)}`, { headers: webHeaders() });
-  }
-
-  async function writeFileViaWeb(args: Record<string, unknown>): Promise<unknown> {
-    return webJson(`${webBase}/api/library/file`, {
-      method: 'PUT',
-      headers: webHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify({
-        path: args.path,
-        content: args.content,
-        ...(typeof args.baseVersion === 'string' ? { baseVersion: args.baseVersion } : {}),
-      }),
-    });
-  }
-
-  async function editFileViaWeb(args: Record<string, unknown>): Promise<unknown> {
-    return webJson(`${webBase}/api/library/file/edit`, {
-      method: 'POST',
-      headers: webHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify({
-        path: args.path,
-        old_text: args.old_text,
-        new_text: args.new_text,
-        replace_all: args.replace_all === true,
-        ...(typeof args.baseVersion === 'string' ? { baseVersion: args.baseVersion } : {}),
-      }),
-    });
-  }
-
-  async function moveFileViaWeb(args: Record<string, unknown>): Promise<unknown> {
-    return webJson(`${webBase}/api/library/file/move`, {
-      method: 'PATCH',
-      headers: webHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify({
-        path: args.path,
-        new_path: args.new_path,
-        cascade: args.cascade !== false,
-      }),
-    });
-  }
-
-  async function deleteFileViaWeb(pathValue: unknown): Promise<unknown> {
-    return webJson(`${webBase}/api/library/file?${pathQuery(pathValue)}`, {
-      method: 'DELETE',
-      headers: webHeaders(),
-    });
   }
 
   const server = new Server(
@@ -193,7 +76,7 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
     const folder = typeof args.folder === 'string' && args.folder.trim() ? args.folder.trim() : undefined;
 
     if (req.params.name === 'library_info') {
-      const info = await viaWeb('library_info', () => libraryInfoViaWeb());
+      const info = await operations.info();
       return {
         content: [{ type: 'text', text: JSON.stringify(info, null, 2) }],
       };
@@ -208,56 +91,57 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
         1,
         Math.min(MAX_TOP_K, Math.floor(typeof args.top_k === 'number' ? args.top_k : DEFAULT_TOP_K)),
       );
-      const hits = annotateSearchHitsForMcp(await viaWeb('search', () => searchViaWeb(query, k, folder, pathPrefix)));
+      const searchResult = await operations.search({ query, topK: k, folder, pathPrefix });
+      const hits = annotateSearchHitsForMcp(searchResult.hits);
       return {
         content: [{ type: 'text', text: JSON.stringify({ query, folder: folder ?? null, path_prefix: pathPrefix ?? null, top_k: k, hits }, null, 2) }],
       };
     }
 
     if (req.params.name === 'list_directory') {
-      const result = await viaWeb('list_directory', () => listDirectoryViaWeb(args.path));
+      const result = await operations.listDirectory(args.path);
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     }
 
     if (req.params.name === 'read_file') {
-      const result = await viaWeb('read_file', () => readFileViaWeb(filePathArg(args)));
+      const result = await operations.read(filePathArg(args));
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     }
 
     if (req.params.name === 'write_file') {
-      const result = await viaWeb('write_file', () => writeFileViaWeb(args));
+      const result = await operations.write({ path: args.path, content: args.content, baseVersion: typeof args.baseVersion === 'string' ? args.baseVersion : undefined });
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     }
 
     if (req.params.name === 'edit_file') {
-      const result = await viaWeb('edit_file', () => editFileViaWeb(args));
+      const result = await operations.edit({ path: args.path, oldText: args.old_text, newText: args.new_text, replaceAll: args.replace_all === true, baseVersion: typeof args.baseVersion === 'string' ? args.baseVersion : undefined });
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     }
 
     if (req.params.name === 'move_file') {
-      const result = await viaWeb('move_file', () => moveFileViaWeb(args));
+      const result = await operations.move({ path: args.path, newPath: args.new_path, cascade: args.cascade !== false });
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     }
 
     if (req.params.name === 'delete_file') {
-      const result = await viaWeb('delete_file', () => deleteFileViaWeb(args.path));
+      const result = await operations.delete(args.path);
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     }
 
     if (req.params.name === 'reindex') {
-      const result = await viaWeb('reindex', () => reindexViaWeb(folder));
+      const result = await operations.reindex({ folder });
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
@@ -267,6 +151,25 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
   });
 
   return server;
+}
+
+function withMcpErrors(operations: LibraryOperations): LibraryOperations {
+  return new Proxy(operations, {
+    get(target, key, receiver) {
+      const value = Reflect.get(target, key, receiver);
+      if (typeof value !== 'function') return value;
+      return async (...args: unknown[]) => {
+        try {
+          return await value.apply(target, args);
+        } catch (error: unknown) {
+          const code = typeof (error as { code?: unknown })?.code === 'string'
+            ? (error as { code: string }).code
+            : undefined;
+          throw new Error(code ? `${code}: ${error instanceof Error ? error.message : String(error)}` : error instanceof Error ? error.message : String(error));
+        }
+      };
+    },
+  }) as LibraryOperations;
 }
 
 function annotateSearchHitsForMcp(hits: unknown[]): unknown[] {
