@@ -264,11 +264,7 @@
 
     /* History dropdown — anchored to the head button, opening downward
      * (mirrors .agent-mode-menu, which opens upward from the composer). */
-    .agent-history-wrap { position: relative; display: inline-flex; }
     .agent-history-menu {
-      position: absolute;
-      right: 0;
-      top: calc(100% + 6px);
       z-index: 20;
       width: 320px;
       max-width: calc(100vw - 24px);
@@ -347,6 +343,8 @@
     }
     .agent-history-row:hover .agent-history-time { display: none; }
     .agent-history-row:hover .agent-history-row-actions { display: flex; }
+    .agent-history-row:focus-within .agent-history-time { display: none; }
+    .agent-history-row:focus-within .agent-history-row-actions { display: flex; }
     .agent-history-act {
       width: 24px;
       height: 24px;
@@ -361,6 +359,37 @@
     }
     .agent-history-act svg { width: 15px; height: 15px; }
     .agent-history-act:hover { background: var(--border); color: var(--fg); }
+    .agent-history-confirm-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgba(0, 0, 0, 0.36);
+    }
+    .agent-history-confirm {
+      width: min(360px, 100%);
+      padding: 16px;
+      background: var(--pane);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+      color: var(--fg);
+    }
+    .agent-history-confirm h2 { margin: 0; font-size: 14px; }
+    .agent-history-confirm p { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+    .agent-history-confirm-error { margin-top: 8px; color: #c0392b; font-size: 12px; }
+    .agent-history-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .agent-history-confirm-actions button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 9px;
+      background: var(--bg);
+      color: var(--fg);
+      cursor: pointer;
+    }
+    .agent-history-confirm-actions button.danger { border-color: #e45649; background: #e45649; color: #fff; }
 
     .agent-messages {
       flex: 1;
@@ -968,7 +997,7 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      max-width: 220px;
+      max-width: 260px;
       padding: 3px 4px 3px 7px;
       background: var(--hover);
       border: 1px solid var(--border);
@@ -977,11 +1006,13 @@
       color: var(--fg);
     }
     .agent-attach-icon { width: 13px; height: 13px; flex-shrink: 0; color: var(--muted); }
+    .agent-attach-text { display: flex; min-width: 0; flex-direction: column; }
     .agent-attach-name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .agent-attach-path { overflow: hidden; color: var(--muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
     .agent-attach-dims { color: var(--muted); flex-shrink: 0; }
     .agent-attach-x {
       display: grid;
@@ -1074,11 +1105,7 @@
     .agent-effort-btn.is-locked { opacity: 0.58; cursor: default; }
 
     /* "Modes" dropdown — opens upward from the mode button. */
-    .agent-mode-wrap { position: relative; display: inline-flex; }
     .agent-mode-menu {
-      position: absolute;
-      right: 0;
-      bottom: calc(100% + 6px);
       z-index: 20;
       width: 320px;
       max-width: calc(100vw - 24px);
@@ -1194,7 +1221,7 @@
     .agent-send svg { width: 18px; height: 18px; }
     .agent-send:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
     .agent-send:disabled { opacity: 0.4; cursor: default; }
-    .agent-send.stop { background: #e45649; border-color: #e45649; color: #fff; font-size: 11px; }
+    .agent-send.stop { background: #e45649; border-color: #e45649; color: #fff; }
 
     /* @-mention popup */
     .agent-mention {
@@ -1213,6 +1240,8 @@
       z-index: 30;
     }
     .agent-mention-list { max-height: 210px; overflow-y: auto; }
+    .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: 10.5px; }
+    .agent-mention-head > span:first-child { color: var(--fg); font-weight: 600; }
     .agent-mention-item {
       display: flex;
       align-items: flex-start;

@@ -18,6 +18,7 @@ import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
 import { useApp } from '../store/AppContext';
 import { makeChatTab } from '../store/state';
 import { NewChatIcon } from '../icons';
+import { Button } from 'react-aria-components';
 import { AgentComposer } from './agent/AgentComposer';
 import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
@@ -705,9 +706,9 @@ export function AgentView({
               onActiveDeleted={resetAfterActiveSessionDeleted}
             />
           )}
-          <button type="button" className="agent-head-btn" title={`New ${meta.name} chat`} onClick={newChat}>
+          <Button className="agent-head-btn" aria-label={`New ${meta.name} chat`} onPress={newChat}>
             <NewChatIcon />
-          </button>
+          </Button>
         </div>
       </div>
       <MessageList
@@ -735,7 +736,7 @@ export function AgentView({
         !fatal && (
           <div className="agent-ended">
             <span>Session ended.</span>
-            <button type="button" className="agent-btn" onClick={reconnect}>Reconnect</button>
+            <Button className="agent-btn" onPress={reconnect}>Reconnect</Button>
           </div>
         )
       )}

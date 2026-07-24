@@ -16,6 +16,8 @@ context, not a separate AI workspace.
   streamlined, while deletion, commands, network access, and broader access
   stay explicit approval decisions.
 - Agent file outputs and local file links lead back into the local workspace.
+- Agent response Markdown supports GFM, but treats raw HTML and remote images
+  as inert content; only workspace-relative links and HTTP(S) links are active.
 
 ## Experience Contract
 
@@ -26,6 +28,10 @@ context, not a separate AI workspace.
   transcript content.
 - Presentation changes must not create a separate agent, context, permission,
   indexing, or MCP model.
+- Popup controls use maintained accessible primitives while the CodeMirror
+  composer remains responsible for typed content and mention keystrokes. The
+  composer presents as a capped-height chat input, with ranked file and folder mentions,
+  visible attachment chips, and clear Send/Stop states rather than editor UI.
 - The panel complements external MCP clients; it does not replace the
   bring-your-own-agent direction.
 

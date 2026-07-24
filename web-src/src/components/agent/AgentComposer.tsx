@@ -1,11 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Button, ListBox, ListBoxItem, Menu, MenuItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
   ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
-  FileGenericIcon, HandIcon, PlusIcon,
+  FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
 } from '../../icons';
 import { useApp } from '../../store/AppContext';
 import { baseName } from './attachments';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
+import { rankMentionSuggestions } from './mentionRanking';
 import type { Attachment, EffortLevel, PermMode } from './types';
 
 const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon }[] = [
@@ -21,34 +23,36 @@ const EFFORT_LABEL: Record<EffortLevel, string> = {
 };
 
 function AccessMenu({
-  mode, open, disabled, wrapRef, onToggle, onPick,
+  mode, open, disabled, onOpenChange, onPick,
 }: {
   mode: PermMode;
   open: boolean;
   disabled: boolean;
-  wrapRef: React.RefObject<HTMLDivElement | null>;
-  onToggle: () => void;
+  onOpenChange: (open: boolean) => void;
   onPick: (m: PermMode) => void;
 }) {
   const active = MODES.find((m) => m.id === mode) ?? MODES[0];
   const ActiveIcon = active.Icon;
   return (
-    <div className="agent-mode-wrap" ref={wrapRef}>
-      {open && (
-        <div className="agent-mode-menu" role="menu">
-          <div className="agent-mode-menu-head">
-            <span>Access</span>
-          </div>
+    <MenuTrigger isOpen={open} onOpenChange={onOpenChange}>
+      <Button className="agent-mode-btn" isDisabled={disabled}>
+        <ActiveIcon className="agent-mode-icon" />
+        {active.label}
+        <ChevronDownIcon className="agent-mode-chevron" />
+      </Button>
+      <Popover className="agent-mode-menu" placement="top end">
+        <div className="agent-mode-menu-head">
+          <span>Access</span>
+        </div>
+        <Menu aria-label="Access level" selectionMode="single" selectedKeys={[mode]} onAction={(key) => onPick(key as PermMode)}>
           {MODES.map((m) => {
             const Icon = m.Icon;
             return (
-              <button
+              <MenuItem
                 key={m.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={m.id === mode}
-                className={'agent-mode-opt' + (m.id === mode ? ' active' : '')}
-                onClick={() => onPick(m.id)}
+                id={m.id}
+                className={({ isSelected }) => 'agent-mode-opt' + (isSelected ? ' active' : '')}
+                textValue={m.label}
               >
                 <Icon className="agent-mode-opt-icon" />
                 <span className="agent-mode-opt-text">
@@ -56,25 +60,12 @@ function AccessMenu({
                   <span className="agent-mode-opt-desc">{m.desc}</span>
                 </span>
                 {m.id === mode && <CheckIcon className="agent-mode-opt-check" />}
-              </button>
+              </MenuItem>
             );
           })}
-        </div>
-      )}
-      <button
-        type="button"
-        className="agent-mode-btn"
-        disabled={disabled}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title="Access level (⇧+Tab)"
-        onClick={onToggle}
-      >
-        <ActiveIcon className="agent-mode-icon" />
-        {active.label}
-        <ChevronDownIcon className="agent-mode-chevron" />
-      </button>
-    </div>
+        </Menu>
+      </Popover>
+    </MenuTrigger>
   );
 }
 
@@ -86,65 +77,59 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
       <span className="agent-effort-label">
         Effort <span className="agent-effort-level">({EFFORT_LABEL[effort]})</span>
       </span>
-      <div className="agent-effort-track" role="group" aria-label="Effort">
+      <ListBox
+        className="agent-effort-track"
+        aria-label="Effort"
+        selectionMode="single"
+        selectedKeys={[effort]}
+        onAction={(key) => onSet(key as EffortLevel)}
+      >
         {EFFORTS.map((lv, i) => (
-          <button
+          <ListBoxItem
             key={lv}
-            type="button"
-            className={
+            id={lv}
+            className={({ isSelected }) =>
               'agent-effort-notch'
               + (i <= cur ? ' on' : '')
-              + (lv === effort ? ' cur' : '')
+              + (isSelected ? ' cur' : '')
               + (lv === 'max' ? ' max' : '')
             }
             aria-label={EFFORT_LABEL[lv]}
-            aria-pressed={lv === effort}
-            title={EFFORT_LABEL[lv]}
-            onClick={() => onSet(lv)}
+            textValue={EFFORT_LABEL[lv]}
           />
         ))}
-      </div>
+      </ListBox>
     </div>
   );
 }
 
 function EffortMenu({
-  effort, open, disabled, locked, wrapRef, onToggle, onSetEffort,
+  effort, open, disabled, locked, onOpenChange, onSetEffort,
 }: {
   effort: EffortLevel;
   open: boolean;
   disabled: boolean;
   locked: boolean;
-  wrapRef: React.RefObject<HTMLDivElement | null>;
-  onToggle: () => void;
+  onOpenChange: (open: boolean) => void;
   onSetEffort: (level: EffortLevel) => void;
 }) {
   const unavailable = disabled || locked;
   return (
-    <div className="agent-mode-wrap" ref={wrapRef}>
-      {open && !unavailable && (
-        <div className="agent-mode-menu effort-only" role="menu">
-          <EffortBar effort={effort} onSet={onSetEffort} />
-        </div>
-      )}
-      <button
-        type="button"
+    <MenuTrigger isOpen={open && !unavailable} onOpenChange={onOpenChange}>
+      <Button
         className={'agent-mode-btn agent-effort-btn' + (locked ? ' is-locked' : '')}
-        disabled={disabled}
-        aria-disabled={unavailable}
-        aria-haspopup="menu"
-        aria-expanded={open && !unavailable}
-        title={locked ? 'Effort applies to new chats' : 'Effort'}
-        onClick={() => {
-          if (unavailable) return;
-          onToggle();
-        }}
+        isDisabled={unavailable}
       >
         <DumbbellIcon className="agent-mode-icon" />
         {EFFORT_LABEL[effort]}
         <ChevronDownIcon className="agent-mode-chevron" />
-      </button>
-    </div>
+      </Button>
+      <Popover className="agent-mode-menu effort-only" placement="top end">
+        <div>
+          <EffortBar effort={effort} onSet={onSetEffort} />
+        </div>
+      </Popover>
+    </MenuTrigger>
   );
 }
 
@@ -179,30 +164,10 @@ export function AgentComposer({
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [modeOpen, setModeOpen] = useState(false);
   const [effortOpen, setEffortOpen] = useState(false);
-  const modeWrapRef = useRef<HTMLDivElement>(null);
-  const effortWrapRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const activeMentionRef = useRef<HTMLButtonElement>(null);
+  const activeMentionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (active) composerRef.current?.focus(); }, [active]);
-
-  useEffect(() => {
-    if (!modeOpen) return;
-    function onDown(e: MouseEvent) {
-      if (!modeWrapRef.current?.contains(e.target as Node)) setModeOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [modeOpen]);
-
-  useEffect(() => {
-    if (!effortOpen) return;
-    function onDown(e: MouseEvent) {
-      if (!effortWrapRef.current?.contains(e.target as Node)) setEffortOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [effortOpen]);
 
   useEffect(() => {
     if (effortLocked) setEffortOpen(false);
@@ -215,11 +180,8 @@ export function AgentComposer({
 
   const suggestions = useMemo(() => {
     if (!mention) return [];
-    const q = mention.q.toLowerCase();
-    return state.files
-      .filter((f) => f.name.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [mention, state.files]);
+    return rankMentionSuggestions(state.files, state.folders, mention.q);
+  }, [mention, state.files, state.folders]);
 
   const activeSuggestionIndex = Math.min(activeMentionIndex, Math.max(suggestions.length - 1, 0));
 
@@ -258,28 +220,41 @@ export function AgentComposer({
     <div className="agent-composer">
       {mention && suggestions.length > 0 && (
         <div className="agent-mention">
-          <div id={mentionListboxId} className="agent-mention-list" role="listbox" aria-label="Matching library files">
-            {suggestions.map((f, index) => (
-              <button
-                key={f.name}
-                ref={index === activeSuggestionIndex ? activeMentionRef : null}
-                id={`${mentionListboxId}-option-${index}`}
-                type="button"
-                role="option"
-                aria-selected={index === activeSuggestionIndex}
-                tabIndex={-1}
-                className={'agent-mention-item' + (index === activeSuggestionIndex ? ' active' : '')}
-                onMouseEnter={() => setActiveMentionIndex(index)}
-                onClick={() => pickMention(f.name)}
-              >
-                <FileGenericIcon className="agent-mention-icon" />
-                <span className="agent-mention-text">
-                  <span className="agent-mention-name">{baseName(f.name)}</span>
-                  <span className="agent-mention-path">{f.name}</span>
-                </span>
-              </button>
-            ))}
+          <div className="agent-mention-head">
+            <span>Files and folders</span>
+            <span>↑↓ navigate · Enter select · Esc dismiss</span>
           </div>
+          <VisuallyHidden>
+            <div role="status">
+              {`${baseName(suggestions[activeSuggestionIndex].path)}, ${activeSuggestionIndex + 1} of ${suggestions.length}`}
+            </div>
+          </VisuallyHidden>
+          <ListBox
+            id={mentionListboxId}
+            className="agent-mention-list"
+            aria-label="Matching library files and folders"
+            selectionMode="single"
+            selectedKeys={[suggestions[activeSuggestionIndex].path]}
+            onAction={(key) => pickMention(String(key))}
+          >
+            {suggestions.map((suggestion, index) => (
+              <ListBoxItem
+                key={suggestion.path}
+                ref={index === activeSuggestionIndex ? activeMentionRef : null}
+                id={suggestion.path}
+                className={({ isSelected }) => 'agent-mention-item' + (isSelected ? ' active' : '')}
+                textValue={suggestion.path}
+              >
+                {suggestion.kind === 'folder'
+                  ? <FolderIcon className="agent-mention-icon" />
+                  : <FileGenericIcon className="agent-mention-icon" />}
+                <span className="agent-mention-text">
+                  <span className="agent-mention-name">{baseName(suggestion.path)}</span>
+                  <span className="agent-mention-path">{suggestion.path}</span>
+                </span>
+              </ListBoxItem>
+            ))}
+          </ListBox>
         </div>
       )}
       <div className="agent-composer-box">
@@ -288,14 +263,16 @@ export function AgentComposer({
             {attachments.map((a) => (
               <span key={a.path} className="agent-attach-chip" title={a.path}>
                 <FileGenericIcon className="agent-attach-icon" />
-                <span className="agent-attach-name">{a.name}</span>
+                <span className="agent-attach-text">
+                  <span className="agent-attach-name">{a.name}</span>
+                  <span className="agent-attach-path">{a.path}</span>
+                </span>
                 {a.dims && <span className="agent-attach-dims">{a.dims}</span>}
-                <button
-                  type="button"
+                <Button
                   className="agent-attach-x"
-                  title="Remove attachment"
-                  onClick={() => onRemoveAttachment(a.path)}
-                >×</button>
+                  aria-label={`Remove ${a.name}`}
+                  onPress={() => onRemoveAttachment(a.path)}
+                >×</Button>
               </span>
             ))}
             {uploading && <span className="agent-attach-loading">Uploading…</span>}
@@ -313,7 +290,7 @@ export function AgentComposer({
           onMentionNavigate={moveMention}
           onMentionAccept={() => {
             if (!suggestions.length) return false;
-            pickMention(suggestions[activeSuggestionIndex].name);
+            pickMention(suggestions[activeSuggestionIndex].path);
             return true;
           }}
           onMentionDismiss={() => setMention(null)}
@@ -325,7 +302,6 @@ export function AgentComposer({
           onSubmit={submit}
           mentionOpen={Boolean(mention && suggestions.length)}
           mentionListboxId={mention && suggestions.length ? mentionListboxId : undefined}
-          activeMentionOptionId={mention && suggestions.length ? `${mentionListboxId}-option-${activeSuggestionIndex}` : undefined}
         />
         <input
           ref={fileInputRef}
@@ -338,23 +314,21 @@ export function AgentComposer({
           }}
         />
         <div className="agent-composer-bar">
-          <button
-            type="button"
+          <Button
             className="agent-bar-btn"
-            title={uploading ? 'Uploading…' : 'Upload local files'}
-            disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
+            aria-label={uploading ? 'Uploading files' : 'Upload local files'}
+            isDisabled={uploading}
+            onPress={() => fileInputRef.current?.click()}
           >
             <PlusIcon />
-          </button>
+          </Button>
           <span className="agent-bar-spacer" />
           {showModeMenu && (
             <AccessMenu
               mode={mode}
               open={modeOpen}
               disabled={disabled}
-              wrapRef={modeWrapRef}
-              onToggle={() => { setModeOpen((o) => !o); setEffortOpen(false); }}
+              onOpenChange={(open) => { setModeOpen(open); if (open) setEffortOpen(false); }}
               onPick={(m) => { onSetMode(m); setModeOpen(false); }}
             />
           )}
@@ -364,27 +338,23 @@ export function AgentComposer({
               open={effortOpen}
               disabled={disabled}
               locked={effortLocked}
-              wrapRef={effortWrapRef}
-              onToggle={() => {
-                if (effortLocked) return;
-                setEffortOpen((o) => !o);
-                setModeOpen(false);
-              }}
+              onOpenChange={(open) => { setEffortOpen(open); if (open) setModeOpen(false); }}
               onSetEffort={(level) => { onSetEffort(level); setEffortOpen(false); }}
             />
           )}
           {turnActive ? (
-            <button type="button" className="agent-send stop" title="Stop" onClick={onStop}>■</button>
+            <Button className="agent-send stop" aria-label="Stop agent" onPress={onStop}>
+              <StopIcon />
+            </Button>
           ) : (
-            <button
-              type="button"
+            <Button
               className="agent-send"
-              title="Send"
-              disabled={disabled || uploading || (!text.trim() && attachments.length === 0)}
-              onClick={() => composerRef.current?.submit()}
+              aria-label="Send message"
+              isDisabled={disabled || uploading || (!text.trim() && attachments.length === 0)}
+              onPress={() => composerRef.current?.submit()}
             >
               <ArrowUpIcon />
-            </button>
+            </Button>
           )}
         </div>
       </div>

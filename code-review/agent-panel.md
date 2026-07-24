@@ -34,12 +34,22 @@ Community contributions can land as useful first iterations, but the long-term d
 The accepted baseline includes:
 
 - per-agent chat tab selection and toggle behavior
-- keyboard navigation for `@` file mentions
+- keyboard navigation for `@` file and folder mentions
 - smooth chat-side resize without drag-frequency global state updates
 - compact activity grouping for non-actionable tool calls, with inspectable
   command/read/search labels rather than lifecycle-only summaries
 - visible permission cards outside collapsed activity
 - lightweight file/artifact open affordances
 - jump-to-latest behavior for transcript scrolling
+- GFM Agent-message rendering through React elements, never an HTML string or
+  raw HTML parser. Keep remote images and non-HTTP(S), non-workspace links
+  inert; local links continue through the folder-safe workspace callback.
+- React Aria controls for popover dismissal, focus management, and menu/listbox
+  semantics, including permission decisions and destructive history
+  confirmation. CodeMirror remains the owner of composer text, selection,
+  undo, and mention-key handoff; keep its presentation chat-like and its
+  height capped so the transcript retains reading space. When a permission
+  action removes its own controls, restore focus to the persistent tool-card
+  trigger.
 
 These are still implementation details, not a new product category. If the panel starts to feel heavier than VS Code/Codex/Claude Code side chat, the preferred follow-up is to reduce visual weight rather than add more structure.

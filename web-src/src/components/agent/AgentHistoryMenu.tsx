@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } from 'react-aria-components';
 import { api, type SessionInfo } from '../../api';
 import { EditIcon, HistoryIcon, TrashIcon } from '../../icons';
 import type { AgentKind } from './types';
@@ -23,13 +24,13 @@ export function AgentHistoryMenu({
   onResume: (id: string) => void;
   onActiveDeleted: () => void;
 }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [q, setQ] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -43,15 +44,6 @@ export function AgentHistoryMenu({
     if (open) { void refresh(); }
     else { setQ(''); setEditingId(null); }
   }, [open, agent]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open, onClose]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -68,26 +60,30 @@ export function AgentHistoryMenu({
     } catch { /* leave list as-is */ }
   }
 
-  async function remove(id: string) {
-    try { await api.deleteSession(id, agent); } catch { return; }
+  async function remove(id: string): Promise<boolean> {
+    try { await api.deleteSession(id, agent); }
+    catch {
+      setDeleteError('Could not delete this session. Try again.');
+      return false;
+    }
     setSessions((ss) => ss.filter((s) => s.id !== id));
     if (id === currentSessionId) onActiveDeleted();
+    return true;
   }
 
   return (
-    <div className="agent-history-wrap" ref={wrapRef}>
-      <button
-        type="button"
-        className="agent-head-btn"
-        title="Chat history"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={onToggle}
-      >
+    <DialogTrigger
+      isOpen={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen && !open) onToggle();
+        if (!nextOpen) onClose();
+      }}
+    >
+      <Button className="agent-head-btn" aria-label="Chat history">
         <HistoryIcon />
-      </button>
-      {open && (
-        <div className="agent-history-menu" role="menu">
+      </Button>
+      <Popover className="agent-history-menu" placement="bottom end">
+        <Dialog aria-label="Chat history">
           <div className="agent-history-search">
             <input
               type="text"
@@ -121,39 +117,56 @@ export function AgentHistoryMenu({
                     onBlur={() => void commitRename(s.id)}
                   />
                 ) : (
-                  <button
-                    type="button"
+                  <Button
                     className="agent-history-open"
-                    title={s.title}
-                    onClick={() => onResume(s.id)}
+                    aria-label={`Resume ${s.title}`}
+                    onPress={() => onResume(s.id)}
                   >
                     <span className="agent-history-title">{s.title}</span>
                     <span className="agent-history-time">{relTime(s.lastModified)}</span>
-                  </button>
+                  </Button>
                 )}
                 <div className="agent-history-row-actions">
-                  <button
-                    type="button"
+                  <Button
                     className="agent-history-act"
-                    title="Rename"
-                    onClick={() => { setEditingId(s.id); setEditText(s.title); }}
+                    aria-label={`Rename ${s.title}`}
+                    onPress={() => { setEditingId(s.id); setEditText(s.title); }}
                   >
                     <EditIcon />
-                  </button>
-                  <button
-                    type="button"
-                    className="agent-history-act"
-                    title="Delete"
-                    onClick={() => void remove(s.id)}
-                  >
-                    <TrashIcon />
-                  </button>
+                  </Button>
+                  <DialogTrigger onOpenChange={(isOpen) => { if (isOpen) setDeleteError(null); }}>
+                    <Button className="agent-history-act" aria-label={`Delete ${s.title}`}>
+                      <TrashIcon />
+                    </Button>
+                    <ModalOverlay className="agent-history-confirm-overlay" isDismissable>
+                      <Modal className="agent-history-confirm">
+                        <Dialog role="alertdialog" aria-label="Delete chat session">
+                          {({ close }) => (
+                            <>
+                              <Heading slot="title">Delete chat?</Heading>
+                              <p>Delete “{s.title}”? This cannot be undone.</p>
+                              {deleteError && <div className="agent-history-confirm-error" role="alert">{deleteError}</div>}
+                              <div className="agent-history-confirm-actions">
+                                <Button onPress={close}>Cancel</Button>
+                                <Button
+                                  className="danger"
+                                  onPress={() => { void remove(s.id).then((deleted) => { if (deleted) close(); }); }}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </Dialog>
+                      </Modal>
+                    </ModalOverlay>
+                  </DialogTrigger>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-    </div>
+        </Dialog>
+      </Popover>
+    </DialogTrigger>
   );
 }
