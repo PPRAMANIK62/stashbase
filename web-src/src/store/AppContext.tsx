@@ -30,7 +30,7 @@ import {
   type State,
 } from './state';
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
-import type { EditorHandle, EditorSession, FindController } from './actionTypes';
+import type { EditorHandle, FindController } from './actionTypes';
 import { useDocumentActions } from './useDocumentActions';
 import { useFeedbackActions } from './useFeedbackActions';
 import { useFileActions } from './useFileActions';
@@ -54,7 +54,7 @@ export type {
   State,
   Tab,
 } from './state';
-export type { EditorHandle, EditorSession, FindController, FindOptions, MatchInfo } from './actionTypes';
+export type { EditorHandle, FindController, FindOptions, MatchInfo } from './actionTypes';
 
 export interface AppActions {
   bootstrap: () => Promise<void>;
@@ -175,8 +175,6 @@ export interface AppActions {
   flushSave: () => Promise<boolean>;
 
   registerEditor: (h: EditorHandle | null) => void;
-  getEditorSession: (tabId: string) => EditorSession | undefined;
-  setEditorSession: (tabId: string, session: EditorSession) => void;
   /** Sidebar SearchBox registers its input element on mount so
    *  `focusSearch` can reach it without a DOM query. Same shape as
    *  `registerEditor` — pass `null` on unmount. */
@@ -220,15 +218,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveInFlight = useRef<Promise<boolean> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<EditorHandle | null>(null);
-  const editorSessions = useRef<Map<string, EditorSession>>(new Map());
-  // A session belongs to an open document tab. Reading View temporarily
-  // unmounts its editor, but closed/folder-reset tabs must release history.
-  useEffect(() => {
-    const openTabIds = new Set(state.tabs.map((tab) => tab.id));
-    for (const tabId of editorSessions.current.keys()) {
-      if (!openTabIds.has(tabId)) editorSessions.current.delete(tabId);
-    }
-  }, [state.tabs]);
   // Race protection for `runSearch`: every call bumps this counter and
   // remembers its own value; an older request's response is dropped
   // when it returns after a newer one has been issued.
@@ -405,7 +394,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({
         type: 'FILE_PATCH',
         patch: { content: body.content, ...('version' in body ? { version: body.version } : {}) },
-        invalidateEditorSession: latestFile.format === 'md',
       });
     } catch {
       /* swallow — sidebar will reflect a delete on the next poll */
@@ -478,14 +466,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     newTab,
     openInNewTab,
     registerEditor,
-    getEditorSession,
-    setEditorSession,
     scheduleSave,
     selectFile,
     selectFileWithHighlight,
     toggleEditMode,
   } = useDocumentActions(
-    { state: stateRef, editor: editorRef, editorSessions, saveTimer, saveInFlight },
+    { state: stateRef, editor: editorRef, saveTimer, saveInFlight },
     { loadFiles, refreshIndexState, toast, primeFind },
     dispatch,
   );
@@ -556,8 +542,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     renameFile, renameFolder, moveFile, upload,
     scheduleSave, flushSave,
     registerEditor,
-    getEditorSession,
-    setEditorSession,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
@@ -575,8 +559,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     renameFile, renameFolder, moveFile, upload,
     scheduleSave, flushSave,
     registerEditor,
-    getEditorSession,
-    setEditorSession,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,

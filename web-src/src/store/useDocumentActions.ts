@@ -1,7 +1,7 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import { api, ApiError } from '../api';
-import type { EditorHandle, EditorSession } from './actionTypes';
+import type { EditorHandle } from './actionTypes';
 import {
   isFolderFileTab,
   keywordFindCaseSensitive,
@@ -21,7 +21,6 @@ interface DocumentActionRefs {
   editor: MutableRefObject<EditorHandle | null>;
   saveTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   saveInFlight: MutableRefObject<Promise<boolean> | null>;
-  editorSessions: MutableRefObject<Map<string, EditorSession>>;
 }
 
 interface DocumentActionDependencies {
@@ -46,7 +45,7 @@ export function useDocumentActions(
   dependencies: DocumentActionDependencies,
   dispatch: Dispatch,
 ) {
-  const { editor, editorSessions, saveInFlight, saveTimer, state } = refs;
+  const { editor, saveInFlight, saveTimer, state } = refs;
   const { loadFiles, refreshIndexState, toast, primeFind } = dependencies;
 
   const flushSave = useCallback(async () => {
@@ -97,7 +96,12 @@ export function useDocumentActions(
         if (!sameTab) return true;
 
         const liveValue = editor.current?.getValue();
-        dispatch({ type: 'FILE_PATCH', patch: { content: savedResult.content, version: savedResult.version } });
+        // An open Milkdown editor is the source of its live document. Even
+        // reusing the exact submitted Markdown here changes the `content` prop
+        // and schedules a DOM-decoration pass while CodeMirror owns code-block
+        // node views. Advance only the optimistic-concurrency version; actual
+        // external reloads still replace content through file loading.
+        dispatch({ type: 'FILE_PATCH', patch: { version: savedResult.version } });
         if (liveValue === content) {
           dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
           dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
@@ -334,11 +338,6 @@ export function useDocumentActions(
     editor.current = handle;
   }, [editor]);
 
-  const getEditorSession = useCallback((tabId: string) => editorSessions.current.get(tabId), [editorSessions]);
-  const setEditorSession = useCallback((tabId: string, session: EditorSession) => {
-    editorSessions.current.set(tabId, session);
-  }, [editorSessions]);
-
   return {
     activateTab,
     closeActiveTab,
@@ -350,8 +349,6 @@ export function useDocumentActions(
     newTab,
     openInNewTab,
     registerEditor,
-    getEditorSession,
-    setEditorSession,
     scheduleSave,
     selectFile,
     selectFileWithHighlight,

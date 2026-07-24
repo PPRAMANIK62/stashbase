@@ -8,11 +8,10 @@ import { ImagePreview } from './ImagePreview';
 import { TabStrip } from './TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 
-const LazyMarkdownPreview = lazyWithRetry(() => import('./MarkdownPreview').then((mod) => ({ default: mod.MarkdownPreview })));
+const LazyCrepeDocument = lazyWithRetry(() => import('./CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
 const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
 const LazyDocxPreview = lazyWithRetry(() => import('./DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
 const LazyAudioPreview = lazyWithRetry(() => import('./AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
-const LazyCodeEditor = lazyWithRetry(() => import('./CodeEditor').then((mod) => ({ default: mod.CodeEditor })));
 
 /**
  * Right rail. Layout from top to bottom:
@@ -56,10 +55,17 @@ export function MainPane() {
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}
-        {cur && !editMode && cur.format === 'md' && (
-          <LazyLoadBoundary className="doc-loading" label="Markdown preview" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className="doc-loading">Loading preview…</div>}>
-              <LazyMarkdownPreview name={cur.name} content={cur.content} />
+        {cur && cur.format === 'md' && (
+          <LazyLoadBoundary className="doc-loading" label="Markdown document" resetKey={resourceResetKey}>
+            <Suspense fallback={<div className="doc-loading">Opening document…</div>}>
+              <LazyCrepeDocument
+                key={activeTab?.id ?? cur.name}
+                tabId={activeTab?.id ?? ''}
+                name={cur.name}
+                content={cur.content}
+                readOnly={!editMode}
+                active
+              />
             </Suspense>
           </LazyLoadBoundary>
         )}
@@ -95,25 +101,6 @@ export function MainPane() {
               <LazyAudioPreview name={cur.name} />
             </Suspense>
           </LazyLoadBoundary>
-        )}
-        {cur && editMode && cur.format === 'md' && (
-          // Markdown is the only editable format — HTML/PDF/image/DOCX are
-          // read-only viewers, including audio. The editor is a single CodeMirror pane
-          // (no source+preview split); save is scheduled on every edit.
-          <div className="md-editor">
-            <LazyLoadBoundary className="doc-loading" label="Markdown editor" resetKey={resourceResetKey}>
-              <Suspense fallback={<div className="doc-loading">Loading editor…</div>}>
-                <LazyCodeEditor
-                  key={activeTab?.id ?? cur.name}
-                  tabId={activeTab?.id ?? ''}
-                  sessionVersion={activeTab?.editorSessionVersion ?? 0}
-                  name={cur.name}
-                  initialContent={cur.content}
-                  onChange={() => actions.scheduleSave()}
-                />
-              </Suspense>
-            </LazyLoadBoundary>
-          </div>
         )}
       </div>
       {emptyTab && (

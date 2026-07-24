@@ -8,7 +8,7 @@ import { useEffect, type RefObject } from 'react';
  * as a `stashbase:iframe-drop` CustomEvent on `window` (which
  * `useGlobalDragDrop` listens for).
  *
- * Shared by MarkdownPreview (srcDoc iframe) and HtmlPreview (/asset/*
+ * Shared by document iframe previews (srcDoc) and HtmlPreview (/asset/*
  * iframe) — both sandboxes carry `allow-same-origin`, so the parent can
  * reach the contentDocument directly. `reattachKey` re-runs the effect
  * when the iframe's content identity changes (srcDoc html / asset src);

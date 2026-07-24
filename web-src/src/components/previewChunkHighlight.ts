@@ -3,8 +3,8 @@ type TextPoint = { node: Text; offset: number };
 const CHUNK_HIGHLIGHT = 'stashbase-chunk';
 let chunkTimer: number | null = null;
 
-export function applyChunkHighlight(doc: Document, raw: string): boolean {
-  const range = findChunkRange(doc, raw);
+export function applyChunkHighlight(doc: Document, raw: string, root: HTMLElement = doc.body): boolean {
+  const range = findChunkRange(doc, raw, root);
   if (!range) return false;
   const win = doc.defaultView;
   const CSSNS = win as unknown as { CSS?: { highlights?: Map<string, unknown> } };
@@ -49,10 +49,10 @@ function scrollRangeIntoView(win: Window | null, range: Range): void {
   });
 }
 
-function findChunkRange(doc: Document, raw: string): Range | null {
+function findChunkRange(doc: Document, raw: string, root: HTMLElement): Range | null {
   const anchors = chunkAnchors(raw);
   if (anchors.length === 0 || !doc.body) return null;
-  const flat = flattenDocumentText(doc);
+  const flat = flattenDocumentText(doc, root);
   if (!flat.text) return null;
   for (const anchor of anchors) {
     const idx = flat.text.indexOf(anchor);
@@ -72,11 +72,11 @@ function findChunkRange(doc: Document, raw: string): Range | null {
   return null;
 }
 
-function flattenDocumentText(doc: Document): { text: string; points: TextPoint[] } {
+function flattenDocumentText(doc: Document, root: HTMLElement): { text: string; points: TextPoint[] } {
   let text = '';
   const points: TextPoint[] = [];
   let lastWasSpace = true;
-  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node: Node) {
       const parent = node.parentElement?.tagName;
       if (parent === 'SCRIPT' || parent === 'STYLE' || parent === 'NOSCRIPT') return NodeFilter.FILTER_REJECT;

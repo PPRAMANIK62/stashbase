@@ -12,6 +12,17 @@ function readPackageJson(packageDir) {
 }
 
 function resolvePackageDir(name, fromDir) {
+  // Some ESM-only packages intentionally export no root entry point. Their
+  // installed package directory remains available through pnpm's node_modules
+  // links, so search those before asking Node's export-aware resolver.
+  let ancestor = fromDir;
+  while (true) {
+    const installedPackageJson = path.join(ancestor, 'node_modules', name, 'package.json');
+    if (fs.existsSync(installedPackageJson)) return path.dirname(installedPackageJson);
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) break;
+    ancestor = parent;
+  }
   const req = createRequire(path.join(fromDir, 'package.json'));
   try {
     return path.dirname(req.resolve(`${name}/package.json`));
@@ -29,7 +40,13 @@ function resolvePackageDir(name, fromDir) {
 function buildPackageTree(aliasName, packageDir, optional) {
   const realDir = fs.realpathSync(packageDir);
   const cacheKey = `${aliasName}\0${realDir}`;
-  if (seen.has(cacheKey)) return seen.get(cacheKey);
+  const existing = seen.get(cacheKey);
+  if (existing) {
+    // Dependency cycles are valid; retain the edge as a leaf instead of
+    // returning the in-progress node and creating a circular JSON value.
+    const { dependencies, optionalDependencies, ...leaf } = existing;
+    return leaf;
+  }
 
   const pkg = readPackageJson(realDir);
   const node = {
