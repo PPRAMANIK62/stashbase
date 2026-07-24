@@ -1353,27 +1353,11 @@
       background: var(--accent);
     }
 
-    /* Semantic result count, matching the keyword summary treatment. */
+    /* Semantic top-N summary, matching the keyword summary treatment. */
     .search-summary {
       font-size: 11px;
       color: var(--muted);
       padding: 2px 10px 6px;
-    }
-
-    .search-show-more {
-      width: 100%;
-      margin-top: 2px;
-      padding: 6px;
-      font-size: 12px;
-      color: var(--accent);
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
-    .search-show-more:hover {
-      background: var(--hover);
     }
 
     /* Keyword (ripgrep) results — VS-Code-style: a per-file header with a

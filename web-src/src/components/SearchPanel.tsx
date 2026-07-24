@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { FileMeta, KeywordHitFile, KeywordMatch, SearchHit } from '../api';
 import { useApp } from '../store/AppContext';
 import { openSettings } from './SettingsModal';
@@ -386,38 +386,25 @@ function SearchResults({ query }: { query: string }) {
   if (!state.searchHits || state.searchHits.length === 0) {
     return <div className="empty-list">No matches</div>;
   }
-  return <SemanticSearchResults hits={state.searchHits} query={query} />;
+  return <SemanticSearchResults hits={state.searchHits} />;
 }
 
-const SEMANTIC_VISIBLE_STEP = 8;
-
-/** Ranked semantic hits with a result count, a relative relevance bar per
- *  hit, and progressive disclosure so a long candidate list is revealed in
- *  steps rather than dumped at once. */
-function SemanticSearchResults({ hits, query }: { hits: SearchHit[]; query: string }) {
-  const [visible, setVisible] = useState(SEMANTIC_VISIBLE_STEP);
-  // A new query is a new result set, so collapse back to the first page.
-  useEffect(() => { setVisible(SEMANTIC_VISIBLE_STEP); }, [query]);
-
+/** Ranked semantic hits with a relative relevance bar per hit.
+ *
+ *  `filterGuiSemanticHits` already truncates this list to the strongest
+ *  matches before it arrives, so the count is deliberately phrased as a
+ *  top-N summary rather than a total: weaker candidates were dropped by
+ *  that relevance cutoff, not by this component. */
+function SemanticSearchResults({ hits }: { hits: SearchHit[] }) {
   const ratios = relevanceRatios(hits.map((hit) => hit.score));
-  const shown = hits.slice(0, visible);
-  const remaining = hits.length - shown.length;
-
   return (
     <div className="search-hits">
-      <div className="search-summary">{hits.length} result{hits.length === 1 ? '' : 's'}</div>
-      {shown.map((hit, i) => (
+      <div className="search-summary">
+        {hits.length === 1 ? 'Top match' : `Top ${hits.length} matches`}
+      </div>
+      {hits.map((hit, i) => (
         <SearchHitRow key={`${hit.fileName}#${hit.chunkIndex}#${i}`} hit={hit} relevance={ratios[i]} />
       ))}
-      {remaining > 0 && (
-        <button
-          type="button"
-          className="search-show-more"
-          onClick={() => setVisible((current) => current + SEMANTIC_VISIBLE_STEP)}
-        >
-          Show {Math.min(remaining, SEMANTIC_VISIBLE_STEP)} more
-        </button>
-      )}
     </div>
   );
 }
