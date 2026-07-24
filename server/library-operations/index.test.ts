@@ -5,7 +5,9 @@ import { LibraryOperationError, createLibraryOperations } from './index.ts';
 test('Library Operations rejects semantic search without embedding configuration', async () => {
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
-    hasEmbeddingKey: () => false,
+    retrieval: { search: async () => ({
+      evidence: [], availability: { state: 'unavailable' as const, reason: 'embedding-key-required' as const }, truncated: false,
+    }) },
   });
 
   await assert.rejects(
@@ -19,11 +21,10 @@ test('Library Operations rejects semantic search without embedding configuration
 test('Library Operations keeps search result identity at the visible source path', async () => {
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
-    hasEmbeddingKey: () => true,
-    search: async () => [{
-      fileName: '/library/paper.pdf', chunkIndex: 0, content: 'derived evidence', heading: '', score: 1,
-    }],
-    remapSearchHits: (hits) => hits.map((hit) => ({ ...hit, fileName: '/library/paper.pdf' })),
+    retrieval: { search: async () => ({
+      evidence: [{ sourcePath: '/library/paper.pdf', snippet: 'derived evidence', heading: '', locator: {}, score: 1, chunkIndex: 0 }],
+      availability: { state: 'ready' as const }, truncated: false,
+    }) },
   });
 
   assert.deepEqual(

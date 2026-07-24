@@ -5,11 +5,7 @@
  * source identity, library membership, preparation readiness, and operation
  * errors; transports only parse and serialize requests.
  */
-import { getApiKey } from '../app-config.ts';
-import { isAudioTranscriptTextUnavailable } from '../audio-transcription.ts';
-import { isConversionTextUnavailable } from '../conversion.ts';
 import { memberFolderRoots } from '../folder.ts';
-import { filesystemPath } from '../filesystem-path.ts';
 import {
   normalizeLibrarySearchScope,
   requireLibraryStatusFolder,
@@ -24,9 +20,9 @@ import {
   writeLibraryFile,
 } from '../library-file-mutations.ts';
 import { getLibraryInfo, type LibraryInfo } from '../library-info.ts';
-import { remapSearchHitsForDisplay } from '../search-display.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer, syncFolderNow } from '../state.ts';
+import { createRetrieval, semanticHitsFromEvidence, type Retrieval } from '../retrieval/index.ts';
 import type { IndexStatus, SearchHit } from '../indexer.ts';
 import type { SyncResult } from '../sync.ts';
 import { LibraryOperationError } from './errors.ts';
@@ -49,9 +45,7 @@ export interface LibraryOperations {
 
 export interface LibraryOperationsDependencies {
   getLibraryInfo: () => LibraryInfo;
-  hasEmbeddingKey: () => boolean;
-  search: (query: string, topK: number, folderRoot?: string, pathPrefix?: string) => Promise<SearchHit[]>;
-  remapSearchHits: (hits: SearchHit[]) => SearchHit[];
+  retrieval: Retrieval;
   reindexFolder: (folder: string) => Promise<SyncResult>;
   indexStatus: (folderRoot?: string) => Promise<IndexStatus>;
   memberFolderRoots: () => string[];
@@ -65,15 +59,7 @@ export interface LibraryOperationsDependencies {
 
 const productionDependencies: LibraryOperationsDependencies = {
   getLibraryInfo,
-  hasEmbeddingKey: () => Boolean(getApiKey()),
-  search: (query, topK, folderRoot, pathPrefix) => indexer.search(query, topK, folderRoot, pathPrefix),
-  remapSearchHits: (hits) => remapSearchHitsForDisplay(
-    hits.filter((hit) => {
-      const fileName = typeof hit.fileName === 'string' ? hit.fileName : '';
-      return !isConversionTextUnavailable(fileName) && !isAudioTranscriptTextUnavailable(fileName);
-    }),
-    filesystemPath.absolute(getLibraryInfo().folder_home),
-  ),
+  retrieval: createRetrieval(),
   reindexFolder: (folder) => syncFolderNow(folder, { reason: 'mcp reindex' }),
   indexStatus: (folderRoot) => indexer.status(folderRoot),
   memberFolderRoots,
@@ -96,16 +82,18 @@ export function createLibraryOperations(
     async search({ query, topK = 8, folder, pathPrefix }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      if (!deps.hasEmbeddingKey()) {
+      const scope = normalizeLibrarySearchScope(folder, pathPrefix);
+      const result = await deps.retrieval.search({
+        mode: 'semantic', query: trimmedQuery, topK, folderRoot: scope.folderRoot, pathPrefix: scope.pathPrefix,
+      });
+      if (result.availability.state === 'unavailable') {
         throw routeError(
           'semantic search is disabled until you add an embedding API key',
           412,
           'EMBEDDER_KEY_REQUIRED',
         );
       }
-      const scope = normalizeLibrarySearchScope(folder, pathPrefix);
-      const hits = await deps.search(trimmedQuery, topK, scope.folderRoot, scope.pathPrefix);
-      return { hits: deps.remapSearchHits(hits) };
+      return { hits: semanticHitsFromEvidence(result.evidence) };
     },
 
     async reindex({ folder } = {}) {
