@@ -10,7 +10,6 @@ import {
   exactMemberFolderRoot,
   resolveFolderRoot,
 } from '../folder.ts';
-import { getApiKey } from '../app-config.ts';
 import {
   cancelAudioPreparation,
   isAudioTranscriptTextUnavailable,
@@ -27,24 +26,20 @@ import {
   prepareConvertibleSource,
   reprocessConvertibleSource,
 } from '../conversion-dispatch.ts';
-import { clearIndexWarning, indexer, syncFolderNow } from '../state.ts';
+import { clearIndexWarning, syncFolderNow } from '../state.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { sendError } from '../http.ts';
 import { filesystemPath } from '../filesystem-path.ts';
-import { searchExtensionsForTypes } from '../format.ts';
 import { isSearchTypeCategory, type SearchTypeCategory } from '../../shared/search-types.ts';
 import { buildIndexStatus } from '../index-status.ts';
-import { runKeywordSearch } from '../keyword-search.ts';
-import {
-  remapKeywordFilesForDisplay,
-  remapSearchHitsForDisplay,
-} from '../search-display.ts';
+import { createRetrieval, keywordFilesFromEvidence, semanticHitsFromEvidence } from '../retrieval/index.ts';
 import {
   normalizeTranscriptionLanguage,
   type ConfiguredTranscriptionBlock,
 } from '../../shared/transcription.ts';
 
 const log = logger('routes/indexing');
+const retrieval = createRetrieval();
 
 function parseFolderParam(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
@@ -255,38 +250,25 @@ export function mount(app: express.Express): void {
       const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
       const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
       if (!query) return res.status(400).json({ error: 'query required' });
-      if (!getApiKey()) {
-        return res.status(412).json({
-          error: 'semantic search is disabled until you add an embedding API key',
-          code: 'EMBEDDER_KEY_REQUIRED',
-        });
-      }
       const explicit = parseFolderParam(req.body?.folder);
       const { folderRoot } = requireRequestFolder(explicit);
       const types = parseSearchTypes(req.body?.types);
       if (types == null) return res.status(400).json({ error: 'unknown types value' });
       const prefixAbs = resolveScopePrefix(folderRoot, req.body?.path_prefix);
       if (prefixAbs === false) return res.status(400).json({ error: 'path_prefix must be a folder-relative subfolder' });
-      const root = filesystemPath.absolute(folderRoot);
-      const hits = await indexer.search(
-        query, topK, root, prefixAbs, searchExtensionsForTypes(types) ?? undefined,
-      );
-      // Daemon hits arrive as absolute paths; translate fileName back to
-      // folder-relative for the sidebar (which only knows the current
-      // folder). Then `displayPathForHit` rewrites a derived note to its
-      // source PDF/image/media file (or drops an orphan) so hidden derived
-      // text never shows — the corresponding viewer picks up chunk text from
-      // pendingHighlight and jump to the matching passage.
-      const out = remapSearchHitsForDisplay(
-        hits
-          .filter((hit) => !isConversionTextUnavailable(hit.fileName) && !isAudioTranscriptTextUnavailable(hit.fileName))
-          .map((h) => {
-            const rel = filesystemPath.relative(root, h.fileName);
-            return rel == null ? null : { ...h, fileName: rel };
-          })
-          .filter((h): h is NonNullable<typeof h> => h !== null),
-        folderRoot,
-      );
+      const result = await retrieval.search({
+        mode: 'semantic', query, topK, folderRoot, pathPrefix: prefixAbs, types,
+      });
+      if (result.availability.state === 'unavailable') {
+        return res.status(412).json({
+          error: 'semantic search is disabled until you add an embedding API key',
+          code: 'EMBEDDER_KEY_REQUIRED',
+        });
+      }
+      const out = semanticHitsFromEvidence(result.evidence).flatMap((hit) => {
+        const rel = filesystemPath.relative(folderRoot, hit.fileName);
+        return rel == null ? [] : [{ ...hit, fileName: rel }];
+      });
       res.json({ hits: out });
     } catch (err: unknown) {
       sendError(res, err);
@@ -316,19 +298,18 @@ export function mount(app: express.Express): void {
       const rawPrefix = typeof req.query.path_prefix === 'string' ? req.query.path_prefix : undefined;
       const prefixAbs = resolveScopePrefix(folderDir, rawPrefix);
       if (prefixAbs === false) return res.status(400).json({ error: 'path_prefix must be a folder-relative subfolder' });
-      const result = await runKeywordSearch(query, folderDir, {
-        caseStrict,
-        wholeWord,
-        pathPrefix: prefixAbs ? (filesystemPath.relative(filesystemPath.absolute(folderDir), prefixAbs) ?? undefined) : undefined,
-        types,
+      const result = await retrieval.search({
+        mode: 'keyword', query, folderRoot: folderDir, pathPrefix: prefixAbs,
+        caseStrict, wholeWord, types,
       });
       // ripgrep's `*.md` glob may also match legacy hidden dot-prefixed
       // derived notes (`.paper.pdf.md` / `.shot.png.md`). Apply the same
       // remap-or-drop rule as the semantic routes so a hit's row points
       // at the openable source PDF / image (the matched OCR / converted
       // snippet stays) and an orphan note never surfaces.
-      const remapped = remapKeywordFilesForDisplay(result.files, folderDir);
-      res.json({ query, folder: folderDir, ...result, ...remapped });
+      const files = keywordFilesFromEvidence(result.evidence, folderDir);
+      const totalMatches = files.reduce((sum, file) => sum + file.totalMatches, 0);
+      res.json({ query, folder: folderDir, files, totalMatches, truncated: result.truncated });
     } catch (err: unknown) {
       sendError(res, err);
     }
