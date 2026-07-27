@@ -35,6 +35,10 @@ pnpm check
 
 The check builds the renderer before launching the real Electron lifecycle
 smoke. Headless Linux environments need Xvfb; CI supplies it automatically.
+The isolated Linux source smoke also passes Chromium's `--no-sandbox` flag
+because hosted runners cannot install Electron's SUID sandbox helper as root.
+Packaged applications and macOS/Windows smoke launches retain their normal
+sandbox behavior.
 
 For Markdown renderer changes:
 
