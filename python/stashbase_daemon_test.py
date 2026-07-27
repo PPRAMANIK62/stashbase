@@ -408,7 +408,7 @@ class StashbaseDaemonTests(unittest.TestCase):
             (15, 2, 1),
         )
 
-    def test_milvus_manifest_patch_overwrites_existing_target(self) -> None:
+    def test_milvus_manifest_patch_supports_legacy_and_fixed_upstream(self) -> None:
         try:
             from milvus_lite.storage import manifest as manifest_module
         except ImportError:
@@ -435,19 +435,28 @@ class StashbaseDaemonTests(unittest.TestCase):
 
             manifest_module.os.rename = windows_rename
             try:
-                with self.assertRaises(FileExistsError):
+                save_names = set(
+                    getattr(getattr(original_save, "__code__", None), "co_names", ())
+                )
+                if "rename" in save_names and "replace" not in save_names:
+                    with self.assertRaises(FileExistsError):
+                        manifest.save()
+                else:
+                    # Milvus Lite 3.1+ already uses os.replace, so the
+                    # simulated Windows rename failure is never reached.
                     manifest.save()
 
                 self.assertTrue(
                     stashbase_daemon._patch_milvus_manifest_windows_replace(force=True)
                 )
+                expected_version = manifest._version + 1
                 manifest.save()
 
                 payload = json.loads(
                     (root / "manifest.json").read_text(encoding="utf-8")
                 )
-                self.assertEqual(payload["version"], 2)
-                self.assertEqual(manifest._version, 2)
+                self.assertEqual(payload["version"], expected_version)
+                self.assertEqual(manifest._version, expected_version)
             finally:
                 manifest_module.os.rename = original_rename
                 manifest_module.Manifest.save = installed_save
