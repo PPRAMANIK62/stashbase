@@ -33,14 +33,21 @@ user-visible source file.
 ## Scope And Access
 
 - The library is the set of local folders the user has added or opened.
-- A window works primarily in one current folder; this is UI scope, not a
-  separate library.
+- Each window works primarily in one current folder. Multiple windows may
+  show different folders at the same time; those are independent UI scopes,
+  not separate libraries or indexing runtimes.
 - In-app search defaults to that current folder. MCP can search the library and
   narrow to an authorized folder or path prefix.
 - MCP file operations are deliberately bounded to authorized library folders;
   they are never a general filesystem interface.
 - One local runtime owns indexing state. Other processes communicate through
   its supported boundary rather than maintaining competing copies of the index.
+- Closing a window releases only that window's UI and folder context. Shared
+  indexing, settings, and MCP resources remain alive until the application
+  session quits. A closed window identity cannot be revived by a request that
+  was already in transit when the native window disappeared. Native close
+  waits for the renderer to confirm its current edit is durable before
+  retiring that identity.
 
 ## Preparation And Retrieval
 
@@ -62,7 +69,12 @@ user-visible source file.
 - Explicit user cancellation is respected; interrupted background work is
   rediscovered when its durable output is incomplete.
 - Removing a folder clears StashBase-owned state for that folder without
-  deleting the user's source files.
+  deleting the user's source files. Every window showing that folder saves
+  first and returns to the library view; restart recovery cannot silently add
+  an intentionally removed folder back.
+- Application shutdown is an explicit owner-to-server handshake. The server
+  drains its cleanup ladder before Electron exits, including on Windows where
+  process signals do not provide graceful child termination.
 - File mutation and deletion must retire or invalidate related derived state so
   retrieval never presents orphaned or stale evidence as current.
 - Import publishes through a no-clobber path; recovery only removes an

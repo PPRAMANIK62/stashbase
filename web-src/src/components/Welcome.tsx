@@ -18,6 +18,9 @@ interface ElectronBridge {
     defaultPath?: string;
     allowCreateDirectory?: boolean;
   }) => Promise<string | null>;
+  openFolderWindow?: (folder: string) => Promise<boolean>;
+  prepareFolderRemoval?: (folder: string) => Promise<boolean>;
+  notifyFolderRemoved?: (folder: string) => Promise<boolean>;
 }
 
 interface FolderIndexSnapshot {
@@ -88,12 +91,20 @@ export function Welcome() {
 
   const removeFolder = useCallback((path: string) => {
     setRemoving(true);
-    void api.removeFolder(path)
-      .then(() => {
-        dispatch({ type: 'LIBRARY_FOLDER_STATUS_REMOVE', path });
-      })
-      .then(() => api.getFolder())
-      .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
+    void (async () => {
+      const bridge = (window as { electron?: ElectronBridge }).electron;
+      if (bridge?.prepareFolderRemoval) {
+        const ready = await bridge.prepareFolderRemoval(path);
+        if (!ready) {
+          throw new Error('Another window could not save its current edit. The folder was not removed.');
+        }
+      }
+      await api.removeFolder(path);
+      await bridge?.notifyFolderRemoved?.(path);
+      dispatch({ type: 'LIBRARY_FOLDER_STATUS_REMOVE', path });
+      const j = await api.getFolder();
+      dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir });
+    })()
       .catch((e) => dispatch({ type: 'WELCOME_ERROR', error: errorMessage(e) }))
       .finally(() => { setRemoving(false); setConfirmRemove(null); });
   }, [dispatch]);
@@ -227,6 +238,18 @@ export function Welcome() {
       .finally(() => {
         if (requestId === openingRequestRef.current) setOpeningFolder(null);
       });
+  }
+
+  async function openRecentInNewWindow(path: string) {
+    setFolderMenu(null);
+    const bridge = (window as { electron?: ElectronBridge }).electron;
+    const opened = await bridge?.openFolderWindow?.(path);
+    if (!opened) {
+      dispatch({
+        type: 'WELCOME_ERROR',
+        error: 'New window is only available in the desktop app.',
+      });
+    }
   }
 
   if (!state.welcomeVisible) return null;
@@ -390,6 +413,10 @@ export function Welcome() {
           anchor={{ rect: folderMenu.rect, align: 'right' }}
           minWidth={190}
           items={[
+            {
+              label: 'Open in New Window',
+              onSelect: () => { void openRecentInNewWindow(folderMenu.path); },
+            },
             {
               label: 'Remove from Library',
               detail: 'Will not delete local files',

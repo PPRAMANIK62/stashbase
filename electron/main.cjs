@@ -9,7 +9,7 @@
  * The renderer is sandboxed; all main → renderer surfaces are exposed
  * through the narrow IPC bridge in preload.cjs.
  */
-const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -17,6 +17,17 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { isCompatibleServerHealth } = require('./main-probe.cjs');
+const {
+  WINDOW_ID_ARG_PREFIX,
+  createApplicationMenuTemplate,
+  createRendererFlushCoordinator,
+  createSingleFlight,
+  createWindowRegistry,
+  focusWindow,
+  openOrFocusFolder,
+  releaseWindowContextWithRetry,
+  shouldQuitAfterLastWindow,
+} = require('./multi-window.cjs');
 
 function parsePortArg(argv, fallback) {
   for (let i = 0; i < argv.length; i++) {
@@ -97,6 +108,7 @@ const SERVER_LOG_PATH = path.join(SERVER_LOG_DIR, 'server.log');
 const SERVER_HOST = '127.0.0.1';
 const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
 const SERVER_PROTOCOL_VERSION = 1;
+const SERVER_SHUTDOWN_TOKEN = crypto.randomBytes(32).toString('hex');
 const PROJECT_ROOT = app.isPackaged ? app.getAppPath() : path.resolve(__dirname, '..');
 const SERVER_ENTRY = app.isPackaged
   ? path.join(PROJECT_ROOT, 'dist', 'server', 'index.mjs')
@@ -107,7 +119,12 @@ const MCP_ENTRY = app.isPackaged
 const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
 let serverProc = null;
+let serverStartPromise = null;
 const mainWindows = new Set();
+const windowRegistry = createWindowRegistry({ platform: process.platform });
+const rendererFlush = createRendererFlushCoordinator();
+const approvedWindowCloses = new WeakSet();
+const pendingWindowCloses = new WeakSet();
 let lastMainWindow = null;
 
 const APP_CONFIG_FILE = path.join(os.homedir(), '.stashbase', 'config.json');
@@ -220,7 +237,7 @@ function writeFileAtomic(file, content, options = {}) {
  *  the port (e.g. you've got `pnpm dev` running in a terminal), we
  *  skip the spawn and just point the window at it — handy for editing
  *  the server in your editor with tsx-watch hot reload. */
-async function ensureServer() {
+async function startOrReuseServer() {
   const existing = await probeServer(SERVER_PORT, 300);
   if (existing.compatible) {
     console.log(`[electron] reusing existing server at ${SERVER_URL}`);
@@ -346,7 +363,11 @@ async function ensureServer() {
     cwd: serverCwd,
     // Port flows via the CLI arg above, not the env — keeps the server
     // entry's argv parser the single source of truth for port config.
-    env: { ...process.env, ...packagedEnv },
+    env: {
+      ...process.env,
+      ...packagedEnv,
+      STASHBASE_SHUTDOWN_TOKEN: SERVER_SHUTDOWN_TOKEN,
+    },
     // stdin = 'ignore' is intentional: the server never reads from
     // stdin, and inheriting the parent's TTY made Node attach a real
     // TTY ReadStream to the child's fd 0. Any flake on that TTY
@@ -375,6 +396,7 @@ async function ensureServer() {
     }
   });
   serverProc.on('exit', (code) => {
+    serverStartPromise = null;
     if (code != null && code !== 0) {
       console.warn(`[electron] server exited with code ${code}`);
     }
@@ -398,6 +420,22 @@ async function ensureServer() {
   }
   stopSpawnedServer();
   throw new Error(appendServerLogHint(`server did not come up on :${SERVER_PORT} within 10s`));
+}
+
+/** Coalesce every window onto one server readiness promise. The spawned
+ *  server's exit listener clears the latch; a reused development server is
+ *  assumed to remain the renderer owner for this Electron session. */
+async function ensureServer() {
+  if (!serverStartPromise) serverStartPromise = startOrReuseServer();
+  const pending = serverStartPromise;
+  try {
+    await pending;
+  } catch (err) {
+    // A failed older startup must not clear a newer retry installed after
+    // its child process exited.
+    if (serverStartPromise === pending) serverStartPromise = null;
+    throw err;
+  }
 }
 
 async function probeServer(port, timeoutMs) {
@@ -424,10 +462,17 @@ async function probeServer(port, timeoutMs) {
   return { compatible: false, occupied: true, legacyStashBase };
 }
 
-function requestJson(port, requestPath, timeoutMs) {
+function requestJson(port, requestPath, timeoutMs, options = {}) {
   return new Promise((resolve) => {
     const req = http.request(
-      { host: SERVER_HOST, port, path: requestPath, method: 'GET', timeout: timeoutMs },
+      {
+        host: SERVER_HOST,
+        port,
+        path: requestPath,
+        method: options.method || 'GET',
+        headers: options.headers,
+        timeout: timeoutMs,
+      },
       (res) => {
         let body = '';
         res.setEncoding('utf8');
@@ -575,18 +620,18 @@ async function createWindow(initialFolder) {
       'StashBase failed to start',
       `${String(err?.message ?? err)}\n\nServer log: ${SERVER_LOG_PATH}`,
     );
-    app.quit();
+    if (mainWindows.size === 0) app.quit();
     return;
   }
+  const windowId = crypto.randomUUID();
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 720,
     minHeight: 480,
-    // OS-level title (Dock right-click, Cmd+Tab, mission control) —
-    // the visible app-name in the window itself is drawn by HTML in a
-    // custom titlebar so we control typography and color seamlessly
-    // (see `.electron-titlebar` rule).
+    // Initial OS-level title; the renderer adds the current folder once it
+    // opens so Mission Control/task switchers can distinguish windows. The
+    // visible in-window title is still drawn by the custom HTML chrome.
     title: 'StashBase',
     backgroundColor: '#fafafa',
     titleBarStyle: 'hiddenInset',
@@ -596,20 +641,51 @@ async function createWindow(initialFolder) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // preload needs `require` for ipcRenderer
+      additionalArguments: [`${WINDOW_ID_ARG_PREFIX}${windowId}`],
     },
   });
+  const webContentsId = win.webContents.id;
   mainWindows.add(win);
+  windowRegistry.add(windowId, win, initialFolder);
   lastMainWindow = win;
+  let rendererReadyForFlush = false;
   win.on('focus', () => {
     lastMainWindow = win;
     offerClipboardImage(win);
     startClipboardPolling();
   });
+  win.on('close', (event) => {
+    if (approvedWindowCloses.has(win) || !rendererReadyForFlush) return;
+    event.preventDefault();
+    if (pendingWindowCloses.has(win)) return;
+    pendingWindowCloses.add(win);
+    void rendererFlush.request(win, 'window-close').then((ok) => {
+      pendingWindowCloses.delete(win);
+      if (!ok || win.isDestroyed()) {
+        if (!win.isDestroyed() && process.env.STASHBASE_MULTI_WINDOW_SMOKE !== '1') {
+          void dialog.showMessageBox(win, {
+            type: 'error',
+            title: 'Could not close window',
+            message: 'StashBase could not confirm that the current edit was saved.',
+            detail: 'Resolve the save error and close the window again.',
+          });
+        }
+        return;
+      }
+      approvedWindowCloses.add(win);
+      win.close();
+    });
+  });
   win.on('closed', () => {
+    rendererFlush.cancel(webContentsId);
     mainWindows.delete(win);
-    if (lastMainWindow === win) lastMainWindow = null;
+    windowRegistry.remove(windowId);
+    releaseWindowContext(windowId);
+    if (lastMainWindow === win) {
+      lastMainWindow = [...mainWindows].find((candidate) => isLiveMainWindow(candidate)) ?? null;
+    }
     if (mainWindows.size === 0) {
-      if (process.platform !== 'darwin') app.quit();
+      if (shouldQuitAfterLastWindow(process.platform)) app.quit();
     }
   });
 
@@ -637,7 +713,10 @@ async function createWindow(initialFolder) {
   }
   win.on('enter-full-screen', pushFullscreen);
   win.on('leave-full-screen', pushFullscreen);
-  win.webContents.on('did-finish-load', pushFullscreen);
+  win.webContents.on('did-finish-load', () => {
+    rendererReadyForFlush = true;
+    pushFullscreen();
+  });
 
   // Swallow ⌘R / Ctrl+R from the keyboard. Electron's default View
   // menu binds it to "Reload", which does a full renderer re-mount —
@@ -660,10 +739,48 @@ async function createWindow(initialFolder) {
   return win;
 }
 
+function releaseWindowContext(windowId) {
+  void releaseWindowContextWithRetry(() => (
+    requestJson(SERVER_PORT, '/api/window', 1000, {
+      method: 'DELETE',
+      headers: { 'x-stashbase-window-id': windowId },
+    })
+  )).then(({ ok, result, attempts }) => {
+    if (!ok) {
+      const detail = result?.reachable ? `HTTP ${result.statusCode}` : 'server unreachable';
+      console.warn(`[electron] window context cleanup failed after ${attempts} attempts: ${detail}`);
+    }
+  });
+}
+
+function focusLastMainWindow() {
+  const focused = BrowserWindow.getFocusedWindow();
+  const win = isLiveMainWindow(focused)
+    ? focused
+    : isLiveMainWindow(lastMainWindow)
+      ? lastMainWindow
+      : [...mainWindows].find((candidate) => isLiveMainWindow(candidate));
+  if (!focusWindow(win)) return false;
+  lastMainWindow = win;
+  return true;
+}
+
+function installApplicationMenu() {
+  const template = createApplicationMenuTemplate({
+    isMac: process.platform === 'darwin',
+    onNewWindow: () => { void createWindow(); },
+    onCloseWindow: (win) => {
+      const target = isLiveMainWindow(win) ? win : BrowserWindow.getFocusedWindow();
+      if (isLiveMainWindow(target)) target.close();
+    },
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 // Folder picker for Open/New folder flows. `defaultPath` lets New
 // folder start at `~/Documents/StashBase`, while the OS panel owns the
 // actual directory creation affordance.
-ipcMain.handle('dialog:openFolder', async (_e, opts = {}) => {
+ipcMain.handle('dialog:openFolder', async (event, opts = {}) => {
   const properties = ['openDirectory'];
   if (opts.allowCreateDirectory !== false) properties.push('createDirectory');
   const dialogOpts = {
@@ -676,9 +793,10 @@ ipcMain.handle('dialog:openFolder', async (_e, opts = {}) => {
   if (typeof opts.defaultPath === 'string' && opts.defaultPath) {
     dialogOpts.defaultPath = opts.defaultPath;
   }
-  const focused = BrowserWindow.getFocusedWindow();
-  const result = focused
-    ? await dialog.showOpenDialog(focused, dialogOpts)
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  const parent = isLiveMainWindow(senderWindow) ? senderWindow : BrowserWindow.getFocusedWindow();
+  const result = parent
+    ? await dialog.showOpenDialog(parent, dialogOpts)
     : await dialog.showOpenDialog(dialogOpts);
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
@@ -691,9 +809,52 @@ ipcMain.handle('shell:openExternal', async (_e, url) => {
   return openHttpExternal(url, 'renderer external URL');
 });
 
-ipcMain.handle('window:openFolder', async (_e, name) => {
+ipcMain.handle('window:setFolder', (event, folder) => {
+  if (folder !== null && (typeof folder !== 'string' || !folder.trim())) return false;
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  const windowId = windowRegistry.idForWindow(senderWindow);
+  if (!windowId) return false;
+  return windowRegistry.setFolder(windowId, folder);
+});
+
+ipcMain.handle('window:openFolder', async (event, name) => {
   if (typeof name !== 'string' || !name.trim()) return false;
-  await createWindow(name.trim());
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  const result = await openOrFocusFolder({
+    registry: windowRegistry,
+    folder: name.trim(),
+    senderWindow,
+    createWindow,
+  });
+  if (result.ok && result.win) lastMainWindow = result.win;
+  return result.ok;
+});
+
+ipcMain.on('window:context-release-ready', (event, payload) => {
+  rendererFlush.handleResponse(event.sender.id, payload);
+});
+
+ipcMain.handle('window:prepareFolderRemoval', async (event, folder) => {
+  if (typeof folder !== 'string' || !folder.trim()) return false;
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return false;
+  const affected = windowRegistry.windowsByFolder(folder.trim())
+    .filter((win) => isLiveMainWindow(win));
+  const saved = await Promise.all(
+    affected.map((win) => rendererFlush.request(win, 'folder-removal')),
+  );
+  return saved.every(Boolean);
+});
+
+ipcMain.handle('window:notifyFolderRemoved', (event, folder) => {
+  if (typeof folder !== 'string' || !folder.trim()) return false;
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return false;
+  for (const win of mainWindows) {
+    if (isLiveMainWindow(win)) {
+      win.webContents.send('window:folder-removed', folder.trim());
+    }
+  }
   return true;
 });
 
@@ -718,33 +879,45 @@ ipcMain.on('clipboard:markHandled', (_event, hash) => {
   if (typeof hash === 'string' && hash) lastClipboardOfferHash = hash;
 });
 
+const initialWindowFlight = createSingleFlight(() => app.whenReady().then(() => createWindow()));
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!focusLastMainWindow()) {
+      void initialWindowFlight.run().then(() => { focusLastMainWindow(); });
+    }
+  });
 
-app.whenReady().then(async () => {
-  // Refresh the MCP wrapper on every launch so the most recently-opened
-  // app owns it. Without this, a wrapper written by an earlier `pnpm
-  // dev` run still points at a vanished `node_modules/.bin/tsx`, and
-  // Claude Code / Claude Desktop spawn it after a brew install with
-  // "command not found" (or, on macOS, "Operation not permitted" when
-  // the old path is under ~/Downloads and TCC blocks it). Skip silently
-  // if the entry for *this* app isn't on disk — partial dev checkouts
-  // shouldn't clobber a working packaged wrapper.
-  try {
-    if (fs.existsSync(MCP_ENTRY)) writeMcpWrapper();
-  } catch (err) {
-    console.warn(`[electron] MCP wrapper refresh failed: ${err && err.message ? err.message : err}`);
-  }
-  await createWindow();
-});
+  app.whenReady().then(async () => {
+    // Refresh the MCP wrapper on every launch so the most recently-opened
+    // app owns it. Without this, a wrapper written by an earlier `pnpm
+    // dev` run still points at a vanished `node_modules/.bin/tsx`, and
+    // Claude Code / Claude Desktop spawn it after a brew install with
+    // "command not found" (or, on macOS, "Operation not permitted" when
+    // the old path is under ~/Downloads and TCC blocks it). Skip silently
+    // if the entry for *this* app isn't on disk — partial dev checkouts
+    // shouldn't clobber a working packaged wrapper.
+    try {
+      if (fs.existsSync(MCP_ENTRY)) writeMcpWrapper();
+    } catch (err) {
+      console.warn(`[electron] MCP wrapper refresh failed: ${err && err.message ? err.message : err}`);
+    }
+    installApplicationMenu();
+    await initialWindowFlight.run();
+  });
 
-app.on('activate', () => {
-  if (mainWindows.size === 0) {
-    void createWindow();
-  }
-});
+  app.on('activate', () => {
+    if (mainWindows.size === 0) {
+      void createWindow();
+    }
+  });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.on('window-all-closed', () => {
+    if (shouldQuitAfterLastWindow(process.platform)) app.quit();
+  });
+}
 
 // Drag the server down with us on real shutdown. macOS keeps the
 // process alive on window-close (Cmd+Q is the actual quit signal), so
@@ -753,17 +926,30 @@ app.on('window-all-closed', () => {
 // We need to **wait** for the server to actually exit before quitting
 // Electron — otherwise the Python daemon orphans, still holding
 // Milvus Lite's flock, and the next launch fails to open the DB.
-// Hard 4 s ceiling so a stuck server can't pin the Electron quit.
+// Hard 8 s ceiling so the server's 6.5 s cleanup ladder can finish without a
+// stuck child pinning Electron forever.
 let quitting = false;
 app.on('will-quit', (event) => {
   if (quitting) return;
   if (!serverProc || serverProc.killed) return;
   event.preventDefault();
   quitting = true;
-  serverProc.kill('SIGTERM');
-  const fallback = setTimeout(() => app.exit(0), 4000);
+  void requestJson(SERVER_PORT, '/api/internal/shutdown', 1500, {
+    method: 'POST',
+    headers: { 'x-stashbase-shutdown-token': SERVER_SHUTDOWN_TOKEN },
+  }).then((result) => {
+    if (result.reachable && result.statusCode === 202) return;
+    // POSIX receives this gracefully; Windows uses it only after the explicit
+    // shutdown handshake failed, where forceful termination is preferable to
+    // pinning the desktop process forever.
+    try { serverProc.kill('SIGTERM'); } catch { /* already gone */ }
+  });
+  const fallback = setTimeout(() => {
+    try { serverProc.kill('SIGKILL'); } catch { /* already gone */ }
+    app.exit(process.exitCode || 0);
+  }, 8000);
   serverProc.once('exit', () => {
     clearTimeout(fallback);
-    app.exit(0);
+    app.exit(process.exitCode || 0);
   });
 });

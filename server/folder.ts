@@ -50,8 +50,10 @@ const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
     : path.resolve(__dirname, '..');
 
 const DEFAULT_WINDOW_ID = 'default';
+const MAX_RETIRED_WINDOW_IDS = 2048;
 const requestWindow = new AsyncLocalStorage<string>();
 const currentFolders = new Map<string, string>();
+const retiredWindowIds = new Map<string, number>();
 const switchListeners: Array<(newRoot: string, windowId: string) => void> = [];
 const closeListeners: Array<(oldRoot: string, windowId: string) => void> = [];
 
@@ -391,6 +393,12 @@ export function requireCurrentFolder(): string {
  *  HTTP route can respond before background index / Agent cleanup starts. */
 export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exclusiveCreate?: boolean }): boolean {
   if (typeof absPath !== 'string' || !absPath) throw new Error('path required');
+  const windowId = currentWindowId();
+  if (retiredWindowIds.has(windowId)) {
+    const err = new Error('window is closed');
+    (err as any).code = 'WINDOW_CLOSED';
+    throw err;
+  }
   // Expand a leading `~` so the welcome screen can accept `~/Notes`
   // without forcing the user to spell out their home directory.
   let expanded = absPath;
@@ -424,7 +432,6 @@ export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exc
   const st = fs.statSync(normalized);
   if (!st.isDirectory()) throw new Error('path is not a directory');
 
-  const windowId = currentWindowId();
   const prev = currentFolders.get(windowId) ?? null;
   const changed = prev == null || !filesystemPath.equal(prev, normalized);
   currentFolders.set(windowId, normalized);
@@ -442,6 +449,21 @@ export function clearCurrentFolder(windowId = currentWindowId()): void {
         log.warn(`close listener threw: ${(err as any)?.message ?? err}`);
       }
     }
+  }
+}
+
+/** Permanently retire one native window identity for this app-server process.
+ * Late HTTP requests from Chromium may outlive BrowserWindow.close(); keeping a
+ * bounded tombstone prevents those requests from recreating folder/Agent state. */
+export function retireWindow(windowId = currentWindowId()): void {
+  const id = normalizeWindowId(windowId);
+  clearCurrentFolder(id);
+  retiredWindowIds.delete(id);
+  retiredWindowIds.set(id, Date.now());
+  while (retiredWindowIds.size > MAX_RETIRED_WINDOW_IDS) {
+    const oldest = retiredWindowIds.keys().next().value;
+    if (typeof oldest !== 'string') break;
+    retiredWindowIds.delete(oldest);
   }
 }
 

@@ -45,6 +45,8 @@ import { noteTreeChanged } from './watcher.ts';
 import { indexer } from './state.ts';
 import { closeStateDb } from './state-db.ts';
 import { requireFolder, withWindowContext } from './http.ts';
+import { mount as mountWindowContextRoutes } from './routes/window-context.ts';
+import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
 import { mount as mountLibraryRoutes } from './routes/library.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountTranscriptionRoutes } from './routes/transcription.ts';
@@ -234,6 +236,11 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+mountInternalShutdownRoute(app, {
+  token: process.env.STASHBASE_SHUTDOWN_TOKEN ?? '',
+  shutdown: () => { void shutdown('Electron request'); },
+});
+
 // Static layer is mounted before the API routes for renderer bundle
 // requests, but data routes must bypass it entirely. In packaged asar
 // builds, serve-static can still issue directory-normalisation redirects
@@ -265,6 +272,7 @@ if (!DEV_VITE) {
 
 // Folder/library routes include Welcome-screen operations that must work
 // before a window has an open folder, so mount them before the gate.
+mountWindowContextRoutes(app);
 mountLibraryRoutes(app);
 
 // Route-prefix gate: every API path under these roots needs an open

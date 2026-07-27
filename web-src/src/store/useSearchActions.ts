@@ -1,5 +1,6 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { api, ApiError } from '../api';
+import { rebindFolderIfStillInLibrary } from '../folderPath';
 import {
   filterGuiSemanticHits,
   shallowEqualConversionProgress,
@@ -263,13 +264,23 @@ export function useSearchActions(
         return;
       }
       if (err instanceof ApiError && err.status === 412) {
+        let latestLibrary: Awaited<ReturnType<typeof api.getFolder>> | null = null;
         if (folderPathAtStart && openGenAtStart === openGen.current) {
           try {
             // Server restart / dev tsx reload drops the in-memory
             // window → folder binding while the renderer still has the
-            // right folder and possibly an unsaved editor buffer. Rebind
-            // first; only fall back to Welcome if the folder is truly gone.
-            const opened = await api.openFolder(folderPathAtStart);
+            // right folder and possibly an unsaved editor buffer. Membership
+            // distinguishes that case from another window intentionally
+            // removing the folder from the library.
+            const recovery = await rebindFolderIfStillInLibrary(folderPathAtStart, {
+              getLibrary: api.getFolder,
+              openFolder: api.openFolder,
+            });
+            latestLibrary = recovery.library;
+            if (!recovery.opened) {
+              throw new Error('folder was removed from the library');
+            }
+            const opened = recovery.opened;
             if (
               stateRef.current.folderPath === folderPathAtStart
               && opened.current?.path
@@ -314,10 +325,16 @@ export function useSearchActions(
           dispatch({ type: 'ACTIVE_FOLDER', path: '' });
           dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
           dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
-          dispatch({ type: 'WELCOME_SHOW', recent: [] });
-          void api.getFolder()
-            .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
-            .catch(() => { /* welcome can stay empty until bootstrap/focus */ });
+          dispatch({
+            type: 'WELCOME_SHOW',
+            recent: latestLibrary?.recent ?? [],
+            homeDir: latestLibrary?.homeDir,
+          });
+          if (!latestLibrary) {
+            void api.getFolder()
+              .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
+              .catch(() => { /* welcome can stay empty until bootstrap/focus */ });
+          }
         }
       }
     }

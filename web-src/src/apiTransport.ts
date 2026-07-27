@@ -28,8 +28,14 @@ const WINDOW_ID_KEY = 'stashbase.windowId';
 
 export function getWindowId(): string {
   try {
+    const assigned = (window as {
+      electron?: { windowId?: unknown };
+    }).electron?.windowId;
     let id = window.sessionStorage.getItem(WINDOW_ID_KEY);
-    if (!id) {
+    if (typeof assigned === 'string' && assigned.trim()) {
+      id = assigned.trim().slice(0, 128);
+      window.sessionStorage.setItem(WINDOW_ID_KEY, id);
+    } else if (!id) {
       id = crypto.randomUUID();
       window.sessionStorage.setItem(WINDOW_ID_KEY, id);
     }

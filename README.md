@@ -17,6 +17,8 @@
 - 🎙️ Transcribe audio locally with whisper.cpp and keep timestamped text searchable.
 - 🔎 Index Markdown, HTML, PDFs, DOCX files, images, and audio for semantic and keyword search.
 - 🤖 Let Claude, Codex, and other MCP clients search the same local library.
+- 🪟 Use **File → New Window** to keep different folders and tools side by
+  side; Cmd/Ctrl+W continues to close the active document tab.
 
 Your folders remain the source of truth; StashBase adds a rebuildable retrieval layer on top.
 
