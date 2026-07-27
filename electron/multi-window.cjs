@@ -5,6 +5,14 @@ const crypto = require('node:crypto');
 
 const WINDOW_ID_ARG_PREFIX = '--stashbase-window-id=';
 
+function buildElectronSmokeArgs(platform, script, port) {
+  const appArgs = [script, `--port=${port}`];
+  // GitHub-hosted Linux runners cannot install Electron's chrome-sandbox
+  // helper as root with mode 4755. This affects only the isolated source
+  // smoke under Xvfb; production Electron launches retain their sandbox.
+  return platform === 'linux' ? ['--no-sandbox', ...appArgs] : appArgs;
+}
+
 function windowIdFromArgv(argv) {
   const arg = Array.isArray(argv)
     ? argv.find((value) => typeof value === 'string' && value.startsWith(WINDOW_ID_ARG_PREFIX))
@@ -222,6 +230,7 @@ function createRendererFlushCoordinator({
 
 module.exports = {
   WINDOW_ID_ARG_PREFIX,
+  buildElectronSmokeArgs,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createSingleFlight,

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   WINDOW_ID_ARG_PREFIX,
+  buildElectronSmokeArgs,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createSingleFlight,
@@ -14,6 +15,21 @@ const {
   shouldQuitAfterLastWindow,
   windowIdFromArgv,
 } = require('./multi-window.cjs');
+
+test('Electron smoke disables Chromium sandbox only on Linux CI hosts', () => {
+  assert.deepEqual(
+    buildElectronSmokeArgs('linux', '/repo/electron/smoke.cjs', 43123),
+    ['--no-sandbox', '/repo/electron/smoke.cjs', '--port=43123'],
+  );
+  assert.deepEqual(
+    buildElectronSmokeArgs('darwin', '/repo/electron/smoke.cjs', 43123),
+    ['/repo/electron/smoke.cjs', '--port=43123'],
+  );
+  assert.deepEqual(
+    buildElectronSmokeArgs('win32', 'C:\\repo\\electron\\smoke.cjs', 43123),
+    ['C:\\repo\\electron\\smoke.cjs', '--port=43123'],
+  );
+});
 
 test('application menu exposes new-window and click-only close commands', () => {
   let opened = 0;

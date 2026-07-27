@@ -5,6 +5,7 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { buildElectronSmokeArgs } = require('./multi-window.cjs');
 
 function reservePort() {
   return new Promise((resolve, reject) => {
@@ -27,7 +28,7 @@ function reservePort() {
 
 function runElectron(electronPath, script, port, smokeRoot, launch) {
   return new Promise((resolve, reject) => {
-    const child = spawn(electronPath, [script, `--port=${port}`], {
+    const child = spawn(electronPath, buildElectronSmokeArgs(process.platform, script, port), {
       cwd: path.resolve(__dirname, '..'),
       env: {
         ...process.env,
