@@ -28,12 +28,14 @@ An Agent can write new output back as local files. Once those files are reindexe
 
 ## 1.1 Runtime Shape
 
-One installation has one desktop app and one local library.
+One installation has one desktop app session and one local library. The
+Electron main process may own multiple renderer windows, but they all share
+the same Node server, Python daemon, settings, and derived state.
 
 ```text
-Electron renderer
-      |
-      | HTTP / WebSocket
+Electron renderer windows
+      |  per-window request identity
+      |  HTTP / WebSocket
       v
 Node main process
       |-- file system read/write
@@ -66,7 +68,10 @@ StashBase does not introduce a new workspace model. A user points it at ordinary
 - Removing a folder from the library clears StashBase-owned state for that folder — index rows, derived text/assets, preparation state, runtime bindings, file-order state, and membership. It never deletes the user's files.
 - Deleting a folder from inside an opened folder is different: that is a normal filesystem delete, guarded by the app's confirmation flow.
 - New Folder opens the native folder picker at `~/Documents/StashBase`. The picker creates or selects a normal local folder; the location is a default, not a boundary.
-- One app window views one folder at a time. This is UI scope, not a separate library.
+- One app window views one folder at a time. Multiple windows may bind
+  different current folders concurrently; each renderer's request identity
+  selects its server-side folder context. These are UI scopes, not separate
+  libraries.
 
 `server/filesystem-path.ts` is the platform-path seam for user files and folder
 roots; `server/folder-relative-path.ts` owns the POSIX-spelled path policy inside
@@ -115,6 +120,33 @@ Each opened folder can carry a short optional description in app config. The des
 Renderer state orchestration lives under `web-src/src/store/`. `state.ts` is the stable state-model and action-contract facade, `stateHelpers.ts` owns reusable pure transitions and layout bounds, and `stateReducer.ts` applies the action union. `AppContext.tsx` is the composition seam exposed to views. Async behavior is grouped by ownership: document persistence and tabs in `useDocumentActions.ts`, visible file mutations in `useFileActions.ts`, index polling/search/sync in `useSearchActions.ts`, folder-session transitions in `useFolderActions.ts`, and transient find/feedback protocols in `useFindActions.ts` and `useFeedbackActions.ts`. These hooks share refs only through the Provider composition and preserve one `AppActions` interface for renderer callers. `web-src/src/components/MainPane.tsx` dynamically imports format- and mode-specific heavy viewers/editors, including audio, PDF, DOCX, Markdown preview, and the Markdown editor, so the initial renderer chunk carries the common browsing surface first. `web-src/src/App.tsx` also dynamically imports the chat pane; launcher buttons stay in the initial shell, while Agent transcript rendering and the CodeMirror mention composer load only after chat is opened. `scripts/check-renderer-chunks.mjs` requires those six dynamic entries and caps the entry chunk plus its recursive static imports at 400 KiB. `web-src/src/components/ErrorBoundary.tsx` retries each dynamic import once and contains a persistent failure inside the affected chat or document surface; a changed document identity/version or chat surface clears that local failure, while the root boundary remains the final recovery path for unrelated renderer errors. `web-src/src/components/ChatPane.tsx` keeps tab navigation outside one boundary per mounted Agent session, so a render failure in one tab cannot hide the controls needed to switch or close it.
 
 The renderer's local HTTP boundary keeps `web-src/src/api.ts` as the stable endpoint facade. `shared/conversion.ts` and `shared/transcription.ts` own the preparation and transcription contracts consumed on both sides of that boundary; `apiTypes.ts` re-exports them and owns the remaining renderer-only request/response shapes. `apiTransport.ts` owns per-window request identity, JSON/error normalization, retry policy, and folder-relative path encoding. `web-src/src/preparation-copy.ts` translates queued and yielded preparation waits into shared user-facing copy without exposing scheduler lanes or positions. `web-src/src/audio-transcript.ts` maps semantic text or an explicit keyword-result millisecond timestamp back to the exact structured transcript segment and owns the remaining transcription-specific status copy, while `web-src/src/audio-playback.ts` retains logical playback position across direct-to-fallback source replacement.
+
+Electron assigns each `BrowserWindow` a stable identity through its preload
+arguments. The renderer uses that identity for HTTP headers, asset URLs, and
+Agent WebSockets, and reports folder transitions back to the main process. The
+main-process registry uses those transitions to focus an existing matching
+folder window, excluding the sender when the user explicitly asks to open its
+current folder in another window. Native close first requests an awaited
+renderer save acknowledgement; failure or timeout leaves the window open.
+Only then does close remove the registry entry and retry server cleanup. The
+server retires the identity with a bounded tombstone before clearing its
+folder and Agent context, so a late open request cannot recreate a ghost
+window. Folder removal uses the same save barrier for every matching window,
+then broadcasts the committed membership change so those renderers return
+Home; 412 recovery checks durable membership before attempting a restart
+rebind. An individual close never tears down the shared server. A
+single-instance lock plus a single-flight initial-window operation prevents a
+second launch during startup from creating a duplicate. The application menu
+owns click-only New Window and Close Window commands; Close Window deliberately
+does not register Cmd/Ctrl+W because that chord belongs to renderer tab close.
+macOS activation recreates a window after the last one closes, while non-macOS
+platforms quit after the last window closes.
+
+Electron owns the child server through a random per-launch shutdown token.
+Quit sends an authenticated loopback shutdown request and waits for the server
+cleanup ladder to exit before terminating Electron. Signals are timeout
+fallbacks only, because Windows child-process signals are forceful rather than
+graceful.
 
 ---
 
@@ -398,7 +430,7 @@ Claude session titles come from the Claude SDK history metadata. Codex threads a
 
 Source validation and platform packaging are separate GitHub Actions workflows. `.github/workflows/ci.yml` validates pull requests and pushes to `main`. Publishing a GitHub Release, or manually dispatching a platform backfill, starts the existing macOS, Linux, and Windows packaging workflows.
 
-The source CI matrix runs scheduler, cancellation, renderer, server, MCP, and Python gates on macOS, Windows, and Linux. Platform packaging builds pinned `whisper.cpp`, FFmpeg, and Opus sources into a transcription sidecar for macOS arm64, Linux x64, or Windows x64. The Windows workflows provision every build dependency, including the manifest-reading Node runtime, inside MINGW64 instead of inheriting the hosted runner's tool PATH. x64 whisper.cpp builds disable host-native instruction selection and retain runtime dispatch; macOS builds target 12.0 consistently across CMake and FFmpeg, disable the optional BLAS backend whose current SDK surface requires a newer OS, and retain Metal plus the generic CPU backend. Packaging rejects missing or empty binaries/licenses/notices, wrong executable formats, drift in every pinned version/commit/build option, FFmpeg configurations that enable GPL/nonfree components or omit libopus, and macOS helpers whose load-command minimum exceeds 12.0. Platform release smoke tests start the packaged server, exercise the native PDF/OCR helpers, verify and execute the DOCX worker, explicitly download and checksum-verify the Tiny speech model, transcode a WAV fixture through packaged FFmpeg, run packaged whisper.cpp inference, validate the transcript contract, and generate/serve the WebM fallback before an artifact is uploaded.
+The source CI matrix runs scheduler, cancellation, renderer, server, MCP, Python, and Electron window-lifecycle gates on macOS, Windows, and Linux. The Electron gate boots the real main entry and shared server, creates a second window through the application menu, verifies distinct preload identities and folder contexts, focuses an existing folder window without duplication, closes one without destroying its peer, follows the platform last-window convention, and launches the whole application a second time against the same state and port to catch orphaned server/daemon ownership; Linux runs it under Xvfb. Platform packaging builds pinned `whisper.cpp`, FFmpeg, and Opus sources into a transcription sidecar for macOS arm64, Linux x64, or Windows x64. The Windows workflows provision every build dependency, including the manifest-reading Node runtime, inside MINGW64 instead of inheriting the hosted runner's tool PATH. x64 whisper.cpp builds disable host-native instruction selection and retain runtime dispatch; macOS builds target 12.0 consistently across CMake and FFmpeg, disable the optional BLAS backend whose current SDK surface requires a newer OS, and retain Metal plus the generic CPU backend. Packaging rejects missing or empty binaries/licenses/notices, wrong executable formats, drift in every pinned version/commit/build option, FFmpeg configurations that enable GPL/nonfree components or omit libopus, and macOS helpers whose load-command minimum exceeds 12.0. Platform release smoke tests start the packaged server, exercise the native PDF/OCR helpers, verify and execute the DOCX worker, explicitly download and checksum-verify the Tiny speech model, transcode a WAV fixture through packaged FFmpeg, run packaged whisper.cpp inference, validate the transcript contract, and generate/serve the WebM fallback before an artifact is uploaded.
 
 Each platform workflow calls `.github/workflows/release-ci-gate.yml` before its packaging job. The gate resolves the release tag to its exact commit, including annotated tags, and queries GitHub Actions for a successful `ci.yml` push run with the same commit SHA. It waits for an absent or active run for up to fifteen minutes and blocks packaging when the matching run fails, is cancelled, or never succeeds. The gate implementation is read from the default branch so a manual dispatch can validate an older tag; the platform job still checks out and packages the requested tag.
 

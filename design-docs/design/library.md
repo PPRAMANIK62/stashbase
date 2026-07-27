@@ -7,7 +7,11 @@ to migrate them into a StashBase-specific storage model.
 ## Current
 
 - Users can add, create, open, and remove local folders from the library.
-- One window centres on one current folder, with a file tree and document tabs.
+- Each window centres on one current folder, with its own file tree, document
+  tabs, search state, and Agent panel.
+- Users can open multiple windows from the application menu or a folder action
+  to keep different folders or working contexts visible side by side. A folder
+  action focuses an existing matching window when one is already available.
 - Users can create, rename, move, and delete files or folders through explicit
   file operations.
 - The main pane opens the source file the user selected; generated artifacts
@@ -19,9 +23,17 @@ to migrate them into a StashBase-specific storage model.
 ## Experience Contract
 
 - Opening a folder should feel like navigation, not a long preparation task.
+- Opening or closing one window must not switch or close another window's
+  folder context.
+- Closing a window must either save the live edit first or leave the window
+  open with a visible save failure.
+- Opening a folder from one window must not create an avoidable duplicate when
+  another window already owns that context.
 - Users must be able to tell whether an operation affects source files or only
   StashBase-owned state.
 - Removing a library folder removes derived state, never the user's folder.
+- Removing a folder that is open elsewhere saves those windows and returns
+  them to the library view instead of leaving stale editable state behind.
 - Destructive file operations require clear confirmation.
 - The tree is a calm orientation tool, not a separate knowledge graph or
   project-management surface.

@@ -5,6 +5,32 @@
  * never the raw ipcRenderer.
  */
 const { contextBridge, ipcRenderer } = require('electron');
+const { windowIdFromArgv } = require('./multi-window.cjs');
+
+const windowId = windowIdFromArgv(process.argv);
+const contextReleaseHandlers = new Set();
+const folderRemovedHandlers = new Set();
+
+ipcRenderer.on('window:prepare-context-release', async (_event, payload) => {
+  if (!payload || typeof payload.requestId !== 'string') return;
+  let ok = contextReleaseHandlers.size > 0;
+  for (const handler of contextReleaseHandlers) {
+    try {
+      if (await handler(payload.reason) !== true) ok = false;
+    } catch {
+      ok = false;
+    }
+  }
+  ipcRenderer.send('window:context-release-ready', {
+    requestId: payload.requestId,
+    ok,
+  });
+});
+
+ipcRenderer.on('window:folder-removed', (_event, folder) => {
+  if (typeof folder !== 'string') return;
+  for (const handler of folderRemovedHandlers) handler(folder);
+});
 
 // Mark the document as running under Electron so CSS can reserve room
 // for the traffic-light buttons, opt into the drag region, etc. Done
@@ -28,6 +54,9 @@ function applyFullscreenClass(isFullScreen) {
 ipcRenderer.on('fullscreen-change', (_e, isFullScreen) => applyFullscreenClass(isFullScreen));
 
 contextBridge.exposeInMainWorld('electron', {
+  /** Stable identity assigned by the Electron main process. HTTP and
+   *  WebSocket calls use it to keep each window's folder context isolated. */
+  windowId,
   /** Show the OS folder picker. Returns the picked absolute path or
    *  null if the user cancelled. Accepts `defaultPath` and
    *  `allowCreateDirectory`. */
@@ -37,6 +66,24 @@ contextBridge.exposeInMainWorld('electron', {
    *  be reliable, and the system browser already has user cookies. */
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   openFolderWindow: (name) => ipcRenderer.invoke('window:openFolder', name),
+  /** Keep the main-process folder → BrowserWindow registry current so
+   *  "Open in New Window" can focus an existing matching context. */
+  setWindowFolder: (folder) => ipcRenderer.invoke('window:setFolder', folder),
+  /** Flush renderer-owned edits before main releases this window's server
+   * context. Returning false cancels close/removal. */
+  onPrepareContextRelease: (handler) => {
+    contextReleaseHandlers.add(handler);
+    return () => contextReleaseHandlers.delete(handler);
+  },
+  contextReleaseReady: () => contextReleaseHandlers.size > 0,
+  /** Before removing a library member, ask every window currently showing it
+   * to flush its editor. */
+  prepareFolderRemoval: (folder) => ipcRenderer.invoke('window:prepareFolderRemoval', folder),
+  notifyFolderRemoved: (folder) => ipcRenderer.invoke('window:notifyFolderRemoved', folder),
+  onFolderRemoved: (handler) => {
+    folderRemovedHandlers.add(handler);
+    return () => folderRemovedHandlers.delete(handler);
+  },
   /** Subscribe to "an image is on the clipboard, offer to import it"
    *  pushes fired when a main window regains focus. The renderer shows a
    *  confirm modal and, on accept, imports via the normal upload path. */

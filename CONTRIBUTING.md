@@ -33,6 +33,9 @@ Run the same source checks used by CI:
 pnpm check
 ```
 
+The check builds the renderer before launching the real Electron lifecycle
+smoke. Headless Linux environments need Xvfb; CI supplies it automatically.
+
 For Markdown renderer changes:
 
 ```bash

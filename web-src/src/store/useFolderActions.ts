@@ -1,5 +1,7 @@
-import { useCallback, type MutableRefObject } from 'react';
+import { useCallback, useRef, type MutableRefObject } from 'react';
 import { api } from '../api';
+import { folderRefsEqual, isAbsoluteFolderRef } from '../folderPath';
+import { createFolderMutationQueue } from '../folderTransition';
 import type { EditorHandle } from './actionTypes';
 import type { Action, LibraryFolderStatus, State } from './state';
 import type { ToastOptions } from './useFeedbackActions';
@@ -36,10 +38,6 @@ function libraryStatusFromActiveFolder(state: State): LibraryFolderStatus {
   return 'ready';
 }
 
-function isAbsoluteFolderRef(value: string): boolean {
-  return value.startsWith('/');
-}
-
 /** Owns folder-session transitions and invalidates stale async finishers. */
 export function useFolderActions(
   refs: FolderActionRefs,
@@ -65,6 +63,7 @@ export function useFolderActions(
     refreshIndexState,
     toast,
   } = dependencies;
+  const folderMutations = useRef(createFolderMutationQueue()).current;
 
   const resetFolderScopedState = useCallback(() => {
     const previous = state.current;
@@ -163,14 +162,14 @@ export function useFolderActions(
       throw new Error('Current file could not be saved. Resolve the save error before switching folders.');
     }
     const generation = ++openGeneration.current;
-    const opened = await api.openFolder(path);
+    const opened = await folderMutations.run(() => api.openFolder(path));
     const current = opened.current;
     if (!current || generation !== openGeneration.current) return;
     void refreshRecent().catch((err) => {
       console.warn('[recent] refresh after open failed:', err);
     });
     await finishOpenFolder(current, generation);
-  }, [editor, finishOpenFolder, flushSave, openGeneration, refreshRecent]);
+  }, [editor, finishOpenFolder, flushSave, folderMutations, openGeneration, refreshRecent]);
 
   const openFolderByName = useCallback(async (
     name: string,
@@ -180,10 +179,10 @@ export function useFolderActions(
       throw new Error('Current file could not be saved. Resolve the save error before switching folders.');
     }
     const generation = ++openGeneration.current;
-    const opened = await api.openFolderByName(name, {
+    const opened = await folderMutations.run(() => api.openFolderByName(name, {
       create: opts?.create,
       exclusiveCreate: opts?.exclusiveCreate,
-    });
+    }));
     const current = opened.current;
     if (!current || generation !== openGeneration.current) return;
     void refreshRecent().catch((err) => {
@@ -192,7 +191,7 @@ export function useFolderActions(
     await finishOpenFolder(current, generation, {
       optimisticPendingOnOpen: opts?.optimisticPendingOnOpen,
     });
-  }, [editor, finishOpenFolder, flushSave, openGeneration, refreshRecent]);
+  }, [editor, finishOpenFolder, flushSave, folderMutations, openGeneration, refreshRecent]);
 
   const goHome = useCallback(async () => {
     if (editor.current && !(await flushSave())) return false;
@@ -204,21 +203,64 @@ export function useFolderActions(
       recent: state.current.recent,
       homeDir: state.current.homeDir,
     });
-    void api.closeFolder().catch((err: unknown) => {
+    try {
+      await folderMutations.run(() => api.closeFolder());
+    } catch (err: unknown) {
       toast(
         'Could not close the current folder: ' + (err instanceof Error ? err.message : String(err)),
         { level: 'error' },
       );
+      return false;
+    }
+    try {
+      const result = await api.getFolder();
+      dispatch({
+        type: 'WELCOME_SHOW',
+        recent: result.recent ?? [],
+        homeDir: result.homeDir,
+      });
+    } catch {
+      // Keep the last known library list.
+    }
+    return true;
+  }, [
+    dispatch,
+    editor,
+    flushSave,
+    folderMutations,
+    openGeneration,
+    resetFolderScopedState,
+    state,
+    toast,
+  ]);
+
+  const prepareForFolderRemoval = useCallback((removedPath: string) => {
+    if (!state.current.folderPath || !folderRefsEqual(state.current.folderPath, removedPath)) return;
+    openGeneration.current += 1;
+    resetFolderScopedState();
+    dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
+    dispatch({
+      type: 'WELCOME_SHOW',
+      recent: state.current.recent.filter((entry) => !folderRefsEqual(entry.path, removedPath)),
+      homeDir: state.current.homeDir,
     });
-    void api.getFolder()
-      .then((result) => dispatch({
+  }, [dispatch, openGeneration, resetFolderScopedState, state]);
+
+  const handleFolderRemoved = useCallback((removedPath: string) => {
+    const affected = Boolean(
+      state.current.folderPath
+      && folderRefsEqual(state.current.folderPath, removedPath),
+    );
+    if (affected) prepareForFolderRemoval(removedPath);
+    if (affected || state.current.welcomeVisible) {
+      void api.getFolder().then((result) => dispatch({
         type: 'WELCOME_SHOW',
         recent: result.recent ?? [],
         homeDir: result.homeDir,
       }))
-      .catch(() => { /* Keep the last known library list. */ });
-    return true;
-  }, [dispatch, editor, flushSave, openGeneration, resetFolderScopedState, state, toast]);
+      .catch(() => { /* Keep the optimistic membership removal. */ });
+    }
+  }, [dispatch, prepareForFolderRemoval, state]);
 
   const bootstrap = useCallback(async () => {
     try {
@@ -267,5 +309,12 @@ export function useFolderActions(
     state,
   ]);
 
-  return { bootstrap, goHome, openFolder, openFolderByName };
+  return {
+    bootstrap,
+    goHome,
+    handleFolderRemoved,
+    openFolder,
+    openFolderByName,
+    prepareForFolderRemoval,
+  };
 }

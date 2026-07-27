@@ -38,6 +38,13 @@ import { useFindActions } from './useFindActions';
 import { useFolderActions } from './useFolderActions';
 import { useSearchActions } from './useSearchActions';
 
+interface ElectronLifecycleBridge {
+  onPrepareContextRelease?: (
+    handler: (reason: string) => Promise<boolean>,
+  ) => (() => void);
+  onFolderRemoved?: (handler: (folder: string) => void) => (() => void);
+}
+
 // Re-export the state types from a single barrel so consumers that
 // import from `'../store/AppContext'` keep working. The Provider
 // itself owns the React-side surface (AppActions, EditorHandle); the
@@ -503,7 +510,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch,
   );
 
-  const { bootstrap, goHome, openFolder, openFolderByName } = useFolderActions(
+  const {
+    bootstrap,
+    goHome,
+    handleFolderRemoved,
+    openFolder,
+    openFolderByName,
+    prepareForFolderRemoval,
+  } = useFolderActions(
     {
       state: stateRef,
       editor: editorRef,
@@ -526,6 +540,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch,
   );
 
+  useEffect(() => {
+    const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
+    return bridge?.onPrepareContextRelease?.(async (reason) => {
+      const folderAtStart = stateRef.current.folderPath;
+      const saved = await flushSave();
+      if (saved && reason === 'folder-removal' && folderAtStart) {
+        prepareForFolderRemoval(folderAtStart);
+      }
+      return saved;
+    });
+  }, [flushSave, prepareForFolderRemoval]);
+
+  useEffect(() => {
+    const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
+    return bridge?.onFolderRemoved?.(handleFolderRemoved);
+  }, [handleFolderRemoved]);
 
   const actions = useMemo<AppActions>(() => ({
     bootstrap, openFolder, openFolderByName, goHome,
@@ -601,6 +631,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Best-effort flush before unload. `sendBeacon` keeps the POST alive
   // past page teardown.
   useEffect(() => {
+    const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
+    if (typeof bridge?.onPrepareContextRelease === 'function') return;
     function onUnload() {
       const cur = getActiveTab(stateRef.current)?.file ?? null;
       const h = editorRef.current;

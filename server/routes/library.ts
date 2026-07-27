@@ -119,6 +119,9 @@ export function mount(app: express.Express): void {
       }
       res.json({ current: { path: filesystemPath.absolute(folderRoot), name: getCurrentFolderLabel() ?? getCurrentFolderBasename() } });
     } catch (err: unknown) {
+      if ((err as any)?.code === 'WINDOW_CLOSED') {
+        return res.status(410).json({ error: 'window is closed', code: 'WINDOW_CLOSED' });
+      }
       if ((err as any)?.code === 'FOLDER_EXISTS') {
         return res.status(409).json({ error: errorMessage(err), code: 'FOLDER_EXISTS' });
       }

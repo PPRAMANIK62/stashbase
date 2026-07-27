@@ -22,6 +22,8 @@ This is not a second architecture document. `architecture.md` explains where mod
 | Import or copy in a large PDF | Some PDF batches may finish before the app exits or the extractor is killed. | Batch scratch can be reused, but the final PDF note is complete only with the completion marker. |
 | Import several PDFs, including scans | Scanned PDFs can monopolize conversion time, while one probe per import can itself exhaust subprocess resources. | A capacity-4 scheduler-owned classifier pool probes asynchronously; cheaper text-layer PDFs run first within the same urgency tier, and probe failure/timeout remains conservative heavy work. |
 | Open a folder while other library conversions are queued | Background library conversion can delay the folder the user is actively trying to search/read. | One scheduler prefers explicit interaction, then work under any open window's folder, then library background work. Background tasks age only into the open-folder tier; running work is not preempted. |
+| Close a native window while its renderer has a live edit or requests in transit | Retirement can overtake the final save, or a late folder-open request can recreate scheduler priority and Agent state for a window that no longer exists. | Main waits for the renderer's save acknowledgement before close, then retires the stable identity before clearing its binding; subsequent opens for that identity fail, cleanup is idempotent, and other window identities remain live. |
+| Remove a library folder that another window is editing | The other renderer can lose its final edit, retain stale UI, or mistake the cleared binding for a server restart and re-add membership. | Flush every matching renderer first, return those windows Home, broadcast the committed removal, and allow 412 recovery to rebind only while durable membership still contains the folder. |
 | Open an unprepared DOCX while OCR is running | Making visible content depend on server preparation can leave the document on “Preparing…” behind unrelated work or a failed scheduler path; parsing a large source on the renderer thread can also freeze navigation. | An on-demand worker converts and sanitizes the source directly, independently of server preparation and the renderer UI thread. A 20s watchdog aborts a stuck direct path and exposes the server-derived fallback. Opening/importing also promotes the durable search/Agent derivation into the capacity-2 light lane; its status never replaces visible content. |
 | OCR a scanned PDF or image | OCR libraries may use many native threads and make the desktop UI feel stuck even though work is in a child process. | PDF/image extractor work runs through the capacity-1 heavy lane, with conservative native-thread limits and lower OS priority; OCR may take longer, but UI responsiveness has priority. |
 | Open transcribable media before installing a speech model | Treating a missing optional model as a failed file can leave a durable error after the model becomes available. | Media remains playable when Chromium supports the container. Transcript readiness is dynamically blocked by the selected model; no preparation failure is persisted, and model installation triggers reconcile. |
@@ -119,7 +121,12 @@ Conversion has six practical states:
 
 System-driven interruption is not durable. App exit, source/folder mutation, model removal, extractor termination, or source replacement clear in-flight state and follow their owning rediscovery rule. An explicit user Cancel is durable `cancelled` state so later reconcile cannot restart the work without Reprocess.
 
-On graceful shutdown, StashBase cancels active extractors before closing state storage. Shutdown cancellation is transient: it must not persist a failure row, and the next reconcile must rediscover incomplete work.
+On graceful shutdown, StashBase cancels active extractors before closing state
+storage. Electron requests shutdown through a per-launch authenticated loopback
+handshake and waits for server exit; OS signals are timeout fallback only, so
+Windows cannot skip this ladder through its forceful child-process signal
+semantics. Shutdown cancellation is transient: it must not persist a failure
+row, and the next reconcile must rediscover incomplete work.
 
 Persistent preparation failures are durable. They are not silently retried forever because repeated automatic retries can burn time, CPU, OCR, or embedding budget. The user can reprocess the file manually.
 
@@ -465,6 +472,9 @@ Current contract:
 - Visible DOCX preview converts the source in the renderer and never enters the scheduler. Durable DOCX search/Agent preparation uses the light lane (capacity 2); PDF/image OCR and audio transcription use the heavy lane (capacity 1).
 - Audio releases and reacquires the heavy lane after each durable ten-minute checkpoint. Source playback and the lazy playback fallback do not wait for transcript completion.
 - Interactive work is preferred over work under any open window's folder, which is preferred over other background work.
+- Closing one native window retires its server-side folder identity so that
+  folder no longer receives open-window priority from a ghost context. Other
+  windows and the shared server/daemon continue running.
 - Background ageing is bounded at open-folder urgency, so it prevents starvation without overtaking interaction.
 - Format cost and original enqueue order break ties inside one urgency tier; text-layer PDFs become cheaper only if the asynchronous probe succeeds before they start.
 - Already-running conversions are not preempted; priority changes apply to queued work.

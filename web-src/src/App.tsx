@@ -10,6 +10,7 @@ import {
 interface ElectronBridge {
   openFolderDialog?: (opts?: unknown) => Promise<string | null>;
   openExternal?: (url: string) => Promise<boolean>;
+  setWindowFolder?: (folder: string | null) => Promise<boolean>;
   onClipboardImage?: (handler: (offer: ClipboardOffer) => void) => (() => void);
   markClipboardHandled?: (hash: string) => void;
 }
@@ -66,6 +67,7 @@ function AppBody() {
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [clipboardOffer, setClipboardOffer] = useState<ClipboardOffer | null>(null);
   const [pendingClipboardOffer, setPendingClipboardOffer] = useState<ClipboardOffer | null>(null);
+  const initialFolderPending = useRef(new URLSearchParams(window.location.search).has('folder'));
   // Mount the chat panel lazily on first open and then NEVER
   // unmount it — top-bar agent selectors only hide the column via CSS,
   // the underlying agent WebSocket sessions stay alive. Killing them
@@ -83,6 +85,18 @@ function AppBody() {
       document.body.classList.add('is-electron');
     }
   }, []);
+  useEffect(() => {
+    document.title = state.folder ? `${state.folder} — StashBase` : 'StashBase';
+  }, [state.folder]);
+  useEffect(() => {
+    // createWindow registers its requested folder immediately so a second
+    // "Open in New Window" click can focus the still-loading window. Preserve
+    // that pending identity until bootstrap either opens it or reports failure.
+    if (initialFolderPending.current && !state.folderPath && !state.welcomeError) return;
+    initialFolderPending.current = false;
+    const bridge = (window as { electron?: ElectronBridge }).electron;
+    void bridge?.setWindowFolder?.(state.folderPath || null);
+  }, [state.folderPath, state.welcomeError]);
   // macOS fullscreen toggles the `is-fullscreen` body class so the chrome
   // strip can drop its traffic-light inset. That's owned entirely by the
   // preload (registered before page load, so it catches the initial state

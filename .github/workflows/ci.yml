@@ -62,6 +62,9 @@ jobs:
       - name: Test renderer
         run: pnpm test:renderer
 
+      - name: Test Electron window lifecycle
+        run: npm run test:electron
+
       - name: Test conversion scheduler
         run: pnpm test:conversion-scheduler
 
@@ -79,6 +82,14 @@ jobs:
 
       - name: Build web + server
         run: pnpm build
+
+      - name: Smoke real Electron app lifecycle (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm test:electron:smoke
+
+      - name: Smoke real Electron app lifecycle (macOS and Windows)
+        if: runner.os != 'Linux'
+        run: pnpm test:electron:smoke
 
       - name: Build Windows Python sidecars
         if: runner.os == 'Windows'
