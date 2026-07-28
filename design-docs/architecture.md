@@ -24,7 +24,7 @@ library per installation.
 | Local files and folders | User | They remain the source of truth. |
 | `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never overwritten by StashBase. |
 | Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
-| Credentials and user settings | StashBase settings | They are managed through Settings, not environment variables. |
+| Credentials and user settings | StashBase settings | They are managed through Settings, not environment variables. Appearance is user-wide, updates every open window immediately, and is limited to theme plus UI and reading-size presets. |
 
 Derived artifacts must not appear as ordinary files in the workspace. When
 search finds derived evidence, the result still identifies and opens the
