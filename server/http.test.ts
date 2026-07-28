@@ -2,6 +2,40 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runWithWindowId } from './folder.ts';
 import { requireFolder, validateEmbedderKey } from './http.ts';
+import {
+  createAppearancePreferencesStore,
+  normalizeAppearancePreferences,
+  type AppConfigFile,
+} from './app-config.ts';
+
+test('appearance preferences default safely and persist bounded presets', () => {
+  let config: AppConfigFile = { appearance: { uiScale: 'large' } };
+  const store = createAppearancePreferencesStore({
+    read: () => structuredClone(config),
+    write: (next) => { config = structuredClone(next); },
+  });
+
+  assert.deepEqual(store.get(), {
+    theme: 'system',
+    uiScale: 'large',
+    readingTextSize: 'default',
+  });
+  assert.deepEqual(store.set({ theme: 'dark', readingTextSize: 'small' }), {
+    theme: 'dark',
+    uiScale: 'large',
+    readingTextSize: 'small',
+  });
+  assert.deepEqual(store.get(), {
+    theme: 'dark',
+    uiScale: 'large',
+    readingTextSize: 'small',
+  });
+  assert.deepEqual(normalizeAppearancePreferences({ theme: 'neon', uiScale: 'oversized' }), {
+    theme: 'system',
+    uiScale: 'default',
+    readingTextSize: 'default',
+  });
+});
 
 test('folder-explicit preparation routes work without an open window folder', async () => {
   for (const path of ['/prepare', '/reprocess', '/cancel-preparation']) {

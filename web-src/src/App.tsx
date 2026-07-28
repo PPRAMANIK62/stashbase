@@ -40,6 +40,8 @@ import {
 } from './store/state';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { getWindowId } from './api';
+import { api } from './api';
+import { applyAppearance, subscribeToAppearance } from './appearance';
 import { isTrustedPreviewSource } from './lib/previewMessages';
 
 const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane').then((mod) => ({ default: mod.ChatPane })));
@@ -76,6 +78,20 @@ function AppBody() {
   // in-flight agent run. The in-panel "new chat" `+` is how the user
   // starts a fresh session.
   const [chatMounted, setChatMounted] = useState(state.chatOpen);
+  useEffect(() => {
+    let receivedWindowUpdate = false;
+    const unsubscribe = subscribeToAppearance((preferences) => {
+      receivedWindowUpdate = true;
+      applyAppearance(preferences);
+    });
+    void api.appearance().then((preferences) => {
+      if (!receivedWindowUpdate) applyAppearance(preferences);
+    }).catch(() => {
+      // The initial light/system-safe CSS remains usable if config is absent
+      // or temporarily unreadable; Settings exposes the recoverable error.
+    });
+    return unsubscribe;
+  }, []);
   useEffect(() => {
     if (state.chatOpen) setChatMounted(true);
   }, [state.chatOpen]);

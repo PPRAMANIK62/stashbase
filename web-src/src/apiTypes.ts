@@ -25,6 +25,14 @@ export type {
   TranscriptionSettings,
 } from '../../shared/transcription.ts';
 export type TranscriptionModelId = LocalTranscriptionModelId;
+export type AppearanceTheme = 'system' | 'light' | 'dark';
+export type AppearanceScale = 'small' | 'default' | 'large';
+
+export interface AppearancePreferences {
+  theme: AppearanceTheme;
+  uiScale: AppearanceScale;
+  readingTextSize: AppearanceScale;
+}
 
 /** Viewer format the renderer uses for tab routing. `md` / `html` are
  *  text formats loaded from `/api/files/*`; `pdf`, `image`, and `docx` load
