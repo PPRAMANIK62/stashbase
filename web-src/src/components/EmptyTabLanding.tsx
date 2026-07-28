@@ -20,9 +20,9 @@ export function EmptyTabLanding() {
       <button
         type="button"
         className="empty-tab-action"
-        onClick={() => { actions.focusSearch(); }}
+        onClick={() => { window.dispatchEvent(new Event('stashbase-open-quick-open')); }}
       >
-        Search notes <kbd>⌘O</kbd>
+        Open notes <kbd>⌘O</kbd>
       </button>
       <button
         type="button"

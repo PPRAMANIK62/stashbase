@@ -12,6 +12,7 @@ import {
   makeTab,
   mostRecentChatTab,
   patchActiveTab,
+  rememberRecentFile,
   remapFileOrder,
   remapOnePath,
   rememberChatTab,
@@ -73,6 +74,7 @@ export function reducer(s: State, a: Action): State {
               searchHits: null,
               keywordResult: null,
               searchError: null,
+              recentFilePaths: [],
               // Scope names a subfolder of the previous folder; type
               // filters are per-folder session state too.
               searchScope: null,
@@ -110,6 +112,7 @@ export function reducer(s: State, a: Action): State {
         return {
           ...s,
           tabs: [...s.tabs, tab],
+          recentFilePaths: rememberRecentFile(s.recentFilePaths, file.name),
           activeTabId: tab.id,
           selectedPath: file.name,
         };
@@ -127,6 +130,7 @@ export function reducer(s: State, a: Action): State {
           // preview/pinned status.
           ...(a.preview != null ? { preview: a.preview } : {}),
         }),
+        recentFilePaths: rememberRecentFile(s.recentFilePaths, file.name),
         selectedPath: file.name,
       };
     }
@@ -189,6 +193,7 @@ export function reducer(s: State, a: Action): State {
         files,
         folders,
         tabs,
+        recentFilePaths: s.recentFilePaths.map((path) => remapOnePath(path, a.from, a.to, a.kind)),
         expanded,
         fileOrder: remapFileOrder(s.fileOrder, a.from, a.to, a.kind),
         activeFolder: remapOnePath(s.activeFolder, a.from, a.to, a.kind),
@@ -226,10 +231,17 @@ export function reducer(s: State, a: Action): State {
       if (s.activeTabId === a.id) return s;
       const target = s.tabs.find((t) => t.id === a.id);
       if (!target) return s;
-      return { ...s, activeTabId: a.id, selectedPath: target.file?.name ?? '' };
+      return {
+        ...s,
+        activeTabId: a.id,
+        recentFilePaths: target.file
+          ? rememberRecentFile(s.recentFilePaths, target.file.name)
+          : s.recentFilePaths,
+        selectedPath: target.file?.name ?? '',
+      };
     }
     case 'TABS_RESET':
-      return { ...s, tabs: [], activeTabId: null, selectedPath: '' };
+      return { ...s, tabs: [], recentFilePaths: [], activeTabId: null, selectedPath: '' };
     case 'EDIT_MODE': {
       const tab = getActiveTab(s);
       if (!tab) return s;

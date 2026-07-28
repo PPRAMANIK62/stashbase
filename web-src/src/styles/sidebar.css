@@ -789,7 +789,7 @@
     }
 
     /* Brief glow when something programmatically focuses the search
-     * input (empty-tab landing → "Search notes", ⌘O hotkey). Without
+     * input (empty-tab landing → "Search notes", ⌘⇧F hotkey). Without
      * this the focus border alone is easy to miss when the user's
      * eyes are still on the main pane. */
     @keyframes search-focus-flash {
