@@ -30,6 +30,20 @@ export interface RecentFolder {
 
 export type EmbedderProvider = 'openai' | 'openrouter';
 export type TranscriptionModelId = LocalTranscriptionModelId;
+export type AppearanceTheme = 'system' | 'light' | 'dark';
+export type AppearanceScale = 'small' | 'default' | 'large';
+
+export interface AppearancePreferences {
+  theme: AppearanceTheme;
+  uiScale: AppearanceScale;
+  readingTextSize: AppearanceScale;
+}
+
+export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
+  theme: 'system',
+  uiScale: 'default',
+  readingTextSize: 'default',
+};
 
 export interface EmbedderConfig {
   provider: EmbedderProvider;
@@ -104,6 +118,9 @@ export interface AppConfigFile {
     /** Whisper language code or `auto`. */
     language?: string;
   };
+  /** Bounded, user-wide presentation preferences. These deliberately avoid
+   * arbitrary theme, font, spacing, and layout customization. */
+  appearance?: Partial<AppearancePreferences>;
 }
 
 export function readAppConfigStrict(): AppConfigFile {
@@ -253,6 +270,66 @@ export function setTranscriptionPreferences(next: Partial<TranscriptionPreferenc
   cfg.transcription = { providerId, modelId, language };
   writeAppConfigStrict(cfg);
   return { providerId, modelId, language };
+}
+
+function isAppearanceTheme(value: unknown): value is AppearanceTheme {
+  return value === 'system' || value === 'light' || value === 'dark';
+}
+
+function isAppearanceScale(value: unknown): value is AppearanceScale {
+  return value === 'small' || value === 'default' || value === 'large';
+}
+
+/** Resolve persisted presentation values defensively so a hand-edited or
+ * legacy config cannot prevent Settings from loading. */
+export function normalizeAppearancePreferences(value: unknown): AppearancePreferences {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<AppearancePreferences>
+    : {};
+  return {
+    theme: isAppearanceTheme(raw.theme) ? raw.theme : DEFAULT_APPEARANCE_PREFERENCES.theme,
+    uiScale: isAppearanceScale(raw.uiScale) ? raw.uiScale : DEFAULT_APPEARANCE_PREFERENCES.uiScale,
+    readingTextSize: isAppearanceScale(raw.readingTextSize)
+      ? raw.readingTextSize
+      : DEFAULT_APPEARANCE_PREFERENCES.readingTextSize,
+  };
+}
+
+export interface AppearancePreferencesStore {
+  get(): AppearancePreferences;
+  set(next: Partial<AppearancePreferences>): AppearancePreferences;
+}
+
+/** The small injected seam keeps preference recovery and persistence testable
+ * without coupling tests to the user's actual config file. */
+export function createAppearancePreferencesStore(io: {
+  read(): AppConfigFile;
+  write(config: AppConfigFile): void;
+}): AppearancePreferencesStore {
+  return {
+    get: () => normalizeAppearancePreferences(io.read().appearance),
+    set(next) {
+      const current = normalizeAppearancePreferences(io.read().appearance);
+      const resolved = normalizeAppearancePreferences({ ...current, ...next });
+      const config = io.read();
+      config.appearance = resolved;
+      io.write(config);
+      return resolved;
+    },
+  };
+}
+
+const appearancePreferences = createAppearancePreferencesStore({
+  read: readAppConfig,
+  write: writeAppConfigStrict,
+});
+
+export function getAppearancePreferences(): AppearancePreferences {
+  return appearancePreferences.get();
+}
+
+export function setAppearancePreferences(next: Partial<AppearancePreferences>): AppearancePreferences {
+  return appearancePreferences.set(next);
 }
 
 /** One-time upgrade from the very first global-embedder schema, when

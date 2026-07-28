@@ -21,6 +21,11 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 - StashBase owns tab lifecycle, saving, conflict/version handling, local asset
   storage, local navigation, image lightbox, Find, anchors, search highlighting,
   app styling, and the trust boundary.
+- Theme integration uses semantic StashBase tokens plus a scoped Milkdown token
+  bridge. Milkdown's frame stylesheet assigns its variables directly on its
+  root, so inherited app tokens alone are insufficient: keep the bridge more
+  specific than the package selector and map its menus, placeholders, tooltips,
+  and code blocks to the active light/dark roles.
 - The Agent-message Markdown renderer remains separate from document Markdown.
 
 ## Integration invariants

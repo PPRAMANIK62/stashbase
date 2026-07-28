@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   color: var(--fg);
   /* Hidden until the layout effect clamps it into place, then faded in by
    * `.ready`. Prevents a one-frame flash at the unclamped (0,0) position. */
@@ -89,13 +89,13 @@
 }
 
 .menu-item-detail {
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--muted);
 }
 
 .menu-item-shortcut {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--muted);
   letter-spacing: 0.04em;
 }

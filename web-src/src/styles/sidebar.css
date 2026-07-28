@@ -154,11 +154,11 @@
 
     .modal-card h3 {
       margin: 0 0 8px;
-      font-size: 16px;
+      font-size: calc(16px * var(--ui-scale));
     }
 
     .modal-hint {
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
       color: var(--muted);
       margin: 0 0 14px;
       line-height: 1.5;
@@ -166,7 +166,7 @@
 
     .modal-hint code {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       color: var(--accent);
     }
 
@@ -194,7 +194,7 @@
       padding: 8px 10px;
       font: inherit;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
       background: var(--bg);
       color: var(--fg);
       box-sizing: border-box;
@@ -228,7 +228,7 @@
       background: transparent;
       color: var(--fg);
       font: inherit;
-      font-size: 12.5px;
+      font-size: calc(12.5px * var(--ui-scale));
       font-weight: 500;
       padding: 0 11px;
       cursor: pointer;
@@ -268,7 +268,7 @@
       margin-top: 10px;
       margin-bottom: 14px;
       color: var(--fg);
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
     }
 
     .modal-check input {
@@ -299,7 +299,7 @@
       background: rgba(220, 38, 38, 0.08);
       color: var(--danger);
       border-radius: 6px;
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       line-height: 1.45;
       max-width: 100%;
       max-height: min(180px, 32vh);
@@ -314,7 +314,7 @@
       background: rgba(217, 119, 6, 0.1);
       color: #b45309;
       border-radius: 6px;
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       line-height: 1.45;
       max-width: 100%;
       max-height: min(180px, 32vh);
@@ -376,7 +376,7 @@
     }
 
     .mcp-client-name {
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
       font-weight: 600;
       color: var(--fg);
       overflow: hidden;
@@ -395,7 +395,7 @@
       border: 1px solid var(--border);
       background: var(--pane);
       color: var(--muted);
-      font-size: 11.5px;
+      font-size: calc(11.5px * var(--ui-scale));
       font-weight: 500;
       white-space: nowrap;
     }
@@ -424,7 +424,7 @@
       flex-shrink: 0;
       min-width: 96px;
       padding: 5px 12px;
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       text-align: center;
     }
 
@@ -455,7 +455,7 @@
       background: rgba(var(--accent-rgb), 0.08);
       color: var(--accent);
       border-radius: 6px;
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       line-height: 1.45;
     }
 
@@ -474,7 +474,7 @@
 
     .mcp-http-field > label {
       color: var(--muted);
-      font-size: 11.5px;
+      font-size: calc(11.5px * var(--ui-scale));
       font-weight: 600;
     }
 
@@ -508,7 +508,7 @@
       align-items: center;
       gap: 7px;
       color: var(--fg);
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       cursor: pointer;
     }
 
@@ -536,7 +536,7 @@
       justify-content: space-between;
       padding: 8px 12px;
       border-bottom: 1px solid var(--border);
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
@@ -583,7 +583,7 @@
       max-height: 320px;
       overflow: auto;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 11.5px;
+      font-size: calc(11.5px * var(--ui-scale));
       line-height: 1.45;
       white-space: pre;
       color: var(--fg);
@@ -621,7 +621,7 @@
       border-radius: 6px;
       cursor: pointer;
       font: inherit;
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
       transition: background 0.12s, border-color 0.12s, color 0.12s;
     }
 
@@ -677,7 +677,7 @@
       background: var(--bg);
       color: var(--fg);
       font: inherit;
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
       outline: none;
     }
 
@@ -708,7 +708,7 @@
       background: transparent;
       color: var(--muted);
       font: inherit;
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       cursor: pointer;
       user-select: none;
     }
@@ -733,7 +733,7 @@
       min-width: 34px;
     }
     .side-search-mode-btn.side-search-mode-flip {
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
       font-weight: 600;
     }
 
@@ -754,7 +754,7 @@
       background: var(--bg);
       color: var(--muted);
       font: inherit;
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       outline: none;
     }
     .search-scope:focus {
@@ -774,7 +774,7 @@
       background: transparent;
       color: var(--muted);
       font: inherit;
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       cursor: pointer;
       user-select: none;
     }
@@ -822,7 +822,7 @@
     .panel-section-title {
       flex: 1;
       min-width: 0;
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       font-weight: 600;
       letter-spacing: .06em;
       text-transform: uppercase;
@@ -896,7 +896,7 @@
      * muted "FOLDER" section label above it (mirrors VSCode's workspace
      * name reading stronger than the EXPLORER header). */
     .folder-label {
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       font-weight: 600;
       letter-spacing: .04em;
       text-transform: uppercase;
@@ -950,7 +950,7 @@
     .preparation-failure-icon .warning-mark-text {
       fill: #fff;
       stroke: none;
-      font-size: 9.5px;
+      font-size: calc(9.5px * var(--ui-scale));
       font-weight: 800;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       dominant-baseline: auto;
@@ -1010,7 +1010,7 @@
       border-radius: 6px;
       background: var(--bg);
       color: var(--muted);
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
     }
 
     .search-status-banner.warning {
@@ -1054,7 +1054,7 @@
       background: rgba(255, 255, 255, 0.55);
       color: inherit;
       font: inherit;
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       font-weight: 600;
       padding: 3px 5px;
       cursor: pointer;
@@ -1080,7 +1080,7 @@
       padding: 3px 12px 3px 0;
       cursor: pointer;
       border-left: 2px solid transparent;
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
       color: var(--fg);
       min-width: 0;
       user-select: none;
@@ -1232,7 +1232,7 @@
       background: var(--card);
       color: var(--fg);
       font: inherit;
-      font-size: 13px;
+      font-size: calc(13px * var(--ui-scale));
       outline: none;
     }
 
@@ -1240,7 +1240,7 @@
       padding: 24px 16px;
       text-align: center;
       color: var(--muted);
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
     }
 
     /* Semantic search results (replaces the tree when the search box is
@@ -1264,7 +1264,7 @@
     }
 
     .search-hit-heading {
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       color: var(--muted);
       font-weight: 500;
       letter-spacing: 0.02em;
@@ -1275,7 +1275,7 @@
     }
 
     .search-hit-snippet {
-      font-size: 12.5px;
+      font-size: calc(12.5px * var(--ui-scale));
       line-height: 1.45;
       color: var(--fg);
       display: -webkit-box;
@@ -1297,7 +1297,7 @@
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       color: var(--muted);
     }
 
@@ -1312,7 +1312,7 @@
      * single-line snippet that ellipsises rather than wrapping into a
      * wall of text). */
     .keyword-summary {
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       color: var(--muted);
       padding: 2px 10px 6px;
     }
@@ -1336,13 +1336,13 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-size: 12.5px;
+      font-size: calc(12.5px * var(--ui-scale));
       font-weight: 500;
       color: var(--fg);
     }
     .keyword-file-count {
       flex-shrink: 0;
-      font-size: 10px;
+      font-size: calc(10px * var(--ui-scale));
       line-height: 16px;
       min-width: 16px;
       padding: 0 5px;
@@ -1357,7 +1357,7 @@
       align-items: baseline;
       padding: 2px 10px 2px 16px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       line-height: 1.5;
       border-radius: 4px;
     }
@@ -1388,7 +1388,7 @@
     }
     .keyword-truncated {
       color: var(--muted);
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       padding: 2px 10px 2px 16px;
       cursor: default;
     }

@@ -1,11 +1,25 @@
     :root {
       color-scheme: light;
-      --fg: #333333;
-      --muted: #8a8a8a;
-      --bg: #ffffff;
-      --pane: #fafafa;
-      --card: #fff;
-      --border: #ececec;
+      /* Semantic tokens are the only cross-surface theme API. Component
+       * styles consume these roles instead of assuming a light literal. */
+      --surface-base: #ffffff;
+      --surface-raised: #ffffff;
+      --surface-sunken: #f6f7f8;
+      --surface-hover: #eef2f3;
+      --surface-selected: #dceff3;
+      --text-primary: #202427;
+      --text-secondary: #68737a;
+      --text-on-accent: #ffffff;
+      --stroke-subtle: #d9e0e3;
+      --stroke-strong: #aeb9bf;
+      --focus-ring: #0891b2;
+      --shadow-color: 25, 34, 39;
+      --fg: var(--text-primary);
+      --muted: var(--text-secondary);
+      --bg: var(--surface-base);
+      --pane: var(--surface-sunken);
+      --card: var(--surface-raised);
+      --border: var(--stroke-subtle);
       /* Cyan accent — matches the .html file icon. Paired with the
        * #d9a000 amber on .md icons, the two are the project's color
        * signature (see `.tree-row.file.format-*` comments). */
@@ -17,8 +31,73 @@
        * (chat.css's #e45649 is the One-Dark editor red and the sidebar's
        * #dc2626 is the recording red — different palettes on purpose.) */
       --danger: #b91c1c;
-      --hover: #f0f0f0;
-      --active: #e8e8e8;
+      --hover: var(--surface-hover);
+      --active: var(--surface-selected);
+      --ui-font-size: calc(14px * var(--ui-scale));
+      --ui-scale: 1;
+      --reading-font-size: 14px;
+    }
+
+    :root[data-ui-scale='small'] { --ui-scale: .9; }
+    :root[data-ui-scale='large'] { --ui-scale: 1.15; }
+    :root[data-reading-text-size='small'] { --reading-font-size: 13px; }
+    :root[data-reading-text-size='large'] { --reading-font-size: 17px; }
+
+    :root[data-theme='dark'] {
+      color-scheme: dark;
+      --surface-base: #1b1f22;
+      --surface-raised: #242a2e;
+      --surface-sunken: #15191c;
+      --surface-hover: #30383d;
+      --surface-selected: #164955;
+      --text-primary: #edf2f3;
+      --text-secondary: #aab5ba;
+      --text-on-accent: #06191f;
+      --stroke-subtle: #39444a;
+      --stroke-strong: #64727a;
+      --focus-ring: #46cce8;
+      --shadow-color: 0, 0, 0;
+      --fg: var(--text-primary);
+      --muted: var(--text-secondary);
+      --bg: var(--surface-base);
+      --pane: var(--surface-sunken);
+      --card: var(--surface-raised);
+      --border: var(--stroke-subtle);
+      --accent: #22b8d8;
+      --accent-rgb: 34, 184, 216;
+      --danger: #f87171;
+      --hover: var(--surface-hover);
+      --active: var(--surface-selected);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]),
+      :root[data-theme='system'] {
+        color-scheme: dark;
+        --surface-base: #1b1f22;
+        --surface-raised: #242a2e;
+        --surface-sunken: #15191c;
+        --surface-hover: #30383d;
+        --surface-selected: #164955;
+        --text-primary: #edf2f3;
+        --text-secondary: #aab5ba;
+        --text-on-accent: #06191f;
+        --stroke-subtle: #39444a;
+        --stroke-strong: #64727a;
+        --focus-ring: #46cce8;
+        --shadow-color: 0, 0, 0;
+        --fg: var(--text-primary);
+        --muted: var(--text-secondary);
+        --bg: var(--surface-base);
+        --pane: var(--surface-sunken);
+        --card: var(--surface-raised);
+        --border: var(--stroke-subtle);
+        --accent: #22b8d8;
+        --accent-rgb: 34, 184, 216;
+        --danger: #f87171;
+        --hover: var(--surface-hover);
+        --active: var(--surface-selected);
+      }
     }
 
     * {
@@ -32,10 +111,20 @@
     }
 
     body {
-      font: 14px/1.55 -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
+      font: var(--ui-font-size)/1.55 -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
       color: var(--fg);
       background: var(--bg);
       overflow: hidden;
+    }
+
+    /* Controls inherit the scaled UI baseline. Component rules can still set
+     * their own scaled size, preserving established visual hierarchy. */
+    button,
+    input,
+    select,
+    textarea {
+      font-family: inherit;
+      font-size: inherit;
     }
 
     /* React mounts into #root — make IT the flex column so the chrome
@@ -105,7 +194,7 @@
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       font-weight: 500;
       color: var(--muted);
       white-space: nowrap;
@@ -143,7 +232,7 @@
       background: var(--pane);
       color: var(--fg);
       border: 1px solid var(--border);
-      font-size: 12px;
+      font-size: calc(12px * var(--ui-scale));
       line-height: 1.2;
       padding: 4px 8px;
       border-radius: 6px;

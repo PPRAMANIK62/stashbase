@@ -14,10 +14,12 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { EmbeddingPanel } from './settings/EmbeddingPanel';
 import { McpClientsPanel } from './settings/McpClientsPanel';
 import { TranscriptionPanel } from './settings/TranscriptionPanel';
+import { AppearancePanel } from './settings/AppearancePanel';
 
-export type SettingsSection = 'embedding' | 'transcription' | 'mcp';
+export type SettingsSection = 'appearance' | 'embedding' | 'transcription' | 'mcp';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
+  { id: 'appearance', label: 'Appearance', render: () => <AppearancePanel /> },
   { id: 'embedding', label: 'Embedding', render: () => <EmbeddingPanel /> },
   { id: 'transcription', label: 'Transcription', render: () => <TranscriptionPanel /> },
   { id: 'mcp', label: 'MCP', render: () => <McpClientsPanel /> },
@@ -32,7 +34,7 @@ interface LockDetail {
 }
 
 /** Fire from anywhere to open the Settings modal. Optional `section`
- *  picks the initial pane (default: embedding). */
+ *  picks the initial pane (default: appearance). */
 export function openSettings(section?: SettingsSection): void {
   window.dispatchEvent(
     new CustomEvent<OpenDetail>('stashbase-open-settings', { detail: { section } }),
@@ -43,7 +45,7 @@ export function openSettings(section?: SettingsSection): void {
  *  renders the modal when triggered. */
 export function SettingsPortal() {
   const [open, setOpen] = useState(false);
-  const [section, setSection] = useState<SettingsSection>('embedding');
+  const [section, setSection] = useState<SettingsSection>('appearance');
   const [interactionLocked, setInteractionLocked] = useState(false);
 
   // Settings is a blocking surface even though its local state is deliberately

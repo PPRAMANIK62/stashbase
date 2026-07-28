@@ -6,6 +6,7 @@
 import type {
   AgentContextFile,
   AgentsResponse,
+  AppearancePreferences,
   ApiKeySaveResult,
   EmbedderState,
   EmbedderProvider,
@@ -220,6 +221,9 @@ export const api = {
     getJson<AudioTranscriptState>(`/api/audio/transcript?path=${encodeURIComponent(path)}`),
   transcriptionSettings: () =>
     getJson<TranscriptionSettings>('/api/transcription/settings'),
+  appearance: () => getJson<AppearancePreferences>('/api/appearance'),
+  setAppearance: (preferences: Partial<AppearancePreferences>) =>
+    send<AppearancePreferences>('PUT', '/api/appearance', preferences),
   setTranscriptionPreferences: (preferences: { providerId?: string; modelId?: string; language?: string }) =>
     send<{ providerId: string; modelId: string; language: string }>('PUT', '/api/transcription/preferences', preferences),
   downloadTranscriptionModel: (id: TranscriptionModelId) =>

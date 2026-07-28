@@ -49,6 +49,7 @@ import { mount as mountWindowContextRoutes } from './routes/window-context.ts';
 import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
 import { mount as mountLibraryRoutes } from './routes/library.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
+import { mount as mountAppearanceRoutes } from './routes/appearance.ts';
 import { mount as mountTranscriptionRoutes } from './routes/transcription.ts';
 import { mount as mountFilesRoutes } from './routes/files.ts';
 import { mount as mountFoldersRoutes } from './routes/folders.ts';
@@ -293,6 +294,7 @@ app.use([
 ], requireFolder);
 
 // ----- mount routes -------------------------------------------------------
+mountAppearanceRoutes(app);
 mountEmbedderRoutes(app);
 mountTranscriptionRoutes(app);
 // Register exact `/api/files/prepare` and `/api/files/reprocess` endpoints
