@@ -16,6 +16,10 @@ to migrate them into a StashBase-specific storage model.
   file operations.
 - The main pane opens the source file the user selected; generated artifacts
   stay hidden.
+- Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active
+  folder. It starts with recently used editors, then ranks basename and
+  relative-path matches; accepting a result retains normal preview-tab and
+  unsaved-work protections.
 - Search results and agent file links return users to those source files.
 - Root-level `AGENTS.md` and optional `CLAUDE.md` bridge files are visible,
   editable user files. StashBase only creates missing defaults.
@@ -37,6 +41,8 @@ to migrate them into a StashBase-specific storage model.
 - Destructive file operations require clear confirmation.
 - The tree is a calm orientation tool, not a separate knowledge graph or
   project-management surface.
+- Quick Open is file navigation, not content retrieval: it stays scoped to the
+  active folder and does not surface generated artifacts or search evidence.
 
 ## Contribution Map
 

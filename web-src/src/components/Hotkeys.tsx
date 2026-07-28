@@ -7,7 +7,7 @@ import { useApp } from '../store/AppContext';
  *
  *   Cmd/Ctrl + N        → new note
  *   Cmd/Ctrl + S        → flush autosave immediately
- *   Cmd/Ctrl + O        → focus the sidebar search (quick-switcher analog)
+ *   Cmd/Ctrl + O        → Quick Open for the active library
  *   Cmd/Ctrl + W        → close the active tab
  *   Cmd/Ctrl + F        → open in-document find bar
  *   Cmd/Ctrl + G        → next find match (Shift = prev). No-op when bar is closed.
@@ -49,15 +49,17 @@ export function Hotkeys() {
         actions.focusSearch();
         return;
       }
+      if (k === 'o') {
+        e.preventDefault();
+        window.dispatchEvent(new Event('stashbase-open-quick-open'));
+        return;
+      }
       if (k === 'n') {
         e.preventDefault();
         void actions.newNote();
       } else if (k === 's') {
         e.preventDefault();
         void actions.flushSave();
-      } else if (k === 'o') {
-        e.preventDefault();
-        actions.focusSearch();
       } else if (k === 'w') {
         // Swallow the chord even when no tab is open so the browser /
         // Electron doesn't close the window out from under us.

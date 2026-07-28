@@ -188,7 +188,7 @@ export interface AppActions {
   registerSearchInput: (el: HTMLInputElement | null) => void;
   /** Focus + select the sidebar search input. Un-collapses the sidebar
    *  first if hidden; flashes a brief glow so the user can tell where
-   *  focus landed. Used by the empty-tab landing and the `⌘O` hotkey. */
+   *  focus landed. Used by the empty-tab landing and the `⌘⇧F` hotkey. */
   focusSearch: () => void;
 
   /** A view registers its find driver on mount; `null` on unmount.

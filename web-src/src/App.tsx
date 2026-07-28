@@ -27,6 +27,7 @@ import { AlertConfirmModal } from './components/AlertConfirmModal';
 import { Toasts } from './components/Toasts';
 import { ChatLaunchButtons } from './components/ChatLaunchButtons';
 import { SettingsPortal, openSettings } from './components/SettingsModal';
+import { QuickOpen } from './components/QuickOpen';
 import { HomeIcon } from './icons';
 import { useHoverTip } from './hooks/useHoverTip';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
@@ -255,6 +256,7 @@ function AppBody() {
       <DropVeil hot={veilHot} />
       <ContextMenu />
       <Hotkeys />
+      <QuickOpen />
       {previewImage && (
         <ImageLightbox
           src={previewImage.src}

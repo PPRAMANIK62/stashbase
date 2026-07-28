@@ -88,7 +88,7 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
   }
 
   return (
-    <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Image preview">
+    <div className="image-lightbox quick-open-blocking" role="dialog" aria-modal="true" aria-label="Image preview">
       <div className="image-lightbox-toolbar">
         <div className="image-lightbox-title">{alt || 'Image preview'}</div>
         <button type="button" onClick={() => zoomBy(1 / 1.2)}>Zoom out</button>

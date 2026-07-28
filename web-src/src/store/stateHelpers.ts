@@ -82,6 +82,11 @@ export function mostRecentChatTab(s: State, agent: string): ChatTab | null {
   return null;
 }
 
+/** Put a source file first in its folder-local most-recently-used list. */
+export function rememberRecentFile(paths: string[], path: string): string[] {
+  return [path, ...paths.filter((candidate) => candidate !== path)];
+}
+
 /** Visible files to mark as pending immediately after the user adds the
  *  first embedding key. The server may already be embedding by the time
  *  `/api/index-status` is polled, and the daemon serialises status behind

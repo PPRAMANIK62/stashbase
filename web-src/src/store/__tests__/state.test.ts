@@ -75,6 +75,23 @@ test('Markdown opens in Live Editing while read-only formats remain out of edit 
   assert.equal(html.tabs[0].editMode, false);
 });
 
+test('document activation maintains folder-local file recency separately from tab order', () => {
+  let state = freshState({ folderPath: '/folder' });
+  state = reducer(state, { type: 'FILE_OPEN', body: { name: 'one.md', format: 'md', content: '' } });
+  const oneId = state.activeTabId!;
+  state = reducer(state, { type: 'NEW_TAB' });
+  state = reducer(state, { type: 'FILE_OPEN', body: { name: 'two.md', format: 'md', content: '' } });
+  assert.deepEqual(state.recentFilePaths, ['two.md', 'one.md']);
+
+  state = reducer(state, { type: 'ACTIVATE_TAB', id: oneId });
+  assert.deepEqual(state.recentFilePaths, ['one.md', 'two.md']);
+
+  state = reducer(state, {
+    type: 'FILES_LOADED', files: [], folders: [], folder: 'other', folderPath: '/other',
+  });
+  assert.deepEqual(state.recentFilePaths, []);
+});
+
 test('a save acknowledgement advances the version without replacing the live document source', () => {
   const state = reducer(freshState(), {
     type: 'FILE_OPEN',
@@ -109,6 +126,7 @@ test('folder path remap updates files, tabs, expansion, focus, and manual order 
     files: [{ name: 'docs/a.md', format: 'md', heading: 'A', snippet: '' }],
     folders: [{ path: 'docs' }, { path: 'docs/sub' }],
     tabs: [documentTab('tab-a', 'docs/a.md')],
+    recentFilePaths: ['docs/a.md'],
     activeTabId: 'tab-a',
     expanded: new Set(['docs', 'docs/sub']),
     activeFolder: 'docs/sub',
@@ -124,6 +142,7 @@ test('folder path remap updates files, tabs, expansion, focus, and manual order 
   assert.deepEqual(next.files.map((file) => file.name), ['archive/a.md']);
   assert.deepEqual(next.folders.map((folder) => folder.path), ['archive', 'archive/sub']);
   assert.equal(next.tabs[0].file?.name, 'archive/a.md');
+  assert.deepEqual(next.recentFilePaths, ['archive/a.md']);
   assert.deepEqual([...next.expanded], ['archive', 'archive/sub']);
   assert.equal(next.activeFolder, 'archive/sub');
   assert.equal(next.selectedPath, 'archive/a.md');

@@ -46,6 +46,16 @@ export function SettingsPortal() {
   const [section, setSection] = useState<SettingsSection>('embedding');
   const [interactionLocked, setInteractionLocked] = useState(false);
 
+  // Settings is a blocking surface even though its local state is deliberately
+  // separate from the app reducer. Announce that ownership to Quick Open so a
+  // global Cmd/Ctrl+O cannot steal focus or let Escape leak between overlays.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent<boolean>('stashbase-overlay-blocking', { detail: open }));
+    return () => {
+      window.dispatchEvent(new CustomEvent<boolean>('stashbase-overlay-blocking', { detail: false }));
+    };
+  }, [open]);
+
   useEffect(() => {
     function onOpen(e: Event) {
       const detail = (e as CustomEvent<OpenDetail>).detail;

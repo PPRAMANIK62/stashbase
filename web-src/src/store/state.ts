@@ -202,6 +202,9 @@ export interface State {
    *  Empty array = no document open (initial state or after closing the
    *  last tab). The active tab is whichever has `id === activeTabId`. */
   tabs: Tab[];
+  /** Most recently activated source-file paths for the active folder.
+   *  This is intentionally independent of tab-strip order. */
+  recentFilePaths: string[];
   activeTabId: string | null;
 
   expanded: Set<string>;
@@ -358,6 +361,7 @@ export const initialState: State = {
   folders: [],
   fileOrder: {},
   tabs: [],
+  recentFilePaths: [],
   activeTabId: null,
   expanded: new Set(),
   activeFolder: '',
