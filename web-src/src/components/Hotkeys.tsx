@@ -1,6 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '../store/AppContext';
 
+type WindowShortcutInput = Pick<
+  KeyboardEvent,
+  'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'
+>;
+
+export function isWindowLifecycleShortcut(input: WindowShortcutInput): boolean {
+  return (input.metaKey || input.ctrlKey)
+    && input.shiftKey
+    && !input.altKey
+    && ['n', 'w'].includes(input.key.toLowerCase());
+}
+
 /**
  * Global keyboard shortcuts. Renderless — mounts a `keydown` listener
  * on document and dispatches into the store.
@@ -49,6 +61,9 @@ export function Hotkeys() {
         actions.focusSearch();
         return;
       }
+      // The native application menu owns shifted New Window / Close Window
+      // chords. Yield them here so they cannot also create or close a tab.
+      if (isWindowLifecycleShortcut(e)) return;
       if (k === 'o') {
         e.preventDefault();
         window.dispatchEvent(new Event('stashbase-open-quick-open'));

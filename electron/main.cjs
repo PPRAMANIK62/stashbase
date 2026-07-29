@@ -27,6 +27,7 @@ const {
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
+  windowLifecycleShortcutAction,
 } = require('./multi-window.cjs');
 
 function parsePortArg(argv, fallback) {
@@ -726,6 +727,20 @@ async function createWindow(initialFolder) {
   // The View → Reload menu item is left in place as an escape hatch
   // (mouse click); only the keyboard chord is gone.
   win.webContents.on('before-input-event', (event, input) => {
+    // Own window-level input before it reaches the renderer. The native menu
+    // still advertises the platform accelerator, while this boundary prevents
+    // the same chord from also creating or closing a document tab.
+    const windowAction = windowLifecycleShortcutAction(input);
+    if (windowAction === 'new-window') {
+      event.preventDefault();
+      void createWindow();
+      return;
+    }
+    if (windowAction === 'close-window') {
+      event.preventDefault();
+      win.close();
+      return;
+    }
     if (input.type !== 'keyDown') return;
     if (!(input.meta || input.control)) return;
     if (input.shift) return; // ⌘⇧R (Force Reload) stays — dev escape hatch.
@@ -767,7 +782,7 @@ function focusLastMainWindow() {
 
 function installApplicationMenu() {
   const template = createApplicationMenuTemplate({
-    isMac: process.platform === 'darwin',
+    platform: process.platform,
     onNewWindow: () => { void createWindow(); },
     onCloseWindow: (win) => {
       const target = isLiveMainWindow(win) ? win : BrowserWindow.getFocusedWindow();

@@ -21,11 +21,18 @@ function windowIdFromArgv(argv) {
   return id ? id.slice(0, 128) : null;
 }
 
-function createApplicationMenuTemplate({ isMac, onNewWindow, onCloseWindow }) {
-  // Do not use Electron's `role: 'close'`: that role silently installs
-  // Cmd/Ctrl+W, which the renderer owns for closing the active document tab.
+function createApplicationMenuTemplate({
+  platform = process.platform,
+  onNewWindow,
+  onCloseWindow,
+}) {
+  const isMac = platform === 'darwin';
+  // Do not use Electron's `role: 'close'`: its Cmd/Ctrl+W binding conflicts
+  // with the renderer's active-tab command. Match VS Code instead: macOS uses
+  // Cmd+Shift+W, while Windows/Linux display their native Alt+F4 binding.
   const closeWindow = {
     label: 'Close Window',
+    accelerator: isMac ? 'Command+Shift+W' : 'Alt+F4',
     click: (_item, win) => onCloseWindow(win),
   };
   const fileLifecycleItems = isMac
@@ -49,6 +56,37 @@ function createApplicationMenuTemplate({ isMac, onNewWindow, onCloseWindow }) {
     { role: 'viewMenu' },
     { role: 'windowMenu' },
   ];
+}
+
+function windowLifecycleShortcutAction(input, platform = process.platform) {
+  if (
+    !input
+    || input.type !== 'keyDown'
+    || input.isAutoRepeat === true
+    || typeof input.key !== 'string'
+  ) {
+    return null;
+  }
+
+  const key = input.key.toLowerCase();
+  const primary = platform === 'darwin'
+    ? input.meta === true && input.control !== true
+    : input.control === true && input.meta !== true;
+  const shiftedPrimary = primary && input.shift === true && input.alt !== true;
+
+  if (shiftedPrimary && key === 'n') return 'new-window';
+  if (shiftedPrimary && key === 'w') return 'close-window';
+  if (
+    platform !== 'darwin'
+    && key === 'f4'
+    && input.alt === true
+    && input.control !== true
+    && input.meta !== true
+    && input.shift !== true
+  ) {
+    return 'close-window';
+  }
+  return null;
 }
 
 function shouldQuitAfterLastWindow(platform) {
@@ -239,5 +277,6 @@ module.exports = {
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
+  windowLifecycleShortcutAction,
   windowIdFromArgv,
 };

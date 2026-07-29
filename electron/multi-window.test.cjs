@@ -1,7 +1,12 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
 const test = require('node:test');
+const {
+  terminateChildProcessTree,
+  waitForChildExit,
+} = require('./smoke-process.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
@@ -13,8 +18,61 @@ const {
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
+  windowLifecycleShortcutAction,
   windowIdFromArgv,
 } = require('./multi-window.cjs');
+
+test('smoke runner terminates and rejects a hung Electron child', async () => {
+  const child = new EventEmitter();
+  child.pid = 43123;
+  child.exitCode = null;
+  child.signalCode = null;
+  let terminated = 0;
+
+  await assert.rejects(
+    waitForChildExit(child, {
+      launch: 'layout',
+      timeoutMs: 5,
+      terminate: () => { terminated += 1; },
+    }),
+    /Electron smoke launch layout timed out after 5ms/,
+  );
+  assert.equal(terminated, 1);
+});
+
+test('smoke runner accepts a clean child exit without terminating it', async () => {
+  const child = new EventEmitter();
+  child.pid = 43124;
+  child.exitCode = null;
+  child.signalCode = null;
+  let terminated = 0;
+
+  const completed = waitForChildExit(child, {
+    launch: 1,
+    timeoutMs: 1000,
+    terminate: () => { terminated += 1; },
+  });
+  child.emit('exit', 0, null);
+  await completed;
+  assert.equal(terminated, 0);
+});
+
+test('POSIX smoke timeout terminates the isolated Electron process group', async () => {
+  const child = new EventEmitter();
+  child.pid = 43125;
+  child.exitCode = null;
+  child.signalCode = null;
+  const kills = [];
+
+  await terminateChildProcessTree(child, 'linux', {
+    killProcess: (pid, signal) => {
+      kills.push([pid, signal]);
+      child.exitCode = 1;
+    },
+  });
+
+  assert.deepEqual(kills, [[-43125, 'SIGKILL']]);
+});
 
 test('Electron smoke disables Chromium sandbox only on Linux CI hosts', () => {
   assert.deepEqual(
@@ -31,11 +89,11 @@ test('Electron smoke disables Chromium sandbox only on Linux CI hosts', () => {
   );
 });
 
-test('application menu exposes new-window and click-only close commands', () => {
+test('application menu exposes VS Code window commands on Windows and Linux', () => {
   let opened = 0;
   let closed = 0;
   const template = createApplicationMenuTemplate({
-    isMac: false,
+    platform: 'win32',
     onNewWindow: () => { opened += 1; },
     onCloseWindow: () => { closed += 1; },
   });
@@ -49,15 +107,25 @@ test('application menu exposes new-window and click-only close commands', () => 
   const closeWindow = fileMenu.submenu.find((item) => item.label === 'Close Window');
   assert.ok(closeWindow);
   assert.equal(closeWindow.role, undefined);
-  assert.equal(closeWindow.accelerator, undefined);
+  assert.equal(closeWindow.accelerator, 'Alt+F4');
   closeWindow.click();
   assert.equal(closed, 1);
   assert.equal(fileMenu.submenu.at(-1).role, 'quit');
+
+  const linuxTemplate = createApplicationMenuTemplate({
+    platform: 'linux',
+    onNewWindow: () => {},
+    onCloseWindow: () => {},
+  });
+  const linuxCloseWindow = linuxTemplate
+    .find((item) => item.label === 'File')
+    .submenu.find((item) => item.label === 'Close Window');
+  assert.equal(linuxCloseWindow.accelerator, 'Alt+F4');
 });
 
-test('macOS application menu keeps the app role without stealing Cmd+W from tabs', () => {
+test('macOS application menu keeps Cmd+W for tabs and uses Cmd+Shift+W for windows', () => {
   const template = createApplicationMenuTemplate({
-    isMac: true,
+    platform: 'darwin',
     onNewWindow: () => {},
     onCloseWindow: () => {},
   });
@@ -65,7 +133,66 @@ test('macOS application menu keeps the app role without stealing Cmd+W from tabs
   const closeWindow = template.find((item) => item.label === 'File').submenu.at(-1);
   assert.equal(closeWindow.label, 'Close Window');
   assert.equal(closeWindow.role, undefined);
-  assert.equal(closeWindow.accelerator, undefined);
+  assert.equal(closeWindow.accelerator, 'Command+Shift+W');
+});
+
+test('window lifecycle input follows the platform menu mapping without stealing tab chords', () => {
+  const ctrlShiftN = {
+    type: 'keyDown',
+    key: 'n',
+    control: true,
+    meta: false,
+    shift: true,
+    alt: false,
+  };
+  const ctrlShiftW = {
+    type: 'keyDown',
+    key: 'w',
+    control: true,
+    meta: false,
+    shift: true,
+    alt: false,
+  };
+
+  assert.equal(windowLifecycleShortcutAction(ctrlShiftN, 'win32'), 'new-window');
+  assert.equal(windowLifecycleShortcutAction(ctrlShiftN, 'linux'), 'new-window');
+  assert.equal(
+    windowLifecycleShortcutAction({ ...ctrlShiftN, control: false, meta: true }, 'darwin'),
+    'new-window',
+  );
+  assert.equal(windowLifecycleShortcutAction(ctrlShiftW, 'win32'), 'close-window');
+  assert.equal(windowLifecycleShortcutAction(ctrlShiftW, 'linux'), 'close-window');
+  assert.equal(
+    windowLifecycleShortcutAction({ ...ctrlShiftW, control: false, meta: true }, 'darwin'),
+    'close-window',
+  );
+  assert.equal(
+    windowLifecycleShortcutAction({
+      type: 'keyDown',
+      key: 'F4',
+      control: false,
+      meta: false,
+      shift: false,
+      alt: true,
+    }, 'win32'),
+    'close-window',
+  );
+  assert.equal(
+    windowLifecycleShortcutAction({ ...ctrlShiftW, shift: false }, 'win32'),
+    null,
+  );
+  assert.equal(
+    windowLifecycleShortcutAction({ ...ctrlShiftW, type: 'keyUp' }, 'win32'),
+    null,
+  );
+  assert.equal(
+    windowLifecycleShortcutAction({ ...ctrlShiftW, alt: true }, 'linux'),
+    null,
+  );
+  assert.equal(
+    windowLifecycleShortcutAction({ ...ctrlShiftW, isAutoRepeat: true }, 'linux'),
+    null,
+  );
 });
 
 test('last-window behavior follows each desktop platform convention', () => {

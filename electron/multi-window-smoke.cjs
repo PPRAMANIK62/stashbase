@@ -83,13 +83,46 @@ async function currentFolder(win) {
   `);
 }
 
-function clickNewWindow(fromWindow) {
+function fileMenuItem(label) {
   const menu = Menu.getApplicationMenu();
   assert.ok(menu);
   const fileMenu = menu.items.find((item) => item.label === 'File');
-  const newWindow = fileMenu?.submenu?.items.find((item) => item.label === 'New Window');
-  assert.ok(newWindow);
-  newWindow.click?.(newWindow, fromWindow, {});
+  const item = fileMenu?.submenu?.items.find((candidate) => candidate.label === label);
+  assert.ok(item, `File > ${label} is missing`);
+  return item;
+}
+
+function clickFileMenuItem(label, fromWindow) {
+  const item = fileMenuItem(label);
+  item.click?.(item, fromWindow, {});
+}
+
+async function pressShortcut(win, keyCode, modifiers) {
+  win.show();
+  win.focus();
+  win.webContents.focus();
+  await sleep(50);
+  const input = { keyCode, modifiers };
+  win.webContents.sendInputEvent({ type: 'keyDown', ...input });
+  win.webContents.sendInputEvent({ type: 'keyUp', ...input });
+}
+
+function pressNewWindowShortcut(win) {
+  return pressShortcut(
+    win,
+    'N',
+    [process.platform === 'darwin' ? 'meta' : 'control', 'shift'],
+  );
+}
+
+function pressPrimaryCloseWindowShortcut(win) {
+  return process.platform === 'darwin'
+    ? pressShortcut(win, 'W', ['meta', 'shift'])
+    : pressShortcut(win, 'F4', ['alt']);
+}
+
+function pressSecondaryCloseWindowShortcut(win) {
+  return pressShortcut(win, 'W', ['control', 'shift']);
 }
 
 async function run() {
@@ -106,10 +139,14 @@ async function run() {
   await waitForRenderer(first);
   const firstContext = await openFolder(first, notes);
 
-  clickNewWindow(first);
+  assert.equal(
+    fileMenuItem('New Window').accelerator,
+    'CommandOrControl+Shift+N',
+  );
+  await pressNewWindowShortcut(first);
   const second = await waitFor(
     () => BrowserWindow.getAllWindows().find((win) => win !== first && !win.isDestroyed()),
-    'File > New Window did not create a second real app window',
+    'Cmd/Ctrl+Shift+N did not create a second real app window',
   );
   await waitForRenderer(second);
   const secondContext = await openFolder(second, research);
@@ -122,13 +159,31 @@ async function run() {
   assert.equal(focused, true);
   assert.equal(BrowserWindow.getAllWindows().length, 2);
 
-  first.close();
-  await waitFor(() => first.isDestroyed(), 'first window did not close after save handshake');
+  assert.equal(
+    fileMenuItem('Close Window').accelerator,
+    process.platform === 'darwin' ? 'Command+Shift+W' : 'Alt+F4',
+  );
+  await pressPrimaryCloseWindowShortcut(first);
+  await waitFor(
+    () => first.isDestroyed(),
+    process.platform === 'darwin'
+      ? 'Cmd+Shift+W did not close the first window'
+      : 'Alt+F4 did not close the first window',
+  );
   assert.equal(second.isDestroyed(), false);
   assert.equal(await currentFolder(second), secondContext.path);
 
-  second.close();
-  await waitFor(() => second.isDestroyed(), 'second window did not close after save handshake');
+  if (process.platform === 'darwin') {
+    await pressPrimaryCloseWindowShortcut(second);
+  } else {
+    await pressSecondaryCloseWindowShortcut(second);
+  }
+  await waitFor(
+    () => second.isDestroyed(),
+    process.platform === 'darwin'
+      ? 'Cmd+Shift+W did not close the last window'
+      : 'Ctrl+Shift+W did not close the last window',
+  );
 
   if (process.platform === 'darwin') {
     assert.equal(BrowserWindow.getAllWindows().length, 0);
@@ -138,8 +193,8 @@ async function run() {
       'macOS activate did not reopen a real app window',
     );
     await waitForRenderer(reopened);
-    reopened.close();
-    await waitFor(() => reopened.isDestroyed(), 'reopened window did not close');
+    clickFileMenuItem('Close Window', reopened);
+    await waitFor(() => reopened.isDestroyed(), 'reopened window did not close from the File menu');
     console.log('real multi-window smoke passed: macOS close/reopen/quit');
     app.quit();
     return;
