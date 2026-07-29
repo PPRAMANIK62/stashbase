@@ -148,10 +148,16 @@ Home; 412 recovery checks durable membership before attempting a restart
 rebind. An individual close never tears down the shared server. A
 single-instance lock plus a single-flight initial-window operation prevents a
 second launch during startup from creating a duplicate. The application menu
-owns click-only New Window and Close Window commands; Close Window deliberately
-does not register Cmd/Ctrl+W because that chord belongs to renderer tab close.
-macOS activation recreates a window after the last one closes, while non-macOS
-platforms quit after the last window closes.
+owns the window lifecycle commands using the platform mappings documented in
+[Local File Workspace](../design-docs/design/library.md). The renderer must
+yield those native window chords without narrowing the established modifier
+handling of unrelated document commands. The menu advertises the platform
+accelerator, while the `BrowserWindow` input boundary dispatches it and owns
+the secondary non-macOS binding that cannot fit on the same menu item. macOS
+activation recreates a window after the last one closes, while non-macOS
+platforms quit after the last window closes. The real Electron lifecycle smoke
+must send the platform accelerator input, enforce a parent-owned deadline, and
+delete its isolated profile only after the child process exits.
 
 Electron owns the child server through a random per-launch shutdown token.
 Quit sends an authenticated loopback shutdown request and waits for the server

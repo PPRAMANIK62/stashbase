@@ -12,6 +12,9 @@ to migrate them into a StashBase-specific storage model.
 - Users can open multiple windows from the application menu or a folder action
   to keep different folders or working contexts visible side by side. A folder
   action focuses an existing matching window when one is already available.
+- Window keyboard behavior follows VS Code: Cmd/Ctrl+Shift+N opens a window;
+  macOS uses Cmd+Shift+W to close one, while Windows and Linux use Alt+F4 with
+  Ctrl+Shift+W as an alternative. Cmd/Ctrl+W remains the active-tab command.
 - Users can create, rename, move, and delete files or folders through explicit
   file operations.
 - The main pane opens the source file the user selected; generated artifacts
@@ -29,6 +32,7 @@ to migrate them into a StashBase-specific storage model.
 - Opening a folder should feel like navigation, not a long preparation task.
 - Opening or closing one window must not switch or close another window's
   folder context.
+- Window lifecycle shortcuts must not be interpreted as document-tab commands.
 - Closing a window must either save the live edit first or leave the window
   open with a visible save failure.
 - Opening a folder from one window must not create an avoidable duplicate when

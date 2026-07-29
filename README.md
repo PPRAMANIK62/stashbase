@@ -66,7 +66,9 @@ sudo dpkg -i ./StashBase-*-linux-amd64.deb
 
 Your library is opt-in: only folders you open in StashBase are indexed. You can remove a folder from the library at any time; StashBase clears its index but never deletes the folder from disk.
 
-Use **File → New Window** to keep different folders and tools side by side. Cmd/Ctrl+W continues to close the active document tab.
+Use **File → New Window** or Cmd/Ctrl+Shift+N to keep different folders and
+tools side by side. Window close follows VS Code's platform shortcuts;
+Cmd/Ctrl+W continues to close the active document tab.
 
 ---
 
