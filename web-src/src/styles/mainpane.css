@@ -1097,6 +1097,7 @@
       /* Pin to the right of the visible row even when tabs scroll —
        * never grows or shrinks with them. */
       flex: 0 0 28px;
+      align-self: center;
       border: 0;
       background: transparent;
       color: var(--muted);
