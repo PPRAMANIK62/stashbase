@@ -321,7 +321,62 @@
     }
     .crepe-shell .milkdown-code-block .cm-cursor { border-left-color: var(--focus-ring); }
     .crepe-shell .milkdown-code-block .cm-lineNumbers .cm-gutterElement { color: var(--crepe-color-on-surface-variant); }
-    .crepe-shell .crepe-toolbar, .crepe-shell .crepe-link-tooltip, .crepe-shell .crepe-slash-menu { color: var(--fg); }
+    .crepe-shell .crepe-link-tooltip, .crepe-shell .crepe-slash-menu { color: var(--fg); }
+    /* Crepe uses its outline token for toolbar glyphs. That token correctly
+       maps to our subtle borders elsewhere, but makes inactive controls
+       disappear on the dark raised surface. Give this compact selection menu
+       a deliberate, readable state ladder instead. */
+    .crepe-shell .milkdown-toolbar {
+      background: var(--surface-raised);
+      border: 1px solid color-mix(in srgb, var(--stroke-strong) 58%, transparent);
+      box-shadow: 0 14px 30px rgba(var(--shadow-color), .32), 0 3px 8px rgba(var(--shadow-color), .2);
+    }
+    .crepe-shell .milkdown-toolbar .divider {
+      background: color-mix(in srgb, var(--stroke-strong) 62%, transparent);
+    }
+    .crepe-shell .milkdown .milkdown-toolbar .toolbar-item svg {
+      color: color-mix(in srgb, var(--fg) 78%, var(--bg));
+      fill: color-mix(in srgb, var(--fg) 78%, var(--bg));
+    }
+    .crepe-shell .milkdown-toolbar .toolbar-item:hover {
+      background: color-mix(in srgb, var(--fg) 9%, transparent);
+    }
+    .crepe-shell .milkdown .milkdown-toolbar .toolbar-item:hover svg {
+      color: var(--fg);
+      fill: var(--fg);
+    }
+    .crepe-shell .milkdown-toolbar .toolbar-item.active {
+      background: color-mix(in srgb, var(--accent) 16%, transparent);
+    }
+    .crepe-shell .milkdown .milkdown-toolbar .toolbar-item.active svg {
+      color: var(--accent);
+      fill: var(--accent);
+    }
+    .crepe-shell .milkdown .milkdown-slash-menu {
+      background: var(--surface-raised);
+      border: 1px solid color-mix(in srgb, var(--stroke-strong) 58%, transparent);
+      box-shadow: 0 18px 38px rgba(var(--shadow-color), .34), 0 4px 10px rgba(var(--shadow-color), .2);
+    }
+    .crepe-shell .milkdown .milkdown-slash-menu .tab-group {
+      border-bottom-color: color-mix(in srgb, var(--stroke-strong) 52%, transparent);
+    }
+    .crepe-shell .milkdown .milkdown-slash-menu .tab-group ul li:hover,
+    .crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover {
+      background: color-mix(in srgb, var(--fg) 9%, transparent);
+    }
+    .crepe-shell .milkdown .milkdown-slash-menu .tab-group ul li.selected,
+    .crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li.active {
+      background: color-mix(in srgb, var(--accent) 16%, transparent);
+    }
+    .crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+      color: color-mix(in srgb, var(--fg) 78%, var(--bg));
+      fill: color-mix(in srgb, var(--fg) 78%, var(--bg));
+    }
+    .crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover svg,
+    .crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li.active svg {
+      color: var(--fg);
+      fill: var(--fg);
+    }
     /* Crepe sizes its edit field and existing-link preview independently.
        Treat both as one responsive popover so switching between them does not
        make the surrounding document jump. */

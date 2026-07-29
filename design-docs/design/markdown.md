@@ -24,6 +24,8 @@ Agent without a conversion layer becoming the product.
   outside the visual document body. GitHub alert markers render as accessible
   styled blockquotes while retaining their standard Markdown source.
 - Inline and block LaTex math are available through Crepe's KaTeX feature.
+- Contextual authoring controls retain distinct inactive, hover, and active
+  states in both light and dark themes.
 - Find, anchors, search-result highlighting, local-link navigation, and image
   activation attach to the Markdown document DOM in both modes.
 - Safe local links remain in StashBase; external HTTP(S) links use the system
