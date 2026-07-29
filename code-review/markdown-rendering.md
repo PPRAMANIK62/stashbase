@@ -25,7 +25,10 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   bridge. Milkdown's frame stylesheet assigns its variables directly on its
   root, so inherited app tokens alone are insufficient: keep the bridge more
   specific than the package selector and map its menus, placeholders, tooltips,
-  and code blocks to the active light/dark roles.
+  and code blocks to the active light/dark roles. Crepe uses its outline token
+  for contextual-toolbar and slash-menu glyphs, so those controls need explicit
+  inactive, hover, and active colors rather than inheriting the subtle border
+  role.
 - The Agent-message Markdown renderer remains separate from document Markdown.
 
 ## Integration invariants
