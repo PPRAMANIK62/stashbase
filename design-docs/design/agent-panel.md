@@ -18,6 +18,9 @@ context, not a separate AI workspace.
 - Agent file outputs and local file links lead back into the local workspace.
 - Agent response Markdown supports GFM, but treats raw HTML and remote images
   as inert content; only workspace-relative links and HTTP(S) links are active.
+- If a supported Agent CLI is missing, its launcher opens a compact setup state
+  with the copyable install command and a runtime-refresh action. A missing CLI
+  is distinct from a runtime that is installed but failed to start.
 
 ## Experience Contract
 

@@ -23,6 +23,10 @@ Community contributions can land as useful first iterations, but the long-term d
 - Keep the panel renderer-led. Do not change agent transport, session persistence, MCP, indexing, or permission policy just to support presentation changes.
 - Prefer small, familiar agent-chat affordances over a bespoke workbench UI.
 - Treat user-action states as first-class. Permission approvals, retry actions, and stopped-turn editing must remain visible and directly actionable.
+- A discovered missing Agent CLI is a setup state, not a disabled launcher or a
+  generic connection failure. Keep its install command copyable and let the
+  user re-run discovery after installation; do not conflate it with an
+  installed runtime that has failed.
 - Keep background activity compact. Tool calls may be grouped or summarized, but the user must be able to inspect them when needed.
 - File outputs should be easy to open, but artifact UI should stay lightweight. Prefer rows or compact affordances over large delivery cards.
 - Streaming should not steal the user's scroll position. If the user has scrolled away from the bottom, show a clear jump-to-latest affordance.

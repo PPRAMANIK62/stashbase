@@ -473,6 +473,35 @@
       min-height: 180px;
       padding: 24px 8px;
     }
+    .agent-runtime-setup {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      min-height: 180px;
+      padding: 24px 12px;
+    }
+    .agent-runtime-setup-card {
+      width: min(440px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--pane);
+      padding: 16px;
+      color: var(--fg);
+    }
+    .agent-runtime-setup-card h2 { margin: 0; font-size: calc(14px * var(--ui-scale)); }
+    .agent-runtime-setup-card p { margin: 7px 0 12px; color: var(--muted); font-size: calc(12.5px * var(--ui-scale)); line-height: 1.5; }
+    .agent-runtime-setup-card code {
+      display: block;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      padding: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: calc(12px * var(--ui-scale));
+      white-space: nowrap;
+    }
+    .agent-runtime-setup-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
     .agent-fatal-card,
     .agent-fatal-inline {
       border: 1px solid rgba(220, 38, 38, 0.22);
