@@ -69,7 +69,9 @@ function LaunchButton({
 }) {
   const unavailable = runtime?.state === 'unavailable';
   const label = runtime?.state && runtime.state !== 'available'
-    ? `${agent.launcherLabel} is ${runtime.state}${runtime.error ? `: ${runtime.error}` : ''}`
+    ? unavailable
+      ? `${agent.launcherLabel} is unavailable. Click for setup.`
+      : `${agent.launcherLabel} is ${runtime.state}${runtime.error ? `: ${runtime.error}` : ''}`
     : active ? `Hide ${agent.launcherLabel} chat` : `Show ${agent.launcherLabel} chat`;
   const Icon = agent.Icon;
   const { tipProps, tip } = useHoverTip(label, 'bottom');
@@ -79,7 +81,6 @@ function LaunchButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      disabled={unavailable}
       {...tipProps}
     >
       <Icon />

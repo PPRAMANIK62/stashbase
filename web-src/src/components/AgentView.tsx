@@ -11,7 +11,7 @@
  * See design-docs/architecture.md §8 for the shared library path.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, getWindowId, type AgentContextFile, type AgentsResponse } from '../api';
+import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse } from '../api';
 import { AGENT_META, type AgentKind } from '../agentCatalog';
 import { FILE_MIME } from '../dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
@@ -67,6 +67,7 @@ export function AgentView({
   const { state, dispatch, actions } = useApp();
   const meta = AGENT_META[agent];
   const runtime = state.agents.find((candidate) => candidate.id === agent);
+  const runtimeUnavailable = runtime?.state === 'unavailable';
   const capabilities = runtime?.capabilities ?? meta.capabilities;
   const folderPathRef = useRef(state.folderPath);
   folderPathRef.current = state.folderPath;
@@ -123,12 +124,34 @@ export function AgentView({
     mountedRef.current = false;
   }, []);
 
+  // A launcher can be clicked before the chrome's initial discovery request
+  // settles. Keep that tab out of the WebSocket path until its runtime has a
+  // descriptor, so a missing CLI never briefly becomes a generic failure.
+  useEffect(() => {
+    if (!runtime) void refreshRuntimes();
+  }, [runtime]);
+
   function setTurnBusy(active: boolean) {
     turnActiveRef.current = active;
     setTurnActive(active);
   }
 
   useEffect(() => {
+    if (!runtime) {
+      readyRef.current = false;
+      setPhase('connecting');
+      setFatal(null);
+      return;
+    }
+    // Discovery is authoritative once it has returned. Do not open a socket
+    // for a known-missing CLI: the setup card below is the actionable state,
+    // rather than a generic connection failure.
+    if (runtimeUnavailable) {
+      readyRef.current = false;
+      setPhase('closed');
+      setFatal(null);
+      return;
+    }
     readyRef.current = false;
     // Consume-and-clear the resume id: it belongs to this one connection,
     // so a later reconnect (Retry / effort change) starts fresh instead of
@@ -170,7 +193,7 @@ export function AgentView({
       try { ws.send(JSON.stringify({ t: 'close' })); } catch { /* gone */ }
       ws.close();
     };
-  }, [nonce, runtime?.endpoint, agent, meta.shortName]);
+  }, [nonce, runtime?.endpoint, runtimeUnavailable, agent, meta.shortName]);
 
   /** Tear down and start a fresh session (Retry button / after the user
    *  reopens a folder). */
@@ -191,10 +214,14 @@ export function AgentView({
 
   /** Refresh after a failed or successful connection so the chrome reflects
    * the contract's in-memory available/failed state. */
-  function refreshRuntimes() {
-    void api.listAgents().then((result: AgentsResponse) => {
+  async function refreshRuntimes() {
+    try {
+      const result: AgentsResponse = await api.listAgents();
       dispatch({ type: 'AGENTS_LOADED', agents: result.clis });
-    }).catch(() => { /* retain the last known catalog */ });
+    } catch {
+      // Retain the last known catalog so an unavailable runtime remains
+      // actionable even while the local server is restarting.
+    }
   }
 
   /** Open a past session from the History dropdown: paint its transcript,
@@ -711,28 +738,46 @@ export function AgentView({
           </Button>
         </div>
       </div>
-      <MessageList
-        blocks={blocks}
-        queuedTurns={queuedTurns}
-        turnActive={turnActive}
-        phase={phase}
-        fatal={fatal}
-        agentName={meta.name}
-        agentShortName={meta.shortName}
-        Icon={meta.Icon}
-        editableUserMessageIds={editableUserMessageIds}
-        onPermission={replyPermission}
-        onSteerQueued={steerQueuedPrompt}
-        onCopyUserMessage={copyUserMessage}
-        onResendUserMessage={send}
-        onRetry={reconnect}
-        onOpenArtifact={(path) => {
-          const folder = folderPathRef.current;
-          const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
-          if (isSafeFolderRelativePath(rel)) void actions.selectFile(rel);
-        }}
-      />
-      {phase === 'closed' && (
+      {!runtime ? (
+        <AgentRuntimeChecking name={meta.name} onRefresh={() => void refreshRuntimes()} />
+      ) : runtimeUnavailable ? (
+        <AgentRuntimeSetup
+          runtime={runtime}
+          fallbackName={meta.name}
+          onCopy={() => {
+            if (!runtime) return;
+            void copyText(runtime.installHint).then((copied) => {
+              actions.toast(
+                copied ? 'Install command copied.' : 'Could not copy install command.',
+                { level: copied ? 'info' : 'error' },
+              );
+            });
+          }}
+          onRefresh={() => void refreshRuntimes()}
+        />
+      ) : <>
+        <MessageList
+          blocks={blocks}
+          queuedTurns={queuedTurns}
+          turnActive={turnActive}
+          phase={phase}
+          fatal={fatal}
+          agentName={meta.name}
+          agentShortName={meta.shortName}
+          Icon={meta.Icon}
+          editableUserMessageIds={editableUserMessageIds}
+          onPermission={replyPermission}
+          onSteerQueued={steerQueuedPrompt}
+          onCopyUserMessage={copyUserMessage}
+          onResendUserMessage={send}
+          onRetry={reconnect}
+          onOpenArtifact={(path) => {
+            const folder = folderPathRef.current;
+            const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
+            if (isSafeFolderRelativePath(rel)) void actions.selectFile(rel);
+          }}
+        />
+        {phase === 'closed' && (
         !fatal && (
           <div className="agent-ended">
             <span>Session ended.</span>
@@ -760,8 +805,79 @@ export function AgentView({
         onSend={send}
         onStop={stop}
       />
+      </>}
     </div>
   );
+}
+
+function AgentRuntimeSetup({
+  runtime,
+  fallbackName,
+  onCopy,
+  onRefresh,
+}: {
+  runtime: Agent | undefined;
+  fallbackName: string;
+  onCopy: () => void;
+  onRefresh: () => void;
+}) {
+  const name = runtime?.label ?? fallbackName;
+  const installHint = runtime?.installHint ?? '';
+  return (
+    <div className="agent-runtime-setup" role="status">
+      <div className="agent-runtime-setup-card">
+        <h2>{name} is not installed</h2>
+        <p>Install its CLI to start a built-in chat.</p>
+        <code>{installHint}</code>
+        <div className="agent-runtime-setup-actions">
+          <Button className="agent-btn primary" onPress={onCopy}>Copy command</Button>
+          <Button className="agent-btn" onPress={onRefresh}>Refresh status</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentRuntimeChecking({ name, onRefresh }: { name: string; onRefresh: () => void }) {
+  return (
+    <div className="agent-runtime-setup" role="status">
+      <div className="agent-runtime-setup-card">
+        <h2>Checking {name}</h2>
+        <p>Checking whether its local CLI is installed.</p>
+        <div className="agent-runtime-setup-actions">
+          <Button className="agent-btn" onPress={onRefresh}>Refresh status</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Clipboard access can be unavailable in an unfocused Electron webview. */
+async function copyText(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy path below.
+  }
+
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    try {
+      textarea.select();
+      return document.execCommand('copy');
+    } finally {
+      textarea.remove();
+    }
+  } catch {
+    return false;
+  }
 }
 
 function shouldRefreshAfterTool(name: string | undefined): boolean {
