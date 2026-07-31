@@ -5,7 +5,7 @@ export interface QuickOpenItem {
   score: number;
 }
 
-const basename = (path: string) => path.split('/').pop() ?? path;
+export const basename = (path: string) => path.split('/').pop() ?? path;
 
 /** A small deterministic fuzzy ranker. Basename matches win over path-only
  * matches; contiguous and early matches win within either field. */

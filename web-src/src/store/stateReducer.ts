@@ -8,10 +8,12 @@ import {
   SIDEBAR_MIN_WIDTH,
   clampChatWidth,
   forgetChatTab,
+  forgetClosedTabs,
   getActiveTab,
   makeTab,
   mostRecentChatTab,
   patchActiveTab,
+  rememberActivatedTab,
   rememberRecentFile,
   remapFileOrder,
   remapOnePath,
@@ -75,6 +77,7 @@ export function reducer(s: State, a: Action): State {
               keywordResult: null,
               searchError: null,
               recentFilePaths: [],
+              editorHistory: [],
               // Scope names a subfolder of the previous folder; type
               // filters are per-folder session state too.
               searchScope: null,
@@ -113,6 +116,7 @@ export function reducer(s: State, a: Action): State {
           ...s,
           tabs: [...s.tabs, tab],
           recentFilePaths: rememberRecentFile(s.recentFilePaths, file.name),
+          editorHistory: rememberActivatedTab(s.editorHistory, tab.id),
           activeTabId: tab.id,
           selectedPath: file.name,
         };
@@ -131,6 +135,8 @@ export function reducer(s: State, a: Action): State {
           ...(a.preview != null ? { preview: a.preview } : {}),
         }),
         recentFilePaths: rememberRecentFile(s.recentFilePaths, file.name),
+        // The branch above already returned unless `s.activeTabId` is set.
+        editorHistory: rememberActivatedTab(s.editorHistory, s.activeTabId!),
         selectedPath: file.name,
       };
     }
@@ -168,6 +174,7 @@ export function reducer(s: State, a: Action): State {
       return {
         ...s,
         tabs: nextTabs,
+        editorHistory: forgetClosedTabs(s.editorHistory, new Set(nextTabs.map((t) => t.id))),
         activeTabId: activeId,
         selectedPath: activeWasStale ? active?.file?.name ?? '' : s.selectedPath,
       };
@@ -205,6 +212,7 @@ export function reducer(s: State, a: Action): State {
       return {
         ...s,
         tabs: [...s.tabs, tab],
+        editorHistory: rememberActivatedTab(s.editorHistory, tab.id),
         activeTabId: tab.id,
         selectedPath: '',
       };
@@ -223,6 +231,7 @@ export function reducer(s: State, a: Action): State {
       return {
         ...s,
         tabs: next,
+        editorHistory: forgetClosedTabs(s.editorHistory, new Set(next.map((t) => t.id))),
         activeTabId: activeId,
         selectedPath: active?.file?.name ?? '',
       };
@@ -237,11 +246,12 @@ export function reducer(s: State, a: Action): State {
         recentFilePaths: target.file
           ? rememberRecentFile(s.recentFilePaths, target.file.name)
           : s.recentFilePaths,
+        editorHistory: rememberActivatedTab(s.editorHistory, a.id),
         selectedPath: target.file?.name ?? '',
       };
     }
     case 'TABS_RESET':
-      return { ...s, tabs: [], recentFilePaths: [], activeTabId: null, selectedPath: '' };
+      return { ...s, tabs: [], recentFilePaths: [], editorHistory: [], activeTabId: null, selectedPath: '' };
     case 'EDIT_MODE': {
       const tab = getActiveTab(s);
       if (!tab) return s;

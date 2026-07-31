@@ -205,6 +205,13 @@ export interface State {
   /** Most recently activated source-file paths for the active folder.
    *  This is intentionally independent of tab-strip order. */
   recentFilePaths: string[];
+  /** Editor History: most-recently-activated tab ids, current tab first.
+   *  Independent of tab-strip order — the Ctrl+Tab navigator's ordering
+   *  source. Entries are dropped when their tab closes; unlike
+   *  `recentFilePaths` (which can outlive a closed tab for Quick Open's
+   *  "recent editors" list) this never references a tab that isn't
+   *  currently open. Reset with `tabs` on `TABS_RESET` / folder switch. */
+  editorHistory: string[];
   activeTabId: string | null;
 
   expanded: Set<string>;
@@ -362,6 +369,7 @@ export const initialState: State = {
   fileOrder: {},
   tabs: [],
   recentFilePaths: [],
+  editorHistory: [],
   activeTabId: null,
   expanded: new Set(),
   activeFolder: '',

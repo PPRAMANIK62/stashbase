@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { isEditorHistoryChord } from '../editorHistory';
 import { useApp } from '../store/AppContext';
 
 type WindowShortcutInput = Pick<
@@ -27,6 +28,9 @@ export function isCommandPaletteShortcut(input: WindowShortcutInput): boolean {
  *   Cmd/Ctrl + S        → flush autosave immediately
  *   Cmd/Ctrl + O        → Quick Open for the active library
  *   Cmd/Ctrl + Shift + P / F1 → Command Palette
+ *   Ctrl + Tab (Shift = reverse) → open/cycle Editor History (literal
+ *                         Control on every platform, including macOS —
+ *                         Cmd+Tab is the OS app switcher)
  *   Cmd/Ctrl + W        → close the active tab
  *   Cmd/Ctrl + F        → open in-document find bar
  *   Cmd/Ctrl + G        → next find match (Shift = prev). No-op when bar is closed.
@@ -56,6 +60,11 @@ export function Hotkeys() {
       if (isCommandPaletteShortcut(e)) {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('stashbase-open-quick-open', { detail: { mode: 'commands' } }));
+        return;
+      }
+      if (isEditorHistoryChord(e)) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('stashbase-open-editor-history', { detail: { backward: e.shiftKey } }));
         return;
       }
       if (!(e.metaKey || e.ctrlKey)) return;

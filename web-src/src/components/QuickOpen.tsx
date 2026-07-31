@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '../commandPalette';
 import { rankQuickOpen } from '../quickOpen';
+import { useSettingsBlocking } from '../hooks/useSettingsBlocking';
 import { openSettings } from './SettingsModal';
 import { useApp } from '../store/AppContext';
 
@@ -11,7 +12,7 @@ export function QuickOpen() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  const [settingsBlocking, setSettingsBlocking] = useState(false);
+  const settingsBlocking = useSettingsBlocking();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const blocked = Boolean(settingsBlocking || state.modal || state.cascadePrompt || state.ctxMenu || state.renaming);
@@ -66,11 +67,6 @@ export function QuickOpen() {
     window.addEventListener('stashbase-open-quick-open', onOpen);
     return () => window.removeEventListener('stashbase-open-quick-open', onOpen);
   }, [blocked, state.folder, state.welcomeVisible]);
-  useEffect(() => {
-    const onBlocking = (event: Event) => setSettingsBlocking((event as CustomEvent<boolean>).detail === true);
-    window.addEventListener('stashbase-overlay-blocking', onBlocking);
-    return () => window.removeEventListener('stashbase-overlay-blocking', onBlocking);
-  }, []);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
   useEffect(() => { if (active >= itemCount) setActive(Math.max(0, itemCount - 1)); }, [active, itemCount]);
   if (!open) return null;

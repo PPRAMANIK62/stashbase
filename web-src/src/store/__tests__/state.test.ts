@@ -92,6 +92,57 @@ test('document activation maintains folder-local file recency separately from ta
   assert.deepEqual(state.recentFilePaths, []);
 });
 
+test('Editor History tracks tab-id MRU order independent of tab-strip order and prunes closed tabs', () => {
+  let state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'one.md', format: 'md', content: '' },
+  });
+  const oneId = state.activeTabId!;
+  state = reducer(state, { type: 'NEW_TAB' });
+  const blankId = state.activeTabId!;
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'two.md', format: 'md', content: '' },
+  });
+  // FILE_OPEN without newTab replaces the active (blank) tab's file — the
+  // MRU entry is the blank tab's id, not a fresh id.
+  assert.deepEqual(state.editorHistory, [blankId, oneId]);
+
+  // Reordering the tab strip must not perturb Editor History.
+  state = reducer(state, { type: 'TABS_REORDER', id: oneId, beforeId: null });
+  assert.deepEqual(state.editorHistory, [blankId, oneId]);
+
+  state = reducer(state, { type: 'ACTIVATE_TAB', id: oneId });
+  assert.deepEqual(state.editorHistory, [oneId, blankId]);
+
+  // Closing a tab drops it from history even though it isn't the most
+  // recent entry.
+  state = reducer(state, { type: 'CLOSE_TAB', id: blankId });
+  assert.deepEqual(state.editorHistory, [oneId]);
+
+  state = reducer(state, {
+    type: 'FILES_LOADED', files: [], folders: [], folder: 'other', folderPath: '/other',
+  });
+  assert.deepEqual(state.editorHistory, []);
+});
+
+test('Editor History survives sidebar pruning of missing file tabs', () => {
+  let state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'keep.md', format: 'md', content: '' },
+  });
+  const keepId = state.activeTabId!;
+  state = reducer(state, { type: 'NEW_TAB' });
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'gone.md', format: 'md', content: '' },
+  });
+  assert.equal(state.editorHistory.length, 2);
+
+  state = reducer(state, { type: 'PRUNE_MISSING_FILE_TABS', names: ['keep.md'] });
+  assert.deepEqual(state.editorHistory, [keepId]);
+});
+
 test('a save acknowledgement advances the version without replacing the live document source', () => {
   const state = reducer(freshState(), {
     type: 'FILE_OPEN',
