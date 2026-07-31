@@ -28,6 +28,7 @@ import { Toasts } from './components/Toasts';
 import { ChatLaunchButtons } from './components/ChatLaunchButtons';
 import { SettingsPortal, openSettings } from './components/SettingsModal';
 import { QuickOpen } from './components/QuickOpen';
+import { EditorHistoryNavigator } from './components/EditorHistoryNavigator';
 import { HomeIcon } from './icons';
 import { useHoverTip } from './hooks/useHoverTip';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
@@ -273,6 +274,7 @@ function AppBody() {
       <ContextMenu />
       <Hotkeys />
       <QuickOpen />
+      <EditorHistoryNavigator />
       {previewImage && (
         <ImageLightbox
           src={previewImage.src}

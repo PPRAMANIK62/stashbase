@@ -87,6 +87,17 @@ export function rememberRecentFile(paths: string[], path: string): string[] {
   return [path, ...paths.filter((candidate) => candidate !== path)];
 }
 
+/** Put a tab id first in Editor History's most-recently-activated list. */
+export function rememberActivatedTab(history: string[], id: string): string[] {
+  return [id, ...history.filter((candidate) => candidate !== id)];
+}
+
+/** Drop closed tab ids from Editor History so the Ctrl+Tab navigator never
+ *  offers a tab that no longer exists. */
+export function forgetClosedTabs(history: string[], openIds: Set<string>): string[] {
+  return history.filter((id) => openIds.has(id));
+}
+
 /** Visible files to mark as pending immediately after the user adds the
  *  first embedding key. The server may already be embedding by the time
  *  `/api/index-status` is polled, and the daemon serialises status behind

@@ -133,6 +133,35 @@ availability predicates, call established renderer actions, and keep command
 recency in picker-local session memory only. Do not turn either provider into a
 retrieval, cross-library, Agent-permission, or destructive-operation surface.
 
+Editor History (`state.editorHistory`, `web-src/src/editorHistory.ts`,
+`EditorHistoryNavigator.tsx`) is `state.tabs`' id-level most-recently-activated
+order, separate from `recentFilePaths` (Quick Open's folder-local file recency,
+which can outlive a closed tab) and from tab-strip order (`TABS_REORDER` never
+touches it). Every tab-creating or tab-activating action records itself;
+`CLOSE_TAB` / `PRUNE_MISSING_FILE_TABS` / `TABS_RESET` drop entries so the
+navigator never offers a tab that no longer exists. The Ctrl+Tab chord binds
+the literal Control key on every platform, including macOS, matching VS
+Code's own default — Cmd+Tab is the OS application switcher and never reaches
+an Electron window.
+
+Hotkeys owns the raw keydown for the chord (mirroring how it dispatches
+Quick Open's Cmd+O) and dispatches `stashbase-open-editor-history` on every
+qualifying Tab press while Ctrl is held, not just the first. The navigator
+tells opening from cycling apart by an internal `closed`/`pending`/`open`
+phase: the first press arms a pending switch (list computed, index picked)
+without rendering anything; releasing Control within `REVEAL_DELAY_MS`
+(150ms) commits that pending switch directly, so a quick tap never paints
+the overlay. Only a hold past that window, or a second Tab tap arriving
+first, reveals the overlay and enters cycling mode. While pending, nothing
+owns keyboard focus yet, so a `document`-level listener handles release-to-
+commit and Escape-to-cancel; once open, the navigator's focused root owns
+Tab/Shift+Tab (cycle)/Enter/Escape/Control-release through React's synthetic
+handlers and stops propagation, the same topmost-owns-input contract Quick
+Open follows. It carries Quick Open's `quick-open-blocking` marker class for
+mutual exclusion and reuses `activateTab` to commit, preserving that
+action's dirty-buffer save guard. There are no editor groups, so this is one
+navigator over one list, not a per-group picker.
+
 The renderer's local HTTP boundary keeps `web-src/src/api.ts` as the stable endpoint facade. `shared/conversion.ts` and `shared/transcription.ts` own the preparation and transcription contracts consumed on both sides of that boundary; `apiTypes.ts` re-exports them and owns the remaining renderer-only request/response shapes. `apiTransport.ts` owns per-window request identity, JSON/error normalization, retry policy, and folder-relative path encoding. `web-src/src/preparation-copy.ts` translates queued and yielded preparation waits into shared user-facing copy without exposing scheduler lanes or positions. `web-src/src/audio-transcript.ts` maps semantic text or an explicit keyword-result millisecond timestamp back to the exact structured transcript segment and owns the remaining transcription-specific status copy, while `web-src/src/audio-playback.ts` retains logical playback position across direct-to-fallback source replacement.
 
 Electron assigns each `BrowserWindow` a stable identity through its preload

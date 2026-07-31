@@ -19,11 +19,22 @@ to migrate them into a StashBase-specific storage model.
   file operations.
 - The main pane opens the source file the user selected; generated artifacts
   stay hidden.
+- Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
+  strip's `+` button — distinct from Cmd/Ctrl+N, which creates a note file.
 - Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active
   folder. It starts with recently used editors, then ranks basename and
   relative-path matches; accepting a result retains normal preview-tab and
   unsaved-work protections. Typing `>` switches that same picker to safe app
   commands; Cmd/Ctrl+Shift+P and F1 open that command mode directly.
+- Holding Ctrl and tapping Tab opens Editor History, a VS Code-style
+  Alt-Tab switcher over open tabs ordered by most-recent use, independent of
+  tab-strip order. A quick tap-release switches straight to the previous
+  editor without ever showing the picker; only a deliberate hold (or a
+  second Tab tap) reveals it. Once revealed, tapping Tab while Ctrl stays
+  down cycles the highlighted entry (Shift reverses); releasing Ctrl
+  activates it. Escape cancels. Deliberately the literal Control key on
+  every platform, including macOS, since Cmd+Tab is the OS application
+  switcher.
 - Search results and agent file links return users to those source files.
 - Root-level `AGENTS.md` and optional `CLAUDE.md` bridge files are visible,
   editable user files. StashBase only creates missing defaults.
