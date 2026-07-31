@@ -453,6 +453,8 @@ export type Action =
   /** Select or toggle an agent from a chrome icon. `tab` is supplied only
    *  when that agent has no open tabs. */
   | { type: 'CHAT_AGENT_TOGGLE'; agent: string; tab?: ChatTab }
+  /** Reveal an Agent Panel session without toggling an already-visible panel. */
+  | { type: 'CHAT_AGENT_OPEN'; agent: string; tab?: ChatTab }
   | { type: 'CHAT_TAB_NEW'; tab: ChatTab }
   | { type: 'CHAT_TAB_CLOSE'; id: string }
   | { type: 'CHAT_TAB_ACTIVATE'; id: string }

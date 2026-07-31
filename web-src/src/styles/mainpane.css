@@ -2966,3 +2966,5 @@
 .quick-open-results small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .quick-open-results li.active small { color: inherit; opacity: .82; }
 .quick-open-results .quick-open-empty { color: var(--muted); justify-content: center; padding: 18px; }
+.quick-open-help { display: block !important; color: var(--muted); line-height: 1.5; padding: 14px 10px !important; }
+.quick-open-help kbd { color: var(--fg); font: inherit; font-weight: 600; }

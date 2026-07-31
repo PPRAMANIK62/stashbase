@@ -23,6 +23,7 @@ import {
 import {
   getActiveTab,
   initialState,
+  makeChatTab,
   reducer,
   type Action,
   type CascadeDecision,
@@ -30,6 +31,7 @@ import {
   type State,
 } from './state';
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
+import type { AgentKind } from '../agentCatalog';
 import type { EditorHandle, FindController } from './actionTypes';
 import { useDocumentActions } from './useDocumentActions';
 import { useFeedbackActions } from './useFeedbackActions';
@@ -168,6 +170,9 @@ export interface AppActions {
    *  toasts otherwise have to be dismissed one by one). */
   clearToasts: () => void;
   toggleEditMode: () => Promise<void>;
+  /** Reveal an existing Agent Panel session or create its first tab. This only
+   * changes renderer layout; permissions and Agent context remain unchanged. */
+  openAgent: (agent: AgentKind) => void;
 
   newNote: () => Promise<void>;
   newFolder: (path: string) => Promise<void>;
@@ -568,6 +573,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     alert: showAlert, confirm: askConfirm, resolveModal,
     toast, dismissToast, clearToasts,
     toggleEditMode,
+    openAgent: (agent) => {
+      const current = stateRef.current;
+      const hasOpenTab = current.chatTabs.some((tab) => tab.agent === agent);
+      dispatch({
+        type: 'CHAT_AGENT_OPEN',
+        agent,
+        tab: hasOpenTab ? undefined : makeChatTab(agent, current.chatTabs),
+      });
+    },
     newNote, newFolder, deleteFile, deleteFolder,
     renameFile, renameFolder, moveFile, upload,
     scheduleSave, flushSave,

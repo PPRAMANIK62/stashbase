@@ -127,8 +127,11 @@ its separate local blocking state to the picker, while reducer-backed confirms,
 cascade prompts, context menus, inline rename, modal veils, and explicitly
 marked local dialogs prevent invocation. Open-file recency is folder-local and
 separate from tab-strip order. Dismissal restores the element that invoked the
-picker. Do not turn it into a retrieval, cross-library, or Agent-permission
-surface.
+picker. Its `>` provider is Command Palette, also entered directly with
+Cmd/Ctrl+Shift+P or F1. Command definitions have stable identities and
+availability predicates, call established renderer actions, and keep command
+recency in picker-local session memory only. Do not turn either provider into a
+retrieval, cross-library, Agent-permission, or destructive-operation surface.
 
 The renderer's local HTTP boundary keeps `web-src/src/api.ts` as the stable endpoint facade. `shared/conversion.ts` and `shared/transcription.ts` own the preparation and transcription contracts consumed on both sides of that boundary; `apiTypes.ts` re-exports them and owns the remaining renderer-only request/response shapes. `apiTransport.ts` owns per-window request identity, JSON/error normalization, retry policy, and folder-relative path encoding. `web-src/src/preparation-copy.ts` translates queued and yielded preparation waits into shared user-facing copy without exposing scheduler lanes or positions. `web-src/src/audio-transcript.ts` maps semantic text or an explicit keyword-result millisecond timestamp back to the exact structured transcript segment and owns the remaining transcription-specific status copy, while `web-src/src/audio-playback.ts` retains logical playback position across direct-to-fallback source replacement.
 

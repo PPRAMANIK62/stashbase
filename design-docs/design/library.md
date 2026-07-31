@@ -22,7 +22,8 @@ to migrate them into a StashBase-specific storage model.
 - Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active
   folder. It starts with recently used editors, then ranks basename and
   relative-path matches; accepting a result retains normal preview-tab and
-  unsaved-work protections.
+  unsaved-work protections. Typing `>` switches that same picker to safe app
+  commands; Cmd/Ctrl+Shift+P and F1 open that command mode directly.
 - Search results and agent file links return users to those source files.
 - Root-level `AGENTS.md` and optional `CLAUDE.md` bridge files are visible,
   editable user files. StashBase only creates missing defaults.
@@ -47,6 +48,9 @@ to migrate them into a StashBase-specific storage model.
   project-management surface.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
+- Command Palette exposes only safe, context-available actions the app already
+  supports. Its recency ordering lasts for the current session only; destructive
+  and target-dependent operations keep their explicit flows and confirmations.
 
 ## Contribution Map
 
