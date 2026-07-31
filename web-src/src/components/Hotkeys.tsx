@@ -25,6 +25,7 @@ export function isCommandPaletteShortcut(input: WindowShortcutInput): boolean {
  * on document and dispatches into the store.
  *
  *   Cmd/Ctrl + N        → new note
+ *   Cmd/Ctrl + T        → new blank tab (Obsidian-style `+`)
  *   Cmd/Ctrl + S        → flush autosave immediately
  *   Cmd/Ctrl + O        → Quick Open for the active library
  *   Cmd/Ctrl + Shift + P / F1 → Command Palette
@@ -93,6 +94,9 @@ export function Hotkeys() {
       if (k === 'n') {
         e.preventDefault();
         void actions.newNote();
+      } else if (k === 't') {
+        e.preventDefault();
+        void actions.newTab();
       } else if (k === 's') {
         e.preventDefault();
         void actions.flushSave();
