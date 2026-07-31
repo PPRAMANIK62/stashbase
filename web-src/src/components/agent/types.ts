@@ -4,10 +4,10 @@ export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type ToolStatus = 'running' | 'awaiting' | 'done' | 'error' | 'denied';
 
-/** A context file attached to the composer, shown as a removable chip.
- *  `path` is the folder-relative path (sent to the agent); `dims` is the
- *  pixel size for images (chip label only). */
-export interface Attachment { path: string; name: string; dims?: string }
+/** A context file attached to the composer. Image uploads use a renderer-local
+ * object URL while composing; restored sessions use a constrained local
+ * preview URL. The agent only receives `path`, never either preview URL. */
+export interface Attachment { path: string; name: string; dims?: string; previewUrl?: string }
 
 export interface ToolBlock {
   kind: 'tool';

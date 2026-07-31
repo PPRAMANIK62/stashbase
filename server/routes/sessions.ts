@@ -31,6 +31,7 @@ import { getCurrentFolder } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
 import { agentAdapter, type AgentHistoryActions } from '../agent-contract.ts';
+import { restoreHistoryImageAttachments, type RestoredImageAttachment } from '../agent-history-attachments.ts';
 
 /** Trimmed session row sent to the client. */
 interface SessionRow {
@@ -157,7 +158,7 @@ export function sessionInfoMatchesFolder(info: { cwd?: unknown } | null | undefi
  *  AgentView's `Block` union (history tools are always settled: 'done' or
  *  'error'). */
 type WireBlock =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; attachments?: RestoredImageAttachment[] }
   | { kind: 'assistant'; id: string; text: string }
   | { kind: 'thinking'; id: string; text: string }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
@@ -166,7 +167,7 @@ type WireBlock =
  *  `tool_result` (which arrives as a later user-role message) back onto
  *  its originating `tool_use` block by id — the same correlation the live
  *  WS path does, just replayed from disk. */
-function transcriptToBlocks(msgs: Array<{ type: string; message: unknown }>): WireBlock[] {
+export function transcriptToBlocks(msgs: Array<{ type: string; message: unknown }>): WireBlock[] {
   const blocks: WireBlock[] = [];
   const toolById = new Map<string, Extract<WireBlock, { kind: 'tool' }>>();
   let seq = 0;
@@ -178,7 +179,7 @@ function transcriptToBlocks(msgs: Array<{ type: string; message: unknown }>): Wi
 
     if (m.type === 'user') {
       if (typeof content === 'string') {
-        if (content.trim()) blocks.push({ kind: 'user', id: id(), text: content });
+        appendUserBlock(blocks, id, content);
         continue;
       }
       if (Array.isArray(content)) {
@@ -194,8 +195,7 @@ function transcriptToBlocks(msgs: Array<{ type: string; message: unknown }>): Wi
             }
           }
         }
-        const joined = texts.join('\n').trim();
-        if (joined) blocks.push({ kind: 'user', id: id(), text: joined });
+        appendUserBlock(blocks, id, texts.join('\n').trim());
       }
       continue;
     }
@@ -221,6 +221,17 @@ function transcriptToBlocks(msgs: Array<{ type: string; message: unknown }>): Wi
     }
   }
   return blocks;
+}
+
+function appendUserBlock(blocks: WireBlock[], id: () => string, text: string): void {
+  const restored = restoreHistoryImageAttachments(text);
+  if (!restored.text.trim() && restored.attachments.length === 0) return;
+  blocks.push({
+    kind: 'user',
+    id: id(),
+    text: restored.text,
+    ...(restored.attachments.length ? { attachments: restored.attachments } : {}),
+  });
 }
 
 /** Stringify a tool_result `content` (string, or text/other blocks) — the

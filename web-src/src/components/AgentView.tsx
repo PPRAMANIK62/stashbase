@@ -72,6 +72,7 @@ export function AgentView({
   const folderPathRef = useRef(state.folderPath);
   folderPathRef.current = state.folderPath;
   const mountedRef = useRef(true);
+  const attachmentPreviewUrlsRef = useRef(new Set<string>());
   const uploadCountRef = useRef(0);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [editableUserMessageIds, setEditableUserMessageIds] = useState<Set<string>>(() => new Set());
@@ -120,9 +121,43 @@ export function AgentView({
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
   const knownFilePaths = useMemo(() => new Set(state.files.map((f) => f.name)), [state.files]);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
+  useEffect(() => {
+    // Fast Refresh runs an effect cleanup before reapplying it while keeping
+    // refs and state. Re-arm this guard on every mount so a live attachment
+    // upload can settle instead of leaving the composer on “Uploading…”.
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      setAgentComposerFocused(false);
+      releaseAllAttachmentPreviews();
+    };
   }, []);
+
+  function releaseAllAttachmentPreviews() {
+    for (const url of attachmentPreviewUrlsRef.current) URL.revokeObjectURL(url);
+    attachmentPreviewUrlsRef.current.clear();
+  }
+
+  function setAgentComposerFocused(focused: boolean) {
+    const bridge = (window as {
+      electron?: {
+        setAgentComposerFocused?: (value: boolean) => void;
+        markCurrentClipboardImageHandled?: () => void;
+      };
+    }).electron;
+    bridge?.setAgentComposerFocused?.(focused);
+  }
+
+  function pasteImages(files: File[]) {
+    const bridge = (window as {
+      electron?: { markCurrentClipboardImageHandled?: () => void };
+    }).electron;
+    // The native watcher independently observes screenshots. Mark this
+    // explicit composer paste first so it cannot surface later as a library
+    // import prompt once focus leaves the input.
+    bridge?.markCurrentClipboardImageHandled?.();
+    void uploadFiles(files);
+  }
 
   // A launcher can be clicked before the chrome's initial discovery request
   // settles. Keep that tab out of the WebSocket path until its runtime has a
@@ -198,6 +233,7 @@ export function AgentView({
   /** Tear down and start a fresh session (Retry button / after the user
    *  reopens a folder). */
   function reconnect() {
+    releaseAllAttachmentPreviews();
     setBlocks([]);
     setEditableUserMessageIds(new Set());
     setFatal(null);
@@ -237,6 +273,7 @@ export function AgentView({
       actions.toast('Could not load that session.', { level: 'error' });
       return;
     }
+    releaseAllAttachmentPreviews();
     setBlocks(hist);
     setEditableUserMessageIds(new Set());
     setFatal(null);
@@ -505,7 +542,7 @@ export function AgentView({
         text: wire,
         ...(titleHint ? { titleHint } : {}),
       }));
-      if (clearAttachments) setAttachments([]);
+      if (clearAttachments) clearComposerAttachments();
     } catch (err) {
       setTurnBusy(false);
       setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not send message: ${errorText(err)}` }]);
@@ -560,8 +597,9 @@ export function AgentView({
     try {
       const result = await api.attachFiles(eligible, { signal: controller.signal });
       if (!mountedRef.current) return;
-      // `result.files` is 1:1 with `files` (server preserves order); pull
-      // image dimensions off the original File for the chip label.
+      // `result.files` is 1:1 with `files` (server preserves order). Keep a
+      // renderer-local preview URL for image thumbnails; only the returned
+      // temp path becomes Agent context.
       const entries = result.files ?? [];
       const added: Attachment[] = [];
       let failed = 0;
@@ -569,10 +607,17 @@ export function AgentView({
         const r = entries[i];
         if (r.error || !r.path) { failed++; continue; }
         const orig = eligible[i];
+        const previewUrl = orig && orig.type.startsWith('image/') ? URL.createObjectURL(orig) : undefined;
+        if (previewUrl) attachmentPreviewUrlsRef.current.add(previewUrl);
         const dims = orig && orig.type.startsWith('image/') ? await readImageDims(orig) : undefined;
-        added.push({ path: r.path, name: r.name, dims });
+        added.push({ path: r.path, name: r.name, dims, previewUrl });
       }
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        for (const attachment of added) {
+          if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+        }
+        return;
+      }
       if (added.length) setAttachments((a) => mergeAttachments(a, added));
       if (failed) actions.toast(`${failed} file(s) failed to attach.`, { level: 'error' });
     } catch (err: unknown) {
@@ -597,7 +642,20 @@ export function AgentView({
   }
 
   function removeAttachment(path: string) {
-    setAttachments((a) => a.filter((x) => x.path !== path));
+    setAttachments((current) => {
+      const removed = current.find((attachment) => attachment.path === path);
+      if (removed?.previewUrl) {
+        URL.revokeObjectURL(removed.previewUrl);
+        attachmentPreviewUrlsRef.current.delete(removed.previewUrl);
+      }
+      return current.filter((attachment) => attachment.path !== path);
+    });
+  }
+
+  function clearComposerAttachments() {
+    // Sent and queued turns retain their image thumbnail in the transcript.
+    // The URL remains owned by the panel until its transcript is replaced.
+    setAttachments([]);
   }
 
   function stop() {
@@ -801,6 +859,8 @@ export function AgentView({
         attachments={attachments}
         uploading={uploading}
         onPickFiles={uploadFiles}
+        onPasteImages={pasteImages}
+        onFocusChange={setAgentComposerFocused}
         onRemoveAttachment={removeAttachment}
         onSend={send}
         onStop={stop}

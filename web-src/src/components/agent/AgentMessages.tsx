@@ -3,6 +3,7 @@ import { Button } from 'react-aria-components';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
 import { AgentMarkdown } from './AgentMarkdown';
 import { ChevronDownIcon, CopyIcon, EditIcon, FileGenericIcon } from '../../icons';
+import { ImageLightbox } from '../ImageLightbox';
 import type { Attachment, Block, ToolBlock, ToolStatus } from './types';
 
 export interface QueuedTurnPreview {
@@ -194,17 +195,7 @@ function UserTurnHead({
     <>
       {sticky && <span ref={sentinelRef} className="agent-turn-sentinel" aria-hidden="true" />}
       <div className={'agent-turn-head' + (block.text && !editing ? ' has-actions' : '') + (sticky ? '' : ' static') + (stuck ? ' stuck' : '')}>
-        {block.attachments && block.attachments.length > 0 && (
-          <div className="agent-turn-attach">
-            {block.attachments.map((a) => (
-              <span key={a.path} className="agent-attach-chip" title={a.path}>
-                <FileGenericIcon className="agent-attach-icon" />
-                <span className="agent-attach-name">{a.name}</span>
-                {a.dims && <span className="agent-attach-dims">{a.dims}</span>}
-              </span>
-            ))}
-          </div>
-        )}
+        {block.attachments && block.attachments.length > 0 && <MessageAttachments attachments={block.attachments} />}
         {editing ? (
           <InlineUserMessageEditor
             text={draft}
@@ -249,17 +240,7 @@ function QueuedTurn({
   return (
     <div className="agent-turn queued">
       <div className="agent-turn-head queued">
-        {turn.attachments && turn.attachments.length > 0 && (
-          <div className="agent-turn-attach">
-            {turn.attachments.map((a) => (
-              <span key={a.path} className="agent-attach-chip" title={a.path}>
-                <FileGenericIcon className="agent-attach-icon" />
-                <span className="agent-attach-name">{a.name}</span>
-                {a.dims && <span className="agent-attach-dims">{a.dims}</span>}
-              </span>
-            ))}
-          </div>
-        )}
+        {turn.attachments && turn.attachments.length > 0 && <MessageAttachments attachments={turn.attachments} />}
         <div className="agent-turn-line">
           {turn.text && <UserMessageText text={turn.text} />}
           <span className="agent-turn-actions">
@@ -276,6 +257,42 @@ function QueuedTurn({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Sent image attachments intentionally mirror the composer thumbnail, but
+ * are transcript content rather than removable composer state. */
+function MessageAttachments({ attachments }: { attachments: Attachment[] }) {
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
+  return (
+    <>
+      <div className="agent-turn-attach">
+        {attachments.map((attachment) => attachment.previewUrl ? (
+          <button
+            key={attachment.path}
+            type="button"
+            className="agent-attach-image-chip agent-attach-image-static"
+            aria-label={`Preview ${attachment.name}`}
+            onClick={() => setPreviewAttachment(attachment)}
+          >
+            <img src={attachment.previewUrl} alt="" />
+          </button>
+        ) : (
+          <span key={attachment.path} className="agent-attach-chip" title={attachment.path}>
+            <FileGenericIcon className="agent-attach-icon" />
+            <span className="agent-attach-name">{attachment.name}</span>
+            {attachment.dims && <span className="agent-attach-dims">{attachment.dims}</span>}
+          </span>
+        ))}
+      </div>
+      {previewAttachment?.previewUrl && (
+        <ImageLightbox
+          src={previewAttachment.previewUrl}
+          alt={previewAttachment.name}
+          onClose={() => setPreviewAttachment(null)}
+        />
+      )}
+    </>
   );
 }
 

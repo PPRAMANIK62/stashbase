@@ -30,7 +30,7 @@ Community contributions can land as useful first iterations, but the long-term d
 - Keep background activity compact. Tool calls may be grouped or summarized, but the user must be able to inspect them when needed.
 - File outputs should be easy to open, but artifact UI should stay lightweight. Prefer rows or compact affordances over large delivery cards.
 - Streaming should not steal the user's scroll position. If the user has scrolled away from the bottom, show a clear jump-to-latest affordance.
-- The current document is never implicit agent context. Users attach files by drag/drop, file picker, or `@` mention.
+- The current document is never implicit agent context. Users attach files by drag/drop, file picker, `@` mention, or a composer-focused image paste. Image paste must reuse transient attachments, preserve accompanying text, and suppress the competing clipboard library-import offer.
 - The top-bar Claude and Codex icons select or toggle existing chats. Creating a new chat belongs to the in-panel `+`.
 
 ## Current Baseline
@@ -52,8 +52,20 @@ The accepted baseline includes:
   semantics, including permission decisions and destructive history
   confirmation. CodeMirror remains the owner of composer text, selection,
   undo, and mention-key handoff; keep its presentation chat-like and its
-  height capped so the transcript retains reading space. When a permission
-  action removes its own controls, restore focus to the persistent tool-card
-  trigger.
+  height capped so the transcript retains reading space. Image attachments
+  show renderer-local thumbnails, never their transient filesystem paths;
+  sent thumbnails remain available for the current transcript, while their URLs
+  are revoked when removed, the transcript is replaced, or the panel unmounts.
+  Restored Claude and Codex sessions may recreate thumbnails only for live
+  transient image files through the scoped local preview route; never expose
+  an arbitrary path found in a transcript. The route resolves the real target
+  under a non-symlinked private attachment root before it reads it. When a
+  permission action removes its own controls, restore focus to the persistent
+  tool-card trigger.
+- Image-preview controls float over the image: Download and Close at the top
+  right, and a bottom-centred zoom group. They need accessible names and hover
+  titles; do not replace their semantic buttons with non-interactive artwork.
+  Use clean, optically centred `+` and `−` line glyphs for zoom rather than
+  ornate magnifying-glass icons; keep the floating control surfaces borderless.
 
 These are still implementation details, not a new product category. If the panel starts to feel heavier than VS Code/Codex/Claude Code side chat, the preferred follow-up is to reduce visual weight rather than add more structure.

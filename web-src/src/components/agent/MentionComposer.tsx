@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef } from 'react';
 import { Compartment, EditorState, RangeSet, RangeValue, StateEffect, StateField } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, invertedEffects } from '@codemirror/commands';
 import { Decoration, type DecorationSet, EditorView, keymap, placeholder, WidgetType } from '@codemirror/view';
+import { handleComposerPaste } from './clipboardAttachments';
 
 const MENTION = '\uFFFC';
 
@@ -148,6 +149,8 @@ export function MentionComposer({
   onMentionDismiss,
   onShiftTab,
   onSubmit,
+  onPasteImages,
+  onFocusChange,
   mentionListboxId,
   mentionOpen,
   ref,
@@ -161,6 +164,8 @@ export function MentionComposer({
   onMentionDismiss: () => void;
   onShiftTab: () => boolean;
   onSubmit: (text: string) => boolean;
+  onPasteImages: (files: File[]) => void;
+  onFocusChange: (focused: boolean) => void;
   mentionListboxId?: string;
   mentionOpen: boolean;
   ref: React.Ref<MentionComposerHandle>;
@@ -175,6 +180,8 @@ export function MentionComposer({
   const onMentionDismissRef = useRef(onMentionDismiss);
   const onShiftTabRef = useRef(onShiftTab);
   const onSubmitRef = useRef(onSubmit);
+  const onPasteImagesRef = useRef(onPasteImages);
+  const onFocusChangeRef = useRef(onFocusChange);
   const mentionOpenRef = useRef(mentionOpen);
   const mentionDismissedRef = useRef(false);
   const editableCompartmentRef = useRef(new Compartment());
@@ -188,6 +195,8 @@ export function MentionComposer({
   onMentionDismissRef.current = onMentionDismiss;
   onShiftTabRef.current = onShiftTab;
   onSubmitRef.current = onSubmit;
+  onPasteImagesRef.current = onPasteImages;
+  onFocusChangeRef.current = onFocusChange;
   mentionOpenRef.current = mentionOpen;
 
   function submit() {
@@ -230,6 +239,19 @@ export function MentionComposer({
           })),
           mentionField,
           EditorView.lineWrapping,
+          EditorView.domEventHandlers({
+            paste: (event) => {
+              return handleComposerPaste(event.clipboardData, disabledRef.current, onPasteImagesRef.current);
+            },
+            focus: () => {
+              onFocusChangeRef.current(true);
+              return false;
+            },
+            blur: () => {
+              onFocusChangeRef.current(false);
+              return false;
+            },
+          }),
           placeholderCompartmentRef.current.of(placeholder(placeholderText)),
           editableCompartmentRef.current.of(EditorView.editable.of(!disabledRef.current)),
           keymap.of([
@@ -300,6 +322,7 @@ export function MentionComposer({
     });
     viewRef.current = view;
     return () => {
+      onFocusChangeRef.current(false);
       view.destroy();
       viewRef.current = null;
     };
