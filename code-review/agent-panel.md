@@ -52,8 +52,20 @@ The accepted baseline includes:
   semantics, including permission decisions and destructive history
   confirmation. CodeMirror remains the owner of composer text, selection,
   undo, and mention-key handoff; keep its presentation chat-like and its
-  height capped so the transcript retains reading space. When a permission
-  action removes its own controls, restore focus to the persistent tool-card
-  trigger.
+  height capped so the transcript retains reading space. Image attachments
+  show renderer-local thumbnails, never their transient filesystem paths;
+  sent thumbnails remain available for the current transcript, while their URLs
+  are revoked when removed, the transcript is replaced, or the panel unmounts.
+  Restored Claude and Codex sessions may recreate thumbnails only for live
+  transient image files through the scoped local preview route; never expose
+  an arbitrary path found in a transcript. The route resolves the real target
+  under a non-symlinked private attachment root before it reads it. When a
+  permission action removes its own controls, restore focus to the persistent
+  tool-card trigger.
+- Image-preview controls float over the image: Download and Close at the top
+  right, and a bottom-centred zoom group. They need accessible names and hover
+  titles; do not replace their semantic buttons with non-interactive artwork.
+  Use clean, optically centred `+` and `−` line glyphs for zoom rather than
+  ornate magnifying-glass icons; keep the floating control surfaces borderless.
 
 These are still implementation details, not a new product category. If the panel starts to feel heavier than VS Code/Codex/Claude Code side chat, the preferred follow-up is to reduce visual weight rather than add more structure.

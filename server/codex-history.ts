@@ -16,6 +16,7 @@ import {
   type JsonObject,
 } from './codex-protocol.ts';
 import { CodexRpcPeer } from './codex-rpc-transport.ts';
+import { historyImageAttachment, restoreHistoryImageAttachments, type RestoredImageAttachment } from './agent-history-attachments.ts';
 
 const log = logger('codex-history');
 
@@ -28,10 +29,14 @@ export interface CodexSessionRow {
 }
 
 export type CodexSessionBlock =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; attachments?: CodexImageAttachment[] }
   | { kind: 'assistant'; id: string; text: string }
   | { kind: 'thinking'; id: string; text: string }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
+
+/** A restored transcript can only preview images originally uploaded through
+ * StashBase's transient attachment route. */
+export type CodexImageAttachment = RestoredImageAttachment;
 
 export async function listCodexSessions(folder: string | null): Promise<CodexSessionRow[]> {
   const cwd = folder ?? process.cwd();
@@ -324,7 +329,7 @@ function rolloutToolName(name: string): string {
   return name || 'Tool call';
 }
 
-function codexThreadToBlocks(thread: JsonObject, rolloutTools: RolloutToolsByTurn = new Map()): CodexSessionBlock[] {
+export function codexThreadToBlocks(thread: JsonObject, rolloutTools: RolloutToolsByTurn = new Map()): CodexSessionBlock[] {
   const blocks: CodexSessionBlock[] = [];
   let seq = 0;
   const id = () => `c${seq++}`;
@@ -352,8 +357,15 @@ function codexThreadToBlocks(thread: JsonObject, rolloutTools: RolloutToolsByTur
       const item = objectValue(raw);
       const type = stringValue(item.type);
       if (type === 'userMessage') {
-        const text = userInputText(item.content);
-        if (text.trim()) blocks.push({ kind: 'user', id: id(), text });
+        const userMessage = userInput(item.content);
+        if (userMessage.text.trim() || userMessage.attachments.length) {
+          blocks.push({
+            kind: 'user',
+            id: id(),
+            text: userMessage.text,
+            ...(userMessage.attachments.length ? { attachments: userMessage.attachments } : {}),
+          });
+        }
         continue;
       }
       if (type === 'agentMessage') {
@@ -397,18 +409,32 @@ function codexThreadToBlocks(thread: JsonObject, rolloutTools: RolloutToolsByTur
   return blocks;
 }
 
-function userInputText(value: unknown): string {
-  if (!Array.isArray(value)) return '';
-  return value
+function userInput(value: unknown): { text: string; attachments: CodexImageAttachment[] } {
+  if (!Array.isArray(value)) return { text: '', attachments: [] };
+  const attachments: CodexImageAttachment[] = [];
+  const text = value
     .map((input) => {
       const obj = objectValue(input);
       if (stringValue(obj.type) === 'text') return stringValue(obj.text);
       if (stringValue(obj.type) === 'image') return stringValue(obj.url);
-      if (stringValue(obj.type) === 'localImage') return stringValue(obj.path);
+      if (stringValue(obj.type) === 'localImage') {
+        addHistoryImageAttachment(attachments, stringValue(obj.path));
+        return '';
+      }
       return stringValue(obj.name) || stringValue(obj.path);
     })
     .filter(Boolean)
     .join('\n');
+  const restored = restoreHistoryImageAttachments(text);
+  for (const attachment of restored.attachments) addHistoryImageAttachment(attachments, attachment.path);
+  return { text: restored.text, attachments };
+}
+
+function addHistoryImageAttachment(attachments: CodexImageAttachment[], candidate: string): void {
+  const attachment = historyImageAttachment(candidate);
+  if (!attachment) return;
+  if (attachments.some((attachment) => attachment.path === candidate)) return;
+  attachments.push(attachment);
 }
 
 function stringArray(value: unknown): string[] {

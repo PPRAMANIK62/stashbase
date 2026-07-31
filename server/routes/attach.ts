@@ -25,8 +25,57 @@ const upload = multer({
 const ATTACHMENT_MAX_AGE_MS = 24 * 60 * 60_000;
 
 /** Root for transient attachment files, outside any folder. */
-function attachRoot(): string {
+export function attachRoot(): string {
   return path.join(os.tmpdir(), 'stashbase-attachments');
+}
+
+/** Create the shared transient root privately, and never follow a pre-existing
+ * symlink at that location. */
+function ensureAttachmentRoot(): string | null {
+  const root = attachRoot();
+  try {
+    fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+    const stat = fs.lstatSync(root);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return null;
+    fs.chmodSync(root, 0o700);
+    return root;
+  } catch {
+    return null;
+  }
+}
+
+/** Only files created by this route may be read back for a restored chat
+ * preview. This deliberately rejects arbitrary local paths from a session
+ * transcript. */
+export function isTransientAttachmentPath(candidate: string): boolean {
+  const root = path.resolve(attachRoot());
+  const relative = path.relative(root, path.resolve(candidate));
+  return Boolean(relative) && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+}
+
+/** Resolve a preview target only after proving that its real filesystem path
+ * remains inside the real attachment root. This blocks transcript-provided
+ * paths that enter the temp tree through a symlink and point elsewhere. */
+export function transientAttachmentPreviewPath(candidate: string): string | null {
+  if (!isTransientAttachmentPath(candidate)) return null;
+  try {
+    const root = attachRoot();
+    const rootStat = fs.lstatSync(root);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) return null;
+    const realRoot = fs.realpathSync(root);
+    const realCandidate = fs.realpathSync(candidate);
+    const relative = path.relative(realRoot, realCandidate);
+    if (!relative || relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) return null;
+    return fs.statSync(realCandidate).isFile() ? realCandidate : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Relative renderer URL for a transient image. The route validates the path
+ * again when it is fetched. */
+export function transientAttachmentPreviewUrl(filePath: string): string {
+  return `/api/agent/attachment-preview?path=${encodeURIComponent(filePath)}`;
 }
 
 export function safeAttachmentName(original: string): string {
@@ -81,11 +130,13 @@ export function mount(app: express.Express): void {
       }
       const files = (req.files as Express.Multer.File[]) ?? [];
       if (files.length === 0) { res.status(400).json({ error: 'no files' }); return; }
-      cleanupStaleAttachments();
+      const root = ensureAttachmentRoot();
+      if (!root) { res.status(500).json({ error: 'could not secure attachment storage' }); return; }
+      cleanupStaleAttachments(root);
       // One throwaway dir per batch so same-named files never collide.
-      const dir = path.join(attachRoot(), randomUUID());
+      const dir = path.join(root, randomUUID());
       try {
-        fs.mkdirSync(dir, { recursive: true });
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       } catch (err: unknown) {
         res.status(500).json({ error: errorMessage(err) });
         return;
@@ -96,7 +147,7 @@ export function mount(app: express.Express): void {
         const name = uniqueAttachmentName(f.originalname || 'file', usedNames);
         try {
           const abs = path.join(dir, name);
-          fs.writeFileSync(abs, f.buffer);
+          fs.writeFileSync(abs, f.buffer, { mode: 0o600 });
           out.push({ name, path: abs });
         } catch (err: unknown) {
           log.warn(`attach: write ${name} failed: ${errorMessage(err)}`);
@@ -109,6 +160,36 @@ export function mount(app: express.Express): void {
       res.json({ files: out });
     });
   });
+
+  app.get('/api/agent/attachment-preview', (req, res) => {
+    const filePath = typeof req.query.path === 'string' ? req.query.path : '';
+    const type = imageContentType(filePath);
+    if (!type) {
+      res.status(404).end();
+      return;
+    }
+    const previewPath = transientAttachmentPreviewPath(filePath);
+    if (!previewPath) {
+      res.status(404).end();
+      return;
+    }
+    res.type(type);
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.sendFile(previewPath);
+  });
+}
+
+function imageContentType(filePath: string): string | null {
+  switch (path.extname(filePath).toLowerCase()) {
+    case '.avif': return 'image/avif';
+    case '.gif': return 'image/gif';
+    case '.jpeg':
+    case '.jpg': return 'image/jpeg';
+    case '.png': return 'image/png';
+    case '.webp': return 'image/webp';
+    default: return null;
+  }
 }
 
 function sendAttachError(res: express.Response, err: unknown): void {

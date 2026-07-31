@@ -36,7 +36,10 @@ context, not a separate AI workspace.
 - Popup controls use maintained accessible primitives while the CodeMirror
   composer remains responsible for typed content and mention keystrokes. The
   composer presents as a capped-height chat input, with ranked file and folder mentions,
-  visible attachment chips, and clear Send/Stop states rather than editor UI.
+  image attachment thumbnails that remain visible in sent messages and restored
+  history while their transient files are available, open the existing image
+  preview with floating image actions and bottom-centered zoom controls, and clear
+  Send/Stop states rather than editor UI.
 - The panel complements external MCP clients; it does not replace the
   bring-your-own-agent direction.
 
