@@ -70,6 +70,10 @@ Use **File → New Window** or Cmd/Ctrl+Shift+N to keep different folders and
 tools side by side. Window close follows VS Code's platform shortcuts;
 Cmd/Ctrl+W continues to close the active document tab.
 
+Use Cmd/Ctrl+O to open a source file in the active folder. The Command Palette
+opens with Cmd/Ctrl+Shift+P or F1 (or by typing `>` in Quick Open) and exposes
+safe application actions with their existing safeguards.
+
 ---
 
 ## What It Does
