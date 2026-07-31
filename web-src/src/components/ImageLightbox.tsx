@@ -63,9 +63,12 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
     });
   }
 
-  function reset() {
-    setScale(1);
-    setOffset({ x: 0, y: 0 });
+  function download() {
+    const link = document.createElement('a');
+    link.href = src;
+    link.download = safeDownloadName(alt);
+    link.click();
+    link.remove();
   }
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
@@ -89,14 +92,6 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
 
   return (
     <div className="image-lightbox quick-open-blocking" role="dialog" aria-modal="true" aria-label="Image preview">
-      <div className="image-lightbox-toolbar">
-        <div className="image-lightbox-title">{alt || 'Image preview'}</div>
-        <button type="button" onClick={() => zoomBy(1 / 1.2)}>Zoom out</button>
-        <span className="image-lightbox-scale">{Math.round(scale * 100)}%</span>
-        <button type="button" onClick={() => zoomBy(1.2)}>Zoom in</button>
-        <button type="button" onClick={reset}>Reset</button>
-        <button type="button" onClick={onClose}>Close</button>
-      </div>
       <div
         ref={stageRef}
         className={'image-lightbox-stage' + (scale > 1 ? ' pannable' : '')}
@@ -114,8 +109,46 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
           }}
         />
       </div>
+      <div className="image-lightbox-actions">
+        <button type="button" className="image-lightbox-floating-btn" aria-label="Download image" title="Download" onClick={download}>
+          <LightboxIcon kind="download" />
+        </button>
+        <button type="button" className="image-lightbox-floating-btn" aria-label="Close image preview" title="Close" onClick={onClose}>
+          <LightboxIcon kind="close" />
+        </button>
+      </div>
+      <div className="image-lightbox-zoom-controls">
+        <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoomBy(1 / 1.2)}>
+          <ZoomGlyph />
+        </button>
+        <span className="image-lightbox-scale">{Math.round(scale * 100)}%</span>
+        <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => zoomBy(1.2)}>
+          <ZoomGlyph plus />
+        </button>
+      </div>
     </div>
   );
+}
+
+function LightboxIcon({ kind }: { kind: 'download' | 'close' }) {
+  if (kind === 'download') return (
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.25v7.5m0 0 2.7-2.7M8 9.75 5.3 7.05M3 10.75v2h10v-2" /></svg>
+  );
+  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 3.5 9 9m0-9-9 9" /></svg>;
+}
+
+function ZoomGlyph({ plus = false }: { plus?: boolean }) {
+  return (
+    <svg className="image-lightbox-zoom-glyph" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3.5 8h9" />
+      {plus && <path d="M8 3.5v9" />}
+    </svg>
+  );
+}
+
+function safeDownloadName(name: string): string {
+  const trimmed = name.trim();
+  return trimmed && !/[\\/:*?"<>|]/.test(trimmed) ? trimmed : 'image';
 }
 
 function clamp(value: number): number {
