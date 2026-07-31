@@ -548,15 +548,38 @@ function isLiveMainWindow(win) {
 // Default-on; toggleable from the renderer via `clipboard:setWatch`.
 let clipboardWatchEnabled = true;
 let lastClipboardOfferHash = null;
+const agentComposerFocusedContents = new Set();
 
 function clipboardImageFilename() {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   return `clipboard-${stamp}.png`;
 }
 
+function markCurrentClipboardImageHandled() {
+  let img;
+  try {
+    img = clipboard.readImage();
+  } catch {
+    return false;
+  }
+  if (!img || img.isEmpty()) return false;
+  let png;
+  try {
+    png = img.toPNG();
+  } catch {
+    return false;
+  }
+  if (!png || !png.length) return false;
+  lastClipboardOfferHash = crypto.createHash('sha1').update(png).digest('hex');
+  return true;
+}
+
 function offerClipboardImage(win) {
   if (!clipboardWatchEnabled) return;
   if (!win || win.isDestroyed()) return;
+  // A focused Agent composer claims clipboard images as transient chat
+  // context, so do not race the explicit paste with a library-import offer.
+  if (agentComposerFocusedContents.has(win.webContents.id)) return;
   let img;
   try {
     img = clipboard.readImage();
@@ -678,6 +701,7 @@ async function createWindow(initialFolder) {
     });
   });
   win.on('closed', () => {
+    agentComposerFocusedContents.delete(webContentsId);
     rendererFlush.cancel(webContentsId);
     mainWindows.delete(win);
     windowRegistry.remove(windowId);
@@ -892,6 +916,19 @@ ipcMain.handle('clipboard:setWatch', (_event, enabled) => {
 // image; remember the hash so re-focus doesn't re-offer the same one.
 ipcMain.on('clipboard:markHandled', (_event, hash) => {
   if (typeof hash === 'string' && hash) lastClipboardOfferHash = hash;
+});
+
+ipcMain.on('clipboard:markCurrentImageHandled', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(win)) return;
+  markCurrentClipboardImageHandled();
+});
+
+ipcMain.on('clipboard:setAgentComposerFocused', (event, focused) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(win)) return;
+  if (focused === true) agentComposerFocusedContents.add(event.sender.id);
+  else agentComposerFocusedContents.delete(event.sender.id);
 });
 
 const initialWindowFlight = createSingleFlight(() => app.whenReady().then(() => createWindow()));

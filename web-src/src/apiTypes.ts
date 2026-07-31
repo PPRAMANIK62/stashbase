@@ -101,7 +101,7 @@ export interface SessionInfo {
  *  AgentView's `Block` (history tools are always settled), so it drops
  *  straight into `setBlocks`. */
 export type SessionBlock =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; attachments?: Array<{ path: string; name: string; dims?: string; previewUrl?: string }> }
   | { kind: 'assistant'; id: string; text: string }
   | { kind: 'thinking'; id: string; text: string }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };

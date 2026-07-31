@@ -1034,6 +1034,63 @@
       font-size: calc(11.5px * var(--ui-scale));
       color: var(--fg);
     }
+    .agent-attach-image-chip {
+      position: relative;
+      width: 64px;
+      height: 64px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--hover);
+      box-shadow: 0 1px 2px color-mix(in srgb, #000 28%, transparent);
+    }
+    .agent-attach-image-preview {
+      display: block;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: zoom-in;
+    }
+    .agent-attach-image-preview img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .agent-attach-image-static {
+      display: block;
+      padding: 0;
+      cursor: zoom-in;
+    }
+    .agent-attach-image-static img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .agent-attach-image-chip .agent-attach-x {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      color: var(--fg);
+      background: color-mix(in srgb, var(--bg) 76%, transparent);
+      border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+      border-radius: 50%;
+    }
+    .agent-attach-image-chip .agent-attach-x svg {
+      display: block;
+      width: 9px;
+      height: 9px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+    }
     .agent-attach-icon { width: 13px; height: 13px; flex-shrink: 0; color: var(--muted); }
     .agent-attach-text { display: flex; min-width: 0; flex-direction: column; }
     .agent-attach-name {

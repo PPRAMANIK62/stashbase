@@ -5,6 +5,7 @@ import {
   FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
 } from '../../icons';
 import { useApp } from '../../store/AppContext';
+import { ImageLightbox } from '../ImageLightbox';
 import { baseName } from './attachments';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
@@ -135,7 +136,7 @@ function EffortMenu({
 
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, onPickFiles, onRemoveAttachment, onSend, onStop,
+  effortLocked, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -152,6 +153,8 @@ export function AgentComposer({
   showModeMenu: boolean;
   showEffortMenu: boolean;
   onPickFiles: (files: File[]) => void;
+  onPasteImages: (files: File[]) => void;
+  onFocusChange: (focused: boolean) => void;
   onRemoveAttachment: (path: string) => void;
   onSend: (text: string) => void;
   onStop: () => void;
@@ -164,6 +167,7 @@ export function AgentComposer({
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [modeOpen, setModeOpen] = useState(false);
   const [effortOpen, setEffortOpen] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeMentionRef = useRef<HTMLDivElement>(null);
 
@@ -260,19 +264,34 @@ export function AgentComposer({
       <div className="agent-composer-box">
         {(attachments.length > 0 || uploading) && (
           <div className="agent-attachments">
-            {attachments.map((a) => (
-              <span key={a.path} className="agent-attach-chip" title={a.path}>
-                <FileGenericIcon className="agent-attach-icon" />
-                <span className="agent-attach-text">
-                  <span className="agent-attach-name">{a.name}</span>
-                  <span className="agent-attach-path">{a.path}</span>
-                </span>
-                {a.dims && <span className="agent-attach-dims">{a.dims}</span>}
+            {attachments.map((a) => a.previewUrl ? (
+              <span key={a.path} className="agent-attach-image-chip">
+                <button
+                  type="button"
+                  className="agent-attach-image-preview"
+                  aria-label={`Preview ${a.name}`}
+                  onClick={() => setPreviewAttachment(a)}
+                >
+                  <img src={a.previewUrl} alt="" />
+                </button>
                 <Button
                   className="agent-attach-x"
                   aria-label={`Remove ${a.name}`}
-                  onPress={() => onRemoveAttachment(a.path)}
-                >×</Button>
+                  onPress={() => {
+                    if (previewAttachment?.path === a.path) setPreviewAttachment(null);
+                    onRemoveAttachment(a.path);
+                  }}
+                >
+                  <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+                    <path d="m2.25 2.25 7.5 7.5M9.75 2.25l-7.5 7.5" />
+                  </svg>
+                </Button>
+              </span>
+            ) : (
+              <span key={a.path} className="agent-attach-chip" title={a.path}>
+                <FileGenericIcon className="agent-attach-icon" />
+                <span className="agent-attach-name">{a.name}</span>
+                <Button className="agent-attach-x" aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>
               </span>
             ))}
             {uploading && <span className="agent-attach-loading">Uploading…</span>}
@@ -300,6 +319,8 @@ export function AgentComposer({
             return true;
           }}
           onSubmit={submit}
+          onPasteImages={onPasteImages}
+          onFocusChange={onFocusChange}
           mentionOpen={Boolean(mention && suggestions.length)}
           mentionListboxId={mention && suggestions.length ? mentionListboxId : undefined}
         />
@@ -358,6 +379,13 @@ export function AgentComposer({
           )}
         </div>
       </div>
+      {previewAttachment?.previewUrl && (
+        <ImageLightbox
+          src={previewAttachment.previewUrl}
+          alt={previewAttachment.name}
+          onClose={() => setPreviewAttachment(null)}
+        />
+      )}
     </div>
   );
 }

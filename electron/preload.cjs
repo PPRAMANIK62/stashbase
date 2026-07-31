@@ -99,4 +99,10 @@ contextBridge.exposeInMainWorld('electron', {
   /** Tell main an offered clipboard image was handled so it isn't
    *  re-offered on the next focus. */
   markClipboardHandled: (hash) => ipcRenderer.send('clipboard:markHandled', hash),
+  /** Mark the image currently being pasted as handled without exposing the
+   * native clipboard bytes to the renderer a second time. */
+  markCurrentClipboardImageHandled: () => ipcRenderer.send('clipboard:markCurrentImageHandled'),
+  /** While the Agent composer owns focus, pasted images become temporary
+   * chat context instead of candidates for library import. */
+  setAgentComposerFocused: (focused) => ipcRenderer.send('clipboard:setAgentComposerFocused', focused === true),
 });

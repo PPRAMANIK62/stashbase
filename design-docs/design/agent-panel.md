@@ -10,8 +10,10 @@ context, not a separate AI workspace.
   prior chat history.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
-- Users explicitly attach context through mentions, file selection, or drag and
-  drop; the current document is never implicit Agent context.
+- Users explicitly attach context through mentions, file selection, drag and
+  drop, or pasting an image while the composer is focused; the current
+  document is never implicit Agent context. Pasted images are transient chat
+  attachments, never library imports.
 - Permission requests remain actionable. Limited edit workflows can be
   streamlined, while deletion, commands, network access, and broader access
   stay explicit approval decisions.
