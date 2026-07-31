@@ -13,6 +13,12 @@ export function isWindowLifecycleShortcut(input: WindowShortcutInput): boolean {
     && ['n', 'w'].includes(input.key.toLowerCase());
 }
 
+export function isCommandPaletteShortcut(input: WindowShortcutInput): boolean {
+  const key = input.key.toLowerCase();
+  return (key === 'f1' && !input.metaKey && !input.ctrlKey && !input.altKey && !input.shiftKey)
+    || ((input.metaKey || input.ctrlKey) && input.shiftKey && !input.altKey && key === 'p');
+}
+
 /**
  * Global keyboard shortcuts. Renderless — mounts a `keydown` listener
  * on document and dispatches into the store.
@@ -20,6 +26,7 @@ export function isWindowLifecycleShortcut(input: WindowShortcutInput): boolean {
  *   Cmd/Ctrl + N        → new note
  *   Cmd/Ctrl + S        → flush autosave immediately
  *   Cmd/Ctrl + O        → Quick Open for the active library
+ *   Cmd/Ctrl + Shift + P / F1 → Command Palette
  *   Cmd/Ctrl + W        → close the active tab
  *   Cmd/Ctrl + F        → open in-document find bar
  *   Cmd/Ctrl + G        → next find match (Shift = prev). No-op when bar is closed.
@@ -44,6 +51,11 @@ export function Hotkeys() {
       if (e.key === 'Escape' && findOpenRef.current) {
         e.preventDefault();
         actions.closeFind();
+        return;
+      }
+      if (isCommandPaletteShortcut(e)) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('stashbase-open-quick-open', { detail: { mode: 'commands' } }));
         return;
       }
       if (!(e.metaKey || e.ctrlKey)) return;

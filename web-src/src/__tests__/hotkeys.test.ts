@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isWindowLifecycleShortcut } from '../components/Hotkeys';
+import { isCommandPaletteShortcut, isWindowLifecycleShortcut } from '../components/Hotkeys';
+
+test('Command Palette owns F1 and Cmd/Ctrl+Shift+P only', () => {
+  assert.equal(isCommandPaletteShortcut({ key: 'F1', metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }), true);
+  assert.equal(isCommandPaletteShortcut({ key: 'p', metaKey: true, ctrlKey: false, shiftKey: true, altKey: false }), true);
+  assert.equal(isCommandPaletteShortcut({ key: 'p', metaKey: false, ctrlKey: true, shiftKey: false, altKey: false }), false);
+  assert.equal(isCommandPaletteShortcut({ key: 'F1', metaKey: false, ctrlKey: false, shiftKey: true, altKey: false }), false);
+});
 
 test('renderer yields shifted new-window and close-window chords to Electron', () => {
   assert.equal(

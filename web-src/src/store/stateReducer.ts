@@ -311,6 +311,25 @@ export function reducer(s: State, a: Action): State {
         chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, a.tab),
       };
     }
+    case 'CHAT_AGENT_OPEN': {
+      const existingTab = mostRecentChatTab(s, a.agent);
+      if (existingTab) {
+        return {
+          ...s,
+          chatOpen: true,
+          activeChatTabId: existingTab.id,
+          chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, existingTab),
+        };
+      }
+      if (!a.tab) return s;
+      return {
+        ...s,
+        chatOpen: true,
+        chatTabs: [...s.chatTabs, a.tab],
+        activeChatTabId: a.tab.id,
+        chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, a.tab),
+      };
+    }
     case 'CHAT_TAB_NEW':
       return {
         ...s,
