@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { languages } from '@codemirror/language-data';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { replaceAll } from '@milkdown/kit/utils';
@@ -23,18 +23,20 @@ import { applyChunkHighlight } from './previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '../milkdown/paths';
 import { splitLeadingYamlFrontmatter } from '../milkdown/frontmatter';
 import { resolveLocalImageUrl } from '../milkdown/imageUrls';
+import { activeHeadingId, extractDocumentHeadings, headingSlug, outlineModeForWidth, type DocumentHeading, type OutlineMode } from '../milkdown/headings';
 
 /**
  * The single Markdown surface. CrepeBuilder provides Milkdown's maintained
  * authoring features, while StashBase keeps ownership of persistence, local
  * asset paths, navigation and the application-level find experience.
  */
-export function CrepeDocument({ tabId, name, content, readOnly, active }: {
+export function CrepeDocument({ tabId, name, content, readOnly, active, outlineOpen }: {
   tabId: string;
   name: string;
   content: string;
   readOnly: boolean;
   active: boolean;
+  outlineOpen: boolean;
 }) {
   const { actions, activeTab } = useApp();
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -46,6 +48,9 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   const observedIncomingRef = useRef<string | null>(null);
   const suppressChangeRef = useRef(false);
   const frontmatterRef = useRef(splitLeadingYamlFrontmatter(content).source);
+  const [headings, setHeadings] = useState<DocumentHeading[]>([]);
+  const [activeHeading, setActiveHeading] = useState<string | null>(null);
+  const [outlineMode, setOutlineMode] = useState<OutlineMode>('overlay');
   nameRef.current = name;
   contentRef.current = content;
   readOnlyRef.current = readOnly;
@@ -78,14 +83,17 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       .addFeature(codeMirror, { languages, copyText: 'Copy code' })
       .addFeature(latex);
 
+    const updateHeadings = () => setHeadings(extractDocumentHeadings(editor.editor.action((ctx) => ctx.get(editorViewCtx).state.doc)));
     editor.setReadonly(readOnlyRef.current);
     editor.on((listener) => listener.markdownUpdated((_ctx, markdown, previous) => {
       if (!suppressChangeRef.current && markdown !== previous) actions.scheduleSave();
+      updateHeadings();
     }));
     editor.create().then(() => {
       if (disposed) return;
       editorRef.current = editor;
       refreshDocumentDom(host, nameRef.current);
+      updateHeadings();
       if (!readOnlyRef.current && activeRef.current) {
         actions.registerEditor({
           getValue: () => frontmatterRef.current + editor.getMarkdown(),
@@ -142,6 +150,36 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     const frame = requestAnimationFrame(() => refreshDocumentDom(host, name));
     return () => cancelAnimationFrame(frame);
   }, [content, name, readOnly]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const frame = requestAnimationFrame(() => applyHeadingIds(host, headings));
+    return () => cancelAnimationFrame(frame);
+  }, [headings]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const updateMode = () => setOutlineMode(outlineModeForWidth(host.clientWidth));
+    const observer = new ResizeObserver(updateMode);
+    observer.observe(host);
+    updateMode();
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !outlineOpen) return;
+    const updateActive = () => {
+      const threshold = host.getBoundingClientRect().top + 12;
+      const positions = Array.from(host.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')).map((heading, index) => ({ id: heading.id || headings[index]?.id || '', top: heading.getBoundingClientRect().top }));
+      setActiveHeading(activeHeadingId(headings, positions, threshold));
+    };
+    host.addEventListener('scroll', updateActive, true);
+    updateActive();
+    return () => host.removeEventListener('scroll', updateActive, true);
+  }, [headings, outlineOpen]);
 
   useEffect(() => {
     const controller = makeIframeFindController(
@@ -210,7 +248,10 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     if (applyChunkHighlight(host.ownerDocument, pendingHighlight.chunkText, host)) actions.consumePendingHighlight();
   }, [actions, content, pendingHighlight]);
 
-  return <div ref={hostRef} className={'crepe-shell' + (readOnly ? ' crepe-readonly' : '')} data-tab-id={tabId} hidden={!active} />;
+  return <div className="markdown-document" hidden={!active}>
+    {outlineOpen && <DocumentOutline headings={headings} activeId={activeHeading} mode={outlineMode} onSelect={(id) => hostRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' })} />}
+    <div ref={hostRef} className={'crepe-shell' + (readOnly ? ' crepe-readonly' : '')} data-tab-id={tabId} />
+  </div>;
 }
 
 async function uploadLocalImage(file: File, noteName: string): Promise<string> {
@@ -265,13 +306,26 @@ function refreshDocumentDom(host: HTMLElement, name: string): void {
     quote.setAttribute('role', 'note');
     quote.setAttribute('aria-label', match[1][0] + match[1].slice(1).toLowerCase());
   }
+  applyHeadingIds(host);
+}
+
+function applyHeadingIds(host: HTMLElement, entries?: DocumentHeading[]) {
   const used = new Map<string, number>();
-  for (const heading of host.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')) {
-    const baseId = heading.textContent?.trim().toLowerCase().normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}_ -]/gu, '')
-      .trim().replace(/\s+/g, '-') || 'section';
-    const seen = used.get(baseId) ?? 0;
-    used.set(baseId, seen + 1);
-    heading.id = seen === 0 ? baseId : `${baseId}-${seen}`;
-  }
+  Array.from(host.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')).forEach((heading, index) => {
+    if (entries?.[index]) { heading.id = entries[index].id; return; }
+    const base = headingSlug(heading.textContent ?? '');
+    const seen = used.get(base) ?? 0;
+    used.set(base, seen + 1);
+    heading.id = seen === 0 ? base : `${base}-${seen}`;
+  });
+}
+
+function DocumentOutline({ headings, activeId, mode, onSelect }: { headings: DocumentHeading[]; activeId: string | null; mode: OutlineMode; onSelect: (id: string) => void }) {
+  let emptyCount = 0;
+  return <nav id="document-outline" className={`document-outline ${mode}`} aria-label="Document outline">
+    {headings.length === 0 ? <p className="document-outline-empty">No headings</p> : headings.map((heading) => {
+      const label = heading.text || `Untitled section ${++emptyCount}`;
+      return <button key={heading.id} type="button" className="document-outline-entry" style={{ paddingLeft: `${8 + (heading.level - 1) * 12}px` }} title={label} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading.id)}>{label}</button>;
+    })}
+  </nav>;
 }

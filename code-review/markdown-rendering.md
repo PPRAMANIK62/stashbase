@@ -51,6 +51,9 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   own scroller, rather than the renderer window.
 - Heading IDs derive from rendered heading text and remain stable enough for
   same-note and cross-note anchor navigation.
+- Document outlines read heading nodes from the retained ProseMirror document.
+  Keep live extraction and active-section tracking outside transaction-time DOM
+  decoration; outline IDs must share the anchor slug allocation.
 - Relative images resolve below the opened note's `/asset/` base. Image upload
   writes through the existing folder-scoped upload endpoint, then returns an
   encoded note-relative Markdown path; rendering resolves it only in the DOM.

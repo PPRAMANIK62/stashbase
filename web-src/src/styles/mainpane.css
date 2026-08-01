@@ -272,6 +272,14 @@
       --crepe-shadow-1: 0 12px 28px rgba(var(--shadow-color), .24), 0 2px 7px rgba(var(--shadow-color), .16);
       --crepe-shadow-2: 0 18px 44px rgba(var(--shadow-color), .28), 0 4px 12px rgba(var(--shadow-color), .18);
     }
+    .markdown-document { position: relative; min-width: 0; min-height: 0; height: 100%; }
+    .document-outline { position: absolute; z-index: 6; top: 12px; width: 170px; max-height: calc(100% - 24px); overflow: auto; padding: 6px; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--bg) 94%, transparent); box-sizing: border-box; }
+    .document-outline.docked { left: max(8px, calc(50% - 600px)); }
+    .document-outline.overlay { left: 8px; width: min(260px, calc(100% - 16px)); box-shadow: 0 8px 24px rgba(var(--shadow-color), .2); }
+    .document-outline-entry { display: block; width: 100%; overflow: hidden; border: 0; border-radius: 4px; background: none; color: var(--fg); font: inherit; font-size: calc(12px * var(--ui-scale)); line-height: 1.5; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+    .document-outline-entry:hover, .document-outline-entry[aria-current="location"] { background: var(--hover); }
+    .document-outline-empty { margin: 4px 2px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
+    .outline-toggle { height: 28px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--fg); font: inherit; font-size: calc(12px * var(--ui-scale)); cursor: pointer; }
 
     .crepe-shell .milkdown { min-height: 100%; background: transparent; color: var(--fg); }
     .crepe-shell .ProseMirror {

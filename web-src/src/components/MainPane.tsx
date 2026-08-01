@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { EditIcon, PreviewIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { EmptyTabLanding } from './EmptyTabLanding';
@@ -31,6 +31,7 @@ export function MainPane() {
   const hasTabs = state.tabs.length > 0;
   const emptyTab = !!activeTab && !cur;
   const resourceResetKey = cur ? `${cur.name}:${cur.version ?? ''}` : undefined;
+  const [outlineOpen, setOutlineOpen] = useState(false);
 
   return (
     <main className={'main' + (hasTabs ? '' : ' no-file') + (cur ? ' fmt-' + cur.format : '')}>
@@ -65,6 +66,7 @@ export function MainPane() {
                 content={cur.content}
                 readOnly={!editMode}
                 active
+                outlineOpen={outlineOpen}
               />
             </Suspense>
           </LazyLoadBoundary>
@@ -116,6 +118,7 @@ export function MainPane() {
               {saveStatus.text}
             </span>
           )}
+          <button type="button" className="outline-toggle" aria-expanded={outlineOpen} aria-controls="document-outline" onClick={() => setOutlineOpen((open) => !open)}>Outline</button>
           <button
             className={'icon-btn edit-toggle' + (editMode ? ' editing' : '')}
             type="button"
