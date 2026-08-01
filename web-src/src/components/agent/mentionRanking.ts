@@ -9,7 +9,7 @@ export function rankMentionSuggestions(
   query: string,
   limit = 8,
 ): MentionSuggestion[] {
-  const needle = query.trim().toLowerCase();
+  const needle = normalizeMentionText(query);
   const suggestions = [
     ...files.map((file) => ({ path: file.name, kind: 'file' as const })),
     ...folders.map((folder) => ({ path: folder.path, kind: 'folder' as const })),
@@ -19,23 +19,34 @@ export function rankMentionSuggestions(
     .filter((candidate): candidate is { suggestion: MentionSuggestion; score: number } => candidate.score !== null)
     .sort((a, b) => a.score - b.score
       || baseName(a.suggestion.path).length - baseName(b.suggestion.path).length
-      || a.suggestion.path.localeCompare(b.suggestion.path))
+      || comparePaths(a.suggestion.path, b.suggestion.path))
     .slice(0, limit)
     .map((candidate) => candidate.suggestion);
 }
 
 function mentionScore(path: string, query: string): number | null {
   if (!query) return 5;
-  const fileName = baseName(path).toLowerCase();
-  const lowerPath = path.toLowerCase();
+  const fileName = normalizeMentionText(baseName(path));
+  const lowerPath = normalizeMentionText(path);
   if (fileName === query) return 0;
   if (fileName.startsWith(query)) return 1;
-  if (lowerPath.startsWith(query)) return 2;
-  if (fileName.includes(query)) return 3;
+  if (fileName.includes(query)) return 2;
+  if (lowerPath.startsWith(query)) return 3;
   if (lowerPath.includes(query)) return 4;
   return null;
 }
 
 function baseName(path: string): string {
-  return path.split('/').pop() ?? path;
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
+function comparePaths(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function normalizeMentionText(value: string): string {
+  return value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[\p{M}\p{P}\p{Z}]+/gu, '');
 }

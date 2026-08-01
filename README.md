@@ -151,6 +151,8 @@ The panel is a convenient client of the same MCP server, not a separate knowledg
 - Sessions run in the current folder, next to the files they work on.
 - Tool calls and file edits can be reviewed in the app.
 - Session history stays in the Agent CLI's normal storage.
+- `@` mentions find files and folders with forgiving workspace-path search;
+  selecting one inserts only its workspace-relative path.
 
 ---
 
