@@ -35,7 +35,9 @@ context, not a separate AI workspace.
   indexing, or MCP model.
 - Popup controls use maintained accessible primitives while the CodeMirror
   composer remains responsible for typed content and mention keystrokes. The
-  composer presents as a capped-height chat input, with ranked file and folder mentions,
+  composer presents as a capped-height chat input, with ranked file and folder
+  mentions that search workspace paths without case, punctuation, whitespace,
+  or separator sensitivity,
   image attachment thumbnails that remain visible in sent messages and restored
   history while their transient files are available, open the existing image
   preview with floating image actions and bottom-centered zoom controls, and clear

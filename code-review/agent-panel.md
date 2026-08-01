@@ -38,7 +38,11 @@ Community contributions can land as useful first iterations, but the long-term d
 The accepted baseline includes:
 
 - per-agent chat tab selection and toggle behavior
-- keyboard navigation for `@` file and folder mentions
+- keyboard navigation for `@` file and folder mentions. Ranking normalizes
+  Unicode accents and ignores case, punctuation, whitespace, and path
+  separators; basename matches precede path-only matches, ties use a
+  locale-independent order, and raw workspace-relative paths remain the
+  stable item IDs and inserted tokens.
 - smooth chat-side resize without drag-frequency global state updates
 - compact activity grouping for non-actionable tool calls, with inspectable
   command/read/search labels rather than lifecycle-only summaries
