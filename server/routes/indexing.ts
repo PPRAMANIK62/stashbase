@@ -30,7 +30,10 @@ import { clearIndexWarning, syncFolderNow } from '../state.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { sendError } from '../http.ts';
 import { filesystemPath } from '../filesystem-path.ts';
-import { isSearchTypeCategory, type SearchTypeCategory } from '../../shared/search-types.ts';
+import {
+  parseSearchTypes,
+  SEARCH_TYPES_VALIDATION_ERROR,
+} from '../../shared/search-types.ts';
 import { buildIndexStatus } from '../index-status.ts';
 import { createRetrieval, keywordFilesFromEvidence, semanticHitsFromEvidence } from '../retrieval/index.ts';
 import {
@@ -253,7 +256,7 @@ export function mount(app: express.Express): void {
       const explicit = parseFolderParam(req.body?.folder);
       const { folderRoot } = requireRequestFolder(explicit);
       const types = parseSearchTypes(req.body?.types);
-      if (types == null) return res.status(400).json({ error: 'unknown types value' });
+      if (types == null) return res.status(400).json({ error: SEARCH_TYPES_VALIDATION_ERROR });
       const prefixAbs = resolveScopePrefix(folderRoot, req.body?.path_prefix);
       if (prefixAbs === false) return res.status(400).json({ error: 'path_prefix must be a folder-relative subfolder' });
       const result = await retrieval.search({
@@ -294,7 +297,7 @@ export function mount(app: express.Express): void {
           ? req.query.types.split(',')
           : undefined,
       );
-      if (types == null) return res.status(400).json({ error: 'unknown types value' });
+      if (types == null) return res.status(400).json({ error: SEARCH_TYPES_VALIDATION_ERROR });
       const rawPrefix = typeof req.query.path_prefix === 'string' ? req.query.path_prefix : undefined;
       const prefixAbs = resolveScopePrefix(folderDir, rawPrefix);
       if (prefixAbs === false) return res.status(400).json({ error: 'path_prefix must be a folder-relative subfolder' });
@@ -382,20 +385,6 @@ export function mount(app: express.Express): void {
       sendError(res, err);
     }
   });
-}
-
-/** Validates a `types` request value into search categories. Absent →
- *  empty list (no filter); any unknown entry → null (caller 400s). */
-function parseSearchTypes(raw: unknown): SearchTypeCategory[] | null {
-  if (raw == null) return [];
-  if (!Array.isArray(raw)) return null;
-  const out: SearchTypeCategory[] = [];
-  for (const entry of raw) {
-    const value = typeof entry === 'string' ? entry.trim() : entry;
-    if (!isSearchTypeCategory(value)) return null;
-    out.push(value);
-  }
-  return out;
 }
 
 /** Resolves a folder-relative subfolder scope to an absolute directory

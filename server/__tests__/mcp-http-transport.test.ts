@@ -29,10 +29,16 @@ const callRequest = {
 
 test('HTTP transport enforces the live Settings token and preserves the shared tool surface', async () => {
   let token = 'a'.repeat(64);
+  let searchInput: Record<string, unknown> | undefined;
+  let stdioSearchBody: Record<string, unknown> | undefined;
   const app = express();
   app.use(express.json());
   app.get('/api/library/info', (_req, res) => {
     res.json({ folder_home: '/tmp', folders: [] });
+  });
+  app.post('/api/library/search', (req, res) => {
+    stdioSearchBody = req.body as Record<string, unknown>;
+    res.json({ hits: [] });
   });
 
   const server = app.listen(0, '127.0.0.1');
@@ -46,7 +52,17 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   mount(app, {
     webBase: base,
     getToken: () => token,
-    operations: createLibraryOperations({ getLibraryInfo: () => ({ folder_home: '/tmp', folders: [] }) }),
+    operations: createLibraryOperations({
+      getLibraryInfo: () => ({ folder_home: '/tmp', folders: [] }),
+      retrieval: { search: async (input) => {
+        searchInput = input as unknown as Record<string, unknown>;
+        return {
+          evidence: [],
+          availability: { state: 'ready' as const },
+          truncated: false,
+        };
+      } },
+    }),
   });
 
   try {
@@ -60,14 +76,53 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     const listed = await post(base, listRequest, token);
     assert.equal(listed.status, 200);
     assert.equal(listed.body.result.tools.length, 9);
+    const searchTool = listed.body.result.tools.find((tool: any) => tool.name === 'search_library');
+    assert.deepEqual(
+      searchTool.inputSchema.properties.types.items.enum,
+      ['notes', 'pdf', 'image', 'docx', 'audio'],
+    );
 
     const called = await post(base, callRequest, token);
     assert.equal(called.status, 200);
+
+    const searched = await post(base, {
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'search_library',
+        arguments: { query: 'paper', types: ['pdf', 'docx'] },
+      },
+    }, token);
+    assert.equal(searched.status, 200);
+    assert.deepEqual(searchInput?.types, ['pdf', 'docx']);
+    assert.deepEqual(
+      JSON.parse(searched.body.result.content[0].text).types,
+      ['pdf', 'docx'],
+    );
+
+    const invalidSearch = await post(base, {
+      jsonrpc: '2.0',
+      id: 5,
+      method: 'tools/call',
+      params: {
+        name: 'search_library',
+        arguments: { query: 'paper', types: ['spreadsheet'] },
+      },
+    }, token);
+    assert.equal(invalidSearch.status, 200);
+    assert.equal(invalidSearch.body.result.isError, true);
+    assert.match(invalidSearch.body.result.content[0].text, /unknown search type/i);
 
     const stdio = await runStdio(address.port);
     assert.equal(stdio.initialized.result.serverInfo.name, 'stashbase');
     assert.deepEqual(stdio.listed.result.tools, listed.body.result.tools);
     assert.deepEqual(stdio.called.result, called.body.result);
+    assert.deepEqual(stdioSearchBody?.types, ['image']);
+    assert.deepEqual(
+      JSON.parse(stdio.searched.result.content[0].text).types,
+      ['image'],
+    );
 
     token = 'b'.repeat(64);
     assert.equal((await post(base, initRequest, 'a'.repeat(64))).status, 401);
@@ -146,7 +201,12 @@ async function waitForJsonLines(read: () => string, count: number): Promise<any[
   throw new Error(`timed out waiting for ${count} JSON lines: ${read()}`);
 }
 
-async function runStdio(port: number): Promise<{ initialized: any; listed: any; called: any }> {
+async function runStdio(port: number): Promise<{
+  initialized: any;
+  listed: any;
+  called: any;
+  searched: any;
+}> {
   const { spawn } = await import('node:child_process');
   const entry = fileURLToPath(new URL('../../mcp/server.ts', import.meta.url));
   const child = spawn(process.execPath, ['--import', 'tsx', entry, '--port', String(port)], {
@@ -160,10 +220,24 @@ async function runStdio(port: number): Promise<{ initialized: any; listed: any; 
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
   child.stdin.write(`${JSON.stringify(listRequest)}\n`);
   child.stdin.write(`${JSON.stringify(callRequest)}\n`);
+  child.stdin.write(`${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 4,
+    method: 'tools/call',
+    params: {
+      name: 'search_library',
+      arguments: { query: 'diagram', types: ['image'] },
+    },
+  })}\n`);
 
   try {
-    const lines = await waitForJsonLines(() => stdout, 3);
-    return { initialized: lines[0], listed: lines[1], called: lines[2] };
+    const lines = await waitForJsonLines(() => stdout, 4);
+    return {
+      initialized: lines[0],
+      listed: lines[1],
+      called: lines[2],
+      searched: lines[3],
+    };
   } catch (err) {
     throw new Error(`${err instanceof Error ? err.message : String(err)}\nstderr: ${stderr}`);
   } finally {

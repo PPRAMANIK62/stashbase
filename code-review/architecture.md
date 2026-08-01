@@ -109,7 +109,11 @@ daemon adapters cross these modules. Identity, containment, migration, and proto
 
 One installation has **one library**: the set of opened folders indexed into one collection and exposed by one MCP server.
 
-MCP search defaults to the whole library. Calls can narrow scope by folder root or path prefix. The in-app search UI is scoped to the current window's folder and can narrow further to one subfolder and to file-type categories.
+MCP search defaults to the whole library. Calls can narrow scope by folder root,
+path prefix, or source file-type categories; the detailed filtering contract
+lives in [§6.2](#62-scope). The in-app search UI is scoped to the current
+window's folder and can narrow further to one subfolder and to file-type
+categories.
 
 On server boot, StashBase binds every library folder into the daemon and then reconciles them in the background. The Welcome screen also reconciles library folders with a short cooldown and polls folder status when it is idle. While a folder is actively opening, Welcome status polling and reconcile are deferred so navigation does not compete with preparation work.
 
@@ -373,9 +377,11 @@ StashBase supports two retrieval paths:
 
 ## 6.2 Scope
 
-Search defaults to the whole library for MCP callers. It can be narrowed by folder root or path prefix.
+Search defaults to the whole library for MCP callers. It can be narrowed by
+folder root, path prefix, and the same source file-type categories as app
+search.
 
-The desktop UI search is scoped to the current folder because the UI is showing one folder at a time. The Search panel can narrow further: a subfolder scope (folder-relative, resolved escape-safe against the active folder) and file-type category chips (`shared/search-types.ts` defines the `notes` / `pdf` / `image` / `docx` / `audio` vocabulary; `server/format.ts` maps categories to source extensions). Both narrowing knobs apply to semantic and keyword modes and compose. The semantic path passes the extension filter to the daemon, which over-fetches from MFS (bounded), filters hits by source suffix, and truncates back to `top_k` before returning, so filtering happens before the caller-visible top-k cut; a very sparse type can still return fewer than `top_k` hits. The keyword path restricts the ripgrep target and the derived-text walk to the scoped subtree and enabled categories. Display-path remapping is unchanged: filters act on source paths, and derived notes never surface.
+The desktop UI search is scoped to the current folder because the UI is showing one folder at a time. The Search panel can narrow further: a subfolder scope (folder-relative, resolved escape-safe against the active folder) and file-type category chips (`shared/search-types.ts` defines and validates the `notes` / `pdf` / `image` / `docx` / `audio` vocabulary; `server/format.ts` maps categories to source extensions). MCP `search_library` accepts the same categories. The app and library HTTP routes plus the shared MCP handler normalize raw values through that validator; Library Operations accepts only validated categories before reaching Retrieval. Scope and type narrowing compose. The semantic path passes the extension filter to the daemon, which over-fetches from MFS (bounded), resolves any legacy sibling-derived row to its live visible source identity, filters by that source suffix, and truncates back to `top_k` before returning. Node pushes the note and legacy-source extension vocabularies with the daemon indexing rules so this compatibility logic cannot drift from the shared format catalog. A very sparse type can still return fewer than `top_k` hits. The keyword path restricts the ripgrep target and the derived-text walk to the scoped subtree and enabled categories. Display-path remapping is unchanged: filters act on source paths, and derived notes never surface.
 
 `server/retrieval/` returns one flat list of visible-source evidence for an explicit `keyword` or `semantic` query. The source path is absolute at this seam; renderer adapters make it folder-relative while MCP retains the absolute path. A result reports `ready`, `partial`, or `unavailable` availability so an embedding-key absence is not confused with preparation or indexing work. `server/index-status.ts` owns the folder-scoped readiness snapshot behind `/api/index-status`, including semantic pending work, conversion state, durable attention records, tree versions, and index warnings. `web-src/src/store/useSearchActions.ts` mirrors that snapshot for file rows and the Search view. The readiness, caching, failure, and cancellation rules belong to [data-layer §8.2](data-layer.md#82-conversion-scheduler-and-renderer-notification).
 
@@ -402,7 +408,7 @@ StashBase does not embed an LLM. It gives AI clients retrieval tools, explicit r
 The core MCP tools are:
 
 - **`library_info()`**: returns the default folder home, opened folders, optional folder descriptions, and embedder information so a client can orient itself.
-- **`search_library(query, folder?, path_prefix?, top_k?)`**: searches the library and returns source paths, chunks, line ranges, and scores.
+- **`search_library(query, folder?, path_prefix?, types?, top_k?)`**: searches the library and returns source paths, chunks, line ranges, and scores; `types` accepts the shared source categories and is echoed in the response.
 - **`reindex(folder?)`**: reconciles disk state with the index after local files change.
 
 StashBase also exposes bounded file helpers:

@@ -14,6 +14,10 @@ import {
 } from '../library-file-access.ts';
 import { agentContextFile } from '../library-file-reader.ts';
 import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
+import {
+  parseSearchTypes,
+  SEARCH_TYPES_VALIDATION_ERROR,
+} from '../../shared/search-types.ts';
 
 export {
   normalizeLibraryFilePath,
@@ -35,15 +39,28 @@ const log = logger('routes/library-files');
 
 
 export function mount(app: express.Express, operations: LibraryOperations = createLibraryOperations()): void {
-  // Hybrid search over the whole library (optional `folder` / `path_prefix`
-  // filter). Powers MCP's `search_library`. Hidden `.md` files are remapped or
-  // dropped (same rule as /api/search) so an external client never sees
-  // an internal path.
+  // Hybrid search over the whole library (optional `folder`, `path_prefix`,
+  // and source `types` filters). Powers MCP's `search_library`. Hidden `.md`
+  // files are remapped or dropped (same rule as /api/search) so an external
+  // client never sees an internal path.
   app.post('/api/library/search', async (req, res) => {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query : '';
       const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
-      res.json(await operations.search({ query, topK, folder: req.body?.folder, pathPrefix: req.body?.path_prefix }));
+      const types = parseSearchTypes(req.body?.types);
+      if (types == null) {
+        return res.status(400).json({
+          error: SEARCH_TYPES_VALIDATION_ERROR,
+          code: 'INVALID_SEARCH_TYPES',
+        });
+      }
+      res.json(await operations.search({
+        query,
+        topK,
+        folder: req.body?.folder,
+        pathPrefix: req.body?.path_prefix,
+        types,
+      }));
     } catch (err: unknown) {
       sendError(res, err);
     }

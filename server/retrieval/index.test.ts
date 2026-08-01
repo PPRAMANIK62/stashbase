@@ -65,6 +65,25 @@ test('Retrieval preserves semantic source identity and source-safe locators', as
   }]);
 });
 
+test('Retrieval maps source categories to semantic index extension filters', async () => {
+  let extensions: string[] | undefined;
+  const retrieval = createRetrieval({
+    hasEmbeddingKey: () => true,
+    semanticSearch: async (_query, _topK, _folderRoot, _pathPrefix, requestedExtensions) => {
+      extensions = requestedExtensions;
+      return [];
+    },
+  });
+
+  await retrieval.search({
+    mode: 'semantic',
+    query: 'evidence',
+    types: ['pdf', 'docx'],
+  });
+
+  assert.deepEqual(extensions, ['.pdf', '.docx']);
+});
+
 test('Retrieval remaps scoped semantic legacy-derived hits to their visible source', async () => {
   const folderRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-retrieval-'));
   const sourcePath = path.join(folderRoot, 'paper.pdf');

@@ -13,8 +13,8 @@ as the result identity.
   or page/timestamp hint.
 - Prepared PDF, image, DOCX, and media transcript text can be evidence, but
   opening a result returns to the original source file.
-- MCP offers orientation, search, read, reindex, and bounded file operations
-  to authorized Agent clients.
+- MCP offers orientation, search with the same file-type categories as the
+  app, read, reindex, and bounded file operations to authorized Agent clients.
 
 ## Experience Contract
 
