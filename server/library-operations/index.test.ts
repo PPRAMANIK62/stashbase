@@ -33,6 +33,28 @@ test('Library Operations keeps search result identity at the visible source path
   );
 });
 
+test('Library Operations forwards file-type filters to Retrieval', async () => {
+  let searchInput: Record<string, unknown> | undefined;
+  const operations = createLibraryOperations({
+    getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
+    retrieval: { search: async (input) => {
+      searchInput = input as unknown as Record<string, unknown>;
+      return {
+        evidence: [],
+        availability: { state: 'ready' as const },
+        truncated: false,
+      };
+    } },
+  });
+
+  await operations.search({
+    query: 'paper',
+    types: ['pdf', 'docx'],
+  });
+
+  assert.deepEqual(searchInput?.types, ['pdf', 'docx']);
+});
+
 test('Library Operations validates mutation fields before an adapter can write', async () => {
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),

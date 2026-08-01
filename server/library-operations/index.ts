@@ -26,6 +26,7 @@ import { createRetrieval, semanticHitsFromEvidence, type Retrieval } from '../re
 import type { IndexStatus, SearchHit } from '../indexer.ts';
 import type { SyncResult } from '../sync.ts';
 import { LibraryOperationError } from './errors.ts';
+import type { SearchTypeCategory } from '../../shared/search-types.ts';
 
 export { LibraryOperationError } from './errors.ts';
 
@@ -33,7 +34,13 @@ const log = logger('library-operations');
 
 export interface LibraryOperations {
   info(): Promise<LibraryInfo>;
-  search(input: { query: string; topK?: number; folder?: string; pathPrefix?: string }): Promise<{ hits: SearchHit[] }>;
+  search(input: {
+    query: string;
+    topK?: number;
+    folder?: string;
+    pathPrefix?: string;
+    types?: readonly SearchTypeCategory[];
+  }): Promise<{ hits: SearchHit[] }>;
   reindex(input?: { folder?: string }): Promise<unknown>;
   listDirectory(path?: unknown): Promise<unknown>;
   read(path: unknown): Promise<unknown>;
@@ -79,12 +86,17 @@ export function createLibraryOperations(
   return {
     info: async () => deps.getLibraryInfo(),
 
-    async search({ query, topK = 8, folder, pathPrefix }) {
+    async search({ query, topK = 8, folder, pathPrefix, types }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
       const scope = normalizeLibrarySearchScope(folder, pathPrefix);
       const result = await deps.retrieval.search({
-        mode: 'semantic', query: trimmedQuery, topK, folderRoot: scope.folderRoot, pathPrefix: scope.pathPrefix,
+        mode: 'semantic',
+        query: trimmedQuery,
+        topK,
+        folderRoot: scope.folderRoot,
+        pathPrefix: scope.pathPrefix,
+        types,
       });
       if (result.availability.state === 'unavailable') {
         throw routeError(

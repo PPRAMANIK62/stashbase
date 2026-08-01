@@ -65,7 +65,9 @@ name to keep the protocol surface small).
                           Scoped by root prefix when given.
 - ``close_store``       — release Milvus Lite's flock so the server can
                           delete or move the DB file.
-- ``set_rules {excluded_dirs?, max_indexable_bytes?, include_extensions?}``
+- ``set_rules {excluded_dirs?, max_indexable_bytes?, include_extensions?,
+  note_extensions?, legacy_derived_source_extensions?,
+  legacy_extensionless_derived_source_extensions?}``
                         — receive indexing rules from Node (single source
                           of truth there); built-in constants are only the
                           fallback for an old Node. Echoes effective rules.
@@ -527,6 +529,13 @@ _RULES = {
     "excluded_dirs": set(INDEX_EXCLUDED_DIRS),
     "max_indexable_bytes": MAX_INDEXABLE_BYTES,
     "include_extensions": [".html", ".htm"],
+    "note_extensions": [".md", ".markdown", ".html", ".htm"],
+    "legacy_derived_source_extensions": [
+        ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".docx",
+    ],
+    "legacy_extensionless_derived_source_extensions": [
+        ".pdf", ".png", ".jpg", ".jpeg", ".webp",
+    ],
 }
 
 
@@ -544,10 +553,31 @@ def op_set_rules(svc: StashbaseStore, args: dict) -> dict:
         _RULES["include_extensions"] = [
             str(e) for e in args["include_extensions"] if str(e).startswith(".")
         ]
+    if isinstance(args.get("note_extensions"), list):
+        _RULES["note_extensions"] = [
+            str(e).lower() for e in args["note_extensions"]
+            if str(e).startswith(".")
+        ]
+    if isinstance(args.get("legacy_derived_source_extensions"), list):
+        _RULES["legacy_derived_source_extensions"] = [
+            str(e).lower() for e in args["legacy_derived_source_extensions"]
+            if str(e).startswith(".")
+        ]
+    if isinstance(args.get("legacy_extensionless_derived_source_extensions"), list):
+        _RULES["legacy_extensionless_derived_source_extensions"] = [
+            str(e).lower()
+            for e in args["legacy_extensionless_derived_source_extensions"]
+            if str(e).startswith(".")
+        ]
     return {
         "excluded_dirs": sorted(_RULES["excluded_dirs"]),
         "max_indexable_bytes": _RULES["max_indexable_bytes"],
         "include_extensions": _RULES["include_extensions"],
+        "note_extensions": _RULES["note_extensions"],
+        "legacy_derived_source_extensions":
+            _RULES["legacy_derived_source_extensions"],
+        "legacy_extensionless_derived_source_extensions":
+            _RULES["legacy_extensionless_derived_source_extensions"],
     }
 
 
@@ -1198,6 +1228,45 @@ def _search_extension_filter(raw) -> tuple | None:
     return exts or None
 
 
+def _visible_source_for_extension_filter(source: str) -> str | None:
+    """Resolve a legacy hidden derived-note row to its live visible source.
+
+    Current derived text is indexed directly under the source path. Older
+    indexes may still contain sibling rows such as ``.paper.pdf.md`` or
+    ``.paper.md``. Extension filtering must classify those rows as the source
+    PDF/image/DOCX before the top-k cut; an orphaned extension-bearing row is
+    dropped just as the Node display remapper drops it later.
+    """
+    normalized = source.replace("\\", "/")
+    slash = normalized.rfind("/")
+    parent = normalized[:slash + 1] if slash >= 0 else ""
+    basename = normalized[slash + 1:]
+    if not basename.startswith("."):
+        return source
+
+    lower = basename.lower()
+    note_extension = next(
+        (ext for ext in _RULES["note_extensions"] if lower.endswith(ext)),
+        None,
+    )
+    if note_extension is None:
+        return source
+
+    stem = basename[1:-len(note_extension)]
+    if not stem:
+        return source
+    legacy_extensions = tuple(_RULES["legacy_derived_source_extensions"])
+    if stem.lower().endswith(legacy_extensions):
+        candidate = f"{parent}{stem}"
+        return candidate if Path(candidate).is_file() else None
+
+    for extension in _RULES["legacy_extensionless_derived_source_extensions"]:
+        candidate = f"{parent}{stem}{extension}"
+        if Path(candidate).is_file():
+            return candidate
+    return source
+
+
 def op_search(svc: StashbaseStore, args: dict) -> dict:
     """Hybrid search in the single collection, optionally scoped to one
     ``folder``. MFS's ``hybrid_search`` already does dense + BM25 + RRF
@@ -1249,8 +1318,13 @@ def op_search(svc: StashbaseStore, args: dict) -> dict:
     for h in hits:
         if h.is_dir:
             continue
-        if extensions is not None and not h.source.lower().endswith(extensions):
-            continue
+        if extensions is not None:
+            visible_source = _visible_source_for_extension_filter(h.source)
+            if (
+                visible_source is None
+                or not visible_source.lower().endswith(extensions)
+            ):
+                continue
         out.append({
             "path": h.source,
             "chunk_index": h.chunk_index,

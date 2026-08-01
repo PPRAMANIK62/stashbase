@@ -28,6 +28,10 @@ import {
 import { lowerExtractorPriority, spawnOptionsForExtractor, terminateExtractorTree } from './extractor-process.ts';
 import type { ConversionProgress } from './conversion-status.ts';
 import { logger } from './log.ts';
+import {
+  LEGACY_DERIVED_SOURCE_EXTENSIONS,
+  LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS,
+} from '../shared/file-formats.ts';
 
 const log = logger('pdf');
 const STDERR_TAIL_BYTES = 64 * 1024;
@@ -183,8 +187,10 @@ function originalForLegacyDerivedNote(noteRel: string, baseAbs: string): string 
   // source with the same stem exists next to them; this keeps ordinary
   // user-authored hidden notes visible unless they collide with a legacy
   // converter artifact.
-  if (/\.(pdf|png|jpe?g|webp)$/i.test(stem)) return null;
-  for (const ext of ['pdf', 'png', 'jpg', 'jpeg', 'webp']) {
+  if (LEGACY_DERIVED_SOURCE_EXTENSIONS.some(
+    (extension) => stem.toLowerCase().endsWith(`.${extension}`),
+  )) return null;
+  for (const ext of LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS) {
     const sourceBase = `${stem}.${ext}`;
     const source = dir === '.' ? sourceBase : `${dir}/${sourceBase}`;
     if (existsSync(path.join(baseAbs, source))) return source;

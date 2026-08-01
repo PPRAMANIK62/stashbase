@@ -28,9 +28,15 @@ export function createHttpLibraryOperations(webBase: string, windowId?: string):
   const pathQuery = (path: unknown) => `path=${encodeURIComponent(typeof path === 'string' ? path : '')}`;
   return {
     info: () => json(`${webBase}/api/library/info`, { headers: headers() }),
-    search: ({ query, topK, folder, pathPrefix }) => json(`${webBase}/api/library/search`, {
+    search: ({ query, topK, folder, pathPrefix, types }) => json(`${webBase}/api/library/search`, {
       method: 'POST', headers: headers({ 'content-type': 'application/json' }),
-      body: JSON.stringify({ query, top_k: topK, ...(folder ? { folder } : {}), ...(pathPrefix ? { path_prefix: pathPrefix } : {}) }),
+      body: JSON.stringify({
+        query,
+        top_k: topK,
+        ...(folder ? { folder } : {}),
+        ...(pathPrefix ? { path_prefix: pathPrefix } : {}),
+        ...(types !== undefined ? { types } : {}),
+      }),
     }),
     reindex: ({ folder } = {}) => json(`${webBase}/api/library/reindex`, {
       method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify(folder ? { folder } : {}),

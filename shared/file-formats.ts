@@ -38,6 +38,13 @@ export const LEGACY_DERIVED_SOURCE_EXTENSIONS = [
   ...DOCX_EXTENSIONS,
 ] as const;
 
+/** Older converters also emitted extension-less sibling names such as
+ * `.paper.md`, but only for PDF and image sources. */
+export const LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS = [
+  ...PDF_EXTENSIONS,
+  ...IMAGE_SOURCE_EXTENSIONS,
+] as const;
+
 export const VIEWABLE_FILE_EXTENSIONS = [
   ...NOTE_EXTENSIONS,
   ...CONVERTIBLE_SOURCE_EXTENSIONS,

@@ -21,7 +21,11 @@ import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:chil
 import { INDEX_EXCLUDED_DIRS, MAX_INDEXABLE_BYTES } from './indexable.ts';
 import { NOTE_EXTS } from './format.ts';
 import { EventEmitter } from 'node:events';
-import { CONVERTIBLE_SOURCE_EXTENSIONS } from '../shared/file-formats.ts';
+import {
+  CONVERTIBLE_SOURCE_EXTENSIONS,
+  LEGACY_DERIVED_SOURCE_EXTENSIONS,
+  LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS,
+} from '../shared/file-formats.ts';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -251,6 +255,11 @@ class MfsDaemon extends EventEmitter {
             // them; the markdown content is pushed by the conversion path.
             ...CONVERTIBLE_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
           ],
+          note_extensions: NOTE_EXTS.map((extension) => `.${extension}`),
+          legacy_derived_source_extensions:
+            LEGACY_DERIVED_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
+          legacy_extensionless_derived_source_extensions:
+            LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
         }).catch((err) => log.warn(
           `set_rules failed — daemon binary may predate rule push, indexing rules can drift ` +
             `(rebuild with: pnpm build:python-sidecar): ${(err as Error).message}`,

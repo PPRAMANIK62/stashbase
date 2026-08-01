@@ -18,6 +18,11 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { LibraryOperations } from '../server/library-operations/index.ts';
 import { createHttpLibraryOperations } from './library-operations-http.ts';
+import {
+  parseSearchTypes,
+  SEARCH_TYPE_CATEGORIES,
+  SEARCH_TYPES_VALIDATION_ERROR,
+} from '../shared/search-types.ts';
 
 export interface LibraryMcpServerOptions {
   /** App server base URL, e.g. `http://127.0.0.1:8090`. */
@@ -87,14 +92,32 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
       if (!query) throw new Error('`query` is required');
       const pathPrefix = typeof args.path_prefix === 'string' && args.path_prefix.trim()
         ? args.path_prefix.trim() : undefined;
+      const parsedTypes = parseSearchTypes(args.types);
+      if (parsedTypes == null) {
+        return {
+          content: [{ type: 'text', text: SEARCH_TYPES_VALIDATION_ERROR }],
+          isError: true,
+        };
+      }
+      const types = args.types == null ? undefined : parsedTypes;
       const k = Math.max(
         1,
         Math.min(MAX_TOP_K, Math.floor(typeof args.top_k === 'number' ? args.top_k : DEFAULT_TOP_K)),
       );
-      const searchResult = await operations.search({ query, topK: k, folder, pathPrefix });
+      const searchResult = await operations.search({ query, topK: k, folder, pathPrefix, types });
       const hits = annotateSearchHitsForMcp(searchResult.hits);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ query, folder: folder ?? null, path_prefix: pathPrefix ?? null, top_k: k, hits }, null, 2) }],
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            query,
+            folder: folder ?? null,
+            path_prefix: pathPrefix ?? null,
+            types: types ?? null,
+            top_k: k,
+            hits,
+          }, null, 2),
+        }],
       };
     }
 
@@ -316,6 +339,14 @@ const BUILTIN_TOOLS = [
               'Optional absolute path prefix (e.g. "/Users/me/notes/transcripts/"). Overrides ' +
               '`folder` when present — pass either, not both. Matches any chunk whose source ' +
               'starts with the prefix.',
+          },
+          types: {
+            type: 'array',
+            description:
+              'Optional source file categories. Omit for all types; combine categories to ' +
+              'search notes, PDFs, images, DOCX files, or audio/video transcripts.',
+            items: { type: 'string', enum: [...SEARCH_TYPE_CATEGORIES] },
+            uniqueItems: true,
           },
           top_k: {
             type: 'integer',

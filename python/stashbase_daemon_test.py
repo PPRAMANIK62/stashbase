@@ -383,6 +383,78 @@ class StashbaseDaemonTests(unittest.TestCase):
             # Filtered call over-fetches; unfiltered keeps the caller's k.
             self.assertEqual(requested, [50, 2])
 
+    def test_search_filters_legacy_derived_rows_by_visible_source_type(self) -> None:
+        hit = lambda source: types.SimpleNamespace(
+            is_dir=False, source=source, chunk_index=0, chunk_text="t",
+            start_line=1, end_line=2, content_type="text", score=1.0, metadata={},
+        )
+
+        class FakeStore:
+            def __init__(self, hits) -> None:  # noqa: ANN001
+                self.hits = hits
+
+            def is_empty(self):
+                return False
+
+            def hybrid_search(self, _qvec, _query, path_filter, top_k):  # noqa: ANN001
+                return self.hits[:top_k]
+
+        class FakeEmbedder:
+            def embed(self, texts):  # noqa: ANN001
+                return [[0.0] for _ in texts]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "paper.pdf"
+            legacy = root / ".paper.pdf.md"
+            image_source = root / "scan.png"
+            extensionless_legacy = root / ".scan.md"
+            docx_source = root / "report.docx"
+            hidden_note = root / ".report.md"
+            note = root / "note.md"
+            source.write_text("pdf", encoding="utf-8")
+            legacy.write_text("legacy derived text", encoding="utf-8")
+            image_source.write_text("image", encoding="utf-8")
+            extensionless_legacy.write_text(
+                "extensionless legacy text", encoding="utf-8",
+            )
+            docx_source.write_text("docx", encoding="utf-8")
+            hidden_note.write_text("user hidden note", encoding="utf-8")
+            note.write_text("ordinary note", encoding="utf-8")
+
+            svc = stashbase_daemon.StashbaseStore(tmp)
+            svc.stores = lambda: [(
+                None,
+                FakeEmbedder(),
+                FakeStore([
+                    hit(legacy.as_posix()),
+                    hit(extensionless_legacy.as_posix()),
+                    hit(hidden_note.as_posix()),
+                    hit(note.as_posix()),
+                ]),
+            )]
+
+            pdf = stashbase_daemon.op_search(svc, {
+                "query": "q", "top_k": 10, "extensions": [".pdf"],
+            })
+            self.assertEqual([h["path"] for h in pdf["hits"]], [legacy.as_posix()])
+
+            images = stashbase_daemon.op_search(svc, {
+                "query": "q", "top_k": 10, "extensions": [".png"],
+            })
+            self.assertEqual(
+                [h["path"] for h in images["hits"]],
+                [extensionless_legacy.as_posix()],
+            )
+
+            notes = stashbase_daemon.op_search(svc, {
+                "query": "q", "top_k": 10, "extensions": [".md"],
+            })
+            self.assertEqual(
+                [h["path"] for h in notes["hits"]],
+                [hidden_note.as_posix(), note.as_posix()],
+            )
+
     def test_search_extension_filter_normalizes_suffixes(self) -> None:
         f = stashbase_daemon._search_extension_filter
         self.assertEqual(f([".md", ".PDF"]), (".md", ".pdf"))
