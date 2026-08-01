@@ -7,6 +7,8 @@ to migrate them into a StashBase-specific storage model.
 ## Current
 
 - Users can add, create, open, and remove local folders from the library.
+- Each Library folder offers an explicit file or folder import flow; imports
+  always show their destination before StashBase writes anything.
 - Each window centres on one current folder, with its own file tree, document
   tabs, search state, and Agent panel.
 - Users can open multiple windows from the application menu or a folder action
