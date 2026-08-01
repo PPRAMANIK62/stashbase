@@ -433,6 +433,14 @@ Representative failure:
 Current contract:
 
 - Opening a folder establishes renderer folder identity and hides Welcome before `/api/files`, file order, or `/api/index-status` finish.
+- Every index-status response is bound to the folder-open generation that
+  started it. A response from before a newer Open, New, Home, removal, or
+  window-context transition cannot advance that generation or reset the newer
+  renderer state.
+- Active-folder polling issues no request while the renderer has no active
+  folder or another folder transition is in progress. Welcome owns explicit
+  per-library-folder status polling, including while the user remains on the
+  library screen.
 - Folder-switch side effects such as index sync and Agent-session cleanup are scheduled after the open-folder response, so they cannot turn navigation into a failed request.
 - Folder-sync queue cleanup consumes rejected promises; an indexer or daemon startup failure records an index warning but must not exit the Node server.
 - Going Home resets renderer folder state and shows Welcome before the server-side close request returns.
