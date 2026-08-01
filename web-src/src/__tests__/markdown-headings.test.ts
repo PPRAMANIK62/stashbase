@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { activeHeadingId, extractDocumentHeadings, outlineModeForWidth } from '../milkdown/headings';
+import { activeHeadingId, extractDocumentHeadings, MIN_DOCKED_OUTLINE_WIDTH, outlineModeForWidth, outlineScrollTop } from '../milkdown/headings';
 
 test('outline headings keep hierarchy and stable duplicate Unicode targets', () => {
   const nodes = [
@@ -23,8 +23,10 @@ test('live heading changes, active tracking, responsive modes, and large documen
   const updated = extractDocumentHeadings(documentWith('After'));
   assert.deepEqual(updated, [{ id: 'after', level: 2, text: 'After' }]);
   assert.equal(activeHeadingId(updated, [{ id: 'after', top: 20 }], 30), 'after');
-  assert.equal(outlineModeForWidth(1080), 'docked');
-  assert.equal(outlineModeForWidth(1079), 'overlay');
+  assert.equal(outlineModeForWidth(MIN_DOCKED_OUTLINE_WIDTH), 'docked');
+  assert.equal(outlineModeForWidth(MIN_DOCKED_OUTLINE_WIDTH - 1), 'overlay');
+  assert.equal(outlineScrollTop(100, 300, 180), 380);
+  assert.equal(outlineScrollTop(100, 0, 20), 0);
   const large = { descendants: (visit: (node: { type: { name: string }; attrs: { level: number }; textContent: string }) => void) => { for (let i = 0; i < 2000; i++) visit({ type: { name: 'heading' }, attrs: { level: 1 }, textContent: `Section ${i}` }); } };
   assert.equal(extractDocumentHeadings(large).length, 2000);
 });

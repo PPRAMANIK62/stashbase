@@ -23,7 +23,8 @@ import { applyChunkHighlight } from './previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '../milkdown/paths';
 import { splitLeadingYamlFrontmatter } from '../milkdown/frontmatter';
 import { resolveLocalImageUrl } from '../milkdown/imageUrls';
-import { activeHeadingId, extractDocumentHeadings, headingSlug, outlineModeForWidth, type DocumentHeading, type OutlineMode } from '../milkdown/headings';
+import { activeHeadingId, extractDocumentHeadings, headingSlug, outlineModeForWidth, outlineScrollTop, type DocumentHeading, type OutlineMode } from '../milkdown/headings';
+import { DocumentOutline } from './DocumentOutline';
 
 /**
  * The single Markdown surface. CrepeBuilder provides Milkdown's maintained
@@ -48,6 +49,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
   const activeRef = useRef(active);
   const observedIncomingRef = useRef<string | null>(null);
   const suppressChangeRef = useRef(false);
+  const refreshHeadingsRef = useRef<() => void>(() => {});
   const frontmatterRef = useRef(splitLeadingYamlFrontmatter(content).source);
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [activeHeading, setActiveHeading] = useState<string | null>(null);
@@ -85,6 +87,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
       .addFeature(latex);
 
     const updateHeadings = () => setHeadings(extractDocumentHeadings(editor.editor.action((ctx) => ctx.get(editorViewCtx).state.doc)));
+    refreshHeadingsRef.current = updateHeadings;
     editor.setReadonly(readOnlyRef.current);
     editor.on((listener) => listener.markdownUpdated((_ctx, markdown, previous) => {
       if (!suppressChangeRef.current && markdown !== previous) actions.scheduleSave();
@@ -109,6 +112,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
     return () => {
       disposed = true;
       if (editorRef.current === editor) editorRef.current = null;
+      if (refreshHeadingsRef.current === updateHeadings) refreshHeadingsRef.current = () => {};
       if (!readOnlyRef.current && activeRef.current) actions.registerEditor(null);
       void editor.destroy();
     };
@@ -142,7 +146,12 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
     if (previousIncoming === content || current === incoming.body) return;
     suppressChangeRef.current = true;
     editor.editor.action(replaceAll(incoming.body));
-    queueMicrotask(() => { suppressChangeRef.current = false; });
+    queueMicrotask(() => {
+      suppressChangeRef.current = false;
+      // Read the new ProseMirror state, but do not decorate the editor DOM
+      // inside the transaction. The headings effect handles DOM IDs later.
+      refreshHeadingsRef.current();
+    });
   }, [content]);
 
   useEffect(() => {
@@ -181,17 +190,6 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
     updateActive();
     return () => host.removeEventListener('scroll', updateActive, true);
   }, [headings, outlineOpen]);
-
-  useEffect(() => {
-    if (!outlineOpen) return;
-    const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      onCloseOutline();
-    };
-    window.addEventListener('keydown', dismissOnEscape);
-    return () => window.removeEventListener('keydown', dismissOnEscape);
-  }, [onCloseOutline, outlineOpen]);
 
   useEffect(() => {
     const controller = makeIframeFindController(
@@ -261,7 +259,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
   }, [actions, content, pendingHighlight]);
 
   return <div className="markdown-document" hidden={!active}>
-    {outlineOpen && <DocumentOutline headings={headings} activeId={activeHeading} mode={outlineMode} onClose={onCloseOutline} onSelect={(id) => hostRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' })} />}
+    {outlineOpen && <DocumentOutline headings={headings} activeId={activeHeading} mode={outlineMode} onClose={onCloseOutline} onSelect={(id) => scrollOutlineToHeading(hostRef.current, id)} />}
     <div ref={hostRef} className={'crepe-shell' + (readOnly ? ' crepe-readonly' : '')} data-tab-id={tabId} />
   </div>;
 }
@@ -332,18 +330,13 @@ function applyHeadingIds(host: HTMLElement, entries?: DocumentHeading[]) {
   });
 }
 
-function DocumentOutline({ headings, activeId, mode, onClose, onSelect }: { headings: DocumentHeading[]; activeId: string | null; mode: OutlineMode; onClose: () => void; onSelect: (id: string) => void }) {
-  let emptyCount = 0;
-  return <nav id="document-outline" className={`document-outline ${mode}`} aria-label="Document outline">
-    <div className="document-outline-head">
-      <div><span className="document-outline-title">Outline</span><span className="document-outline-count">{headings.length} {headings.length === 1 ? 'heading' : 'headings'}</span></div>
-      <button type="button" className="document-outline-close" aria-label="Close outline" title="Close outline (Escape)" onClick={onClose}>×</button>
-    </div>
-    <div className="document-outline-list">
-      {headings.length === 0 ? <p className="document-outline-empty">No headings</p> : headings.map((heading) => {
-        const label = heading.text || `Untitled section ${++emptyCount}`;
-        return <button key={heading.id} type="button" className="document-outline-entry" style={{ paddingLeft: `${8 + (heading.level - 1) * 12}px` }} title={label} aria-label={`Heading level ${heading.level}: ${label}`} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading.id)}><span className="document-outline-level">H{heading.level}</span><span className="document-outline-label">{label}</span></button>;
-      })}
-    </div>
-  </nav>;
+function scrollOutlineToHeading(host: HTMLElement | null, id: string) {
+  const heading = host?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+  if (!host || !heading) return;
+  const top = outlineScrollTop(
+    host.getBoundingClientRect().top,
+    host.scrollTop,
+    heading.getBoundingClientRect().top,
+  );
+  host.scrollTo({ top, behavior: 'smooth' });
 }

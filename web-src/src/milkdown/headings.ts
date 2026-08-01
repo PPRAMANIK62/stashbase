@@ -1,6 +1,14 @@
 export type DocumentHeading = { id: string; level: number; text: string };
 export type OutlineMode = 'docked' | 'overlay';
 
+// These values match the centered Markdown measure and outline geometry in
+// mainpane.css. Dock only when the left gutter can contain the panel plus its
+// edge gap without covering the document.
+const DOCUMENT_MAX_WIDTH = 820;
+const OUTLINE_WIDTH = 196;
+const OUTLINE_EDGE_GAP = 8;
+export const MIN_DOCKED_OUTLINE_WIDTH = DOCUMENT_MAX_WIDTH + 2 * (OUTLINE_WIDTH + OUTLINE_EDGE_GAP);
+
 type ProseMirrorDocument = { descendants: (visit: (node: { type: { name: string }; attrs: { level?: number }; textContent: string }) => void) => void };
 
 export function headingSlug(text: string): string {
@@ -23,7 +31,12 @@ export function extractDocumentHeadings(doc: ProseMirrorDocument): DocumentHeadi
   return headings;
 }
 
-export const outlineModeForWidth = (mainPaneWidth: number): OutlineMode => mainPaneWidth >= 1080 ? 'docked' : 'overlay';
+export const outlineModeForWidth = (mainPaneWidth: number): OutlineMode => mainPaneWidth >= MIN_DOCKED_OUTLINE_WIDTH ? 'docked' : 'overlay';
+
+/** Compute the document-scroller offset for an outline selection. */
+export function outlineScrollTop(scrollerTop: number, scrollTop: number, headingTop: number): number {
+  return Math.max(0, scrollTop + headingTop - scrollerTop);
+}
 
 export function activeHeadingId(entries: DocumentHeading[], positions: Array<{ id: string; top: number }>, threshold: number): string | null {
   let active = entries[0]?.id ?? null;

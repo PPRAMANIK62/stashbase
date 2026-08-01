@@ -53,7 +53,9 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   same-note and cross-note anchor navigation.
 - Document outlines read heading nodes from the retained ProseMirror document.
   Keep live extraction and active-section tracking outside transaction-time DOM
-  decoration; outline IDs must share the anchor slug allocation.
+  decoration; outline IDs must share the anchor slug allocation. Outline
+  selection scrolls the Crepe document surface directly rather than using a
+  generic ancestor-scrolling call.
 - Relative images resolve below the opened note's `/asset/` base. Image upload
   writes through the existing folder-scoped upload endpoint, then returns an
   encoded note-relative Markdown path; rendering resolves it only in the DOM.
