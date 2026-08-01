@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type InputHTMLAttributes } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   api,
   errorMessage,
@@ -82,7 +82,6 @@ export function Welcome() {
   const { state, actions, dispatch } = useApp();
   const [folderHome, setFolderHome] = useState('');
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
-  const [importDestination, setImportDestination] = useState<string | null>(null);
   const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
   const [folderIndexSnapshots, setFolderIndexSnapshots] = useState<Record<string, FolderIndexSnapshot>>({});
   const [openingFolder, setOpeningFolder] = useState<{ path: string; name: string } | null>(null);
@@ -415,11 +414,6 @@ export function Welcome() {
           minWidth={190}
           items={[
             {
-              label: 'Import files or folder…',
-              detail: 'Choose files to add here',
-              onSelect: () => setImportDestination(folderMenu.path),
-            },
-            {
               label: 'Open in New Window',
               onSelect: () => { void openRecentInNewWindow(folderMenu.path); },
             },
@@ -463,118 +457,7 @@ export function Welcome() {
           </div>
         </ModalShell>
       )}
-      {importDestination && (
-        <ImportToFolderModal
-          folders={state.recent}
-          initialDestination={importDestination}
-          onClose={() => setImportDestination(null)}
-        />
-      )}
     </div>
-  );
-}
-
-function ImportToFolderModal({
-  folders,
-  initialDestination,
-  onClose,
-}: {
-  folders: { path: string }[];
-  initialDestination: string;
-  onClose: () => void;
-}) {
-  const { actions, dispatch } = useApp();
-  const [destination, setDestination] = useState(initialDestination);
-  const [busy, setBusy] = useState(false);
-  const filesInput = useRef<HTMLInputElement>(null);
-  const folderInput = useRef<HTMLInputElement>(null);
-
-  async function importSelection(files: FileList | null) {
-    if (!files || files.length === 0 || busy) return;
-    const items = Array.from(files).map((file) => ({
-      file,
-      relPath: file.webkitRelativePath || file.name,
-    }));
-    setBusy(true);
-    try {
-      // Upload ownership stays with the selected Library folder. Opening it
-      // first keeps the existing folder-scoped upload route and its access
-      // checks as the only write path.
-      await actions.openFolder(destination);
-      const saved = await actions.upload(items, '');
-      if (saved) onClose();
-    } catch (err) {
-      dispatch({ type: 'WELCOME_ERROR', error: errorMessage(err) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <ModalShell onCancel={busy ? () => { /* wait for the import */ } : onClose} top>
-      <h3>Import files or folder</h3>
-      <p className="modal-hint">
-        Choose where the imported content belongs. StashBase writes only to the selected Library folder.
-      </p>
-      <label className="welcome-import-destination">
-        <span>Destination</span>
-        <select
-          value={destination}
-          disabled={busy}
-          onChange={(event) => setDestination(event.target.value)}
-        >
-          {folders.map((folder) => (
-            <option key={folder.path} value={folder.path}>{folder.path}</option>
-          ))}
-        </select>
-      </label>
-      <div className="welcome-import-actions">
-        <button
-          type="button"
-          className="modal-btn primary"
-          disabled={busy}
-          onClick={() => filesInput.current?.click()}
-        >
-          Choose files
-        </button>
-        <button
-          type="button"
-          className="modal-btn"
-          disabled={busy}
-          onClick={() => folderInput.current?.click()}
-        >
-          Choose folder
-        </button>
-      </div>
-      <input
-        ref={filesInput}
-        className="welcome-import-input"
-        type="file"
-        multiple
-        onChange={(event) => {
-          void importSelection(event.currentTarget.files);
-          event.currentTarget.value = '';
-        }}
-      />
-      <input
-        ref={folderInput}
-        className="welcome-import-input"
-        type="file"
-        multiple
-        // Chromium (including Electron) preserves relative paths for a
-        // directory selection through this standard de-facto attribute.
-        {...({ webkitdirectory: '' } as InputHTMLAttributes<HTMLInputElement>)}
-        onChange={(event) => {
-          void importSelection(event.currentTarget.files);
-          event.currentTarget.value = '';
-        }}
-      />
-      <div className="modal-actions">
-        <button type="button" className="modal-btn" disabled={busy} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    </ModalShell>
   );
 }
 

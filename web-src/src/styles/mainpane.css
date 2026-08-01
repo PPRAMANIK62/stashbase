@@ -1726,38 +1726,6 @@
       font-weight: 600;
     }
 
-    .welcome-import-destination {
-      display: grid;
-      gap: 7px;
-      margin-top: 18px;
-      color: var(--muted);
-      font-size: calc(12px * var(--ui-scale));
-      font-weight: 600;
-    }
-
-    .welcome-import-destination select {
-      width: 100%;
-      min-height: 36px;
-      padding: 7px 9px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--surface-raised);
-      color: var(--fg);
-      font: inherit;
-      font-weight: 400;
-    }
-
-    .welcome-import-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 18px;
-    }
-
-    .welcome-import-input {
-      display: none;
-    }
-
-
     .welcome-mcp {
       display: flex;
       align-items: center;
