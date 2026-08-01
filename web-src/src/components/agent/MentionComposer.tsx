@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef } from 'react';
 import { Compartment, EditorState, RangeSet, RangeValue, StateEffect, StateField } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, invertedEffects } from '@codemirror/commands';
 import { Decoration, type DecorationSet, EditorView, keymap, placeholder, WidgetType } from '@codemirror/view';
+import { mentionKeyAction } from './mentionKeys';
 import { handleComposerPaste } from './clipboardAttachments';
 
 const MENTION = '\uFFFC';
@@ -228,6 +229,24 @@ export function MentionComposer({
       const view = viewRef.current;
       return view && mentionOpenRef.current ? mentionQuery(view.state) : null;
     };
+    const runMentionKey = (key: string) => {
+      const action = mentionKeyAction(key, Boolean(currentMentionQuery()));
+      if (action === 'next') {
+        onMentionNavigateRef.current(1);
+        return true;
+      }
+      if (action === 'previous') {
+        onMentionNavigateRef.current(-1);
+        return true;
+      }
+      if (action === 'accept') return onMentionAcceptRef.current();
+      if (action === 'dismiss') {
+        mentionDismissedRef.current = true;
+        onMentionDismissRef.current();
+        return true;
+      }
+      return false;
+    };
     const view = new EditorView({
       state: EditorState.create({
         extensions: [
@@ -257,24 +276,16 @@ export function MentionComposer({
           keymap.of([
             {
               key: 'ArrowDown',
-              run: () => {
-                if (!currentMentionQuery()) return false;
-                onMentionNavigateRef.current(1);
-                return true;
-              },
+              run: () => runMentionKey('ArrowDown'),
             },
             {
               key: 'ArrowUp',
-              run: () => {
-                if (!currentMentionQuery()) return false;
-                onMentionNavigateRef.current(-1);
-                return true;
-              },
+              run: () => runMentionKey('ArrowUp'),
             },
             {
               key: 'Enter',
               run: () => {
-                if (currentMentionQuery() && onMentionAcceptRef.current()) return true;
+                if (runMentionKey('Enter')) return true;
                 if (disabledRef.current) return true;
                 submit();
                 return true;
@@ -282,17 +293,12 @@ export function MentionComposer({
             },
             {
               key: 'Tab',
-              run: () => currentMentionQuery() ? onMentionAcceptRef.current() : false,
+              run: () => runMentionKey('Tab'),
             },
             { key: 'Shift-Tab', run: () => onShiftTabRef.current() },
             {
               key: 'Escape',
-              run: () => {
-                if (!currentMentionQuery()) return false;
-                mentionDismissedRef.current = true;
-                onMentionDismissRef.current();
-                return true;
-              },
+              run: () => runMentionKey('Escape'),
             },
             { key: 'Backspace', run: (view) => deleteMentionSelection(view, true) },
             { key: 'Delete', run: (view) => deleteMentionSelection(view, false) },
