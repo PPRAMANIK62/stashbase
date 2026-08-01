@@ -1,5 +1,5 @@
 import { useCallback, useRef, type MutableRefObject } from 'react';
-import { api } from '../api';
+import { api, type FolderState } from '../api';
 import { folderRefsEqual, isAbsoluteFolderRef } from '../folderPath';
 import { createFolderMutationQueue } from '../folderTransition';
 import type { EditorHandle } from './actionTypes';
@@ -11,8 +11,10 @@ type Toast = (message: string, opts?: ToastOptions) => string;
 
 interface FolderActionRefs {
   state: MutableRefObject<State>;
+  folderContextPath: MutableRefObject<string>;
   editor: MutableRefObject<EditorHandle | null>;
   openGeneration: MutableRefObject<number>;
+  openingFolderGeneration: MutableRefObject<number | null>;
   syncGeneration: MutableRefObject<number>;
   searchGeneration: MutableRefObject<number>;
   lastTreeVersion: MutableRefObject<number>;
@@ -28,6 +30,55 @@ interface FolderActionDependencies {
   markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   toast: Toast;
+}
+
+export async function runFolderOpenTransition({
+  openGeneration,
+  openingFolderGeneration,
+  request,
+  commitNavigation,
+  afterNavigation,
+}: {
+  openGeneration: MutableRefObject<number>;
+  openingFolderGeneration: MutableRefObject<number | null>;
+  request: () => Promise<FolderState>;
+  commitNavigation: (current: NonNullable<FolderState['current']>, generation: number) => void;
+  afterNavigation: (
+    current: NonNullable<FolderState['current']>,
+    generation: number,
+  ) => Promise<void>;
+}): Promise<void> {
+  const generation = ++openGeneration.current;
+  openingFolderGeneration.current = generation;
+  try {
+    const opened = await request();
+    if (!opened.current || generation !== openGeneration.current) return;
+    commitNavigation(opened.current, generation);
+    if (openingFolderGeneration.current === generation) {
+      openingFolderGeneration.current = null;
+    }
+    await afterNavigation(opened.current, generation);
+  } finally {
+    if (openingFolderGeneration.current === generation) {
+      openingFolderGeneration.current = null;
+    }
+  }
+}
+
+export function commitOpenedFolderNavigation(
+  dispatch: Dispatch,
+  folderContextPath: MutableRefObject<string>,
+  expected: NonNullable<FolderState['current']>,
+) {
+  folderContextPath.current = expected.path;
+  dispatch({
+    type: 'FILES_LOADED',
+    files: [],
+    folders: [],
+    folder: expected.name,
+    folderPath: expected.path,
+  });
+  dispatch({ type: 'WELCOME_HIDE' });
 }
 
 function libraryStatusFromActiveFolder(state: State): LibraryFolderStatus {
@@ -46,11 +97,13 @@ export function useFolderActions(
 ) {
   const {
     editor,
+    folderContextPath,
     importConversionGrace,
     importIndexGrace,
     keyBackfillGrace,
     lastTreeVersion,
     openGeneration,
+    openingFolderGeneration,
     searchGeneration,
     state,
     syncGeneration,
@@ -80,6 +133,7 @@ export function useFolderActions(
     importConversionGrace.current.clear();
     importIndexGrace.current.clear();
     keyBackfillGrace.current.clear();
+    folderContextPath.current = '';
     dispatch({ type: 'TABS_RESET' });
     dispatch({ type: 'CHAT_TABS_RESET' });
     dispatch({ type: 'SIDEBAR_VIEW', view: 'files' });
@@ -97,6 +151,7 @@ export function useFolderActions(
     dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
   }, [
     dispatch,
+    folderContextPath,
     importConversionGrace,
     importIndexGrace,
     keyBackfillGrace,
@@ -106,23 +161,28 @@ export function useFolderActions(
     syncGeneration,
   ]);
 
-  const finishOpenFolder = useCallback(async (
+  const commitFolderOpenNavigation = useCallback((
+    expected: { path: string; name: string },
+    generation: number,
+  ) => {
+    if (generation !== openGeneration.current) return false;
+    resetFolderScopedState();
+    dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
+    commitOpenedFolderNavigation(dispatch, folderContextPath, expected);
+    return true;
+  }, [
+    dispatch,
+    folderContextPath,
+    openGeneration,
+    resetFolderScopedState,
+  ]);
+
+  const finishOpenFolderBackground = useCallback(async (
     expected: { path: string; name: string },
     generation: number,
     opts: { optimisticPendingOnOpen?: boolean } = {},
   ) => {
-    if (generation !== openGeneration.current) return;
     const expectedFolderPath = expected.path;
-    resetFolderScopedState();
-    dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
-    dispatch({
-      type: 'FILES_LOADED',
-      files: [],
-      folders: [],
-      folder: expected.name,
-      folderPath: expectedFolderPath,
-    });
-    dispatch({ type: 'WELCOME_HIDE' });
     const [files] = await Promise.all([
       loadFiles(expectedFolderPath),
       loadFileOrder(expectedFolderPath),
@@ -142,34 +202,59 @@ export function useFolderActions(
       void refreshIndexState(expectedFolderPath);
     }, 500);
   }, [
-    dispatch,
     loadFileOrder,
     loadFiles,
     markVisibleFilesPendingForSearch,
     openGeneration,
     refreshIndexState,
-    resetFolderScopedState,
     state,
   ]);
+
+  const finishOpenFolder = useCallback(async (
+    expected: { path: string; name: string },
+    generation: number,
+    opts: { optimisticPendingOnOpen?: boolean } = {},
+  ) => {
+    if (!commitFolderOpenNavigation(expected, generation)) return;
+    await finishOpenFolderBackground(expected, generation, opts);
+  }, [commitFolderOpenNavigation, finishOpenFolderBackground]);
 
   const refreshRecent = useCallback(async () => {
     const result = await api.getFolder();
     dispatch({ type: 'RECENT_LOADED', recent: result.recent ?? [], homeDir: result.homeDir });
   }, [dispatch]);
 
+  const performFolderOpen = useCallback(async (
+    request: () => Promise<FolderState>,
+    opts: { optimisticPendingOnOpen?: boolean } = {},
+  ) => {
+    await runFolderOpenTransition({
+      openGeneration,
+      openingFolderGeneration,
+      request,
+      commitNavigation: (current, generation) => {
+        void refreshRecent().catch((err) => {
+          console.warn('[recent] refresh after open failed:', err);
+        });
+        commitFolderOpenNavigation(current, generation);
+      },
+      afterNavigation: (current, generation) =>
+        finishOpenFolderBackground(current, generation, opts),
+    });
+  }, [
+    commitFolderOpenNavigation,
+    finishOpenFolderBackground,
+    openGeneration,
+    openingFolderGeneration,
+    refreshRecent,
+  ]);
+
   const openFolder = useCallback(async (path: string) => {
     if (editor.current && !(await flushSave())) {
       throw new Error('Current file could not be saved. Resolve the save error before switching folders.');
     }
-    const generation = ++openGeneration.current;
-    const opened = await folderMutations.run(() => api.openFolder(path));
-    const current = opened.current;
-    if (!current || generation !== openGeneration.current) return;
-    void refreshRecent().catch((err) => {
-      console.warn('[recent] refresh after open failed:', err);
-    });
-    await finishOpenFolder(current, generation);
-  }, [editor, finishOpenFolder, flushSave, folderMutations, openGeneration, refreshRecent]);
+    await performFolderOpen(() => folderMutations.run(() => api.openFolder(path)));
+  }, [editor, flushSave, folderMutations, performFolderOpen]);
 
   const openFolderByName = useCallback(async (
     name: string,
@@ -178,20 +263,13 @@ export function useFolderActions(
     if (editor.current && !(await flushSave())) {
       throw new Error('Current file could not be saved. Resolve the save error before switching folders.');
     }
-    const generation = ++openGeneration.current;
-    const opened = await folderMutations.run(() => api.openFolderByName(name, {
+    await performFolderOpen(() => folderMutations.run(() => api.openFolderByName(name, {
       create: opts?.create,
       exclusiveCreate: opts?.exclusiveCreate,
-    }));
-    const current = opened.current;
-    if (!current || generation !== openGeneration.current) return;
-    void refreshRecent().catch((err) => {
-      console.warn('[recent] refresh after open failed:', err);
-    });
-    await finishOpenFolder(current, generation, {
+    })), {
       optimisticPendingOnOpen: opts?.optimisticPendingOnOpen,
     });
-  }, [editor, finishOpenFolder, flushSave, folderMutations, openGeneration, refreshRecent]);
+  }, [editor, flushSave, folderMutations, performFolderOpen]);
 
   const goHome = useCallback(async () => {
     if (editor.current && !(await flushSave())) return false;

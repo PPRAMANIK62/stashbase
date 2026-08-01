@@ -16,6 +16,7 @@ import {
 import type { ToastOptions } from './useFeedbackActions';
 import { hasAggregatePreparationFailure } from './fileReadiness';
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
+import { runIndexStatusRequest } from './indexStatusRequest';
 
 const SEMANTIC_SEARCH_CANDIDATES = 30;
 const POLL_PENDING_MS = 1500;
@@ -26,10 +27,12 @@ type Toast = (message: string, opts?: ToastOptions) => string;
 
 interface SearchActionRefs {
   stateRef: MutableRefObject<State>;
+  folderContextPath: MutableRefObject<string>;
   pollTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   searchGeneration: MutableRefObject<number>;
   syncGeneration: MutableRefObject<number>;
   openGeneration: MutableRefObject<number>;
+  openingFolderGeneration: MutableRefObject<number | null>;
   lastTreeVersion: MutableRefObject<number>;
   importConversionGrace: MutableRefObject<Map<string, number>>;
   importIndexGrace: MutableRefObject<Map<string, number>>;
@@ -52,11 +55,13 @@ export function useSearchActions(
   dispatch: Dispatch,
 ) {
   const {
+    folderContextPath,
     importConversionGrace,
     importIndexGrace,
     keyBackfillGrace,
     lastTreeVersion,
     openGeneration: openGen,
+    openingFolderGeneration,
     pollTimer,
     searchGeneration: searchGen,
     stateRef,
@@ -91,17 +96,25 @@ export function useSearchActions(
       pollTimer.current = setTimeout(() => { void refreshIndexState(); }, delay);
     };
     const explicitFolderPath = folderPathOverride?.trim() || undefined;
-    const folderPathAtStart = explicitFolderPath ?? stateRef.current.folderPath;
+    const activeFolderPathAtStart = folderContextPath.current;
+    const folderPathAtStart = explicitFolderPath ?? activeFolderPathAtStart;
     const openGenAtStart = openGen.current;
-    const stillTargetFolder = () =>
-      stateRef.current.folderPath === folderPathAtStart
-      || (explicitFolderPath != null && openGenAtStart === openGen.current);
     try {
-      const s = await api.indexStatus(folderPathAtStart || undefined);
-      if (!stillTargetFolder()) {
+      const outcome = await runIndexStatusRequest({
+        activeFolderPath: activeFolderPathAtStart,
+        activeFolderTransitionInProgress: openingFolderGeneration.current != null,
+        explicitFolderPath,
+        openGenerationAtStart: openGenAtStart,
+        getCurrentFolderPath: () => stateRef.current.folderPath,
+        getCurrentOpenGeneration: () => openGen.current,
+        request: (folderPath) => api.indexStatus(folderPath),
+      });
+      if (outcome.kind === 'stale' || outcome.kind === 'skipped') {
         scheduleNextPoll(nextDelay);
         return;
       }
+      if (outcome.kind === 'error') throw outcome.error;
+      const s = outcome.status;
       const indexReady = s.indexReady !== false;
       const semanticEnabled = s.semanticEnabled !== false;
       if (stateRef.current.embedderHasKey !== semanticEnabled) {
@@ -259,10 +272,6 @@ export function useSearchActions(
       }
       nextDelay = busy ? POLL_PENDING_MS : POLL_IDLE_MS;
     } catch (err) {
-      if (!stillTargetFolder()) {
-        scheduleNextPoll(nextDelay);
-        return;
-      }
       if (err instanceof ApiError && err.status === 412) {
         let latestLibrary: Awaited<ReturnType<typeof api.getFolder>> | null = null;
         if (folderPathAtStart && openGenAtStart === openGen.current) {
@@ -285,6 +294,7 @@ export function useSearchActions(
               stateRef.current.folderPath === folderPathAtStart
               && opened.current?.path
             ) {
+              folderContextPath.current = opened.current.path;
               lastTreeVersion.current = -1;
               dispatch({
                 type: 'FOLDER_CONTEXT',
@@ -305,6 +315,7 @@ export function useSearchActions(
         // bleed into the welcome / next-folder view.
         syncGen.current += 1;
         openGen.current += 1;
+        folderContextPath.current = '';
         dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
         dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
         dispatch({ type: 'BLOCKED_CONVERSIONS', paths: [] });

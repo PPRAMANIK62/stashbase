@@ -225,6 +225,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const folderContextPathRef = useRef(state.folderPath);
+  folderContextPathRef.current = state.folderPath;
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlight = useRef<Promise<boolean> | null>(null);
@@ -241,6 +243,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Opening folders is multi-step (server bind → files/order load →
   // landing file). A newer open/home action invalidates older finishers.
   const openGen = useRef(0);
+  const openingFolderGen = useRef<number | null>(null);
   // Last `treeVersion` we saw from `/api/index-status`. Any bump means
   // the watcher detected a disk change since last poll → refetch files.
   const lastTreeVersion = useRef<number>(-1);
@@ -449,10 +452,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   } = useSearchActions(
     {
       stateRef,
+      folderContextPath: folderContextPathRef,
       pollTimer,
       searchGeneration: searchGen,
       syncGeneration: syncGen,
       openGeneration: openGen,
+      openingFolderGeneration: openingFolderGen,
       lastTreeVersion,
       importConversionGrace,
       importIndexGrace,
@@ -525,8 +530,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   } = useFolderActions(
     {
       state: stateRef,
+      folderContextPath: folderContextPathRef,
       editor: editorRef,
       openGeneration: openGen,
+      openingFolderGeneration: openingFolderGen,
       syncGeneration: syncGen,
       searchGeneration: searchGen,
       lastTreeVersion,
