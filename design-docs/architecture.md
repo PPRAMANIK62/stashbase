@@ -37,7 +37,7 @@ user-visible source file.
   show different folders at the same time; those are independent UI scopes,
   not separate libraries or indexing runtimes.
 - In-app search defaults to that current folder. MCP can search the library and
-  narrow to an authorized folder or path prefix.
+  narrow to an authorized folder, path prefix, or source file-type category.
 - MCP file operations are deliberately bounded to authorized library folders;
   they are never a general filesystem interface.
 - One local runtime owns indexing state. Other processes communicate through
