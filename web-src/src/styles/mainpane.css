@@ -273,13 +273,24 @@
       --crepe-shadow-2: 0 18px 44px rgba(var(--shadow-color), .28), 0 4px 12px rgba(var(--shadow-color), .18);
     }
     .markdown-document { position: relative; min-width: 0; min-height: 0; height: 100%; }
-    .document-outline { position: absolute; z-index: 6; top: 12px; width: 170px; max-height: calc(100% - 24px); overflow: auto; padding: 6px; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--bg) 94%, transparent); box-sizing: border-box; }
+    .document-outline { position: absolute; z-index: 6; top: 12px; display: flex; flex-direction: column; width: 196px; max-height: calc(100% - 24px); overflow: hidden; border: 1px solid color-mix(in srgb, var(--border) 85%, var(--fg)); border-radius: 9px; background: color-mix(in srgb, var(--surface-raised) 92%, var(--bg)); box-shadow: 0 12px 28px rgba(var(--shadow-color), .18); box-sizing: border-box; }
     .document-outline.docked { left: max(8px, calc(50% - 600px)); }
-    .document-outline.overlay { left: 8px; width: min(260px, calc(100% - 16px)); box-shadow: 0 8px 24px rgba(var(--shadow-color), .2); }
-    .document-outline-entry { display: block; width: 100%; overflow: hidden; border: 0; border-radius: 4px; background: none; color: var(--fg); font: inherit; font-size: calc(12px * var(--ui-scale)); line-height: 1.5; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-    .document-outline-entry:hover, .document-outline-entry[aria-current="location"] { background: var(--hover); }
-    .document-outline-empty { margin: 4px 2px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
-    .outline-toggle { height: 28px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--fg); font: inherit; font-size: calc(12px * var(--ui-scale)); cursor: pointer; }
+    .document-outline.overlay { left: 8px; width: min(276px, calc(100% - 16px)); }
+    .document-outline-head { display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 0 8px 0 11px; border-bottom: 1px solid var(--border); }
+    .document-outline-title { display: block; color: var(--fg); font-size: calc(12px * var(--ui-scale)); font-weight: 650; }
+    .document-outline-count { display: block; margin-top: 1px; color: var(--muted); font-size: calc(10.5px * var(--ui-scale)); }
+    .document-outline-close { width: 24px; height: 24px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font: inherit; font-size: 19px; line-height: 1; cursor: pointer; }
+    .document-outline-close:hover, .document-outline-close:focus-visible { background: var(--hover); color: var(--fg); }
+    .document-outline-list { overflow: auto; padding: 5px; }
+    .document-outline-entry { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 27px; overflow: hidden; border: 0; border-radius: 5px; background: none; color: var(--fg); font: inherit; font-size: calc(12px * var(--ui-scale)); line-height: 1.4; text-align: left; cursor: pointer; }
+    .document-outline-level { flex: 0 0 18px; color: var(--muted); font-size: calc(9.5px * var(--ui-scale)); font-weight: 650; }
+    .document-outline-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .document-outline-entry:hover, .document-outline-entry:focus-visible { background: var(--hover); outline: none; }
+    .document-outline-entry[aria-current="location"] { background: color-mix(in srgb, var(--accent) 17%, var(--bg)); color: var(--fg); box-shadow: inset 2px 0 var(--accent); }
+    .document-outline-entry[aria-current="location"] .document-outline-level { color: var(--accent); }
+    .document-outline-empty { margin: 7px 6px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
+    .outline-toggle { height: 28px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; font-size: calc(12px * var(--ui-scale)); cursor: pointer; }
+    .outline-toggle:hover, .outline-toggle[aria-expanded="true"] { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); color: var(--accent); }
 
     .crepe-shell .milkdown { min-height: 100%; background: transparent; color: var(--fg); }
     .crepe-shell .ProseMirror {

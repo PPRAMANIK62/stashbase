@@ -30,13 +30,14 @@ import { activeHeadingId, extractDocumentHeadings, headingSlug, outlineModeForWi
  * authoring features, while StashBase keeps ownership of persistence, local
  * asset paths, navigation and the application-level find experience.
  */
-export function CrepeDocument({ tabId, name, content, readOnly, active, outlineOpen }: {
+export function CrepeDocument({ tabId, name, content, readOnly, active, outlineOpen, onCloseOutline }: {
   tabId: string;
   name: string;
   content: string;
   readOnly: boolean;
   active: boolean;
   outlineOpen: boolean;
+  onCloseOutline: () => void;
 }) {
   const { actions, activeTab } = useApp();
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -182,6 +183,17 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
   }, [headings, outlineOpen]);
 
   useEffect(() => {
+    if (!outlineOpen) return;
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onCloseOutline();
+    };
+    window.addEventListener('keydown', dismissOnEscape);
+    return () => window.removeEventListener('keydown', dismissOnEscape);
+  }, [onCloseOutline, outlineOpen]);
+
+  useEffect(() => {
     const controller = makeIframeFindController(
       () => hostRef.current?.ownerDocument ?? null,
       () => hostRef.current?.ownerDocument.defaultView ?? null,
@@ -249,7 +261,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
   }, [actions, content, pendingHighlight]);
 
   return <div className="markdown-document" hidden={!active}>
-    {outlineOpen && <DocumentOutline headings={headings} activeId={activeHeading} mode={outlineMode} onSelect={(id) => hostRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' })} />}
+    {outlineOpen && <DocumentOutline headings={headings} activeId={activeHeading} mode={outlineMode} onClose={onCloseOutline} onSelect={(id) => hostRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' })} />}
     <div ref={hostRef} className={'crepe-shell' + (readOnly ? ' crepe-readonly' : '')} data-tab-id={tabId} />
   </div>;
 }
@@ -320,12 +332,18 @@ function applyHeadingIds(host: HTMLElement, entries?: DocumentHeading[]) {
   });
 }
 
-function DocumentOutline({ headings, activeId, mode, onSelect }: { headings: DocumentHeading[]; activeId: string | null; mode: OutlineMode; onSelect: (id: string) => void }) {
+function DocumentOutline({ headings, activeId, mode, onClose, onSelect }: { headings: DocumentHeading[]; activeId: string | null; mode: OutlineMode; onClose: () => void; onSelect: (id: string) => void }) {
   let emptyCount = 0;
   return <nav id="document-outline" className={`document-outline ${mode}`} aria-label="Document outline">
-    {headings.length === 0 ? <p className="document-outline-empty">No headings</p> : headings.map((heading) => {
-      const label = heading.text || `Untitled section ${++emptyCount}`;
-      return <button key={heading.id} type="button" className="document-outline-entry" style={{ paddingLeft: `${8 + (heading.level - 1) * 12}px` }} title={label} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading.id)}>{label}</button>;
-    })}
+    <div className="document-outline-head">
+      <div><span className="document-outline-title">Outline</span><span className="document-outline-count">{headings.length} {headings.length === 1 ? 'heading' : 'headings'}</span></div>
+      <button type="button" className="document-outline-close" aria-label="Close outline" title="Close outline (Escape)" onClick={onClose}>×</button>
+    </div>
+    <div className="document-outline-list">
+      {headings.length === 0 ? <p className="document-outline-empty">No headings</p> : headings.map((heading) => {
+        const label = heading.text || `Untitled section ${++emptyCount}`;
+        return <button key={heading.id} type="button" className="document-outline-entry" style={{ paddingLeft: `${8 + (heading.level - 1) * 12}px` }} title={label} aria-label={`Heading level ${heading.level}: ${label}`} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading.id)}><span className="document-outline-level">H{heading.level}</span><span className="document-outline-label">{label}</span></button>;
+      })}
+    </div>
   </nav>;
 }

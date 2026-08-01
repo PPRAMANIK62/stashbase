@@ -67,6 +67,7 @@ export function MainPane() {
                 readOnly={!editMode}
                 active
                 outlineOpen={outlineOpen}
+                onCloseOutline={() => setOutlineOpen(false)}
               />
             </Suspense>
           </LazyLoadBoundary>
