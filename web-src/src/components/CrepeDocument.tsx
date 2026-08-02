@@ -148,7 +148,10 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       () => hostRef.current?.ownerDocument ?? null,
       () => hostRef.current?.ownerDocument.defaultView ?? null,
       () => hostRef.current?.querySelector<HTMLElement>('.ProseMirror') ?? null,
-      () => hostRef.current,
+      // Milkdown owns the document's scrollport. The surrounding shell fills
+      // the pane but does not scroll, so Find must target `.milkdown` to bring
+      // an off-screen current match into view.
+      () => hostRef.current?.querySelector<HTMLElement>('.milkdown') ?? null,
     );
     actions.registerFindController(controller);
     return () => actions.registerFindController(null);

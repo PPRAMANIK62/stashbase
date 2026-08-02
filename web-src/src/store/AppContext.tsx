@@ -1,8 +1,7 @@
 /** React Context composition for the renderer.
  *
- * Pure state lives in `state.ts`; domain hooks own the async action
- * implementations. This module wires their shared refs into one stable
- * `AppActions` surface and owns window-level lifecycle effects.
+ * Pure state lives in `state.ts`. Shell-owned interaction hooks are composed
+ * here; active-folder orchestration lives in `useActiveFolderWorkspace.ts`.
  */
 import {
   createContext,
@@ -17,8 +16,6 @@ import {
 import {
   api,
   ApiError,
-  encodePath,
-  getWindowId,
 } from '../api';
 import {
   getActiveTab,
@@ -33,19 +30,9 @@ import {
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 import type { AgentKind } from '../agentCatalog';
 import type { EditorHandle, FindController } from './actionTypes';
-import { useDocumentActions } from './useDocumentActions';
 import { useFeedbackActions } from './useFeedbackActions';
-import { useFileActions } from './useFileActions';
 import { useFindActions } from './useFindActions';
-import { useFolderActions } from './useFolderActions';
-import { useSearchActions } from './useSearchActions';
-
-interface ElectronLifecycleBridge {
-  onPrepareContextRelease?: (
-    handler: (reason: string) => Promise<boolean>,
-  ) => (() => void);
-  onFolderRemoved?: (handler: (folder: string) => void) => (() => void);
-}
+import { useActiveFolderWorkspace } from './useActiveFolderWorkspace';
 
 // Re-export the state types from a single barrel so consumers that
 // import from `'../store/AppContext'` keep working. The Provider
@@ -415,44 +402,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // An inactive binary tab can miss a watcher refresh while another tab is
-  // visible. Re-stat it whenever it becomes active so binary viewers
-  // never reuse source bytes from before an external replacement.
-  const versionRefreshTab = getActiveTab(state);
-  const activeBinaryName = versionRefreshTab?.file
-    && (versionRefreshTab.file.format === 'pdf'
-      || versionRefreshTab.file.format === 'image'
-      || versionRefreshTab.file.format === 'docx'
-      || versionRefreshTab.file.format === 'audio')
-    ? versionRefreshTab.file.name
-    : null;
-  const activeBinaryTabId = activeBinaryName ? versionRefreshTab?.id ?? null : null;
-  useEffect(() => {
-    if (!activeBinaryName || !activeBinaryTabId) return;
-    const tabId = activeBinaryTabId;
-    const folderPathAtStart = state.folderPath;
-    void api.statFile(activeBinaryName).then((stat) => {
-      if (stateRef.current.folderPath !== folderPathAtStart) return;
-      const latest = getActiveTab(stateRef.current);
-      if (latest?.id !== tabId || latest.file?.name !== activeBinaryName) return;
-      if (latest.file.version !== stat.version) {
-        dispatch({ type: 'FILE_PATCH', patch: { version: stat.version } });
-      }
-    }).catch(() => {
-      // The tree/sidebar refresh owns deletion and error presentation.
-    });
-  }, [activeBinaryName, activeBinaryTabId, state.folderPath]);
-
-  const {
-    dismissIndexWarning,
-    markVisibleFilesPendingForSearch,
-    refreshIndexState,
-    runSearch,
-    runSync,
-  } = useSearchActions(
+  const workspace = useActiveFolderWorkspace(
     {
-      stateRef,
+      state: stateRef,
       folderContextPath: folderContextPathRef,
+      editor: editorRef,
+      saveTimer,
+      saveInFlight,
       pollTimer,
       searchGeneration: searchGen,
       syncGeneration: syncGen,
@@ -464,122 +420,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
       keyBackfillGrace,
     },
     {
+      state,
+      dispatch,
       loadFiles,
       loadFilesFromServer,
+      loadFileOrder,
+      setFolderOrder,
       refreshActiveTabFromDisk,
-      toast,
-    },
-    dispatch,
-  );
-
-  const {
-    activateTab,
-    closeActiveTab,
-    closeTab,
-    consumePendingHighlight,
-    consumePendingScroll,
-    flushSave,
-    navigateTo,
-    newTab,
-    openInNewTab,
-    registerEditor,
-    scheduleSave,
-    selectFile,
-    selectFileWithHighlight,
-    toggleEditMode,
-  } = useDocumentActions(
-    { state: stateRef, editor: editorRef, saveTimer, saveInFlight },
-    { loadFiles, refreshIndexState, toast, primeFind },
-    dispatch,
-  );
-  const {
-    deleteFile,
-    deleteFolder,
-    moveFile,
-    newFolder,
-    newNote,
-    renameFile,
-    renameFolder,
-    upload,
-  } = useFileActions(
-    {
-      stateRef,
-      saveTimer,
-      importConversionGrace,
-      importIndexGrace,
-    },
-    {
       askCascadeForRename,
       askConfirm,
-      flushSave,
-      loadFiles,
-      openInNewTab,
-      refreshIndexState,
       toast,
+      primeFind,
     },
-    dispatch,
   );
-
-  const {
-    bootstrap,
-    goHome,
-    handleFolderRemoved,
-    openFolder,
-    openFolderByName,
-    prepareForFolderRemoval,
-  } = useFolderActions(
-    {
-      state: stateRef,
-      folderContextPath: folderContextPathRef,
-      editor: editorRef,
-      openGeneration: openGen,
-      openingFolderGeneration: openingFolderGen,
-      syncGeneration: syncGen,
-      searchGeneration: searchGen,
-      lastTreeVersion,
-      importConversionGrace,
-      importIndexGrace,
-      keyBackfillGrace,
-    },
-    {
-      flushSave,
-      loadFiles,
-      loadFileOrder,
-      markVisibleFilesPendingForSearch,
-      refreshIndexState,
-      toast,
-    },
-    dispatch,
-  );
-
-  useEffect(() => {
-    const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
-    return bridge?.onPrepareContextRelease?.(async (reason) => {
-      const folderAtStart = stateRef.current.folderPath;
-      const saved = await flushSave();
-      if (saved && reason === 'folder-removal' && folderAtStart) {
-        prepareForFolderRemoval(folderAtStart);
-      }
-      return saved;
-    });
-  }, [flushSave, prepareForFolderRemoval]);
-
-  useEffect(() => {
-    const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
-    return bridge?.onFolderRemoved?.(handleFolderRemoved);
-  }, [handleFolderRemoved]);
 
   const actions = useMemo<AppActions>(() => ({
-    bootstrap, openFolder, openFolderByName, goHome,
-    loadFiles, markVisibleFilesPendingForSearch, refreshIndexState, runSync, runSearch, setFolderOrder,
-    dismissIndexWarning,
-    selectFile, selectFileWithHighlight, openInNewTab, newTab, closeTab, closeActiveTab, activateTab,
-    navigateTo, consumePendingScroll,
-    consumePendingHighlight,
+    bootstrap: workspace.bootstrap, openFolder: workspace.openFolder, openFolderByName: workspace.openFolderByName, goHome: workspace.goHome,
+    loadFiles: workspace.loadFiles, markVisibleFilesPendingForSearch: workspace.markVisibleFilesPendingForSearch,
+    refreshIndexState: workspace.refreshIndexState, runSync: workspace.runSync, runSearch: workspace.runSearch,
+    setFolderOrder: workspace.setFolderOrder, dismissIndexWarning: workspace.dismissIndexWarning,
+    selectFile: workspace.selectFile, selectFileWithHighlight: workspace.selectFileWithHighlight,
+    openInNewTab: workspace.openInNewTab, newTab: workspace.newTab, closeTab: workspace.closeTab,
+    closeActiveTab: workspace.closeActiveTab, activateTab: workspace.activateTab,
+    navigateTo: workspace.navigateTo, consumePendingScroll: workspace.consumePendingScroll,
+    consumePendingHighlight: workspace.consumePendingHighlight,
     resolveCascadePrompt,
     alert: showAlert, confirm: askConfirm, resolveModal,
     toast, dismissToast, clearToasts,
-    toggleEditMode,
+    toggleEditMode: workspace.toggleEditMode,
     openAgent: (agent) => {
       const current = stateRef.current;
       const hasOpenTab = current.chatTabs.some((tab) => tab.agent === agent);
@@ -589,96 +457,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         tab: hasOpenTab ? undefined : makeChatTab(agent, current.chatTabs),
       });
     },
-    newNote, newFolder, deleteFile, deleteFolder,
-    renameFile, renameFolder, moveFile, upload,
-    scheduleSave, flushSave,
-    registerEditor,
+    newNote: workspace.newNote, newFolder: workspace.newFolder, deleteFile: workspace.deleteFile, deleteFolder: workspace.deleteFolder,
+    renameFile: workspace.renameFile, renameFolder: workspace.renameFolder, moveFile: workspace.moveFile, upload: workspace.upload,
+    scheduleSave: workspace.scheduleSave, flushSave: workspace.flushSave,
+    registerEditor: workspace.registerEditor,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   }), [
-    bootstrap, openFolder, openFolderByName, goHome,
-    loadFiles, markVisibleFilesPendingForSearch, refreshIndexState, runSync, runSearch, setFolderOrder,
-    dismissIndexWarning,
-    selectFile, selectFileWithHighlight, openInNewTab, newTab, closeTab, closeActiveTab, activateTab,
-    navigateTo, consumePendingScroll,
-    consumePendingHighlight,
+    workspace,
     resolveCascadePrompt,
     showAlert, askConfirm, resolveModal, toast, dismissToast, clearToasts,
-    toggleEditMode,
-    newNote, newFolder, deleteFile, deleteFolder,
-    renameFile, renameFolder, moveFile, upload,
-    scheduleSave, flushSave,
-    registerEditor,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   ]);
 
-  // Bootstrap + start polling on first mount.
-  useEffect(() => {
-    void actions.bootstrap();
-    void actions.refreshIndexState();
-    return () => {
-      if (pollTimer.current) clearTimeout(pollTimer.current);
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Reconcile on window focus — the replacement for the old fs.watch
-  // layer. External edits made while StashBase wasn't focused (vim, git
-  // checkout, scripts) fold in the moment the user comes back; while the
-  // app IS focused, in-app and agent writes index on their own write
-  // paths, so nothing is lost by not watching. Throttled so rapid
-  // focus/blur cycles don't stack syncs; results surface through the
-  // regular index-status poll (treeVersion bumps server-side).
-  useEffect(() => {
-    let lastFocusSync = 0;
-    function onFocus() {
-      const focusFolder = stateRef.current.folderPath;
-      if (!focusFolder) return;
-      const now = Date.now();
-      if (now - lastFocusSync < 5000) return;
-      lastFocusSync = now;
-      void api.sync(focusFolder)
-        .catch(() => { /* surfaced by the next status poll */ })
-        .finally(() => { void refreshIndexState(); });
-    }
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [refreshIndexState]);
-
-  // Best-effort flush before unload. `sendBeacon` keeps the POST alive
-  // past page teardown.
-  useEffect(() => {
-    const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
-    if (typeof bridge?.onPrepareContextRelease === 'function') return;
-    function onUnload() {
-      const cur = getActiveTab(stateRef.current)?.file ?? null;
-      const h = editorRef.current;
-      const liveValue = h?.getValue();
-      if (cur && h && liveValue !== undefined && liveValue !== cur.content) {
-        if (saveTimer.current !== null) {
-          clearTimeout(saveTimer.current);
-          saveTimer.current = null;
-        }
-        try {
-          const qs = `?windowId=${encodeURIComponent(getWindowId())}`;
-          const endpoint = `/api/files/${encodePath(cur.name)}${qs}`;
-          navigator.sendBeacon?.(
-            endpoint,
-            new Blob(
-              [JSON.stringify({ content: liveValue, ...(cur.version ? { baseVersion: cur.version } : {}) })],
-              { type: 'application/json' },
-            ),
-          );
-        } catch { /* swallow */ }
-      }
-    }
-    window.addEventListener('beforeunload', onUnload);
-    return () => window.removeEventListener('beforeunload', onUnload);
-  }, []);
 
   const value = useMemo(() => ({ state, actions, dispatch }), [state, actions]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
