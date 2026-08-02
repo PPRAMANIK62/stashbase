@@ -23,24 +23,23 @@ import { applyChunkHighlight } from './previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '../milkdown/paths';
 import { splitLeadingYamlFrontmatter } from '../milkdown/frontmatter';
 import { resolveLocalImageUrl } from '../milkdown/imageUrls';
-import { activeHeadingId, extractDocumentHeadings, headingSlug, outlineModeForWidth, outlineScrollTop, type DocumentHeading, type OutlineMode } from '../milkdown/headings';
-import { DocumentOutline } from './DocumentOutline';
+import { activeHeadingId, extractDocumentHeadings, headingSlug, outlineScrollTop, type DocumentHeading } from '../milkdown/headings';
+import { useDocumentOutline } from './DocumentOutlineContext';
 
 /**
  * The single Markdown surface. CrepeBuilder provides Milkdown's maintained
  * authoring features, while StashBase keeps ownership of persistence, local
  * asset paths, navigation and the application-level find experience.
  */
-export function CrepeDocument({ tabId, name, content, readOnly, active, outlineOpen, onCloseOutline }: {
+export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   tabId: string;
   name: string;
   content: string;
   readOnly: boolean;
   active: boolean;
-  outlineOpen: boolean;
-  onCloseOutline: () => void;
 }) {
   const { actions, activeTab } = useApp();
+  const { publishOutline, clearOutline } = useDocumentOutline();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<CrepeBuilder | null>(null);
   const nameRef = useRef(name);
@@ -53,7 +52,6 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
   const frontmatterRef = useRef(splitLeadingYamlFrontmatter(content).source);
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [activeHeading, setActiveHeading] = useState<string | null>(null);
-  const [outlineMode, setOutlineMode] = useState<OutlineMode>('overlay');
   nameRef.current = name;
   contentRef.current = content;
   readOnlyRef.current = readOnly;
@@ -171,25 +169,26 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const updateMode = () => setOutlineMode(outlineModeForWidth(host.clientWidth));
-    const observer = new ResizeObserver(updateMode);
-    observer.observe(host);
-    updateMode();
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host || !outlineOpen) return;
+    const scroller = documentScroller(host);
     const updateActive = () => {
-      const threshold = host.getBoundingClientRect().top + 12;
+      const threshold = scroller.getBoundingClientRect().top + 16;
       const positions = Array.from(host.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')).map((heading, index) => ({ id: heading.id || headings[index]?.id || '', top: heading.getBoundingClientRect().top }));
       setActiveHeading(activeHeadingId(headings, positions, threshold));
     };
-    host.addEventListener('scroll', updateActive, true);
+    scroller.addEventListener('scroll', updateActive, { passive: true });
     updateActive();
-    return () => host.removeEventListener('scroll', updateActive, true);
-  }, [headings, outlineOpen]);
+    return () => scroller.removeEventListener('scroll', updateActive);
+  }, [headings]);
+
+  useEffect(() => {
+    publishOutline({
+      headings,
+      activeId: activeHeading,
+      onSelect: (id) => scrollOutlineToHeading(hostRef.current, id),
+    });
+  }, [activeHeading, headings, publishOutline]);
+
+  useEffect(() => () => clearOutline(), [clearOutline]);
 
   useEffect(() => {
     const controller = makeIframeFindController(
@@ -258,10 +257,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, outlineO
     if (applyChunkHighlight(host.ownerDocument, pendingHighlight.chunkText, host)) actions.consumePendingHighlight();
   }, [actions, content, pendingHighlight]);
 
-  return <div className="markdown-document" hidden={!active}>
-    {outlineOpen && <DocumentOutline headings={headings} activeId={activeHeading} mode={outlineMode} onClose={onCloseOutline} onSelect={(id) => scrollOutlineToHeading(hostRef.current, id)} />}
-    <div ref={hostRef} className={'crepe-shell' + (readOnly ? ' crepe-readonly' : '')} data-tab-id={tabId} />
-  </div>;
+  return <div ref={hostRef} className={'crepe-shell' + (readOnly ? ' crepe-readonly' : '')} data-tab-id={tabId} hidden={!active} />;
 }
 
 async function uploadLocalImage(file: File, noteName: string): Promise<string> {
@@ -333,10 +329,16 @@ function applyHeadingIds(host: HTMLElement, entries?: DocumentHeading[]) {
 function scrollOutlineToHeading(host: HTMLElement | null, id: string) {
   const heading = host?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
   if (!host || !heading) return;
+  const scroller = documentScroller(host);
   const top = outlineScrollTop(
-    host.getBoundingClientRect().top,
-    host.scrollTop,
+    scroller.getBoundingClientRect().top,
+    scroller.scrollTop,
     heading.getBoundingClientRect().top,
   );
-  host.scrollTo({ top, behavior: 'smooth' });
+  scroller.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+
+/** Milkdown owns the visible document scrollbar; the shell only hosts it. */
+function documentScroller(host: HTMLElement) {
+  return host.querySelector<HTMLElement>('.milkdown') ?? host;
 }

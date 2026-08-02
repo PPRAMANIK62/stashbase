@@ -1,13 +1,4 @@
 export type DocumentHeading = { id: string; level: number; text: string };
-export type OutlineMode = 'docked' | 'overlay';
-
-// These values match the centered Markdown measure and outline geometry in
-// mainpane.css. Dock only when the left gutter can contain the panel plus its
-// edge gap without covering the document.
-const DOCUMENT_MAX_WIDTH = 820;
-const OUTLINE_WIDTH = 196;
-const OUTLINE_EDGE_GAP = 8;
-export const MIN_DOCKED_OUTLINE_WIDTH = DOCUMENT_MAX_WIDTH + 2 * (OUTLINE_WIDTH + OUTLINE_EDGE_GAP);
 
 type ProseMirrorDocument = { descendants: (visit: (node: { type: { name: string }; attrs: { level?: number }; textContent: string }) => void) => void };
 
@@ -31,7 +22,44 @@ export function extractDocumentHeadings(doc: ProseMirrorDocument): DocumentHeadi
   return headings;
 }
 
-export const outlineModeForWidth = (mainPaneWidth: number): OutlineMode => mainPaneWidth >= MIN_DOCKED_OUTLINE_WIDTH ? 'docked' : 'overlay';
+/** A heading owns every following, deeper heading until the next peer or
+ * ancestor. This is the same structural rule used by editor outline trees. */
+export function outlineHasChildren(headings: DocumentHeading[], index: number): boolean {
+  return index < headings.length - 1 && headings[index + 1].level > headings[index].level;
+}
+
+/** Maps headings to their structural outline depth. Markdown permits skipped
+ * heading levels, but the sidebar should indent only one tree step per actual
+ * parent/child relationship, just like the file browser. */
+export function outlineDepth(headings: DocumentHeading[], index: number): number {
+  return outlineDepths(headings)[index] ?? 0;
+}
+
+/** Compute every tree depth together so large documents stay linear. */
+export function outlineDepths(headings: DocumentHeading[]): number[] {
+  const ancestors: number[] = [];
+  return headings.map((heading) => {
+    const level = heading.level;
+    while (ancestors.length && ancestors[ancestors.length - 1] >= level) ancestors.pop();
+    const depth = ancestors.length;
+    ancestors.push(level);
+    return depth;
+  });
+}
+
+/** Removes descendants of collapsed outline entries without changing the
+ * retained Markdown document or its heading order. */
+export function visibleOutlineHeadings(headings: DocumentHeading[], collapsed: ReadonlySet<string>): DocumentHeading[] {
+  const collapsedAncestors: number[] = [];
+  return headings.filter((heading) => {
+    while (collapsedAncestors.length && collapsedAncestors[collapsedAncestors.length - 1] >= heading.level) {
+      collapsedAncestors.pop();
+    }
+    const visible = collapsedAncestors.length === 0;
+    if (collapsed.has(heading.id)) collapsedAncestors.push(heading.level);
+    return visible;
+  });
+}
 
 /** Compute the document-scroller offset for an outline selection. */
 export function outlineScrollTop(scrollerTop: number, scrollTop: number, headingTop: number): number {

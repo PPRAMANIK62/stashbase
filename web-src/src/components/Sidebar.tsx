@@ -10,6 +10,8 @@ import {
 import { useApp } from '../store/AppContext';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
+import { DocumentOutline } from './DocumentOutline';
+import { useDocumentOutline } from './DocumentOutlineContext';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { SearchPanel } from './SearchPanel';
@@ -49,13 +51,14 @@ export function Sidebar() {
   );
 }
 
-/** The current sidebar content minus the search input — owns a
- *  VSCode-style two-tier FOLDER header (a
- *  "FOLDER" section row with the folder-actions ⋯ above the folder row:
- *  current folder name + the 4 file-action buttons), and the file tree. */
+/** The Explorer view. Files and the active Markdown document outline share
+ * this one sidebar as independently collapsible sections, like VS Code. */
 function FilesPanel() {
-  const { state, actions, dispatch } = useApp();
+  const { state, actions, dispatch, activeTab } = useApp();
+  const { outline } = useDocumentOutline();
   const [sideHeadDrop, setSideHeadDrop] = useState(false);
+  const [filesExpanded, setFilesExpanded] = useState(true);
+  const [outlineExpanded, setOutlineExpanded] = useState(true);
 
   function onSideHeadDragOver(e: DragEvent<HTMLDivElement>) {
     if (!e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes(FILE_MIME)) return;
@@ -77,72 +80,66 @@ function FilesPanel() {
   }
 
   const rootSelected = state.selectedPath === '';
+  const hasMarkdownDocument = activeTab?.file?.format === 'md';
 
   return (
     <div className="files-panel" id="sidebar-panel-files" role="tabpanel">
-      {/* VSCode-style two-tier header: a section-title row ("FOLDER" +
-          folder-actions ⋯, mirroring EXPLORER) above the folder row
-          (current folder name + file actions). */}
-      <div className="panel-section-head folder-section-head">
-        <span className="panel-section-title">FOLDER</span>
-        <div className="side-actions">
-          <FolderMenu />
-        </div>
-      </div>
-      <div
-        id="sideHead"
-        className={
-          'side-head'
-          + (sideHeadDrop ? ' drop-target' : '')
-          + (rootSelected ? ' active-root' : '')
-        }
-        onDragOver={onSideHeadDragOver}
-        onDragLeave={onSideHeadDragLeave}
-        onDrop={onSideHeadDrop}
-      >
-        <span className={'folder-title' + (state.folderCollapsed ? ' collapsed' : '')}>
-          {/* Chevron alone toggles whole-folder fold. Clicking the
-              label selects "folder root" so the next new-note / +folder
-              lands at the top level — mirrors VSCode where the
-              workspace header is itself a selectable container. */}
-          <span
-            className="folder-chev"
-            onClick={(e) => {
-              e.stopPropagation();
-              dispatch({ type: 'FOLDER_FOLD_TOGGLE' });
-            }}
-          ><ChevronDownIcon /></span>
-          <span
-            className="folder-label"
-            title={state.folder || 'notes'}
-            onClick={(e) => {
-              e.stopPropagation();
-              dispatch({ type: 'ACTIVE_FOLDER', path: '' });
-            }}
-          >{(state.folder || 'notes').toUpperCase()}</span>
-        </span>
-        <div className="side-actions">
-          <NewNoteButton />
+      <section className={'sidebar-section files-section' + (filesExpanded ? '' : ' collapsed')}>
+        <div className="panel-section-head folder-section-head">
           <button
-            className="icon-btn"
             type="button"
-            title={'New folder in ' + (state.activeFolder || (state.folder || 'folder root'))}
-            onClick={() => {
-              // Make sure the target parent is expanded so the inline
-              // input appears in view; FileTree mounts it there.
-              if (state.activeFolder) {
-                dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
-              }
-              dispatch({ type: 'NEW_FOLDER_INPUT', open: true });
-            }}
-          ><NewFolderIcon /></button>
-          <SyncButton />
-          <FolderFoldToggle />
+            className="sidebar-section-toggle"
+            aria-expanded={filesExpanded}
+            aria-controls="sidebar-files-section"
+            onClick={() => setFilesExpanded((expanded) => !expanded)}
+          ><ChevronDownIcon /><span className="panel-section-title">Files</span></button>
+          <div className="side-actions">
+            <FolderMenu />
+          </div>
         </div>
-      </div>
-      <div className={'file-list' + (state.folderCollapsed ? ' collapsed' : '')}>
-        <FileTree />
-      </div>
+        <div id="sidebar-files-section" className="sidebar-section-body">
+          <div
+            id="sideHead"
+            className={
+              'side-head'
+              + (sideHeadDrop ? ' drop-target' : '')
+              + (rootSelected ? ' active-root' : '')
+            }
+            onDragOver={onSideHeadDragOver}
+            onDragLeave={onSideHeadDragLeave}
+            onDrop={onSideHeadDrop}
+          >
+            <span className={'folder-title' + (state.folderCollapsed ? ' collapsed' : '')}>
+              <span className="folder-chev" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}><ChevronDownIcon /></span>
+              <span className="folder-label" title={state.folder || 'notes'} onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}>{(state.folder || 'notes').toUpperCase()}</span>
+            </span>
+            <div className="side-actions">
+              <NewNoteButton />
+              <button className="icon-btn" type="button" title={'New folder in ' + (state.activeFolder || (state.folder || 'folder root'))} onClick={() => {
+                if (state.activeFolder) dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
+                dispatch({ type: 'NEW_FOLDER_INPUT', open: true });
+              }}><NewFolderIcon /></button>
+              <SyncButton />
+              <FolderFoldToggle />
+            </div>
+          </div>
+          <div className={'file-list' + (state.folderCollapsed ? ' collapsed' : '')}>
+            <FileTree />
+          </div>
+        </div>
+      </section>
+      {hasMarkdownDocument && (
+        <section className={'sidebar-section outline-section' + (outlineExpanded ? '' : ' collapsed')}>
+          <div className="panel-section-head outline-section-head">
+            <button type="button" className="sidebar-section-toggle" aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
+              <ChevronDownIcon /><span className="panel-section-title">Document Outline</span><span className="sidebar-section-count">{outline.headings.length}</span>
+            </button>
+          </div>
+          <div id="sidebar-outline-section" className="sidebar-section-body">
+            <DocumentOutline headings={outline.headings} activeId={outline.activeId} onSelect={outline.onSelect} />
+          </div>
+        </section>
+      )}
     </div>
   );
 }
