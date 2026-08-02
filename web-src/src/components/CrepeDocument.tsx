@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { languages } from '@codemirror/language-data';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { replaceAll } from '@milkdown/kit/utils';
@@ -23,6 +23,8 @@ import { applyChunkHighlight } from './previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '../milkdown/paths';
 import { splitLeadingYamlFrontmatter } from '../milkdown/frontmatter';
 import { resolveLocalImageUrl } from '../milkdown/imageUrls';
+import { activeHeadingId, extractDocumentHeadings, headingSlug, outlineScrollTop, type DocumentHeading } from '../milkdown/headings';
+import { useDocumentOutline } from './DocumentOutlineContext';
 
 /**
  * The single Markdown surface. CrepeBuilder provides Milkdown's maintained
@@ -37,6 +39,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   active: boolean;
 }) {
   const { actions, activeTab } = useApp();
+  const { publishOutline, clearOutline } = useDocumentOutline();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<CrepeBuilder | null>(null);
   const nameRef = useRef(name);
@@ -45,7 +48,10 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   const activeRef = useRef(active);
   const observedIncomingRef = useRef<string | null>(null);
   const suppressChangeRef = useRef(false);
+  const refreshHeadingsRef = useRef<() => void>(() => {});
   const frontmatterRef = useRef(splitLeadingYamlFrontmatter(content).source);
+  const [headings, setHeadings] = useState<DocumentHeading[]>([]);
+  const [activeHeading, setActiveHeading] = useState<string | null>(null);
   nameRef.current = name;
   contentRef.current = content;
   readOnlyRef.current = readOnly;
@@ -78,14 +84,18 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       .addFeature(codeMirror, { languages, copyText: 'Copy code' })
       .addFeature(latex);
 
+    const updateHeadings = () => setHeadings(extractDocumentHeadings(editor.editor.action((ctx) => ctx.get(editorViewCtx).state.doc)));
+    refreshHeadingsRef.current = updateHeadings;
     editor.setReadonly(readOnlyRef.current);
     editor.on((listener) => listener.markdownUpdated((_ctx, markdown, previous) => {
       if (!suppressChangeRef.current && markdown !== previous) actions.scheduleSave();
+      updateHeadings();
     }));
     editor.create().then(() => {
       if (disposed) return;
       editorRef.current = editor;
       refreshDocumentDom(host, nameRef.current);
+      updateHeadings();
       if (!readOnlyRef.current && activeRef.current) {
         actions.registerEditor({
           getValue: () => frontmatterRef.current + editor.getMarkdown(),
@@ -100,6 +110,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     return () => {
       disposed = true;
       if (editorRef.current === editor) editorRef.current = null;
+      if (refreshHeadingsRef.current === updateHeadings) refreshHeadingsRef.current = () => {};
       if (!readOnlyRef.current && activeRef.current) actions.registerEditor(null);
       void editor.destroy();
     };
@@ -133,7 +144,12 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     if (previousIncoming === content || current === incoming.body) return;
     suppressChangeRef.current = true;
     editor.editor.action(replaceAll(incoming.body));
-    queueMicrotask(() => { suppressChangeRef.current = false; });
+    queueMicrotask(() => {
+      suppressChangeRef.current = false;
+      // Read the new ProseMirror state, but do not decorate the editor DOM
+      // inside the transaction. The headings effect handles DOM IDs later.
+      refreshHeadingsRef.current();
+    });
   }, [content]);
 
   useEffect(() => {
@@ -142,6 +158,37 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     const frame = requestAnimationFrame(() => refreshDocumentDom(host, name));
     return () => cancelAnimationFrame(frame);
   }, [content, name, readOnly]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const frame = requestAnimationFrame(() => applyHeadingIds(host, headings));
+    return () => cancelAnimationFrame(frame);
+  }, [headings]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const scroller = documentScroller(host);
+    const updateActive = () => {
+      const threshold = scroller.getBoundingClientRect().top + 16;
+      const positions = Array.from(host.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')).map((heading, index) => ({ id: heading.id || headings[index]?.id || '', top: heading.getBoundingClientRect().top }));
+      setActiveHeading(activeHeadingId(headings, positions, threshold));
+    };
+    scroller.addEventListener('scroll', updateActive, { passive: true });
+    updateActive();
+    return () => scroller.removeEventListener('scroll', updateActive);
+  }, [headings]);
+
+  useEffect(() => {
+    publishOutline({
+      headings,
+      activeId: activeHeading,
+      onSelect: (id) => scrollOutlineToHeading(hostRef.current, id),
+    });
+  }, [activeHeading, headings, publishOutline]);
+
+  useEffect(() => () => clearOutline(), [clearOutline]);
 
   useEffect(() => {
     const controller = makeIframeFindController(
@@ -268,13 +315,33 @@ function refreshDocumentDom(host: HTMLElement, name: string): void {
     quote.setAttribute('role', 'note');
     quote.setAttribute('aria-label', match[1][0] + match[1].slice(1).toLowerCase());
   }
+  applyHeadingIds(host);
+}
+
+function applyHeadingIds(host: HTMLElement, entries?: DocumentHeading[]) {
   const used = new Map<string, number>();
-  for (const heading of host.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')) {
-    const baseId = heading.textContent?.trim().toLowerCase().normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}_ -]/gu, '')
-      .trim().replace(/\s+/g, '-') || 'section';
-    const seen = used.get(baseId) ?? 0;
-    used.set(baseId, seen + 1);
-    heading.id = seen === 0 ? baseId : `${baseId}-${seen}`;
-  }
+  Array.from(host.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')).forEach((heading, index) => {
+    if (entries?.[index]) { heading.id = entries[index].id; return; }
+    const base = headingSlug(heading.textContent ?? '');
+    const seen = used.get(base) ?? 0;
+    used.set(base, seen + 1);
+    heading.id = seen === 0 ? base : `${base}-${seen}`;
+  });
+}
+
+function scrollOutlineToHeading(host: HTMLElement | null, id: string) {
+  const heading = host?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+  if (!host || !heading) return;
+  const scroller = documentScroller(host);
+  const top = outlineScrollTop(
+    scroller.getBoundingClientRect().top,
+    scroller.scrollTop,
+    heading.getBoundingClientRect().top,
+  );
+  scroller.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+
+/** Milkdown owns the visible document scrollbar; the shell only hosts it. */
+function documentScroller(host: HTMLElement) {
+  return host.querySelector<HTMLElement>('.milkdown') ?? host;
 }

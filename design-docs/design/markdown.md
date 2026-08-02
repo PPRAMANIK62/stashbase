@@ -28,6 +28,12 @@ Agent without a conversion layer becoming the product.
   states in both light and dark themes.
 - Find, anchors, search-result highlighting, local-link navigation, and image
   activation attach to the Markdown document DOM in both modes.
+- Markdown documents offer a session-local heading outline in the Files
+  sidebar. Files and the active document outline are independently
+  collapsible navigation sections; heading entries with descendants can be
+  folded without changing the document. Selection moves the document's own
+  scroll surface to the section and honours reduced-motion preferences. The
+  outline is not a second document surface.
 - Safe local links remain in StashBase; external HTTP(S) links use the system
   browser. Agent responses and Markdown documents remain distinct contexts.
 

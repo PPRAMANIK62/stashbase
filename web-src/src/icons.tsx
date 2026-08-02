@@ -4,6 +4,8 @@
  * `currentColor` so the parent's `color` rule wins.
  */
 
+import * as React from 'react';
+
 type IconProps = { className?: string };
 
 const stroke = {

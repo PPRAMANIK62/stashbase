@@ -55,8 +55,9 @@ to migrate them into a StashBase-specific storage model.
 - Removing a folder that is open elsewhere saves those windows and returns
   them to the library view instead of leaving stale editable state behind.
 - Destructive file operations require clear confirmation.
-- The tree is a calm orientation tool, not a separate knowledge graph or
-  project-management surface.
+- The Files sidebar is a calm orientation tool, not a separate knowledge graph
+  or project-management surface. It groups the file tree and the active
+  Markdown document outline into independently collapsible navigation sections.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
 - Command Palette exposes only safe, context-available actions the app already

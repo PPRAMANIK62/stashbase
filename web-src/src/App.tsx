@@ -29,6 +29,7 @@ import { ChatLaunchButtons } from './components/ChatLaunchButtons';
 import { SettingsPortal, openSettings } from './components/SettingsModal';
 import { QuickOpen } from './components/QuickOpen';
 import { EditorHistoryNavigator } from './components/EditorHistoryNavigator';
+import { DocumentOutlineProvider } from './components/DocumentOutlineContext';
 import { HomeIcon } from './icons';
 import { useHoverTip } from './hooks/useHoverTip';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
@@ -254,9 +255,11 @@ function AppBody() {
           '--sidebar-width': `${state.sidebarWidth}px`,
         } as CSSProperties}
       >
-        <Sidebar />
-        {!state.welcomeVisible && <SidebarSplitter />}
-        <MainPane />
+        <DocumentOutlineProvider>
+          <Sidebar />
+          {!state.welcomeVisible && <SidebarSplitter />}
+          <MainPane />
+        </DocumentOutlineProvider>
         {chatMounted && <ChatSplitter />}
         {chatMounted && (
           <LazyLoadBoundary

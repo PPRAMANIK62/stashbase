@@ -832,6 +832,41 @@
       text-overflow: ellipsis;
     }
 
+    /* Explorer sections mirror VS Code's compact disclosure rows. Files and
+     * the active document's outline intentionally share one navigation
+     * surface; neither becomes a floating editor companion. */
+    .sidebar-section {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-section.files-section { flex: 3 1 0; }
+    .sidebar-section.outline-section { flex: 2 1 0; }
+    .sidebar-section.collapsed { flex: 0 0 auto; }
+    .sidebar-section-toggle {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      flex: 1;
+      gap: 3px;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .sidebar-section-toggle:hover,
+    .sidebar-section-toggle:focus-visible { color: var(--fg); outline: none; }
+    .sidebar-section-toggle svg { width: 14px; height: 14px; flex: 0 0 auto; transition: transform .15s ease; }
+    .sidebar-section.collapsed .sidebar-section-toggle svg { transform: rotate(-90deg); }
+    .sidebar-section-count { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-size: calc(10.5px * var(--ui-scale)); }
+    .sidebar-section-body { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+    .sidebar-section.collapsed .sidebar-section-body { display: none; }
+
     /* FOLDER header: keep the "FOLDER" label content-width and push the
      * ⋯ actions to the far right edge. */
     .folder-section-head .panel-section-title {
@@ -841,6 +876,16 @@
     .folder-section-head .side-actions {
       margin-left: auto;
     }
+
+    .document-outline { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+    .outline-section-head { padding: 5px 8px 5px 12px; }
+    .document-outline-list { flex: 1; overflow: auto; padding: 0 0 8px; scrollbar-width: thin; }
+    .tree-row.outline-tree-row { gap: 4px; }
+    .outline-tree-entry { display: flex; align-items: center; flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .outline-tree-entry:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .document-outline-disclosure { border: 0; padding: 0; background: transparent; cursor: pointer; }
+    .document-outline-disclosure-spacer { flex: 0 0 16px; width: 16px; height: 16px; }
+    .document-outline-empty { margin: 8px 12px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
 
     .side-head {
       display: flex;
