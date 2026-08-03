@@ -1,4 +1,5 @@
 import { api } from '../api';
+import { AnimatePresence, motion } from 'motion/react';
 import { useApp } from '../store/AppContext';
 import { getPreparationProblem } from '../store/fileReadiness';
 import { Menu, type MenuItem } from './Menu';
@@ -6,7 +7,21 @@ import { Menu, type MenuItem } from './Menu';
 /** Drag-import veil. Visibility flows from the global drag handler in
  *  the parent (`useGlobalDragDrop`) via the `hot` prop. */
 export function DropVeil({ hot }: { hot: boolean }) {
-  return <div className={'drop-veil' + (hot ? ' hot' : '')}>Release to import</div>;
+  return (
+    <AnimatePresence>
+      {hot && (
+        <motion.div
+          className="drop-veil hot"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.12 }}
+        >
+          Release to import
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 /**

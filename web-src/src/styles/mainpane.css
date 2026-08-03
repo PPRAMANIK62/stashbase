@@ -2867,6 +2867,20 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
+    @keyframes toast-fade {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      /* Toasts remain readable as a short opacity transition, rather than
+       * translating into view. MotionConfig applies the same principle to
+       * Motion-managed structural transitions. */
+      .toast {
+        animation: toast-fade var(--motion-fast) var(--motion-ease);
+      }
+    }
+
     /* Level-specific accents — a 3px left bar carries the colour
      * cue; the body stays on the neutral surface so the message
      * itself reads clearly. */

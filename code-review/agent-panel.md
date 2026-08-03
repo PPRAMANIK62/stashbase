@@ -16,6 +16,18 @@ The panel may make agent work easier to scan, but it should stay quiet:
 - no decorative motion or visual metaphor
 - no new workspace model separate from the user's local folder
 
+## Renderer foundation
+
+The renderer retains its existing CSS during the Tailwind v4 migration. Shared
+semantic theme roles (surface, text, border, focus, status, density, radius,
+elevation, and motion) are exposed as CSS variables and Tailwind tokens; new
+work consumes those roles rather than inventing visual literals. New accessible
+popup/control work uses Base UI. React Aria Components remain only where they
+already own a transitional surface and are not a dependency choice for new
+renderer work. Motion is limited to structural/status feedback and runs under
+the user reduced-motion policy: transforms and layout animation stop while
+opacity feedback remains available.
+
 Community contributions can land as useful first iterations, but the long-term design should continue to be simplified toward this side-panel model when needed.
 
 ## Design Rules
