@@ -1,12 +1,21 @@
 import { api } from '../api';
+import { lazy, Suspense } from 'react';
 import { useApp } from '../store/AppContext';
 import { getPreparationProblem } from '../store/fileReadiness';
 import { Menu, type MenuItem } from './Menu';
 
+const MotionDropVeil = lazy(() => import('./MotionDropVeil'));
+
 /** Drag-import veil. Visibility flows from the global drag handler in
- *  the parent (`useGlobalDragDrop`) via the `hot` prop. */
+ *  the parent (`useGlobalDragDrop`) via the `hot` prop. Motion is loaded only
+ *  when a drag begins, so an optional visual enhancement does not tax startup. */
 export function DropVeil({ hot }: { hot: boolean }) {
-  return <div className={'drop-veil' + (hot ? ' hot' : '')}>Release to import</div>;
+  if (!hot) return null;
+  return (
+    <Suspense fallback={<div className="drop-veil hot">Release to import</div>}>
+      <MotionDropVeil />
+    </Suspense>
+  );
 }
 
 /**

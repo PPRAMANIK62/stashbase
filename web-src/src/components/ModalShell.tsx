@@ -2,11 +2,11 @@ import { type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 /**
- * Shared backdrop + card wrapper for every modal in the app. Click on
+ * Shared backdrop + card wrapper for every legacy modal in the app. Click on
  * the backdrop dismisses; click on the card itself doesn't (we
  * `stopPropagation` so users can highlight text / press buttons without
- * accidentally closing). `wide` opts into the larger card style used
- * by the re-embed confirmation (which has cost stats to lay out).
+ * accidentally closing). `wide` opts into the larger card style used by the
+ * re-embed confirmation (which has cost stats to lay out).
  *
  * NOTE: Esc-to-dismiss is deliberately NOT owned here. A window-level
  * keydown on every mounted ModalShell would fire for ALL stacked
@@ -30,18 +30,18 @@ export function ModalShell({
   top?: boolean;
   children: ReactNode;
 }) {
-  const node = (
+  return createPortal(
     <div
       className={'modal-veil' + (top ? ' top' : '')}
       onClick={closeOnBackdrop ? onCancel : undefined}
     >
       <div
         className={'modal-card' + (wide ? ' wide' : '')}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
-  return createPortal(node, document.body);
 }

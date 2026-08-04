@@ -14,6 +14,46 @@
  *   mainpane.css  — main viewer / tabs / split / PDF + HTML + MD
  *                   previews / modals / settings / error boundary
  */
+/* Tailwind v4 is intentionally utility-only during the migration. Keeping
+ * Preflight out avoids changing the established renderer reset underneath
+ * Milkdown, CodeMirror, and the existing CSS surfaces. */
+@layer theme, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-pane: var(--pane);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--text-on-accent);
+  --color-secondary: var(--pane);
+  --color-secondary-foreground: var(--fg);
+  --color-focus: var(--focus-ring);
+  --color-ring: var(--focus-ring);
+  --color-destructive: var(--danger);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--fg);
+  --color-danger: var(--danger);
+  --color-status-info: var(--status-info);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-danger: var(--status-danger);
+  --spacing-density: var(--density-gap);
+  --spacing-control: var(--density-control);
+  --radius-ui: var(--radius-ui);
+  --radius-control: var(--radius-control);
+  --shadow-elevation: var(--shadow-elevation);
+  --duration-fast: var(--motion-fast);
+  --duration-standard: var(--motion-standard);
+  --ease-ui: var(--motion-ease);
+}
+
+@import 'tailwindcss/utilities.css' layer(utilities);
+
 @import './styles/globals.css';
 @import './styles/menu.css';
 @import './styles/chat.css';

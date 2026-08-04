@@ -14,6 +14,14 @@
       --stroke-strong: #aeb9bf;
       --focus-ring: #0891b2;
       --shadow-color: 25, 34, 39;
+      --radius-ui: 6px;
+      --radius-control: 4px;
+      --density-gap: 4px;
+      --density-control: 28px;
+      --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.14);
+      --motion-fast: 120ms;
+      --motion-standard: 180ms;
+      --motion-ease: cubic-bezier(.2, .8, .2, 1);
       --fg: var(--text-primary);
       --muted: var(--text-secondary);
       --bg: var(--surface-base);
@@ -31,6 +39,10 @@
        * (chat.css's #e45649 is the One-Dark editor red and the sidebar's
        * #dc2626 is the recording red — different palettes on purpose.) */
       --danger: #b91c1c;
+      --status-info: var(--accent);
+      --status-success: #047857;
+      --status-warning: #a16207;
+      --status-danger: var(--danger);
       --hover: var(--surface-hover);
       --active: var(--surface-selected);
       --ui-font-size: calc(14px * var(--ui-scale));
@@ -57,6 +69,7 @@
       --stroke-strong: #64727a;
       --focus-ring: #46cce8;
       --shadow-color: 0, 0, 0;
+      --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.32);
       --fg: var(--text-primary);
       --muted: var(--text-secondary);
       --bg: var(--surface-base);
@@ -66,6 +79,10 @@
       --accent: #22b8d8;
       --accent-rgb: 34, 184, 216;
       --danger: #f87171;
+      --status-info: var(--accent);
+      --status-success: #34d399;
+      --status-warning: #fbbf24;
+      --status-danger: var(--danger);
       --hover: var(--surface-hover);
       --active: var(--surface-selected);
     }
@@ -86,6 +103,7 @@
         --stroke-strong: #64727a;
         --focus-ring: #46cce8;
         --shadow-color: 0, 0, 0;
+        --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.32);
         --fg: var(--text-primary);
         --muted: var(--text-secondary);
         --bg: var(--surface-base);
@@ -95,6 +113,10 @@
         --accent: #22b8d8;
         --accent-rgb: 34, 184, 216;
         --danger: #f87171;
+        --status-info: var(--accent);
+        --status-success: #34d399;
+        --status-warning: #fbbf24;
+        --status-danger: var(--danger);
         --hover: var(--surface-hover);
         --active: var(--surface-selected);
       }
@@ -125,6 +147,35 @@
     textarea {
       font-family: inherit;
       font-size: inherit;
+    }
+
+    /* One visible, token-backed focus treatment for legacy controls and new
+     * primitives alike. It intentionally uses outline rather than layout so
+     * focus never shifts dense editor or panel chrome. */
+    :where(button, input, select, textarea, [tabindex]):focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        /* Keep quiet visual/state feedback, but exclude layout and transform
+         * properties so panes, disclosures, and large surfaces never move. */
+        transition-property: opacity, color, background-color, border-color, outline-color, box-shadow, filter !important;
+        /* Stop all existing keyframe animation by default. Explicit opacity
+         * feedback below remains available where it conveys app status. */
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+
+      .icon-btn.spinning svg,
+      .welcome-loading-spinner {
+        animation: none;
+      }
+
     }
 
     /* React mounts into #root — make IT the flex column so the chrome
