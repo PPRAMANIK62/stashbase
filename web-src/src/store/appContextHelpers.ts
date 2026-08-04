@@ -64,11 +64,17 @@ export function shallowEqualNumberRecord(
   return ak.length === bk.length && ak.every((key) => a[key] === b[key]);
 }
 
-export function filterGuiSemanticHits(hits: SearchHit[]): SearchHit[] {
-  if (hits.length <= 1) return hits;
+/** How many of the fetched semantic hits to show before "show more".
+ *  Finds the relevance knee in the score curve (capped at
+ *  SEMANTIC_SEARCH_MAX_VISIBLE) so the strongest matches lead. The
+ *  weaker fetched candidates are kept and revealed through progressive
+ *  disclosure rather than discarded, so the count is an initial visible
+ *  slice, not a hard result limit. */
+export function guiSemanticVisibleCount(hits: SearchHit[]): number {
+  if (hits.length <= 1) return hits.length;
   const top = hits[0]?.score ?? 0;
   if (!Number.isFinite(top) || top <= 0) {
-    return hits.slice(0, SEMANTIC_SEARCH_MAX_VISIBLE);
+    return Math.min(hits.length, SEMANTIC_SEARCH_MAX_VISIBLE);
   }
 
   let cutoff = Math.min(hits.length, SEMANTIC_SEARCH_MAX_VISIBLE);
@@ -88,7 +94,7 @@ export function filterGuiSemanticHits(hits: SearchHit[]): SearchHit[] {
     }
   }
 
-  return hits.slice(0, Math.max(1, cutoff));
+  return Math.max(1, cutoff);
 }
 
 export function waitForNextFrame(): Promise<void> {

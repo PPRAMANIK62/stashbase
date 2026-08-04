@@ -2,7 +2,6 @@ import { useCallback, type MutableRefObject } from 'react';
 import { api, ApiError } from '../api';
 import { rebindFolderIfStillInLibrary } from '../folderPath';
 import {
-  filterGuiSemanticHits,
   shallowEqualConversionProgress,
   shallowEqualIndexWarning,
   shallowEqualNumberRecord,
@@ -424,7 +423,9 @@ export function useSearchActions(
           types: opts?.types ?? s.searchTypes,
         });
         if (isStaleSearch()) return;
-        dispatch({ type: 'SEARCH_HITS', hits: filterGuiSemanticHits(hits) });
+        // Keep every fetched candidate; the panel shows the strongest
+        // slice first and reveals the rest through progressive disclosure.
+        dispatch({ type: 'SEARCH_HITS', hits });
       }
     } catch (err) {
       if (isStaleSearch()) return;

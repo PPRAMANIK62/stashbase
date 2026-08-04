@@ -1355,9 +1355,25 @@
 
     /* Semantic top-N summary, matching the keyword summary treatment. */
     .search-summary {
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       color: var(--muted);
       padding: 2px 10px 6px;
+    }
+
+    .search-show-more {
+      width: calc(100% - 12px);
+      margin: 2px 6px 4px;
+      padding: 6px;
+      font-size: calc(12px * var(--ui-scale));
+      color: var(--accent);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .search-show-more:hover {
+      background: var(--hover);
     }
 
     /* Keyword (ripgrep) results — VS-Code-style: a per-file header with a
