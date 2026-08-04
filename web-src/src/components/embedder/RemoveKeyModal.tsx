@@ -27,12 +27,11 @@ export function RemoveKeyModal({
     }
   }
   return (
-    <ModalShell onCancel={onCancel}>
-      <h3>Remove API key?</h3>
-      <p className="modal-hint">
-        Indexing and search stop until you add a key back. Your existing
-        index is kept — nothing is deleted.
-      </p>
+    <ModalShell
+      title="Remove API key?"
+      description="Indexing and search stop until you add a key back. Your existing index is kept — nothing is deleted."
+      onCancel={busy ? () => { /* wait for removal */ } : onCancel}
+    >
       {error && <div className="modal-error">{error}</div>}
       <div className="modal-actions">
         <button type="button" className="modal-btn" onClick={onCancel} disabled={busy}>

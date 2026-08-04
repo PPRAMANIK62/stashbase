@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 
@@ -31,11 +32,17 @@ import { QuickOpen } from './components/QuickOpen';
 import { EditorHistoryNavigator } from './components/EditorHistoryNavigator';
 import { DocumentOutlineProvider } from './components/DocumentOutlineContext';
 import { HomeIcon } from './icons';
-import { useHoverTip } from './hooks/useHoverTip';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
+import { DeferredTooltipButton } from './components/DeferredTooltipButton';
+import { OverlayStackProvider } from './components/OverlayStack';
 import { AppProvider, useApp } from './store/AppContext';
 import {
   clampChatWidth,
+  CHAT_MAX_WIDTH,
+  CHAT_MIN_WIDTH,
+  isSplitterKey,
+  resizeChatByKeyboard,
+  resizeSidebarByKeyboard,
   SIDEBAR_COLLAPSE_AT,
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_MAX_WIDTH,
@@ -60,7 +67,9 @@ export function App() {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <AppBody />
+        <OverlayStackProvider>
+          <AppBody />
+        </OverlayStackProvider>
       </AppProvider>
     </ErrorBoundary>
   );
@@ -97,13 +106,6 @@ function AppBody() {
   useEffect(() => {
     if (state.chatOpen) setChatMounted(true);
   }, [state.chatOpen]);
-  // Tag the body as Electron for the chrome-region CSS, only when the
-  // preload bridge is exposed.
-  useEffect(() => {
-    if ((window as { electron?: unknown }).electron) {
-      document.body.classList.add('is-electron');
-    }
-  }, []);
   useEffect(() => {
     document.title = state.folder ? `${state.folder} — StashBase` : 'StashBase';
   }, [state.folder]);
@@ -260,7 +262,7 @@ function AppBody() {
           {!state.welcomeVisible && <SidebarSplitter />}
           <MainPane />
         </DocumentOutlineProvider>
-        {chatMounted && <ChatSplitter />}
+        {chatMounted && state.chatOpen && <ChatSplitter />}
         {chatMounted && (
           <LazyLoadBoundary
             className="chat-pane-shell"
@@ -305,17 +307,16 @@ function AppBody() {
   );
 }
 
-/** Home button in the top chrome. Its own component so the hover-tip hook
- *  isn't called conditionally (the button only renders outside Welcome).
- *  Tip drops *below* the button — it sits at the very top of the window,
- *  so a tooltip above would be clipped off-screen. */
 function HomeChromeButton({ onClick }: { onClick: () => void }) {
-  const { tipProps, tip } = useHoverTip('Back to Welcome', 'bottom');
   return (
-    <button className="icon-btn" type="button" aria-label="Back to Welcome" onClick={onClick} {...tipProps}>
+    <DeferredTooltipButton
+      className="icon-btn"
+      label="Back to Welcome"
+      side="bottom"
+      onClick={onClick}
+    >
       <HomeIcon />
-      {tip}
-    </button>
+    </DeferredTooltipButton>
   );
 }
 
@@ -408,9 +409,33 @@ function SidebarSplitter() {
     appRef.current = null;
   }
 
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!isSplitterKey(event.key)) return;
+    event.preventDefault();
+    const next = resizeSidebarByKeyboard(
+      state.sidebarWidth,
+      state.sidebarCollapsed,
+      event.key,
+    );
+    if (next.width !== state.sidebarWidth) {
+      dispatch({ type: 'SIDEBAR_WIDTH', width: next.width });
+    }
+    if (next.collapsed !== state.sidebarCollapsed) {
+      dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: next.collapsed });
+    }
+  }
+
   return (
     <div
       className="sidebar-splitter"
+      role="separator"
+      tabIndex={0}
+      aria-label="Resize sidebar"
+      aria-orientation="vertical"
+      aria-valuemin={0}
+      aria-valuemax={SIDEBAR_MAX_WIDTH}
+      aria-valuenow={state.sidebarCollapsed ? 0 : state.sidebarWidth}
+      aria-valuetext={state.sidebarCollapsed ? 'Collapsed' : `${state.sidebarWidth} pixels`}
       style={{
         left: state.sidebarCollapsed
           ? '44px'
@@ -420,6 +445,7 @@ function SidebarSplitter() {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onKeyDown={onKeyDown}
     />
   );
 }
@@ -483,13 +509,34 @@ function ChatSplitter() {
     if (width !== null) queueWidth(width);
   }
 
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!isSplitterKey(event.key)) return;
+    event.preventDefault();
+    dispatch({
+      type: 'CHAT_WIDTH',
+      width: resizeChatByKeyboard(
+        state.chatWidth,
+        event.key,
+      ),
+    });
+  }
+
   return (
     <div
       className="chat-splitter"
+      role="separator"
+      tabIndex={0}
+      aria-label="Resize Agent chat panel"
+      aria-orientation="vertical"
+      aria-valuemin={CHAT_MIN_WIDTH}
+      aria-valuemax={CHAT_MAX_WIDTH}
+      aria-valuenow={state.chatWidth}
+      aria-valuetext={`${state.chatWidth} pixels`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finish}
       onPointerCancel={finish}
+      onKeyDown={onKeyDown}
     />
   );
 }

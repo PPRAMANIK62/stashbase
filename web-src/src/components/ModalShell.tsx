@@ -1,47 +1,43 @@
-import { type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import {
+  Suspense,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import { lazyWithRetry } from './ErrorBoundary';
+import { useOverlayLayer } from './OverlayStack';
+import { ModalLoadingStatus } from './ui/status';
 
-/**
- * Shared backdrop + card wrapper for every legacy modal in the app. Click on
- * the backdrop dismisses; click on the card itself doesn't (we
- * `stopPropagation` so users can highlight text / press buttons without
- * accidentally closing). `wide` opts into the larger card style used by the
- * re-embed confirmation (which has cost stats to lay out).
- *
- * NOTE: Esc-to-dismiss is deliberately NOT owned here. A window-level
- * keydown on every mounted ModalShell would fire for ALL stacked
- * instances at once (e.g. a confirm dialog over the migration modal),
- * closing more than the topmost. Until there's a modal-stack that can
- * target only the top layer, modals keep their own input-focused Esc
- * handler (which only fires for the focused, topmost modal).
- *
- * Each modal still owns its own header / body / buttons.
- */
-export function ModalShell({
-  onCancel,
-  closeOnBackdrop = true,
-  wide,
-  top,
-  children,
-}: {
+export interface ModalShellProps {
+  title: ReactNode;
+  description?: ReactNode;
   onCancel: () => void;
   closeOnBackdrop?: boolean;
+  initialFocus?: RefObject<HTMLElement | null>;
   wide?: boolean;
   top?: boolean;
-  children: ReactNode;
-}) {
-  return createPortal(
-    <div
-      className={'modal-veil' + (top ? ' top' : '')}
-      onClick={closeOnBackdrop ? onCancel : undefined}
+  children?: ReactNode;
+}
+
+const ManagedModalShell = lazyWithRetry(() => import('./ManagedModalShell'));
+
+/**
+ * Interaction-boundary loader for the managed dialog. The fallback is status
+ * only: it never recreates an unmanaged modal while Base UI is loading.
+ */
+export function ModalShell(props: ModalShellProps) {
+  const layer = useOverlayLayer(true);
+  return (
+    <Suspense
+      fallback={(
+        <ModalLoadingStatus
+          label="Opening dialog…"
+          isTopmost={layer.isTopmost}
+          onCancel={props.onCancel}
+          closeOnBackdrop={props.closeOnBackdrop ?? true}
+        />
+      )}
     >
-      <div
-        className={'modal-card' + (wide ? ' wide' : '')}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>,
-    document.body,
+      <ManagedModalShell {...props} isTopmost={layer.isTopmost} />
+    </Suspense>
   );
 }

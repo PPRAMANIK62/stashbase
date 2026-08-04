@@ -8,7 +8,7 @@
  * We deliberately don't show a plain "Cancel" — "Later" is the soft
  * escape.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { api, ApiError, errorMessage, type EmbedderProvider } from '../../api';
 import { ModalShell } from '../ModalShell';
 
@@ -41,7 +41,6 @@ export function RequireApiKeyModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => { inputRef.current?.focus(); }, []);
 
   async function submit() {
     const k = key.trim();
@@ -62,12 +61,12 @@ export function RequireApiKeyModal({
   }
 
   return (
-    <ModalShell onCancel={busy ? () => { /* swallow */ } : onLater}>
-      <h3>Add embedding key</h3>
-      <p className="modal-hint">
-        Semantic search uses embeddings. Choose a provider, then paste the API key.
-        Keyword search and editing work without it.
-      </p>
+    <ModalShell
+      title="Add embedding key"
+      description="Semantic search uses embeddings. Choose a provider, then paste the API key. Keyword search and editing work without it."
+      initialFocus={inputRef}
+      onCancel={busy ? () => { /* swallow */ } : onLater}
+    >
       <div className="embedder-modal-provider-row" role="radiogroup" aria-label="Embedding provider">
         {PROVIDER_ORDER.map((optionProvider) => {
           const option = PROVIDERS[optionProvider];
@@ -107,7 +106,6 @@ export function RequireApiKeyModal({
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing) return;
           if (e.key === 'Enter') { e.preventDefault(); void submit(); }
-          else if (e.key === 'Escape' && !busy) { e.preventDefault(); onLater(); }
         }}
       />
       {error && <div className="modal-error">{error}</div>}

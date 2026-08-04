@@ -10,6 +10,7 @@ import type { LibraryFolderStatus } from '../store/state';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { openSettings } from './SettingsModal';
+import { StatusMessage } from './ui/status';
 
 interface ElectronBridge {
   openFolderDialog?: (opts?: {
@@ -399,14 +400,16 @@ export function Welcome() {
         </div>
 
         {state.welcomeError && (
-          <div className="welcome-err">{state.welcomeError}</div>
+          <StatusMessage tone="error" className="welcome-err">
+            {state.welcomeError}
+          </StatusMessage>
         )}
       </div>
       {openingFolder && (
-        <div className="welcome-loading" role="status" aria-live="polite">
+        <StatusMessage className="welcome-loading">
           <div className="welcome-loading-spinner" />
           <div className="welcome-loading-text">Opening {openingFolder.name}</div>
-        </div>
+        </StatusMessage>
       )}
       {folderMenu && (
         <Menu
@@ -428,12 +431,17 @@ export function Welcome() {
         />
       )}
       {removeTarget && (
-        <ModalShell onCancel={removing ? () => { /* wait for removal */ } : () => setConfirmRemove(null)} top>
-          <h3>Remove from Library?</h3>
-          <p className="modal-hint">
+        <ModalShell
+          title="Remove from Library?"
+          description={
+            <>
             StashBase will remove <strong className="welcome-remove-name">{removeTarget.name}</strong> from your Library.
             It will <strong>not</strong> delete the folder or its files from your disk.
-          </p>
+            </>
+          }
+          onCancel={removing ? () => { /* wait for removal */ } : () => setConfirmRemove(null)}
+          top
+        >
           <div className="welcome-remove-path" title={removeTarget.path}>
             {removeTarget.parent}
           </div>

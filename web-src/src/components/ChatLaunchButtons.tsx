@@ -9,8 +9,8 @@ import { useEffect, useRef } from 'react';
 import { api, type Agent, type AgentsResponse } from '../api';
 import { AGENTS, type AgentMeta } from '../agentCatalog';
 import { useApp } from '../store/AppContext';
-import { useHoverTip } from '../hooks/useHoverTip';
 import { makeChatTab } from '../store/state';
+import { DeferredTooltipButton } from './DeferredTooltipButton';
 
 export function ChatLaunchButtons() {
   const { state, dispatch } = useApp();
@@ -52,10 +52,8 @@ export function ChatLaunchButtons() {
   );
 }
 
-/** One launcher. Its own component so `useHoverTip` isn't called in a map
- *  callback. Uses the shared custom tooltip because these live in the
- *  `app-chrome` drag region, where the native `title` tooltip never
- *  appears. Tip drops below — they sit at the top-right of the window. */
+/** One launcher. The shared tooltip remains reliable inside Electron's
+ * custom drag region and is also exposed from keyboard focus. */
 function LaunchButton({
   agent,
   runtime,
@@ -74,17 +72,14 @@ function LaunchButton({
       : `${agent.launcherLabel} is ${runtime.state}${runtime.error ? `: ${runtime.error}` : ''}`
     : active ? `Hide ${agent.launcherLabel} chat` : `Show ${agent.launcherLabel} chat`;
   const Icon = agent.Icon;
-  const { tipProps, tip } = useHoverTip(label, 'bottom');
   return (
-    <button
+    <DeferredTooltipButton
       className={'icon-btn chat-launch' + (active ? ' active' : '')}
-      type="button"
-      aria-label={label}
+      label={label}
+      side="bottom"
       onClick={onClick}
-      {...tipProps}
     >
       <Icon />
-      {tip}
-    </button>
+    </DeferredTooltipButton>
   );
 }

@@ -228,8 +228,7 @@ function FolderMenu() {
       >⋯</button>
       {anchor && <Menu anchor={{ rect: anchor }} items={items} onClose={() => setAnchor(null)} />}
       {switchOpen && (
-        <ModalShell top onCancel={busy ? () => {} : () => setSwitchOpen(false)}>
-          <h3>Switch folder</h3>
+        <ModalShell title="Switch folder" top onCancel={busy ? () => {} : () => setSwitchOpen(false)}>
           {state.recent.length === 0 ? (
             <p className="modal-hint">No folders found.</p>
           ) : (

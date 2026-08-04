@@ -1,7 +1,8 @@
 import { FilesViewIcon, SearchIcon, SettingsIcon } from '../icons';
+import { formatPrimaryShiftShortcut } from '../platformShortcuts';
 import { useApp } from '../store/AppContext';
 import { openSettings } from './SettingsModal';
-import { useHoverTip } from '../hooks/useHoverTip';
+import { DeferredTooltipButton } from './DeferredTooltipButton';
 
 /**
  * Narrow left rail (à la VS Code / Obsidian) holding one icon per
@@ -18,8 +19,6 @@ import { useHoverTip } from '../hooks/useHoverTip';
  */
 export function ActivityBar() {
   const { state, dispatch, actions } = useApp();
-
-  const settingsTip = useHoverTip('Settings');
 
   /** VSCode rail semantics: clicking the *active* view toggles the
    *  panel collapsed; clicking another view (or any view while
@@ -41,7 +40,7 @@ export function ActivityBar() {
       <ActivityIcon
         active={!state.sidebarCollapsed && state.activeSidebarView === 'files'}
         controls="sidebar-panel-files"
-        label="Files (⌘⇧E)"
+        label={`Files (${formatPrimaryShiftShortcut('E')})`}
         onClick={() => selectView('files')}
       >
         <FilesViewIcon />
@@ -49,7 +48,7 @@ export function ActivityBar() {
       <ActivityIcon
         active={!state.sidebarCollapsed && state.activeSidebarView === 'search'}
         controls="sidebar-panel-search"
-        label="Search (⌘⇧F)"
+        label={`Search (${formatPrimaryShiftShortcut('F')})`}
         // Focusing the input after the view switch lets ⌘⇧F (and a
         // mouse click) feel the same — both end with the caret in
         // the search box ready for typing.
@@ -60,16 +59,13 @@ export function ActivityBar() {
       {/* Settings pinned to the bottom of the rail, VSCode-style. The
           spacer above (margin-top:auto on this button) pushes it down
           so view toggles stay grouped at the top. */}
-      <button
-        type="button"
+      <DeferredTooltipButton
         className="activity-bar-btn activity-bar-btn-bottom"
+        label="Settings"
         onClick={() => openSettings()}
-        aria-label="Settings"
-        {...settingsTip.tipProps}
       >
         <SettingsIcon />
-        {settingsTip.tip}
-      </button>
+      </DeferredTooltipButton>
     </nav>
   );
 }
@@ -83,20 +79,16 @@ interface ActivityIconProps {
 }
 
 function ActivityIcon({ active, controls, label, onClick, children }: ActivityIconProps) {
-  const { tipProps, tip } = useHoverTip(label);
   return (
-    <button
-      type="button"
+    <DeferredTooltipButton
       className={'activity-bar-btn' + (active ? ' active' : '')}
       role="tab"
       aria-selected={active}
       aria-controls={controls}
-      aria-label={label}
+      label={label}
       onClick={onClick}
-      {...tipProps}
     >
       {children}
-      {tip}
-    </button>
+    </DeferredTooltipButton>
   );
 }

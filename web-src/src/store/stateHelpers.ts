@@ -19,9 +19,55 @@ export const SIDEBAR_COLLAPSE_AT = 100;
 /** Chat-panel resize bounds (px), shared by the reducer and drag handle. */
 export const CHAT_MIN_WIDTH = 280;
 export const CHAT_MAX_WIDTH = 640;
+export const SPLITTER_KEYBOARD_STEP = 16;
+
+export type SplitterKey = 'ArrowLeft' | 'ArrowRight' | 'Home' | 'End';
+const SPLITTER_KEYS: readonly SplitterKey[] = [
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+];
+
+export function isSplitterKey(key: string): key is SplitterKey {
+  return (SPLITTER_KEYS as readonly string[]).includes(key);
+}
 
 export function clampChatWidth(width: number) {
   return Math.max(CHAT_MIN_WIDTH, Math.min(width, CHAT_MAX_WIDTH));
+}
+
+/** Platform-neutral keyboard transition for the left sidebar separator. */
+export function resizeSidebarByKeyboard(
+  width: number,
+  collapsed: boolean,
+  key: SplitterKey,
+): { width: number; collapsed: boolean } {
+  if (key === 'Home') return { width, collapsed: true };
+  if (key === 'End') return { width: SIDEBAR_MAX_WIDTH, collapsed: false };
+  if (key === 'ArrowRight') {
+    return {
+      width: collapsed
+        ? Math.max(SIDEBAR_MIN_WIDTH, Math.min(width, SIDEBAR_MAX_WIDTH))
+        : Math.min(width + SPLITTER_KEYBOARD_STEP, SIDEBAR_MAX_WIDTH),
+      collapsed: false,
+    };
+  }
+  if (collapsed) return { width, collapsed: true };
+  if (width <= SIDEBAR_MIN_WIDTH) return { width, collapsed: true };
+  return {
+    width: Math.max(width - SPLITTER_KEYBOARD_STEP, SIDEBAR_MIN_WIDTH),
+    collapsed: false,
+  };
+}
+
+/** Keyboard movement follows the separator: left grows the right-hand pane. */
+export function resizeChatByKeyboard(width: number, key: SplitterKey): number {
+  if (key === 'Home') return CHAT_MIN_WIDTH;
+  if (key === 'End') return CHAT_MAX_WIDTH;
+  return clampChatWidth(
+    width + (key === 'ArrowLeft' ? SPLITTER_KEYBOARD_STEP : -SPLITTER_KEYBOARD_STEP),
+  );
 }
 
 /** Build a fresh empty tab. The id is `crypto.randomUUID` because every

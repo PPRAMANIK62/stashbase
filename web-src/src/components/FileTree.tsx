@@ -221,6 +221,7 @@ function FolderRow({
   function onContextMenu(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    (e.currentTarget as HTMLElement).focus({ preventScroll: true });
     dispatch({
       type: 'CTX_MENU',
       menu: { x: e.clientX, y: e.clientY, target: node.path, kind: 'folder' },
@@ -307,6 +308,7 @@ function FolderRow({
     <>
       <div
         className={rowClass}
+        tabIndex={-1}
         style={{ paddingLeft: depth * 14 + 26 }}
         data-path={node.path}
         draggable={!renaming}
@@ -467,6 +469,7 @@ function FileRow({
   function onContextMenu(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    (e.currentTarget as HTMLElement).focus({ preventScroll: true });
     dispatch({
       type: 'CTX_MENU',
       menu: { x: e.clientX, y: e.clientY, target: path, kind: 'file' },
@@ -476,6 +479,7 @@ function FileRow({
   return (
     <div
       className={rowClass}
+      tabIndex={-1}
       style={{ paddingLeft }}
       data-path={path}
       title={title}
