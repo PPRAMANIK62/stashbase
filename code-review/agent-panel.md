@@ -22,11 +22,13 @@ The renderer retains its existing CSS during the Tailwind v4 migration. Shared
 semantic theme roles (surface, text, border, focus, status, density, radius,
 elevation, and motion) are exposed as CSS variables and Tailwind tokens; new
 work consumes those roles rather than inventing visual literals. New accessible
-popup/control work uses Base UI. React Aria Components remain only where they
+popup/control work uses shadcn-generated Base UI components. A lazily loaded primitive may show only a
+non-interactive loading status until the managed control is ready; never provide an
+unmanaged dialog fallback. React Aria Components remain only where they
 already own a transitional surface and are not a dependency choice for new
 renderer work. Motion is limited to structural/status feedback and runs under
 the user reduced-motion policy: transforms and layout animation stop while
-opacity feedback remains available. Foundation primitives that are only needed
+essential opacity feedback remains available. Foundation primitives that are only needed
 after an interaction may load at that interaction boundary, preserving the
 enforced initial-renderer budget without making the feature unavailable.
 

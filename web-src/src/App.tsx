@@ -6,7 +6,6 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { Button as BaseButton } from '@base-ui/react/button';
 
 interface ElectronBridge {
   openFolderDialog?: (opts?: unknown) => Promise<string | null>;
@@ -313,10 +312,10 @@ function AppBody() {
 function HomeChromeButton({ onClick }: { onClick: () => void }) {
   const { tipProps, tip } = useHoverTip('Back to Welcome', 'bottom');
   return (
-    <BaseButton className="icon-btn inline-flex items-center justify-center focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-pane" aria-label="Back to Welcome" onClick={onClick} {...tipProps}>
+    <button className="icon-btn" type="button" aria-label="Back to Welcome" onClick={onClick} {...tipProps}>
       <HomeIcon />
       {tip}
-    </BaseButton>
+    </button>
   );
 }
 

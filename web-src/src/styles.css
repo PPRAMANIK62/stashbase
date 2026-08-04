@@ -28,7 +28,15 @@
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-accent: var(--accent);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--text-on-accent);
+  --color-secondary: var(--pane);
+  --color-secondary-foreground: var(--fg);
   --color-focus: var(--focus-ring);
+  --color-ring: var(--focus-ring);
+  --color-destructive: var(--danger);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--fg);
   --color-danger: var(--danger);
   --color-status-info: var(--status-info);
   --color-status-success: var(--status-success);

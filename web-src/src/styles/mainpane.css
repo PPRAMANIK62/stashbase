@@ -2878,6 +2878,8 @@
        * Motion-managed structural transitions. */
       .toast {
         animation: toast-fade var(--motion-fast) var(--motion-ease);
+        animation-duration: var(--motion-fast) !important;
+        animation-iteration-count: 1 !important;
       }
     }
 

@@ -33,13 +33,22 @@ test('shadcn generation is configured for Base UI and renderer aliases', () => {
 });
 
 test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
-  assert.match(read('web-src/src/App.tsx'), /@base-ui\/react\/button/);
-  assert.match(read('web-src/src/components/BaseDialogModalShell.tsx'), /@base-ui\/react\/dialog/);
+  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /\.\/ui\/dialog/);
+  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /\.\/ui\/button/);
+  assert.match(read('web-src/src/components/ui/dialog.tsx'), /@base-ui\/react\/dialog/);
+  assert.match(read('web-src/src/components/ui/dialog.tsx'), /bg-black\/35.*data-open:animate-in/);
+  assert.match(read('web-src/src/components/ui/dialog.tsx'), /data-open:zoom-in-95/);
+  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /<DialogTitle/);
+  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /!w-\[min\(420px,90vw\)\] !max-w-\[90vw\] !gap-0/);
+  assert.match(read('web-src/src/components/ClipboardImportModal.tsx'), /<ClipboardImportDialog/);
+  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /autoFocus onClick=\{onAdd\}/);
+  assert.doesNotMatch(read('web-src/src/components/ClipboardImportModal.tsx'), /window\.addEventListener/);
+  assert.doesNotMatch(read('web-src/src/components/ModalShell.tsx'), /ClipboardImportDialog/);
   assert.match(read('web-src/src/components/MotionDropVeil.tsx'), /MotionConfig reducedMotion="user"/);
   assert.match(read('web-src/src/components/MotionDropVeil.tsx'), /animate=\{\{ opacity: 1 \}\}/);
   assert.match(read('web-src/src/components/Overlays.tsx'), /lazy\(\(\) => import\('\.\/MotionDropVeil'\)\)/);
   const globals = read('web-src/src/styles/globals.css');
   assert.match(globals, /transition-property: opacity, color, background-color/);
-  assert.doesNotMatch(globals, /animation-duration: 1ms/);
+  assert.match(globals, /animation-duration: 0\.01ms !important/);
   assert.match(read('web-src/src/styles/mainpane.css'), /\.toast \{\s*animation: toast-fade/);
 });

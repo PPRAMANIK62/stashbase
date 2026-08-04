@@ -135,26 +135,18 @@
       z-index: 100;
     }
 
-    /* Base UI owns the dialog backdrop; preserve the legacy veil backdrop
-     * for Settings and other not-yet-migrated overlays without double-dimming
-     * the representative Base UI modal path. */
-    .modal-dialog-viewport {
-      background: transparent;
-    }
-
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.35);
-      z-index: 100;
-    }
-
     .modal-veil.top {
       z-index: 10000;
     }
 
-    .modal-backdrop.top {
-      z-index: 10000;
+    .modal-load-status {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: grid;
+      place-items: center;
+      color: var(--fg);
+      background: rgba(0, 0, 0, 0.35);
     }
 
     .modal-card {

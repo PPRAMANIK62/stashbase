@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { ModalShell } from './ModalShell';
+import { lazy, Suspense } from 'react';
+
+const ClipboardImportDialog = lazy(() => import('./ClipboardImportDialog'));
 
 export interface ClipboardOffer {
   dataUrl: string;
@@ -19,8 +20,8 @@ export interface ClipboardOffer {
  * image gets OCR'd into a hidden note), Dismiss leaves it alone.
  *
  * Modal (not a toast) by product decision — a screenshot is a
- * deliberate "I want to keep this" moment worth a clear yes/no. Esc /
- * backdrop dismiss, Enter adds.
+ * deliberate "I want to keep this" moment worth a clear yes/no. The Base UI
+ * dialog owns Esc and backdrop dismissal; Enter adds.
  */
 export function ClipboardImportModal({
   offer,
@@ -31,29 +32,18 @@ export function ClipboardImportModal({
   onAdd: () => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-      else if (e.key === 'Enter') { e.preventDefault(); onAdd(); }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onAdd, onClose]);
-
   return (
-    <ModalShell onCancel={onClose}>
-      <h2 className="modal-title">Add image to StashBase?</h2>
-      <p className="modal-hint">
-        There's an image on your clipboard. Add it to this folder — its text
-        gets extracted so you can search it later.
-      </p>
-      <div className="clipboard-offer-preview">
-        <img src={offer.dataUrl} alt="Clipboard image" />
-      </div>
-      <div className="modal-actions">
-        <button type="button" className="modal-btn" onClick={onClose}>Dismiss</button>
-        <button type="button" className="modal-btn primary" onClick={onAdd}>Add</button>
-      </div>
-    </ModalShell>
+    <Suspense fallback={<div className="modal-load-status" role="status" aria-live="polite">Opening image import…</div>}>
+      <ClipboardImportDialog
+        title="Add image to StashBase?"
+        description={<>There's an image on your clipboard. Add it to this folder — its text gets extracted so you can search it later.</>}
+        onCancel={onClose}
+        onAdd={onAdd}
+      >
+        <div className="clipboard-offer-preview">
+          <img src={offer.dataUrl} alt="Clipboard image" />
+        </div>
+      </ClipboardImportDialog>
+    </Suspense>
   );
 }
