@@ -491,6 +491,8 @@ Each platform workflow calls `.github/workflows/release-ci-gate.yml` before its 
 
 Version selection, the version-bump commit, tag creation, and GitHub Release publication remain maintainer-controlled.
 
+The unsigned macOS DMG includes a privileged recovery installer for Gatekeeper-damaged installs. When replacing an existing app, it must retain that app as a same-volume rollback until the new bundle has copied, been ad-hoc signed, and passed strict verification; a failed replacement restores the prior bundle rather than leaving Applications without a runnable app. The source gate and macOS release verifier execute the bundled helper through failed copy, signing, and verification stages, asserting that each restores the old bundle.
+
 ---
 
 # 10. Boundaries
