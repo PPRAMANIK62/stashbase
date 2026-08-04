@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useApp } from '../store/AppContext';
 import { ModalShell } from './ModalShell';
 
@@ -19,17 +18,6 @@ export function CascadePromptModal() {
   const { state, actions } = useApp();
   const prompt = state.cascadePrompt;
 
-  // Esc cancels; Enter commits the default "Update" action.
-  useEffect(() => {
-    if (!prompt) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { e.preventDefault(); actions.resolveCascadePrompt('cancel'); }
-      else if (e.key === 'Enter') { e.preventDefault(); actions.resolveCascadePrompt('update'); }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [prompt, actions]);
-
   if (!prompt) return null;
 
   const fromShort = prompt.oldPath.split('/').pop() || prompt.oldPath;
@@ -37,13 +25,17 @@ export function CascadePromptModal() {
   const kindLabel = prompt.kind === 'folder' ? 'folder' : 'note';
 
   return (
-    <ModalShell onCancel={() => actions.resolveCascadePrompt('cancel')}>
-      <h2 className="modal-title">Update references?</h2>
-      <p className="modal-hint">
+    <ModalShell
+      title="Update references?"
+      description={
+        <>
         Renaming this {kindLabel} from <strong>{fromShort}</strong> to <strong>{toShort}</strong>{' '}
         will affect {prompt.links} link{prompt.links === 1 ? '' : 's'} across{' '}
         {prompt.files} file{prompt.files === 1 ? '' : 's'}.
-      </p>
+        </>
+      }
+      onCancel={() => actions.resolveCascadePrompt('cancel')}
+    >
       <div className="modal-actions">
         <button
           type="button"
@@ -58,6 +50,7 @@ export function CascadePromptModal() {
         <button
           type="button"
           className="modal-btn primary"
+          autoFocus
           onClick={() => actions.resolveCascadePrompt('update')}
         >Update</button>
       </div>

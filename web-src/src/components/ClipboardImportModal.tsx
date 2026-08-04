@@ -1,6 +1,9 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazyWithRetry } from './ErrorBoundary';
+import { useOverlayLayer } from './OverlayStack';
+import { ModalLoadingStatus } from './ui/status';
 
-const ClipboardImportDialog = lazy(() => import('./ClipboardImportDialog'));
+const ClipboardImportDialog = lazyWithRetry(() => import('./ClipboardImportDialog'));
 
 export interface ClipboardOffer {
   dataUrl: string;
@@ -32,11 +35,22 @@ export function ClipboardImportModal({
   onAdd: () => void;
   onClose: () => void;
 }) {
+  const layer = useOverlayLayer(true);
   return (
-    <Suspense fallback={<div className="modal-load-status" role="status" aria-live="polite">Opening image import…</div>}>
+    <Suspense
+      fallback={(
+        <ModalLoadingStatus
+          label="Opening image import…"
+          isTopmost={layer.isTopmost}
+          onCancel={onClose}
+          closeOnBackdrop
+        />
+      )}
+    >
       <ClipboardImportDialog
         title="Add image to StashBase?"
         description={<>There's an image on your clipboard. Add it to this folder — its text gets extracted so you can search it later.</>}
+        isTopmost={layer.isTopmost}
         onCancel={onClose}
         onAdd={onAdd}
       >

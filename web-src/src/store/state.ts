@@ -22,10 +22,14 @@ import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 export {
   CHAT_MAX_WIDTH,
   CHAT_MIN_WIDTH,
+  SPLITTER_KEYBOARD_STEP,
   SIDEBAR_COLLAPSE_AT,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   clampChatWidth,
+  isSplitterKey,
+  resizeChatByKeyboard,
+  resizeSidebarByKeyboard,
   getActiveTab,
   makeChatTab,
   makeTab,
@@ -142,30 +146,6 @@ export type CascadeDecision = 'update' | 'skip' | 'cancel';
 export interface ModalRequest {
   type: 'alert' | 'confirm';
   message: string;
-}
-
-/** A toast notification: lightweight non-blocking feedback the user
- *  can dismiss or just wait out. Use this for "operation succeeded /
- *  failed" feedback where the user can keep working — reserve
- *  `actions.alert` for content that genuinely needs the user to
- *  stop and read. */
-export interface Toast {
-  id: string;
-  level: 'info' | 'success' | 'warning' | 'error';
-  message: string;
-  /** Optional inline action (e.g. "Retry", "Undo"). The handler runs
-   *  in addition to dismissing the toast — the toast tracker takes
-   *  care of removing the toast from the stack afterwards. */
-  action?: { label: string; onClick: () => void };
-  /** Milliseconds before auto-dismiss. `null` = persistent (must be
-   *  clicked away). Defaults: info / success 3000, warning 5000,
-   *  error null. */
-  ttl: number | null;
-  /** How many identical (same level + message) toasts have collapsed
-   *  into this one. Absent / 1 = a single occurrence; rendered as a
-   *  "×N" badge when >1 so rapid-fire duplicates don't flood the
-   *  stack. Maintained by the `TOAST_ADD` reducer. */
-  count?: number;
 }
 
 export interface State {
@@ -330,10 +310,6 @@ export interface State {
    *  Provider's `actions.alert` / `actions.confirm` set this and resolve
    *  the returned Promise once the user dismisses. */
   modal: ModalRequest | null;
-  /** Active toast notifications, rendered as a stack in the bottom-
-   *  right corner. Each entry self-dismisses after its ttl; the
-   *  Provider trims this list on every `TOAST_DISMISS`. */
-  toasts: Toast[];
   /** True while the user is typing a new folder name. The input
    *  renders inside the FileTree at the row matching
    *  `state.activeFolder` so the new folder appears under the
@@ -408,7 +384,6 @@ export const initialState: State = {
   renaming: null,
   cascadePrompt: null,
   modal: null,
-  toasts: [],
   newFolderInputOpen: false,
   find: { open: false, query: '', caseSensitive: false, wholeWord: false, current: 0, total: 0 },
 };
@@ -503,9 +478,6 @@ export type Action =
   | { type: 'CASCADE_PROMPT'; prompt: CascadePrompt | null }
   | { type: 'MODAL_OPEN'; request: ModalRequest }
   | { type: 'MODAL_CLOSE' }
-  | { type: 'TOAST_ADD'; toast: Toast }
-  | { type: 'TOAST_DISMISS'; id: string }
-  | { type: 'TOAST_CLEAR' }
   /** Promote a preview tab to a pinned one (sets `preview = false`).
    *  Triggered by double-click on a sidebar file, double-click on the
    *  tab title, or entering edit mode on the tab. */

@@ -151,11 +151,6 @@ export interface AppActions {
       action?: { label: string; onClick: () => void };
     },
   ) => string;
-  dismissToast: (id: string) => void;
-  /** Clear all toasts at once — backs the "Clear all" control that
-   *  appears when the stack has more than one toast (persistent error
-   *  toasts otherwise have to be dismissed one by one). */
-  clearToasts: () => void;
   toggleEditMode: () => Promise<void>;
   /** Reveal an existing Agent Panel session or create its first tab. This only
    * changes renderer layout; permissions and Agent context remain unchanged. */
@@ -258,8 +253,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const {
     askCascadeForRename,
     askConfirm,
-    clearToasts,
-    dismissToast,
     resolveCascadePrompt,
     resolveModal,
     showAlert,
@@ -446,7 +439,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     consumePendingHighlight: workspace.consumePendingHighlight,
     resolveCascadePrompt,
     alert: showAlert, confirm: askConfirm, resolveModal,
-    toast, dismissToast, clearToasts,
+    toast,
     toggleEditMode: workspace.toggleEditMode,
     openAgent: (agent) => {
       const current = stateRef.current;
@@ -467,7 +460,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }), [
     workspace,
     resolveCascadePrompt,
-    showAlert, askConfirm, resolveModal, toast, dismissToast, clearToasts,
+    showAlert, askConfirm, resolveModal, toast,
     registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,

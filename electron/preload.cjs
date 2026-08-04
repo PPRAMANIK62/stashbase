@@ -36,7 +36,7 @@ ipcRenderer.on('window:folder-removed', (_event, folder) => {
 // for the traffic-light buttons, opt into the drag region, etc. Done
 // pre-DOMContentLoaded by toggling a class once the body exists.
 window.addEventListener('DOMContentLoaded', () => {
-  document.body.classList.add('is-electron');
+  document.body.classList.add('is-electron', `platform-${process.platform}`);
 });
 
 // macOS green-button fullscreen hides the traffic lights, so the chrome

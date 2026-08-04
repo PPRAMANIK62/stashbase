@@ -5,6 +5,7 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from 'react';
+import { StatusMessage } from './ui/status';
 
 interface Props {
   children: ReactNode;
@@ -77,12 +78,19 @@ export class LazyLoadBoundary extends Component<LazyLoadBoundaryProps, LazyLoadB
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className={`${this.props.className} lazy-load-error`} role="alert">
+      <StatusMessage
+        tone="error"
+        className={`${this.props.className} lazy-load-error`}
+      >
         <span>Could not open {this.props.label}.</span>
-        <button type="button" className="lazy-load-reload" onClick={() => window.location.reload()}>
+        <button
+          type="button"
+          className="rounded-md border border-border bg-background px-2.5 py-1 text-sm hover:bg-[var(--hover)]"
+          onClick={() => window.location.reload()}
+        >
           Reload
         </button>
-      </div>
+      </StatusMessage>
     );
   }
 }
@@ -133,18 +141,21 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="errbnd-veil" role="alert">
-        <div className="errbnd-card">
-          <div className="errbnd-title">Something went wrong</div>
-          <div className="errbnd-msg">{this.state.error.message || 'Unknown error'}</div>
-          <pre className="errbnd-stack">
+      <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/35 p-4">
+        <StatusMessage
+          tone="error"
+          className="grid max-h-[calc(100vh-32px)] w-[min(620px,calc(100vw-32px))] gap-3 overflow-hidden rounded-xl bg-popover p-5 text-popover-foreground shadow-elevation"
+        >
+          <h1 className="m-0 text-base font-semibold">Something went wrong</h1>
+          <div>{this.state.error.message || 'Unknown error'}</div>
+          <pre className="max-h-[min(48vh,360px)] overflow-auto rounded-md bg-pane p-3 text-xs whitespace-pre-wrap">
             {this.state.error.stack ?? '(no stack)'}
           </pre>
-          <div className="errbnd-actions">
-            <button type="button" className="errbnd-btn primary" onClick={this.reset}>Reload</button>
-            <button type="button" className="errbnd-btn" onClick={() => void this.copyDetails()}>Copy details</button>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="rounded-md bg-primary px-2.5 py-1.5 text-sm font-medium text-primary-foreground" onClick={this.reset}>Reload</button>
+            <button type="button" className="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-medium hover:bg-[var(--hover)]" onClick={() => void this.copyDetails()}>Copy details</button>
           </div>
-        </div>
+        </StatusMessage>
       </div>
     );
   }

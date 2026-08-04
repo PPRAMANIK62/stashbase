@@ -50,5 +50,77 @@ test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
   const globals = read('web-src/src/styles/globals.css');
   assert.match(globals, /transition-property: opacity, color, background-color/);
   assert.match(globals, /animation-duration: 0\.01ms !important/);
-  assert.match(read('web-src/src/styles/mainpane.css'), /\.toast \{\s*animation: toast-fade/);
+});
+
+test('shared interaction surfaces delegate behavior to the renderer UI layer', () => {
+  for (const [file, primitive] of [
+    ['web-src/src/components/ui/alert-dialog.tsx', 'alert-dialog'],
+    ['web-src/src/components/ui/menu.tsx', 'menu'],
+    ['web-src/src/components/ui/popover.tsx', 'popover'],
+    ['web-src/src/components/ui/toast.tsx', 'toast'],
+    ['web-src/src/components/ui/tooltip.tsx', 'tooltip'],
+  ]) {
+    assert.match(read(file), new RegExp(`@base-ui/react/${primitive}`));
+  }
+
+  const modal = read('web-src/src/components/ModalShell.tsx');
+  assert.match(modal, /lazyWithRetry\(\(\) => import\('\.\/ManagedModalShell'\)\)/);
+  assert.match(read('web-src/src/components/ManagedModalShell.tsx'), /\.\/ui\/dialog/);
+  assert.match(modal, /<ModalLoadingStatus/);
+  assert.doesNotMatch(modal, /createPortal|addEventListener/);
+  assert.doesNotMatch(read('web-src/src/components/SettingsModal.tsx'), /addEventListener\('keydown'/);
+  assert.doesNotMatch(read('web-src/src/components/CascadePromptModal.tsx'), /addEventListener/);
+
+  const menu = read('web-src/src/components/Menu.tsx');
+  assert.match(menu, /lazyWithRetry\(\(\) => import\('\.\/ManagedMenu'\)\)/);
+  const managedMenu = read('web-src/src/components/ManagedMenu.tsx');
+  assert.match(managedMenu, /\.\/ui\/menu/);
+  assert.doesNotMatch(managedMenu, /useLayoutEffect|addEventListener|getBoundingClientRect\(\).*set/);
+
+  assert.match(read('web-src/src/components/Toasts.tsx'), /lazyWithRetry\(\(\) => import\('\.\/ManagedToasts'\)\)/);
+  assert.match(read('web-src/src/components/ManagedToasts.tsx'), /\.\/ui\/toast/);
+  assert.doesNotMatch(read('web-src/src/store/state.ts'), /TOAST_(ADD|DISMISS|CLEAR)/);
+  assert.doesNotMatch(read('web-src/src/store/stateReducer.ts'), /case 'TOAST_/);
+
+  const managedTooltipButton = read('web-src/src/components/ManagedTooltipButton.tsx');
+  assert.match(managedTooltipButton, /<TooltipTrigger\s+\{\.\.\.triggerProps\}/);
+  assert.match(managedTooltipButton, /render=\{<button disabled=\{disabled\} \/>}/);
+  assert.match(managedTooltipButton, /triggerRef\.current\?\.focus\(\)/);
+
+  const app = read('web-src/src/App.tsx');
+  assert.match(app, /<OverlayStackProvider>/);
+  assert.match(app, /role="separator"/);
+  assert.match(app, /aria-valuemin=/);
+  assert.match(app, /resizeSidebarByKeyboard/);
+  assert.match(app, /resizeChatByKeyboard/);
+  assert.doesNotMatch(app, /classList\.add\('is-electron'\)/);
+
+  const preload = read('electron/preload.cjs');
+  assert.match(preload, /platform-\$\{process\.platform\}/);
+  assert.match(read('web-src/src/styles/globals.css'), /platform-darwin \.app-chrome-left/);
+});
+
+test('shared overlays own loading modality, popup positioning, and focus return', () => {
+  for (const file of [
+    'web-src/src/components/ModalShell.tsx',
+    'web-src/src/components/SettingsModal.tsx',
+    'web-src/src/components/AlertConfirmModal.tsx',
+    'web-src/src/components/ClipboardImportModal.tsx',
+  ]) {
+    const source = read(file);
+    assert.match(source, /useOverlayLayer/);
+    assert.match(source, /<ModalLoadingStatus/);
+  }
+
+  const loadingStatus = read('web-src/src/components/ui/status.tsx');
+  assert.match(loadingStatus, /dialog\.showModal\(\)/);
+  assert.match(loadingStatus, /if \(isTopmost\) onCancel\(\)/);
+
+  const popover = read('web-src/src/components/ui/popover.tsx');
+  assert.match(popover, /<PopoverPrimitive\.Positioner[\s\S]*side=\{side\}/);
+  assert.match(popover, /<PopoverPrimitive\.Popup[\s\S]*\{\.\.\.props\}/);
+
+  const tree = read('web-src/src/components/FileTree.tsx');
+  assert.match(tree, /tabIndex=\{-1\}/);
+  assert.match(tree, /currentTarget as HTMLElement\)\.focus\(\{ preventScroll: true \}\)/);
 });

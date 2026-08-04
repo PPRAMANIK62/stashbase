@@ -55,6 +55,14 @@ to migrate them into a StashBase-specific storage model.
 - Removing a folder that is open elsewhere saves those windows and returns
   them to the library view instead of leaving stale editable state behind.
 - Destructive file operations require clear confirmation.
+- Blocking dialogs and menus keep keyboard focus inside the active surface,
+  dismiss only the topmost eligible surface with Escape, and return focus to
+  the invoking control. Pointer context menus first focus their file-tree row,
+  so dismissal has the same deterministic return target. Non-blocking feedback
+  is announced without stealing focus.
+- Sidebar and Agent-panel widths work with pointer input and with
+  Arrow/Home/End keys on macOS, Windows, and Linux; reduced-motion users do
+  not receive layout movement animation.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
   or project-management surface. It groups the file tree and the active
   Markdown document outline into independently collapsible navigation sections.

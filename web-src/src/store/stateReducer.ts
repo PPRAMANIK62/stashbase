@@ -459,26 +459,6 @@ export function reducer(s: State, a: Action): State {
       return { ...s, modal: a.request };
     case 'MODAL_CLOSE':
       return { ...s, modal: null };
-    case 'TOAST_ADD': {
-      // Collapse rapid-fire duplicates: if an identical toast (same
-      // level + message) is already on the stack, bump its count in
-      // place instead of pushing a new one. Keeps its original id (so
-      // React doesn't remount) and position; ToastItem re-arms its
-      // auto-dismiss off the count change.
-      const dup = s.toasts.findIndex(
-        (t) => t.level === a.toast.level && t.message === a.toast.message,
-      );
-      if (dup !== -1) {
-        const next = s.toasts.slice();
-        next[dup] = { ...next[dup], count: (next[dup].count ?? 1) + 1 };
-        return { ...s, toasts: next };
-      }
-      return { ...s, toasts: [...s.toasts, a.toast] };
-    }
-    case 'TOAST_DISMISS':
-      return { ...s, toasts: s.toasts.filter((t) => t.id !== a.id) };
-    case 'TOAST_CLEAR':
-      return s.toasts.length === 0 ? s : { ...s, toasts: [] };
     case 'PROMOTE_TAB':
       return {
         ...s,

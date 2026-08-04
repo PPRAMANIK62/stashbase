@@ -21,10 +21,19 @@ The panel may make agent work easier to scan, but it should stay quiet:
 The renderer retains its existing CSS during the Tailwind v4 migration. Shared
 semantic theme roles (surface, text, border, focus, status, density, radius,
 elevation, and motion) are exposed as CSS variables and Tailwind tokens; new
-work consumes those roles rather than inventing visual literals. New accessible
-popup/control work uses shadcn-generated Base UI components. A lazily loaded primitive may show only a
-non-interactive loading status until the managed control is ready; never provide an
-unmanaged dialog fallback. React Aria Components remain only where they
+work consumes those roles rather than inventing visual literals. Shared
+dialogs, alert dialogs, menus, popovers, tooltips, and toasts use the
+shadcn-generated Base UI adapters under `web-src/src/components/ui/`; feature
+code must not recreate their focus, Escape, outside-press, collision, timer, or
+announcement behavior. The shared Button adapter is used inside managed
+primitives; feature-owned semantic buttons may remain native while the
+migration is incremental. App splitters remain renderer-owned layout controls,
+but expose separator value semantics, visible keyboard focus, and
+platform-neutral Arrow/Home/End transitions. A lazily loaded blocking
+primitive uses the shared native-modal loading status until Base UI is ready,
+so focus containment, inertness, topmost Escape, and cancellation do not
+depend on chunk timing. Never provide a feature-owned dialog fallback. React
+Aria Components remain only where they
 already own a transitional surface and are not a dependency choice for new
 renderer work. Motion is limited to structural/status feedback and runs under
 the user reduced-motion policy: transforms and layout animation stop while

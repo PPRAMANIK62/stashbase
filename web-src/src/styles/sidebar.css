@@ -122,33 +122,6 @@
       filter: brightness(0.95);
     }
 
-    /* Shared modal scaffolding for the embedder flow (key entry +
-     * re-embed confirmation). Veil dims the app; card centers a
-     * fixed-width panel. Click on the veil cancels; the card
-     * stops propagation so clicks inside don't dismiss. */
-    .modal-veil {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.35);
-      display: grid;
-      place-items: center;
-      z-index: 100;
-    }
-
-    .modal-veil.top {
-      z-index: 10000;
-    }
-
-    .modal-load-status {
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      display: grid;
-      place-items: center;
-      color: var(--fg);
-      background: rgba(0, 0, 0, 0.35);
-    }
-
     .modal-card {
       background: var(--bg);
       border: 1px solid var(--border);

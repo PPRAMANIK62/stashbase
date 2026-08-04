@@ -4,7 +4,7 @@
  * before writing config.
  * `mode='change'` only swaps the title + button text.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { EmbedderProvider } from '../../api';
 import { errorMessage } from '../../api';
 import { ModalShell } from '../ModalShell';
@@ -28,7 +28,6 @@ export function KeyModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => { inputRef.current?.focus(); }, []);
 
   async function submit() {
     const trimmed = key.trim();
@@ -47,13 +46,14 @@ export function KeyModal({
   }
 
   return (
-    <ModalShell onCancel={onCancel}>
-      <h3>{mode === 'change' ? 'Change API key' : `${providerLabel(provider)} API key`}</h3>
-      <p className="modal-hint">
-        {mode === 'change'
-          ? `Replaces your ${providerLabel(provider)} key for ${model}.`
-          : `Used only for embeddings with ${model} — never for chat or completions.`}
-      </p>
+    <ModalShell
+      title={mode === 'change' ? 'Change API key' : `${providerLabel(provider)} API key`}
+      description={mode === 'change'
+        ? `Replaces your ${providerLabel(provider)} key for ${model}.`
+        : `Used only for embeddings with ${model} — never for chat or completions.`}
+      initialFocus={inputRef}
+      onCancel={onCancel}
+    >
       <input
         ref={inputRef}
         type="password"
@@ -64,7 +64,6 @@ export function KeyModal({
         onChange={(e) => setKey(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') { e.preventDefault(); void submit(); }
-          else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
         }}
       />
       {error && <div className="modal-error">{error}</div>}

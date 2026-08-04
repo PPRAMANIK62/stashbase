@@ -10,6 +10,7 @@ import { Button } from './ui/button';
 interface ClipboardImportDialogProps {
   title: ReactNode;
   description?: ReactNode;
+  isTopmost: boolean;
   onCancel: () => void;
   onAdd: () => void;
   children: ReactNode;
@@ -24,13 +25,14 @@ interface ClipboardImportDialogProps {
 export default function ClipboardImportDialog({
   title,
   description,
+  isTopmost,
   onCancel,
   onAdd,
   children,
 }: ClipboardImportDialogProps) {
   return (
     <Dialog open onOpenChange={(open) => {
-      if (!open) onCancel();
+      if (!open && isTopmost) onCancel();
     }}>
       <DialogContent className="modal-card !w-[min(420px,90vw)] !max-w-[90vw] !gap-0 !p-[22px_24px_20px]" showCloseButton={false}>
         <DialogTitle className="modal-title">{title}</DialogTitle>

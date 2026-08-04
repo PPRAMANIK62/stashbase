@@ -7,8 +7,6 @@
  * `./styles/`; never add new rules here.
  *
  *   globals.css   — design tokens, body / #root, .app grid, common reset
- *   menu.css      — the shared popup-menu primitive (<Menu>): sidebar
- *                   button menus + file-tree right-click context menu
  *   chat.css      — right-side chat panel (agent tabs) + agent picker
  *   sidebar.css   — left rail: tree, search, library row, banners
  *   mainpane.css  — main viewer / tabs / split / PDF + HTML + MD
@@ -55,7 +53,6 @@
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 @import './styles/globals.css';
-@import './styles/menu.css';
 @import './styles/chat.css';
 @import './styles/sidebar.css';
 @import './styles/mainpane.css';

@@ -34,7 +34,8 @@
       transition: background .12s, width .12s;
     }
     .chat-splitter:hover::after,
-    .chat-splitter:active::after {
+    .chat-splitter:active::after,
+    .chat-splitter:focus-visible::after {
       width: 2px;
       background: var(--accent);
     }
