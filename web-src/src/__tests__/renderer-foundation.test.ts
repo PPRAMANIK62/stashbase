@@ -34,9 +34,10 @@ test('shadcn generation is configured for Base UI and renderer aliases', () => {
 
 test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
   assert.match(read('web-src/src/App.tsx'), /@base-ui\/react\/button/);
-  assert.match(read('web-src/src/components/ModalShell.tsx'), /@base-ui\/react\/dialog/);
-  assert.match(read('web-src/src/main.tsx'), /MotionConfig reducedMotion="user"/);
-  assert.match(read('web-src/src/components/Overlays.tsx'), /AnimatePresence/);
+  assert.match(read('web-src/src/components/BaseDialogModalShell.tsx'), /@base-ui\/react\/dialog/);
+  assert.match(read('web-src/src/components/MotionDropVeil.tsx'), /MotionConfig reducedMotion="user"/);
+  assert.match(read('web-src/src/components/MotionDropVeil.tsx'), /animate=\{\{ opacity: 1 \}\}/);
+  assert.match(read('web-src/src/components/Overlays.tsx'), /lazy\(\(\) => import\('\.\/MotionDropVeil'\)\)/);
   const globals = read('web-src/src/styles/globals.css');
   assert.match(globals, /transition-property: opacity, color, background-color/);
   assert.doesNotMatch(globals, /animation-duration: 1ms/);

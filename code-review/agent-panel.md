@@ -26,7 +26,9 @@ popup/control work uses Base UI. React Aria Components remain only where they
 already own a transitional surface and are not a dependency choice for new
 renderer work. Motion is limited to structural/status feedback and runs under
 the user reduced-motion policy: transforms and layout animation stop while
-opacity feedback remains available.
+opacity feedback remains available. Foundation primitives that are only needed
+after an interaction may load at that interaction boundary, preserving the
+enforced initial-renderer budget without making the feature unavailable.
 
 Community contributions can land as useful first iterations, but the long-term design should continue to be simplified toward this side-panel model when needed.
 
