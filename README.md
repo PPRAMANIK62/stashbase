@@ -44,7 +44,7 @@ Apple Silicon Macs running macOS 12 or later can install with Homebrew:
 brew install --cask liliu-z/stashbase/stashbase
 ```
 
-Or download the `StashBase-*-mac-arm64.dmg` from [Releases](https://github.com/liliu-z/stashbase/releases), drag the app to **Applications**, and open it there. If macOS says the app is damaged or asks to move it to Trash, use the `Fix.sh` included in that DMG; it repairs the copy in Applications and restores the previous copy if the replacement cannot be verified.
+Or download the `StashBase-*-mac-arm64.dmg` from [Releases](https://github.com/liliu-z/stashbase/releases), drag the app to **Applications**, and open it there. If macOS says the app is damaged or asks to move it to Trash, use the `Fix.sh` included in that DMG to repair the copy in Applications.
 
 ### Windows
 
@@ -62,7 +62,7 @@ Run the same command with a newer package to update. To remove StashBase, run `s
 
 ### Updating and first launch
 
-Quit StashBase before replacing it with a newer installer. Updates and uninstalls leave your source folders untouched; removing a folder inside StashBase only clears its rebuildable StashBase index, never the folder on disk.
+Quit StashBase before replacing it with a newer installer. Updates and uninstalls leave your source folders untouched; removing an opened root from the StashBase library only clears its rebuildable index, never the folder on disk.
 
 > Don't have an embedding API key? In-app keyword search works without one. Join our [Discord](https://discord.gg/zsRZH4PTq9) to ask about evaluation access.
 

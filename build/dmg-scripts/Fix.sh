@@ -36,22 +36,32 @@ TARGET_APP="$2"
 SIGN_SCRIPT="$3"
 stage="starting"
 BACKUP_APP=""
+COMMITTED=0
 
-fail() {
+rollback() {
+  [[ "$COMMITTED" -eq 0 && -n "$BACKUP_APP" && -d "$BACKUP_APP" ]] || return 0
+  echo "[StashBase install] restoring the previous app" >&2
+  /bin/rm -rf "$TARGET_APP"
+  /bin/mv "$BACKUP_APP" "$TARGET_APP"
+  BACKUP_APP=""
+}
+
+on_exit() {
   local code="$?"
-  trap - ERR
+  trap - EXIT INT TERM HUP
   set +e
-  if [[ -n "$BACKUP_APP" && -d "$BACKUP_APP" ]]; then
-    echo "[StashBase install] restoring the previous app" >&2
-    /bin/rm -rf "$TARGET_APP"
-    /bin/mv "$BACKUP_APP" "$TARGET_APP"
+  if [[ "$COMMITTED" -eq 0 ]]; then
+    rollback
+    echo "[StashBase install] failed while ${stage}" >&2
+    echo "[StashBase install] source: ${SOURCE_APP}" >&2
+    echo "[StashBase install] target: ${TARGET_APP}" >&2
   fi
-  echo "[StashBase install] failed while ${stage}" >&2
-  echo "[StashBase install] source: ${SOURCE_APP}" >&2
-  echo "[StashBase install] target: ${TARGET_APP}" >&2
   exit "$code"
 }
-trap fail ERR
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 if [[ -d "$TARGET_APP" ]]; then
   BACKUP_APP="${TARGET_APP}.stashbase-previous-$$"
@@ -67,10 +77,13 @@ stage="repairing the ad-hoc code signature"
 /bin/zsh "$SIGN_SCRIPT" "$TARGET_APP"
 stage="verifying the installed app bundle"
 /usr/bin/codesign --verify --deep --strict "$TARGET_APP"
+COMMITTED=1
 
 if [[ -n "$BACKUP_APP" ]]; then
   stage="removing the replaced app backup"
-  /bin/rm -rf "$BACKUP_APP"
+  if ! /bin/rm -rf "$BACKUP_APP"; then
+    echo "[StashBase install] installed the new app but could not remove ${BACKUP_APP}" >&2
+  fi
   BACKUP_APP=""
 fi
 EOS
