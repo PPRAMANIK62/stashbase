@@ -5,7 +5,7 @@ import { verifyMacosRecoveryInstaller } from './verify-macos-recovery-installer.
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('macOS recovery installer restores the previous app after every failed replacement stage', {
+test('macOS recovery installer restores or preserves the previous app across failures and interruptions', {
   skip: process.platform !== 'darwin',
 }, () => {
   verifyMacosRecoveryInstaller(

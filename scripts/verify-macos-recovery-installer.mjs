@@ -27,23 +27,93 @@ function writeSignedApp(source) {
   execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', source]);
 }
 
-function writeSigner(signer, mode, realSigner, sentinel) {
+const RECOVERY_CASES = [
+  {
+    name: 'copy-failure',
+    prepareSource: false,
+    signer: 'real',
+    expectedStage: 'copying StashBase.app without quarantine attributes',
+  },
+  {
+    name: 'sign-failure',
+    signer: 'fail',
+    expectedStage: 'repairing the ad-hoc code signature',
+  },
+  {
+    name: 'verification-failure',
+    signer: 'corrupt',
+    expectedStage: 'verifying the installed app bundle',
+  },
+  ...['INT', 'TERM', 'HUP'].map((signal) => ({
+    name: `interrupt-${signal.toLowerCase()}`,
+    signer: 'signal',
+    signal,
+    expectedStage: 'repairing the ad-hoc code signature',
+  })),
+  {
+    name: 'remove-failure',
+    signer: 'fail',
+    rollbackCommand: 'remove',
+    expectedRecoveryError: 'could not remove the failed replacement',
+    expectedStage: 'repairing the ad-hoc code signature',
+  },
+  {
+    name: 'restore-failure',
+    signer: 'fail',
+    rollbackCommand: 'restore',
+    expectedRecoveryError: 'could not restore the previous app',
+    expectedStage: 'repairing the ad-hoc code signature',
+  },
+  {
+    name: 'success',
+    signer: 'real',
+    success: true,
+  },
+];
+
+function replaceOnce(source, needle, replacement, label) {
+  assert(source.includes(needle), `Could not instrument ${label}`);
+  return source.replace(needle, replacement);
+}
+
+function helperForCase(helper, recoveryCase) {
+  let instrumented = helper;
+  if (recoveryCase.rollbackCommand === 'remove') {
+    instrumented = replaceOnce(
+      instrumented,
+      '/bin/rm -rf "$TARGET_APP"',
+      '/usr/bin/false',
+      `${recoveryCase.name} remove failure`,
+    );
+  }
+  if (recoveryCase.rollbackCommand === 'restore') {
+    instrumented = replaceOnce(
+      instrumented,
+      '/bin/mv "$BACKUP_APP" "$TARGET_APP"',
+      '/usr/bin/false',
+      `${recoveryCase.name} restore failure`,
+    );
+  }
+  return instrumented;
+}
+
+function writeSigner(signer, recoveryCase, realSigner, sentinel) {
   const common = `#!/bin/zsh
 print -r -- invoked > ${JSON.stringify(sentinel)}
 `;
-  const source = mode === 'sign'
+  const source = recoveryCase.signer === 'fail'
     ? `${common}exit 1\n`
-    : mode === 'verification'
+    : recoveryCase.signer === 'corrupt'
       ? `${common}print -r -- corrupt >> "$1/Contents/Resources/version.txt"\nexit 0\n`
-      : mode === 'interrupt'
-        ? `${common}kill -TERM "$PPID"\n/bin/sleep 0.1\nexit 0\n`
+      : recoveryCase.signer === 'signal'
+        ? `${common}kill -${recoveryCase.signal} "$PPID"\n/bin/sleep 0.1\nexit 0\n`
         : `${common}exec /bin/zsh ${JSON.stringify(realSigner)} "$1"\n`;
   fs.writeFileSync(signer, source);
   fs.chmodSync(signer, 0o755);
 }
 
-function runCase(helper, realSigner, mode) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `stashbase-macos-recovery-${mode}-`));
+function runCase(helper, realSigner, recoveryCase) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `stashbase-macos-recovery-${recoveryCase.name}-`));
   const target = path.join(root, 'StashBase.app');
   const source = path.join(root, 'Source.app');
   const signer = path.join(root, 'sign.sh');
@@ -53,26 +123,53 @@ function runCase(helper, realSigner, mode) {
   try {
     fs.mkdirSync(target);
     fs.writeFileSync(path.join(target, 'version.txt'), 'old');
-    if (mode !== 'copy') writeSignedApp(source);
-    writeSigner(signer, mode, realSigner, sentinel);
-    fs.writeFileSync(helperPath, helper);
+    if (recoveryCase.prepareSource !== false) writeSignedApp(source);
+    writeSigner(signer, recoveryCase, realSigner, sentinel);
+    fs.writeFileSync(helperPath, helperForCase(helper, recoveryCase));
     fs.chmodSync(helperPath, 0o755);
 
     const result = spawnSync('/bin/zsh', [helperPath, source, target, signer], { encoding: 'utf8' });
-    const success = mode === 'success';
-    assert(success ? result.status === 0 : result.status !== 0, `${mode} returned the wrong status`);
-    if (mode !== 'copy') assert(fs.existsSync(sentinel), `${mode} never invoked the signer`);
-    if (!success) {
-      const expectedStage = mode === 'copy' ? 'copying StashBase.app without quarantine attributes'
-        : mode === 'verification' ? 'verifying the installed app bundle'
-          : 'repairing the ad-hoc code signature';
-      assert(result.stderr.includes(`failed while ${expectedStage}`), `${mode} did not fail at ${expectedStage}`);
-      assert(fs.readFileSync(path.join(target, 'version.txt'), 'utf8') === 'old', `${mode} did not restore the previous app`);
-    } else {
+    assert(recoveryCase.success ? result.status === 0 : result.status !== 0, `${recoveryCase.name} returned the wrong status`);
+    if (recoveryCase.prepareSource !== false) {
+      assert(fs.existsSync(sentinel), `${recoveryCase.name} never invoked the signer`);
+    }
+    if (recoveryCase.success) {
       assert(fs.readFileSync(path.join(target, 'Contents', 'Resources', 'version.txt'), 'utf8') === 'new', 'success did not install the new app');
+    } else if (recoveryCase.rollbackCommand) {
+      assert(
+        result.stderr.includes(`failed while ${recoveryCase.expectedStage}`),
+        `${recoveryCase.name} did not fail at ${recoveryCase.expectedStage}`,
+      );
+      assert(
+        result.stderr.includes(recoveryCase.expectedRecoveryError),
+        `${recoveryCase.name} did not report the recovery failure`,
+      );
+      assert(
+        result.stderr.includes('the previous app remains at'),
+        `${recoveryCase.name} did not report the preserved backup`,
+      );
+    } else {
+      assert(
+        result.stderr.includes(`failed while ${recoveryCase.expectedStage}`),
+        `${recoveryCase.name} did not fail at ${recoveryCase.expectedStage}`,
+      );
+      assert(
+        fs.readFileSync(path.join(target, 'version.txt'), 'utf8') === 'old',
+        `${recoveryCase.name} did not restore the previous app`,
+      );
     }
     const leftovers = fs.readdirSync(root).filter((name) => name.includes('.stashbase-previous-'));
-    assert(leftovers.length === 0, `${mode} left a rollback bundle behind`);
+    const expectedLeftovers = recoveryCase.rollbackCommand ? 1 : 0;
+    assert(
+      leftovers.length === expectedLeftovers,
+      `${recoveryCase.name} left ${leftovers.length} rollback bundles, expected ${expectedLeftovers}`,
+    );
+    if (recoveryCase.rollbackCommand) {
+      assert(
+        fs.readFileSync(path.join(root, leftovers[0], 'version.txt'), 'utf8') === 'old',
+        `${recoveryCase.name} did not preserve the previous app in its backup`,
+      );
+    }
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -82,7 +179,7 @@ export function verifyMacosRecoveryInstaller(fixScript, realSigner) {
   if (process.platform !== 'darwin') throw new Error('macOS recovery installer verification must run on macOS.');
 
   const helper = helperFrom(fixScript);
-  for (const mode of ['copy', 'sign', 'verification', 'interrupt', 'success']) {
-    runCase(helper, realSigner, mode);
+  for (const recoveryCase of RECOVERY_CASES) {
+    runCase(helper, realSigner, recoveryCase);
   }
 }

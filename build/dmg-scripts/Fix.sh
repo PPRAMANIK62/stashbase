@@ -41,17 +41,26 @@ COMMITTED=0
 rollback() {
   [[ "$COMMITTED" -eq 0 && -n "$BACKUP_APP" && -d "$BACKUP_APP" ]] || return 0
   echo "[StashBase install] restoring the previous app" >&2
-  /bin/rm -rf "$TARGET_APP"
-  /bin/mv "$BACKUP_APP" "$TARGET_APP"
+  if ! /bin/rm -rf "$TARGET_APP"; then
+    echo "[StashBase install] could not remove the failed replacement at ${TARGET_APP}" >&2
+    return 1
+  fi
+  if ! /bin/mv "$BACKUP_APP" "$TARGET_APP"; then
+    echo "[StashBase install] could not restore the previous app from ${BACKUP_APP}" >&2
+    return 1
+  fi
   BACKUP_APP=""
 }
 
 on_exit() {
   local code="$?"
-  trap - EXIT INT TERM HUP
+  trap - EXIT
+  trap '' INT TERM HUP
   set +e
   if [[ "$COMMITTED" -eq 0 ]]; then
-    rollback
+    if ! rollback && [[ -n "$BACKUP_APP" ]]; then
+      echo "[StashBase install] the previous app remains at ${BACKUP_APP}" >&2
+    fi
     echo "[StashBase install] failed while ${stage}" >&2
     echo "[StashBase install] source: ${SOURCE_APP}" >&2
     echo "[StashBase install] target: ${TARGET_APP}" >&2
