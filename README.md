@@ -34,14 +34,6 @@ Open this repo in StashBase and ask the built-in Agent: **How is this project de
 
 ## 💡 Try It
 
-### System Requirements
-
-Before installing, make sure you have:
-- **Disk space**: 500 MB for the app, plus additional space for your file library and search index
-- **Internet**: Required for first launch (to verify the app); semantic search requires an API key
-- **Processor**: 64-bit processor
-- **RAM**: 4 GB minimum (8 GB recommended for large libraries)
-
 StashBase's primary platforms are **macOS 12+ (Apple Silicon)** and **Windows 10+ (x64)**. A community-supported Linux build is also available for **x86_64 Debian 12+ / Ubuntu 22.04+**.
 
 ### macOS
@@ -82,17 +74,19 @@ Run the same command with a newer package to update. To remove StashBase, run `s
 When you open StashBase for the first time:
 
 1. **Open a folder**: Click the folder icon to choose a local folder containing files you want to search
-2. **(Optional) Configure semantic search**: If you want AI-powered semantic search, add an OpenAI or OpenRouter API key in **Settings → API Keys**. Without this, keyword search still works locally at no cost
-3. **(Optional) Set up transcription**: To transcribe audio or video files, download a speech model from **Settings → Transcription**. Models are small (Tiny: 74 MiB, Small: 465 MiB) and run entirely on your machine
+2. **(Optional) Configure semantic search**: If you want AI-powered semantic search, add an OpenAI or OpenRouter API key in **Settings → Embedding**
+3. **(Optional) Set up transcription**: To transcribe audio or video, download a speech model from **Settings → Transcription**. Small (465 MiB) is the default; Tiny (74 MiB) and Base (141 MiB) are lighter options. Transcription runs entirely on your machine, with no API cost, and you can cancel or rerun it while viewing the file
 4. **(Optional) Connect to Claude/Codex**: From **Settings → MCP**, connect external AI tools to access your searchable library
 5. Start searching! Use the search box to find files by content
 
 Your library is **opt-in**: only folders you open in StashBase are indexed. You can remove a folder at any time; StashBase clears its index but never deletes your files from disk.
 
+> Don't have an embedding API key? In-app keyword search works without one. Join our [Discord](https://discord.gg/zsRZH4PTq9) to ask about evaluation access.
+
 ### Updating and Uninstalling
 
 - **Updates**: Quit StashBase and run the newer installer. Your library and settings are preserved
-- **Uninstalls**: Remove StashBase from Settings → Apps. Your local files are never deleted
+- **Uninstalls**: On macOS, remove StashBase from Applications; on Windows or Linux, follow the platform-specific removal steps above. Your local files are never deleted
 
 ### Troubleshooting Installation
 
@@ -102,7 +96,7 @@ Your library is **opt-in**: only folders you open in StashBase are indexed. You 
 - If antivirus software blocks it, temporarily disable it and try again (it's safe to do so from official releases)
 
 **"App is damaged" error on macOS**
-- This is normal on first launch. The `Fix.sh` script in the DMG resolves this
+- This can happen with unsigned builds. The `Fix.sh` script in the DMG resolves this
 - Drag StashBase to Applications, then run the `Fix.sh` from the DMG
 
 **App won't launch after installation**
@@ -112,18 +106,16 @@ Your library is **opt-in**: only folders you open in StashBase are indexed. You 
 
 **Out of disk space errors**
 - Your library index needs space proportional to your files. Add more disk space or remove large files
-- Clear the search index for a folder to reclaim space (your files are never deleted)
+- Remove the folder from the Library to clear its StashBase-owned index and derived data. Your source files are never deleted
 
 **Can't find installed app**
-- On Windows: Press Win+X and search for "StashBase"
+- On Windows: Press the Windows key and search for "StashBase"
 - On macOS: Open Finder → Applications → look for StashBase
 - On Linux: Run `stashbase` from terminal or find it in your applications menu
 
 ---
 
 ## Usage Tips
-
-Your library is opt-in: only folders you open in StashBase are indexed. You can remove a folder from the library at any time; StashBase clears its index but never deletes the folder from disk.
 
 Use **File → New Window** or Cmd/Ctrl+Shift+N to keep different folders and
 tools side by side. Window close follows VS Code's platform shortcuts;
