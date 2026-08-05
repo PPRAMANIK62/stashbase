@@ -11,6 +11,7 @@ import { clearAgentRuntimeFailure } from '../agent-contract.ts';
 import { codexAccessOptions, isStashbaseWorkspaceEdit, isWorkspaceFileChange, permanentlyDeleteCodexThread } from '../codex-agent.ts';
 import { CodexRpcPeer } from '../codex-rpc-transport.ts';
 import { CodexSession } from '../codex-session-runtime.ts';
+import { clearCurrentFolder, runWithWindowId, setCurrentFolder } from '../folder.ts';
 
 class FakeCodexProcess extends EventEmitter {
   stdin = new PassThrough();
@@ -37,6 +38,148 @@ class FakeWebSocket extends EventEmitter {
     this.emit('close');
   }
 }
+
+function catalogProcess(
+  models = [{ id: 'native-model', displayName: 'Native model' }],
+  options: { pages?: Array<Record<string, unknown>[]>; threadModel?: string; rejectSelectedTurn?: boolean } = {},
+): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
+  const proc = new FakeCodexProcess();
+  const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
+  let page = 0;
+  let rejected = false;
+  proc.stdin.on('data', (chunk: Buffer) => {
+    const request = JSON.parse(String(chunk)) as { id: number; method: string; params: Record<string, unknown> };
+    requests.push({ method: request.method, params: request.params });
+    const catalog = options.pages ?? [models];
+    const result = request.method === 'model/list' ? { data: catalog[page] ?? [], ...(page++ < catalog.length - 1 ? { nextCursor: `page-${page}` } : {}) }
+      : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, ...(options.threadModel ? { model: options.threadModel } : {}) }
+      : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model' }
+        : request.method === 'turn/start' ? { turn: { id: 'turn-1' } } : {};
+    if (request.method === 'turn/start' && options.rejectSelectedTurn && request.params.model && !rejected) {
+      rejected = true;
+      proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: 'model unavailable' } })}\n`);
+    } else {
+      proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
+    }
+  });
+  return { proc, requests };
+}
+
+async function settle(): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
+test('Codex publishes its native model catalog before ready and forwards a selected model on the first turn', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('model-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('model-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(ws as unknown as WebSocket, 'model-window', undefined, undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; models?: Array<{ id: string }>; activeModel?: string });
+  assert.equal(events[0]?.t, 'models', JSON.stringify(events));
+  assert.equal(events[0]?.models?.[0]?.id, 'native-model');
+  assert.equal(events[0]?.activeModel, 'native-model');
+  assert.equal(events[1]?.t, 'ready');
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  assert.equal(native.requests.find((request) => request.method === 'turn/start')?.params.model, 'native-model');
+  session.dispose();
+});
+
+test('Codex recovers unavailable selections to Default and never forwards an override while resuming', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('stale-window', () => setCurrentFolder(folder));
+  runWithWindowId('resume-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('stale-window', () => clearCurrentFolder()); runWithWindowId('resume-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+
+  const staleWs = new FakeWebSocket();
+  const staleNative = catalogProcess();
+  const stale = new CodexSession(staleWs as unknown as WebSocket, 'stale-window', undefined, undefined, undefined, 'withdrawn-model', undefined, () => staleNative.proc as unknown as ChildProcessWithoutNullStreams);
+  stale.begin();
+  await settle();
+  const staleModels = staleWs.sent.map((item) => JSON.parse(item) as { t: string; fallback?: string }).find((event) => event.t === 'models');
+  assert.match(staleModels?.fallback ?? '', /no longer available/);
+  staleWs.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  assert.equal('model' in (staleNative.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
+  stale.dispose();
+
+  const resumeWs = new FakeWebSocket();
+  const resumeNative = catalogProcess();
+  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', undefined, 'thread-old', undefined, 'native-model', undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
+  resumed.begin();
+  await settle();
+  const resumedModels = resumeWs.sent.map((item) => JSON.parse(item) as { t: string; activeModel?: string }).filter((event) => event.t === 'models').at(-1);
+  assert.equal(resumedModels?.activeModel, 'resumed-model');
+  resumeWs.emit('message', JSON.stringify({ t: 'prompt', text: 'continue' }));
+  await settle();
+  assert.equal(resumeNative.requests.some((request) => request.method === 'thread/resume'), true);
+  assert.equal('model' in (resumeNative.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
+  resumed.dispose();
+});
+
+test('Codex reports the native Default model after starting a new thread', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('default-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('default-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { threadModel: 'runtime-default' });
+  const session = new CodexSession(ws as unknown as WebSocket, 'default-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  const active = ws.sent.map((item) => JSON.parse(item) as { t: string; activeModel?: string }).filter((event) => event.t === 'models').at(-1);
+  assert.equal(active?.activeModel, 'runtime-default');
+  assert.equal('model' in (native.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
+  session.dispose();
+});
+
+test('Codex retries a rejected selected model with Default and publishes recovery', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('reject-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('reject-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { rejectSelectedTurn: true });
+  const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  const turns = native.requests.filter((request) => request.method === 'turn/start');
+  assert.equal(turns.length, 2);
+  assert.equal(turns[0]?.params.model, 'native-model');
+  assert.equal('model' in (turns[1]?.params ?? {}), false);
+  const fallback = ws.sent.map((item) => JSON.parse(item) as { t: string; fallback?: string }).find((event) => event.fallback);
+  assert.match(fallback?.fallback ?? '', /retrying/);
+  session.dispose();
+});
+
+test('Codex combines every catalog page and preserves advertised effort options', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('pages-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('pages-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess([], { pages: [
+    [{ id: 'early-model', displayName: 'Early' }],
+    [{ id: 'late-model', displayName: 'Late', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'xhigh' }] }],
+  ] });
+  const session = new CodexSession(ws as unknown as WebSocket, 'pages-window', undefined, undefined, undefined, 'late-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  const modelsEvent = ws.sent.map((item) => JSON.parse(item) as { t: string; models?: Array<{ id: string; supportedEfforts?: string[] }>; activeModel?: string }).find((event) => event.t === 'models');
+  assert.deepEqual(modelsEvent?.models?.map((model) => model.id), ['early-model', 'late-model']);
+  assert.deepEqual(modelsEvent?.models?.[1]?.supportedEfforts, ['low', 'xhigh']);
+  assert.equal(modelsEvent?.activeModel, 'late-model');
+  assert.deepEqual(native.requests.filter((request) => request.method === 'model/list').map((request) => request.params), [{}, { cursor: 'page-1' }]);
+  session.dispose();
+});
 
 test('Codex RPC peer correlates responses and dispatches inbound messages', async () => {
   const writes: string[] = [];
@@ -73,6 +216,7 @@ test('stale Codex process events and stdout cannot affect a replacement generati
   const session = new CodexSession(
     new FakeWebSocket() as unknown as WebSocket,
     'test-window',
+    undefined,
     undefined,
     undefined,
     undefined,

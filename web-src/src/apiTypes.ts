@@ -292,6 +292,7 @@ export interface Agent {
     history: true;
     modes: boolean;
     effort: boolean;
+    models: boolean;
     steering: boolean;
     titleHint: boolean;
   };

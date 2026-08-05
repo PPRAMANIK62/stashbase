@@ -23,6 +23,8 @@ import { AgentComposer } from './agent/AgentComposer';
 import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
+import { agentConnectionUrl } from './agent/connectionUrl';
+import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import type { Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
 
 let blockSeq = 0;
@@ -95,11 +97,14 @@ export function AgentView({
   // dropdown. Switching it sends `set-mode` so the agent applies it live.
   const [mode, setMode] = useState<PermMode>('default');
   const modeRef = useRef<PermMode>('default');
-  // Thinking effort — fixed per session (no live SDK setter), so it rides
-  // the connect URL. `effortRef` lets the connect effect read the latest
-  // value without resubscribing on every change.
-  const [effort, setEffort] = useState<EffortLevel>('high');
-  const effortRef = useRef<EffortLevel>('high');
+  // Thinking effort is opt-in. Undefined preserves the native runtime
+  // default; an explicit choice rides the connect URL for a new session.
+  const [effort, setEffort] = useState<EffortLevel | undefined>(undefined);
+  const effortRef = useRef<EffortLevel | undefined>(undefined);
+  // User intent and runtime telemetry must stay separate: an active model
+  // reached through Default must never become an explicit override later.
+  const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
+  const modelControlRef = useRef(modelControl);
   // The live session's SDK id (from the `session-id` event) — lets the
   // History dropdown mark the current session active. `resumeIdRef` holds
   // a session id to resume on the next connect; it rides the connect URL
@@ -194,11 +199,11 @@ export function AgentView({
     const resume = resumeIdRef.current;
     resumeIdRef.current = null;
     const endpoint = runtime?.endpoint ?? '/ws/agent';
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${endpoint}`
-      + `?windowId=${encodeURIComponent(getWindowId())}&effort=${effortRef.current}`
-      + `&access=${modeRef.current}`
-      + `&agent=${encodeURIComponent(agent)}`
-      + (resume ? `&resume=${encodeURIComponent(resume)}` : '');
+    const wsUrl = agentConnectionUrl({
+      protocol: location.protocol, host: location.host, endpoint,
+      windowId: getWindowId(), effort: effortRef.current, access: modeRef.current,
+      agent, model: modelControlRef.current.selectedModel, resume,
+    });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -244,6 +249,11 @@ export function AgentView({
     sessionIdRef.current = null;
     toolNamesRef.current.clear();
     openKind.current = null;
+    setModelControl((current) => {
+      const next = { ...current, activeModel: undefined, resumedSession: false };
+      modelControlRef.current = next;
+      return next;
+    });
     setPhase('connecting');
     setNonce((n) => n + 1);
   }
@@ -285,6 +295,13 @@ export function AgentView({
     toolNamesRef.current.clear();
     openKind.current = null;
     resumeIdRef.current = id;
+    // The previous tab may have been configured for another model. Clear it
+    // before reconnecting so the locked resumed chat cannot mislabel itself.
+    const resumedModelControl: ModelControlState = {
+      models: [], notice: 'This resumed session retains the model chosen by its native runtime.', resumedSession: true,
+    };
+    modelControlRef.current = resumedModelControl;
+    setModelControl(resumedModelControl);
     // Name the tab from the resumed session right away — otherwise a tab
     // opened to a past session stays "Untitled" until the user sends a
     // new prompt (the `turn-end` path that usually renames never fires on
@@ -312,6 +329,13 @@ export function AgentView({
       case 'session-id':
         setCurrentSessionId(ev.id);
         sessionIdRef.current = ev.id;
+        break;
+      case 'models':
+        setModelControl((current) => {
+          const next = applyModelEvent(current, ev);
+          modelControlRef.current = next;
+          return next;
+        });
         break;
       case 'session-title':
         if (isDefaultChatTitle(titleRef.current)) {
@@ -681,10 +705,22 @@ export function AgentView({
    *  (no live setter), so we apply it by reconnecting — but only when the
    *  chat is still empty, so we never discard a real conversation. With
    *  history present it takes effect on the next new chat. */
-  function changeEffort(level: EffortLevel) {
+  function changeEffort(level: EffortLevel | undefined) {
     if (blocks.length > 0 || turnActive) return;
     setEffort(level);
     effortRef.current = level;
+    reconnect();
+  }
+
+  /** Changing model starts a new native session. A resumed or populated
+   * transcript is immutable here, so it can never silently switch models. */
+  function changeModel(next: string | undefined) {
+    if (blocks.length > 0 || turnActive) return;
+    setModelControl((current) => {
+      const updated = { ...current, selectedModel: next, activeModel: undefined, notice: null, resumedSession: false };
+      modelControlRef.current = updated;
+      return updated;
+    });
     reconnect();
   }
 
@@ -721,6 +757,9 @@ export function AgentView({
   }
 
   const effortLocked = blocks.length > 0 || turnActive;
+  const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
+  const effectiveModel = modelControl.activeModel ?? modelControl.selectedModel;
+  const supportedEfforts = modelControl.models.find((entry) => entry.id === effectiveModel)?.supportedEfforts;
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
     wsRef.current?.send(JSON.stringify({ t: 'permission-reply', id: permId, allow }));
@@ -853,8 +892,17 @@ export function AgentView({
         effort={effort}
         onSetEffort={changeEffort}
         effortLocked={effortLocked}
+        selectedModel={modelControl.selectedModel}
+        activeModel={modelControl.activeModel}
+        models={modelControl.models}
+        modelLocked={modelLocked}
+        modelNotice={modelControl.notice}
+        resumedSession={modelControl.resumedSession}
+        supportedEfforts={supportedEfforts}
+        onSetModel={changeModel}
         showModeMenu={capabilities?.modes === true}
         showEffortMenu={capabilities?.effort === true}
+        showModelMenu={modelMenuVisible(capabilities?.models === true, modelControl.models)}
         agentShortName={meta.shortName}
         attachments={attachments}
         uploading={uploading}

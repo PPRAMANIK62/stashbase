@@ -57,6 +57,28 @@ Community contributions can land as useful first iterations, but the long-term d
 - Streaming should not steal the user's scroll position. If the user has scrolled away from the bottom, show a clear jump-to-latest affordance.
 - The current document is never implicit agent context. Users attach files by drag/drop, file picker, `@` mention, or a composer-focused image paste. Image paste must reuse transient attachments, preserve accompanying text, and suppress the competing clipboard library-import offer.
 - The top-bar Claude and Codex icons select or toggle existing chats. Creating a new chat belongs to the in-panel `+`.
+- Model catalogs and identifiers belong to their native runtime: use Claude's
+  SDK discovery and Codex app-server `model/list`, never a shared hard-coded
+  list. `undefined` means Default and must not change global CLI settings.
+  Keep the renderer's explicit selected override separate from the runtime's
+  active-model telemetry: only the selected override belongs in a new-session
+  URL, so a runtime Default model can never be pinned accidentally. Validate a
+  requested identifier against the complete current native catalog before a
+  new session/turn; a missing, rejected, or stale value clears the override,
+  visibly falls back to Default, and remains recoverable. Codex must collect
+  every paginated `model/list` page before validation and preserve each model's
+  advertised reasoning-effort identifiers/order (including object entries), so
+  the effort picker only offers compatible levels. An unset effort is the
+  native runtime Default and must be omitted from the connection URL; send one
+  only after an explicit user choice. It must initialize and
+  publish this catalog before it emits panel-ready, otherwise the first turn
+  cannot be selected.
+  Do not send a model override when resuming, and lock the picker after chat
+  content exists so a transcript cannot silently switch models. Recover the
+  active model from native thread/session metadata for both Default and
+  resumed chats and surface that identity; a generic “session model” label is
+  not sufficient. Preserve a fallback notice if later initialization reports
+  the active Default model.
 
 ## Current Baseline
 
@@ -89,9 +111,9 @@ The accepted baseline includes:
   transient image files through the scoped local preview route; never expose
   an arbitrary path found in a transcript. The route resolves the real target
   under a non-symlinked private attachment root before it reads it. Effort
-  selection remains open across the session reconnect caused by a level
-  change. Its trigger stays available as a close action during that reconnect,
-  while a closed picker cannot reopen until the session is ready. Leave
+  selection, including Default, remains open across the session reconnect
+  caused by a change. Its trigger stays available as a close action during that
+  reconnect, while a closed picker cannot reopen until the session is ready. Leave
   trigger, Escape, and outside-interaction dismissal to the managed popup
   primitive. When a permission action removes its own controls, restore focus
   to the persistent tool-card trigger.

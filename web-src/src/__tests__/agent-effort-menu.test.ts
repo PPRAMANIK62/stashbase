@@ -29,7 +29,10 @@ test('a closed effort picker cannot open while the Agent reconnects', () => {
 test('controlled effort selection accepts one changed level only', () => {
   assert.equal(changedEffortSelection(new Set(['medium']), 'high'), 'medium');
   assert.equal(changedEffortSelection(new Set(['high']), 'high'), null);
+  assert.equal(changedEffortSelection(new Set(['__default__']), 'high'), undefined);
+  assert.equal(changedEffortSelection(new Set(['__default__']), undefined), null);
   assert.equal(changedEffortSelection(new Set(), 'high'), null);
   assert.equal(changedEffortSelection(new Set(['unsupported']), 'high'), null);
+  assert.equal(changedEffortSelection(new Set(['xhigh']), 'high', ['low', 'high']), null);
   assert.equal(changedEffortSelection('all', 'high'), null);
 });

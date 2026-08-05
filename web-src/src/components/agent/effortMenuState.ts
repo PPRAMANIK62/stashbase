@@ -31,13 +31,15 @@ export function effortMenuState({
 /** Normalize React Aria's controlled selection into a changed effort level. */
 export function changedEffortSelection(
   keys: 'all' | Iterable<unknown>,
-  current: EffortLevel,
-): EffortLevel | null {
+  current: EffortLevel | undefined,
+  supported: readonly EffortLevel[] = EFFORT_LEVELS,
+): EffortLevel | undefined | null {
   if (keys === 'all') return null;
   const next = keys[Symbol.iterator]().next().value;
+  if (next === '__default__') return current ? undefined : null;
   return typeof next === 'string'
     && next !== current
-    && EFFORT_LEVELS.includes(next as EffortLevel)
+    && supported.includes(next as EffortLevel)
     ? next as EffortLevel
     : null;
 }

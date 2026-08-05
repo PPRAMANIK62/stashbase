@@ -8,6 +8,19 @@ context, not a separate AI workspace.
 
 - Users can work with supported Agent runtimes in separate chats and restore
   prior chat history.
+- When a runtime supplies its native model catalog, a compact per-session
+  selector shows Default plus that runtime's available models. Default leaves
+  the user's CLI configuration intact; StashBase never rewrites it or turns the
+  runtime's active Default model into a saved override. A model is fixed once a
+  chat has content or is resumed, so history cannot silently move to another
+  model; new and resumed chats show the identity reported by their native
+  runtime. If a saved choice becomes unavailable or is rejected at turn start,
+  the next new chat recovers to Default with an explanation. Reasoning controls
+  only offer the levels supported by the active model when the runtime reports
+  that compatibility. Effort begins at Default and leaves the native runtime
+  untouched until the user explicitly chooses a level. Those choices remain
+  plainly labeled and easy to select; they are never represented only by
+  decorative slider marks.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
 - Users explicitly attach context through mentions, file selection, drag and
@@ -42,8 +55,10 @@ context, not a separate AI workspace.
   history while their transient files are available, open the existing image
   preview with floating image actions and bottom-centered zoom controls, and clear
   Send/Stop states rather than editor UI.
-- Choosing an Agent effort level keeps the picker available while the fresh
-  Agent session reconnects, so users can observe or refine the setting.
+- Choosing an Agent effort level, including Default, keeps the picker available
+  while the fresh Agent session reconnects, so users can observe or refine the
+  setting. The current model and effort choices remain visually prominent using
+  the active application theme.
 - The panel complements external MCP clients; it does not replace the
   bring-your-own-agent direction.
 

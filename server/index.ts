@@ -415,7 +415,16 @@ function agentIdOf(req: import('node:http').IncomingMessage): string {
 }
 
 function connectionOptionsOf(req: import('node:http').IncomingMessage): AgentConnectionOptions {
-  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req) };
+  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req), model: modelOf(req) };
+}
+
+/** Model ids are opaque native identifiers. Keep only a small URL safety bound;
+ * each adapter validates membership in its freshly discovered catalog. */
+function modelOf(req: import('node:http').IncomingMessage): string | undefined {
+  try {
+    const value = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`).searchParams.get('model')?.trim();
+    return value && value.length <= 200 ? value : undefined;
+  } catch { return undefined; }
 }
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {

@@ -27,6 +27,8 @@ export interface AgentCapabilities {
   history: true;
   modes: boolean;
   effort: boolean;
+  /** The runtime can enumerate and select its own session models. */
+  models: boolean;
   steering: boolean;
   titleHint: boolean;
 }
@@ -36,6 +38,16 @@ export interface AgentConnectionOptions {
   effort?: string;
   resume?: string;
   access?: AgentAccessMode;
+  /** Undefined deliberately means "use the runtime's configured default". */
+  model?: string;
+}
+
+/** A model is always advertised by the native runtime, never a StashBase list. */
+export interface AgentModel {
+  id: string;
+  label: string;
+  description?: string;
+  supportedEfforts?: string[];
 }
 
 /** The stable panel wire protocol. Adapters may translate native events,
@@ -52,6 +64,7 @@ export type AgentServerEvent =
   | { t: 'ready' }
   | { t: 'session-id'; id: string }
   | { t: 'session-title'; title: string }
+  | { t: 'models'; models: AgentModel[]; activeModel?: string; fallback?: string }
   | { t: 'turn-start' }
   | { t: 'text'; delta: string }
   | { t: 'thinking'; delta: string }

@@ -31,4 +31,10 @@ export type Block =
 export type ServerEvent = AgentServerEvent;
 
 export type AgentKind = 'claude' | 'codex';
+export interface AgentModel {
+  id: string;
+  label: string;
+  description?: string;
+  supportedEfforts?: string[];
+}
 import type { AgentServerEvent } from '../../../../server/agent-contract.ts';

@@ -55,7 +55,7 @@ import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './
 import { ensureClaudeBridgeFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode } from './agent-contract.ts';
-import type { AgentClientEvent, AgentServerEvent } from './agent-contract.ts';
+import type { AgentClientEvent, AgentModel, AgentServerEvent } from './agent-contract.ts';
 import { detectViewerFormat } from './format.ts';
 import { isAgentReadableDerivedTextReady } from './library-file-reader.ts';
 
@@ -78,6 +78,33 @@ function missingClaudeMessage(): string {
  * cannot turn an arbitrary WebSocket query value into a native setting. */
 export function claudePermissionMode(access?: string): AgentAccessMode {
   return isAgentAccessMode(access) ? access : 'default';
+}
+
+/** Validate and apply a requested model at the SDK boundary. The caller must
+ * still wait for the SDK init event before presenting it as the active model. */
+export async function selectClaudeModel(
+  requested: string | undefined,
+  models: AgentModel[],
+  setModel: (model?: string) => Promise<void>,
+  resume: boolean,
+): Promise<{ fallback?: string }> {
+  if (resume) return {};
+  const selected = requested && models.some((entry) => entry.id === requested) ? requested : undefined;
+  if (requested && !selected) return { fallback: 'That model is no longer available; using the runtime default.' };
+  try {
+    await setModel(selected);
+    return {};
+  } catch (err: unknown) {
+    return { fallback: 'That model could not be selected; using the runtime default.' };
+  }
+}
+
+export function claudeActiveModelEvent(models: AgentModel[], activeModel: string): Extract<AgentServerEvent, { t: 'models' }> {
+  return {
+    t: 'models',
+    models: models.some((entry) => entry.id === activeModel) ? models : [...models, { id: activeModel, label: activeModel }],
+    activeModel,
+  };
 }
 
 function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
@@ -204,6 +231,7 @@ class AgentSession {
   /** The SDK session_id, captured from the init message. Sent to the
    *  client so the history dropdown can mark this session active. */
   private sessionId: string | null = null;
+  private models: AgentModel[] = [];
 
   constructor(
     private ws: WebSocket,
@@ -211,6 +239,7 @@ class AgentSession {
     private effort?: EffortLevel,
     private resume?: string,
     private access: PermissionMode = 'default',
+    private model?: string,
     private onDispose?: (session: AgentSession) => void,
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
@@ -305,8 +334,33 @@ class AgentSession {
       void this.q?.interrupt().catch(() => { /* already disposed */ });
       return;
     }
+    await this.publishModels();
     this.send({ t: 'ready' });
     void this.pump();
+  }
+
+  /** Ask the SDK rather than encoding Claude aliases or release names here.
+   * Do this before `ready`, so a fresh session cannot race its first prompt
+   * ahead of the requested model. A resumed transcript always stays native. */
+  private async publishModels(): Promise<void> {
+    if (!this.q) return;
+    try {
+      const available = await this.q.supportedModels();
+      this.models = available.map((entry) => ({
+        id: entry.value,
+        label: entry.displayName || entry.value,
+        ...(entry.description ? { description: entry.description } : {}),
+        ...(entry.supportedEffortLevels ? { supportedEfforts: entry.supportedEffortLevels } : {}),
+      }));
+      const selection = await selectClaudeModel(this.model, this.models, (model) => this.q!.setModel(model), Boolean(this.resume));
+      // A resume is intentionally never reconfigured, even if a stale UI
+      // parameter appears on the URL. It preserves the runtime's session model.
+      this.send({ t: 'models', models: this.models, ...(selection.fallback ? { fallback: selection.fallback } : {}) });
+    } catch (err: unknown) {
+      // Catalog discovery is optional runtime capability. The chat remains
+      // usable on older CLIs, with their configured default untouched.
+      log.debug(`could not discover Claude models: ${errorMessage(err)}`);
+    }
   }
 
   /** Drain the SDK message stream until it ends or errors. */
@@ -331,6 +385,9 @@ class AgentSession {
     if (!this.sessionId && typeof sid === 'string' && sid) {
       this.sessionId = sid;
       this.send({ t: 'session-id', id: sid });
+    }
+    if (msg.type === 'system' && msg.subtype === 'init' && msg.model) {
+      this.send(claudeActiveModelEvent(this.models, msg.model));
     }
     switch (msg.type) {
       case 'stream_event': {
@@ -541,6 +598,7 @@ export function attachAgentWebSocket(
   effort?: string,
   resume?: string,
   access?: AgentAccessMode,
+  model?: string,
 ): void {
   const session = new AgentSession(
     ws,
@@ -548,6 +606,7 @@ export function attachAgentWebSocket(
     effort as EffortLevel | undefined,
     resume,
     claudePermissionMode(access),
+    model,
     (s) => sessions.delete(s),
   );
   sessions.add(session);
