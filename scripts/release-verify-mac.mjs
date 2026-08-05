@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyMacosRecoveryInstaller } from './verify-macos-recovery-installer.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -62,6 +63,10 @@ function verifyMountedDmg(dmg) {
     assertPath(path.join(mountPoint, 'Read Me.txt'), 'Read Me.txt');
     assertPath(path.join(mountPoint, '.sign-macos-app.sh'), '.sign-macos-app.sh');
     assertPath(path.join(mountPoint, 'Applications'), 'Applications link');
+    verifyMacosRecoveryInstaller(
+      path.join(mountPoint, 'Fix.sh'),
+      path.join(mountPoint, '.sign-macos-app.sh'),
+    );
     console.log(`[release:verify:mac] verified DMG contents in ${path.basename(dmg)}`);
   } finally {
     if (attached) {

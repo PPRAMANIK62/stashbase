@@ -38,23 +38,31 @@ StashBase's primary platforms are **macOS 12+ (Apple Silicon)** and **Windows 10
 
 ### macOS
 
+Apple Silicon Macs running macOS 12 or later can install with Homebrew:
+
 ```bash
 brew install --cask liliu-z/stashbase/stashbase
 ```
 
+Or download the `StashBase-*-mac-arm64.dmg` from [Releases](https://github.com/liliu-z/stashbase/releases), drag the app to **Applications**, and open it there. If macOS says the app is damaged or asks to move it to Trash, use the `Fix.sh` included in that DMG to repair the copy in Applications.
+
 ### Windows
 
-Download the latest `StashBase-*-win-x64.exe` installer from [Releases](https://github.com/liliu-z/stashbase/releases), then run it.
+Download the latest `StashBase-*-win-x64.exe` installer from [Releases](https://github.com/liliu-z/stashbase/releases), then run it. If Windows SmartScreen appears, choose **More info → Run anyway** only after confirming the installer came from that official Releases page. To update, quit StashBase and run the newer installer. To uninstall, open **Settings → Apps**, then select **StashBase** under **Installed apps** (Windows 11) or **Apps & features** (Windows 10).
 
 ### Linux
 
-Download the latest `StashBase-*-linux-amd64.deb` asset from [Releases](https://github.com/liliu-z/stashbase/releases), then install it:
+For Debian 12+ or Ubuntu 22.04+ on x86_64, download the latest `StashBase-*-linux-amd64.deb` asset from [Releases](https://github.com/liliu-z/stashbase/releases), then install it with `apt` so any required system packages are resolved:
 
 ```bash
-sudo dpkg -i ./StashBase-*-linux-amd64.deb
+sudo apt install ./StashBase-*-linux-amd64.deb
 ```
 
-### First Run
+Run the same command with a newer package to update. To remove StashBase, run `sudo apt remove stashbase`.
+
+### Updating and first launch
+
+Quit StashBase before replacing it with a newer installer. Updates and uninstalls leave your source folders untouched.
 
 > Don't have an embedding API key? In-app keyword search works without one. Join our [Discord](https://discord.gg/zsRZH4PTq9) to ask about evaluation access.
 

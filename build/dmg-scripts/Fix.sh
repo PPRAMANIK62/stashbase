@@ -35,19 +35,47 @@ SOURCE_APP="$1"
 TARGET_APP="$2"
 SIGN_SCRIPT="$3"
 stage="starting"
+BACKUP_APP=""
+COMMITTED=0
 
-fail() {
+rollback() {
+  [[ "$COMMITTED" -eq 0 && -n "$BACKUP_APP" && -d "$BACKUP_APP" ]] || return 0
+  echo "[StashBase install] restoring the previous app" >&2
+  if ! /bin/rm -rf "$TARGET_APP"; then
+    echo "[StashBase install] could not remove the failed replacement at ${TARGET_APP}" >&2
+    return 1
+  fi
+  if ! /bin/mv "$BACKUP_APP" "$TARGET_APP"; then
+    echo "[StashBase install] could not restore the previous app from ${BACKUP_APP}" >&2
+    return 1
+  fi
+  BACKUP_APP=""
+}
+
+on_exit() {
   local code="$?"
-  echo "[StashBase install] failed while ${stage}" >&2
-  echo "[StashBase install] source: ${SOURCE_APP}" >&2
-  echo "[StashBase install] target: ${TARGET_APP}" >&2
+  trap - EXIT
+  trap '' INT TERM HUP
+  set +e
+  if [[ "$COMMITTED" -eq 0 ]]; then
+    if ! rollback && [[ -n "$BACKUP_APP" ]]; then
+      echo "[StashBase install] the previous app remains at ${BACKUP_APP}" >&2
+    fi
+    echo "[StashBase install] failed while ${stage}" >&2
+    echo "[StashBase install] source: ${SOURCE_APP}" >&2
+    echo "[StashBase install] target: ${TARGET_APP}" >&2
+  fi
   exit "$code"
 }
-trap fail ERR
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 if [[ -d "$TARGET_APP" ]]; then
-  stage="removing the previous app from /Applications"
-  /bin/rm -rf "$TARGET_APP"
+  BACKUP_APP="${TARGET_APP}.stashbase-previous-$$"
+  stage="saving the previous app for rollback"
+  /bin/mv "$TARGET_APP" "$BACKUP_APP"
 fi
 
 stage="copying StashBase.app without quarantine attributes"
@@ -57,7 +85,16 @@ stage="clearing extended attributes"
 stage="repairing the ad-hoc code signature"
 /bin/zsh "$SIGN_SCRIPT" "$TARGET_APP"
 stage="verifying the installed app bundle"
-/usr/bin/codesign --verify --deep --strict "$TARGET_APP" >/dev/null 2>&1 || true
+/usr/bin/codesign --verify --deep --strict "$TARGET_APP"
+COMMITTED=1
+
+if [[ -n "$BACKUP_APP" ]]; then
+  stage="removing the replaced app backup"
+  if ! /bin/rm -rf "$BACKUP_APP"; then
+    echo "[StashBase install] installed the new app but could not remove ${BACKUP_APP}" >&2
+  fi
+  BACKUP_APP=""
+fi
 EOS
 
 /bin/chmod +x "$HELPER"
