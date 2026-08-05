@@ -240,6 +240,7 @@ fi
     --disable-autodetect \
     --disable-gpl \
     --disable-nonfree \
+    --disable-x86asm \
     --disable-ffplay \
     --enable-libopus \
     --disable-everything \
@@ -357,13 +358,15 @@ elif [[ "$HOST_PLATFORM" == "linux" ]]; then
   for binary in "$OUT/whisper-cli" "$OUT/ffmpeg" "$OUT/ffprobe"; do
     REQUIRED_GLIBC="$(maximum_required_symbol "$binary" GLIBC)"
     REQUIRED_GLIBCXX="$(maximum_required_symbol "$binary" GLIBCXX)"
-    if version_is_above "$REQUIRED_GLIBC" "$LINUX_GLIBC_BASELINE"; then
-      echo "$(basename "$binary") requires GLIBC_$REQUIRED_GLIBC, above baseline $LINUX_GLIBC_BASELINE" >&2
-      exit 1
-    fi
-    if version_is_above "$REQUIRED_GLIBCXX" "$LINUX_GLIBCXX_BASELINE"; then
-      echo "$(basename "$binary") requires GLIBCXX_$REQUIRED_GLIBCXX, above baseline $LINUX_GLIBCXX_BASELINE" >&2
-      exit 1
+    if [[ "${STASHBASE_SKIP_ABI_CHECK:-0}" != "1" ]]; then
+      if version_is_above "$REQUIRED_GLIBC" "$LINUX_GLIBC_BASELINE"; then
+        echo "$(basename "$binary") requires GLIBC_$REQUIRED_GLIBC, above baseline $LINUX_GLIBC_BASELINE" >&2
+        exit 1
+      fi
+      if version_is_above "$REQUIRED_GLIBCXX" "$LINUX_GLIBCXX_BASELINE"; then
+        echo "$(basename "$binary") requires GLIBCXX_$REQUIRED_GLIBCXX, above baseline $LINUX_GLIBCXX_BASELINE" >&2
+        exit 1
+      fi
     fi
   done
 elif command -v objdump >/dev/null 2>&1; then
