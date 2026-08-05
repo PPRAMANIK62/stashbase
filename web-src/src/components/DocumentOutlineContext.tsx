@@ -4,7 +4,7 @@ import type { DocumentHeading } from '../milkdown/headings';
 type DocumentOutlineModel = {
   headings: DocumentHeading[];
   activeId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (heading: DocumentHeading) => void;
 };
 
 const emptyOutline: DocumentOutlineModel = {
