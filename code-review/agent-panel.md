@@ -68,7 +68,9 @@ Community contributions can land as useful first iterations, but the long-term d
   visibly falls back to Default, and remains recoverable. Codex must collect
   every paginated `model/list` page before validation and preserve each model's
   advertised reasoning-effort identifiers/order (including object entries), so
-  the effort picker only offers compatible levels. It must initialize and
+  the effort picker only offers compatible levels. An unset effort is the
+  native runtime Default and must be omitted from the connection URL; send one
+  only after an explicit user choice. It must initialize and
   publish this catalog before it emits panel-ready, otherwise the first turn
   cannot be selected.
   Do not send a model override when resuming, and lock the picker after chat

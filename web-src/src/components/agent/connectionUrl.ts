@@ -16,13 +16,14 @@ export function agentConnectionUrl({
   host: string;
   endpoint: string;
   windowId: string;
-  effort: string;
+  effort?: string;
   access: string;
   agent: string;
   model?: string;
   resume?: string | null;
 }): string {
-  const query = new URLSearchParams({ windowId, effort, access, agent });
+  const query = new URLSearchParams({ windowId, access, agent });
+  if (effort) query.set('effort', effort);
   if (!resume && model) query.set('model', model);
   if (resume) query.set('resume', resume);
   return `${protocol === 'https:' ? 'wss' : 'ws'}://${host}${endpoint}?${query}`;

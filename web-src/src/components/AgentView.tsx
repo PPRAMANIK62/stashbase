@@ -97,11 +97,10 @@ export function AgentView({
   // dropdown. Switching it sends `set-mode` so the agent applies it live.
   const [mode, setMode] = useState<PermMode>('default');
   const modeRef = useRef<PermMode>('default');
-  // Thinking effort — fixed per session (no live SDK setter), so it rides
-  // the connect URL. `effortRef` lets the connect effect read the latest
-  // value without resubscribing on every change.
-  const [effort, setEffort] = useState<EffortLevel>('high');
-  const effortRef = useRef<EffortLevel>('high');
+  // Thinking effort is opt-in. Undefined preserves the native runtime
+  // default; an explicit choice rides the connect URL for a new session.
+  const [effort, setEffort] = useState<EffortLevel | undefined>(undefined);
+  const effortRef = useRef<EffortLevel | undefined>(undefined);
   // User intent and runtime telemetry must stay separate: an active model
   // reached through Default must never become an explicit override later.
   const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
@@ -706,7 +705,7 @@ export function AgentView({
    *  (no live setter), so we apply it by reconnecting — but only when the
    *  chat is still empty, so we never discard a real conversation. With
    *  history present it takes effect on the next new chat. */
-  function changeEffort(level: EffortLevel) {
+  function changeEffort(level: EffortLevel | undefined) {
     if (blocks.length > 0 || turnActive) return;
     setEffort(level);
     effortRef.current = level;

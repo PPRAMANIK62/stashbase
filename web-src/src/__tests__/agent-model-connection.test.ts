@@ -11,6 +11,14 @@ test('a fresh Agent session forwards its selected native model', () => {
   assert.equal(url.searchParams.get('resume'), null);
 });
 
+test('a fresh Agent session leaves effort unset until the user chooses it', () => {
+  const defaultUrl = new URL(agentConnectionUrl({ ...base, effort: undefined }));
+  assert.equal(defaultUrl.searchParams.get('effort'), null);
+
+  const selectedUrl = new URL(agentConnectionUrl({ ...base, effort: 'low' }));
+  assert.equal(selectedUrl.searchParams.get('effort'), 'low');
+});
+
 test('a resumed Agent session never forwards a stale tab model', () => {
   const url = new URL(agentConnectionUrl({ ...base, model: 'old-tab-model', resume: 'historic-session' }));
   assert.equal(url.searchParams.get('model'), null);

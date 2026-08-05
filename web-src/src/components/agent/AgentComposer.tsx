@@ -79,20 +79,23 @@ function AccessMenu({
   );
 }
 
-function EffortBar({ effort, efforts, onSet }: { effort: EffortLevel; efforts: EffortLevel[]; onSet: (l: EffortLevel) => void }) {
+function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; onSet: (l?: EffortLevel) => void }) {
   return (
     <div className="agent-effort">
       <DumbbellIcon className="agent-effort-icon" />
       <span className="agent-effort-label">
-        Effort <span className="agent-effort-level">({EFFORT_LABEL[effort]})</span>
+        Effort <span className="agent-effort-level">({effort ? EFFORT_LABEL[effort] : 'Default'})</span>
       </span>
       <ListBox
         className="agent-effort-track"
         aria-label="Effort"
         selectionMode="single"
-        selectedKeys={[effort]}
-        onAction={(key) => onSet(key as EffortLevel)}
+        selectedKeys={[effort ?? '__default__']}
+        onAction={(key) => onSet(key === '__default__' ? undefined : key as EffortLevel)}
       >
+        <ListBoxItem id="__default__" className={({ isSelected }) => 'agent-effort-choice' + (isSelected ? ' cur' : '')} textValue="Default">
+          Default
+        </ListBoxItem>
         {efforts.map((lv) => (
           <ListBoxItem
             key={lv}
@@ -116,13 +119,13 @@ function EffortBar({ effort, efforts, onSet }: { effort: EffortLevel; efforts: E
 function EffortMenu({
   effort, efforts, open, disabled, locked, onOpenChange, onSetEffort,
 }: {
-  effort: EffortLevel;
+  effort?: EffortLevel;
   efforts: EffortLevel[];
   open: boolean;
   disabled: boolean;
   locked: boolean;
   onOpenChange: (open: boolean) => void;
-  onSetEffort: (level: EffortLevel) => void;
+  onSetEffort: (level?: EffortLevel) => void;
 }) {
   const unavailable = disabled || locked;
   return (
@@ -132,7 +135,7 @@ function EffortMenu({
         isDisabled={unavailable}
       >
         <DumbbellIcon className="agent-mode-icon" />
-        {EFFORT_LABEL[effort]}
+        {effort ? EFFORT_LABEL[effort] : 'Default'}
         <ChevronDownIcon className="agent-mode-chevron" />
       </Button>
       <Popover className="agent-mode-menu effort-only" placement="top end">
@@ -190,8 +193,8 @@ export function AgentComposer({
   active: boolean;
   mode: PermMode;
   onSetMode: (mode: PermMode) => void;
-  effort: EffortLevel;
-  onSetEffort: (level: EffortLevel) => void;
+  effort?: EffortLevel;
+  onSetEffort: (level?: EffortLevel) => void;
   effortLocked: boolean;
   supportedEfforts?: string[];
   selectedModel?: string;
