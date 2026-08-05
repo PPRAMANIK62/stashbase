@@ -62,7 +62,7 @@ Run the same command with a newer package to update. To remove StashBase, run `s
 
 ### Updating and first launch
 
-Quit StashBase before replacing it with a newer installer. Updates and uninstalls leave your source folders untouched; removing an opened root from the StashBase library only clears its rebuildable index, never the folder on disk.
+Quit StashBase before replacing it with a newer installer. Updates and uninstalls leave your source folders untouched.
 
 > Don't have an embedding API key? In-app keyword search works without one. Join our [Discord](https://discord.gg/zsRZH4PTq9) to ask about evaluation access.
 
