@@ -83,7 +83,14 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
         aria-label="Effort"
         selectionMode="single"
         selectedKeys={[effort]}
-        onAction={(key) => onSet(key as EffortLevel)}
+        disallowEmptySelection
+        onSelectionChange={(keys) => {
+          if (keys === 'all') return;
+          const next = keys.values().next().value;
+          if (typeof next === 'string' && next !== effort && EFFORTS.includes(next as EffortLevel)) {
+            onSet(next as EffortLevel);
+          }
+        }}
       >
         {EFFORTS.map((lv, i) => (
           <ListBoxItem
@@ -116,7 +123,7 @@ function EffortMenu({
 }) {
   const unavailable = disabled || locked;
   return (
-    <MenuTrigger isOpen={open && !unavailable} onOpenChange={onOpenChange}>
+    <MenuTrigger isOpen={open && !locked} onOpenChange={onOpenChange}>
       <Button
         className={'agent-mode-btn agent-effort-btn' + (locked ? ' is-locked' : '')}
         isDisabled={unavailable}
@@ -360,7 +367,7 @@ export function AgentComposer({
               disabled={disabled}
               locked={effortLocked}
               onOpenChange={(open) => { setEffortOpen(open); if (open) setModeOpen(false); }}
-              onSetEffort={(level) => { onSetEffort(level); setEffortOpen(false); }}
+              onSetEffort={onSetEffort}
             />
           )}
           {turnActive ? (

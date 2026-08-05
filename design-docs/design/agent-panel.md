@@ -42,6 +42,8 @@ context, not a separate AI workspace.
   history while their transient files are available, open the existing image
   preview with floating image actions and bottom-centered zoom controls, and clear
   Send/Stop states rather than editor UI.
+- Choosing an Agent effort level keeps the picker open for further adjustment;
+  the trigger or an outside interaction dismisses it.
 - The panel complements external MCP clients; it does not replace the
   bring-your-own-agent direction.
 
