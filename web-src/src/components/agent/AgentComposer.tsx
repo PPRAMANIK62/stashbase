@@ -80,7 +80,6 @@ function AccessMenu({
 }
 
 function EffortBar({ effort, efforts, onSet }: { effort: EffortLevel; efforts: EffortLevel[]; onSet: (l: EffortLevel) => void }) {
-  const cur = efforts.indexOf(effort);
   return (
     <div className="agent-effort">
       <DumbbellIcon className="agent-effort-icon" />
@@ -94,19 +93,20 @@ function EffortBar({ effort, efforts, onSet }: { effort: EffortLevel; efforts: E
         selectedKeys={[effort]}
         onAction={(key) => onSet(key as EffortLevel)}
       >
-        {efforts.map((lv, i) => (
+        {efforts.map((lv) => (
           <ListBoxItem
             key={lv}
             id={lv}
             className={({ isSelected }) =>
-              'agent-effort-notch'
-              + (i <= cur ? ' on' : '')
+              'agent-effort-choice'
               + (isSelected ? ' cur' : '')
               + (lv === 'max' ? ' max' : '')
             }
             aria-label={EFFORT_LABEL[lv]}
             textValue={EFFORT_LABEL[lv]}
-          />
+          >
+            {EFFORT_LABEL[lv]}
+          </ListBoxItem>
         ))}
       </ListBox>
     </div>

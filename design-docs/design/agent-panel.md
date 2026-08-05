@@ -17,7 +17,8 @@ context, not a separate AI workspace.
   runtime. If a saved choice becomes unavailable or is rejected at turn start,
   the next new chat recovers to Default with an explanation. Reasoning controls
   only offer the levels supported by the active model when the runtime reports
-  that compatibility.
+  that compatibility. Those choices remain plainly labeled and easy to select;
+  they are never represented only by decorative slider marks.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
 - Users explicitly attach context through mentions, file selection, drag and
