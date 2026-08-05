@@ -286,6 +286,14 @@ test('Codex Edit keeps native approval requests enabled for sensitive actions', 
   });
 });
 
+test('Codex Auto uses the app-server auto-reviewer wire value', () => {
+  assert.deepEqual(codexAccessOptions('auto'), {
+    approvalPolicy: 'on-request',
+    approvalsReviewer: 'auto_review',
+    sandbox: 'workspace-write',
+  });
+});
+
 test('Codex Edit auto-accepts only physical file-change grants inside the open folder', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-'));
   const folder = path.join(root, 'project');

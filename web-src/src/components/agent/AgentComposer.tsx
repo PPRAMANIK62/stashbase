@@ -15,6 +15,7 @@ import {
   MenuTrigger as SharedMenuTrigger,
 } from '../ui/menu';
 import { baseName } from './attachments';
+import { changedEffortSelection, EFFORT_LEVELS, effortMenuState } from './effortMenuState';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import type { AgentModel, Attachment, EffortLevel, PermMode } from './types';
@@ -27,7 +28,6 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
 
-const EFFORTS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const EFFORT_LABEL: Record<EffortLevel, string> = {
   low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-High', max: 'Max',
 };
@@ -91,7 +91,10 @@ function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: 
         aria-label="Effort"
         selectionMode="single"
         selectedKeys={[effort ?? '__default__']}
-        onAction={(key) => onSet(key === '__default__' ? undefined : key as EffortLevel)}
+        onSelectionChange={(keys) => {
+          const next = changedEffortSelection(keys, effort, efforts);
+          if (next !== null) onSet(next);
+        }}
       >
         <ListBoxItem id="__default__" className={({ isSelected }) => 'agent-effort-choice' + (isSelected ? ' cur' : '')} textValue="Default">
           Default
@@ -127,12 +130,12 @@ function EffortMenu({
   onOpenChange: (open: boolean) => void;
   onSetEffort: (level?: EffortLevel) => void;
 }) {
-  const unavailable = disabled || locked;
+  const state = effortMenuState({ open, disabled, locked });
   return (
-    <MenuTrigger isOpen={open && !unavailable} onOpenChange={onOpenChange}>
+    <MenuTrigger isOpen={state.isOpen} onOpenChange={onOpenChange}>
       <Button
         className={'agent-mode-btn agent-effort-btn' + (locked ? ' is-locked' : '')}
-        isDisabled={unavailable}
+        isDisabled={state.triggerDisabled}
       >
         <DumbbellIcon className="agent-mode-icon" />
         {effort ? EFFORT_LABEL[effort] : 'Default'}
@@ -156,6 +159,7 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
   resumedSession: boolean;
   onSetModel: (model?: string) => void;
 }) {
+  const defaultSelected = !selectedModel;
   return (
     <SharedMenu>
       <SharedMenuTrigger className={'agent-mode-btn agent-model-btn' + (locked ? ' is-locked' : '')} disabled={disabled || locked}>
@@ -166,12 +170,12 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
         <SharedMenuPositioner side="top" align="end" sideOffset={6} collisionPadding={8}>
           <SharedMenuPopup className="agent-mode-menu agent-model-menu" aria-label="Model">
             <div className="agent-mode-menu-head"><span>Model</span></div>
-            <SharedMenuItem label="Default" className="agent-mode-opt" onClick={() => onSetModel(undefined)}>
+            <SharedMenuItem label="Default" className={'agent-mode-opt' + (defaultSelected ? ' active' : '')} onClick={() => onSetModel(undefined)}>
             <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">Default</span><span className="agent-mode-opt-desc">Use this runtime’s configured model</span></span>
-            {!selectedModel && <CheckIcon className="agent-mode-opt-check" />}
+            {defaultSelected && <CheckIcon className="agent-mode-opt-check" />}
             </SharedMenuItem>
             {models.map((entry) => (
-              <SharedMenuItem key={entry.id} label={entry.label} className="agent-mode-opt" onClick={() => onSetModel(entry.id)}>
+              <SharedMenuItem key={entry.id} label={entry.label} className={'agent-mode-opt' + (selectedModel === entry.id ? ' active' : '')} onClick={() => onSetModel(entry.id)}>
               <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">{entry.label}</span>{entry.description && <span className="agent-mode-opt-desc">{entry.description}</span>}</span>
               {selectedModel === entry.id && <CheckIcon className="agent-mode-opt-check" />}
               </SharedMenuItem>
@@ -246,7 +250,7 @@ export function AgentComposer({
   }, [mention, state.files, state.folders]);
 
   const activeSuggestionIndex = Math.min(activeMentionIndex, Math.max(suggestions.length - 1, 0));
-  const compatibleEfforts = EFFORTS.filter((level) => !supportedEfforts?.length || supportedEfforts.includes(level));
+  const compatibleEfforts = EFFORT_LEVELS.filter((level) => !supportedEfforts?.length || supportedEfforts.includes(level));
 
   useEffect(() => {
     activeMentionRef.current?.scrollIntoView({ block: 'nearest' });
@@ -419,9 +423,9 @@ export function AgentComposer({
               open={effortOpen}
               disabled={disabled}
               locked={effortLocked}
-              efforts={compatibleEfforts.length ? compatibleEfforts : EFFORTS}
+              efforts={compatibleEfforts.length ? compatibleEfforts : EFFORT_LEVELS}
               onOpenChange={(open) => { setEffortOpen(open); if (open) setModeOpen(false); }}
-              onSetEffort={(level) => { onSetEffort(level); setEffortOpen(false); }}
+              onSetEffort={onSetEffort}
             />
           )}
           {turnActive ? (

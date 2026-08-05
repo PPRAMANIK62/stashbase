@@ -55,6 +55,10 @@ context, not a separate AI workspace.
   history while their transient files are available, open the existing image
   preview with floating image actions and bottom-centered zoom controls, and clear
   Send/Stop states rather than editor UI.
+- Choosing an Agent effort level, including Default, keeps the picker available
+  while the fresh Agent session reconnects, so users can observe or refine the
+  setting. The current model and effort choices remain visually prominent using
+  the active application theme.
 - The panel complements external MCP clients; it does not replace the
   bring-your-own-agent direction.
 

@@ -1188,9 +1188,23 @@
     .agent-mode-chevron { width: 12px; height: 12px; flex-shrink: 0; opacity: 0.75; margin-left: -1px; }
     .agent-mode-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-mode-btn:disabled { cursor: default; }
+    /* Model and effort change the next native session, so distinguish them
+     * from the surrounding utility actions using theme tokens only. */
+    .agent-effort-btn,
+    .agent-model-btn {
+      min-height: 28px;
+      border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+      background: color-mix(in srgb, var(--accent) 8%, var(--card));
+      color: var(--fg);
+    }
     .agent-effort-btn { min-width: 0; }
+    .agent-effort-btn:hover:not(:disabled),
+    .agent-model-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 14%, var(--card));
+    }
     .agent-effort-btn.is-locked { opacity: 0.58; cursor: default; }
-    .agent-model-btn { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+    .agent-model-btn { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
     .agent-model-btn.is-locked { opacity: 0.58; cursor: default; }
 
     /* "Modes" dropdown — opens upward from the mode button. */
@@ -1199,10 +1213,10 @@
       width: 320px;
       max-width: calc(100vw - 24px);
       padding: 6px;
-      background: var(--pane);
+      background: var(--card);
       border: 1px solid var(--border);
       border-radius: 10px;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+      box-shadow: var(--shadow-elevation);
     }
     .agent-mode-menu.effort-only {
       width: 300px;
@@ -1244,7 +1258,10 @@
       color: var(--fg);
     }
     .agent-mode-opt:hover { background: var(--hover); }
-    .agent-mode-opt.active { background: var(--active); }
+    .agent-mode-opt.active {
+      background: color-mix(in srgb, var(--accent) 12%, var(--card));
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
     .agent-mode-opt-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; color: var(--muted); }
     .agent-mode-opt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
     .agent-mode-opt-title { font-size: calc(13px * var(--ui-scale)); font-weight: 500; }
@@ -1259,16 +1276,18 @@
       align-items: center;
       gap: 8px;
       margin-top: 4px;
-      padding: 10px 8px 4px;
+      padding: 8px;
       border-top: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent) 4%, var(--card));
     }
     .agent-effort-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
     .agent-effort-label { flex: 1; font-size: calc(12.5px * var(--ui-scale)); color: var(--fg); }
     .agent-effort-level { color: var(--muted); }
-    .agent-effort-track { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 4px; padding: 2px 0; }
+    .agent-effort-track { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; padding: 2px 0; }
     .agent-effort-choice {
-      min-height: 28px;
-      padding: 4px 7px;
+      min-height: 30px;
+      padding: 4px 8px;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: transparent;
@@ -1279,17 +1298,17 @@
       flex-shrink: 0;
       transition: background .12s, border-color .12s, color .12s;
     }
-    .agent-effort-choice:hover { background: var(--hover); color: var(--fg); }
+    .agent-effort-choice:hover { border-color: var(--stroke-strong); background: var(--hover); color: var(--fg); }
     .agent-effort-choice.cur {
       border-color: var(--accent);
-      background: var(--active);
+      background: color-mix(in srgb, var(--accent) 16%, var(--card));
       color: var(--fg);
       font-weight: 600;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
     }
-    .agent-effort-choice.max.cur { border-color: #a855f7; }
     .agent-mode-menu.effort-only .agent-effort {
       margin-top: 0;
-      padding: 4px 0;
+      padding: 8px;
       border-top: 0;
     }
     /* Neutral send button — subtle surface + border, not a filled accent
