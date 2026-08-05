@@ -226,7 +226,7 @@ pnpm setup:python
 pnpm build:web
 pnpm electron
 
-# Development mode
+# Development mode (access web app at http://localhost:8090 or run pnpm electron)
 pnpm dev
 
 # Build a distributable app for your platform
@@ -237,6 +237,22 @@ pnpm dist:linux  # Linux (.deb & AppImage)
 # Optional: include the local PDF/OCR extractor sidecar
 pnpm build:python-extract-sidecar
 ```
+
+### Agent Panel Setup (Claude Code & OpenAI Codex)
+
+To use the built-in Agent panel with Codex or Claude Code:
+
+1. Install the CLI tool globally:
+   ```bash
+   npm install -g @openai/codex        # For Codex
+   npm install -g @anthropic-ai/claude-code  # For Claude Code
+   ```
+2. Authenticate the CLI:
+   ```bash
+   codex login     # For Codex
+   claude login    # For Claude Code
+   ```
+3. Alternatively, enter your API keys directly in StashBase **Settings (⚙️ icon)**.
 
 Before opening a PR:
 
