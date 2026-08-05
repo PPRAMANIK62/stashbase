@@ -17,7 +17,13 @@ export function applyModelEvent(state: ModelControlState, event: {
   fallback?: string;
 }): ModelControlState {
   if (event.fallback) {
-    return { ...state, models: event.models, selectedModel: undefined, notice: event.fallback };
+    return {
+      ...state,
+      models: event.models,
+      selectedModel: undefined,
+      notice: event.fallback,
+      ...(event.activeModel ? { activeModel: event.activeModel } : {}),
+    };
   }
   return {
     ...state,

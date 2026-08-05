@@ -41,8 +41,14 @@ test('model control visibility, locking label, active identity, and fallback sta
   assert.equal(active.notice, null);
   assert.equal(modelMenuLabel(active.models, active.selectedModel, active.activeModel, active.resumedSession), 'Native model');
 
-  const fallback = applyModelEvent(active, { models, fallback: 'That model could not be selected; using the runtime default.' });
+  const fallbackModels = [...models, { id: 'runtime-default', label: 'Runtime default' }];
+  const fallback = applyModelEvent(active, {
+    models: fallbackModels,
+    activeModel: 'runtime-default',
+    fallback: 'That model could not be selected; using the runtime default.',
+  });
   assert.equal(fallback.selectedModel, undefined);
+  assert.equal(fallback.activeModel, 'runtime-default');
   assert.match(fallback.notice ?? '', /runtime default/);
 
   const defaultActive = applyModelEvent(fallback, { models, activeModel: 'native-model' });

@@ -107,6 +107,19 @@ export function claudeActiveModelEvent(models: AgentModel[], activeModel: string
   };
 }
 
+export function claudeModelCatalogFailureEvent(
+  requested: string | undefined,
+  resume: boolean,
+): Extract<AgentServerEvent, { t: 'models' }> {
+  return {
+    t: 'models',
+    models: [],
+    ...(requested && !resume
+      ? { fallback: 'This Claude runtime cannot verify that model; using the runtime default.' }
+      : {}),
+  };
+}
+
 function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
   const command = resolveClaudeBinary() ?? options.command;
   if (command !== options.command) {
@@ -359,6 +372,7 @@ class AgentSession {
     } catch (err: unknown) {
       // Catalog discovery is optional runtime capability. The chat remains
       // usable on older CLIs, with their configured default untouched.
+      this.send(claudeModelCatalogFailureEvent(this.model, Boolean(this.resume)));
       log.debug(`could not discover Claude models: ${errorMessage(err)}`);
     }
   }

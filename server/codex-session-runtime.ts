@@ -292,13 +292,22 @@ export class CodexSession {
       try {
         result = await startTurn(model);
       } catch (err: unknown) {
-        if (!model) throw err;
+        if (!model || !isCodexModelSelectionError(err)) throw err;
         // A runtime can reject a catalogued model because its entitlement or
         // availability changed after discovery. Clear the override and retry
         // this first turn with Default while the picker is still recoverable.
         this.selectedModel = undefined;
-        this.send({ t: 'models', models: this.models, fallback: 'That model could not be used; retrying with the runtime default.' });
+        this.send({
+          t: 'models',
+          models: this.models,
+          ...(this.activeModel ? { activeModel: this.activeModel } : {}),
+          fallback: 'That model could not be used; retrying with the runtime default.',
+        });
         result = await startTurn(undefined);
+      }
+      if (model && this.selectedModel === model) {
+        this.activeModel = model;
+        this.send({ t: 'models', models: this.models, activeModel: model });
       }
       const turn = result.turn as JsonObject | undefined;
       const id = stringValue(turn?.id);
@@ -338,7 +347,7 @@ export class CodexSession {
       return undefined;
     }
     const selected = this.model && this.models.some((entry) => entry.id === this.model) ? this.model : undefined;
-    this.send({ t: 'models', models: this.models, ...(selected ? { activeModel: selected } : {}), ...(this.model && !selected ? { fallback: 'That model is no longer available; using the runtime default.' } : {}) });
+    this.send({ t: 'models', models: this.models, ...(this.model && !selected ? { fallback: 'That model is no longer available; using the runtime default.' } : {}) });
     this.selectedModel = selected;
     this.modelResolved = true;
     return selected;
@@ -397,10 +406,15 @@ export class CodexSession {
     const activeModel = codexThreadModel(thread, result);
     if (activeModel) {
       this.activeModel = activeModel;
-      const models = this.models.some((entry) => entry.id === activeModel)
-        ? this.models
-        : [...this.models, { id: activeModel, label: activeModel }];
-      this.send({ t: 'models', models, activeModel });
+      if (!this.models.some((entry) => entry.id === activeModel)) {
+        this.models = [...this.models, { id: activeModel, label: activeModel }];
+      }
+      // A new thread is still on its native Default until the first selected
+      // turn succeeds. Do not let that temporary identity overwrite the
+      // pending selection in the renderer.
+      if (!isNewThread || !this.selectedModel) {
+        this.send({ t: 'models', models: this.models, activeModel });
+      }
     }
     this.resumeThreadId = null;
     if (shouldSendSessionId) this.send({ t: 'session-id', id });
@@ -836,6 +850,12 @@ function codexEffortOption(effort: string | undefined): { effort?: string } {
   if (!effort) return {};
   if (effort === 'max') return { effort: 'xhigh' };
   return ['low', 'medium', 'high', 'xhigh'].includes(effort) ? { effort } : {};
+}
+
+function isCodexModelSelectionError(err: unknown): boolean {
+  const message = errorMessage(err);
+  return /\bmodel\b/i.test(message)
+    && /(unavailable|not available|not found|unsupported|unauthori[sz]ed|not permitted|access denied|does not exist)/i.test(message);
 }
 
 function titleFromPrompt(prompt: string): string {

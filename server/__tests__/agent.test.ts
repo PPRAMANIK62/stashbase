@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { claudeActiveModelEvent, claudePermissionMode, selectClaudeModel } from '../agent.ts';
+import {
+  claudeActiveModelEvent,
+  claudeModelCatalogFailureEvent,
+  claudePermissionMode,
+  selectClaudeModel,
+} from '../agent.ts';
 
 test('Claude adapter preserves supported Shared Agent Contract access modes', () => {
   assert.equal(claudePermissionMode('default'), 'default');
@@ -35,4 +40,16 @@ test('Claude init-event model becomes the visible active model, including a runt
   const event = claudeActiveModelEvent([{ id: 'sonnet', label: 'Sonnet' }], 'claude-sonnet-native');
   assert.equal(event.activeModel, 'claude-sonnet-native');
   assert.deepEqual(event.models.at(-1), { id: 'claude-sonnet-native', label: 'claude-sonnet-native' });
+});
+
+test('Claude catalog failure clears an unverifiable fresh selection with a visible fallback', () => {
+  const event = claudeModelCatalogFailureEvent('claude-opus-native', false);
+  assert.deepEqual(event.models, []);
+  assert.match(event.fallback ?? '', /runtime default/);
+});
+
+test('Claude catalog failure does not claim a fallback for a resumed native session', () => {
+  const event = claudeModelCatalogFailureEvent('stale-tab-model', true);
+  assert.deepEqual(event.models, []);
+  assert.equal(event.fallback, undefined);
 });

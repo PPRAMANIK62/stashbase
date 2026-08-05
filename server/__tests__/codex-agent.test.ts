@@ -41,7 +41,7 @@ class FakeWebSocket extends EventEmitter {
 
 function catalogProcess(
   models = [{ id: 'native-model', displayName: 'Native model' }],
-  options: { pages?: Array<Record<string, unknown>[]>; threadModel?: string; rejectSelectedTurn?: boolean } = {},
+  options: { pages?: Array<Record<string, unknown>[]>; threadModel?: string; selectedTurnError?: string } = {},
 ): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
   const proc = new FakeCodexProcess();
   const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -52,12 +52,12 @@ function catalogProcess(
     requests.push({ method: request.method, params: request.params });
     const catalog = options.pages ?? [models];
     const result = request.method === 'model/list' ? { data: catalog[page] ?? [], ...(page++ < catalog.length - 1 ? { nextCursor: `page-${page}` } : {}) }
-      : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, ...(options.threadModel ? { model: options.threadModel } : {}) }
+      : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, model: options.threadModel ?? 'runtime-default' }
       : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model' }
         : request.method === 'turn/start' ? { turn: { id: 'turn-1' } } : {};
-    if (request.method === 'turn/start' && options.rejectSelectedTurn && request.params.model && !rejected) {
+    if (request.method === 'turn/start' && options.selectedTurnError && request.params.model && !rejected) {
       rejected = true;
-      proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: 'model unavailable' } })}\n`);
+      proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.selectedTurnError } })}\n`);
     } else {
       proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
     }
@@ -83,12 +83,17 @@ test('Codex publishes its native model catalog before ready and forwards a selec
   const events = ws.sent.map((item) => JSON.parse(item) as { t: string; models?: Array<{ id: string }>; activeModel?: string });
   assert.equal(events[0]?.t, 'models', JSON.stringify(events));
   assert.equal(events[0]?.models?.[0]?.id, 'native-model');
-  assert.equal(events[0]?.activeModel, 'native-model');
+  assert.equal(events[0]?.activeModel, undefined, 'selection is not active until the native turn accepts it');
   assert.equal(events[1]?.t, 'ready');
 
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
   await settle();
   assert.equal(native.requests.find((request) => request.method === 'turn/start')?.params.model, 'native-model');
+  const active = ws.sent
+    .map((item) => JSON.parse(item) as { t: string; activeModel?: string })
+    .filter((event) => event.t === 'models')
+    .at(-1);
+  assert.equal(active?.activeModel, 'native-model');
   session.dispose();
 });
 
@@ -146,7 +151,7 @@ test('Codex retries a rejected selected model with Default and publishes recover
   runWithWindowId('reject-window', () => setCurrentFolder(folder));
   t.after(() => { runWithWindowId('reject-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
-  const native = catalogProcess(undefined, { rejectSelectedTurn: true });
+  const native = catalogProcess(undefined, { selectedTurnError: 'model unavailable' });
   const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
@@ -156,8 +161,30 @@ test('Codex retries a rejected selected model with Default and publishes recover
   assert.equal(turns.length, 2);
   assert.equal(turns[0]?.params.model, 'native-model');
   assert.equal('model' in (turns[1]?.params ?? {}), false);
-  const fallback = ws.sent.map((item) => JSON.parse(item) as { t: string; fallback?: string }).find((event) => event.fallback);
+  const fallback = ws.sent
+    .map((item) => JSON.parse(item) as { t: string; activeModel?: string; fallback?: string })
+    .find((event) => event.fallback);
   assert.match(fallback?.fallback ?? '', /retrying/);
+  assert.equal(fallback?.activeModel, 'runtime-default');
+  session.dispose();
+});
+
+test('Codex does not misclassify an unrelated turn failure as a model fallback', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('turn-error-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('turn-error-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { selectedTurnError: 'sandbox service unavailable' });
+  const session = new CodexSession(ws as unknown as WebSocket, 'turn-error-window', undefined, undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  assert.equal(native.requests.filter((request) => request.method === 'turn/start').length, 1);
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string; fallback?: string });
+  assert.equal(events.some((event) => event.fallback), false);
+  assert.match(events.find((event) => event.t === 'error')?.message ?? '', /sandbox service unavailable/);
   session.dispose();
 });
 
@@ -176,7 +203,7 @@ test('Codex combines every catalog page and preserves advertised effort options'
   const modelsEvent = ws.sent.map((item) => JSON.parse(item) as { t: string; models?: Array<{ id: string; supportedEfforts?: string[] }>; activeModel?: string }).find((event) => event.t === 'models');
   assert.deepEqual(modelsEvent?.models?.map((model) => model.id), ['early-model', 'late-model']);
   assert.deepEqual(modelsEvent?.models?.[1]?.supportedEfforts, ['low', 'xhigh']);
-  assert.equal(modelsEvent?.activeModel, 'late-model');
+  assert.equal(modelsEvent?.activeModel, undefined);
   assert.deepEqual(native.requests.filter((request) => request.method === 'model/list').map((request) => request.params), [{}, { cursor: 'page-1' }]);
   session.dispose();
 });
