@@ -96,7 +96,9 @@ export function codexAccessOptions(mode: string | undefined): {
     case 'plan':
       return { approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: 'read-only' };
     case 'auto':
-      return { approvalPolicy: 'on-request', approvalsReviewer: 'auto', sandbox: 'workspace-write' };
+      // `auto` is the panel's stable mode name. The Codex app-server wire
+      // protocol calls the equivalent approval reviewer `auto_review`.
+      return { approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write' };
     case 'default':
     default:
       return { approvalPolicy: 'on-request', approvalsReviewer: 'user', sandbox: 'workspace-write' };
