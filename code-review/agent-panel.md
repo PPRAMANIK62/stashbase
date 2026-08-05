@@ -88,7 +88,9 @@ The accepted baseline includes:
   Restored Claude and Codex sessions may recreate thumbnails only for live
   transient image files through the scoped local preview route; never expose
   an arbitrary path found in a transcript. The route resolves the real target
-  under a non-symlinked private attachment root before it reads it. When a
+  under a non-symlinked private attachment root before it reads it. Effort
+  selection remains open across the session reconnect caused by a level change
+  and is dismissed only by its trigger or an outside interaction. When a
   permission action removes its own controls, restore focus to the persistent
   tool-card trigger.
 - Image-preview controls float over the image: Download and Close at the top
