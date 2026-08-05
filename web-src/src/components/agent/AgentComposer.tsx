@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../store/AppContext';
 import { ImageLightbox } from '../ImageLightbox';
 import { baseName } from './attachments';
+import { changedEffortSelection, EFFORT_LEVELS, effortMenuState } from './effortMenuState';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import type { Attachment, EffortLevel, PermMode } from './types';
@@ -18,7 +19,6 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
 
-const EFFORTS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const EFFORT_LABEL: Record<EffortLevel, string> = {
   low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-High', max: 'Max',
 };
@@ -71,7 +71,7 @@ function AccessMenu({
 }
 
 function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLevel) => void }) {
-  const cur = EFFORTS.indexOf(effort);
+  const cur = EFFORT_LEVELS.indexOf(effort);
   return (
     <div className="agent-effort">
       <DumbbellIcon className="agent-effort-icon" />
@@ -85,14 +85,11 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
         selectedKeys={[effort]}
         disallowEmptySelection
         onSelectionChange={(keys) => {
-          if (keys === 'all') return;
-          const next = keys.values().next().value;
-          if (typeof next === 'string' && next !== effort && EFFORTS.includes(next as EffortLevel)) {
-            onSet(next as EffortLevel);
-          }
+          const next = changedEffortSelection(keys, effort);
+          if (next) onSet(next);
         }}
       >
-        {EFFORTS.map((lv, i) => (
+        {EFFORT_LEVELS.map((lv, i) => (
           <ListBoxItem
             key={lv}
             id={lv}
@@ -121,12 +118,12 @@ function EffortMenu({
   onOpenChange: (open: boolean) => void;
   onSetEffort: (level: EffortLevel) => void;
 }) {
-  const unavailable = disabled || locked;
+  const state = effortMenuState({ open, disabled, locked });
   return (
-    <MenuTrigger isOpen={open && !locked} onOpenChange={onOpenChange}>
+    <MenuTrigger isOpen={state.isOpen} onOpenChange={onOpenChange}>
       <Button
         className={'agent-mode-btn agent-effort-btn' + (locked ? ' is-locked' : '')}
-        isDisabled={unavailable}
+        isDisabled={state.triggerDisabled}
       >
         <DumbbellIcon className="agent-mode-icon" />
         {EFFORT_LABEL[effort]}
