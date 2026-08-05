@@ -8,20 +8,47 @@ export interface AgentCliSpec {
   logLabel: string;
 }
 
-const CLI_SEARCH_DIRS = [
-  path.join(os.homedir(), '.npm-global', 'bin'),
-  path.join(os.homedir(), '.local', 'bin'),
-  ...(process.platform === 'win32'
-    ? [
-        process.env.APPDATA ? path.join(process.env.APPDATA, 'npm') : '',
-        process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'npm') : '',
-      ]
-    : []),
-  '/opt/homebrew/bin',
-  '/usr/local/bin',
-  '/usr/bin',
-  '/bin',
-];
+function getNvmSearchDirs(): string[] {
+  const dirs: string[] = [path.join(os.homedir(), '.nvm', 'current', 'bin')];
+  const nvmVersionsDir = path.join(os.homedir(), '.nvm', 'versions', 'node');
+  try {
+    if (fs.existsSync(nvmVersionsDir)) {
+      const versions = fs.readdirSync(nvmVersionsDir);
+      for (const ver of versions) {
+        dirs.push(path.join(nvmVersionsDir, ver, 'bin'));
+      }
+    }
+  } catch {
+    // Ignore read errors
+  }
+  return dirs;
+}
+
+export function getCliSearchDirs(): string[] {
+  const pnpmHome = process.env.PNPM_HOME ?? path.join(os.homedir(), '.local', 'share', 'pnpm');
+  return [
+    ...getNvmSearchDirs(),
+    path.join(os.homedir(), '.npm-global', 'bin'),
+    path.join(os.homedir(), '.local', 'bin'),
+    pnpmHome,
+    path.join(os.homedir(), '.pnpm-global', 'bin'),
+    path.join(os.homedir(), '.local', 'share', 'fnm', 'current', 'bin'),
+    path.join(os.homedir(), '.fnm', 'current', 'bin'),
+    path.join(os.homedir(), '.bun', 'bin'),
+    path.join(os.homedir(), '.volta', 'bin'),
+    path.join(os.homedir(), '.asdf', 'shims'),
+    ...(process.platform === 'win32'
+      ? [
+          process.env.APPDATA ? path.join(process.env.APPDATA, 'npm') : '',
+          process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'npm') : '',
+        ]
+      : []),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    '/bin',
+  ];
+}
 
 const WINDOWS_EXECUTABLE_EXTENSIONS = new Set(['.com', '.exe', '.cmd', '.bat']);
 
@@ -54,7 +81,7 @@ function unique(items: string[]): string[] {
 export function agentCliPath(extraDirs: string[] = [], basePath = process.env.PATH ?? ''): string {
   return unique([
     ...extraDirs,
-    ...CLI_SEARCH_DIRS,
+    ...getCliSearchDirs(),
     ...basePath.split(path.delimiter),
   ]).join(path.delimiter);
 }
