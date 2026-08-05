@@ -17,6 +17,9 @@ test('a fresh Agent session leaves effort unset until the user chooses it', () =
 
   const selectedUrl = new URL(agentConnectionUrl({ ...base, effort: 'low' }));
   assert.equal(selectedUrl.searchParams.get('effort'), 'low');
+
+  const nativeUrl = new URL(agentConnectionUrl({ ...base, effort: 'ultra' }));
+  assert.equal(nativeUrl.searchParams.get('effort'), 'ultra');
 });
 
 test('a resumed Agent session never forwards a stale tab model', () => {

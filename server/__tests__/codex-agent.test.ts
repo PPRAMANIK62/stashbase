@@ -40,7 +40,7 @@ class FakeWebSocket extends EventEmitter {
 }
 
 function catalogProcess(
-  models = [{ id: 'native-model', displayName: 'Native model' }],
+  models: Array<Record<string, unknown>> = [{ id: 'native-model', displayName: 'Native model' }],
   options: { pages?: Array<Record<string, unknown>[]>; threadModel?: string; selectedTurnError?: string } = {},
 ): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
   const proc = new FakeCodexProcess();
@@ -143,6 +143,22 @@ test('Codex reports the native Default model after starting a new thread', async
   const active = ws.sent.map((item) => JSON.parse(item) as { t: string; activeModel?: string }).filter((event) => event.t === 'models').at(-1);
   assert.equal(active?.activeModel, 'runtime-default');
   assert.equal('model' in (native.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
+  session.dispose();
+});
+
+test('Codex forwards a runtime-native effort identifier without remapping it', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-effort-'));
+  runWithWindowId('native-effort-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('native-effort-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess([{ id: 'native-model', displayName: 'Native model', supportedReasoningEfforts: [{ reasoningEffort: 'ultra' }] }]);
+  const session = new CodexSession(ws as unknown as WebSocket, 'native-effort-window', 'ultra', undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  assert.equal(native.requests.find((request) => request.method === 'turn/start')?.params.effort, 'ultra');
   session.dispose();
 });
 

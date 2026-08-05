@@ -24,6 +24,7 @@ import { WebSocketServer } from 'ws';
 import {
   attachAgentRuntime,
   isAgentAccessMode,
+  parseAgentEffort,
   registerAgentAdapter,
   stopAgentRuntime,
   type AgentAccessMode,
@@ -442,8 +443,7 @@ function windowIdOf(req: import('node:http').IncomingMessage): string {
 function effortOf(req: import('node:http').IncomingMessage): string | undefined {
   try {
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
-    const e = u.searchParams.get('effort');
-    return ['low', 'medium', 'high', 'xhigh', 'max'].includes(e ?? '') ? e! : undefined;
+    return parseAgentEffort(u.searchParams.get('effort'));
   } catch {
     return undefined;
   }

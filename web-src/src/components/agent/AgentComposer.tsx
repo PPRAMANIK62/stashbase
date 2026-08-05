@@ -15,7 +15,7 @@ import {
   MenuTrigger as SharedMenuTrigger,
 } from '../ui/menu';
 import { baseName } from './attachments';
-import { changedEffortSelection, EFFORT_LEVELS, effortMenuState } from './effortMenuState';
+import { changedEffortSelection, effortLabel, effortMenuState, effortOptions } from './effortMenuState';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import type { AgentModel, Attachment, EffortLevel, PermMode } from './types';
@@ -27,10 +27,6 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'plan', label: 'Plan', desc: 'Explore and propose a plan before changing files', Icon: ClipboardListIcon },
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
-
-const EFFORT_LABEL: Record<EffortLevel, string> = {
-  low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-High', max: 'Max',
-};
 
 function AccessMenu({
   mode, open, disabled, onOpenChange, onPick,
@@ -84,7 +80,7 @@ function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: 
     <div className="agent-effort">
       <DumbbellIcon className="agent-effort-icon" />
       <span className="agent-effort-label">
-        Effort <span className="agent-effort-level">({effort ? EFFORT_LABEL[effort] : 'Default'})</span>
+        Effort <span className="agent-effort-level">({effort ? effortLabel(effort) : 'Default'})</span>
       </span>
       <ListBox
         className="agent-effort-track"
@@ -108,10 +104,10 @@ function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: 
               + (isSelected ? ' cur' : '')
               + (lv === 'max' ? ' max' : '')
             }
-            aria-label={EFFORT_LABEL[lv]}
-            textValue={EFFORT_LABEL[lv]}
+            aria-label={effortLabel(lv)}
+            textValue={effortLabel(lv)}
           >
-            {EFFORT_LABEL[lv]}
+            {effortLabel(lv)}
           </ListBoxItem>
         ))}
       </ListBox>
@@ -138,7 +134,7 @@ function EffortMenu({
         isDisabled={state.triggerDisabled}
       >
         <DumbbellIcon className="agent-mode-icon" />
-        {effort ? EFFORT_LABEL[effort] : 'Default'}
+        {effort ? effortLabel(effort) : 'Default'}
         <ChevronDownIcon className="agent-mode-chevron" />
       </Button>
       <Popover className="agent-mode-menu effort-only" placement="top end">
@@ -250,7 +246,7 @@ export function AgentComposer({
   }, [mention, state.files, state.folders]);
 
   const activeSuggestionIndex = Math.min(activeMentionIndex, Math.max(suggestions.length - 1, 0));
-  const compatibleEfforts = EFFORT_LEVELS.filter((level) => !supportedEfforts?.length || supportedEfforts.includes(level));
+  const compatibleEfforts = effortOptions(supportedEfforts);
 
   useEffect(() => {
     activeMentionRef.current?.scrollIntoView({ block: 'nearest' });
@@ -423,7 +419,7 @@ export function AgentComposer({
               open={effortOpen}
               disabled={disabled}
               locked={effortLocked}
-              efforts={compatibleEfforts.length ? compatibleEfforts : EFFORT_LEVELS}
+              efforts={compatibleEfforts}
               onOpenChange={(open) => { setEffortOpen(open); if (open) setModeOpen(false); }}
               onSetEffort={onSetEffort}
             />

@@ -847,9 +847,7 @@ function codexCatalogModel(entry: unknown): AgentModel | null {
 }
 
 function codexEffortOption(effort: string | undefined): { effort?: string } {
-  if (!effort) return {};
-  if (effort === 'max') return { effort: 'xhigh' };
-  return ['low', 'medium', 'high', 'xhigh'].includes(effort) ? { effort } : {};
+  return effort ? { effort } : {};
 }
 
 function isCodexModelSelectionError(err: unknown): boolean {

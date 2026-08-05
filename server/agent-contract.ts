@@ -18,6 +18,19 @@ export function isAgentAccessMode(value: unknown): value is AgentAccessMode {
   return typeof value === 'string' && (AGENT_ACCESS_MODES as readonly string[]).includes(value);
 }
 
+/** Effort identifiers are runtime-owned opaque strings. Keep the URL boundary
+ * bounded and free of control characters without narrowing future runtimes to
+ * a StashBase-maintained enum. */
+export function parseAgentEffort(value: unknown): string | undefined {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= 64
+    && value === value.trim()
+    && !/[\u0000-\u001f\u007f]/.test(value)
+    ? value
+    : undefined;
+}
+
 export interface AgentCapabilities {
   connection: true;
   prompts: true;

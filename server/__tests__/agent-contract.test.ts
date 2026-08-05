@@ -5,6 +5,7 @@ import {
   attachAgentRuntime,
   clearAgentRuntimeFailure,
   discoverAgentRuntimes,
+  parseAgentEffort,
   registerAgentAdapter,
   reportAgentRuntimeFailure,
   runtimeDescriptorFor,
@@ -38,6 +39,15 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.equal(capabilities.claude!.titleHint, false);
   assert.equal(capabilities.codex!.steering, true);
   assert.equal(capabilities.codex!.titleHint, true);
+});
+
+test('Agent effort identifiers stay runtime-owned while the URL boundary remains bounded', () => {
+  assert.equal(parseAgentEffort('ultra'), 'ultra');
+  assert.equal(parseAgentEffort('provider_native-level'), 'provider_native-level');
+  assert.equal(parseAgentEffort(''), undefined);
+  assert.equal(parseAgentEffort(' ultra '), undefined);
+  assert.equal(parseAgentEffort('x'.repeat(65)), undefined);
+  assert.equal(parseAgentEffort('high\n'), undefined);
 });
 
 test('Shared Agent Contract retains lifecycle, streaming, approval, session, and queue event vocabulary', () => {

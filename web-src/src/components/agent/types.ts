@@ -1,6 +1,7 @@
 export type PermMode = 'default' | 'acceptEdits' | 'plan' | 'auto';
 
-export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+/** Opaque reasoning-effort identifier advertised by the active runtime. */
+export type EffortLevel = string;
 
 export type ToolStatus = 'running' | 'awaiting' | 'done' | 'error' | 'denied';
 
