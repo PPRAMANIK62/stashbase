@@ -14,7 +14,7 @@ import {
 import { smokeNativeAgentCli } from '../agent-native-smoke.ts';
 
 const REQUIRED_SHARED_CAPABILITIES = [
-  'connection', 'prompts', 'interrupt', 'transcript', 'approvals', 'history', 'modes', 'effort',
+  'connection', 'prompts', 'interrupt', 'transcript', 'approvals', 'history', 'modes', 'effort', 'models',
 ] as const;
 
 test('Claude and Codex declare every Shared Agent Contract panel behavior', () => {
@@ -48,6 +48,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
   ];
   const events: AgentServerEvent[] = [
     { t: 'ready' }, { t: 'session-id', id: 'session' }, { t: 'session-title', title: 'Title' },
+    { t: 'models', models: [{ id: 'native-model', label: 'Native model' }], activeModel: 'native-model' },
     { t: 'turn-start' }, { t: 'text', delta: 'text' }, { t: 'thinking', delta: 'thinking' },
     { t: 'tool', id: 'tool', name: 'Read', input: {} }, { t: 'tool-delta', id: 'tool', delta: 'input' },
     { t: 'tool-result', id: 'tool', content: 'done', isError: false },
@@ -56,7 +57,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
   ];
   assert.equal(clientEvents.length, 6);
-  assert.equal(events.length, 14);
+  assert.equal(events.length, 15);
 });
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {

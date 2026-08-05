@@ -9,7 +9,8 @@ import { ImageLightbox } from '../ImageLightbox';
 import { baseName } from './attachments';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
-import type { Attachment, EffortLevel, PermMode } from './types';
+import type { AgentModel, Attachment, EffortLevel, PermMode } from './types';
+import { modelMenuLabel } from './modelState';
 
 const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon }[] = [
   { id: 'default', label: 'Ask', desc: 'Ask before edits or higher-risk actions', Icon: HandIcon },
@@ -134,9 +135,42 @@ function EffortMenu({
   );
 }
 
+function ModelMenu({ model, models, locked, disabled, resumedSession, onSetModel }: {
+  model?: string;
+  models: AgentModel[];
+  locked: boolean;
+  disabled: boolean;
+  resumedSession: boolean;
+  onSetModel: (model?: string) => void;
+}) {
+  return (
+    <MenuTrigger>
+      <Button className={'agent-mode-btn agent-model-btn' + (locked ? ' is-locked' : '')} isDisabled={disabled || locked}>
+        {modelMenuLabel(models, model, resumedSession)}
+        <ChevronDownIcon className="agent-mode-chevron" />
+      </Button>
+      <Popover className="agent-mode-menu agent-model-menu" placement="top end">
+        <div className="agent-mode-menu-head"><span>Model</span></div>
+        <Menu aria-label="Model" selectionMode="single" selectedKeys={[model ?? '__default__']} onAction={(key) => onSetModel(key === '__default__' ? undefined : String(key))}>
+          <MenuItem id="__default__" className={({ isSelected }) => 'agent-mode-opt' + (isSelected ? ' active' : '')} textValue="Default">
+            <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">Default</span><span className="agent-mode-opt-desc">Use this runtime’s configured model</span></span>
+            {!model && <CheckIcon className="agent-mode-opt-check" />}
+          </MenuItem>
+          {models.map((entry) => (
+            <MenuItem key={entry.id} id={entry.id} className={({ isSelected }) => 'agent-mode-opt' + (isSelected ? ' active' : '')} textValue={entry.label}>
+              <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">{entry.label}</span>{entry.description && <span className="agent-mode-opt-desc">{entry.description}</span>}</span>
+              {model === entry.id && <CheckIcon className="agent-mode-opt-check" />}
+            </MenuItem>
+          ))}
+        </Menu>
+      </Popover>
+    </MenuTrigger>
+  );
+}
+
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortLocked, model, models, modelLocked, modelNotice, resumedSession, onSetModel, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -147,11 +181,18 @@ export function AgentComposer({
   effort: EffortLevel;
   onSetEffort: (level: EffortLevel) => void;
   effortLocked: boolean;
+  model?: string;
+  models: AgentModel[];
+  modelLocked: boolean;
+  modelNotice: string | null;
+  resumedSession: boolean;
+  onSetModel: (model?: string) => void;
   attachments: Attachment[];
   uploading: boolean;
   agentShortName: string;
   showModeMenu: boolean;
   showEffortMenu: boolean;
+  showModelMenu: boolean;
   onPickFiles: (files: File[]) => void;
   onPasteImages: (files: File[]) => void;
   onFocusChange: (focused: boolean) => void;
@@ -344,6 +385,7 @@ export function AgentComposer({
             <PlusIcon />
           </Button>
           <span className="agent-bar-spacer" />
+          {showModelMenu && <ModelMenu model={model} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
           {showModeMenu && (
             <AccessMenu
               mode={mode}
@@ -378,6 +420,7 @@ export function AgentComposer({
             </Button>
           )}
         </div>
+        {modelNotice && <div className="agent-model-notice" role="status">{modelNotice}</div>}
       </div>
       {previewAttachment?.previewUrl && (
         <ImageLightbox

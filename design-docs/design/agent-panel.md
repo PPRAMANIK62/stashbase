@@ -8,6 +8,13 @@ context, not a separate AI workspace.
 
 - Users can work with supported Agent runtimes in separate chats and restore
   prior chat history.
+- When a runtime supplies its native model catalog, a compact per-session
+  selector shows Default plus that runtime's available models. Default leaves
+  the user's CLI configuration intact; StashBase never rewrites it. A model is
+  fixed once a chat has content or is resumed, so history cannot silently move
+  to another model; resumed chats show the model identity recovered from their
+  native session metadata. If a saved choice becomes unavailable, the next new chat
+  recovers to Default with an explanation.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
 - Users explicitly attach context through mentions, file selection, drag and

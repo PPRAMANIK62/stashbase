@@ -1190,6 +1190,8 @@
     .agent-mode-btn:disabled { cursor: default; }
     .agent-effort-btn { min-width: 0; }
     .agent-effort-btn.is-locked { opacity: 0.58; cursor: default; }
+    .agent-model-btn { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+    .agent-model-btn.is-locked { opacity: 0.58; cursor: default; }
 
     /* "Modes" dropdown — opens upward from the mode button. */
     .agent-mode-menu {
@@ -1206,6 +1208,7 @@
       width: 300px;
       padding: 6px 8px;
     }
+    .agent-mode-menu.agent-model-menu { width: 340px; max-height: min(360px, 55vh); overflow: auto; }
     .agent-mode-menu-head {
       display: flex;
       flex-direction: column;
@@ -1247,6 +1250,7 @@
     .agent-mode-opt-title { font-size: calc(13px * var(--ui-scale)); font-weight: 500; }
     .agent-mode-opt-desc { font-size: calc(11.5px * var(--ui-scale)); line-height: 1.4; color: var(--muted); }
     .agent-mode-opt-check { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+    .agent-model-notice { padding: 6px 0 0; color: var(--muted); font-size: calc(11.5px * var(--ui-scale)); line-height: 1.35; }
 
     /* Effort footer — icon + label on the left, a 5-notch slider on the
      * right. Separated from the mode list by a hairline. */
