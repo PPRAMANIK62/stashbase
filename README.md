@@ -201,6 +201,21 @@ areas without duplicating the source tree:
 
 For contributors and developers building locally, and for platforms without a prebuilt installer.
 
+### Linux Prerequisites (Ubuntu / Debian)
+
+Ensure Node.js (>= 22.12.0), pnpm, Python 3.10+, `gcc`, `g++`, `make`, `pkg-config`, and `cmake` are installed:
+
+```bash
+# Node.js 22 & pnpm (via NVM)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.nvm/nvm.sh
+nvm install 22
+corepack enable
+corepack prepare pnpm@latest --activate
+```
+
+### Build Steps
+
 ```bash
 git clone https://github.com/liliu-z/stashbase
 cd stashbase
@@ -217,7 +232,7 @@ pnpm dev
 # Build a distributable app for your platform
 pnpm dist        # macOS
 pnpm dist:win    # Windows
-pnpm dist:linux  # Linux
+pnpm dist:linux  # Linux (.deb & AppImage)
 
 # Optional: include the local PDF/OCR extractor sidecar
 pnpm build:python-extract-sidecar
