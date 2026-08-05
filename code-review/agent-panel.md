@@ -60,14 +60,23 @@ Community contributions can land as useful first iterations, but the long-term d
 - Model catalogs and identifiers belong to their native runtime: use Claude's
   SDK discovery and Codex app-server `model/list`, never a shared hard-coded
   list. `undefined` means Default and must not change global CLI settings.
-  Validate a requested identifier against the current native catalog before a
-  new session/turn; a missing or stale value falls back to Default visibly.
-  Codex must initialize and publish this catalog before it emits panel-ready,
-  otherwise the first turn cannot be selected.
+  Keep the renderer's explicit selected override separate from the runtime's
+  active-model telemetry: only the selected override belongs in a new-session
+  URL, so a runtime Default model can never be pinned accidentally. Validate a
+  requested identifier against the complete current native catalog before a
+  new session/turn; a missing, rejected, or stale value clears the override,
+  visibly falls back to Default, and remains recoverable. Codex must collect
+  every paginated `model/list` page before validation and preserve each model's
+  advertised reasoning-effort identifiers/order (including object entries), so
+  the effort picker only offers compatible levels. It must initialize and
+  publish this catalog before it emits panel-ready, otherwise the first turn
+  cannot be selected.
   Do not send a model override when resuming, and lock the picker after chat
   content exists so a transcript cannot silently switch models. Recover the
-  active model from native resume/session metadata and surface that identity;
-  a generic “session model” label is not sufficient.
+  active model from native thread/session metadata for both Default and
+  resumed chats and surface that identity; a generic “session model” label is
+  not sufficient. Preserve a fallback notice if later initialization reports
+  the active Default model.
 
 ## Current Baseline
 

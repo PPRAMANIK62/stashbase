@@ -39,17 +39,28 @@ class FakeWebSocket extends EventEmitter {
   }
 }
 
-function catalogProcess(models = [{ id: 'native-model', displayName: 'Native model' }]): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
+function catalogProcess(
+  models = [{ id: 'native-model', displayName: 'Native model' }],
+  options: { pages?: Array<Record<string, unknown>[]>; threadModel?: string; rejectSelectedTurn?: boolean } = {},
+): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
   const proc = new FakeCodexProcess();
   const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
+  let page = 0;
+  let rejected = false;
   proc.stdin.on('data', (chunk: Buffer) => {
     const request = JSON.parse(String(chunk)) as { id: number; method: string; params: Record<string, unknown> };
     requests.push({ method: request.method, params: request.params });
-    const result = request.method === 'model/list' ? { data: models }
-      : request.method === 'thread/start' ? { thread: { id: 'thread-1' } }
-        : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model' }
+    const catalog = options.pages ?? [models];
+    const result = request.method === 'model/list' ? { data: catalog[page] ?? [], ...(page++ < catalog.length - 1 ? { nextCursor: `page-${page}` } : {}) }
+      : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, ...(options.threadModel ? { model: options.threadModel } : {}) }
+      : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model' }
         : request.method === 'turn/start' ? { turn: { id: 'turn-1' } } : {};
-    proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
+    if (request.method === 'turn/start' && options.rejectSelectedTurn && request.params.model && !rejected) {
+      rejected = true;
+      proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: 'model unavailable' } })}\n`);
+    } else {
+      proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
+    }
   });
   return { proc, requests };
 }
@@ -111,6 +122,63 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
   assert.equal(resumeNative.requests.some((request) => request.method === 'thread/resume'), true);
   assert.equal('model' in (resumeNative.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
   resumed.dispose();
+});
+
+test('Codex reports the native Default model after starting a new thread', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('default-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('default-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { threadModel: 'runtime-default' });
+  const session = new CodexSession(ws as unknown as WebSocket, 'default-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  const active = ws.sent.map((item) => JSON.parse(item) as { t: string; activeModel?: string }).filter((event) => event.t === 'models').at(-1);
+  assert.equal(active?.activeModel, 'runtime-default');
+  assert.equal('model' in (native.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
+  session.dispose();
+});
+
+test('Codex retries a rejected selected model with Default and publishes recovery', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('reject-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('reject-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { rejectSelectedTurn: true });
+  const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  const turns = native.requests.filter((request) => request.method === 'turn/start');
+  assert.equal(turns.length, 2);
+  assert.equal(turns[0]?.params.model, 'native-model');
+  assert.equal('model' in (turns[1]?.params ?? {}), false);
+  const fallback = ws.sent.map((item) => JSON.parse(item) as { t: string; fallback?: string }).find((event) => event.fallback);
+  assert.match(fallback?.fallback ?? '', /retrying/);
+  session.dispose();
+});
+
+test('Codex combines every catalog page and preserves advertised effort options', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
+  runWithWindowId('pages-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('pages-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess([], { pages: [
+    [{ id: 'early-model', displayName: 'Early' }],
+    [{ id: 'late-model', displayName: 'Late', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'xhigh' }] }],
+  ] });
+  const session = new CodexSession(ws as unknown as WebSocket, 'pages-window', undefined, undefined, undefined, 'late-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  const modelsEvent = ws.sent.map((item) => JSON.parse(item) as { t: string; models?: Array<{ id: string; supportedEfforts?: string[] }>; activeModel?: string }).find((event) => event.t === 'models');
+  assert.deepEqual(modelsEvent?.models?.map((model) => model.id), ['early-model', 'late-model']);
+  assert.deepEqual(modelsEvent?.models?.[1]?.supportedEfforts, ['low', 'xhigh']);
+  assert.equal(modelsEvent?.activeModel, 'late-model');
+  assert.deepEqual(native.requests.filter((request) => request.method === 'model/list').map((request) => request.params), [{}, { cursor: 'page-1' }]);
+  session.dispose();
 });
 
 test('Codex RPC peer correlates responses and dispatches inbound messages', async () => {

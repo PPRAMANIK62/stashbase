@@ -25,14 +25,20 @@ test('model control visibility, locking label, active identity, and fallback sta
   assert.equal(modelMenuLocked(false, false), false);
   assert.equal(modelMenuLocked(true, false), true);
   assert.equal(modelMenuLocked(false, true), true);
-  assert.equal(modelMenuLabel(models, undefined, true), 'Session model');
+  assert.equal(modelMenuLabel(models, undefined, undefined, true), 'Session model');
 
-  const active = applyModelEvent({ models: [], model: undefined, notice: null, resumedSession: true }, { models, activeModel: 'native-model' });
-  assert.equal(active.model, 'native-model');
+  const active = applyModelEvent({ models: [], selectedModel: undefined, activeModel: undefined, notice: null, resumedSession: true }, { models, activeModel: 'native-model' });
+  assert.equal(active.selectedModel, undefined);
+  assert.equal(active.activeModel, 'native-model');
   assert.equal(active.notice, null);
-  assert.equal(modelMenuLabel(active.models, active.model, active.resumedSession), 'Native model');
+  assert.equal(modelMenuLabel(active.models, active.selectedModel, active.activeModel, active.resumedSession), 'Native model');
 
   const fallback = applyModelEvent(active, { models, fallback: 'That model could not be selected; using the runtime default.' });
-  assert.equal(fallback.model, undefined);
+  assert.equal(fallback.selectedModel, undefined);
   assert.match(fallback.notice ?? '', /runtime default/);
+
+  const defaultActive = applyModelEvent(fallback, { models, activeModel: 'native-model' });
+  assert.equal(defaultActive.selectedModel, undefined, 'runtime telemetry must not pin Default on reconnect');
+  assert.equal(defaultActive.activeModel, 'native-model');
+  assert.match(defaultActive.notice ?? '', /runtime default/, 'active-model telemetry must not hide fallback recovery');
 });

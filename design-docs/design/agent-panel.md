@@ -10,11 +10,14 @@ context, not a separate AI workspace.
   prior chat history.
 - When a runtime supplies its native model catalog, a compact per-session
   selector shows Default plus that runtime's available models. Default leaves
-  the user's CLI configuration intact; StashBase never rewrites it. A model is
-  fixed once a chat has content or is resumed, so history cannot silently move
-  to another model; resumed chats show the model identity recovered from their
-  native session metadata. If a saved choice becomes unavailable, the next new chat
-  recovers to Default with an explanation.
+  the user's CLI configuration intact; StashBase never rewrites it or turns the
+  runtime's active Default model into a saved override. A model is fixed once a
+  chat has content or is resumed, so history cannot silently move to another
+  model; new and resumed chats show the identity reported by their native
+  runtime. If a saved choice becomes unavailable or is rejected at turn start,
+  the next new chat recovers to Default with an explanation. Reasoning controls
+  only offer the levels supported by the active model when the runtime reports
+  that compatibility.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
 - Users explicitly attach context through mentions, file selection, drag and

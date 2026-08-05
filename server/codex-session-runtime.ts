@@ -75,6 +75,9 @@ export class CodexSession {
    * turn. Re-checking later could silently change an existing session when a
    * runtime catalog is refreshed or a model is withdrawn. */
   private modelResolved = false;
+  /** Explicit override for a new thread only. Never derive this from the
+   * model the runtime reports for a resumed/default session. */
+  private selectedModel: string | undefined;
   private activeModel: string | undefined;
   private models: AgentModel[] = [];
 
@@ -278,13 +281,25 @@ export class CodexSession {
       this.throwIfInterruptedBeforeTurn();
       const threadId = await this.ensureThread(titleHint);
       this.throwIfInterruptedBeforeTurn();
-      const result = await this.request('turn/start', {
+      const startTurn = (override: string | undefined) => this.request('turn/start', {
         threadId,
         cwd: this.cwd,
         ...codexEffortOption(this.effort),
-        ...(model ? { model } : {}),
+        ...(override ? { model: override } : {}),
         input: [{ type: 'text', text: prompt, text_elements: [] }],
-      }) as JsonObject;
+      }) as Promise<JsonObject>;
+      let result: JsonObject;
+      try {
+        result = await startTurn(model);
+      } catch (err: unknown) {
+        if (!model) throw err;
+        // A runtime can reject a catalogued model because its entitlement or
+        // availability changed after discovery. Clear the override and retry
+        // this first turn with Default while the picker is still recoverable.
+        this.selectedModel = undefined;
+        this.send({ t: 'models', models: this.models, fallback: 'That model could not be used; retrying with the runtime default.' });
+        result = await startTurn(undefined);
+      }
       const turn = result.turn as JsonObject | undefined;
       const id = stringValue(turn?.id);
       if (this.busy && id) {
@@ -306,10 +321,9 @@ export class CodexSession {
   /** `model/list` is the source of truth, including custom providers and
    * their supported effort order. Do not substitute a product-maintained list. */
   private async resolveModel(): Promise<string | undefined> {
-    if (this.modelResolved) return this.activeModel;
-    let result: JsonObject;
+    if (this.modelResolved) return this.selectedModel;
     try {
-      result = await this.request('model/list', {}) as JsonObject;
+      this.models = await this.loadModelCatalog();
     } catch (err: unknown) {
       // Older app-servers can still run a normal default session even when
       // they do not expose the optional catalog method.
@@ -318,17 +332,6 @@ export class CodexSession {
       log.debug(`could not discover Codex models: ${errorMessage(err)}`);
       return undefined;
     }
-    const entries = Array.isArray(result.data) ? result.data : Array.isArray(result.models) ? result.models : [];
-    this.models = entries.flatMap((entry): AgentModel[] => {
-      if (!entry || typeof entry !== 'object') return [];
-      const value = entry as JsonObject;
-      const id = stringValue(value.id) ?? stringValue(value.model);
-      if (!id) return [];
-      return [{ id, label: stringValue(value.displayName) ?? stringValue(value.name) ?? id,
-        ...(typeof value.description === 'string' ? { description: value.description } : {}),
-        ...(Array.isArray(value.supportedReasoningEfforts) ? { supportedEfforts: value.supportedReasoningEfforts.filter((item): item is string => typeof item === 'string') } : {}),
-      }];
-    });
     if (this.resumeThreadId) {
       this.send({ t: 'models', models: this.models });
       this.modelResolved = true;
@@ -336,9 +339,35 @@ export class CodexSession {
     }
     const selected = this.model && this.models.some((entry) => entry.id === this.model) ? this.model : undefined;
     this.send({ t: 'models', models: this.models, ...(selected ? { activeModel: selected } : {}), ...(this.model && !selected ? { fallback: 'That model is no longer available; using the runtime default.' } : {}) });
-    this.activeModel = selected;
+    this.selectedModel = selected;
     this.modelResolved = true;
     return selected;
+  }
+
+  /** Model catalogs are paginated by the native app-server. A valid selected
+   * model can appear on a later page, so validate only after collecting all
+   * pages. */
+  private async loadModelCatalog(): Promise<AgentModel[]> {
+    const models: AgentModel[] = [];
+    const seenModels = new Set<string>();
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    while (true) {
+      const result = await this.request('model/list', cursor ? { cursor } : {}) as JsonObject;
+      const entries = Array.isArray(result.data) ? result.data : Array.isArray(result.models) ? result.models : [];
+      for (const entry of entries) {
+        const model = codexCatalogModel(entry);
+        if (model && !seenModels.has(model.id)) {
+          seenModels.add(model.id);
+          models.push(model);
+        }
+      }
+      const nextCursor = stringValue(result.nextCursor);
+      if (!nextCursor || seenCursors.has(nextCursor)) break;
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+    }
+    return models;
   }
 
   private async ensureThread(titleHint = ''): Promise<string> {
@@ -365,14 +394,13 @@ export class CodexSession {
     if (!id) throw new Error('Codex app-server did not return a thread id.');
     const shouldSendSessionId = this.threadId !== id;
     this.threadId = id;
-    if (!isNewThread) {
-      const activeModel = codexThreadModel(thread, result);
-      if (activeModel) {
-        const models = this.models.some((entry) => entry.id === activeModel)
-          ? this.models
-          : [...this.models, { id: activeModel, label: activeModel }];
-        this.send({ t: 'models', models, activeModel });
-      }
+    const activeModel = codexThreadModel(thread, result);
+    if (activeModel) {
+      this.activeModel = activeModel;
+      const models = this.models.some((entry) => entry.id === activeModel)
+        ? this.models
+        : [...this.models, { id: activeModel, label: activeModel }];
+      this.send({ t: 'models', models, activeModel });
     }
     this.resumeThreadId = null;
     if (shouldSendSessionId) this.send({ t: 'session-id', id });
@@ -779,6 +807,29 @@ function codexThreadModel(thread: JsonObject | undefined, response?: JsonObject)
   if (!thread) return stringValue(response?.model);
   const config = thread.config && typeof thread.config === 'object' ? thread.config as JsonObject : undefined;
   return stringValue(response?.model) || stringValue(thread.model) || stringValue(thread.modelId) || stringValue(config?.model) || undefined;
+}
+
+/** Normalize the app-server catalog while retaining its advertised effort
+ * order. Codex returns effort entries as objects, unlike the Claude SDK. */
+function codexCatalogModel(entry: unknown): AgentModel | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const value = entry as JsonObject;
+  const id = stringValue(value.id) ?? stringValue(value.model);
+  if (!id) return null;
+  const supportedEfforts = Array.isArray(value.supportedReasoningEfforts)
+    ? value.supportedReasoningEfforts.flatMap((effort): string[] => {
+      if (typeof effort === 'string') return [effort];
+      if (!effort || typeof effort !== 'object') return [];
+      const id = stringValue((effort as JsonObject).reasoningEffort);
+      return id ? [id] : [];
+    })
+    : [];
+  return {
+    id,
+    label: stringValue(value.displayName) ?? stringValue(value.name) ?? id,
+    ...(typeof value.description === 'string' ? { description: value.description } : {}),
+    ...(supportedEfforts.length ? { supportedEfforts } : {}),
+  };
 }
 
 function codexEffortOption(effort: string | undefined): { effort?: string } {

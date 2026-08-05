@@ -2,7 +2,11 @@ import type { AgentModel } from './types';
 
 export interface ModelControlState {
   models: AgentModel[];
-  model?: string;
+  /** User intent for the next new native session. Never overwrite this with
+   * runtime telemetry: Default must continue to mean no explicit override. */
+  selectedModel?: string;
+  /** Model the runtime says this live session is actually using. */
+  activeModel?: string;
   notice: string | null;
   resumedSession: boolean;
 }
@@ -12,11 +16,15 @@ export function applyModelEvent(state: ModelControlState, event: {
   activeModel?: string;
   fallback?: string;
 }): ModelControlState {
-  if (event.fallback) return { ...state, models: event.models, model: undefined, notice: event.fallback };
+  if (event.fallback) {
+    return { ...state, models: event.models, selectedModel: undefined, notice: event.fallback };
+  }
   return {
     ...state,
     models: event.models,
-    ...(event.activeModel ? { model: event.activeModel, notice: null } : {}),
+    // Keep a fallback explanation visible even when the runtime follows with
+    // its Default model in an init event.
+    ...(event.activeModel ? { activeModel: event.activeModel } : {}),
   };
 }
 
@@ -28,6 +36,12 @@ export function modelMenuLocked(hasTranscript: boolean, turnActive: boolean): bo
   return hasTranscript || turnActive;
 }
 
-export function modelMenuLabel(models: AgentModel[], model: string | undefined, resumedSession: boolean): string {
-  return models.find((entry) => entry.id === model)?.label ?? (resumedSession ? 'Session model' : 'Default');
+export function modelMenuLabel(
+  models: AgentModel[],
+  selectedModel: string | undefined,
+  activeModel: string | undefined,
+  resumedSession: boolean,
+): string {
+  const identity = activeModel ?? selectedModel;
+  return models.find((entry) => entry.id === identity)?.label ?? (resumedSession ? 'Session model' : 'Default');
 }

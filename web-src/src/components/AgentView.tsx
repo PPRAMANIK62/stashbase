@@ -24,8 +24,8 @@ import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
-import { applyModelEvent, modelMenuLocked, modelMenuVisible } from './agent/modelState';
-import type { AgentModel, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
+import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
+import type { Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
 
 let blockSeq = 0;
 const nextId = () => `b${++blockSeq}`;
@@ -102,12 +102,10 @@ export function AgentView({
   // value without resubscribing on every change.
   const [effort, setEffort] = useState<EffortLevel>('high');
   const effortRef = useRef<EffortLevel>('high');
-  // Undefined means Default: retain the runtime's existing configuration.
-  const [model, setModel] = useState<string | undefined>(undefined);
-  const modelRef = useRef<string | undefined>(undefined);
-  const [models, setModels] = useState<AgentModel[]>([]);
-  const [modelNotice, setModelNotice] = useState<string | null>(null);
-  const [resumedSession, setResumedSession] = useState(false);
+  // User intent and runtime telemetry must stay separate: an active model
+  // reached through Default must never become an explicit override later.
+  const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
+  const modelControlRef = useRef(modelControl);
   // The live session's SDK id (from the `session-id` event) — lets the
   // History dropdown mark the current session active. `resumeIdRef` holds
   // a session id to resume on the next connect; it rides the connect URL
@@ -205,7 +203,7 @@ export function AgentView({
     const wsUrl = agentConnectionUrl({
       protocol: location.protocol, host: location.host, endpoint,
       windowId: getWindowId(), effort: effortRef.current, access: modeRef.current,
-      agent, model: modelRef.current, resume,
+      agent, model: modelControlRef.current.selectedModel, resume,
     });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -252,7 +250,11 @@ export function AgentView({
     sessionIdRef.current = null;
     toolNamesRef.current.clear();
     openKind.current = null;
-    setResumedSession(false);
+    setModelControl((current) => {
+      const next = { ...current, activeModel: undefined, resumedSession: false };
+      modelControlRef.current = next;
+      return next;
+    });
     setPhase('connecting');
     setNonce((n) => n + 1);
   }
@@ -296,11 +298,11 @@ export function AgentView({
     resumeIdRef.current = id;
     // The previous tab may have been configured for another model. Clear it
     // before reconnecting so the locked resumed chat cannot mislabel itself.
-    setModel(undefined);
-    modelRef.current = undefined;
-    setModels([]);
-    setModelNotice('This resumed session retains the model chosen by its native runtime.');
-    setResumedSession(true);
+    const resumedModelControl: ModelControlState = {
+      models: [], notice: 'This resumed session retains the model chosen by its native runtime.', resumedSession: true,
+    };
+    modelControlRef.current = resumedModelControl;
+    setModelControl(resumedModelControl);
     // Name the tab from the resumed session right away — otherwise a tab
     // opened to a past session stays "Untitled" until the user sends a
     // new prompt (the `turn-end` path that usually renames never fires on
@@ -330,13 +332,11 @@ export function AgentView({
         sessionIdRef.current = ev.id;
         break;
       case 'models':
-        {
-          const next = applyModelEvent({ models, model: modelRef.current, notice: modelNotice, resumedSession }, ev);
-          setModels(next.models);
-          setModel(next.model);
-          modelRef.current = next.model;
-          setModelNotice(next.notice);
-        }
+        setModelControl((current) => {
+          const next = applyModelEvent(current, ev);
+          modelControlRef.current = next;
+          return next;
+        });
         break;
       case 'session-title':
         if (isDefaultChatTitle(titleRef.current)) {
@@ -717,9 +717,11 @@ export function AgentView({
    * transcript is immutable here, so it can never silently switch models. */
   function changeModel(next: string | undefined) {
     if (blocks.length > 0 || turnActive) return;
-    setModel(next);
-    modelRef.current = next;
-    setModelNotice(null);
+    setModelControl((current) => {
+      const updated = { ...current, selectedModel: next, activeModel: undefined, notice: null, resumedSession: false };
+      modelControlRef.current = updated;
+      return updated;
+    });
     reconnect();
   }
 
@@ -757,6 +759,8 @@ export function AgentView({
 
   const effortLocked = blocks.length > 0 || turnActive;
   const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
+  const effectiveModel = modelControl.activeModel ?? modelControl.selectedModel;
+  const supportedEfforts = modelControl.models.find((entry) => entry.id === effectiveModel)?.supportedEfforts;
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
     wsRef.current?.send(JSON.stringify({ t: 'permission-reply', id: permId, allow }));
@@ -889,15 +893,17 @@ export function AgentView({
         effort={effort}
         onSetEffort={changeEffort}
         effortLocked={effortLocked}
-        model={model}
-        models={models}
+        selectedModel={modelControl.selectedModel}
+        activeModel={modelControl.activeModel}
+        models={modelControl.models}
         modelLocked={modelLocked}
-        modelNotice={modelNotice}
-        resumedSession={resumedSession}
+        modelNotice={modelControl.notice}
+        resumedSession={modelControl.resumedSession}
+        supportedEfforts={supportedEfforts}
         onSetModel={changeModel}
         showModeMenu={capabilities?.modes === true}
         showEffortMenu={capabilities?.effort === true}
-        showModelMenu={modelMenuVisible(capabilities?.models === true, models)}
+        showModelMenu={modelMenuVisible(capabilities?.models === true, modelControl.models)}
         agentShortName={meta.shortName}
         attachments={attachments}
         uploading={uploading}

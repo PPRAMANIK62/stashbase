@@ -6,6 +6,14 @@ import {
 } from '../../icons';
 import { useApp } from '../../store/AppContext';
 import { ImageLightbox } from '../ImageLightbox';
+import {
+  Menu as SharedMenu,
+  MenuItem as SharedMenuItem,
+  MenuPopup as SharedMenuPopup,
+  MenuPortal as SharedMenuPortal,
+  MenuPositioner as SharedMenuPositioner,
+  MenuTrigger as SharedMenuTrigger,
+} from '../ui/menu';
 import { baseName } from './attachments';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
@@ -71,8 +79,8 @@ function AccessMenu({
   );
 }
 
-function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLevel) => void }) {
-  const cur = EFFORTS.indexOf(effort);
+function EffortBar({ effort, efforts, onSet }: { effort: EffortLevel; efforts: EffortLevel[]; onSet: (l: EffortLevel) => void }) {
+  const cur = efforts.indexOf(effort);
   return (
     <div className="agent-effort">
       <DumbbellIcon className="agent-effort-icon" />
@@ -86,7 +94,7 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
         selectedKeys={[effort]}
         onAction={(key) => onSet(key as EffortLevel)}
       >
-        {EFFORTS.map((lv, i) => (
+        {efforts.map((lv, i) => (
           <ListBoxItem
             key={lv}
             id={lv}
@@ -106,9 +114,10 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
 }
 
 function EffortMenu({
-  effort, open, disabled, locked, onOpenChange, onSetEffort,
+  effort, efforts, open, disabled, locked, onOpenChange, onSetEffort,
 }: {
   effort: EffortLevel;
+  efforts: EffortLevel[];
   open: boolean;
   disabled: boolean;
   locked: boolean;
@@ -128,15 +137,16 @@ function EffortMenu({
       </Button>
       <Popover className="agent-mode-menu effort-only" placement="top end">
         <div>
-          <EffortBar effort={effort} onSet={onSetEffort} />
+          <EffortBar effort={effort} efforts={efforts} onSet={onSetEffort} />
         </div>
       </Popover>
     </MenuTrigger>
   );
 }
 
-function ModelMenu({ model, models, locked, disabled, resumedSession, onSetModel }: {
-  model?: string;
+function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resumedSession, onSetModel }: {
+  selectedModel?: string;
+  activeModel?: string;
   models: AgentModel[];
   locked: boolean;
   disabled: boolean;
@@ -144,33 +154,35 @@ function ModelMenu({ model, models, locked, disabled, resumedSession, onSetModel
   onSetModel: (model?: string) => void;
 }) {
   return (
-    <MenuTrigger>
-      <Button className={'agent-mode-btn agent-model-btn' + (locked ? ' is-locked' : '')} isDisabled={disabled || locked}>
-        {modelMenuLabel(models, model, resumedSession)}
+    <SharedMenu>
+      <SharedMenuTrigger className={'agent-mode-btn agent-model-btn' + (locked ? ' is-locked' : '')} disabled={disabled || locked}>
+        {modelMenuLabel(models, selectedModel, activeModel, resumedSession)}
         <ChevronDownIcon className="agent-mode-chevron" />
-      </Button>
-      <Popover className="agent-mode-menu agent-model-menu" placement="top end">
-        <div className="agent-mode-menu-head"><span>Model</span></div>
-        <Menu aria-label="Model" selectionMode="single" selectedKeys={[model ?? '__default__']} onAction={(key) => onSetModel(key === '__default__' ? undefined : String(key))}>
-          <MenuItem id="__default__" className={({ isSelected }) => 'agent-mode-opt' + (isSelected ? ' active' : '')} textValue="Default">
+      </SharedMenuTrigger>
+      <SharedMenuPortal>
+        <SharedMenuPositioner side="top" align="end" sideOffset={6} collisionPadding={8}>
+          <SharedMenuPopup className="agent-mode-menu agent-model-menu" aria-label="Model">
+            <div className="agent-mode-menu-head"><span>Model</span></div>
+            <SharedMenuItem label="Default" className="agent-mode-opt" onClick={() => onSetModel(undefined)}>
             <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">Default</span><span className="agent-mode-opt-desc">Use this runtime’s configured model</span></span>
-            {!model && <CheckIcon className="agent-mode-opt-check" />}
-          </MenuItem>
-          {models.map((entry) => (
-            <MenuItem key={entry.id} id={entry.id} className={({ isSelected }) => 'agent-mode-opt' + (isSelected ? ' active' : '')} textValue={entry.label}>
+            {!selectedModel && <CheckIcon className="agent-mode-opt-check" />}
+            </SharedMenuItem>
+            {models.map((entry) => (
+              <SharedMenuItem key={entry.id} label={entry.label} className="agent-mode-opt" onClick={() => onSetModel(entry.id)}>
               <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">{entry.label}</span>{entry.description && <span className="agent-mode-opt-desc">{entry.description}</span>}</span>
-              {model === entry.id && <CheckIcon className="agent-mode-opt-check" />}
-            </MenuItem>
-          ))}
-        </Menu>
-      </Popover>
-    </MenuTrigger>
+              {selectedModel === entry.id && <CheckIcon className="agent-mode-opt-check" />}
+              </SharedMenuItem>
+            ))}
+          </SharedMenuPopup>
+        </SharedMenuPositioner>
+      </SharedMenuPortal>
+    </SharedMenu>
   );
 }
 
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, model, models, modelLocked, modelNotice, resumedSession, onSetModel, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -181,7 +193,9 @@ export function AgentComposer({
   effort: EffortLevel;
   onSetEffort: (level: EffortLevel) => void;
   effortLocked: boolean;
-  model?: string;
+  supportedEfforts?: string[];
+  selectedModel?: string;
+  activeModel?: string;
   models: AgentModel[];
   modelLocked: boolean;
   modelNotice: string | null;
@@ -229,6 +243,7 @@ export function AgentComposer({
   }, [mention, state.files, state.folders]);
 
   const activeSuggestionIndex = Math.min(activeMentionIndex, Math.max(suggestions.length - 1, 0));
+  const compatibleEfforts = EFFORTS.filter((level) => !supportedEfforts?.length || supportedEfforts.includes(level));
 
   useEffect(() => {
     activeMentionRef.current?.scrollIntoView({ block: 'nearest' });
@@ -385,7 +400,7 @@ export function AgentComposer({
             <PlusIcon />
           </Button>
           <span className="agent-bar-spacer" />
-          {showModelMenu && <ModelMenu model={model} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
+          {showModelMenu && <ModelMenu selectedModel={selectedModel} activeModel={activeModel} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
           {showModeMenu && (
             <AccessMenu
               mode={mode}
@@ -401,6 +416,7 @@ export function AgentComposer({
               open={effortOpen}
               disabled={disabled}
               locked={effortLocked}
+              efforts={compatibleEfforts.length ? compatibleEfforts : EFFORTS}
               onOpenChange={(open) => { setEffortOpen(open); if (open) setModeOpen(false); }}
               onSetEffort={(level) => { onSetEffort(level); setEffortOpen(false); }}
             />
