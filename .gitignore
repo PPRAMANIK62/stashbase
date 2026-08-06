@@ -20,10 +20,6 @@ native/transcription/sidecar.nosync/
 dev-docs/
 package-lock.json
 
-# Manually-run prompt for updating the Feishu use-case Bitable; not part of
-# the repo's design-doc maintenance loop.
-update-use-cases.md
-
 # Chinese mirrors / drafts. The committed docs are English-only
 # (see CLAUDE.md); Chinese Markdown variants stay local.
 *.zh.md
