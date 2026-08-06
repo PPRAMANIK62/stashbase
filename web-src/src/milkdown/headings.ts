@@ -1,6 +1,7 @@
-export type DocumentHeading = { id: string; level: number; text: string };
+export type DocumentHeading = { id: string; level: number; text: string; position: number };
 
-type ProseMirrorDocument = { descendants: (visit: (node: { type: { name: string }; attrs: { level?: number }; textContent: string }) => void) => void };
+export type ProseMirrorDocument = { descendants: (visit: (node: { type: { name: string }; attrs: { level?: number }; textContent: string }, position: number) => void) => void };
+const headingNodes = new WeakMap<DocumentHeading, object>();
 
 export function headingSlug(text: string): string {
   return text.trim().toLowerCase().normalize('NFKD')
@@ -11,15 +12,33 @@ export function headingSlug(text: string): string {
 export function extractDocumentHeadings(doc: ProseMirrorDocument): DocumentHeading[] {
   const headings: DocumentHeading[] = [];
   const used = new Map<string, number>();
-  doc.descendants((node) => {
+  doc.descendants((node, position) => {
     if (node.type.name !== 'heading') return;
     const text = node.textContent.trim();
     const base = headingSlug(text);
     const seen = used.get(base) ?? 0;
     used.set(base, seen + 1);
-    headings.push({ id: seen === 0 ? base : `${base}-${seen}`, level: Number(node.attrs.level) || 1, text });
+    const heading = { id: seen === 0 ? base : `${base}-${seen}`, level: Number(node.attrs.level) || 1, text, position };
+    headingNodes.set(heading, node);
+    headings.push(heading);
   });
   return headings;
+}
+
+/** Maps an outline entry retained across a React render to its latest
+ * ProseMirror position. Unchanged nodes keep identity across transactions. */
+export function resolveCurrentDocumentHeading(current: DocumentHeading[], selected: DocumentHeading): DocumentHeading | null {
+  const selectedNode = headingNodes.get(selected);
+  const identityMatch = selectedNode
+    ? current.find((heading) => headingNodes.get(heading) === selectedNode)
+    : undefined;
+  if (identityMatch) return identityMatch;
+  return current.find((heading) =>
+    heading.id === selected.id
+    && heading.level === selected.level
+    && heading.text === selected.text
+    && heading.position === selected.position,
+  ) ?? null;
 }
 
 /** A heading owns every following, deeper heading until the next peer or
