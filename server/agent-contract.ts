@@ -42,6 +42,7 @@ export interface AgentCapabilities {
   effort: boolean;
   /** The runtime can enumerate and select its own session models. */
   models: boolean;
+  skills: boolean;
   steering: boolean;
   titleHint: boolean;
 }
@@ -62,11 +63,13 @@ export interface AgentModel {
   description?: string;
   supportedEfforts?: string[];
 }
+export interface AgentSkill { id: string; label: string; description?: string; argumentHint?: string }
 
 /** The stable panel wire protocol. Adapters may translate native events,
  * but they must only emit this transcript and lifecycle vocabulary. */
 export type AgentClientEvent =
-  | { t: 'prompt'; text: string; titleHint?: string }
+  | { t: 'prompt'; text: string; titleHint?: string; skill?: string }
+  | { t: 'refresh-skills' }
   | { t: 'steer'; id: string; text: string }
   | { t: 'permission-reply'; id: string; allow: boolean; always?: boolean }
   | { t: 'interrupt' }
@@ -78,6 +81,7 @@ export type AgentServerEvent =
   | { t: 'session-id'; id: string }
   | { t: 'session-title'; title: string }
   | { t: 'models'; models: AgentModel[]; activeModel?: string; fallback?: string }
+  | { t: 'skills'; skills: AgentSkill[]; state: 'available' | 'empty' | 'failed'; error?: string }
   | { t: 'turn-start' }
   | { t: 'text'; delta: string }
   | { t: 'thinking'; delta: string }

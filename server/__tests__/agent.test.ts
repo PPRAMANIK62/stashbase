@@ -4,6 +4,8 @@ import {
   claudeActiveModelEvent,
   claudeModelCatalogFailureEvent,
   claudePermissionMode,
+  claudeSkillCatalogEvent,
+  claudeSkillPrompt,
   selectClaudeModel,
 } from '../agent.ts';
 
@@ -52,4 +54,15 @@ test('Claude catalog failure does not claim a fallback for a resumed native sess
   const event = claudeModelCatalogFailureEvent('stale-tab-model', true);
   assert.deepEqual(event.models, []);
   assert.equal(event.fallback, undefined);
+});
+
+test('Claude publishes single-slash skill labels and sends the selected native command', () => {
+  const event = claudeSkillCatalogEvent([{ name: 'release-notes', description: 'Prepare release notes', argumentHint: '<version>' }]);
+  assert.deepEqual(event, {
+    t: 'skills',
+    state: 'available',
+    skills: [{ id: 'release-notes', label: 'release-notes', description: 'Prepare release notes', argumentHint: '<version>' }],
+  });
+  assert.equal(claudeSkillPrompt('prepare the release', 'release-notes'), '/release-notes prepare the release');
+  assert.deepEqual(claudeSkillCatalogEvent([]), { t: 'skills', state: 'empty', skills: [] });
 });

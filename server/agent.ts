@@ -55,9 +55,20 @@ import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './
 import { ensureClaudeBridgeFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode } from './agent-contract.ts';
-import type { AgentClientEvent, AgentModel, AgentServerEvent } from './agent-contract.ts';
+import type { AgentClientEvent, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
 import { detectViewerFormat } from './format.ts';
 import { isAgentReadableDerivedTextReady } from './library-file-reader.ts';
+
+type ClaudeSkillCommand = { name: string; description: string; argumentHint: string };
+
+export function claudeSkillCatalogEvent(commands: readonly ClaudeSkillCommand[]): Extract<AgentServerEvent, { t: 'skills' }> {
+  const skills: AgentSkill[] = commands.filter((command) => Boolean(command.name)).map((command) => ({ id: command.name, label: command.name, ...(command.description ? { description: command.description } : {}), ...(command.argumentHint ? { argumentHint: command.argumentHint } : {}) }));
+  return { t: 'skills', skills, state: skills.length ? 'available' : 'empty' };
+}
+
+export function claudeSkillPrompt(body: string, skill?: string): string {
+  return skill ? `/${skill}${body.trim() ? ` ${body}` : ''}` : body;
+}
 
 const log = logger('agent');
 
@@ -245,6 +256,7 @@ class AgentSession {
    *  client so the history dropdown can mark this session active. */
   private sessionId: string | null = null;
   private models: AgentModel[] = [];
+  private skills = new Set<string>();
 
   constructor(
     private ws: WebSocket,
@@ -348,6 +360,7 @@ class AgentSession {
       return;
     }
     await this.publishModels();
+    await this.publishSkills();
     this.send({ t: 'ready' });
     void this.pump();
   }
@@ -377,6 +390,16 @@ class AgentSession {
     }
   }
 
+  private async publishSkills(): Promise<void> {
+    if (!this.q) return;
+    try { this.publishSkillCommands(await this.q.supportedCommands()); }
+    catch { this.skills.clear(); this.send({ t: 'skills', skills: [], state: 'failed', error: 'Could not load skills. Try again.' }); }
+  }
+  private publishSkillCommands(commands: Array<{ name: string; description: string; argumentHint: string }>): void {
+    this.skills = new Set(commands.map((command) => command.name).filter(Boolean));
+    this.send(claudeSkillCatalogEvent(commands));
+  }
+
   /** Drain the SDK message stream until it ends or errors. */
   private async pump(): Promise<void> {
     if (!this.q) return;
@@ -403,6 +426,7 @@ class AgentSession {
     if (msg.type === 'system' && msg.subtype === 'init' && msg.model) {
       this.send(claudeActiveModelEvent(this.models, msg.model));
     }
+    if (msg.type === 'system' && msg.subtype === 'commands_changed') this.publishSkillCommands(msg.commands);
     switch (msg.type) {
       case 'stream_event': {
         // Partial deltas → typewriter streaming for text + thinking.
@@ -497,15 +521,18 @@ class AgentSession {
     switch (msg.t) {
       case 'prompt': {
         const body = typeof msg.text === 'string' ? msg.text : '';
-        if (!body.trim()) return;
+        const skill = typeof msg.skill === 'string' ? msg.skill : undefined;
+        if (skill && !this.skills.has(skill)) { this.send({ t: 'error', message: 'That skill is no longer available. Type / to choose another.' }); return; }
+        if (!body.trim() && !skill) return;
         this.send({ t: 'turn-start' });
         this.input.push({
           type: 'user',
-          message: { role: 'user', content: body },
+          message: { role: 'user', content: claudeSkillPrompt(body, skill) },
           parent_tool_use_id: null,
         } as SDKUserMessage);
         break;
       }
+      case 'refresh-skills': void this.publishSkills(); break;
       case 'permission-reply': {
         const id = typeof msg.id === 'string' ? msg.id : '';
         const p = this.pending.get(id);

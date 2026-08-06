@@ -13,6 +13,7 @@ import {
   reportAgentRuntimeFailure,
   type AgentAccessMode,
   type AgentModel,
+  type AgentSkill,
   type AgentClientEvent,
   type AgentServerEvent,
 } from './agent-contract.ts';
@@ -80,6 +81,8 @@ export class CodexSession {
   private selectedModel: string | undefined;
   private activeModel: string | undefined;
   private models: AgentModel[] = [];
+  private skills = new Map<string, { name: string; path: string }>();
+  private skillSequence = 0;
 
   readonly windowId: string;
 
@@ -120,6 +123,7 @@ export class CodexSession {
     try {
       await this.ensureAppServer();
       await this.resolveModel();
+      await this.publishSkills();
       // Loading a historic thread is what lets the native app-server return
       // its persisted model metadata before the panel becomes interactive.
       if (this.resumeThreadId) await this.ensureThread();
@@ -218,10 +222,12 @@ export class CodexSession {
       case 'prompt': {
         const body = typeof msg.text === 'string' ? msg.text : '';
         const titleHint = typeof msg.titleHint === 'string' ? msg.titleHint : '';
-        if (!body.trim()) return;
-        void this.runTurn(body, titleHint);
+        const skill = typeof msg.skill === 'string' ? msg.skill : undefined;
+        if (!body.trim() && !skill) return;
+        void this.runTurn(body, titleHint, skill);
         break;
       }
+      case 'refresh-skills': void this.publishSkills(true); break;
       case 'steer': {
         const id = typeof msg.id === 'string' ? msg.id : '';
         const body = typeof msg.text === 'string' ? msg.text : '';
@@ -261,7 +267,7 @@ export class CodexSession {
     }
   }
 
-  private async runTurn(prompt: string, titleHint = ''): Promise<void> {
+  private async runTurn(prompt: string, titleHint = '', skillId?: string): Promise<void> {
     if (this.closed) return;
     if (!this.ready || !this.cwd) {
       this.send({ t: 'error', message: 'Codex is not ready yet.' });
@@ -277,6 +283,8 @@ export class CodexSession {
     this.interruptingTurnId = null;
     this.send({ t: 'turn-start' });
     try {
+      const skill = skillId ? this.skills.get(skillId) : undefined;
+      if (skillId && !skill) throw new Error('That skill is no longer available. Type / to choose another.');
       const model = await this.resolveModel();
       this.throwIfInterruptedBeforeTurn();
       const threadId = await this.ensureThread(titleHint);
@@ -286,7 +294,7 @@ export class CodexSession {
         cwd: this.cwd,
         ...codexEffortOption(this.effort),
         ...(override ? { model: override } : {}),
-        input: [{ type: 'text', text: prompt, text_elements: [] }],
+        input: [{ type: 'text', text: skill ? `$${skill.name}${prompt ? ` ${prompt}` : ''}` : prompt, text_elements: [] }, ...(skill ? [{ type: 'skill', name: skill.name, path: skill.path }] : [])],
       }) as Promise<JsonObject>;
       let result: JsonObject;
       try {
@@ -377,6 +385,28 @@ export class CodexSession {
       cursor = nextCursor;
     }
     return models;
+  }
+
+  private async publishSkills(forceReload = false): Promise<void> {
+    if (!this.cwd) return;
+    try {
+      const result = await this.request('skills/list', { cwds: [this.cwd], ...(forceReload ? { forceReload: true } : {}) }) as JsonObject;
+      const entries = Array.isArray(result.data) ? result.data : [];
+      const entry = entries.find((item) => stringValue((item as JsonObject).cwd) === this.cwd) as JsonObject | undefined;
+      const raw = Array.isArray(entry?.skills) ? entry.skills : [];
+      this.skills.clear();
+      const skills: AgentSkill[] = [];
+      for (const item of raw) {
+        if (!item || typeof item !== 'object') continue;
+        const value = item as JsonObject;
+        const name = stringValue(value.name), path = stringValue(value.path);
+        if (!name || !path || value.enabled === false) continue;
+        const id = `skill-${++this.skillSequence}`;
+        this.skills.set(id, { name, path });
+        skills.push({ id, label: stringValue(value.displayName) || name, ...(stringValue(value.shortDescription) || stringValue(value.description) ? { description: stringValue(value.shortDescription) || stringValue(value.description) } : {}) });
+      }
+      this.send({ t: 'skills', skills, state: skills.length ? 'available' : 'empty' });
+    } catch (err) { this.skills.clear(); this.send({ t: 'skills', skills: [], state: 'failed', error: 'Could not load skills. Try again.' }); log.debug(errorMessage(err)); }
   }
 
   private async ensureThread(titleHint = ''): Promise<string> {
@@ -613,6 +643,7 @@ export class CodexSession {
 
   private onNotification(method: string, params: JsonObject): void {
     switch (method) {
+      case 'skills/changed': void this.publishSkills(true); break;
       case 'thread/started': {
         const threadId = stringValue(params.threadId) || stringValue((params.thread as JsonObject | undefined)?.id);
         if (threadId && !this.threadId) {
