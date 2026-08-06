@@ -7,11 +7,13 @@ import { handleComposerPaste } from './clipboardAttachments';
 
 const MENTION = '\uFFFC';
 
-export type MentionQuery = { q: string; from: number } | null;
+export type MentionQuery = { kind: 'mention' | 'skill'; q: string; from: number } | null;
 
 export type MentionComposerHandle = {
   focus: () => void;
   insertMention: (path: string, query: Exclude<MentionQuery, null>) => void;
+  insertSkill: (label: string, query: Exclude<MentionQuery, null>) => void;
+  clearQuery: (query: Exclude<MentionQuery, null>) => void;
   submit: () => void;
 };
 
@@ -20,37 +22,37 @@ class Mention extends RangeValue {
   // Otherwise RangeSet mapping expands the range and keepMentionMarkers removes it.
   endSide = -1;
 
-  constructor(readonly path: string) { super(); }
+  constructor(readonly path: string, readonly kind: 'file' | 'skill' = 'file') { super(); }
 
   eq(other: Mention) {
-    return this.path === other.path;
+    return this.path === other.path && this.kind === other.kind;
   }
 }
 
 class MentionWidget extends WidgetType {
-  constructor(private readonly path: string) { super(); }
+  constructor(private readonly path: string, private readonly kind: 'file' | 'skill') { super(); }
 
   eq(other: MentionWidget) {
-    return this.path === other.path;
+    return this.path === other.path && this.kind === other.kind;
   }
 
   toDOM() {
     const token = document.createElement('span');
-    token.className = 'agent-file-mention';
-    token.textContent = this.path.split('/').pop() ?? this.path;
+    token.className = this.kind === 'skill' ? 'agent-skill-mention' : 'agent-file-mention';
+    token.textContent = this.kind === 'skill' ? `/${this.path}` : this.path.split('/').pop() ?? this.path;
     token.title = this.path;
-    token.setAttribute('aria-label', `File mention: ${this.path}`);
+    token.setAttribute('aria-label', this.kind === 'skill' ? `Selected skill: ${this.path}` : `File mention: ${this.path}`);
     return token;
   }
 }
 
 type MentionState = { mentions: RangeSet<Mention>; decorations: DecorationSet };
 
-const addMention = StateEffect.define<{ from: number; path: string }>({
+const addMention = StateEffect.define<{ from: number; path: string; kind?: 'file' | 'skill' }>({
   map: (value, changes) => ({ ...value, from: changes.mapPos(value.from, -1) }),
 });
 
-const removeMention = StateEffect.define<{ from: number; path: string }>({
+const removeMention = StateEffect.define<{ from: number; path: string; kind?: 'file' | 'skill' }>({
   map: (value, changes) => ({ ...value, from: changes.mapPos(value.from, -1) }),
 });
 
@@ -61,12 +63,12 @@ const mentionField = StateField.define<MentionState>({
     for (const effect of transaction.effects) {
       if (effect.is(addMention)) {
         mentions = mentions.update({
-          add: [new Mention(effect.value.path).range(effect.value.from, effect.value.from + MENTION.length)],
+          add: [new Mention(effect.value.path, effect.value.kind).range(effect.value.from, effect.value.from + MENTION.length)],
           sort: true,
         });
       } else if (effect.is(removeMention)) {
         mentions = mentions.update({
-          filter: (from, _to, mention) => from !== effect.value.from || mention.path !== effect.value.path,
+          filter: (from, _to, mention) => from !== effect.value.from || mention.path !== effect.value.path || mention.kind !== effect.value.kind,
         });
       }
     }
@@ -81,7 +83,7 @@ const mentionField = StateField.define<MentionState>({
 function buildMentionState(mentions: RangeSet<Mention>): MentionState {
   const decorations: ReturnType<Decoration['range']>[] = [];
   mentions.between(0, Infinity, (from, to, mention) => {
-    decorations.push(Decoration.replace({ widget: new MentionWidget(mention.path) }).range(from, to));
+    decorations.push(Decoration.replace({ widget: new MentionWidget(mention.path, mention.kind) }).range(from, to));
   });
   return { mentions, decorations: Decoration.set(decorations, true) };
 }
@@ -99,7 +101,7 @@ function serialize(state: EditorState) {
   let cursor = 0;
   let text = '';
   mentions.between(0, state.doc.length, (from, to, mention) => {
-    text += state.doc.sliceString(cursor, from) + `@${mention.path}`;
+    text += state.doc.sliceString(cursor, from) + (mention.kind === 'skill' ? '' : `@${mention.path}`);
     cursor = to;
   });
   return text + state.doc.sliceString(cursor);
@@ -109,8 +111,8 @@ function mentionQuery(state: EditorState): MentionQuery {
   const selection = state.selection.main;
   if (!selection.empty) return null;
   const before = state.doc.sliceString(0, selection.head);
-  const match = /(^|\s)@([^\s@]*)$/.exec(before);
-  return match ? { q: match[2], from: selection.head - match[2].length } : null;
+  const match = /(^|\s)([@/])([^\s@/]*)$/.exec(before);
+  return match ? { kind: match[2] === '/' ? 'skill' : 'mention', q: match[3], from: selection.head - match[3].length } : null;
 }
 
 function deleteMentionSelection(view: EditorView, backward: boolean) {
@@ -131,9 +133,9 @@ function deleteMentionSelection(view: EditorView, backward: boolean) {
     to = target.to;
   }
 
-  const removed: StateEffect<{ from: number; path: string }>[] = [];
+  const removed: StateEffect<{ from: number; path: string; kind?: 'file' | 'skill' }>[] = [];
   mentions.between(from, to, (mentionFrom, mentionTo, mention) => {
-    if (mentionFrom < to && mentionTo > from) removed.push(removeMention.of({ from: mentionFrom, path: mention.path }));
+    if (mentionFrom < to && mentionTo > from) removed.push(removeMention.of({ from: mentionFrom, path: mention.path, kind: mention.kind }));
   });
   if (!removed.length) return false;
   view.dispatch({ changes: { from, to }, effects: removed });
@@ -152,6 +154,7 @@ export function MentionComposer({
   onSubmit,
   onPasteImages,
   onFocusChange,
+  onSkillMarkerRemoved,
   mentionListboxId,
   mentionOpen,
   ref,
@@ -167,6 +170,7 @@ export function MentionComposer({
   onSubmit: (text: string) => boolean;
   onPasteImages: (files: File[]) => void;
   onFocusChange: (focused: boolean) => void;
+  onSkillMarkerRemoved: () => void;
   mentionListboxId?: string;
   mentionOpen: boolean;
   ref: React.Ref<MentionComposerHandle>;
@@ -183,6 +187,7 @@ export function MentionComposer({
   const onSubmitRef = useRef(onSubmit);
   const onPasteImagesRef = useRef(onPasteImages);
   const onFocusChangeRef = useRef(onFocusChange);
+  const onSkillMarkerRemovedRef = useRef(onSkillMarkerRemoved);
   const mentionOpenRef = useRef(mentionOpen);
   const mentionDismissedRef = useRef(false);
   const editableCompartmentRef = useRef(new Compartment());
@@ -198,6 +203,7 @@ export function MentionComposer({
   onSubmitRef.current = onSubmit;
   onPasteImagesRef.current = onPasteImages;
   onFocusChangeRef.current = onFocusChange;
+  onSkillMarkerRemovedRef.current = onSkillMarkerRemoved;
   mentionOpenRef.current = mentionOpen;
 
   function submit() {
@@ -217,6 +223,23 @@ export function MentionComposer({
         effects: addMention.of({ from, path }),
         selection: { anchor: from + MENTION.length + 1 },
       });
+      view.focus();
+    },
+    insertSkill: (label, query) => {
+      const view = viewRef.current;
+      if (!view) return;
+      const from = query.from - 1;
+      view.dispatch({
+        changes: { from, to: view.state.selection.main.head, insert: MENTION + ' ' },
+        effects: addMention.of({ from, path: label, kind: 'skill' }),
+        selection: { anchor: from + MENTION.length + 1 },
+      });
+      view.focus();
+    },
+    clearQuery: (query) => {
+      const view = viewRef.current;
+      if (!view) return;
+      view.dispatch({ changes: { from: query.from - 1, to: view.state.selection.main.head }, selection: { anchor: query.from - 1 } });
       view.focus();
     },
     submit,
@@ -309,6 +332,11 @@ export function MentionComposer({
             if (update.docChanged) {
               mentionDismissedRef.current = false;
               onChangeRef.current(serialize(update.state));
+              let hasSkillMarker = false;
+              update.state.field(mentionField).mentions.between(0, update.state.doc.length, (_from, _to, marker) => {
+                if (marker.kind === 'skill') hasSkillMarker = true;
+              });
+              if (!hasSkillMarker) onSkillMarkerRemovedRef.current();
             }
             if (update.docChanged || update.selectionSet) {
               onMentionChangeRef.current(mentionDismissedRef.current ? null : mentionQuery(update.state));

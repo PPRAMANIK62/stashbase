@@ -1134,6 +1134,16 @@
       vertical-align: baseline;
       white-space: nowrap;
     }
+    .agent-skill-mention {
+      display: inline-block;
+      padding: 0 4px;
+      border-radius: 4px;
+      background: var(--active);
+      color: var(--fg);
+      line-height: inherit;
+      vertical-align: baseline;
+      white-space: nowrap;
+    }
     /* Action bar under the textarea: + … mode / send.
      * A full-width rule separates it from the input — the negative side
      * margins bleed past the box's 8px padding so the line spans edge to
@@ -1348,7 +1358,14 @@
       padding: 4px;
       z-index: 30;
     }
-    .agent-mention-list { max-height: 210px; overflow-y: auto; }
+    /* The header and list must fit in the same 220px popup.  Giving the list
+       its own 210px maximum used to create a hidden lower portion: keyboard
+       navigation scrolled a row into the list's viewport, but not the popup's
+       visible viewport. */
+    .agent-mention-list { max-height: 182px; overflow-y: auto; scroll-padding-block: 4px; }
+    .agent-mention-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
+    .agent-mention-retry { border: 0; border-radius: 4px; background: var(--active); color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
+    .agent-mention-retry:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
     .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10.5px * var(--ui-scale)); }
     .agent-mention-head > span:first-child { color: var(--fg); font-weight: 600; }
     .agent-mention-item {
@@ -1368,4 +1385,4 @@
     .agent-mention-icon { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--muted); }
     .agent-mention-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
     .agent-mention-name { font-size: calc(12.5px * var(--ui-scale)); color: var(--fg); }
-    .agent-mention-path { font-size: calc(11px * var(--ui-scale)); color: var(--muted); }
+    .agent-mention-path { font-size: calc(11px * var(--ui-scale)); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

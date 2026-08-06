@@ -16,6 +16,7 @@ export interface AgentPanelCapabilities {
   modes: boolean;
   effort: boolean;
   models: boolean;
+  skills: boolean;
   steering: boolean;
   titleHint: boolean;
 }
@@ -38,7 +39,7 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     shortName: 'Claude',
     launcherLabel: 'Claude Code',
     mcpClientId: 'claude-code',
-    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, models: true, steering: false, titleHint: false },
+    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, models: true, skills: true, steering: false, titleHint: false },
     controlsNote: 'Access applies live · Effort on new session',
     Icon: ClaudeIcon,
   },
@@ -48,7 +49,7 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     shortName: 'Codex',
     launcherLabel: 'Codex',
     mcpClientId: 'codex-cli',
-    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, models: true, steering: true, titleHint: true },
+    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, models: true, skills: true, steering: true, titleHint: true },
     controlsNote: 'Access and effort apply on new session',
     Icon: CodexIcon,
   },
