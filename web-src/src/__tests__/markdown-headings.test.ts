@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Schema } from '@milkdown/kit/prose/model';
+import { EditorState } from '@milkdown/kit/prose/state';
 import { activeHeadingId, extractDocumentHeadings, outlineDepth, outlineHasChildren, outlineScrollTop, visibleOutlineHeadings } from '../milkdown/headings';
 import { scrollOutlineToHeading, type HeadingNodeView } from '../milkdown/outlineNavigation';
+
+const outlineSchema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: { content: 'text*', group: 'block' },
+    heading: { attrs: { level: { default: 1 } }, content: 'text*', group: 'block' },
+    text: { group: 'inline' },
+  },
+});
 
 test('outline headings keep hierarchy and stable duplicate Unicode targets', () => {
   const nodes = [
@@ -56,19 +66,11 @@ test('outline depth follows structure when Markdown skips heading levels', () =>
 });
 
 test('outline selection re-resolves the current ProseMirror position when Milkdown rewrites punctuation IDs', () => {
-  const schema = new Schema({
-    nodes: {
-      doc: { content: 'block+' },
-      paragraph: { content: 'text*', group: 'block' },
-      heading: { attrs: { level: { default: 1 } }, content: 'text*', group: 'block' },
-      text: { group: 'inline' },
-    },
-  });
   const headingText = 'P13 — 生产级挑战：多租户 / 过滤 / 冷启动 21:00–22:30 ★ 建立信任';
-  const headingNode = schema.node('heading', { level: 2 }, schema.text(headingText));
-  const selectedHeading = extractDocumentHeadings(schema.node('doc', null, [headingNode]))[0];
-  const prefix = schema.node('paragraph', null, schema.text('Inserted before the selected heading.'));
-  const currentDocument = schema.node('doc', null, [prefix, headingNode]);
+  const headingNode = outlineSchema.node('heading', { level: 2 }, outlineSchema.text(headingText));
+  const selectedHeading = extractDocumentHeadings(outlineSchema.node('doc', null, [headingNode]))[0];
+  const prefix = outlineSchema.node('paragraph', null, outlineSchema.text('Inserted before the selected heading.'));
+  const currentDocument = outlineSchema.node('doc', null, [prefix, headingNode]);
   const currentHeading = extractDocumentHeadings(currentDocument)[0];
   assert.notEqual(currentHeading.position, selectedHeading.position);
 
@@ -101,4 +103,42 @@ test('outline selection re-resolves the current ProseMirror position when Milkdo
   assert.equal(navigated, true);
   assert.deepEqual(requestedPositions, [currentHeading.position]);
   assert.deepEqual(scrollCalls, [{ top: 380, behavior: 'auto' }]);
+});
+
+test('outline selection disambiguates repeated headings that share one immutable ProseMirror node', () => {
+  const sharedHeading = outlineSchema.node('heading', { level: 2 }, outlineSchema.text('Duplicate'));
+  const initialDocument = outlineSchema.node('doc', null, [sharedHeading]);
+  const initialState = EditorState.create({ doc: initialDocument });
+  const currentDocument = initialState.apply(
+    initialState.tr.insert(initialDocument.content.size, sharedHeading),
+  ).doc;
+  const currentHeadings = extractDocumentHeadings(currentDocument);
+  const selectedHeading = currentHeadings[1];
+
+  const requestedPositions: number[] = [];
+  const renderedHeadings = currentHeadings.map((heading) => ({
+    tagName: 'H2',
+    getBoundingClientRect: () => ({ top: heading.position + 100 }),
+  } as unknown as HTMLElement));
+  const scroller = {
+    scrollTop: 0,
+    getBoundingClientRect: () => ({ top: 0 }),
+    scrollTo: () => {},
+  } as unknown as HTMLElement;
+  const host = {
+    querySelector: (selector: string) => selector === '.milkdown' ? scroller : null,
+  } as unknown as HTMLElement;
+  const view = {
+    state: { doc: currentDocument },
+    nodeDOM: (position: number) => {
+      requestedPositions.push(position);
+      const index = currentHeadings.findIndex((heading) => heading.position === position);
+      return index >= 0 ? renderedHeadings[index] as unknown as Node : null;
+    },
+  } satisfies HeadingNodeView;
+
+  const navigated = scrollOutlineToHeading(host, selectedHeading, view, true);
+
+  assert.equal(navigated, true);
+  assert.deepEqual(requestedPositions, [selectedHeading.position]);
 });

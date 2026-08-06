@@ -29,16 +29,23 @@ export function extractDocumentHeadings(doc: ProseMirrorDocument): DocumentHeadi
  * ProseMirror position. Unchanged nodes keep identity across transactions. */
 export function resolveCurrentDocumentHeading(current: DocumentHeading[], selected: DocumentHeading): DocumentHeading | null {
   const selectedNode = headingNodes.get(selected);
-  const identityMatch = selectedNode
-    ? current.find((heading) => headingNodes.get(heading) === selectedNode)
-    : undefined;
-  if (identityMatch) return identityMatch;
-  return current.find((heading) =>
-    heading.id === selected.id
-    && heading.level === selected.level
-    && heading.text === selected.text
-    && heading.position === selected.position,
-  ) ?? null;
+  const identityMatches = selectedNode
+    ? current.filter((heading) => headingNodes.get(heading) === selectedNode)
+    : [];
+  if (identityMatches.length === 1) return identityMatches[0];
+  if (identityMatches.length > 1) {
+    return identityMatches.find((heading) => sameOutlineEntry(heading, selected, true))
+      ?? identityMatches.find((heading) => sameOutlineEntry(heading, selected, false))
+      ?? null;
+  }
+  return current.find((heading) => sameOutlineEntry(heading, selected, true)) ?? null;
+}
+
+function sameOutlineEntry(current: DocumentHeading, selected: DocumentHeading, includePosition: boolean): boolean {
+  return current.id === selected.id
+    && current.level === selected.level
+    && current.text === selected.text
+    && (!includePosition || current.position === selected.position);
 }
 
 /** A heading owns every following, deeper heading until the next peer or
