@@ -36,6 +36,7 @@ This is not a second architecture document. `architecture.md` explains where mod
 | Reprocess a failed file | Stale derived artifacts or stale failure rows may poison the next attempt; clearing a usable transcript before discovering that its provider/model is unavailable loses good output. | Reprocess validates audio provider/runtime/model readiness first, then clears the failure row and stale output. PDF/image/DOCX/audio sources queue extraction; audio also clears chunk checkpoints and may use a per-retry language override. Directly readable files trigger reconcile/index from source. |
 | Add or remove the OpenAI API key | Folder bindings or semantic readiness may reflect stale daemon runtime config. | Reset/rebind the daemon runtime and reconcile library folders after key changes; without a key, semantic search is disabled, not pending. |
 | Edit or replace a source file externally | Existing index rows or derived notes may describe old content. | Reconcile compares source identity and content state; stale derived/index state must not be treated as current. |
+| Agent/MCP writes a Markdown file while its open editor has a pending autosave | The external write can advance the content version, then the stale editor can retry without its old `baseVersion` and silently replace the newer disk copy. | A version conflict must preserve both the dirty editor buffer and the newer disk content until an explicit reload, merge, or overwrite decision. Never turn `FILE_CHANGED` into an automatic unversioned write. See §9.8. |
 | Rename or move a file | Old source identity may leave derived artifacts, failure rows, or index rows behind. | Source identity is absolute path; rename/move must remap or clean old app-owned state. |
 | Delete a source file | Derived text, failure rows, and index rows may become orphaned. | Cleanup must remove app-owned state for the deleted source. |
 | Remove a folder from the library | User files must remain, but app state for that subtree must disappear. | Cancel queued/running conversions, then clear index rows, derived artifacts, preparation rows, sidebar order, runtime bindings, and library membership. |
@@ -578,3 +579,81 @@ Current contract:
 - The regression gate creates separately flushed segments across the 1,000-row
   boundary and requires every source to remain visible
   (`python/stashbase_daemon_test.py:19-99`).
+
+## 9.8 Open Markdown Autosave Overwriting Agent/MCP Writes
+
+An open Markdown editor and an Agent/MCP file tool are independent writers to
+the same user-owned source file. Optimistic versions are meant to stop either
+writer from silently discarding the other's work. The current renderer has a
+known unresolved gap: after a version conflict, it retries its stale editor
+snapshot without a `baseVersion`, which can overwrite a newer Agent/MCP write.
+
+Background:
+
+- Text versions are SHA-256 hashes of the complete source bytes, not mtimes.
+  A changed version therefore proves that different bytes were written
+  (`server/active-file-operations.ts:15-24`).
+- A byte-identical Markdown save is a no-op and retains the current version.
+  Markdown line-ending/BOM preservation alone does not manufacture a new
+  version (`server/file-save.ts:65-101`).
+- Milkdown's `markdownUpdated` callback marks the active document dirty and
+  schedules the renderer autosave
+  (`web-src/src/components/CrepeDocument.tsx:96-98`,
+  `web-src/src/store/useDocumentActions.ts:51-80`).
+- Agent/MCP `write_file` and `edit_file` carry the version returned by
+  `read_file`; the server correctly rejects a stale version with
+  `FILE_CHANGED` (`server/library-file-mutations.ts:31-65`,
+  `server/file-save.ts:72-85`).
+- The unresolved behavior is renderer-side: after that 409, the editor checks
+  only that its own tab/value did not change, then calls the same save without
+  any version guard (`web-src/src/store/useDocumentActions.ts:81-93`).
+
+Deterministic trigger:
+
+1. Start with `note.md` at content version `V1`.
+2. Let the Agent read `V1`. Keep an open Milkdown editor snapshot based on
+   `V1` dirty or pending autosave.
+3. Let the Agent append through `write_file` or `edit_file` with
+   `baseVersion=V1`. The server accepts it and the disk becomes `V2`.
+4. Let the pending editor save its different snapshot with
+   `baseVersion=V1`. The server correctly returns `FILE_CHANGED` and reports
+   `V2`.
+5. Mirror the current renderer recovery path by saving the editor snapshot
+   again without `baseVersion`. The write succeeds as `V3`.
+6. Assert that `V3 != V2` and the Agent's appended text is absent from the
+   final file.
+
+This reproduces with no embedding API key and with semantic indexing skipped,
+so an MFS/vector-store refactor does not resolve it unless that work also
+replaces file-mutation ownership and conflict handling.
+
+User-visible fingerprints:
+
+- An Agent reports that StashBase formatting or autosave "updated the file
+  version again" while it was appending.
+- Repeated `FILE_CHANGED` responses occur while the same Markdown tab is open.
+- An Agent write briefly succeeds, then disappears after the editor autosaves.
+- The renderer may show `Saved over a newer disk copy from sync.` even though
+  the newer copy came from an Agent/MCP write rather than sync.
+
+Temporary avoidance:
+
+- Do not edit the same Markdown source concurrently from the live editor and
+  Agent/MCP tools.
+- Close the Markdown tab, or wait until it is clean and saved before the Agent
+  writes; do not make another editor change until the external update reloads.
+
+Resolution contract:
+
+- A `FILE_CHANGED` response must never automatically downgrade to an
+  unversioned write.
+- The newer disk version and dirty editor buffer must both remain recoverable
+  until the user or a deterministic merge policy resolves them.
+- A clean open editor may reload the external source; a dirty editor must show
+  an actionable conflict rather than silently overwriting or discarding either
+  side.
+- Agent/MCP writes and renderer saves must continue to use the same
+  content-version authority.
+- Regression coverage must reproduce the `V1 -> V2 -> FILE_CHANGED -> V3`
+  sequence at the renderer/server mutation seam and prove that the external
+  append survives or remains recoverable.
