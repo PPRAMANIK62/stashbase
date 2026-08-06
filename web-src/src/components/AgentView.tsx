@@ -25,7 +25,7 @@ import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
-import type { Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
+import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
 
 let blockSeq = 0;
 const nextId = () => `b${++blockSeq}`;
@@ -38,6 +38,7 @@ interface QueuedPrompt {
   text: string;
   attachments: Attachment[];
   titleHint?: string;
+  skill?: string;
   status: 'waiting' | 'steering' | 'steered';
 }
 
@@ -45,6 +46,7 @@ interface PromptToSend {
   text: string;
   attachments: Attachment[];
   titleHint?: string;
+  skill?: string;
   appendBlock: boolean;
   clearAttachments?: boolean;
 }
@@ -104,6 +106,8 @@ export function AgentView({
   // User intent and runtime telemetry must stay separate: an active model
   // reached through Default must never become an explicit override later.
   const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
+  const [skills, setSkills] = useState<AgentSkill[]>([]);
+  const [skillState, setSkillState] = useState<'available' | 'empty' | 'failed'>('empty');
   const modelControlRef = useRef(modelControl);
   // The live session's SDK id (from the `session-id` event) — lets the
   // History dropdown mark the current session active. `resumeIdRef` holds
@@ -337,6 +341,7 @@ export function AgentView({
           return next;
         });
         break;
+      case 'skills': setSkills(ev.skills); setSkillState(ev.state); break;
       case 'session-title':
         if (isDefaultChatTitle(titleRef.current)) {
           const t = ev.title.trim();
@@ -482,7 +487,7 @@ export function AgentView({
       text: p.text,
       attachments: p.attachments.length ? p.attachments : undefined,
       status: p.status,
-      canSteer: capabilities?.steering === true,
+      canSteer: capabilities?.steering === true && !p.skill,
     }));
   }
 
@@ -491,17 +496,22 @@ export function AgentView({
     setQueuedTurns(queuePreview());
   }
 
-  function send(text: string) {
+  function send(text: string, skill?: string) {
     const atts = attachments;
     const titleHint = capabilities?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
     if (turnActiveRef.current) {
       const id = nextId();
-      queuedPromptsRef.current.push({ id, text, attachments: atts, titleHint, status: 'waiting' });
+      queuedPromptsRef.current.push({ id, text, attachments: atts, titleHint, skill, status: 'waiting' });
       setQueuedTurns(queuePreview());
       setAttachments([]);
       return;
     }
-    void sendPromptNow({ text, attachments: atts, titleHint, appendBlock: true, clearAttachments: true });
+    void sendPromptNow({ text, attachments: atts, titleHint, skill, appendBlock: true, clearAttachments: true });
+  }
+
+  function refreshSkills() {
+    if (phase !== 'live') return;
+    wsRef.current?.send(JSON.stringify({ t: 'refresh-skills' }));
   }
 
   function runNextQueuedPrompt() {
@@ -541,6 +551,7 @@ export function AgentView({
     text,
     attachments: atts,
     titleHint,
+    skill,
     appendBlock,
     clearAttachments = false,
   }: PromptToSend) {
@@ -565,6 +576,7 @@ export function AgentView({
         t: 'prompt',
         text: wire,
         ...(titleHint ? { titleHint } : {}),
+        ...(skill ? { skill } : {}),
       }));
       if (clearAttachments) clearComposerAttachments();
     } catch (err) {
@@ -903,6 +915,9 @@ export function AgentView({
         showModeMenu={capabilities?.modes === true}
         showEffortMenu={capabilities?.effort === true}
         showModelMenu={modelMenuVisible(capabilities?.models === true, modelControl.models)}
+        skills={skills}
+        skillState={skillState}
+        onRefreshSkills={refreshSkills}
         agentShortName={meta.shortName}
         attachments={attachments}
         uploading={uploading}

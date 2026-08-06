@@ -122,5 +122,14 @@ The accepted baseline includes:
   titles; do not replace their semantic buttons with non-interactive artwork.
   Use clean, optically centred `+` and `−` line glyphs for zoom rather than
   ornate magnifying-glass icons; keep the floating control surfaces borderless.
+- Skills use the composer’s `/` suggestion path, not a separate workbench
+  control. The shared contract exposes only opaque selection ids and compact
+  metadata; native paths remain server-side. The inline `/skill` composer token
+  is display state and must not be serialized into the user prompt. Codex resolves a current id from
+  `skills/list`, refreshes on `skills/changed`, and sends a native skill input;
+  Claude discovers commands through its SDK and invokes the selected command
+  natively. An empty or failed discovery response remains visible from the
+  composer; retry only refreshes the catalog and never blocks normal prompts.
+  Never concatenate skill-file contents into a prompt.
 
 These are still implementation details, not a new product category. If the panel starts to feel heavier than VS Code/Codex/Claude Code side chat, the preferred follow-up is to reduce visual weight rather than add more structure.

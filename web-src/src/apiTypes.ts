@@ -293,6 +293,7 @@ export interface Agent {
     modes: boolean;
     effort: boolean;
     models: boolean;
+    skills: boolean;
     steering: boolean;
     titleHint: boolean;
   };

@@ -59,6 +59,13 @@ context, not a separate AI workspace.
   while the fresh Agent session reconnects, so users can observe or refine the
   setting. The current model and effort choices remain visually prominent using
   the active application theme.
+- Typing `/` in the composer opens the same compact, keyboard-accessible
+  suggestion surface used for `@` file mentions, filtered to skills available
+  to the active runtime. Selecting a skill leaves an inline `/skill` token in
+  the composer and applies it only to the next message; ordinary prompts remain
+  unchanged. An empty catalog and a discovery failure remain visible inline;
+  the latter offers a retry without blocking ordinary prompts. StashBase discovers and invokes skills but
+  never installs, edits, or otherwise manages them.
 - The panel complements external MCP clients; it does not replace the
   bring-your-own-agent direction.
 

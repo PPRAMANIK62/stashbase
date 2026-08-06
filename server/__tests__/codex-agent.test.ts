@@ -41,7 +41,7 @@ class FakeWebSocket extends EventEmitter {
 
 function catalogProcess(
   models: Array<Record<string, unknown>> = [{ id: 'native-model', displayName: 'Native model' }],
-  options: { pages?: Array<Record<string, unknown>[]>; threadModel?: string; selectedTurnError?: string } = {},
+  options: { pages?: Array<Record<string, unknown>[]>; skills?: Array<Record<string, unknown>>; skillsListError?: string; threadModel?: string; selectedTurnError?: string } = {},
 ): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
   const proc = new FakeCodexProcess();
   const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
@@ -52,10 +52,13 @@ function catalogProcess(
     requests.push({ method: request.method, params: request.params });
     const catalog = options.pages ?? [models];
     const result = request.method === 'model/list' ? { data: catalog[page] ?? [], ...(page++ < catalog.length - 1 ? { nextCursor: `page-${page}` } : {}) }
+      : request.method === 'skills/list' ? { data: [{ cwd: Array.isArray(request.params.cwds) ? request.params.cwds[0] : undefined, skills: options.skills ?? [] }] }
       : request.method === 'thread/start' ? { thread: { id: 'thread-1' }, model: options.threadModel ?? 'runtime-default' }
       : request.method === 'thread/resume' ? { thread: { id: 'thread-1' }, model: 'resumed-model' }
         : request.method === 'turn/start' ? { turn: { id: 'turn-1' } } : {};
-    if (request.method === 'turn/start' && options.selectedTurnError && request.params.model && !rejected) {
+    if (request.method === 'skills/list' && options.skillsListError) {
+      proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.skillsListError } })}\n`);
+    } else if (request.method === 'turn/start' && options.selectedTurnError && request.params.model && !rejected) {
       rejected = true;
       proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.selectedTurnError } })}\n`);
     } else {
@@ -84,7 +87,8 @@ test('Codex publishes its native model catalog before ready and forwards a selec
   assert.equal(events[0]?.t, 'models', JSON.stringify(events));
   assert.equal(events[0]?.models?.[0]?.id, 'native-model');
   assert.equal(events[0]?.activeModel, undefined, 'selection is not active until the native turn accepts it');
-  assert.equal(events[1]?.t, 'ready');
+  assert.equal(events.some((event) => event.t === 'skills'), true);
+  assert.equal(events.some((event) => event.t === 'ready'), true);
 
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
   await settle();
@@ -144,6 +148,59 @@ test('Codex reports the native Default model after starting a new thread', async
   assert.equal(active?.activeModel, 'runtime-default');
   assert.equal('model' in (native.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
   session.dispose();
+});
+
+test('Codex invokes an enabled selected skill and never publishes disabled skills', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-skills-'));
+  runWithWindowId('skills-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('skills-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, {
+    skills: [
+      { name: 'release-notes', path: '/skills/release-notes/SKILL.md', enabled: true },
+      { name: 'disabled-skill', path: '/skills/disabled-skill/SKILL.md', enabled: false },
+    ],
+  });
+  const session = new CodexSession(ws as unknown as WebSocket, 'skills-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+
+  const skills = ws.sent.map((item) => JSON.parse(item) as { t: string; skills?: Array<{ id: string; label: string }> }).find((event) => event.t === 'skills');
+  assert.deepEqual(skills?.skills?.map((skill) => skill.label), ['release-notes']);
+  const skillId = skills?.skills?.[0]?.id;
+  assert.ok(skillId);
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'prepare the release', skill: skillId }));
+  await settle();
+
+  assert.deepEqual(native.requests.find((request) => request.method === 'turn/start')?.params.input, [
+    { type: 'text', text: '$release-notes prepare the release', text_elements: [] },
+    { type: 'skill', name: 'release-notes', path: '/skills/release-notes/SKILL.md' },
+  ]);
+  session.dispose();
+});
+
+test('Codex reports an empty or failed skill catalog without blocking the session', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-skills-'));
+  runWithWindowId('empty-skills-window', () => setCurrentFolder(folder));
+  runWithWindowId('failed-skills-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('empty-skills-window', () => clearCurrentFolder()); runWithWindowId('failed-skills-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+
+  const emptyWs = new FakeWebSocket();
+  const empty = new CodexSession(emptyWs as unknown as WebSocket, 'empty-skills-window', undefined, undefined, undefined, undefined, undefined, () => catalogProcess().proc as unknown as ChildProcessWithoutNullStreams);
+  empty.begin();
+  await settle();
+  assert.equal(emptyWs.sent.map((item) => JSON.parse(item) as { t: string; state?: string }).find((event) => event.t === 'skills')?.state, 'empty');
+  assert.equal(emptyWs.sent.some((item) => (JSON.parse(item) as { t: string }).t === 'ready'), true);
+  empty.dispose();
+
+  const failedWs = new FakeWebSocket();
+  const failedNative = catalogProcess(undefined, { skillsListError: 'skills unavailable' });
+  const failed = new CodexSession(failedWs as unknown as WebSocket, 'failed-skills-window', undefined, undefined, undefined, undefined, undefined, () => failedNative.proc as unknown as ChildProcessWithoutNullStreams);
+  failed.begin();
+  await settle();
+  assert.equal(failedWs.sent.map((item) => JSON.parse(item) as { t: string; state?: string }).find((event) => event.t === 'skills')?.state, 'failed');
+  assert.equal(failedWs.sent.some((item) => (JSON.parse(item) as { t: string }).t === 'ready'), true);
+  failed.dispose();
 });
 
 test('Codex forwards a runtime-native effort identifier without remapping it', async (t) => {
