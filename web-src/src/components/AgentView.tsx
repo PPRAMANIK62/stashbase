@@ -128,6 +128,7 @@ export function AgentView({
   // Which streaming block kind is currently "open" (so consecutive text
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
+  const turnErrorExplainedRef = useRef(false);
   const knownFilePaths = useMemo(() => new Set(state.files.map((f) => f.name)), [state.files]);
 
   useEffect(() => {
@@ -350,6 +351,7 @@ export function AgentView({
         break;
       case 'turn-start':
         openKind.current = null;
+        turnErrorExplainedRef.current = false;
         setTurnBusy(true);
         break;
       case 'text':
@@ -439,6 +441,9 @@ export function AgentView({
             });
         }
         runNextQueuedPrompt();
+        if (ev.isError && !turnErrorExplainedRef.current) {
+          setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: 'The Agent turn failed before returning a response.' }]);
+        }
         break;
       case 'error':
         openKind.current = null;
@@ -456,6 +461,7 @@ export function AgentView({
           setFatal(ev.message);
           setPhase('closed');
         } else {
+          turnErrorExplainedRef.current = true;
           setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: ev.message }]);
         }
         break;
