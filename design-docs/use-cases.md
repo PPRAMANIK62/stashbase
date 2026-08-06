@@ -28,6 +28,11 @@ decision and its reasoning back into the document.
 StashBase does not automatically detect or merge conversation branches. The
 user decides what becomes part of the Canvas.
 
+A slide deck outline is one practical form of Canvas. The user and Agent can
+work out the audience, core message, slide order, and supporting evidence in
+Markdown, then hand the settled outline to a presentation tool. StashBase
+organizes the source material and narrative; it is not the slide editor.
+
 > Chat is for exploring. Canvas is for converging.
 
 ## 1. Take an Engineering Project from Requirements to Delivery
@@ -66,7 +71,9 @@ review.
 
 The result is one continuous workflow from requirements to implementation.
 Research, design, code, and delivery checks stay connected through ordinary
-local files rather than being scattered across unrelated chat sessions.
+local files rather than being scattered across unrelated chat sessions. The
+same material can also become the outline for an architecture review or client
+presentation before the slides are produced elsewhere.
 
 **Related areas:** [Local File Workspace](design/library.md),
 [Search and Retrieval](design/search.md), [Markdown](design/markdown.md),
@@ -102,9 +109,10 @@ then write only the conclusions the student accepts back into the Canvas.
 
 Daily logs and experiment notes remain in the same folder. Later, the Agent can
 use them to prepare a weekly update, experiment report, internship summary, or
-thesis section. Before submission, it can compare the code and report with the
-assignment brief or grading rubric and flag possible omissions for the student
-to review.
+thesis section. It can also shape the source material into a slide deck outline
+for a class presentation, lab update, or thesis defense. Before submission, it
+can compare the code and report with the assignment brief or grading rubric and
+flag possible omissions for the student to review.
 
 The result is a project whose sources, decisions, progress, and final report
 remain connected. Work completed today becomes useful context for the next
