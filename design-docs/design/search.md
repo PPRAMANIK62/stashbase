@@ -24,6 +24,8 @@ as the result identity.
 - Scope and access restrictions apply equally to app and MCP retrieval.
 - Readiness should be understandable: missing results may be caused by
   preparation, indexing, scope, or search mode.
+- Embedding credentials need access only to the configured embedding model;
+  provider model-list access is not required.
 - MCP is context infrastructure, not unrestricted host-filesystem access.
 
 ## Contribution Map

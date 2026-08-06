@@ -362,6 +362,14 @@ Without an API key, semantic indexing and semantic retrieval are disabled. File 
 
 This is the main cloud tradeoff: user files remain local, but embedding generation currently uses a cloud model.
 
+Credential validation normally probes the provider model-list endpoint so it
+does not consume embedding credits. An OpenAI 403 that explicitly lacks
+`api.model.read` is not an authentication failure: validation must fall back to
+one static-input request against `text-embedding-3-small`, because a restricted
+key may intentionally expose only embeddings. That embedding request is
+authoritative for 401/403 responses; transient failures preserve the existing
+save-with-warning path.
+
 ## 5.3 Incremental Updates
 
 The index is updated by deterministic reconciliation, not by a global background crawler.

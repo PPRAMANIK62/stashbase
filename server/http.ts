@@ -101,12 +101,32 @@ function assetWindowIdFromPath(reqPath: string): string | undefined {
 
 export type EmbedderKeyCheck = { ok: true } | { ok: false; status: number; error: string };
 const EMBEDDER_KEY_CHECK_TIMEOUT_MS = 15_000;
+const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
+const OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
+
+function failedEmbedderKeyCheck(
+  providerName: string,
+  response: Response,
+  detail: string,
+): EmbedderKeyCheck {
+  const rejected = response.status === 401 || response.status === 403;
+  return {
+    ok: false,
+    status: rejected ? 400 : 502,
+    error: rejected
+      ? `${providerName} rejected the key (HTTP ${response.status}): ${detail.slice(0, 200)}`
+      : `${providerName} key check could not complete (HTTP ${response.status}): ${detail.slice(0, 200)}`,
+  };
+}
 
 /** Probe an embedding API key against the provider's `/models` endpoint —
- *  cheap auth validation with no embedding credits consumed. `status`
- *  carries the HTTP status the caller should respond with: 400 when the
- *  provider rejected the key, 502 when the check could not prove the key
- *  invalid (network / transient upstream failure). */
+ *  cheap auth validation with no embedding credits consumed. OpenAI keys
+ *  restricted to the embeddings endpoint cannot list models, so an explicit
+ *  `api.model.read` rejection falls back to one minimal request against the
+ *  model StashBase actually uses. `status` carries the HTTP status the caller
+ *  should respond with: 400 when the provider rejected the key, 502 when the
+ *  check could not prove the key invalid (network / transient upstream
+ *  failure). */
 export async function validateEmbedderKey(
   provider: 'openai' | 'openrouter',
   key: string,
@@ -123,18 +143,21 @@ export async function validateEmbedderKey(
     });
     if (r.ok) return { ok: true };
     const detail = await r.text().catch(() => '');
-    if (r.status !== 401 && r.status !== 403) {
-      return {
-        ok: false,
-        status: 502,
-        error: `${providerName} key check could not complete (HTTP ${r.status}): ${detail.slice(0, 200)}`,
-      };
+    if (provider === 'openai' && r.status === 403 && detail.includes('api.model.read')) {
+      const embeddingResponse = await fetch(OPENAI_EMBEDDINGS_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input: 'StashBase' }),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? EMBEDDER_KEY_CHECK_TIMEOUT_MS),
+      });
+      if (embeddingResponse.ok) return { ok: true };
+      const embeddingDetail = await embeddingResponse.text().catch(() => '');
+      return failedEmbedderKeyCheck(providerName, embeddingResponse, embeddingDetail);
     }
-    return {
-      ok: false,
-      status: 400,
-      error: `${providerName} rejected the key (HTTP ${r.status}): ${detail.slice(0, 200)}`,
-    };
+    return failedEmbedderKeyCheck(providerName, r, detail);
   } catch (err: unknown) {
     return { ok: false, status: 502, error: `network: ${errorMessage(err)}` };
   }

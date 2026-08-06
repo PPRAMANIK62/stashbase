@@ -74,7 +74,7 @@ Run the same command with a newer package to update. To remove StashBase, run `s
 When you open StashBase for the first time:
 
 1. **Open a folder**: Click the folder icon to choose a local folder containing files you want to search
-2. **(Optional) Configure semantic search**: If you want AI-powered semantic search, add an OpenAI or OpenRouter API key in **Settings → Embedding**
+2. **(Optional) Configure semantic search**: If you want AI-powered semantic search, add an OpenAI or OpenRouter API key in **Settings → Embedding**. An OpenAI restricted key needs access only to embeddings with `text-embedding-3-small`; model-list access is not required.
 3. **(Optional) Set up transcription**: To transcribe audio or video, download a speech model from **Settings → Transcription**. Small (465 MiB) is the default; Tiny (74 MiB) and Base (141 MiB) are lighter options. Transcription runs entirely on your machine, with no API cost, and you can cancel or rerun it while viewing the file
 4. **(Optional) Connect to Claude/Codex**: From **Settings → MCP**, connect external AI tools to access your searchable library
 5. Start searching! Use the search box to find files by content
