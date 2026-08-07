@@ -15,6 +15,8 @@ import { useDocumentOutline } from './DocumentOutlineContext';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { SearchPanel } from './SearchPanel';
+import { Button } from './ui/button';
+import { StatusMessage } from './ui/status';
 import { api, errorMessage } from '../api';
 import { FILE_MIME } from '../dragMime';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
@@ -42,14 +44,39 @@ interface ElectronBridge {
 export function Sidebar() {
   const { state } = useApp();
   return (
-    <aside className="sidebar">
+    /* Explicit h-full so the inner file list (flex-1) knows how much to
+     * grow into; overflow-hidden clips content as the grid column
+     * resizes / collapses to the bare 44px rail — without it, file
+     * names visually spill into the main pane mid-transition.
+     * `group/sidebar` drives the hover-reveal of the header action
+     * icons (see the side-actions class strings below). */
+    <aside className="sidebar group/sidebar relative flex h-full min-h-0 min-w-0 flex-row overflow-hidden border-r border-border bg-pane">
       <ActivityBar />
-      <div className="sidebar-panel">
+      {/* The panel that swaps content based on `state.activeSidebarView`;
+        * it owns the vertical stack (header / list). */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {state.activeSidebarView === 'search' ? <SearchPanel /> : <FilesPanel />}
       </div>
     </aside>
   );
 }
+
+/* Header action icons stay invisible until the pointer is over the
+ * sidebar, mirroring VS Code's quiet explorer toolbar. */
+const sideActionsClass =
+  'flex gap-0.5 opacity-0 transition-opacity duration-fast group-hover/sidebar:opacity-100';
+
+/* Top tier of the VSCode-style two-row header: a quiet section label on
+ * the left; chevron rotation is keyed off the toggle's aria-expanded so
+ * the visual state can never drift from the accessible one. */
+const sectionToggleClass =
+  'inline-flex min-w-0 flex-1 cursor-pointer items-center gap-0.5 border-0 bg-transparent p-0 text-left '
+  + 'text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none '
+  + '[&>svg]:size-3.5 [&>svg]:flex-none [&>svg]:transition-transform [&>svg]:duration-fast '
+  + 'aria-[expanded=false]:[&>svg]:-rotate-90';
+
+const sectionTitleClass =
+  'min-w-0 truncate text-xs font-semibold tracking-[.06em] uppercase text-muted-foreground';
 
 /** The Explorer view. Files and the active Markdown document outline share
  * this one sidebar as independently collapsible sections, like VS Code. */
@@ -83,25 +110,34 @@ function FilesPanel() {
   const hasMarkdownDocument = activeTab?.file?.format === 'md';
 
   return (
-    <div className="files-panel" id="sidebar-panel-files" role="tabpanel">
-      <section className={'sidebar-section files-section' + (filesExpanded ? '' : ' collapsed')}>
-        <div className="panel-section-head folder-section-head">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files" role="tabpanel">
+      {/* Explorer sections mirror VS Code's compact disclosure rows. Files
+        * and the active document's outline intentionally share one
+        * navigation surface; neither becomes a floating editor companion. */}
+      <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border ' + (filesExpanded ? 'flex-[3_1_0%]' : 'flex-none')}>
+        <div className="flex min-h-[30px] items-center gap-1.5 pt-2 pr-2 pb-0.5 pl-3">
           <button
             type="button"
-            className="sidebar-section-toggle"
+            className={sectionToggleClass + ' flex-none'}
             aria-expanded={filesExpanded}
             aria-controls="sidebar-files-section"
             onClick={() => setFilesExpanded((expanded) => !expanded)}
-          ><ChevronDownIcon /><span className="panel-section-title">Files</span></button>
-          <div className="side-actions">
+          ><ChevronDownIcon /><span className={sectionTitleClass}>Files</span></button>
+          <div className={sideActionsClass + ' ml-auto'}>
             <FolderMenu />
           </div>
         </div>
-        <div id="sidebar-files-section" className="sidebar-section-body">
+        <div id="sidebar-files-section" className={filesExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
+          {/* The current folder row — brighter than the muted "FILES"
+            * section label above it, mirroring VSCode's workspace name.
+            * `.side-head` + `drop-target` / `active-root` state classes
+            * stay CSS-driven: `useGlobalDragDrop` toggles `drop-target`
+            * imperatively on #sideHead, and both rules share the tree's
+            * exempted selected/drop styling (see sidebar.css). */}
           <div
             id="sideHead"
             className={
-              'side-head'
+              'side-head flex items-center justify-between gap-1.5 py-0.5 pr-2 pl-3'
               + (sideHeadDrop ? ' drop-target' : '')
               + (rootSelected ? ' active-root' : '')
             }
@@ -109,33 +145,43 @@ function FilesPanel() {
             onDragLeave={onSideHeadDragLeave}
             onDrop={onSideHeadDrop}
           >
-            <span className={'folder-title' + (state.folderCollapsed ? ' collapsed' : '')}>
-              <span className="folder-chev" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}><ChevronDownIcon /></span>
-              <span className="folder-label" title={state.folder || 'notes'} onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}>{(state.folder || 'notes').toUpperCase()}</span>
+            <span className="flex min-w-0 flex-1 cursor-pointer items-center gap-0.5 text-muted-foreground hover:text-foreground">
+              <span
+                className={'inline-flex size-4 flex-none items-center justify-center transition-transform duration-fast [&_svg]:size-3.5' + (state.folderCollapsed ? ' -rotate-90' : '')}
+                onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
+              ><ChevronDownIcon /></span>
+              <span
+                className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[.04em] uppercase text-foreground"
+                title={state.folder || 'notes'}
+                onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}
+              >{(state.folder || 'notes').toUpperCase()}</span>
             </span>
-            <div className="side-actions">
+            <div className={sideActionsClass}>
               <NewNoteButton />
-              <button className="icon-btn" type="button" title={'New folder in ' + (state.activeFolder || (state.folder || 'folder root'))} onClick={() => {
+              <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title={'New folder in ' + (state.activeFolder || (state.folder || 'folder root'))} onClick={() => {
                 if (state.activeFolder) dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
                 dispatch({ type: 'NEW_FOLDER_INPUT', open: true });
-              }}><NewFolderIcon /></button>
+              }}><NewFolderIcon /></Button>
               <SyncButton />
               <FolderFoldToggle />
             </div>
           </div>
-          <div className={'file-list' + (state.folderCollapsed ? ' collapsed' : '')}>
+          {/* Collapsing hides the list but leaves the `expanded` set in
+            * state untouched, so re-expanding restores every inner
+            * folder's prior open/closed state. */}
+          <div className={'flex-1 overflow-y-auto pb-2' + (state.folderCollapsed ? ' hidden' : '')}>
             <FileTree />
           </div>
         </div>
       </section>
       {hasMarkdownDocument && (
-        <section className={'sidebar-section outline-section' + (outlineExpanded ? '' : ' collapsed')}>
-          <div className="panel-section-head outline-section-head">
-            <button type="button" className="sidebar-section-toggle" aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
-              <ChevronDownIcon /><span className="panel-section-title">Document Outline</span><span className="sidebar-section-count">{outline.headings.length}</span>
+        <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border ' + (outlineExpanded ? 'flex-[2_1_0%]' : 'flex-none')}>
+          <div className="flex min-h-[30px] items-center justify-between gap-1.5 py-[5px] pr-2 pl-3">
+            <button type="button" className={sectionToggleClass} aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
+              <ChevronDownIcon /><span className={sectionTitleClass + ' flex-1'}>Document Outline</span><span className="ml-auto flex-none text-2xs text-muted-foreground">{outline.headings.length}</span>
             </button>
           </div>
-          <div id="sidebar-outline-section" className="sidebar-section-body">
+          <div id="sidebar-outline-section" className={outlineExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
             <DocumentOutline headings={outline.headings} activeId={outline.activeId} onSelect={outline.onSelect} />
           </div>
         </section>
@@ -219,20 +265,21 @@ function FolderMenu() {
 
   return (
     <>
-      <button
+      <Button
         ref={buttonRef}
-        className="icon-btn"
-        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="text-base text-muted-foreground"
         title="Folder actions"
         onClick={toggle}
-      >⋯</button>
+      >⋯</Button>
       {anchor && <Menu anchor={{ rect: anchor }} items={items} onClose={() => setAnchor(null)} />}
       {switchOpen && (
         <ModalShell title="Switch folder" top onCancel={busy ? () => {} : () => setSwitchOpen(false)}>
           {state.recent.length === 0 ? (
             <p className="modal-hint">No folders found.</p>
           ) : (
-            <div className="welcome-open-list">
+            <div className="mt-2 mb-3 flex max-h-[260px] flex-col overflow-y-auto rounded-lg border border-border">
               {state.recent.map((folder) => {
                 const name = folder.path.split('/').filter(Boolean).pop() || folder.path;
                 const isCurrent = folder.path === current || name === current;
@@ -240,20 +287,29 @@ function FolderMenu() {
                   <button
                     key={folder.path}
                     type="button"
-                    className="welcome-open-row"
+                    className={
+                      'group/row flex cursor-pointer items-center gap-2.5 border-0 border-b border-border bg-transparent '
+                      + 'px-3.5 py-2.5 text-left text-base text-foreground transition-colors duration-fast last:border-b-0 '
+                      + 'enabled:hover:bg-accent/5 disabled:cursor-default disabled:opacity-60 '
+                      /* Trailing "›" affordance slides in on hover; hidden
+                       * entirely on the disabled (current / busy) rows. */
+                      + "after:flex-none after:-translate-x-1 after:text-xl after:leading-none after:text-accent "
+                      + "after:opacity-0 after:transition-[opacity,transform] after:duration-fast after:content-['›'] "
+                      + 'enabled:hover:after:translate-x-0 enabled:hover:after:opacity-100 disabled:after:content-none'
+                    }
                     disabled={busy || isCurrent}
                     onClick={() => { void switchTo(folder.path); }}
                   >
-                    <FolderIcon className="welcome-open-row-icon" />
-                    <span className="welcome-open-row-name">{name}</span>
+                    <FolderIcon className="size-4 flex-none text-muted-foreground transition-colors duration-fast group-enabled/row:group-hover/row:text-accent" />
+                    <span className="min-w-0 flex-1 truncate">{name}</span>
                   </button>
                 );
               })}
             </div>
           )}
-          {error && <div className="modal-error">{error}</div>}
-          <div className="modal-actions">
-            <button type="button" className="modal-btn" onClick={() => setSwitchOpen(false)} disabled={busy}>Cancel</button>
+          {error && <StatusMessage tone="error" className="mt-2.5">{error}</StatusMessage>}
+          <div className="mt-3.5 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setSwitchOpen(false)} disabled={busy}>Cancel</Button>
           </div>
         </ModalShell>
       )}
@@ -269,12 +325,13 @@ function NewNoteButton() {
   const target = state.activeFolder || state.folder || 'folder root';
 
   return (
-    <button
-      className="icon-btn"
-      type="button"
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-muted-foreground"
       title={'New note in ' + target}
       onClick={() => void actions.newNote()}
-    ><NewFileIcon /></button>
+    ><NewFileIcon /></Button>
   );
 }
 
@@ -291,9 +348,10 @@ function SyncButton() {
   useEffect(() => () => { if (tipTimer.current) clearTimeout(tipTimer.current); }, []);
 
   return (
-    <button
-      className={'icon-btn' + (spinning ? ' spinning' : '')}
-      type="button"
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className={'text-muted-foreground' + (spinning ? ' [&_svg]:animate-spin [&_svg]:[animation-duration:700ms]' : '')}
       title={spinning ? 'Syncing…' : tip}
       disabled={spinning}
       onClick={async () => {
@@ -315,7 +373,7 @@ function SyncButton() {
           3000,
         );
       }}
-    ><SyncIcon /></button>
+    ><SyncIcon /></Button>
   );
 }
 
@@ -327,9 +385,10 @@ function FolderFoldToggle() {
   const { state, dispatch } = useApp();
   const allCollapsed = state.expanded.size === 0;
   return (
-    <button
-      className="icon-btn"
-      type="button"
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-muted-foreground"
       title={allCollapsed ? 'Expand all folders' : 'Collapse all folders'}
       onClick={() => {
         if (allCollapsed) {
@@ -341,6 +400,6 @@ function FolderFoldToggle() {
           dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
         }
       }}
-    >{allCollapsed ? <ExpandAllIcon /> : <CollapseAllIcon />}</button>
+    >{allCollapsed ? <ExpandAllIcon /> : <CollapseAllIcon />}</Button>
   );
 }

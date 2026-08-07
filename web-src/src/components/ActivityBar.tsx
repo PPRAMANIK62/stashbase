@@ -17,6 +17,18 @@ import { DeferredTooltipButton } from './DeferredTooltipButton';
  * The view is NOT persisted across launches — every relaunch lands on
  * Files (the canonical landing spot; Search is entered on demand).
  */
+/* VS Code / Obsidian-style narrow icon rail. Hover state lives on the
+ * individual buttons; the rail itself is a flat background so it reads
+ * as part of the chrome, not as a separate panel. The active indicator
+ * is a 2px accent strip on the button's left edge. */
+const railButtonClass =
+  'relative flex h-10 w-11 cursor-pointer items-center justify-center border-0 bg-transparent p-0 '
+  + 'text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[18px]';
+
+const railActiveClass =
+  " text-foreground before:absolute before:top-1.5 before:bottom-1.5 before:left-0 before:w-0.5"
+  + " before:rounded-r-xs before:bg-accent before:content-['']";
+
 export function ActivityBar() {
   const { state, dispatch, actions } = useApp();
 
@@ -36,7 +48,11 @@ export function ActivityBar() {
   }
 
   return (
-    <nav className="activity-bar" role="tablist" aria-label="Sidebar views">
+    <nav
+      className="flex w-11 flex-none flex-col items-stretch gap-0.5 border-r border-border bg-pane py-1"
+      role="tablist"
+      aria-label="Sidebar views"
+    >
       <ActivityIcon
         active={!state.sidebarCollapsed && state.activeSidebarView === 'files'}
         controls="sidebar-panel-files"
@@ -60,7 +76,7 @@ export function ActivityBar() {
           spacer above (margin-top:auto on this button) pushes it down
           so view toggles stay grouped at the top. */}
       <DeferredTooltipButton
-        className="activity-bar-btn activity-bar-btn-bottom"
+        className={railButtonClass + ' mt-auto'}
         label="Settings"
         onClick={() => openSettings()}
       >
@@ -81,7 +97,7 @@ interface ActivityIconProps {
 function ActivityIcon({ active, controls, label, onClick, children }: ActivityIconProps) {
   return (
     <DeferredTooltipButton
-      className={'activity-bar-btn' + (active ? ' active' : '')}
+      className={railButtonClass + (active ? railActiveClass : '')}
       role="tab"
       aria-selected={active}
       aria-controls={controls}

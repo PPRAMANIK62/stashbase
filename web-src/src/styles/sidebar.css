@@ -1,95 +1,9 @@
-    /* sidebar */
-    .sidebar {
-      background: var(--pane);
-      border-right: 1px solid var(--border);
-      /* Row layout: 44px ActivityBar rail on the left, the active
-       * sidebar-panel filling the rest. The panel itself owns the
-       * vertical stack (header / list). */
-      display: flex;
-      flex-direction: row;
-      min-width: 0;
-      min-height: 0;
-      /* Explicit height so the inner `.file-list { flex: 1 }` knows how
-       * much to grow into — without it, .sidebar would shrink to
-       * content size and the file list would no longer fill the column. */
-      height: 100%;
-      position: relative;
-      /* Clip content as the grid column resizes / collapses to the bare
-       * 44px rail — without this, file names visually spill into the
-       * main pane mid-transition. */
-      overflow: hidden;
-    }
-
-    /* VS Code / Obsidian-style narrow icon rail. Holds the three
-     * mutually-exclusive view toggles (Files / Search / Library) and
-     * paints the active indicator as a 2px accent strip on its left
-     * edge. Hover state on individual buttons; the rail itself is a
-     * flat background so it reads as part of the chrome, not as a
-     * separate panel. */
-    .activity-bar {
-      flex: 0 0 44px;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      padding: 4px 0;
-      gap: 2px;
-      background: var(--pane);
-      border-right: 1px solid var(--border);
-    }
-    .activity-bar-btn {
-      appearance: none;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 44px;
-      height: 40px;
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      cursor: pointer;
-      padding: 0;
-    }
-    .activity-bar-btn:hover {
-      color: var(--fg);
-      background: var(--hover);
-    }
-    .activity-bar-btn.active {
-      color: var(--fg);
-    }
-    .activity-bar-btn.active::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 6px;
-      bottom: 6px;
-      width: 2px;
-      background: var(--accent);
-      border-radius: 0 2px 2px 0;
-    }
-    /* Push the settings gear to the bottom of the rail (VSCode-style),
-     * keeping the view toggles grouped at the top. */
-    .activity-bar-btn-bottom {
-      margin-top: auto;
-    }
-    .activity-bar-btn svg {
-      width: 18px;
-      height: 18px;
-    }
-
-    /* The right-hand 280px column of the sidebar. Owns the vertical
-     * stack: header / file-list / search equivalents.
-     * `.activity-bar` is sibling on the left; this is
-     * the panel that swaps content based on `state.activeSidebarView`. */
-    .sidebar-panel {
-      flex: 1 1 auto;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .files-panel,
+    /* sidebar — the shell (rail, panels, section headers, folder row,
+     * outline) is styled with Tailwind utilities in ActivityBar.tsx /
+     * Sidebar.tsx / DocumentOutline.tsx. What remains here is the
+     * exempted tree state machine (.tree-*), search (later phase),
+     * modal/MCP chrome (later phase), shared .icon-btn consumers, and
+     * the state rules called out inline below. */
     .search-panel {
       display: flex;
       flex-direction: column;
@@ -785,154 +699,6 @@
       cursor: pointer;
     }
 
-    /* Second row: folder label + VSCode-style action toolbar. */
-    /* Top tier of the VSCode-style two-row header: a quiet section label
-     * ("FOLDER") on the left + the folder-actions ⋯ on the right. The
-     * folder row (.side-head) with the current folder name + file-action
-     * icons sits directly below it. */
-    .panel-section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 8px 2px 12px;
-      gap: 6px;
-      min-height: 30px;
-    }
-
-    .panel-section-title {
-      flex: 1;
-      min-width: 0;
-      font-size: calc(11px * var(--ui-scale));
-      font-weight: 600;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      color: var(--muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* Explorer sections mirror VS Code's compact disclosure rows. Files and
-     * the active document's outline intentionally share one navigation
-     * surface; neither becomes a floating editor companion. */
-    .sidebar-section {
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
-      border-bottom: 1px solid var(--border);
-    }
-    .sidebar-section.files-section { flex: 3 1 0; }
-    .sidebar-section.outline-section { flex: 2 1 0; }
-    .sidebar-section.collapsed { flex: 0 0 auto; }
-    .sidebar-section-toggle {
-      display: inline-flex;
-      align-items: center;
-      min-width: 0;
-      flex: 1;
-      gap: 2px;
-      border: 0;
-      padding: 0;
-      background: transparent;
-      color: var(--muted);
-      font: inherit;
-      text-align: left;
-      cursor: pointer;
-    }
-    .sidebar-section-toggle:hover,
-    .sidebar-section-toggle:focus-visible { color: var(--fg); outline: none; }
-    .sidebar-section-toggle svg { width: 14px; height: 14px; flex: 0 0 auto; transition: transform .15s ease; }
-    .sidebar-section.collapsed .sidebar-section-toggle svg { transform: rotate(-90deg); }
-    .sidebar-section-count { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-size: calc(10px * var(--ui-scale)); }
-    .sidebar-section-body { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
-    .sidebar-section.collapsed .sidebar-section-body { display: none; }
-
-    /* FOLDER header: keep the "FOLDER" label content-width and push the
-     * ⋯ actions to the far right edge. */
-    .folder-section-head .panel-section-title {
-      flex: 0 0 auto;
-    }
-
-    .folder-section-head .side-actions {
-      margin-left: auto;
-    }
-
-    .document-outline { display: flex; flex: 1; min-height: 0; overflow: hidden; }
-    .outline-section-head { padding: 5px 8px 5px 12px; }
-    .document-outline-list { flex: 1; overflow: auto; padding: 0 0 8px; scrollbar-width: thin; }
-    .tree-row.outline-tree-row { gap: 4px; }
-    .outline-tree-entry { display: flex; align-items: center; flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-    .outline-tree-entry:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-    .document-outline-disclosure { border: 0; padding: 0; background: transparent; cursor: pointer; }
-    .document-outline-disclosure-spacer { flex: 0 0 16px; width: 16px; height: 16px; }
-    .document-outline-empty { margin: 8px 12px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
-
-    .side-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 2px 8px 2px 12px;
-      gap: 6px;
-    }
-
-    /* Wraps chevron + label so they share one click target and one
-     * hover-highlight rule, mirroring the VSCode workspace header. */
-    .folder-title {
-      display: flex;
-      align-items: center;
-      gap: 2px;
-      flex: 1;
-      min-width: 0;
-      cursor: pointer;
-      color: var(--muted);
-    }
-
-    .folder-title:hover {
-      color: var(--fg);
-    }
-
-    .folder-chev {
-      width: 16px;
-      height: 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: transform .15s;
-      flex-shrink: 0;
-    }
-
-    .folder-chev svg {
-      width: 14px;
-      height: 14px;
-    }
-
-    /* Collapsed state: chevron points right, file list is hidden. The
-     * `expanded` set inside the JS is untouched, so re-expanding the
-     * FOLDER restores every inner folder's prior open/closed state. */
-    .folder-title.collapsed .folder-chev {
-      transform: rotate(-90deg);
-    }
-
-    .file-list.collapsed {
-      display: none;
-    }
-
-    /* The current folder name — the prominent row, brighter than the
-     * muted "FOLDER" section label above it (mirrors VSCode's workspace
-     * name reading stronger than the EXPLORER header). */
-    .folder-label {
-      font-size: calc(11px * var(--ui-scale));
-      font-weight: 600;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-      color: var(--fg);
-      flex: 1;
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     .tree-row.file.preparation-failed {
       color: var(--fg);
     }
@@ -981,17 +747,9 @@
       dominant-baseline: auto;
     }
 
-    .side-actions {
-      display: flex;
-      gap: 2px;
-      opacity: 0;
-      transition: opacity .12s;
-    }
-
-    .sidebar:hover .side-actions {
-      opacity: 1;
-    }
-
+    /* Shared icon-button chrome still consumed by App.tsx, MainPane.tsx,
+     * PdfPreview.tsx, and ChatLaunchButtons.tsx. The sidebar's own header
+     * buttons moved to the Button primitive (ghost / icon-sm). */
     .icon-btn {
       width: 28px;
       height: 28px;
@@ -1012,16 +770,6 @@
     .icon-btn svg {
       width: 16px;
       height: 16px;
-    }
-
-    /* Spinner for the sidebar sync (↻) button. JS sets a guaranteed
-     * minimum spin window even on fast requests so the click always
-     * leaves a visible trace. */
-    @keyframes sync-spin {
-      to { transform: rotate(360deg); }
-    }
-    .icon-btn.spinning svg {
-      animation: sync-spin 0.7s linear infinite;
     }
 
     .search-status-banner {
@@ -1089,13 +837,6 @@
       background: #fef0c5;
     }
 
-    .file-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0 0 8px;
-    }
-
-
     /* Tree rows. Indent is set inline per node depth.
    * Folder rows toggle expand/collapse; file rows open the file. */
     .tree-row {
@@ -1129,7 +870,10 @@
     /* FOLDER header gets the same selected-state styling as
      * `.tree-row.folder.active-folder` when `activeFolder === ''` —
      * VSCode-style folder-root selected indication so the user
-     * can tell where `+ new note` will create. */
+     * can tell where `+ new note` will create. Kept as CSS (the
+     * `.side-head` layout itself is utilities in Sidebar.tsx): the
+     * `--active` selected-surface token has no Tailwind color role yet,
+     * and this must stay in lockstep with the exempted tree rules. */
     .side-head.active-root {
       background: var(--active);
       box-shadow: inset 2px 0 0 var(--accent);
