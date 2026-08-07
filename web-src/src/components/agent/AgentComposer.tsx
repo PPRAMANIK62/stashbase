@@ -558,6 +558,16 @@ export function AgentComposer({
             <PlusIcon />
           </Button>
           <span className="flex-1" />
+          {showFolderMenu && (
+            <FolderMenu
+              folder={sessionFolder}
+              entries={folderEntries}
+              homeDir={folderHomeDir}
+              locked={folderLocked}
+              disabled={disabled}
+              onSetFolder={onSetFolder}
+            />
+          )}
           {showModelMenu && <ModelMenu selectedModel={selectedModel} activeModel={activeModel} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
           {showModeMenu && (
             <AccessMenu

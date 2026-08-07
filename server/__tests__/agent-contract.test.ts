@@ -8,6 +8,7 @@ import {
   parseAgentEffort,
   registerAgentAdapter,
   reportAgentRuntimeFailure,
+  resolveAgentSessionFolder,
   runtimeDescriptorFor,
   type AgentClientEvent,
   type AgentServerEvent,
@@ -100,6 +101,26 @@ test('capability discovery publishes the registered adapter catalog', () => {
     assert.equal(runtime.endpoint, '/ws/agent');
     assert.deepEqual(runtime.capabilities, adapter.capabilities);
   }
+});
+
+test('an explicit session folder is accepted only when it is a registered library folder', () => {
+  const members = ['/Users/me/Documents/StashBase/Notes', '/Users/me/Projects/Research'];
+
+  // Explicit member folder → accepted with the stored member spelling.
+  const accepted = resolveAgentSessionFolder('/Users/me/Projects/Research', members);
+  assert.deepEqual(accepted, { ok: true, folder: '/Users/me/Projects/Research' });
+
+  // Absent/empty → fall back to the window's current folder (no explicit binding).
+  assert.deepEqual(resolveAgentSessionFolder(undefined, members), { ok: true });
+  assert.deepEqual(resolveAgentSessionFolder(null, members), { ok: true });
+  assert.deepEqual(resolveAgentSessionFolder('   ', members), { ok: true });
+
+  // Anything outside membership is rejected — never bound to an agent session.
+  assert.equal(resolveAgentSessionFolder('/etc', members).ok, false);
+  assert.equal(resolveAgentSessionFolder('/Users/me/Projects/Research/nested', members).ok, false);
+  assert.equal(resolveAgentSessionFolder('relative/path', members).ok, false);
+  assert.equal(resolveAgentSessionFolder(['/Users/me/Projects/Research'], members).ok, false);
+  assert.equal(resolveAgentSessionFolder('/anything', []).ok, false);
 });
 
 test('unsupported runtime connections return a contract error and close cleanly', () => {

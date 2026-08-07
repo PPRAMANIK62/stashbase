@@ -39,6 +39,16 @@ client of StashBase context, not a separate AI workspace.
   or the session ends or fails — the composer returns to the bottom of the
   transcript. While a session connects, the panel shows a small spinner with
   muted text instead of bare copy.
+- Each chat is scoped to an explicitly chosen library folder. The composer's
+  leftmost pill is a folder picker (folder name plus shortened path detail)
+  listing every library folder with favorites pinned, defaulting to the
+  window's current folder; a tab without a started session follows that
+  default. Once the chat has content or is resumed the pill stays visible but
+  locked — a conversation never moves to another folder — and resumed chats
+  show their own folder. When a chat's folder differs from the window's
+  current folder, the pane header adds a muted "in <folder>" note so
+  cross-folder chats stay legible. The History menu lists sessions for the
+  currently picked folder.
 - The composer's model, permission-mode, and reasoning-effort controls are
   compact labelled pills, each with a leading icon and an accessible name.
   A default-valued model or effort pill reads "Model: Default" /

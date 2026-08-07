@@ -28,6 +28,20 @@ test('a resumed Agent session never forwards a stale tab model', () => {
   assert.equal(url.searchParams.get('resume'), 'historic-session');
 });
 
+test('an explicit session folder rides the connection URL; absent means window folder', () => {
+  const explicit = new URL(agentConnectionUrl({ ...base, folder: '/Users/me/Projects/Notes' }));
+  assert.equal(explicit.searchParams.get('folder'), '/Users/me/Projects/Notes');
+
+  const implicit = new URL(agentConnectionUrl({ ...base }));
+  assert.equal(implicit.searchParams.get('folder'), null);
+});
+
+test('a resumed Agent session still carries its own explicit folder', () => {
+  const url = new URL(agentConnectionUrl({ ...base, resume: 'historic-session', folder: '/Users/me/Other' }));
+  assert.equal(url.searchParams.get('resume'), 'historic-session');
+  assert.equal(url.searchParams.get('folder'), '/Users/me/Other');
+});
+
 test('model control visibility, locking label, active identity, and fallback state are deterministic', () => {
   const models = [{ id: 'native-model', label: 'Native model' }];
   assert.equal(modelMenuVisible(true, models), true);

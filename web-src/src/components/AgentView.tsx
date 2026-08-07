@@ -27,6 +27,14 @@ import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { iconGhostButtonClass } from './agent/panelStyles';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
+import {
+  folderDisplayName,
+  folderMenuEntries,
+  folderMenuLocked,
+  folderMenuVisible,
+  folderPillFolder,
+  nextSessionFolder,
+} from './agent/folderState';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
 import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
@@ -110,6 +118,16 @@ export function AgentView({
   // User intent and runtime telemetry must stay separate: an active model
   // reached through Default must never become an explicit override later.
   const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
+  // Session folder (Cursor-style picker). `pickedFolder` is the user's
+  // explicit choice for the NEXT session; undefined follows the window's
+  // current folder. `connectedFolder` is the binding the live session
+  // actually connected with — captured per connect and never rebound.
+  const [pickedFolder, setPickedFolder] = useState<string | undefined>(undefined);
+  const pickedFolderRef = useRef<string | undefined>(undefined);
+  const [connectedFolder, setConnectedFolder] = useState<string | null>(null);
+  const connectedFolderRef = useRef<string | null>(null);
+  const recentRef = useRef(state.recent);
+  recentRef.current = state.recent;
   const [skills, setSkills] = useState<AgentSkill[]>([]);
   const [skillState, setSkillState] = useState<'available' | 'empty' | 'failed'>('empty');
   const modelControlRef = useRef(modelControl);
@@ -210,11 +228,22 @@ export function AgentView({
     // re-resuming.
     const resume = resumeIdRef.current;
     resumeIdRef.current = null;
+    // Bind this session's folder explicitly: the user's pick, else the
+    // window's current folder. Recorded here so a later window-folder
+    // switch can never rebind a started conversation.
+    const sessionFolder = nextSessionFolder(
+      pickedFolderRef.current,
+      folderPathRef.current,
+      recentRef.current.map((entry) => entry.path),
+    ) || undefined;
+    connectedFolderRef.current = sessionFolder ?? null;
+    setConnectedFolder(sessionFolder ?? null);
     const endpoint = runtime?.endpoint ?? '/ws/agent';
     const wsUrl = agentConnectionUrl({
       protocol: location.protocol, host: location.host, endpoint,
       windowId: getWindowId(), effort: effortRef.current, access: modeRef.current,
       agent, model: modelControlRef.current.selectedModel, resume,
+      folder: sessionFolder,
     });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -288,13 +317,20 @@ export function AgentView({
    *  cleared) with the replayed history. */
   async function resumeSession(id: string) {
     setHistoryOpen(false);
+    // Resume within the folder the History menu was scoped to, and pin the
+    // tab's binding to it so the reconnect below carries the same folder —
+    // a resumed session always keeps its own folder.
+    const folder = sessionFolder || undefined;
     let hist: Block[] = [];
     try {
-      hist = (await api.getSessionMessages(id, agent)) as Block[];
+      hist = (await api.getSessionMessages(id, agent, folder)) as Block[];
     } catch {
       actions.toast('Could not load that session.', { level: 'error' });
       return;
     }
+    const nextPick = folder && folder !== folderPathRef.current ? folder : undefined;
+    setPickedFolder(nextPick);
+    pickedFolderRef.current = nextPick;
     releaseAllAttachmentPreviews();
     setBlocks(hist);
     setEditableUserMessageIds(new Set());
@@ -386,7 +422,9 @@ export function AgentView({
         if (!ev.isError) {
           const toolName = toolNamesRef.current.get(ev.id);
           if (shouldRefreshAfterTool(toolName)) {
-            const toolFolder = folderPathRef.current;
+            // Reconcile the folder the session is bound to; the window tree
+            // reload below is skipped when the tab works cross-folder.
+            const toolFolder = connectedFolderRef.current ?? folderPathRef.current;
             void (async () => {
               await api.sync(toolFolder).catch(() => { /* turn-end / next poll will surface it */ });
               if (folderPathRef.current !== toolFolder) return;
@@ -440,7 +478,7 @@ export function AgentView({
         // already index on their own path; this catches `Bash`/editor
         // writes the moment the turn finishes.
         {
-          const turnFolder = folderPathRef.current;
+          const turnFolder = connectedFolderRef.current ?? folderPathRef.current;
           void api.sync(turnFolder || undefined)
             .catch(() => { /* next status poll surfaces it */ })
             .finally(() => {
@@ -739,6 +777,18 @@ export function AgentView({
     reconnect();
   }
 
+  /** Pick the session folder for this tab's NEXT session. Like a model
+   * change it reconnects, and it is refused once the conversation has
+   * content — a live session is never rebound to another folder. Picking
+   * the window's current folder returns the tab to follow-the-window. */
+  function changeFolder(path: string) {
+    if (blocks.length > 0 || turnActive || modelControl.resumedSession) return;
+    const next = path === folderPathRef.current ? undefined : path;
+    setPickedFolder(next);
+    pickedFolderRef.current = next;
+    reconnect();
+  }
+
   /** Changing model starts a new native session. A resumed or populated
    * transcript is immutable here, so it can never silently switch models. */
   function changeModel(next: string | undefined) {
@@ -761,7 +811,7 @@ export function AgentView({
     const sid = sessionIdRef.current;
     if (!tabId || !sid || !isDefaultChatTitle(titleRef.current)) return;
     try {
-      const sessions = await api.listSessions(agent);
+      const sessions = await api.listSessions(agent, connectedFolderRef.current ?? undefined);
       const t = sessions.find((x) => x.id === sid)?.title?.trim();
       if (t && !isDefaultChatTitle(t)) {
         dispatch({ type: 'CHAT_TAB_RENAME', id: tabId, title: t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : t });
@@ -785,6 +835,22 @@ export function AgentView({
 
   const effortLocked = blocks.length > 0 || turnActive;
   const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
+  // Session-folder pill state. The shown folder is the live binding once
+  // connected, else the folder the next session would bind (picked folder
+  // or the window's current folder, so unbound tabs follow the sidebar).
+  const memberPaths = useMemo(() => state.recent.map((entry) => entry.path), [state.recent]);
+  const folderEntries = useMemo(
+    () => folderMenuEntries(state.recent, state.folderPath),
+    [state.recent, state.folderPath],
+  );
+  const folderLocked = folderMenuLocked(blocks.length > 0, turnActive, modelControl.resumedSession);
+  const sessionFolder = folderPillFolder({
+    connectedFolder,
+    picked: pickedFolder,
+    windowFolder: state.folderPath,
+    memberPaths,
+  });
+  const crossFolderSession = Boolean(sessionFolder) && Boolean(state.folderPath) && sessionFolder !== state.folderPath;
   const effectiveModel = modelControl.activeModel ?? modelControl.selectedModel;
   const supportedEfforts = modelControl.models.find((entry) => entry.id === effectiveModel)?.supportedEfforts;
 
@@ -857,13 +923,21 @@ export function AgentView({
       {/* `agent-head` is a layout hook: the chat-primary grid rules in
         * styles/chat.css center it to the readable transcript width. */}
       <div className="agent-head flex items-center gap-2 py-1.5 pr-2 pl-3">
-        <span className="min-w-0 flex-1 overflow-hidden text-sm text-ellipsis whitespace-nowrap text-muted-foreground">{title}</span>
+        <span className="min-w-0 flex-1 overflow-hidden text-sm text-ellipsis whitespace-nowrap text-muted-foreground">
+          {title}
+          {crossFolderSession && (
+            // Cross-folder sessions stay legible: mark a tab whose bound
+            // folder differs from the window's current folder.
+            <span className="ml-1.5 text-xs text-muted-foreground">in {folderDisplayName(sessionFolder)}</span>
+          )}
+        </span>
         <div className="flex shrink-0 gap-0.5">
           {capabilities?.history && (
             <AgentHistoryMenu
               open={historyOpen}
               currentSessionId={currentSessionId}
               agent={agent}
+              folder={sessionFolder || undefined}
               onToggle={() => setHistoryOpen((o) => !o)}
               onClose={() => setHistoryOpen(false)}
               onResume={resumeSession}
@@ -958,6 +1032,12 @@ export function AgentView({
         resumedSession={modelControl.resumedSession}
         supportedEfforts={supportedEfforts}
         onSetModel={changeModel}
+        sessionFolder={sessionFolder}
+        folderEntries={folderEntries}
+        folderLocked={folderLocked}
+        folderHomeDir={state.homeDir}
+        showFolderMenu={folderMenuVisible(folderEntries) && Boolean(sessionFolder)}
+        onSetFolder={changeFolder}
         showModeMenu={capabilities?.modes === true}
         showEffortMenu={capabilities?.effort === true}
         showModelMenu={modelMenuVisible(capabilities?.models === true, modelControl.models)}

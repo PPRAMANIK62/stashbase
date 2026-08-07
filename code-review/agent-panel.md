@@ -10,6 +10,21 @@ The built-in Agent panel is one folder-scoped chat surface. It should feel like
 a focused chat when no document is open and a VS Code-style side panel when a
 document is active, not a separate AI workspace.
 
+A session's folder scope is an explicit choice, not an inherited ambient. The
+composer's leftmost pill is a Cursor-style session-folder picker listing the
+library membership (the same source as the sidebar list, favorites pinned);
+it defaults to the window's current folder, and an unbound tab follows the
+window when that default changes. Once the conversation has content, runs a
+turn, or was resumed, the pill stays visible but locked — a live session is
+never rebound to another folder, and its pane header marks a binding that
+differs from the window's current folder with a muted "in <basename>" note.
+Server-side, the WS connect URL and every session-history route accept an
+optional explicit `folder`; it must validate against library membership
+(`resolveAgentSessionFolder` — reject anything else with an error/400) and
+absence falls back to the window's current folder exactly as before. The
+History menu lists sessions for the tab's currently picked folder, and resume
+carries that folder on the reconnect URL.
+
 The panel may make agent work easier to scan, but it should stay quiet:
 
 - low chrome
@@ -56,7 +71,9 @@ typography plus the One-Dark tool/diff palette, the `@`-mention popup
 and the CodeMirror-owned composer input DOM. `.agent-view` stays a class-name
 routing hook for the global drag-drop handler. Composer pill triggers are
 labelled controls: each carries a leading icon and an accessible name
-("Model", "Permission mode", "Reasoning effort"), and a default-valued model
+("Session folder", "Model", "Permission mode", "Reasoning effort"; the locked
+folder pill reads "Session folder: X — set for this conversation"), and a
+default-valued model
 or effort pill renders "<Control>: Default" so adjacent Defaults cannot be
 confused. An empty chat centers the composer as the hero layout: the
 composer swaps its `agent-composer` width hook for the hero column while
