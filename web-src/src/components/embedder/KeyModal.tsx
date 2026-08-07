@@ -8,6 +8,9 @@ import { useRef, useState } from 'react';
 import type { EmbedderProvider } from '../../api';
 import { errorMessage } from '../../api';
 import { ModalShell } from '../ModalShell';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { StatusMessage } from '../ui/status';
 
 export function KeyModal({
   mode = 'enter',
@@ -54,10 +57,10 @@ export function KeyModal({
       initialFocus={inputRef}
       onCancel={onCancel}
     >
-      <input
+      <Input
         ref={inputRef}
         type="password"
-        className="modal-input"
+        className="font-mono text-sm"
         placeholder={placeholder}
         autoComplete="off"
         value={key}
@@ -66,17 +69,20 @@ export function KeyModal({
           if (e.key === 'Enter') { e.preventDefault(); void submit(); }
         }}
       />
-      {error && <div className="modal-error">{error}</div>}
-      <div className="modal-actions">
-        <button type="button" className="modal-btn" onClick={onCancel} disabled={busy}>
+      {error && (
+        <StatusMessage tone="error" className="mt-2.5 max-h-[min(180px,32vh)] overflow-y-auto wrap-anywhere">
+          {error}
+        </StatusMessage>
+      )}
+      <div className="mt-3.5 flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="modal-btn primary"
           onClick={submit}
           disabled={busy}
-        >{busy ? 'Validating…' : (mode === 'change' ? 'Save' : 'Continue')}</button>
+        >{busy ? 'Validating…' : (mode === 'change' ? 'Save' : 'Continue')}</Button>
       </div>
     </ModalShell>
   );

@@ -6,9 +6,8 @@
      * shared ui/ primitives. This file keeps only what utilities can't
      * own: the structural `.main` shell, the tab strip (consumed raw by
      * an Electron layout smoke), keyframe-driven overlays, the Crepe /
-     * Milkdown variable bridge, `.doc` rendered-document typography, the
-     * inline-rename field RenameInput shares with the sidebar tree, and
-     * the modal / settings chrome that migrates in a later phase. */
+     * Milkdown variable bridge, and `.doc` rendered-document
+     * typography. */
     .main {
       overflow: hidden;
       display: flex;
@@ -28,24 +27,6 @@
      * document, not the parent. Skipping them here also keeps
      * lightningcss from warning about the (real but unrecognised) CSS
      * Custom Highlight pseudo-element. */
-
-    /* One source-match system drives Find and selected-word occurrences.
-     * Find mirrors Chrome; selected-word peers stay quieter and let the
-     * browser's native selection paint the active occurrence. */
-    .cm-source-find-match {
-      background: #ffe082 !important;
-    }
-    .cm-source-find-match-active {
-      background: #1a73e8 !important;
-      color: #fff !important;
-    }
-    .cm-source-selection-match {
-      background: #b9f6a5 !important;
-    }
-    .cm-live-heading .cm-source-match {
-      box-decoration-break: clone;
-      line-height: inherit;
-    }
 
     /* The CrepeBuilder document is the sole Markdown surface. It adopts the
      StashBase palette instead of its package-default paper theme; the slash
@@ -248,41 +229,6 @@
     @keyframes pdf-hit-pulse {
       0% { background: rgba(var(--accent-rgb), 0.34); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.56); }
       100% { background: rgba(var(--accent-rgb), 0.18); box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.42); }
-    }
-
-    /* Inline rename — wrapper looks like one field, but only the
-     basename is editable. The extension lives in a muted span pinned
-     to the right so the user can't accidentally turn an .md note into
-     something the rest of the pipeline doesn't know how to handle.
-     Shared by RenameInput.tsx from the sidebar file tree. */
-    .rename-wrap {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      background: var(--card);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      font-size: calc(13px * var(--ui-scale));
-    }
-
-    .rename-wrap .rename-input {
-      flex: 1;
-      min-width: 0;
-      border: 0;
-      outline: none;
-      background: transparent;
-      padding: 2px 0 2px 6px;
-      font: inherit;
-      color: var(--fg);
-      text-align: left;
-    }
-
-    .rename-wrap .rename-ext {
-      padding: 2px 6px 2px 0;
-      color: var(--muted);
-      white-space: nowrap;
-      user-select: none;
     }
 
     /* Tab strip stays in CSS — electron/tab-strip-layout-smoke.cjs
@@ -625,94 +571,6 @@
     }
 
 
-    /* Unified Settings modal — left nav + right content. Wider than
-     * the default modal-card so the MCP client list (the longest
-     * panel) doesn't crowd. */
-    .modal-card.settings-card {
-      width: min(760px, 94vw);
-      /* Fixed height — the modal must NOT resize when switching tabs.
-       * Each panel scrolls inside the dialog's tabpanel region instead. */
-      height: min(78vh, 640px);
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .embedding-provider-row {
-      display: inline-flex;
-      align-items: center;
-      max-width: 100%;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      background: var(--surface-raised);
-      margin: 2px 0 8px;
-    }
-
-    .embedding-provider-option {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      min-height: 30px;
-      border: 0;
-      border-left: 1px solid var(--border);
-      background: transparent;
-      color: var(--fg);
-      font: inherit;
-      font-size: calc(12px * var(--ui-scale));
-      padding: 0 10px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.12s, color 0.12s;
-    }
-
-    .embedding-provider-option:first-child {
-      border-left: 0;
-    }
-
-    .embedding-provider-option:hover:not(:disabled) {
-      background: var(--hover);
-      color: var(--fg);
-    }
-
-    .embedding-provider-option.selected {
-      background: rgba(var(--accent-rgb), 0.08);
-      color: var(--fg);
-      font-weight: 600;
-    }
-
-    .embedding-provider-option:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-
-    .embedding-provider-name {
-      font-weight: 500;
-    }
-
-    .embedding-provider-meta {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 6px 12px;
-      margin-bottom: 12px;
-    }
-
-    .embedding-key-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .embedding-key-status {
-      color: var(--muted);
-      font-size: calc(12px * var(--ui-scale));
-      line-height: 32px;
-      min-width: 0;
-    }
-
     /* Folder-home migration: per-conflict resolver. One row per colliding
      * folder name + a segmented Keep both / Skip / Overwrite control. */
     .migrate-conflict-list {
@@ -782,14 +640,6 @@
      * of the other settings tabs). */
     .capture-state-ok { color: var(--accent); font-weight: 600; }
     .capture-state-warn { color: #b45309; font-weight: 600; }
-
-    .modal-btn.danger {
-      color: var(--danger);
-      border-color: rgba(220, 38, 38, 0.3);
-    }
-    .modal-btn.danger:hover:not(:disabled) {
-      background: rgba(220, 38, 38, 0.06);
-    }
 
     .transcription-model-list {
       display: grid;

@@ -6,6 +6,8 @@
 import { useState } from 'react';
 import { errorMessage } from '../../api';
 import { ModalShell } from '../ModalShell';
+import { Button } from '../ui/button';
+import { StatusMessage } from '../ui/status';
 
 export function RemoveKeyModal({
   onCancel,
@@ -32,17 +34,21 @@ export function RemoveKeyModal({
       description="Indexing and search stop until you add a key back. Your existing index is kept — nothing is deleted."
       onCancel={busy ? () => { /* wait for removal */ } : onCancel}
     >
-      {error && <div className="modal-error">{error}</div>}
-      <div className="modal-actions">
-        <button type="button" className="modal-btn" onClick={onCancel} disabled={busy}>
+      {error && (
+        <StatusMessage tone="error" className="mt-2.5 max-h-[min(180px,32vh)] overflow-y-auto wrap-anywhere">
+          {error}
+        </StatusMessage>
+      )}
+      <div className="mt-3.5 flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="modal-btn primary danger"
+          variant="destructive"
           onClick={submit}
           disabled={busy}
-        >{busy ? 'Removing…' : 'Remove key'}</button>
+        >{busy ? 'Removing…' : 'Remove key'}</Button>
       </div>
     </ModalShell>
   );

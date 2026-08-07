@@ -144,7 +144,7 @@ export function EmbeddingPanel() {
           <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
             Used for semantic search. The model stays fixed so the local index remains compatible.
           </div>
-          <div className="embedding-provider-row" role="radiogroup" aria-label="Embedding provider">
+          <div className="mt-0.5 mb-2 inline-flex max-w-full items-center overflow-hidden rounded-md border border-border bg-card" role="radiogroup" aria-label="Embedding provider">
             {PROVIDER_ORDER.map((provider) => {
               const option = PROVIDERS[provider];
               const selectedOption = provider === selectedProvider;
@@ -152,7 +152,12 @@ export function EmbeddingPanel() {
                 <button
                   key={provider}
                   type="button"
-                  className={`embedding-provider-option${selectedOption ? ' selected' : ''}`}
+                  className={
+                    'inline-flex min-h-[30px] cursor-pointer items-center gap-1.5 border-0 border-l border-border '
+                    + 'px-2.5 text-sm whitespace-nowrap text-foreground transition-colors duration-fast first:border-l-0 '
+                    + 'enabled:hover:bg-muted disabled:cursor-default disabled:opacity-60 '
+                    + (selectedOption ? 'bg-accent/8 font-semibold' : 'bg-transparent')
+                  }
                   role="radio"
                   aria-checked={selectedOption}
                   disabled={addBusy}
@@ -162,19 +167,19 @@ export function EmbeddingPanel() {
                     setAddError(null);
                   }}
                 >
-                  <span className="embedding-provider-name">{option.label}</span>
+                  <span className="font-medium">{option.label}</span>
                 </button>
               );
             })}
           </div>
-          <div className="embedding-provider-meta text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
             {state.hasKey && <span>Current: {PROVIDERS[state.provider].label}</span>}
             <span>Model: <code>{selected.model}</code></span>
             <span>{selected.costHint}</span>
           </div>
           {hasSelectedProviderKey ? (
-            <div className="embedding-key-row">
-              <div className="embedding-key-status">Key configured</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-0 text-sm leading-8 text-muted-foreground">Key configured</div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"

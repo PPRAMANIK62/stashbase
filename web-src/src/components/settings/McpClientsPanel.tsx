@@ -9,6 +9,7 @@ import { MCP_CLIENTS, mcpClientLabel, type McpClientId } from '../../agentCatalo
 import { CopyIcon, CheckIcon } from '../../icons';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { StatusMessage } from '../ui/status';
 
 interface McpConfigureResult {
   client?: McpClientId;
@@ -220,7 +221,7 @@ export function McpClientsPanel() {
       <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
         Connect StashBase to your agents. Restart each app after connecting.
       </div>
-      <div className="mcp-client-list">
+      <div className="flex max-h-[min(56vh,620px)] flex-col overflow-y-auto rounded-lg border border-border bg-background">
         {MCP_CLIENTS.map((client) => {
           const status = clientStatus[client.id] ?? { configured: false };
           const badge = clientBadge(client, status);
@@ -228,23 +229,38 @@ export function McpClientsPanel() {
           const isBusy = busy === client.id;
           const Icon = client.Icon;
           return (
-            <div className="mcp-client-row" key={client.id}>
-              <span className="mcp-client-label">
-                <span className="mcp-client-icon">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-border px-3 py-2.5 first:border-t-0" key={client.id}>
+              <span className="inline-flex min-w-0 items-center gap-2.5">
+                <span className="inline-grid size-7 flex-none place-items-center rounded-md border border-border bg-pane text-foreground [&_svg]:size-4">
                   <Icon />
                 </span>
-                <span className="mcp-client-copy">
-                  <span className="mcp-client-name">{client.name}</span>
+                <span className="flex min-w-0 items-center">
+                  <span className="truncate text-base font-semibold text-foreground">{client.name}</span>
                 </span>
               </span>
               {badge && (
-                <span className={'mcp-status-pill ' + badge.tone} title={badge.title}>
+                <span
+                  className={
+                    'inline-flex h-6 min-w-[98px] items-center justify-center rounded-full border px-2.25 text-xs font-medium whitespace-nowrap '
+                    + (badge.tone === 'warn'
+                      ? 'border-status-danger/30 bg-status-danger/5 text-destructive'
+                      : 'border-status-warning/25 bg-status-warning/10 text-status-warning')
+                  }
+                  title={badge.title}
+                >
                   {badge.label}
                 </span>
               )}
-              <button
+              <Button
                 type="button"
-                className={'modal-btn mcp-connector-btn' + (isConnected ? ' connected' : '')}
+                variant="outline"
+                size="sm"
+                className={
+                  'min-w-24 flex-none '
+                  + (isConnected
+                    ? 'border-accent/30 bg-accent/8 text-accent hover:border-destructive/35 hover:bg-destructive/5 hover:text-destructive'
+                    : 'hover:border-accent/30 hover:bg-accent/8 hover:text-accent')
+                }
                 disabled={busy != null}
                 onClick={() => void (isConnected ? disconnect(client.id) : connect(client.id))}
                 title={isConnected ? `Disconnect ${client.name}` : `Connect ${client.name}`}
@@ -252,18 +268,18 @@ export function McpClientsPanel() {
                 {isBusy
                   ? (isConnected ? 'Disconnecting…' : 'Connecting…')
                   : isConnected ? 'Disconnect' : 'Connect'}
-              </button>
+              </Button>
             </div>
           );
         })}
       </div>
       {status && (
-        <div className={status.kind === 'error' ? 'modal-error' : 'mcp-success'}>
+        <StatusMessage tone={status.kind === 'error' ? 'error' : 'success'} className="mt-2.5 wrap-anywhere">
           {status.text}
-        </div>
+        </StatusMessage>
       )}
 
-      <div className="mcp-http-settings">
+      <div className="mt-4.5 border-t border-border pt-4.5">
         <div className="mb-1 text-base font-semibold">URL access</div>
         <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
           For server-side MCP clients that cannot launch the local command. Browser pages are not supported.
@@ -281,9 +297,9 @@ export function McpClientsPanel() {
               copied={copied === 'loopback'}
               onCopy={() => void copyText(http.loopbackUrl, 'loopback')}
             />
-            <div className="mcp-http-field">
-              <label htmlFor="mcp-http-token">Bearer token</label>
-              <div className="mcp-http-field-controls">
+            <div className="mt-2.5 flex flex-col gap-1">
+              <label htmlFor="mcp-http-token" className="text-xs font-semibold text-muted-foreground">Bearer token</label>
+              <div className="flex min-w-0 items-center gap-1.5">
                 <Input
                   id="mcp-http-token"
                   className="flex-1 font-mono text-sm"
@@ -304,13 +320,14 @@ export function McpClientsPanel() {
                 />
               </div>
             </div>
-            <div className="mcp-http-actions">
+            <div className="mt-3 flex items-center justify-between gap-3">
               <Button variant="outline" size="sm" disabled={httpBusy || !http.token} onClick={() => void rotateToken()}>
                 Rotate token…
               </Button>
-              <label className="mcp-http-docker-toggle">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-foreground">
                 <input
                   type="checkbox"
+                  className="accent-accent"
                   checked={http.dockerAccess}
                   disabled={httpBusy || !!http.settingsError}
                   onChange={(event) => void setDockerAccess(event.target.checked)}
@@ -318,9 +335,9 @@ export function McpClientsPanel() {
                 <span>Enable Docker access</span>
               </label>
             </div>
-            <div className="mcp-http-field">
-              <label htmlFor="mcp-http-docker-port">Docker port</label>
-              <div className="mcp-http-field-controls">
+            <div className="mt-2.5 flex flex-col gap-1">
+              <label htmlFor="mcp-http-docker-port" className="text-xs font-semibold text-muted-foreground">Docker port</label>
+              <div className="flex min-w-0 items-center gap-1.5">
                 <Input
                   id="mcp-http-docker-port"
                   className="flex-1 font-mono text-sm"
@@ -369,24 +386,20 @@ export function McpClientsPanel() {
         )}
       </div>
 
-      <div className="mcp-other">
+      <div className="mt-4.5 flex flex-col gap-2.5">
         <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
           For any other MCP-compatible agent, paste this configuration into its MCP settings:
         </div>
-        <div className="mcp-config-preview">
-          <div className="mcp-config-preview-head">
+        <div className="overflow-hidden rounded-lg border border-border bg-muted">
+          <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">
             MCP configuration
-            <button
-              type="button"
-              className={'mcp-config-copy' + (copied === 'stdio' ? ' copied' : '')}
-              onClick={() => void copyText(config, 'stdio')}
-              title={copied === 'stdio' ? 'Copied' : 'Copy configuration'}
-              aria-label={copied === 'stdio' ? 'Copied' : 'Copy configuration'}
-            >
-              {copied === 'stdio' ? <CheckIcon className="mcp-config-copy-icon" /> : <CopyIcon className="mcp-config-copy-icon" />}
-            </button>
+            <CopyButton
+              copied={copied === 'stdio'}
+              onCopy={() => void copyText(config, 'stdio')}
+              label="configuration"
+            />
           </div>
-          <pre>{config}</pre>
+          <pre className="m-0 max-h-80 overflow-auto p-3 font-mono text-xs whitespace-pre text-foreground">{config}</pre>
         </div>
       </div>
     </div>
@@ -396,9 +409,9 @@ export function McpClientsPanel() {
 function McpHttpField(props: { label: string; value: string; copied: boolean; onCopy(): void }) {
   const id = `mcp-http-${props.label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
-    <div className="mcp-http-field">
-      <label htmlFor={id}>{props.label}</label>
-      <div className="mcp-http-field-controls">
+    <div className="mt-2.5 flex flex-col gap-1">
+      <label htmlFor={id} className="text-xs font-semibold text-muted-foreground">{props.label}</label>
+      <div className="flex min-w-0 items-center gap-1.5">
         <Input id={id} className="flex-1 font-mono text-sm" type="text" readOnly spellCheck={false} value={props.value} />
         <CopyButton copied={props.copied} onCopy={props.onCopy} label={props.label} />
       </div>
@@ -406,18 +419,27 @@ function McpHttpField(props: { label: string; value: string; copied: boolean; on
   );
 }
 
+/** Icon-only copy button (clipboard ↔ accent check — palette is
+ * cyan/amber/red, no green). Sized to match the h-7 Input/Button rows. */
 function CopyButton(props: { copied: boolean; disabled?: boolean; onCopy(): void; label: string }) {
   return (
-    <button
+    <Button
       type="button"
-      className={'mcp-config-copy mcp-http-copy' + (props.copied ? ' copied' : '')}
+      variant="outline"
+      size="icon-sm"
+      className={
+        'flex-none '
+        + (props.copied
+          ? 'border-accent/40 bg-accent/8 text-accent hover:border-accent/40 hover:bg-accent/8 hover:text-accent'
+          : 'text-muted-foreground hover:border-accent hover:text-accent')
+      }
       disabled={props.disabled}
       onClick={props.onCopy}
       title={props.copied ? 'Copied' : `Copy ${props.label}`}
       aria-label={props.copied ? 'Copied' : `Copy ${props.label}`}
     >
-      {props.copied ? <CheckIcon className="mcp-config-copy-icon" /> : <CopyIcon className="mcp-config-copy-icon" />}
-    </button>
+      {props.copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+    </Button>
   );
 }
 

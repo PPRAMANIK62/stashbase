@@ -11,6 +11,9 @@
 import { useRef, useState } from 'react';
 import { api, ApiError, errorMessage, type EmbedderProvider } from '../../api';
 import { ModalShell } from '../ModalShell';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { StatusMessage } from '../ui/status';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string }> = {
   openai: {
@@ -67,7 +70,7 @@ export function RequireApiKeyModal({
       initialFocus={inputRef}
       onCancel={busy ? () => { /* swallow */ } : onLater}
     >
-      <div className="embedder-modal-provider-row" role="radiogroup" aria-label="Embedding provider">
+      <div className="mb-2 inline-flex max-w-full items-center overflow-hidden rounded-md border border-border bg-background" role="radiogroup" aria-label="Embedding provider">
         {PROVIDER_ORDER.map((optionProvider) => {
           const option = PROVIDERS[optionProvider];
           const selected = provider === optionProvider;
@@ -75,7 +78,12 @@ export function RequireApiKeyModal({
             <button
               key={optionProvider}
               type="button"
-              className={`embedder-modal-provider-option${selected ? ' selected' : ''}`}
+              className={
+                'min-h-[30px] cursor-pointer border-0 border-l border-border px-2.75 text-sm '
+                + 'whitespace-nowrap text-foreground transition-colors duration-fast first:border-l-0 '
+                + 'enabled:hover:bg-muted disabled:cursor-default disabled:opacity-60 '
+                + (selected ? 'bg-accent/8 font-semibold' : 'bg-transparent font-medium')
+              }
               role="radio"
               aria-checked={selected}
               disabled={busy}
@@ -90,14 +98,14 @@ export function RequireApiKeyModal({
           );
         })}
       </div>
-      <div className="modal-hint embedder-modal-meta">
+      <div className="mb-2.5 flex flex-wrap gap-x-3 gap-y-1 text-base leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-sm [&_code]:text-accent">
         <span>Model: <code>{PROVIDERS[provider].model}</code></span>
         <span>Stored locally in <code>~/.stashbase/config.json</code></span>
       </div>
-      <input
+      <Input
         ref={inputRef}
         type="password"
-        className="modal-input"
+        className="font-mono text-sm"
         placeholder={PROVIDERS[provider].placeholder}
         autoComplete="off"
         value={key}
@@ -108,20 +116,23 @@ export function RequireApiKeyModal({
           if (e.key === 'Enter') { e.preventDefault(); void submit(); }
         }}
       />
-      {error && <div className="modal-error">{error}</div>}
-      <div className="modal-actions">
-        <button
+      {error && (
+        <StatusMessage tone="error" className="mt-2.5 max-h-[min(180px,32vh)] overflow-y-auto wrap-anywhere">
+          {error}
+        </StatusMessage>
+      )}
+      <div className="mt-3.5 flex justify-end gap-2">
+        <Button
           type="button"
-          className="modal-btn"
+          variant="outline"
           onClick={onLater}
           disabled={busy}
-        >Later</button>
-        <button
+        >Later</Button>
+        <Button
           type="button"
-          className="modal-btn primary"
           onClick={submit}
           disabled={busy}
-        >{busy ? 'Validating…' : 'Save key'}</button>
+        >{busy ? 'Validating…' : 'Save key'}</Button>
       </div>
     </ModalShell>
   );

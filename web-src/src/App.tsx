@@ -407,7 +407,7 @@ function useCompactWorkspace() {
 function HomeChromeButton({ onClick }: { onClick: () => void }) {
   return (
     <DeferredTooltipButton
-      className="icon-btn"
+      className="inline-flex size-7 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-4"
       label="Back to Welcome"
       side="bottom"
       onClick={onClick}

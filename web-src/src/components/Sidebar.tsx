@@ -277,7 +277,7 @@ function FolderMenu() {
       {switchOpen && (
         <ModalShell title="Switch folder" top onCancel={busy ? () => {} : () => setSwitchOpen(false)}>
           {state.recent.length === 0 ? (
-            <p className="modal-hint">No folders found.</p>
+            <p className="mt-0 mb-3.5 text-base leading-normal text-muted-foreground">No folders found.</p>
           ) : (
             <div className="mt-2 mb-3 flex max-h-[260px] flex-col overflow-y-auto rounded-lg border border-border">
               {state.recent.map((folder) => {

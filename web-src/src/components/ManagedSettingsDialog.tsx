@@ -32,7 +32,7 @@ export default function ManagedSettingsDialog({
       }}
     >
       <DialogContent
-        className="modal-card settings-card !max-w-[94vw] !gap-0"
+        className="flex h-[min(78vh,640px)] w-[min(760px,94vw)] !max-w-[94vw] flex-col !gap-0 overflow-hidden border border-border bg-background p-0 shadow-elevation"
         showCloseButton={false}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
