@@ -1,7 +1,9 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FileMeta, KeywordHitFile, KeywordMatch, SearchHit } from '../api';
 import { useApp } from '../store/AppContext';
 import { openSettings } from './SettingsModal';
+import { guiSemanticVisibleCount } from '../store/appContextHelpers';
+import { relevanceRatios } from '../lib/searchRelevance';
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 
 /**
@@ -385,11 +387,48 @@ function SearchResults({ query }: { query: string }) {
   if (!state.searchHits || state.searchHits.length === 0) {
     return <div className="empty-list">No matches</div>;
   }
+  return <SemanticSearchResults hits={state.searchHits} />;
+}
+
+const SEMANTIC_SHOW_MORE_STEP = 8;
+
+/** Ranked semantic hits with a relative relevance bar per hit.
+ *
+ *  Every fetched candidate is kept in state. The strongest slice (the
+ *  relevance knee, via `guiSemanticVisibleCount`) shows first, and the
+ *  remaining already-fetched candidates are revealed in steps with no
+ *  further request. Disclosure resets whenever a new search arrives (a
+ *  fresh `hits` array from a query, scope, type-filter, or mode change),
+ *  and relevance is normalized across the whole fetched set. */
+function SemanticSearchResults({ hits }: { hits: SearchHit[] }) {
+  const [visible, setVisible] = useState(() => guiSemanticVisibleCount(hits));
+  useEffect(() => { setVisible(guiSemanticVisibleCount(hits)); }, [hits]);
+
+  const ratios = relevanceRatios(hits.map((hit) => hit.score));
+  const shown = Math.min(visible, hits.length);
+  const remaining = hits.length - shown;
+
   return (
     <div className="search-hits">
-      {state.searchHits.map((hit, i) => (
-        <SearchHitRow key={`${hit.fileName}#${hit.chunkIndex}#${i}`} hit={hit} />
+      <div className="search-summary">
+        {hits.length === 1
+          ? '1 ranked candidate'
+          : remaining > 0
+            ? `Showing ${shown} of ${hits.length} ranked candidates`
+            : `${hits.length} ranked candidates`}
+      </div>
+      {hits.slice(0, shown).map((hit, i) => (
+        <SearchHitRow key={`${hit.fileName}#${hit.chunkIndex}#${i}`} hit={hit} relevance={ratios[i]} />
       ))}
+      {remaining > 0 && (
+        <button
+          type="button"
+          className="search-show-more"
+          onClick={() => setVisible((current) => current + SEMANTIC_SHOW_MORE_STEP)}
+        >
+          Show {Math.min(remaining, SEMANTIC_SHOW_MORE_STEP)} more
+        </button>
+      )}
     </div>
   );
 }
@@ -492,7 +531,7 @@ function highlightRanges(text: string, ranges: Array<[number, number]>) {
   return <>{parts}</>;
 }
 
-function SearchHitRow({ hit }: { hit: SearchHit }) {
+function SearchHitRow({ hit, relevance }: { hit: SearchHit; relevance?: number }) {
   const { actions } = useApp();
   const fileBasename = hit.fileName.split('/').pop() ?? hit.fileName;
   // No term highlighting on semantic snippets: a semantic hit isn't a
@@ -516,6 +555,11 @@ function SearchHitRow({ hit }: { hit: SearchHit }) {
       <div className="search-hit-snippet">{snippet}</div>
       <div className="search-hit-meta">
         <span className="search-hit-file">{fileBasename}</span>
+        {relevance != null && (
+          <span className="search-hit-relevance" title="Relative match strength" aria-hidden="true">
+            <span className="search-hit-relevance-fill" style={{ width: `${Math.round(relevance * 100)}%` }} />
+          </span>
+        )}
       </div>
     </div>
   );
