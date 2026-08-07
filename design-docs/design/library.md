@@ -49,7 +49,11 @@ to migrate them into a StashBase-specific storage model.
   disk, indexed in place) and New Folder… (created under the default
   StashBase location) through the native picker; a folder row's actions
   menu offers favorite toggling, Open in New Window, and Remove from
-  Library. Users can star folders as Favorites; favorites are library
+  Library. The current folder's header row keeps only its high-frequency
+  actions visible on hover — new note, chat history, and the ⋯ menu; that
+  menu additionally carries the folder's maintenance actions (New
+  Folder…, Sync Folder, Collapse/Expand All) above the shared entries.
+  Users can star folders as Favorites; favorites are library
   metadata stored with the membership list, and starring never touches
   the folder on disk. New Folder creates a plain directory with no chat
   association.
@@ -131,8 +135,9 @@ to migrate them into a StashBase-specific storage model.
   way back in.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
   or project-management surface. It stacks the active folder zone (current
-  folder header and file tree), the Library folder list, and the active
-  Markdown document outline as navigation sections; the Library and outline
+  folder header and file tree), then the active Markdown document outline,
+  with the Library folder list anchored at the bottom — the outline belongs
+  to the working context above the global list. The Library and outline
   sections stay independently collapsible.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.

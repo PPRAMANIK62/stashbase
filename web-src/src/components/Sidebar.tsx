@@ -160,23 +160,26 @@ function FilesPanel() {
       <NewChatButton />
       {/* Explorer sections mirror VS Code's compact disclosure rows. The
         * folder zones and the active document's outline intentionally share
-        * one navigation surface; neither becomes a floating editor companion. */}
-      <LibrarySections />
-      {hasMarkdownDocument && (
-        /* Sections separate by whitespace, not hairlines. When expanded the
-         * outline keeps a guaranteed slice (min-h) even if the sections
-         * above it fill the panel, then grows into whatever is left. */
-        <section className={'mt-3 flex flex-col overflow-hidden ' + (outlineExpanded ? 'min-h-24 flex-[2_1_0%]' : 'min-h-0 flex-none')}>
-          <div className="flex min-h-[30px] items-center justify-between gap-1.5 py-[5px] pr-2 pl-3.5">
-            <button type="button" className={sectionToggleClass} aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
-              <span className={sectionChevronClass + (outlineExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span><span className={sectionTitleClass + ' flex-1'}>Document Outline</span><span className="ml-auto flex-none text-2xs text-muted-foreground">{outline.headings.length}</span>
-            </button>
-          </div>
-          <div id="sidebar-outline-section" className={outlineExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
-            <DocumentOutline headings={outline.headings} activeId={outline.activeId} onSelect={outline.onSelect} />
-          </div>
-        </section>
-      )}
+        * one navigation surface; neither becomes a floating editor
+        * companion. The outline slots between the working tree and the
+        * bottom-anchored Library — it belongs to the open document. */}
+      <LibrarySections>
+        {hasMarkdownDocument && (
+          /* Sections separate by whitespace, not hairlines. When expanded the
+           * outline keeps a guaranteed slice (min-h) even if the sections
+           * above it fill the panel, then grows into whatever is left. */
+          <section className={'mt-3 flex flex-col overflow-hidden ' + (outlineExpanded ? 'min-h-24 flex-[2_1_0%]' : 'min-h-0 flex-none')}>
+            <div className="flex min-h-[30px] items-center justify-between gap-1.5 py-[5px] pr-2 pl-3.5">
+              <button type="button" className={sectionToggleClass} aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
+                <span className={sectionChevronClass + (outlineExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span><span className={sectionTitleClass + ' flex-1'}>Document Outline</span><span className="ml-auto flex-none text-2xs text-muted-foreground">{outline.headings.length}</span>
+              </button>
+            </div>
+            <div id="sidebar-outline-section" className={outlineExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
+              <DocumentOutline headings={outline.headings} activeId={outline.activeId} onSelect={outline.onSelect} />
+            </div>
+          </section>
+        )}
+      </LibrarySections>
     </div>
   );
 }
@@ -464,8 +467,12 @@ function AddFolderMenuButton() {
  *  caps at a fixed height and scrolls internally — a half-row peek at the
  *  cap hints at the overflow. Clicking a row switches this window's folder
  *  in place — the clicked folder moves up into the active zone and the
- *  previous one drops back into the list. */
-function LibrarySections() {
+ *  previous one drops back into the list.
+ *
+ *  `children` (the Document Outline section) slots BETWEEN the two: it
+ *  belongs to the working context above, while Library stays the
+ *  bottom-most global section. */
+function LibrarySections({ children }: { children?: React.ReactNode }) {
   const { state, actions, dispatch } = useApp();
   // Library defaults COLLAPSED while a folder is active (it anchors to
   // the sidebar bottom, out of the way) and expanded when the window has
@@ -734,6 +741,7 @@ function LibrarySections() {
           )}
         </section>
       )}
+      {children}
       {/* LIBRARY sizes to its content too, shrinking (with an internal
         * scroll) only when the panel runs out of room — leftover blank
         * space falls below the last section, never between sections. */}
@@ -843,6 +851,38 @@ function LibrarySections() {
           anchor={{ rect: folderMenu.rect, align: 'right' }}
           minWidth={210}
           items={[
+            // The window's current folder folds its low-frequency
+            // maintenance actions in here — the header row only keeps
+            // new-note, history, and this menu visible, so the folder
+            // name keeps its room.
+            ...(isCurrent(folderMenu.path) ? [
+              {
+                label: 'New Folder…',
+                icon: <NewFolderIcon />,
+                onSelect: () => {
+                  if (state.activeFolder) dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
+                  dispatch({ type: 'NEW_FOLDER_INPUT', open: true });
+                },
+              },
+              {
+                label: 'Sync Folder',
+                icon: <SyncIcon />,
+                detail: 'Re-scan disk for external changes',
+                onSelect: () => { void actions.runSync(); },
+              },
+              state.expanded.size === 0
+                ? {
+                    label: 'Expand All Folders',
+                    icon: <ExpandAllIcon />,
+                    onSelect: () => dispatch({ type: 'EXPAND_ALL_FOLDERS', paths: state.folders.map((f) => f.path) }),
+                  }
+                : {
+                    label: 'Collapse All Folders',
+                    icon: <CollapseAllIcon />,
+                    onSelect: () => dispatch({ type: 'COLLAPSE_ALL_FOLDERS' }),
+                  },
+              { separator: true },
+            ] satisfies MenuItem[] : []),
             {
               label: menuEntry?.favorite ? 'Remove from Favorites' : 'Add to Favorites',
               icon: <StarIcon />,
@@ -1006,14 +1046,11 @@ function ActiveFolderHeader({
           <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
         )}
       </span>
+      {/* Only the high-frequency actions stay on the row — new note,
+        * history, and the ⋯ menu (which carries new-folder / sync /
+        * fold-all for this folder). Six icons here crushed the name. */}
       <div className={menuOpen || historyOpen ? 'flex gap-0.5' : sideActionsClass}>
         <NewNoteButton />
-        <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title={'New folder in ' + (state.activeFolder || name)} onClick={() => {
-          if (state.activeFolder) dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
-          dispatch({ type: 'NEW_FOLDER_INPUT', open: true });
-        }}><NewFolderIcon /></Button>
-        <SyncButton />
-        <FolderFoldToggle />
         {/* This folder's chat sessions — history lives on the scope
           * headers, not in the chat pane. */}
         <ScopeHistoryButton
@@ -1081,71 +1118,3 @@ function NewNoteButton() {
   );
 }
 
-function SyncButton() {
-  const { actions } = useApp();
-  const [tip, setTip] = useState('Re-scan disk for external changes');
-  // Decoupled from `state.syncRunning` so the icon keeps spinning for
-  // a guaranteed minimum even when the sync request resolves in <100ms
-  // (small / already-indexed folders). Without this the click felt
-  // like nothing happened.
-  const [spinning, setSpinning] = useState(false);
-  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => { if (tipTimer.current) clearTimeout(tipTimer.current); }, []);
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      className={'text-muted-foreground' + (spinning ? ' [&_svg]:animate-spin [&_svg]:[animation-duration:700ms]' : '')}
-      title={spinning ? 'Syncing…' : tip}
-      disabled={spinning}
-      onClick={async () => {
-        setSpinning(true);
-        setTip('Syncing…');
-        const minSpin = new Promise((r) => setTimeout(r, 600));
-        let ok = true;
-        try {
-          await Promise.all([actions.runSync(), minSpin]);
-        } catch {
-          ok = false;
-          await minSpin;
-        }
-        setSpinning(false);
-        setTip(ok ? 'Synced' : 'Sync failed');
-        if (tipTimer.current) clearTimeout(tipTimer.current);
-        tipTimer.current = setTimeout(
-          () => setTip('Re-scan disk for external changes'),
-          3000,
-        );
-      }}
-    ><SyncIcon /></Button>
-  );
-}
-
-/** Toggle button: collapse-all when anything is open, expand-all when
- *  everything's already folded. Mirrors VSCode's explorer toolbar
- *  button so a single click always does the "obvious" thing for the
- *  current state. */
-function FolderFoldToggle() {
-  const { state, dispatch } = useApp();
-  const allCollapsed = state.expanded.size === 0;
-  return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      className="text-muted-foreground"
-      title={allCollapsed ? 'Expand all folders' : 'Collapse all folders'}
-      onClick={() => {
-        if (allCollapsed) {
-          dispatch({
-            type: 'EXPAND_ALL_FOLDERS',
-            paths: state.folders.map((f) => f.path),
-          });
-        } else {
-          dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
-        }
-      }}
-    >{allCollapsed ? <ExpandAllIcon /> : <CollapseAllIcon />}</Button>
-  );
-}
