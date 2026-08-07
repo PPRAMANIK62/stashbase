@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   initialState,
+  makeChatTab,
   reducer,
   type ChatTab,
   type State,
@@ -229,6 +230,16 @@ test('chat tab recency survives toggles and is cleaned as tabs close', () => {
   assert.equal(state.activeChatTabId, null);
   assert.equal(state.chatOpen, false);
   assert.deepEqual(state.chatTabRecencyByAgent, {});
+});
+
+test('new chat tabs start blank and AgentView updates keep the flag current', () => {
+  const tab = makeChatTab('codex', []);
+  assert.equal(tab.blank, true);
+  let state = freshState({ chatTabs: [tab], activeChatTabId: tab.id });
+  state = reducer(state, { type: 'CHAT_TAB_SET_BLANK', id: tab.id, blank: false });
+  assert.equal(state.chatTabs[0].blank, false);
+  state = reducer(state, { type: 'CHAT_TAB_SET_BLANK', id: tab.id, blank: true });
+  assert.equal(state.chatTabs[0].blank, true);
 });
 
 test('loading a different folder clears stale search state', () => {

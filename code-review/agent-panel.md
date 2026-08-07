@@ -10,41 +10,84 @@ The built-in Agent panel is one folder-scoped chat surface. It should feel like
 a focused chat when no document is open and a VS Code-style side panel when a
 document is active, not a separate AI workspace.
 
-A session's folder scope is an explicit choice, not an inherited ambient. The
-composer's leftmost pill is a Cursor-style session-folder picker listing the
-library membership (the same source as the sidebar list, favorites pinned);
-it defaults to the window's current folder, and an unbound tab follows the
+A session's scope is an explicit choice, not an inherited ambient, and it is
+typed: `{ kind: 'library' } | { kind: 'folder'; path }` — a missing choice
+is a DEFAULT (the window's current folder when one exists, else the
+library), never a third scope. The composer's leftmost pill is a
+Cursor-style scope picker: a "Library" entry above a separator, then the
+library membership (the same source as the sidebar list, favorites pinned).
+It defaults to the window's current folder, and an unbound tab follows the
 window when that default changes. Once the conversation has content, runs a
 turn, or was resumed, the pill stays visible but locked — a live session is
-never rebound to another folder, and its pane header marks a binding that
-differs from the window's current folder with a muted "in <basename>" note.
-Server-side, the WS connect URL and every session-history route accept an
-optional explicit `folder`; it must validate against library membership
-(`resolveAgentSessionFolder` — reject anything else with an error/400) and
-absence falls back to the window's current folder exactly as before. The
-History menu lists sessions for the tab's currently picked folder, and resume
-carries that folder on the reconnect URL.
+never rebound to another scope, and its pane header marks a binding that
+differs from the window default with a muted note: "in <basename>" for a
+cross-folder chat, "in Library" for a library chat while the window has a
+current folder. The library scope is always called "Library" in UI copy —
+never "Global".
 
-Because every session is folder-pinned, a window-folder switch is NOT a
+Server-side, the WS connect URL and every session-history route accept an
+optional explicit scope — `folder=<abs>` (membership-validated) or
+`scope=library`; anything else, including combining the two, is rejected
+with an error/400 (`resolveAgentSessionScope`). Absence falls back to the
+window's current folder when one exists, else the library
+(`resolveSessionBinding`). A library-scoped session runs with cwd = the
+folder home (`getFolderHome()`) — the reserved library cwd. Both runtimes'
+native history stores key sessions by cwd, so library-scoped history
+persists under that reserved cwd, never under any member folder, and lists
+via the sessions routes with `scope=library`. Library-scoped sessions do
+not write `AGENTS.md`/`CLAUDE.md` bridge files (those belong to member
+folders), and their preamble states that the whole library is in scope with
+`search_library` as the retrieval path. Caveat: if the user adds the folder
+home itself as a library folder, that folder's history and the library
+history coincide (same cwd). The History menu lists sessions for the tab's
+currently picked scope, and resume carries that scope on the reconnect URL.
+
+Because every session is scope-pinned, a window-folder switch is NOT a
 teardown trigger: chat tabs and their running sessions survive the switch,
 transcripts (including queued prompts and failed-turn notices) untouched.
-Bound tabs keep their binding and the "in <basename>" header note; an
-unbound tab that is still empty (no transcript, no queued prompt, no active
-turn, no explicit pick, not resumed) follows the window by reconnecting its
-next session to the new folder. Session teardown happens only on: native
-window close/retire (`onClose` → `stopAgentRuntime` per window), library
-folder removal (`stopAgentRuntimeForFolder` ends every session BOUND to the
-removed folder across all windows, plus the window-close path for windows
-currently showing it), and the app-quit cleanup ladder. The renderer
-mirrors this: a folder switch keeps `chatTabs` (see
+Bound tabs keep their binding and the cross-scope header note. What happens
+to each tab on a switch is a three-way plan (`windowFolderSwitchPlan`):
+
+- **follow** — a COMPLETELY BLANK tab (no transcript, no queued prompt, no
+  active turn, no explicit pick, not resumed, no draft text, no
+  attachments) follows the window by reconnecting its next session to the
+  new window default.
+- **freeze** — a tab that would follow but holds unsent draft text or
+  attachments instead promotes its connected scope to an explicit pick:
+  the draft keeps the scope the user saw, and neither this nor a later
+  switch (or reconnect) can silently rebind it. The composer lifts draft
+  presence into the tab model for this (and for the blank flag below).
+- **keep** — everything else keeps its binding untouched.
+
+The blank definition above is THE blank-tab rule (`isBlankChatTab`), and
+each tab's AgentView mirrors it into `ChatTab.blank`. The sidebar's New
+Chat button and the window-folder switch both consume it through
+`blankTabToReuse`: reuse a blank tab (preferring the preferred agent's)
+as the welcome tab, else create a new tab and make it active. On a folder
+switch this must not change panel visibility; only the no-tabs
+folder-open path opens the panel with its one fresh tab.
+
+Session teardown happens only on: native window close/retire (`onClose` →
+`stopAgentRuntime` per window — this includes library-scoped sessions),
+library folder removal (`stopAgentRuntimeForFolder` ends every session
+BOUND to the removed folder across all windows, plus the window-close path
+for windows currently showing it — library-scoped sessions report no bound
+folder and MUST survive any folder removal), and the app-quit cleanup
+ladder. The renderer mirrors this: a folder switch keeps `chatTabs` (see
 `folderScopedResetActions('switch')`), while losing the window's folder
-context (removal, another window closing it) still resets them; the
-one-fresh-chat-tab-on-folder-open behavior only fires when the window has
-no chat tabs at all.
+context (removal, another window closing it) still resets them. The chat
+panel renders without a window folder too — a no-folder window can hold
+library-scoped chats (the acceptance behavior: with no folder selected the
+user can still ask across the whole library, and switching folders yields
+a fresh working entry point without losing or silently rebinding any
+existing work).
 
 Cross-folder tabs stay scoped to their session folder end to end: `@`
 mention ranking and folder-file attachment validation use the session
-folder's listing (`GET /api/files?folder=` — membership-validated),
+folder's listing (`GET /api/files?folder=` — membership-validated).
+Library-scoped tabs have no single folder listing, so `@` mentions and
+sidebar-file attachments are disabled there (retrieval goes through
+`search_library`; transient OS-file attachments still work),
 `agent-context-file` resolution passes the session folder (the route is
 folder-explicit: it takes an absolute member path and validates membership),
 and turn-end/tool reconcile syncs the session's folder without reloading the
@@ -102,9 +145,9 @@ typography plus the One-Dark tool/diff palette, the `@`-mention popup
 and the CodeMirror-owned composer input DOM. `.agent-view` stays a class-name
 routing hook for the global drag-drop handler. Composer pill triggers are
 labelled controls: each carries a leading icon and an accessible name
-("Session folder", "Model", "Permission mode", "Reasoning effort"; the locked
-folder pill reads "Session folder: X — set for this conversation"), and a
-default-valued model
+("Session folder" / "Session scope: Library", "Model", "Permission mode",
+"Reasoning effort"; the locked scope pill appends "— set for this
+conversation"), and a default-valued model
 or effort pill renders "<Control>: Default" so adjacent Defaults cannot be
 confused. An empty chat centers the composer as the hero layout: the
 composer swaps its `agent-composer` width hook for the hero column while

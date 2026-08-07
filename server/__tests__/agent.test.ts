@@ -8,6 +8,18 @@ import {
   claudeSkillPrompt,
   selectClaudeModel,
 } from '../agent.ts';
+import { buildStashbasePreamble } from '../agent-preamble.ts';
+
+test('the preamble orients folder sessions to their folder and library sessions to the whole library', () => {
+  const folder = buildStashbasePreamble('/Users/me/Projects/Research');
+  assert.match(folder, /Current folder: \*\*Research\*\*/);
+
+  const library = buildStashbasePreamble('/Users/me/Documents/StashBase', 'library');
+  assert.match(library, /library-wide/);
+  assert.match(library, /whole library is in scope/);
+  assert.match(library, /search_library/);
+  assert.doesNotMatch(library, /Current folder:/);
+});
 
 test('Claude adapter preserves supported Shared Agent Contract access modes', () => {
   assert.equal(claudePermissionMode('default'), 'default');

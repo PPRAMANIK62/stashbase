@@ -5,6 +5,7 @@ import { EditIcon, HistoryIcon, TrashIcon } from '../../icons';
 import { cn } from '../../lib/utils';
 import { buttonVariants } from '../ui/button';
 import { Input } from '../ui/input';
+import { scopeRequestParams, type ChatScope } from './folderState';
 import { iconGhostButtonClass } from './panelStyles';
 import type { AgentKind } from './types';
 
@@ -20,14 +21,14 @@ function relTime(ms: number): string {
 }
 
 export function AgentHistoryMenu({
-  open, currentSessionId, agent, folder, onToggle, onClose, onResume, onActiveDeleted,
+  open, currentSessionId, agent, scope, onToggle, onClose, onResume, onActiveDeleted,
 }: {
   open: boolean;
   currentSessionId: string | null;
   agent: AgentKind;
-  /** The tab's currently picked session folder: history lists that
-   *  folder's sessions, so picking folder X shows X's conversations. */
-  folder?: string;
+  /** The tab's currently picked session scope: history lists that scope's
+   *  sessions — a folder's conversations, or the library-wide ones. */
+  scope: ChatScope;
   onToggle: () => void;
   onClose: () => void;
   onResume: (id: string) => void;
@@ -44,7 +45,7 @@ export function AgentHistoryMenu({
   async function refresh() {
     setLoading(true);
     setLoadError(false);
-    try { setSessions(await api.listSessions(agent, folder)); }
+    try { setSessions(await api.listSessions(agent, scopeRequestParams(scope))); }
     catch { setSessions([]); setLoadError(true); }
     finally { setLoading(false); }
   }
@@ -52,7 +53,8 @@ export function AgentHistoryMenu({
   useEffect(() => {
     if (open) { void refresh(); }
     else { setQ(''); setEditingId(null); }
-  }, [open, agent, folder]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh reads the latest scope
+  }, [open, agent, scope.kind, scope.kind === 'folder' ? scope.path : '']);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -64,13 +66,13 @@ export function AgentHistoryMenu({
     setEditingId(null);
     if (!title) return;
     try {
-      const updated = await api.renameSession(id, title, agent, folder);
+      const updated = await api.renameSession(id, title, agent, scopeRequestParams(scope));
       setSessions((ss) => ss.map((s) => (s.id === id ? updated : s)));
     } catch { /* leave list as-is */ }
   }
 
   async function remove(id: string): Promise<boolean> {
-    try { await api.deleteSession(id, agent, folder); }
+    try { await api.deleteSession(id, agent, scopeRequestParams(scope)); }
     catch {
       setDeleteError('Could not delete this session. Try again.');
       return false;

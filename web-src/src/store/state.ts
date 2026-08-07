@@ -56,6 +56,11 @@ export interface ChatTab {
   /** Display name in the tab strip. Default: `"Untitled"` (plus a
    *  `" N"` suffix on duplicates). */
   title: string;
+  /** True while the tab is COMPLETELY blank: no transcript, no active
+   *  turn, not resumed, no picked scope override, no draft text, and no
+   *  attachments. Maintained by the tab's AgentView; a blank tab is the
+   *  reusable welcome tab for New Chat and window-folder switches. */
+  blank?: boolean;
 }
 
 export interface OpenFile {
@@ -443,6 +448,9 @@ export type Action =
   | { type: 'CHAT_TAB_CLOSE'; id: string }
   | { type: 'CHAT_TAB_ACTIVATE'; id: string }
   | { type: 'CHAT_TAB_RENAME'; id: string; title: string }
+  /** AgentView reports whether its tab is completely blank (reusable as a
+   *  welcome tab). See `ChatTab.blank`. */
+  | { type: 'CHAT_TAB_SET_BLANK'; id: string; blank: boolean }
   | { type: 'CHAT_TABS_RESET' }
   | { type: 'ACTIVE_FOLDER'; path: string }
   /** Move the sidebar's single focus to `path`. Pure visual highlight

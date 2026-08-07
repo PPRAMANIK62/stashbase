@@ -12,6 +12,7 @@ import {
   disposeSessionsBoundToFolder,
   isAgentAccessMode,
   reportAgentRuntimeFailure,
+  resolveSessionBinding,
   type AgentAccessMode,
   type AgentModel,
   type AgentSkill,
@@ -38,7 +39,7 @@ import {
   type ThreadItem,
 } from './codex-protocol.ts';
 import { CodexRpcPeer } from './codex-rpc-transport.ts';
-import { getCurrentFolder, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, getFolderHome, runWithWindowId } from './folder.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
 import { errorMessage, logger } from './log.ts';
 import { noteTreeChanged } from './watcher.ts';
@@ -87,10 +88,17 @@ export class CodexSession {
 
   readonly windowId: string;
 
+  /** True for a library-wide session: cwd is the folder home and the
+   * session is NOT bound to any member folder — member-folder removal
+   * never tears it down (window close / app quit still do). */
+  private libraryScoped = false;
+
   /** The member folder this session is (or will be) bound to. `cwd` is the
    * authoritative binding once the session started; before that, the explicit
-   * connect-time folder is the best answer. */
+   * connect-time folder is the best answer. A library-scoped session is
+   * bound to no member folder and reports null. */
   boundFolder(): string | null {
+    if (this.libraryScoped || this.scope === 'library') return null;
     return this.cwd ?? this.folder ?? null;
   }
 
@@ -101,9 +109,12 @@ export class CodexSession {
     resume?: string,
     private accessMode?: AgentAccessMode,
     private model?: string,
-    /** Explicit, membership-validated session folder. Undefined follows the
-     *  window's current folder at connect time (legacy clients). */
+    /** Explicit, membership-validated session folder. Undefined with no
+     *  library scope follows the window's current folder at connect time
+     *  (legacy clients), else the library. */
     private folder?: string,
+    /** Explicit library-wide scope (`scope=library` on the connect URL). */
+    private scope?: 'library',
     private onDispose?: (session: CodexSession) => void,
     private spawnProcess: typeof spawnCodexAppServerProcess = spawnCodexAppServerProcess,
   ) {
@@ -120,15 +131,20 @@ export class CodexSession {
 
   private async start(): Promise<void> {
     if (this.closed) return;
-    // An explicit folder pins the session; otherwise the session binds the
-    // window's current folder — either way the binding never changes later.
-    const cwd = this.folder ?? getCurrentFolder();
-    if (!cwd) {
-      this.send({ t: 'error', message: 'No folder open.' });
-      this.finish();
-      return;
-    }
-    if (ensureAgentsFile(cwd)) noteTreeChanged();
+    // An explicit folder pins the session; an explicit library scope (or
+    // no folder anywhere) binds the folder home as the reserved library
+    // cwd — either way the binding never changes later.
+    const binding = resolveSessionBinding({
+      scope: this.scope,
+      folder: this.folder,
+      currentFolder: getCurrentFolder(),
+      folderHome: getFolderHome(),
+    });
+    const cwd = binding.cwd;
+    this.libraryScoped = binding.libraryScoped;
+    // Instruction files belong to member folders; a library-wide session
+    // must not write them into the folder home container.
+    if (!this.libraryScoped && ensureAgentsFile(cwd)) noteTreeChanged();
     this.cwd = cwd;
     // Model choice belongs to the first turn, so publish the native catalog
     // before the renderer enables its composer. Otherwise a fresh Codex chat
@@ -433,7 +449,7 @@ export class CodexSession {
       approvalPolicy: access.approvalPolicy,
       approvalsReviewer: access.approvalsReviewer,
       sandbox: access.sandbox,
-      developerInstructions: buildStashbasePreamble(this.cwd),
+      developerInstructions: buildStashbasePreamble(this.cwd, this.libraryScoped ? 'library' : 'folder'),
     };
     const result = await this.request(
       this.resumeThreadId ? 'thread/resume' : 'thread/start',
@@ -915,8 +931,8 @@ function titleFromPrompt(prompt: string): string {
 
 const sessions = new Set<CodexSession>();
 
-export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string): void {
-  const session = new CodexSession(ws, windowId, effort, resume, access, model, folder, (s) => sessions.delete(s));
+export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string, scope?: 'library'): void {
+  const session = new CodexSession(ws, windowId, effort, resume, access, model, folder, scope, (s) => sessions.delete(s));
   sessions.add(session);
   session.begin();
 }

@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, ListBox, ListBoxItem, Menu, MenuItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
   ArrowUpIcon, BoltIcon, BotIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
-  FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
+  FileGenericIcon, FolderIcon, HandIcon, LibraryIcon, PlusIcon, StopIcon,
 } from '../../icons';
 import { cn } from '../../lib/utils';
 import type { FileMeta, FolderMeta } from '../../api';
@@ -17,7 +17,16 @@ import {
 } from '../ui/menu';
 import { baseName } from './attachments';
 import { changedEffortSelection, effortLabel, effortMenuState, effortOptions } from './effortMenuState';
-import { folderDisplayName, folderPillAriaLabel, shortenFolderPath, type LibraryFolderOption } from './folderState';
+import {
+  folderDisplayName,
+  folderScope,
+  LIBRARY_SCOPE,
+  scopeDisplayName,
+  scopePillAriaLabel,
+  shortenFolderPath,
+  type ChatScope,
+  type LibraryFolderOption,
+} from './folderState';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import {
@@ -242,43 +251,56 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
   );
 }
 
-/** Cursor-style session-folder picker. A new session binds the picked
- * library folder (default: the window's current folder); once the chat has
- * content the pill stays visible but locked — a conversation never rebinds.
- * Same shared Base UI menu adapter as the model pill. */
-function FolderMenu({ folder, entries, homeDir, locked, disabled, onSetFolder }: {
-  folder: string;
+/** Cursor-style session-scope picker. A new session binds the picked
+ * scope — a library folder, or "Library" for a library-wide chat
+ * (default: the window's current folder, else Library); once the chat has
+ * content the pill stays visible but locked — a conversation never
+ * rebinds. Same shared Base UI menu adapter as the model pill. */
+function ScopeMenu({ scope, entries, homeDir, locked, disabled, onSetScope }: {
+  scope: ChatScope;
   entries: LibraryFolderOption[];
   homeDir: string;
   locked: boolean;
   disabled: boolean;
-  onSetFolder: (path: string) => void;
+  onSetScope: (scope: ChatScope) => void;
 }) {
-  const name = folderDisplayName(folder);
-  const label = folderPillAriaLabel(name, locked);
+  const name = scopeDisplayName(scope);
+  const label = scopePillAriaLabel(scope, locked);
+  const isLibrary = scope.kind === 'library';
   return (
     <SharedMenu>
       <SharedMenuTrigger
         className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
         disabled={disabled || locked}
         aria-label={label}
-        title={`Session folder — ${shortenFolderPath(folder, homeDir)}`}
+        title={isLibrary
+          ? 'Session scope — the whole library'
+          : `Session folder — ${shortenFolderPath(scope.path, homeDir)}`}
       >
-        <FolderIcon className={pillIconClass} />
+        {isLibrary ? <LibraryIcon className={pillIconClass} /> : <FolderIcon className={pillIconClass} />}
         <span className="truncate">{name}</span>
         <ChevronDownIcon className={pillChevronClass} />
       </SharedMenuTrigger>
       <SharedMenuPortal>
         <SharedMenuPositioner side="top" align="start" sideOffset={6} collisionPadding={8}>
-          <SharedMenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label="Session folder">
-            <div className={menuHeadClass}><span className="font-semibold text-foreground">Session folder</span></div>
-            {entries.map((entry) => (
-              <SharedMenuItem key={entry.path} label={folderDisplayName(entry.path)} className={cn(optClass, folder === entry.path && optActiveClass)} onClick={() => onSetFolder(entry.path)}>
-              <FolderIcon className={optIconClass} />
-              <span className={optTextClass}><span className={optTitleClass}>{folderDisplayName(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
-              {folder === entry.path && <CheckIcon className={optCheckClass} />}
-              </SharedMenuItem>
-            ))}
+          <SharedMenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label="Session scope">
+            <div className={menuHeadClass}><span className="font-semibold text-foreground">Session scope</span></div>
+            <SharedMenuItem label="Library" className={cn(optClass, isLibrary && optActiveClass)} onClick={() => onSetScope(LIBRARY_SCOPE)}>
+            <LibraryIcon className={optIconClass} />
+            <span className={optTextClass}><span className={optTitleClass}>Library</span><span className={optDescClass}>Chat across your whole library</span></span>
+            {isLibrary && <CheckIcon className={optCheckClass} />}
+            </SharedMenuItem>
+            {entries.length > 0 && <div className="mx-2 my-1 border-t border-border" role="separator" />}
+            {entries.map((entry) => {
+              const active = scope.kind === 'folder' && scope.path === entry.path;
+              return (
+                <SharedMenuItem key={entry.path} label={folderDisplayName(entry.path)} className={cn(optClass, active && optActiveClass)} onClick={() => onSetScope(folderScope(entry.path))}>
+                <FolderIcon className={optIconClass} />
+                <span className={optTextClass}><span className={optTitleClass}>{folderDisplayName(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
+                {active && <CheckIcon className={optCheckClass} />}
+                </SharedMenuItem>
+              );
+            })}
           </SharedMenuPopup>
         </SharedMenuPositioner>
       </SharedMenuPortal>
@@ -288,7 +310,7 @@ function FolderMenu({ folder, entries, homeDir, locked, disabled, onSetFolder }:
 
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionFolder, folderEntries, folderLocked, folderHomeDir, showFolderMenu, onSetFolder, mentionFiles, mentionFolders, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionScope, folderEntries, folderLocked, folderHomeDir, onSetScope, onDraftChange, mentionFiles, mentionFolders, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -307,16 +329,19 @@ export function AgentComposer({
   modelNotice: string | null;
   resumedSession: boolean;
   onSetModel: (model?: string) => void;
-  /** The folder this tab's session is (or will be) bound to. */
-  sessionFolder: string;
+  /** The scope this tab's session is (or will be) bound to. */
+  sessionScope: ChatScope;
   folderEntries: LibraryFolderOption[];
   folderLocked: boolean;
   folderHomeDir: string;
-  showFolderMenu: boolean;
-  onSetFolder: (path: string) => void;
+  onSetScope: (scope: ChatScope) => void;
+  /** Reports whether the composer holds unsent draft text, so the tab
+   * model can freeze a drafted tab's scope and exclude it from blank-tab
+   * reuse. */
+  onDraftChange?: (hasText: boolean) => void;
   /** File/folder listing that feeds `@` mention ranking. For a tab bound to
    * another library folder this is the SESSION folder's listing, not the
-   * window's. */
+   * window's; empty for a library-wide chat (mentions disabled there). */
   mentionFiles: FileMeta[];
   mentionFolders: FolderMeta[];
   skills: AgentSkill[];
@@ -514,7 +539,12 @@ export function AgentComposer({
           ref={composerRef}
           placeholder={placeholder}
           disabled={disabled}
-          onChange={setText}
+          onChange={(next) => {
+            setText(next);
+            // Lift draft presence to the tab model: unsent text freezes the
+            // tab's scope and disqualifies it from blank-tab reuse.
+            onDraftChange?.(Boolean(next.trim()));
+          }}
           onMentionChange={(next) => {
             setMention(next);
             setActiveMentionIndex(0);
@@ -562,16 +592,14 @@ export function AgentComposer({
             <PlusIcon />
           </Button>
           <span className="flex-1" />
-          {showFolderMenu && (
-            <FolderMenu
-              folder={sessionFolder}
-              entries={folderEntries}
-              homeDir={folderHomeDir}
-              locked={folderLocked}
-              disabled={disabled}
-              onSetFolder={onSetFolder}
-            />
-          )}
+          <ScopeMenu
+            scope={sessionScope}
+            entries={folderEntries}
+            homeDir={folderHomeDir}
+            locked={folderLocked}
+            disabled={disabled}
+            onSetScope={onSetScope}
+          />
           {showModelMenu && <ModelMenu selectedModel={selectedModel} activeModel={activeModel} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
           {showModeMenu && (
             <AccessMenu

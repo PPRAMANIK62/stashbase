@@ -9,19 +9,31 @@ client of StashBase context, not a separate AI workspace.
 
 - Users can work with supported Agent runtimes in separate chats and restore
   prior chat history.
+- Every chat has an explicit scope: one library folder, or the whole
+  library ("Library"). With no folder selected, users can still ask across
+  the whole library — a library chat searches all folders, runs against no
+  single folder, and keeps its own history separate from any folder's.
+- A New Chat button at the top of the sidebar (above the Library list)
+  opens the chat panel on a chat scoped to the window's current folder —
+  or to the Library when no folder is current. It reuses a completely
+  blank chat when one exists instead of stacking empty tabs.
 - Opening a folder starts a fresh chat with the user's last selected Agent
   when the window has no chats yet. Codex is the default until the user
   explicitly selects another Agent. An unavailable preferred runtime remains
   a visible setup state; StashBase does not silently substitute another
   runtime.
 - Chats survive switching the window's folder: every chat is pinned to its
-  own library folder, so changing the sidebar's current folder keeps the
-  open chat tabs and their running sessions intact. A chat whose folder
-  differs from the window keeps working against its own folder — mentions,
-  attachments, and context resolve there — while a not-yet-started empty
-  chat simply follows the window to the new folder. Chats end when their
-  window closes, when their folder is removed from the library, or on app
-  quit.
+  own scope, so changing the sidebar's current folder keeps the open chat
+  tabs and their running sessions intact. A chat whose scope differs from
+  the window keeps working against its own scope — mentions, attachments,
+  and context resolve there. Switching folders activates a welcome chat
+  for the new folder: a completely blank chat is reused (it follows the
+  window's folder), otherwise a new chat appears — no existing work is
+  ever lost or silently rebound. A chat with unsent draft text or
+  attachments keeps the scope the user saw instead of following the
+  window. Folder chats end when their window closes, when their folder is
+  removed from the library, or on app quit; library chats end only with
+  their window or on app quit — removing a folder never ends them.
 - With no document open, Chat fills the workspace beside the Files sidebar.
   Opening a file, search result, local response link, artifact, or new note
   moves the same mounted chat into the side panel. Closing the last document
@@ -48,17 +60,22 @@ client of StashBase context, not a separate AI workspace.
   or the session ends or fails — the composer returns to the bottom of the
   transcript. While a session connects, the panel shows a small spinner with
   muted text instead of bare copy.
-- Each chat is scoped to an explicitly chosen library folder. The composer's
-  leftmost pill is a folder picker (folder name plus shortened path detail)
-  listing every library folder with favorites pinned, defaulting to the
-  window's current folder; a tab without a started session follows that
-  default. Once the chat has content or is resumed the pill stays visible but
-  locked — a conversation never moves to another folder — and resumed chats
-  show their own folder. When a chat's folder differs from the window's
-  current folder, the pane header adds a muted "in <folder>" note so
-  cross-folder chats stay legible. The History menu lists sessions for the
-  currently picked folder, and `@` mentions plus sidebar-file attachments
-  offer the chat's own folder — not the window's — for cross-folder chats.
+- Each chat is scoped to an explicitly chosen library folder or to the
+  whole library. The composer's leftmost pill is a scope picker: a
+  "Library" entry above the folder list (every library folder with
+  favorites pinned, name plus shortened path detail), defaulting to the
+  window's current folder — or to Library when none is current; a tab
+  without a started session follows that default. Once the chat has
+  content or is resumed the pill stays visible but locked — a conversation
+  never moves to another scope — and resumed chats show their own scope.
+  When a chat's binding differs from what the window shows, the pane
+  header adds a muted note — "in <folder>" for a cross-folder chat, "in
+  Library" for a library chat while a folder is open — so cross-scope
+  chats stay legible. The History menu lists sessions for the currently
+  picked scope. `@` mentions plus sidebar-file attachments offer the
+  chat's own folder — not the window's — for cross-folder chats, and are
+  unavailable in library chats (which retrieve through library search;
+  uploaded files still attach).
 - The composer's model, permission-mode, and reasoning-effort controls are
   compact labelled pills, each with a leading icon and an accessible name.
   A default-valued model or effort pill reads "Model: Default" /

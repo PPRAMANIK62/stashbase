@@ -1,16 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { agentConnectionUrl } from '../components/agent/connectionUrl.ts';
 import {
-  crossFolderListingRoot,
+  blankTabToReuse,
+  chatScopePill,
+  chatScopesEqual,
   folderDisplayName,
   folderMenuEntries,
   folderMenuLocked,
-  folderMenuVisible,
-  folderPillAriaLabel,
-  folderPillFolder,
-  nextSessionFolder,
+  folderScope,
+  isBlankChatTab,
+  LIBRARY_SCOPE,
+  mentionListingPlan,
+  newChatScope,
+  nextSessionScope,
+  scopeDisplayName,
+  scopeHeaderNote,
+  scopePillAriaLabel,
+  scopeRequestParams,
   shortenFolderPath,
   shouldFollowWindowFolder,
+  windowFolderSwitchPlan,
 } from '../components/agent/folderState.ts';
 
 const recent = [
@@ -30,39 +40,68 @@ test('folder menu lists library membership with favorites pinned and the window 
 
   const withMissingCurrent = folderMenuEntries(recent, '/Users/me/Elsewhere');
   assert.equal(withMissingCurrent[0].path, '/Users/me/Elsewhere');
-
-  assert.equal(folderMenuVisible(entries), true);
-  assert.equal(folderMenuVisible(folderMenuEntries([], '')), false);
 });
 
-test('an unbound tab follows the window folder until the user picks one', () => {
-  assert.equal(nextSessionFolder(undefined, '/Users/me/Documents/StashBase/Notes', members), '/Users/me/Documents/StashBase/Notes');
-  // Explicit pick wins over the window folder.
-  assert.equal(nextSessionFolder('/tmp/scratch', '/Users/me/Documents/StashBase/Notes', members), '/tmp/scratch');
+test('scope resolution: explicit pick wins, else window folder, else library', () => {
+  // No pick → the window's current folder.
+  assert.deepEqual(
+    nextSessionScope(undefined, '/Users/me/Documents/StashBase/Notes', members),
+    folderScope('/Users/me/Documents/StashBase/Notes'),
+  );
+  // Explicit folder pick wins over the window folder.
+  assert.deepEqual(
+    nextSessionScope(folderScope('/tmp/scratch'), '/Users/me/Documents/StashBase/Notes', members),
+    folderScope('/tmp/scratch'),
+  );
+  // Explicit Library pick wins even with a folder open.
+  assert.deepEqual(
+    nextSessionScope(LIBRARY_SCOPE, '/Users/me/Documents/StashBase/Notes', members),
+    LIBRARY_SCOPE,
+  );
+  // No pick, no window folder → library-wide.
+  assert.deepEqual(nextSessionScope(undefined, '', members), LIBRARY_SCOPE);
   // A window switch moves the default with it when nothing was picked.
-  assert.equal(nextSessionFolder(undefined, '/Users/me/Projects/Research', members), '/Users/me/Projects/Research');
+  assert.deepEqual(
+    nextSessionScope(undefined, '/Users/me/Projects/Research', members),
+    folderScope('/Users/me/Projects/Research'),
+  );
+  // New Chat entry point resolves the same defaults.
+  assert.deepEqual(newChatScope('/tmp/scratch'), folderScope('/tmp/scratch'));
+  assert.deepEqual(newChatScope(''), LIBRARY_SCOPE);
 });
 
-test('a pick that left library membership falls back to the window folder', () => {
-  assert.equal(nextSessionFolder('/gone/removed-folder', '/Users/me/Projects/Research', members), '/Users/me/Projects/Research');
+test('a folder pick that left library membership falls back to the window default', () => {
+  assert.deepEqual(
+    nextSessionScope(folderScope('/gone/removed-folder'), '/Users/me/Projects/Research', members),
+    folderScope('/Users/me/Projects/Research'),
+  );
+  assert.deepEqual(nextSessionScope(folderScope('/gone/removed-folder'), '', members), LIBRARY_SCOPE);
 });
 
 test('a connected session keeps its binding regardless of later window switches', () => {
-  const bound = folderPillFolder({
-    connectedFolder: '/tmp/scratch',
+  const bound = chatScopePill({
+    connectedScope: folderScope('/tmp/scratch'),
     picked: undefined,
     windowFolder: '/Users/me/Projects/Research',
     memberPaths: members,
   });
-  assert.equal(bound, '/tmp/scratch');
+  assert.deepEqual(bound, folderScope('/tmp/scratch'));
 
-  const unbound = folderPillFolder({
-    connectedFolder: null,
+  const libraryBound = chatScopePill({
+    connectedScope: LIBRARY_SCOPE,
     picked: undefined,
     windowFolder: '/Users/me/Projects/Research',
     memberPaths: members,
   });
-  assert.equal(unbound, '/Users/me/Projects/Research');
+  assert.deepEqual(libraryBound, LIBRARY_SCOPE);
+
+  const unbound = chatScopePill({
+    connectedScope: null,
+    picked: undefined,
+    windowFolder: '/Users/me/Projects/Research',
+    memberPaths: members,
+  });
+  assert.deepEqual(unbound, folderScope('/Users/me/Projects/Research'));
 });
 
 test('the pill locks once the conversation has content, a turn runs, or the session is resumed', () => {
@@ -72,43 +111,153 @@ test('the pill locks once the conversation has content, a turn runs, or the sess
   assert.equal(folderMenuLocked(false, false, true), true);
 });
 
-test('only an unbound, empty, idle tab follows a window folder switch', () => {
+test('only an unbound, empty, idle, draft-free tab follows a window folder switch', () => {
   const base = {
-    connectedFolder: '/tmp/scratch',
+    connectedScope: folderScope('/tmp/scratch'),
     picked: undefined,
     resumedSession: false,
     hasContent: false,
     turnActive: false,
+    hasDraft: false,
     windowFolder: '/Users/me/Projects/Research',
   };
   assert.equal(shouldFollowWindowFolder(base), true);
+  assert.equal(windowFolderSwitchPlan(base), 'follow');
+  // A library-connected unpicked blank tab follows too once a folder opens.
+  assert.equal(windowFolderSwitchPlan({ ...base, connectedScope: LIBRARY_SCOPE }), 'follow');
   // Same folder → nothing to follow.
-  assert.equal(shouldFollowWindowFolder({ ...base, windowFolder: '/tmp/scratch' }), false);
+  assert.equal(windowFolderSwitchPlan({ ...base, windowFolder: '/tmp/scratch' }), 'keep');
   // A conversation with content, a running turn, an explicit pick, or a
   // resumed session never rebinds.
-  assert.equal(shouldFollowWindowFolder({ ...base, hasContent: true }), false);
-  assert.equal(shouldFollowWindowFolder({ ...base, turnActive: true }), false);
-  assert.equal(shouldFollowWindowFolder({ ...base, picked: '/tmp/scratch' }), false);
-  assert.equal(shouldFollowWindowFolder({ ...base, resumedSession: true }), false);
+  assert.equal(windowFolderSwitchPlan({ ...base, hasContent: true }), 'keep');
+  assert.equal(windowFolderSwitchPlan({ ...base, turnActive: true }), 'keep');
+  assert.equal(windowFolderSwitchPlan({ ...base, picked: folderScope('/tmp/scratch') }), 'keep');
+  assert.equal(windowFolderSwitchPlan({ ...base, picked: LIBRARY_SCOPE }), 'keep');
+  assert.equal(windowFolderSwitchPlan({ ...base, resumedSession: true }), 'keep');
   // No live binding yet, or no window folder → the next connect handles it.
-  assert.equal(shouldFollowWindowFolder({ ...base, connectedFolder: null }), false);
-  assert.equal(shouldFollowWindowFolder({ ...base, windowFolder: '' }), false);
+  assert.equal(windowFolderSwitchPlan({ ...base, connectedScope: null }), 'keep');
+  assert.equal(windowFolderSwitchPlan({ ...base, windowFolder: '' }), 'keep');
 });
 
-test('mention/attachment scoping uses the session folder only when it differs from the window', () => {
-  assert.equal(crossFolderListingRoot('/tmp/scratch', '/Users/me/Projects/Research'), '/tmp/scratch');
-  assert.equal(crossFolderListingRoot('/tmp/scratch', '/tmp/scratch'), null);
-  assert.equal(crossFolderListingRoot(null, '/Users/me/Projects/Research'), null);
-  assert.equal(crossFolderListingRoot('/tmp/scratch', ''), null);
+test('a draft freezes the tab scope instead of following the window', () => {
+  const base = {
+    connectedScope: folderScope('/tmp/scratch'),
+    picked: undefined,
+    resumedSession: false,
+    hasContent: false,
+    turnActive: false,
+    hasDraft: true,
+    windowFolder: '/Users/me/Projects/Research',
+  };
+  // Draft text or attachments: never silently rebind — freeze instead.
+  assert.equal(windowFolderSwitchPlan(base), 'freeze');
+  assert.equal(shouldFollowWindowFolder(base), false);
+  // A drafted library chat freezes at Library the same way.
+  assert.equal(windowFolderSwitchPlan({ ...base, connectedScope: LIBRARY_SCOPE }), 'freeze');
+  // A draft on an already-matching binding has nothing to freeze.
+  assert.equal(windowFolderSwitchPlan({ ...base, windowFolder: '/tmp/scratch' }), 'keep');
 });
 
-test('pill labels expose the binding and its locked state', () => {
+test('a tab is blank only with no content, turn, resume, pick, draft, or attachments', () => {
+  const blank = {
+    hasContent: false,
+    turnActive: false,
+    resumedSession: false,
+    picked: undefined,
+    hasDraftText: false,
+    attachmentCount: 0,
+  };
+  assert.equal(isBlankChatTab(blank), true);
+  assert.equal(isBlankChatTab({ ...blank, hasContent: true }), false);
+  assert.equal(isBlankChatTab({ ...blank, turnActive: true }), false);
+  assert.equal(isBlankChatTab({ ...blank, resumedSession: true }), false);
+  assert.equal(isBlankChatTab({ ...blank, picked: LIBRARY_SCOPE }), false);
+  assert.equal(isBlankChatTab({ ...blank, picked: folderScope('/tmp/scratch') }), false);
+  // Unsent draft text or attachments are user work — never blank.
+  assert.equal(isBlankChatTab({ ...blank, hasDraftText: true }), false);
+  assert.equal(isBlankChatTab({ ...blank, attachmentCount: 1 }), false);
+});
+
+test('blank-tab reuse prefers the preferred agent and never picks non-blank tabs', () => {
+  const tabs = [
+    { id: 'a', agent: 'claude', blank: false },
+    { id: 'b', agent: 'codex', blank: true },
+    { id: 'c', agent: 'claude', blank: true },
+  ];
+  assert.equal(blankTabToReuse(tabs, 'claude'), 'c');
+  assert.equal(blankTabToReuse(tabs, 'codex'), 'b');
+  // No blank tab of the preferred agent → any blank tab.
+  assert.equal(blankTabToReuse(tabs.filter((tab) => tab.id !== 'c'), 'claude'), 'b');
+  // No blank tabs at all → create a new one.
+  assert.equal(blankTabToReuse(tabs.filter((tab) => tab.blank !== true), 'claude'), null);
+  assert.equal(blankTabToReuse([], 'claude'), null);
+});
+
+test('mention/attachment scoping follows the session scope', () => {
+  // Cross-folder chat → the session folder's own listing.
+  assert.deepEqual(
+    mentionListingPlan(folderScope('/tmp/scratch'), '/Users/me/Projects/Research'),
+    { kind: 'folder', root: '/tmp/scratch' },
+  );
+  // Matching folder → the window's listing.
+  assert.deepEqual(mentionListingPlan(folderScope('/tmp/scratch'), '/tmp/scratch'), { kind: 'window' });
+  assert.deepEqual(mentionListingPlan(folderScope('/tmp/scratch'), ''), { kind: 'window' });
+  // Library chats have no single folder listing — mentions disabled.
+  assert.deepEqual(mentionListingPlan(LIBRARY_SCOPE, '/Users/me/Projects/Research'), { kind: 'disabled' });
+  assert.deepEqual(mentionListingPlan(LIBRARY_SCOPE, ''), { kind: 'disabled' });
+});
+
+test('connection URL carries the scope: folder=<abs> vs scope=library', () => {
+  const base = {
+    protocol: 'http:',
+    host: '127.0.0.1:4989',
+    endpoint: '/ws/agent',
+    windowId: 'w1',
+    access: 'default',
+    agent: 'claude',
+  };
+  const folderUrl = new URL(agentConnectionUrl({ ...base, ...scopeRequestParams(folderScope('/tmp/scratch')) }));
+  assert.equal(folderUrl.searchParams.get('folder'), '/tmp/scratch');
+  assert.equal(folderUrl.searchParams.get('scope'), null);
+
+  const libraryUrl = new URL(agentConnectionUrl({ ...base, ...scopeRequestParams(LIBRARY_SCOPE) }));
+  assert.equal(libraryUrl.searchParams.get('scope'), 'library');
+  assert.equal(libraryUrl.searchParams.get('folder'), null);
+
+  // History requests ride the same params.
+  assert.deepEqual(scopeRequestParams(folderScope('/tmp/scratch')), { folder: '/tmp/scratch' });
+  assert.deepEqual(scopeRequestParams(LIBRARY_SCOPE), { scope: 'library' });
+});
+
+test('scope labels: the library scope is called "Library", never "Global"', () => {
+  assert.equal(scopeDisplayName(LIBRARY_SCOPE), 'Library');
+  assert.equal(scopeDisplayName(folderScope('/Users/me/Projects/Research')), 'Research');
   assert.equal(folderDisplayName('/Users/me/Projects/Research'), 'Research');
   assert.equal(shortenFolderPath('/Users/me/Projects/Research', '/Users/me'), '~/Projects/Research');
   assert.equal(shortenFolderPath('/srv/data', '/Users/me'), '/srv/data');
-  assert.equal(folderPillAriaLabel('Research', false), 'Session folder: Research');
+  assert.equal(scopePillAriaLabel(folderScope('/x/Research'), false), 'Session folder: Research');
   assert.equal(
-    folderPillAriaLabel('Research', true),
+    scopePillAriaLabel(folderScope('/x/Research'), true),
     'Session folder: Research — set for this conversation',
   );
+  assert.equal(scopePillAriaLabel(LIBRARY_SCOPE, false), 'Session scope: Library');
+});
+
+test('the header note marks cross-scope bindings, including "in Library"', () => {
+  // A folder chat in another folder's window.
+  assert.equal(scopeHeaderNote(folderScope('/tmp/scratch'), '/Users/me/Projects/Research'), 'in scratch');
+  // A matching binding needs no note.
+  assert.equal(scopeHeaderNote(folderScope('/tmp/scratch'), '/tmp/scratch'), null);
+  // Library chats show "in Library" only while the window has a folder.
+  assert.equal(scopeHeaderNote(LIBRARY_SCOPE, '/tmp/scratch'), 'in Library');
+  assert.equal(scopeHeaderNote(LIBRARY_SCOPE, ''), null);
+});
+
+test('scope equality treats library and folder scopes distinctly', () => {
+  assert.equal(chatScopesEqual(LIBRARY_SCOPE, { kind: 'library' }), true);
+  assert.equal(chatScopesEqual(folderScope('/a'), folderScope('/a')), true);
+  assert.equal(chatScopesEqual(folderScope('/a'), folderScope('/b')), false);
+  assert.equal(chatScopesEqual(folderScope('/a'), LIBRARY_SCOPE), false);
+  assert.equal(chatScopesEqual(undefined, undefined), true);
+  assert.equal(chatScopesEqual(LIBRARY_SCOPE, undefined), false);
 });

@@ -79,7 +79,7 @@ test('Codex publishes its native model catalog before ready and forwards a selec
   t.after(() => { runWithWindowId('model-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess();
-  const session = new CodexSession(ws as unknown as WebSocket, 'model-window', undefined, undefined, undefined, 'native-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'model-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -109,7 +109,7 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
 
   const staleWs = new FakeWebSocket();
   const staleNative = catalogProcess();
-  const stale = new CodexSession(staleWs as unknown as WebSocket, 'stale-window', undefined, undefined, undefined, 'withdrawn-model', undefined, undefined, () => staleNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const stale = new CodexSession(staleWs as unknown as WebSocket, 'stale-window', undefined, undefined, undefined, 'withdrawn-model', undefined, undefined, undefined, () => staleNative.proc as unknown as ChildProcessWithoutNullStreams);
   stale.begin();
   await settle();
   const staleModels = staleWs.sent.map((item) => JSON.parse(item) as { t: string; fallback?: string }).find((event) => event.t === 'models');
@@ -121,7 +121,7 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
 
   const resumeWs = new FakeWebSocket();
   const resumeNative = catalogProcess();
-  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', undefined, 'thread-old', undefined, 'native-model', undefined, undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', undefined, 'thread-old', undefined, 'native-model', undefined, undefined, undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
   resumed.begin();
   await settle();
   const resumedModels = resumeWs.sent.map((item) => JSON.parse(item) as { t: string; activeModel?: string }).filter((event) => event.t === 'models').at(-1);
@@ -139,7 +139,7 @@ test('Codex reports the native Default model after starting a new thread', async
   t.after(() => { runWithWindowId('default-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { threadModel: 'runtime-default' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'default-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'default-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -161,7 +161,7 @@ test('Codex invokes an enabled selected skill and never publishes disabled skill
       { name: 'disabled-skill', path: '/skills/disabled-skill/SKILL.md', enabled: false },
     ],
   });
-  const session = new CodexSession(ws as unknown as WebSocket, 'skills-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -186,7 +186,7 @@ test('Codex reports an empty or failed skill catalog without blocking the sessio
   t.after(() => { runWithWindowId('empty-skills-window', () => clearCurrentFolder()); runWithWindowId('failed-skills-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
 
   const emptyWs = new FakeWebSocket();
-  const empty = new CodexSession(emptyWs as unknown as WebSocket, 'empty-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, () => catalogProcess().proc as unknown as ChildProcessWithoutNullStreams);
+  const empty = new CodexSession(emptyWs as unknown as WebSocket, 'empty-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => catalogProcess().proc as unknown as ChildProcessWithoutNullStreams);
   empty.begin();
   await settle();
   assert.equal(emptyWs.sent.map((item) => JSON.parse(item) as { t: string; state?: string }).find((event) => event.t === 'skills')?.state, 'empty');
@@ -195,7 +195,7 @@ test('Codex reports an empty or failed skill catalog without blocking the sessio
 
   const failedWs = new FakeWebSocket();
   const failedNative = catalogProcess(undefined, { skillsListError: 'skills unavailable' });
-  const failed = new CodexSession(failedWs as unknown as WebSocket, 'failed-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, () => failedNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const failed = new CodexSession(failedWs as unknown as WebSocket, 'failed-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => failedNative.proc as unknown as ChildProcessWithoutNullStreams);
   failed.begin();
   await settle();
   assert.equal(failedWs.sent.map((item) => JSON.parse(item) as { t: string; state?: string }).find((event) => event.t === 'skills')?.state, 'failed');
@@ -209,7 +209,7 @@ test('Codex forwards a runtime-native effort identifier without remapping it', a
   t.after(() => { runWithWindowId('native-effort-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess([{ id: 'native-model', displayName: 'Native model', supportedReasoningEfforts: [{ reasoningEffort: 'ultra' }] }]);
-  const session = new CodexSession(ws as unknown as WebSocket, 'native-effort-window', 'ultra', undefined, undefined, 'native-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'native-effort-window', 'ultra', undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -225,7 +225,7 @@ test('Codex retries a rejected selected model with Default and publishes recover
   t.after(() => { runWithWindowId('reject-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { selectedTurnError: 'model unavailable' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -248,7 +248,7 @@ test('Codex does not misclassify an unrelated turn failure as a model fallback',
   t.after(() => { runWithWindowId('turn-error-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { selectedTurnError: 'sandbox service unavailable' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'turn-error-window', undefined, undefined, undefined, 'native-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'turn-error-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -270,7 +270,7 @@ test('Codex combines every catalog page and preserves advertised effort options'
     [{ id: 'early-model', displayName: 'Early' }],
     [{ id: 'late-model', displayName: 'Late', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'xhigh' }] }],
   ] });
-  const session = new CodexSession(ws as unknown as WebSocket, 'pages-window', undefined, undefined, undefined, 'late-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'pages-window', undefined, undefined, undefined, 'late-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   const modelsEvent = ws.sent.map((item) => JSON.parse(item) as { t: string; models?: Array<{ id: string; supportedEfforts?: string[] }>; activeModel?: string }).find((event) => event.t === 'models');
@@ -316,6 +316,7 @@ test('stale Codex process events and stdout cannot affect a replacement generati
   const session = new CodexSession(
     new FakeWebSocket() as unknown as WebSocket,
     'test-window',
+    undefined,
     undefined,
     undefined,
     undefined,

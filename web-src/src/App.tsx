@@ -45,6 +45,7 @@ import {
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_MAX_WIDTH,
 } from './store/state';
+import { blankTabToReuse } from './components/agent/folderState';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { getWindowId } from './api';
 import { api } from './api';
@@ -126,21 +127,44 @@ function AppBody() {
   useEffect(() => {
     if (!state.folderPath) {
       defaultChatFolderRef.current = '';
+      // Boot default is the library-scoped New Chat workspace: no folder
+      // is selected until the user clicks one, and the chat panel opens
+      // with one blank tab (its scope resolves to Library).
+      if (state.booted && state.chatTabs.length === 0) {
+        const agent = readPreferredAgent();
+        dispatch({
+          type: 'CHAT_AGENT_OPEN',
+          agent,
+          tab: makeChatTab(agent, state.chatTabs),
+        });
+      }
       return;
     }
     if (defaultChatFolderRef.current === state.folderPath) return;
     defaultChatFolderRef.current = state.folderPath;
-    // Chat tabs (and their folder-bound sessions) survive folder switches,
-    // so only a window with NO chat tabs gets the one fresh tab on folder
-    // open — a switch must not spawn extras or yank the panel open.
-    if (state.chatTabs.length > 0) return;
     const agent = readPreferredAgent();
-    dispatch({
-      type: 'CHAT_AGENT_OPEN',
-      agent,
-      tab: makeChatTab(agent, state.chatTabs),
-    });
-  }, [dispatch, state.chatTabs, state.folderPath]);
+    // Chat tabs (and their scope-bound sessions) survive folder switches.
+    // A window with NO chat tabs gets the one fresh tab on folder open
+    // (panel opens); a switch instead activates a welcome tab for the new
+    // folder without touching panel visibility — reusing a completely
+    // blank tab when one exists (it follows the window default on its
+    // next connect), else creating a fresh tab. Started chats, drafts,
+    // and attachments are never rebound by this.
+    if (state.chatTabs.length === 0) {
+      dispatch({
+        type: 'CHAT_AGENT_OPEN',
+        agent,
+        tab: makeChatTab(agent, state.chatTabs),
+      });
+      return;
+    }
+    const reuseId = blankTabToReuse(state.chatTabs, agent);
+    if (reuseId) {
+      if (state.activeChatTabId !== reuseId) dispatch({ type: 'CHAT_TAB_ACTIVATE', id: reuseId });
+    } else {
+      dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
+    }
+  }, [dispatch, state.activeChatTabId, state.booted, state.chatTabs, state.folderPath]);
   useEffect(() => {
     const previous = previousWorkspaceRef.current;
     const folderChanged = previous.folderPath !== state.folderPath;
@@ -192,10 +216,11 @@ function AppBody() {
     initialFolderPending.current = false;
     const bridge = (window as { electron?: ElectronBridge }).electron;
     void bridge?.setWindowFolder?.(state.folderPath || null);
-    // Boot (including the auto-open of the most recent folder) has pushed
-    // its final window-folder registration. The multi-window smoke keys off
-    // this marker before assigning folders programmatically — without it,
-    // a late boot push could clobber the harness's registration.
+    // Boot has pushed its final window-folder registration (boot never
+    // selects a folder on its own — only an explicit ?folder request or a
+    // same-window restore does). The multi-window smoke keys off this
+    // marker before assigning folders programmatically — without it, a
+    // late boot push could clobber the harness's registration.
     if (state.booted) document.body.dataset.bootSettled = '1';
   }, [state.booted, state.folderPath]);
   // macOS fullscreen toggles the `is-fullscreen` body class so the chrome

@@ -6,6 +6,7 @@ import {
   ExternalLinkIcon,
   FolderIcon,
   MoreHorizontalIcon,
+  NewChatIcon,
   NewFileIcon,
   NewFolderIcon,
   PlusIcon,
@@ -14,7 +15,9 @@ import {
   TrashIcon,
 } from '../icons';
 import { useApp } from '../store/AppContext';
-import type { LibraryFolderStatus } from '../store/state';
+import { makeChatTab, type LibraryFolderStatus } from '../store/state';
+import { blankTabToReuse } from './agent/folderState';
+import { readPreferredAgent } from '../agentPreference';
 import { folderRefsEqual } from '../folderPath';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
@@ -134,6 +137,7 @@ function FilesPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files" role="tabpanel">
+      <NewChatButton />
       {/* Explorer sections mirror VS Code's compact disclosure rows. The
         * library list and the active document's outline intentionally share
         * one navigation surface; neither becomes a floating editor companion. */}
@@ -166,6 +170,40 @@ function FilesPanel() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+/** Full-width New Chat entry above the Library section (Cursor's "New
+ *  Agent" position). Opens the chat panel on a tab scoped to the window's
+ *  current folder — or to the whole Library when no folder is current.
+ *  Reuses a completely blank tab when one exists (preferring the
+ *  preferred agent's); otherwise creates a fresh tab for the preferred
+ *  agent. The reused/created tab's scope resolves to the window default
+ *  on connect, so no scope needs to be threaded here. */
+function NewChatButton() {
+  const { state, dispatch } = useApp();
+
+  function newChat() {
+    const agent = readPreferredAgent();
+    const reuseId = blankTabToReuse(state.chatTabs, agent);
+    if (reuseId) dispatch({ type: 'CHAT_TAB_ACTIVATE', id: reuseId });
+    else dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
+    if (!state.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
+  }
+
+  return (
+    <div className="border-b border-border px-2 py-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full justify-center gap-1.5"
+        title="Start a chat in the current folder, or across the whole library"
+        onClick={newChat}
+      >
+        <NewChatIcon className="size-3.5" />
+        New Chat
+      </Button>
     </div>
   );
 }

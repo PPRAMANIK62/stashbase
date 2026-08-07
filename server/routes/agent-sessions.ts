@@ -1,13 +1,14 @@
 /** Shared Agent Contract history routes. Legacy Claude/Codex paths remain
  * mounted for existing clients; the built-in renderer uses this one surface.
  *
- * Every route accepts an optional `folder` query param — the explicit session
- * folder a chat tab is scoped to. It must be a registered library folder
- * (400 otherwise); when absent the window's current folder applies, exactly
- * as before. */
+ * Every route accepts an optional explicit scope — `folder=<abs>` (a
+ * registered library folder, 400 otherwise) or `scope=library` (the
+ * reserved library scope: sessions whose cwd is the folder home). When
+ * both are absent the window's current folder applies; without one, the
+ * library scope. */
 import express from 'express';
-import { agentAdapter, resolveAgentSessionFolder } from '../agent-contract.ts';
-import { getCurrentFolder, memberFolderRoots } from '../folder.ts';
+import { agentAdapter, resolveAgentSessionScope } from '../agent-contract.ts';
+import { getCurrentFolder, getFolderHome, memberFolderRoots } from '../folder.ts';
 import { sendError } from '../http.ts';
 
 function historyFor(id: string) {
@@ -20,16 +21,21 @@ function historyFor(id: string) {
   return adapter.history;
 }
 
-/** Resolve the request's history scope: explicit member folder, else the
- * window's current folder. Throws a 400-carrying error for non-members. */
+/** Resolve the request's history scope to the cwd sessions are stored
+ * under: explicit member folder; `scope=library` → the folder home (the
+ * reserved library cwd — library history never lives under a member
+ * folder); absent → the window's current folder, else the library.
+ * Throws a 400-carrying error for non-members / unknown scopes. */
 function historyFolderOf(req: express.Request): string | null {
-  const resolved = resolveAgentSessionFolder(req.query.folder, memberFolderRoots());
+  const resolved = resolveAgentSessionScope(req.query.scope, req.query.folder, memberFolderRoots());
   if (!resolved.ok) {
     const error = new Error(resolved.message) as Error & { status: number };
     error.status = 400;
     throw error;
   }
-  return resolved.folder ?? getCurrentFolder();
+  if (resolved.scope?.kind === 'folder') return resolved.scope.path;
+  if (resolved.scope?.kind === 'library') return getFolderHome();
+  return getCurrentFolder() ?? getFolderHome();
 }
 
 export function mount(app: express.Express): void {

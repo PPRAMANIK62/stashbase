@@ -18,11 +18,15 @@
  */
 import path from 'node:path';
 
-export function buildStashbasePreamble(cwd: string): string {
+export function buildStashbasePreamble(cwd: string, scope: 'folder' | 'library' = 'folder'): string {
   const current = path.basename(cwd);
 
+  const orientation = scope === 'library'
+    ? `You are operating inside **StashBase**, a local file-based knowledge base. This is a **library-wide** chat: no single folder is selected, and the user's whole library is in scope. Retrieve across all library folders — \`search_library\` already searches the entire library by default. Your working directory (\`${cwd}\`) is only the StashBase folder home, not the user's content; locate files through the library tools rather than assuming they live under it.`
+    : `You are operating inside **StashBase**, a local file-based knowledge base. Current folder: **${current}** (\`${cwd}\`).`;
+
   const lines: string[] = [
-    `You are operating inside **StashBase**, a local file-based knowledge base. Current folder: **${current}** (\`${cwd}\`).`,
+    orientation,
     '',
     'Use the StashBase MCP tools when they fit:',
     '- `search_library` finds relevant library content by meaning across folders; pass `folder` or `path_prefix` to narrow the search.',

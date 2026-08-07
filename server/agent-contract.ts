@@ -55,10 +55,14 @@ export interface AgentConnectionOptions {
   access?: AgentAccessMode;
   /** Undefined deliberately means "use the runtime's configured default". */
   model?: string;
-  /** Explicit session folder (a registered library-member root). Undefined
-   * deliberately means "use the window's current folder". Callers must have
-   * validated membership with `resolveAgentSessionFolder`. */
+  /** Explicit session folder (a registered library-member root). Mutually
+   * exclusive with `scope`. Undefined with no `scope` means "use the
+   * window's current folder when one exists, else the library". Callers
+   * must have validated with `resolveAgentSessionScope`. */
   folder?: string;
+  /** Explicit library-wide session scope. The session binds the folder
+   * home as its cwd and is NOT bound to any member folder. */
+  scope?: 'library';
 }
 
 export type AgentSessionFolderResolution =
@@ -88,6 +92,56 @@ export function resolveAgentSessionFolder(
     }
   }
   return { ok: false, message: 'folder is not a registered library folder' };
+}
+
+/** Explicit session scope: one library folder, or the whole library. */
+export type AgentSessionScope = { kind: 'library' } | { kind: 'folder'; path: string };
+
+export type AgentSessionScopeResolution =
+  | { ok: true; scope?: AgentSessionScope }
+  | { ok: false; message: string };
+
+/** Resolve the optional explicit scope of a connect / history request.
+ * `scope=library` is the only recognized scope value; an explicit folder
+ * stays membership-validated through `resolveAgentSessionFolder`; sending
+ * both is contradictory and rejected. Both absent → no explicit scope:
+ * the caller falls back to the window's current folder when one exists,
+ * else the library. */
+export function resolveAgentSessionScope(
+  requestedScope: unknown,
+  requestedFolder: unknown,
+  memberRoots: readonly string[],
+): AgentSessionScopeResolution {
+  const rawScope = typeof requestedScope === 'string' ? requestedScope.trim() : requestedScope == null ? '' : null;
+  if (rawScope == null) return { ok: false, message: 'scope must be "library"' };
+  const rawFolder = typeof requestedFolder === 'string' ? requestedFolder.trim() : requestedFolder == null ? '' : requestedFolder;
+  if (rawScope) {
+    if (rawScope !== 'library') return { ok: false, message: 'scope must be "library"' };
+    if (rawFolder) return { ok: false, message: 'scope=library cannot be combined with a folder' };
+    return { ok: true, scope: { kind: 'library' } };
+  }
+  const folder = resolveAgentSessionFolder(requestedFolder, memberRoots);
+  if (!folder.ok) return folder;
+  return folder.folder ? { ok: true, scope: { kind: 'folder', path: folder.folder } } : { ok: true };
+}
+
+/** Resolve the cwd and library-scoped flag a session binds at start time.
+ * Explicit library scope → the folder home (the reserved library cwd —
+ * library-scoped history persists under it, not under any member folder).
+ * Explicit folder → that member root. Neither → the window's current
+ * folder when one exists, else the library fallback. `libraryScoped`
+ * sessions report no bound folder, so member-folder removal never tears
+ * them down. */
+export function resolveSessionBinding(options: {
+  scope?: 'library';
+  folder?: string;
+  currentFolder: string | null;
+  folderHome: string;
+}): { cwd: string; libraryScoped: boolean } {
+  if (options.scope === 'library') return { cwd: options.folderHome, libraryScoped: true };
+  if (options.folder) return { cwd: options.folder, libraryScoped: false };
+  if (options.currentFolder) return { cwd: options.currentFolder, libraryScoped: false };
+  return { cwd: options.folderHome, libraryScoped: true };
 }
 
 /** A model is always advertised by the native runtime, never a StashBase list. */

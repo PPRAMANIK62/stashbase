@@ -12,13 +12,19 @@ to migrate them into a StashBase-specific storage model.
   folder opens automatically; an empty library shows a small zero-folder
   block in the sidebar with the app mark, one line of guidance, and an
   Add Folder action.
+- A full-width New Chat button sits at the top of the sidebar, above the
+  Library section: it opens the chat panel on a chat scoped to the
+  window's current folder, or to the whole library when no folder is
+  current, reusing a completely blank chat instead of stacking empty tabs.
 - The sidebar's Library section lists every library folder as a root row —
   favorited folders pinned to the top, the rest in Recents order. The
   window's current folder is the one expanded root showing the file tree
   beneath it; clicking a collapsed root switches this window's folder in
   place. Switching resets the folder-scoped document tabs and search state,
   but keeps the window's chat tabs and their running Agent sessions — each
-  chat is pinned to its own library folder. Collapsed roots show a subtle
+  chat is pinned to its own scope (a library folder, or the whole library)
+  — and surfaces a welcome chat for the new folder without disturbing any
+  started chat or unsent draft. Collapsed roots show a subtle
   warning dot when files in that folder could not be prepared for search.
 - A `+` button in the Library header offers Open Folder… (any folder on
   disk, indexed in place) and New Folder… (created under the default

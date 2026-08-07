@@ -290,27 +290,36 @@ export const api = {
     send<{ hasKey: false; provider: EmbedderProvider; model: string }>('DELETE', '/api/embedder/key'),
 
   // Agent sessions (chat-panel History dropdown) ----------------
-  /** Local agent sessions for the given library folder (defaults to the
-   *  window's current folder), newest first. */
-  listSessions: (agent: 'claude' | 'codex' = 'claude', folder?: string) =>
-    getJson<SessionInfo[]>(agentSessionBase(agent) + folderScopeQuery(folder)),
+  /** Local agent sessions for the given scope (a library folder, or the
+   *  reserved library scope; defaults to the window's current folder),
+   *  newest first. */
+  listSessions: (agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+    getJson<SessionInfo[]>(agentSessionBase(agent) + sessionScopeQuery(scope)),
   /** A session's transcript as renderable blocks (for resume replay). */
-  getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude', folder?: string) =>
-    getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages' + folderScopeQuery(folder)),
-  renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude', folder?: string) =>
-    send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id) + folderScopeQuery(folder), { title }),
-  deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude', folder?: string) =>
-    send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id) + folderScopeQuery(folder)),
+  getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+    getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages' + sessionScopeQuery(scope)),
+  renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+    send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id) + sessionScopeQuery(scope), { title }),
+  deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+    send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id) + sessionScopeQuery(scope)),
 };
 
 function agentSessionBase(agent: 'claude' | 'codex'): string {
   return `/api/agents/${encodeURIComponent(agent)}/sessions`;
 }
 
-/** Explicit session-folder scope for history routes. Absent → the server
- *  falls back to the window's current folder. */
-function folderScopeQuery(folder?: string): string {
-  return folder ? `?folder=${encodeURIComponent(folder)}` : '';
+/** Explicit session scope for history routes: a library folder, or the
+ *  library-wide scope. Absent → the server falls back to the window's
+ *  current folder (else the library). */
+export interface SessionScopeParams {
+  folder?: string;
+  scope?: 'library';
+}
+
+function sessionScopeQuery(params?: SessionScopeParams): string {
+  if (params?.folder) return `?folder=${encodeURIComponent(params.folder)}`;
+  if (params?.scope) return `?scope=${encodeURIComponent(params.scope)}`;
+  return '';
 }
 
 /** Asset URL for HTML files (used by the preview iframe so relative

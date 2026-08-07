@@ -26,7 +26,7 @@ import {
   isAgentAccessMode,
   parseAgentEffort,
   registerAgentAdapter,
-  resolveAgentSessionFolder,
+  resolveAgentSessionScope,
   stopAgentRuntime,
   type AgentAccessMode,
   type AgentConnectionOptions,
@@ -404,15 +404,21 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // because we share the existing http.Server with Vite's HMR proxy.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
-  // An explicit session folder must be a registered library folder; reject
-  // anything else before a runtime process can be bound to it.
-  const folder = resolveAgentSessionFolder(rawFolderOf(req), memberFolderRoots());
-  if (!folder.ok) {
+  // An explicit session scope must be `scope=library` or a registered
+  // library folder; reject anything else before a runtime process can be
+  // bound to it.
+  const resolved = resolveAgentSessionScope(rawScopeOf(req), rawFolderOf(req), memberFolderRoots());
+  if (!resolved.ok) {
     ws.send(JSON.stringify({ t: 'error', message: 'That folder is not part of your library.' }));
     ws.close();
     return;
   }
-  attachAgentRuntime(agentIdOf(req), ws, { ...connectionOptionsOf(req), ...(folder.folder ? { folder: folder.folder } : {}) });
+  const scope = resolved.scope;
+  attachAgentRuntime(agentIdOf(req), ws, {
+    ...connectionOptionsOf(req),
+    ...(scope?.kind === 'folder' ? { folder: scope.path } : {}),
+    ...(scope?.kind === 'library' ? { scope: 'library' as const } : {}),
+  });
 });
 
 function agentIdOf(req: import('node:http').IncomingMessage): string {
@@ -438,11 +444,21 @@ function modelOf(req: import('node:http').IncomingMessage): string | undefined {
 }
 
 /** Raw explicit-folder request off the WS URL. Membership validation happens
- *  in the connection handler via `resolveAgentSessionFolder`. */
+ *  in the connection handler via `resolveAgentSessionScope`. */
 function rawFolderOf(req: import('node:http').IncomingMessage): string | undefined {
   try {
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
     return u.searchParams.get('folder') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Raw explicit-scope request off the WS URL (`scope=library`). */
+function rawScopeOf(req: import('node:http').IncomingMessage): string | undefined {
+  try {
+    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
+    return u.searchParams.get('scope') ?? undefined;
   } catch {
     return undefined;
   }
@@ -494,11 +510,13 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
   }
 }
 
-// Agent sessions are pinned to an explicit member folder, so a window
-// switching folders does NOT tear them down — the chat tabs and their
-// running sessions survive the switch. Teardown remains on window
-// close/retire (below), library folder removal (routes/library.ts via
-// stopAgentRuntimeForFolder), and app shutdown.
+// Agent sessions are pinned to an explicit scope (a member folder, or
+// the whole library), so a window switching folders does NOT tear them
+// down — the chat tabs and their running sessions survive the switch.
+// Teardown remains on window close/retire (below), library folder
+// removal (routes/library.ts via stopAgentRuntimeForFolder — which only
+// matches folder-bound sessions, never library-scoped ones), and app
+// shutdown.
 onClose((_oldRoot, windowId) => {
   stopAgentRuntime('claude', windowId);
   stopAgentRuntime('codex', windowId);

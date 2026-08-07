@@ -325,20 +325,9 @@ export function useFolderActions(
         }
         return;
       }
-      // No window-bound folder: boot straight into the most recent
-      // library folder. An empty library stays on the zero-folder
-      // workspace (the sidebar carries the add-folder affordance).
-      const mostRecent = result.recent?.[0]?.path;
-      if (mostRecent) {
-        try {
-          await openFolder(mostRecent);
-        } catch (err: unknown) {
-          toast(
-            `Could not open "${mostRecent}": ${err instanceof Error ? err.message : String(err)}`,
-            { level: 'error' },
-          );
-        }
-      }
+      // No window-bound folder: stay unselected. The boot default is the
+      // library-scoped New Chat workspace — browsing a folder is an
+      // explicit sidebar click, never an implicit restore.
     } catch {
       toast('Server unreachable', { level: 'error' });
     } finally {

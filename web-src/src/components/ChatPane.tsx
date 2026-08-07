@@ -53,11 +53,11 @@ export function ChatSessionBoundary({
 
 export function ChatPane() {
   const { state, dispatch } = useApp();
-  const folder = state.folder;
+  // The panel renders with or without a window folder: chats are scoped
+  // per tab (a library folder, or the whole library), so a no-folder
+  // window can still hold library-wide chats.
   const tabs = state.chatTabs;
   const activeId = state.activeChatTabId;
-
-  if (!folder) return null;
 
   return (
     <div
@@ -127,8 +127,9 @@ export function ChatPane() {
         ))}
         {tabs.length === 0 && (
           <div className={chatStatusClass}>
-            No active chat. Click the <strong>Claude</strong> or
-            {' '}<strong>Codex</strong> button in the top bar to start one.
+            No active chat. Click <strong>New Chat</strong> in the sidebar, or
+            the <strong>Claude</strong> / <strong>Codex</strong> button in the
+            top bar, to start one.
           </div>
         )}
       </div>

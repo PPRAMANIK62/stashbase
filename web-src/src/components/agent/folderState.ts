@@ -1,25 +1,48 @@
-/** Pure state for the composer's session-folder pill (the Cursor-style
- * folder picker). Kept free of React so default/lock/follow-window
+/** Pure state for the composer's session-scope pill (the Cursor-style
+ * scope picker). Kept free of React so default/lock/follow-window
  * semantics stay covered without a browser harness, mirroring
  * `modelState.ts`.
  *
+ * Scope model: a chat is explicitly scoped either to one library folder
+ * or to the whole library. A missing choice is NOT a scope — the
+ * default resolves to the window's current folder when one exists, else
+ * to the library.
+ *
  * Semantics:
  * - A tab with no started session follows the window's current folder
- *   until the user explicitly picks another library folder.
+ *   until the user explicitly picks a scope (a folder or "Library").
  * - Once the session has content (or is resumed), the binding is fixed:
- *   the pill keeps showing the folder the session connected with, and a
+ *   the pill keeps showing the scope the session connected with, and a
  *   later window-folder switch must not rebind it.
+ * - A tab with unsent draft text or attachments freezes its scope at
+ *   what the user saw instead of silently following the window.
  */
+
+/** Explicit chat scope: one library folder, or the whole library. */
+export type ChatScope = { kind: 'library' } | { kind: 'folder'; path: string };
+
+export const LIBRARY_SCOPE: ChatScope = { kind: 'library' };
+
+export function folderScope(path: string): ChatScope {
+  return { kind: 'folder', path };
+}
+
+export function chatScopesEqual(a: ChatScope | null | undefined, b: ChatScope | null | undefined): boolean {
+  if (!a || !b) return a === b || (!a && !b);
+  if (a.kind === 'library') return b.kind === 'library';
+  return b.kind === 'folder' && b.path === a.path;
+}
 
 export interface LibraryFolderOption {
   path: string;
   favorite?: boolean;
 }
 
-/** Menu entries for the picker: the same membership list the sidebar
+/** Folder entries for the picker: the same membership list the sidebar
  * shows (`state.recent`), favorites pinned first, both groups keeping the
  * server's recents order. The current window folder is ensured so the
- * default choice is always present even before recents load. */
+ * default choice is always present even before recents load. The
+ * "Library" entry is rendered separately above these. */
 export function folderMenuEntries(
   recent: readonly { path: string; favorite?: boolean }[],
   windowFolder: string,
@@ -34,78 +57,173 @@ export function folderMenuEntries(
   return ordered;
 }
 
-/** The folder a NEW session would bind: the explicit pick, else the
- * window's current folder — so an unbound tab follows a sidebar switch.
- * An explicit pick that has left library membership (folder removed) is
- * ignored so the picker cannot bind a dead folder. */
-export function nextSessionFolder(
-  picked: string | undefined,
+/** The scope a NEW session would bind: the explicit pick, else the
+ * window's current folder, else the whole library. An explicit folder
+ * pick that has left library membership (folder removed) is ignored so
+ * the picker cannot bind a dead folder. */
+export function nextSessionScope(
+  picked: ChatScope | undefined,
   windowFolder: string,
   memberPaths: readonly string[],
-): string {
-  if (picked && memberPaths.includes(picked)) return picked;
-  return windowFolder;
+): ChatScope {
+  if (picked?.kind === 'library') return LIBRARY_SCOPE;
+  if (picked?.kind === 'folder' && memberPaths.includes(picked.path)) return picked;
+  return windowFolder ? folderScope(windowFolder) : LIBRARY_SCOPE;
 }
 
-/** The folder the pill displays: the live session's binding once one is
- * connected, else the folder the next session would use. */
-export function folderPillFolder(options: {
-  connectedFolder: string | null;
-  picked: string | undefined;
+/** The scope a brand-new chat entry point (the sidebar's New Chat) binds:
+ * the window's current folder when one exists, else the whole library. */
+export function newChatScope(windowFolder: string): ChatScope {
+  return windowFolder ? folderScope(windowFolder) : LIBRARY_SCOPE;
+}
+
+/** The scope the pill displays: the live session's binding once one is
+ * connected, else the scope the next session would use. */
+export function chatScopePill(options: {
+  connectedScope: ChatScope | null;
+  picked: ChatScope | undefined;
   windowFolder: string;
   memberPaths: readonly string[];
-}): string {
-  return options.connectedFolder
-    ?? nextSessionFolder(options.picked, options.windowFolder, options.memberPaths);
+}): ChatScope {
+  return options.connectedScope
+    ?? nextSessionScope(options.picked, options.windowFolder, options.memberPaths);
 }
 
-/** True when an unbound, still-empty tab should follow a window-folder
- * switch by reconnecting its next session to the new folder. A tab with an
- * explicit pick, a resumed session, any transcript content, or a running
- * turn keeps its binding — a conversation never rebinds. */
-export function shouldFollowWindowFolder(options: {
-  connectedFolder: string | null;
-  picked: string | undefined;
+/** The query parameters a scope rides on — the WS connect URL and every
+ * session-history request. Folder scope stays the legacy `folder` param;
+ * the library scope is an explicit `scope=library`. */
+export function scopeRequestParams(scope: ChatScope): { folder?: string; scope?: 'library' } {
+  return scope.kind === 'folder' ? { folder: scope.path } : { scope: 'library' };
+}
+
+/** True when `scope` is exactly what an unpicked tab would resolve to for
+ * this window folder — i.e. there is nothing to follow or freeze. */
+function scopeIsWindowDefault(scope: ChatScope, windowFolder: string): boolean {
+  return windowFolder
+    ? scope.kind === 'folder' && scope.path === windowFolder
+    : scope.kind === 'library';
+}
+
+export type WindowFolderSwitchPlan = 'follow' | 'freeze' | 'keep';
+
+/** What an existing tab does when the window's folder changes.
+ *
+ * - `'follow'` — an unbound, completely idle tab reconnects its next
+ *   (still empty) session to the new window default.
+ * - `'freeze'` — the tab would follow, but it holds unsent draft text or
+ *   attachments: promote its connected scope to an explicit pick so the
+ *   draft keeps the scope the user saw. Never reconnect.
+ * - `'keep'` — everything else: content, a running turn, an explicit
+ *   pick, or a resumed session keeps its binding untouched.
+ */
+export function windowFolderSwitchPlan(options: {
+  connectedScope: ChatScope | null;
+  picked: ChatScope | undefined;
   resumedSession: boolean;
   hasContent: boolean;
   turnActive: boolean;
+  hasDraft: boolean;
   windowFolder: string;
-}): boolean {
-  return Boolean(options.windowFolder)
+}): WindowFolderSwitchPlan {
+  const unbound = Boolean(options.windowFolder)
     && !options.picked
     && !options.resumedSession
     && !options.hasContent
     && !options.turnActive
-    && options.connectedFolder != null
-    && options.connectedFolder !== options.windowFolder;
+    && options.connectedScope != null
+    && !scopeIsWindowDefault(options.connectedScope, options.windowFolder);
+  if (!unbound) return 'keep';
+  return options.hasDraft ? 'freeze' : 'follow';
 }
 
-/** The folder whose file listing feeds `@` mentions and folder-file
- * attachment validation: the live session's binding when it differs from
- * the window's current folder, else null (use the window's own listing). */
-export function crossFolderListingRoot(
-  connectedFolder: string | null,
-  windowFolder: string,
+/** True when an unbound, still-empty, draft-free tab should follow a
+ * window-folder switch by reconnecting its next session. */
+export function shouldFollowWindowFolder(options: {
+  connectedScope: ChatScope | null;
+  picked: ChatScope | undefined;
+  resumedSession: boolean;
+  hasContent: boolean;
+  turnActive: boolean;
+  hasDraft: boolean;
+  windowFolder: string;
+}): boolean {
+  return windowFolderSwitchPlan(options) === 'follow';
+}
+
+/** Whether a chat tab is COMPLETELY blank — reusable as the welcome tab
+ * for a new scope. Blank requires: no transcript, no active turn, not
+ * resumed, no picked scope override, no draft text, and no attachments.
+ * A tab with any of those is user work and must never be rebound. */
+export function isBlankChatTab(options: {
+  hasContent: boolean;
+  turnActive: boolean;
+  resumedSession: boolean;
+  picked: ChatScope | undefined;
+  hasDraftText: boolean;
+  attachmentCount: number;
+}): boolean {
+  return !options.hasContent
+    && !options.turnActive
+    && !options.resumedSession
+    && !options.picked
+    && !options.hasDraftText
+    && options.attachmentCount === 0;
+}
+
+/** Pick the blank tab to reuse as the welcome tab (New Chat button /
+ * window-folder switch): prefer the preferred agent's blank tab, else any
+ * blank tab, else null (create a new tab). */
+export function blankTabToReuse(
+  tabs: readonly { id: string; agent: string; blank?: boolean }[],
+  preferredAgent: string,
 ): string | null {
-  return connectedFolder && windowFolder && connectedFolder !== windowFolder
-    ? connectedFolder
-    : null;
+  const blanks = tabs.filter((tab) => tab.blank);
+  const preferred = blanks.find((tab) => tab.agent === preferredAgent);
+  return (preferred ?? blanks[0])?.id ?? null;
+}
+
+/** The file listing that feeds `@` mentions and folder-file attachment
+ * validation for a scope:
+ * - window-folder scope → the window's own listing;
+ * - another library folder → that folder's listing;
+ * - library scope → mentions disabled (no single folder listing exists).
+ */
+export type MentionListingPlan =
+  | { kind: 'window' }
+  | { kind: 'folder'; root: string }
+  | { kind: 'disabled' };
+
+export function mentionListingPlan(scope: ChatScope, windowFolder: string): MentionListingPlan {
+  if (scope.kind === 'library') return { kind: 'disabled' };
+  if (windowFolder && scope.path !== windowFolder) return { kind: 'folder', root: scope.path };
+  return { kind: 'window' };
 }
 
 /** Locked exactly like the model menu — a transcript (including a resumed
- * one) or an active turn means the conversation is bound to its folder. */
+ * one) or an active turn means the conversation is bound to its scope. */
 export function folderMenuLocked(hasTranscript: boolean, turnActive: boolean, resumedSession: boolean): boolean {
   return hasTranscript || turnActive || resumedSession;
-}
-
-/** No library folders → no pill; the composer needs a folder to exist. */
-export function folderMenuVisible(entries: readonly LibraryFolderOption[]): boolean {
-  return entries.length > 0;
 }
 
 export function folderDisplayName(path: string): string {
   const segments = path.split('/').filter(Boolean);
   return segments.pop() || path;
+}
+
+/** Pill / header display name for a scope. The library scope is always
+ * called "Library" in UI copy. */
+export function scopeDisplayName(scope: ChatScope): string {
+  return scope.kind === 'library' ? 'Library' : folderDisplayName(scope.path);
+}
+
+/** The muted header note marking a binding that differs from what the
+ * window shows: "in <folder>" for a cross-folder chat, "in Library" for a
+ * library-wide chat while the window has a current folder. Null when the
+ * binding matches the window (nothing to disambiguate). */
+export function scopeHeaderNote(scope: ChatScope, windowFolder: string): string | null {
+  if (scope.kind === 'library') return windowFolder ? 'in Library' : null;
+  if (windowFolder && scope.path !== windowFolder) return `in ${folderDisplayName(scope.path)}`;
+  return null;
 }
 
 /** Shorten an absolute path for menu detail text: `/Users/foo/Notes` →
@@ -117,8 +235,9 @@ export function shortenFolderPath(abs: string, homeDir: string): string {
   return abs;
 }
 
-export function folderPillAriaLabel(name: string, locked: boolean): string {
-  return locked
-    ? `Session folder: ${name} — set for this conversation`
-    : `Session folder: ${name}`;
+export function scopePillAriaLabel(scope: ChatScope, locked: boolean): string {
+  const base = scope.kind === 'library'
+    ? 'Session scope: Library'
+    : `Session folder: ${folderDisplayName(scope.path)}`;
+  return locked ? `${base} — set for this conversation` : base;
 }
