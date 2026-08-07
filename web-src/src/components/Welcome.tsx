@@ -109,19 +109,25 @@ export function Welcome() {
   const [folderIndexSnapshots, setFolderIndexSnapshots] = useState<Record<string, FolderIndexSnapshot>>({});
   const [openingFolder, setOpeningFolder] = useState<{ path: string; name: string } | null>(null);
   const [removing, setRemoving] = useState(false);
-  // UI PREVIEW — favorites ahead of the folder-metadata data model.
-  // Membership lives in local state only (lost on reload) so the full
-  // star → filter loop can be evaluated. Persist once metadata lands.
   const [tagFilter, setTagFilter] = useState<'recents' | 'favorites'>('recents');
-  const [previewFavorites, setPreviewFavorites] = useState<ReadonlySet<string>>(new Set());
+  // Optimistic star toggle: flip in the store immediately, persist in the
+  // background, and re-sync from the server if the write fails.
   const toggleFavorite = useCallback((path: string) => {
-    setPreviewFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path); else next.add(path);
-      return next;
-    });
     setFolderMenu(null);
-  }, []);
+    const entry = state.recent.find((r) => r.path === path);
+    if (!entry) return;
+    const favorite = !entry.favorite;
+    dispatch({
+      type: 'WELCOME_SHOW',
+      recent: state.recent.map((r) => (r.path === path ? { ...r, favorite } : r)),
+      homeDir: state.homeDir,
+    });
+    void api.setFolderFavorite(path, favorite).catch((e) => {
+      void api.getFolder()
+        .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir, error: errorMessage(e) }))
+        .catch(() => dispatch({ type: 'WELCOME_ERROR', error: errorMessage(e) }));
+    });
+  }, [dispatch, state.homeDir, state.recent]);
   const welcomeReconcileStartedAt = useRef<Map<string, number>>(new Map());
   const openingRequestRef = useRef(0);
 
@@ -300,7 +306,7 @@ export function Welcome() {
     : null;
 
   const visibleFolders = tagFilter === 'favorites'
-    ? state.recent.filter((r) => previewFavorites.has(r.path))
+    ? state.recent.filter((r) => r.favorite)
     : state.recent;
 
   return (
@@ -347,13 +353,11 @@ export function Welcome() {
             </div>
             <span className="flex shrink-0 items-center gap-2">
               <OpenFolderButton
-                shortLabel
                 primary
                 disabled={!!openingFolder}
                 onOpeningFolder={setOpeningFolder}
               />
               <NewFolderButton
-                shortLabel
                 disabled={!!openingFolder}
                 folderHome={folderHome}
                 refreshFolderHome={refreshFolderHome}
@@ -387,11 +391,12 @@ export function Welcome() {
                     converting: 0,
                   };
                   const indexState = indexSnapshot.state;
+                  const menuOpen = folderMenu?.path === r.path;
                   return (
                     <div
                       key={r.path}
-                      className={`group flex min-h-11 w-full cursor-pointer items-center border-b border-border px-4 transition-colors last:border-b-0 ${
-                        folderMenu?.path === r.path
+                      className={`group relative flex min-h-11 w-full cursor-pointer items-center border-b border-border px-4 transition-colors last:border-b-0 ${
+                        menuOpen
                           ? 'bg-muted'
                           : 'hover:bg-muted has-[button:first-child:disabled]:hover:bg-transparent'
                       }`}
@@ -411,7 +416,7 @@ export function Welcome() {
                         <FolderIcon className="mx-0.5 size-4 shrink-0 text-muted-foreground opacity-80 [&_path]:stroke-[1.8]" />
                         <span className="flex min-w-0 flex-1 items-center gap-2">
                           <span className="max-w-[36%] min-w-0 truncate text-base font-semibold">{name}</span>
-                          {previewFavorites.has(r.path) && (
+                          {r.favorite && (
                             <StarIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Favorite" />
                           )}
                           <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground max-[720px]:hidden" title={r.path}>{parent}</span>
@@ -426,25 +431,55 @@ export function Welcome() {
                           )}
                         </span>
                         {formatOpenedAt(r.openedAt) && (
-                          <span className="shrink-0 pl-3 text-sm text-muted-foreground max-[720px]:hidden">
+                          <span className={`shrink-0 pl-3 text-sm text-muted-foreground max-[720px]:hidden ${menuOpen ? 'invisible' : 'group-hover:invisible group-focus-within:invisible'}`}>
                             {formatOpenedAt(r.openedAt)}
                           </span>
                         )}
                       </button>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:bg-border aria-expanded:text-foreground aria-expanded:opacity-100"
-                        aria-label={`More actions for ${name}`}
-                        aria-haspopup="menu"
-                        aria-expanded={folderMenu?.path === r.path}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setFolderMenu({ path: r.path, name, rect: e.currentTarget.getBoundingClientRect() });
-                        }}
+                      {/* Gmail-style swap: at rest the time owns the right
+                        * edge; on hover (or while this row's menu is open)
+                        * the action cluster overlays that same slot instead
+                        * of reserving a permanent blank gutter. Favorite
+                        * state itself lives quietly next to the name. */}
+                      <span
+                        className={`absolute top-1/2 right-2.5 flex -translate-y-1/2 items-center gap-1 ${
+                          menuOpen ? '' : 'opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100'
+                        }`}
                       >
-                        <MoreHorizontalIcon />
-                      </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          className={`shrink-0 text-muted-foreground ${
+                            r.favorite ? '[&_svg]:fill-current' : ''
+                          }`}
+                          aria-pressed={!!r.favorite}
+                          aria-label={r.favorite ? `Remove ${name} from Favorites` : `Add ${name} to Favorites`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Mouse clicks (detail > 0) blur so the action
+                            // cluster retracts on mouse-leave; keyboard
+                            // activation keeps focus for continued tabbing.
+                            if (e.detail > 0) e.currentTarget.blur();
+                            toggleFavorite(r.path);
+                          }}
+                        >
+                          <StarIcon />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          className="shrink-0 text-muted-foreground aria-expanded:bg-border aria-expanded:text-foreground"
+                          aria-label={`More actions for ${name}`}
+                          aria-haspopup="menu"
+                          aria-expanded={menuOpen}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFolderMenu({ path: r.path, name, rect: e.currentTarget.getBoundingClientRect() });
+                          }}
+                        >
+                          <MoreHorizontalIcon />
+                        </Button>
+                      </span>
                     </div>
                   );
                 })}
@@ -472,7 +507,7 @@ export function Welcome() {
           minWidth={210}
           items={[
             {
-              label: previewFavorites.has(folderMenu.path) ? 'Remove from Favorites' : 'Add to Favorites',
+              label: state.recent.find((r) => r.path === folderMenu.path)?.favorite ? 'Remove from Favorites' : 'Add to Favorites',
               icon: <StarIcon />,
               onSelect: () => toggleFavorite(folderMenu.path),
             },
@@ -584,8 +619,7 @@ function OpenFolderButton({
   return (
     <Button
       variant={primary ? 'default' : 'outline'}
-      size="sm"
-      className="font-semibold"
+      className="h-8 gap-2 px-3.5 text-base font-medium has-data-[icon=inline-start]:pl-3"
       onClick={onClick}
       disabled={busy || disabled}
       title="Add any folder on your disk to the library — indexed in place, not copied"
@@ -646,8 +680,7 @@ function NewFolderButton({
   return (
     <Button
       variant="outline"
-      size="sm"
-      className="font-semibold"
+      className="h-8 gap-2 px-3.5 text-base font-medium has-data-[icon=inline-start]:pl-3"
       onClick={onClick}
       disabled={busy || disabled}
       title="Create or choose a folder under the default StashBase location and add it to the library"
