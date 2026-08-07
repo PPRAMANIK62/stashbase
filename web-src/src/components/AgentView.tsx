@@ -20,6 +20,7 @@ import { makeChatTab } from '../store/state';
 import { PlusIcon } from '../icons';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from './ui/button';
+import { ChatLaunchButtons } from './ChatLaunchButtons';
 import { AgentComposer } from './agent/AgentComposer';
 import { EmptyChatGreeting, StarterTemplates } from './agent/AgentEmptyState';
 import { resolveAssistantLink } from './agent/assistantLinkTarget';
@@ -1097,7 +1098,12 @@ export function AgentView({
             <span className="ml-1.5 text-xs text-muted-foreground">{bindingNote}</span>
           )}
         </span>
-        <div className="flex shrink-0 gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
+          {/* Agent launchers live here too: in the chat-primary layout the
+            * document tab strip (their other home) is not rendered, and
+            * switching agents must stay one click away. */}
+          <ChatLaunchButtons />
+          <span className="mx-1 h-4 w-px flex-none bg-border" aria-hidden="true" />
           {capabilities?.history && (
             <AgentHistoryMenu
               open={historyOpen}

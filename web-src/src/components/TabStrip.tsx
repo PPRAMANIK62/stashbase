@@ -174,15 +174,15 @@ export function TabStrip() {
           onClick={() => { void actions.newTab(); }}
         >+</button>
       </div>
-      {state.folderPath ? (
-        /* Agent launchers in the strip's right corner. `self-center`
-         * matches `.tab-new`'s vertical centering; the buttons opt out
-         * of the strip's Electron drag region via the global
-         * `body.is-electron button` no-drag rule. */
-        <div className="ml-auto flex flex-none items-center self-center pl-2 pr-0.5">
-          <ChatLaunchButtons />
-        </div>
-      ) : null}
+      {/* Agent launchers in the strip's right corner — the reopen entry
+        * when the chat panel is hidden, present regardless of folder
+        * state (library chats need them too). `self-center` matches
+        * `.tab-new`'s vertical centering; the buttons opt out of the
+        * strip's Electron drag region via the global
+        * `body.is-electron button` no-drag rule. */}
+      <div className="ml-auto flex flex-none items-center self-center pl-2 pr-0.5">
+        <ChatLaunchButtons />
+      </div>
     </div>
   );
 }
