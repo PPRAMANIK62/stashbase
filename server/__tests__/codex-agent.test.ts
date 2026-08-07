@@ -73,6 +73,29 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
+function manualRpcTimers() {
+  const callbacks = new Map<ReturnType<typeof setTimeout>, () => void>();
+  let cancelledCount = 0;
+  return {
+    scheduleTimeout(callback: () => void): ReturnType<typeof setTimeout> {
+      const handle = { unref: () => handle } as unknown as ReturnType<typeof setTimeout>;
+      callbacks.set(handle, callback);
+      return handle;
+    },
+    cancelTimeout(handle: ReturnType<typeof setTimeout>): void {
+      if (callbacks.delete(handle)) cancelledCount += 1;
+    },
+    expireNext(): void {
+      const entry = callbacks.entries().next().value as [ReturnType<typeof setTimeout>, () => void] | undefined;
+      assert.ok(entry, 'expected a pending RPC timeout');
+      callbacks.delete(entry[0]);
+      entry[1]();
+    },
+    activeCount: () => callbacks.size,
+    cancelledCount: () => cancelledCount,
+  };
+}
+
 test('Codex publishes its native model catalog before ready and forwards a selected model on the first turn', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
   runWithWindowId('model-window', () => setCurrentFolder(folder));
@@ -501,14 +524,23 @@ test('Codex Edit auto-accepts only ordinary StashBase MCP writes inside the open
 
 test('Codex RPC peer enforces request timeout, clears timers, and ignores late responses', async () => {
   let written = '';
-  const peer = new CodexRpcPeer((line) => { written = line; }, { requestTimeoutMs: 20 });
+  const timers = manualRpcTimers();
+  const peer = new CodexRpcPeer((line) => { written = line; }, {
+    requestTimeoutMs: 20,
+    scheduleTimeout: timers.scheduleTimeout,
+    cancelTimeout: timers.cancelTimeout,
+  });
   const pending = peer.request('turn/start', { threadId: 't1' });
   const req = JSON.parse(written) as { id: number };
+  assert.equal(timers.activeCount(), 1);
+  timers.expireNext();
 
   await assert.rejects(pending, (err: Error) => {
     assert.match(err.message, /Codex app-server request timed out: turn\/start/);
     return true;
   });
+  assert.equal(timers.activeCount(), 0);
+  assert.equal(timers.cancelledCount(), 0, 'an expired timer should not be cancelled again');
 
   assert.doesNotThrow(() => {
     peer.receiveLine(JSON.stringify({ id: req.id, result: { turn: { id: 'late-turn' } } }));
@@ -516,18 +548,39 @@ test('Codex RPC peer enforces request timeout, clears timers, and ignores late r
 });
 
 test('Codex RPC peer clears timers on response, write failure, and peer close', async () => {
-  const successPeer = new CodexRpcPeer(() => {}, { requestTimeoutMs: 100 });
+  const successTimers = manualRpcTimers();
+  const successPeer = new CodexRpcPeer(() => {}, {
+    requestTimeoutMs: 100,
+    scheduleTimeout: successTimers.scheduleTimeout,
+    cancelTimeout: successTimers.cancelTimeout,
+  });
   const p1 = successPeer.request('initialize', {});
   successPeer.receiveLine(JSON.stringify({ id: 1, result: { ok: true } }));
   assert.deepEqual(await p1, { ok: true });
+  assert.equal(successTimers.activeCount(), 0);
+  assert.equal(successTimers.cancelledCount(), 1);
 
-  const failPeer = new CodexRpcPeer(() => { throw new Error('write error'); }, { requestTimeoutMs: 100 });
+  const failTimers = manualRpcTimers();
+  const failPeer = new CodexRpcPeer(() => { throw new Error('write error'); }, {
+    requestTimeoutMs: 100,
+    scheduleTimeout: failTimers.scheduleTimeout,
+    cancelTimeout: failTimers.cancelTimeout,
+  });
   await assert.rejects(failPeer.request('initialize', {}), /write error/);
+  assert.equal(failTimers.activeCount(), 0);
+  assert.equal(failTimers.cancelledCount(), 1);
 
-  const closePeer = new CodexRpcPeer(() => {}, { requestTimeoutMs: 100 });
+  const closeTimers = manualRpcTimers();
+  const closePeer = new CodexRpcPeer(() => {}, {
+    requestTimeoutMs: 100,
+    scheduleTimeout: closeTimers.scheduleTimeout,
+    cancelTimeout: closeTimers.cancelTimeout,
+  });
   const p3 = closePeer.request('initialize', {});
   closePeer.close(new Error('connection closed'));
   await assert.rejects(p3, /connection closed/);
+  assert.equal(closeTimers.activeCount(), 0);
+  assert.equal(closeTimers.cancelledCount(), 1);
 });
 
 test('Codex Session handles startup timeout by reaching fatal error path', async (t) => {
