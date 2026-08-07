@@ -3,7 +3,9 @@
  * composer in the panel: a quiet runtime greeting sits above it and use-case
  * starter templates sit below it (Cursor-style rows: icon, title, one-line
  * description). Selecting a template only prefills the composer draft —
- * sending always stays an explicit user action.
+ * sending always stays an explicit user action. Copy follows the chat's
+ * scope: a folder-bound chat talks about "this folder", a library chat
+ * talks about the whole library.
  */
 import type { ComponentType } from 'react';
 import { Button } from 'react-aria-components';
@@ -16,7 +18,7 @@ interface StarterTemplate {
   text: string;
 }
 
-const STARTER_TEMPLATES: StarterTemplate[] = [
+const FOLDER_STARTERS: StarterTemplate[] = [
   {
     Icon: SearchIcon,
     title: 'Find answers in your docs',
@@ -37,14 +39,36 @@ const STARTER_TEMPLATES: StarterTemplate[] = [
   },
 ];
 
+const LIBRARY_STARTERS: StarterTemplate[] = [
+  {
+    Icon: SearchIcon,
+    title: 'Find answers in your library',
+    description: 'Ask a question, answered from any folder you have added',
+    text: 'Answer from my library: ',
+  },
+  {
+    Icon: EditIcon,
+    title: 'Draft a document',
+    description: 'Write a design doc, report, or summary from your notes',
+    text: 'Draft a document about ',
+  },
+  {
+    Icon: FolderIcon,
+    title: 'Survey your library',
+    description: 'Summarize the folders here and what each one holds',
+    text: 'Summarize the folders in my library and what each contains',
+  },
+];
+
 /** Small wordmark row above the centered composer. The runtime identity is
  * demoted to a caption; the composer itself is the visual focus. While the
  * session connects the guidance line becomes the spinner + muted text. */
-export function EmptyChatGreeting({ name, agentShortName, Icon, connecting }: {
+export function EmptyChatGreeting({ name, agentShortName, Icon, connecting, libraryScoped }: {
   name: string;
   agentShortName: string;
   Icon: ComponentType<{ className?: string }>;
   connecting: boolean;
+  libraryScoped?: boolean;
 }) {
   return (
     <div className="flex flex-col items-center gap-2 pb-4 text-center">
@@ -64,17 +88,23 @@ export function EmptyChatGreeting({ name, agentShortName, Icon, connecting }: {
         </p>
       ) : (
         <p className="m-0 text-sm text-muted-foreground">
-          Ask about this folder — your files are the context.
+          {libraryScoped
+            ? 'Ask across your library — every folder you have added is in scope.'
+            : 'Ask about this folder — your files are the context.'}
         </p>
       )}
     </div>
   );
 }
 
-export function StarterTemplates({ onPrefill }: { onPrefill: (text: string) => void }) {
+export function StarterTemplates({ onPrefill, libraryScoped }: {
+  onPrefill: (text: string) => void;
+  libraryScoped?: boolean;
+}) {
+  const starters = libraryScoped ? LIBRARY_STARTERS : FOLDER_STARTERS;
   return (
     <div className="flex flex-col pt-5">
-      {STARTER_TEMPLATES.map((starter) => (
+      {starters.map((starter) => (
         <Button
           key={starter.title}
           // Preflight is intentionally off in this renderer (styles.css), so

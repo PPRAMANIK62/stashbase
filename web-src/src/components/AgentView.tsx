@@ -22,6 +22,7 @@ import { Button } from 'react-aria-components';
 import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
 import { EmptyChatGreeting, StarterTemplates } from './agent/AgentEmptyState';
+import { resolveAssistantLink } from './agent/assistantLinkTarget';
 import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { iconGhostButtonClass } from './agent/panelStyles';
@@ -1103,6 +1104,7 @@ export function AgentView({
                 agentShortName={meta.shortName}
                 Icon={meta.Icon}
                 connecting={phase === 'connecting'}
+                libraryScoped={sessionScope.kind === 'library'}
               />
             </div>
           </div>
@@ -1122,9 +1124,24 @@ export function AgentView({
             onResendUserMessage={send}
             onRetry={reconnect}
             onOpenArtifact={(path) => {
-              const folder = folderPathRef.current;
-              const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
-              if (isSafeFolderRelativePath(rel)) void actions.selectFile(rel);
+              const action = resolveAssistantLink(path, {
+                scopeFolder: connectedScopeRef.current?.kind === 'folder' ? connectedScopeRef.current.path : null,
+                windowFolder: folderPathRef.current || null,
+                members: state.recent.map((entry) => entry.path),
+              });
+              if (!action) return;
+              if (action.kind === 'open-folder') {
+                void actions.openFolder(action.path);
+                return;
+              }
+              if (!isSafeFolderRelativePath(action.rel)) return;
+              if (action.folder === folderPathRef.current) {
+                void actions.selectFile(action.rel);
+                return;
+              }
+              // The file lives in another member folder: switch the browse
+              // location first, then select it there.
+              void actions.openFolder(action.folder).then(() => actions.selectFile(action.rel));
             }}
           />
         )}
@@ -1184,7 +1201,10 @@ export function AgentView({
       {emptyChat && (
         <div key="empty-below" className="flex min-h-0 flex-[4] flex-col overflow-y-auto px-2 [scrollbar-width:thin]">
           <div className="mx-auto w-[min(640px,100%)] shrink-0">
-            <StarterTemplates onPrefill={(text) => setPrefill({ text, nonce: Date.now() })} />
+            <StarterTemplates
+              onPrefill={(text) => setPrefill({ text, nonce: Date.now() })}
+              libraryScoped={sessionScope.kind === 'library'}
+            />
           </div>
         </div>
       )}

@@ -7,11 +7,13 @@ to migrate them into a StashBase-specific storage model.
 ## Current
 
 - Users can add, create, open, and remove local folders from the library.
-- The app has no landing page: a window boots straight into the workspace.
-  When the window has no current folder, the most recently opened library
-  folder opens automatically; an empty library shows a small zero-folder
-  block in the sidebar with the app mark, one line of guidance, and an
-  Add Folder action.
+- The app has no landing page: a window boots straight into the workspace
+  with no folder selected, showing the chat panel on one blank
+  library-scoped chat (the New Chat default). Browsing a folder is always
+  an explicit sidebar click; only an explicit open request (such as Open
+  in New Window) or a same-window reload restores a folder. An empty
+  library shows a small zero-folder block in the sidebar with the app
+  mark, one line of guidance, and an Add Folder action.
 - A full-width New Chat button sits at the top of the sidebar, above the
   Library section: it opens the chat panel on a chat scoped to the
   window's current folder, or to the whole library when no folder is
