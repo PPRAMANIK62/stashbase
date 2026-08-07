@@ -22,7 +22,6 @@ export function routeQuickAccess(value: string): { provider: QuickAccessProvider
 }
 
 export const commandDefinitions: readonly CommandDefinition[] = [
-  { id: 'navigation.go-home', label: 'Go to Welcome', category: 'Navigation', available: ({ hasFolder }) => hasFolder },
   { id: 'document.new-note', label: 'New Note', category: 'Document', shortcut: 'Cmd/Ctrl+N', available: ({ hasFolder }) => hasFolder },
   { id: 'document.save', label: 'Save', category: 'Document', shortcut: 'Cmd/Ctrl+S', available: ({ hasActiveTab }) => hasActiveTab },
   { id: 'document.close-editor', label: 'Close Editor', category: 'Document', shortcut: 'Cmd/Ctrl+W', available: ({ hasActiveTab }) => hasActiveTab },

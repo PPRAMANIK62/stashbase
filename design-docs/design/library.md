@@ -7,6 +7,24 @@ to migrate them into a StashBase-specific storage model.
 ## Current
 
 - Users can add, create, open, and remove local folders from the library.
+- The app has no landing page: a window boots straight into the workspace.
+  When the window has no current folder, the most recently opened library
+  folder opens automatically; an empty library shows a small zero-folder
+  block in the sidebar with the app mark, one line of guidance, and an
+  Add Folder action.
+- The sidebar's Library section lists every library folder as a root row —
+  favorited folders pinned to the top, the rest in Recents order. The
+  window's current folder is the one expanded root showing the file tree
+  beneath it; clicking a collapsed root switches this window's folder in
+  place. Collapsed roots show a subtle warning dot when files in that
+  folder could not be prepared for search.
+- A `+` button in the Library header offers Open Folder… (any folder on
+  disk, indexed in place) and New Folder… (created under the default
+  StashBase location) through the native picker; a folder row's actions
+  menu offers favorite toggling, Open in New Window, and Remove from
+  Library. Users can star folders as Favorites; favorites are library
+  metadata stored with the membership list, and starring never touches
+  the folder on disk.
 - Each window centres on one current folder, with its own file tree, document
   tabs, search state, and Agent panel.
 - Users can open multiple windows from the application menu or a folder action
@@ -56,7 +74,8 @@ to migrate them into a StashBase-specific storage model.
   StashBase-owned state.
 - Removing a library folder removes derived state, never the user's folder.
 - Removing a folder that is open elsewhere saves those windows and returns
-  them to the library view instead of leaving stale editable state behind.
+  them to the no-folder workspace (the sidebar library list) instead of
+  leaving stale editable state behind.
 - Destructive file operations require clear confirmation.
 - Blocking dialogs and menus keep keyboard focus inside the active surface,
   dismiss only the topmost eligible surface with Escape, and return focus to
@@ -70,8 +89,9 @@ to migrate them into a StashBase-specific storage model.
   Chat is explicit and leaves a lightweight document/chat launcher instead of
   immediately reopening it.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
-  or project-management surface. It groups the file tree and the active
-  Markdown document outline into independently collapsible navigation sections.
+  or project-management surface. It groups the library folder list (with the
+  current folder's file tree expanded in place) and the active Markdown
+  document outline into independently collapsible navigation sections.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
 - Command Palette exposes only safe, context-available actions the app already

@@ -78,7 +78,6 @@ export function commitOpenedFolderNavigation(
     folder: expected.name,
     folderPath: expected.path,
   });
-  dispatch({ type: 'WELCOME_HIDE' });
 }
 
 function libraryStatusFromActiveFolder(state: State): LibraryFolderStatus {
@@ -271,54 +270,13 @@ export function useFolderActions(
     });
   }, [editor, flushSave, folderMutations, performFolderOpen]);
 
-  const goHome = useCallback(async () => {
-    if (editor.current && !(await flushSave())) return false;
-    openGeneration.current += 1;
-    resetFolderScopedState();
-    dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
-    dispatch({
-      type: 'WELCOME_SHOW',
-      recent: state.current.recent,
-      homeDir: state.current.homeDir,
-    });
-    try {
-      await folderMutations.run(() => api.closeFolder());
-    } catch (err: unknown) {
-      toast(
-        'Could not close the current folder: ' + (err instanceof Error ? err.message : String(err)),
-        { level: 'error' },
-      );
-      return false;
-    }
-    try {
-      const result = await api.getFolder();
-      dispatch({
-        type: 'WELCOME_SHOW',
-        recent: result.recent ?? [],
-        homeDir: result.homeDir,
-      });
-    } catch {
-      // Keep the last known library list.
-    }
-    return true;
-  }, [
-    dispatch,
-    editor,
-    flushSave,
-    folderMutations,
-    openGeneration,
-    resetFolderScopedState,
-    state,
-    toast,
-  ]);
-
   const prepareForFolderRemoval = useCallback((removedPath: string) => {
     if (!state.current.folderPath || !folderRefsEqual(state.current.folderPath, removedPath)) return;
     openGeneration.current += 1;
     resetFolderScopedState();
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
     dispatch({
-      type: 'WELCOME_SHOW',
+      type: 'RECENT_LOADED',
       recent: state.current.recent.filter((entry) => !folderRefsEqual(entry.path, removedPath)),
       homeDir: state.current.homeDir,
     });
@@ -330,20 +288,20 @@ export function useFolderActions(
       && folderRefsEqual(state.current.folderPath, removedPath),
     );
     if (affected) prepareForFolderRemoval(removedPath);
-    if (affected || state.current.welcomeVisible) {
-      void api.getFolder().then((result) => dispatch({
-        type: 'WELCOME_SHOW',
-        recent: result.recent ?? [],
-        homeDir: result.homeDir,
-      }))
-      .catch(() => { /* Keep the optimistic membership removal. */ });
-    }
+    // Every window's sidebar shows the library list, so all of them
+    // refresh membership after a removal — not just the affected one.
+    void api.getFolder().then((result) => dispatch({
+      type: 'RECENT_LOADED',
+      recent: result.recent ?? [],
+      homeDir: result.homeDir,
+    }))
+    .catch(() => { /* Keep the optimistic membership removal. */ });
   }, [dispatch, prepareForFolderRemoval, state]);
 
   const bootstrap = useCallback(async () => {
     try {
       const result = await api.getFolder();
-      dispatch({ type: 'WELCOME_SHOW', recent: result.recent ?? [], homeDir: result.homeDir });
+      dispatch({ type: 'RECENT_LOADED', recent: result.recent ?? [], homeDir: result.homeDir });
       const initialFolder = new URLSearchParams(window.location.search).get('folder');
       if (initialFolder) {
         window.history.replaceState(null, '', window.location.pathname);
@@ -354,14 +312,16 @@ export function useFolderActions(
             await openFolderByName(initialFolder);
           }
         } catch (err: unknown) {
-          dispatch({
-            type: 'WELCOME_SHOW',
-            recent: result.recent ?? [],
-            homeDir: result.homeDir,
-            error: `Could not open "${initialFolder}": ${err instanceof Error ? err.message : String(err)}`,
-          });
+          // Stay on the no-folder workspace: the user asked for a
+          // specific folder, so don't silently substitute another one.
+          toast(
+            `Could not open "${initialFolder}": ${err instanceof Error ? err.message : String(err)}`,
+            { level: 'error' },
+          );
         }
-      } else if (result.current) {
+        return;
+      }
+      if (result.current) {
         const generation = ++openGeneration.current;
         await finishOpenFolder(result.current, generation);
         const restoredFolderPath = result.current.path;
@@ -373,9 +333,26 @@ export function useFolderActions(
             .catch(() => { /* Surfaced by the next status poll. */ })
             .finally(() => { void refreshIndexState(); });
         }
+        return;
+      }
+      // No window-bound folder: boot straight into the most recent
+      // library folder. An empty library stays on the zero-folder
+      // workspace (the sidebar carries the add-folder affordance).
+      const mostRecent = result.recent?.[0]?.path;
+      if (mostRecent) {
+        try {
+          await openFolder(mostRecent);
+        } catch (err: unknown) {
+          toast(
+            `Could not open "${mostRecent}": ${err instanceof Error ? err.message : String(err)}`,
+            { level: 'error' },
+          );
+        }
       }
     } catch {
-      dispatch({ type: 'WELCOME_SHOW', recent: [], error: 'Server unreachable' });
+      toast('Server unreachable', { level: 'error' });
+    } finally {
+      dispatch({ type: 'BOOTED' });
     }
   }, [
     dispatch,
@@ -385,11 +362,11 @@ export function useFolderActions(
     openGeneration,
     refreshIndexState,
     state,
+    toast,
   ]);
 
   return {
     bootstrap,
-    goHome,
     handleFolderRemoved,
     openFolder,
     openFolderByName,

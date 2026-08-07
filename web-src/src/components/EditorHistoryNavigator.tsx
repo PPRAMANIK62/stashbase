@@ -154,7 +154,7 @@ export function EditorHistoryNavigator() {
         const s = stateRef.current;
         const blocked = settingsBlockingRef.current
           || Boolean(s.modal || s.cascadePrompt || s.ctxMenu || s.renaming)
-          || s.welcomeVisible || !s.folder
+          || !s.folder
           || document.querySelector('.modal-veil, .quick-open-blocking, .quick-open-veil');
         if (blocked) return;
         const list = orderEditorHistory(s.tabs, s.editorHistory);

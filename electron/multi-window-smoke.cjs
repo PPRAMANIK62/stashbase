@@ -51,6 +51,23 @@ async function waitForRenderer(win) {
       }, 25);
     })
   `);
+  // Boot auto-opens the most recent library folder and pushes its own
+  // window-folder registration. Wait for that push to settle before this
+  // harness assigns folders, so the boot push cannot clobber ours.
+  await win.webContents.executeJavaScript(`
+    new Promise((resolve, reject) => {
+      const deadline = Date.now() + 20000;
+      const timer = setInterval(() => {
+        if (document.body.dataset.bootSettled === '1') {
+          clearInterval(timer);
+          resolve(true);
+        } else if (Date.now() >= deadline) {
+          clearInterval(timer);
+          reject(new Error('renderer boot did not settle'));
+        }
+      }, 25);
+    })
+  `);
 }
 
 async function openFolder(win, folder) {

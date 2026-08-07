@@ -59,6 +59,10 @@ export const api = {
   /** Absolute path of the default folder home. New Folder opens the native
    *  picker here, but users can still open any folder on disk. */
   getFolderHome: () => getJson<{ path: string }>('/api/folder-home'),
+  /** Star / unstar a library folder. Metadata only — never touches the
+   *  folder on disk. */
+  setFolderFavorite: (path: string, favorite: boolean) =>
+    send<Record<string, never>>('POST', '/api/folders/favorite', { path, favorite }),
   /** Remove a folder from the library ("Your Folders"): forgets it
    *  (unbind + clear index + drop from membership) WITHOUT touching the
    *  folder on disk. */

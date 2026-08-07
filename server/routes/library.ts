@@ -25,6 +25,7 @@ import {
   notifyFolderSwitch,
   removeRecent,
   setCurrentFolder,
+  setRecentFavorite,
   validateFolderName,
 } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
@@ -150,6 +151,23 @@ export function mount(app: express.Express): void {
     const root = getFolderHome();
     if (!fs.existsSync(root)) ensureFolderHome();
     res.json({ path: getFolderHome() });
+  });
+
+  // Star / unstar a member folder. Pure library metadata — never touches
+  // the folder on disk or its index. Powers the Welcome Favorites view.
+  app.post('/api/folders/favorite', (req, res) => {
+    try {
+      const raw = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+      if (!raw) return res.status(400).json({ error: 'path required' });
+      if (typeof req.body?.favorite !== 'boolean') {
+        return res.status(400).json({ error: 'favorite must be a boolean' });
+      }
+      const changed = setRecentFavorite(filesystemPath.absolute(raw), req.body.favorite);
+      if (!changed) return res.status(404).json({ error: 'folder is not in your folders' });
+      res.json({});
+    } catch (err: unknown) {
+      sendFolderOperationError(res, err);
+    }
   });
 
   // Remove a folder from the library ("Your Folders"). UNLIKE

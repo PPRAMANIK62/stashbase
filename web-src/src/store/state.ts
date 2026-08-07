@@ -149,8 +149,11 @@ export interface ModalRequest {
 }
 
 export interface State {
-  welcomeVisible: boolean;
-  welcomeError: string | null;
+  /** True once `bootstrap` has settled (initial library load plus any
+   *  auto-open attempt). Lets the shell distinguish "still booting" from
+   *  "booted with no folder" — e.g. before releasing a pending
+   *  window-folder registration back to Electron. */
+  booted: boolean;
 
   /** Human-facing active folder label. Use `folderPath` for API scope /
    *  identity; this value is for titles, sidebar headings, and empty-state
@@ -159,14 +162,15 @@ export interface State {
   /** Absolute POSIX path of the active folder. This is the stable identity
    *  for search, sync, conversion retry, uploads, and agent context. */
   folderPath: string;
-  recent: { path: string; openedAt: string }[];
-  /** OS home directory — used by the Welcome screen to render
-   *  `~/foo` instead of the full `/Users/<name>/foo`. */
+  /** Library membership, recents-ordered — feeds the sidebar library list. */
+  recent: { path: string; openedAt: string; favorite?: boolean }[];
+  /** OS home directory — used to render `~/foo` instead of the full
+   *  `/Users/<name>/foo` wherever an absolute path shows up in copy. */
   homeDir: string;
   /** Library-level search-readiness state keyed by absolute folder path. Unlike
    *  active-folder `pendingSemanticNames` / `pendingConversions`, this survives leaving an
-   *  active folder so Welcome can surface failures without showing
-   *  background preparation as a browsing status. */
+   *  active folder so the sidebar library list can surface failures without
+   *  showing background preparation as a browsing status. */
   libraryFolderStatuses: Record<string, LibraryFolderStatus>;
 
   files: FileMeta[];
@@ -333,8 +337,7 @@ export interface State {
 }
 
 export const initialState: State = {
-  welcomeVisible: true,
-  welcomeError: null,
+  booted: false,
   folder: '',
   folderPath: '',
   recent: [],
@@ -389,10 +392,8 @@ export const initialState: State = {
 };
 
 export type Action =
-  | { type: 'WELCOME_HIDE' }
-  | { type: 'WELCOME_SHOW'; recent: State['recent']; homeDir?: string; error?: string | null }
+  | { type: 'BOOTED' }
   | { type: 'RECENT_LOADED'; recent: State['recent']; homeDir?: string }
-  | { type: 'WELCOME_ERROR'; error: string }
   | { type: 'LIBRARY_FOLDER_STATUS'; path: string; status: LibraryFolderStatus }
   | { type: 'LIBRARY_FOLDER_STATUS_REMOVE'; path: string }
   | { type: 'FOLDER_CONTEXT'; folder: string; folderPath: string }

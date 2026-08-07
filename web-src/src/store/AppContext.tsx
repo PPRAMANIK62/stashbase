@@ -62,7 +62,6 @@ export interface AppActions {
     name: string,
     opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticPendingOnOpen?: boolean },
   ) => Promise<void>;
-  goHome: () => Promise<boolean>;
 
   loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
   /** Optimistically mark the current visible files as pending for search. Used
@@ -429,7 +428,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const actions = useMemo<AppActions>(() => ({
-    bootstrap: workspace.bootstrap, openFolder: workspace.openFolder, openFolderByName: workspace.openFolderByName, goHome: workspace.goHome,
+    bootstrap: workspace.bootstrap, openFolder: workspace.openFolder, openFolderByName: workspace.openFolderByName,
     loadFiles: workspace.loadFiles, markVisibleFilesPendingForSearch: workspace.markVisibleFilesPendingForSearch,
     refreshIndexState: workspace.refreshIndexState, runSync: workspace.runSync, runSearch: workspace.runSearch,
     setFolderOrder: workspace.setFolderOrder, dismissIndexWarning: workspace.dismissIndexWarning,

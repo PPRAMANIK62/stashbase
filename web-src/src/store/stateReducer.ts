@@ -22,24 +22,14 @@ import {
 
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
-    case 'WELCOME_HIDE':
-      return { ...s, welcomeVisible: false, welcomeError: null };
-    case 'WELCOME_SHOW':
-      return {
-        ...s,
-        welcomeVisible: true,
-        recent: a.recent,
-        homeDir: a.homeDir ?? s.homeDir,
-        welcomeError: a.error ?? null,
-      };
+    case 'BOOTED':
+      return s.booted ? s : { ...s, booted: true };
     case 'RECENT_LOADED':
       return {
         ...s,
         recent: a.recent,
         homeDir: a.homeDir ?? s.homeDir,
       };
-    case 'WELCOME_ERROR':
-      return { ...s, welcomeError: a.error };
     case 'LIBRARY_FOLDER_STATUS':
       return s.libraryFolderStatuses[a.path] === a.status
         ? s

@@ -19,7 +19,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-test('implicit active-folder polling is skipped while Welcome has no active folder', async () => {
+test('implicit active-folder polling is skipped while no folder is open', async () => {
   let calls = 0;
   const outcome = await runIndexStatusRequest({
     activeFolderPath: '',
@@ -188,7 +188,7 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
   assert.deepEqual(await polling, { kind: 'stale' });
   assert.equal(openGeneration.current, 11);
   assert.equal(state.folderPath, '/new-library');
-  assert.equal(state.welcomeVisible, false);
+  assert.equal(state.folder, 'new-library');
 
   afterNavigation.resolve();
   await opening;

@@ -32,7 +32,6 @@ export interface ActiveFolderWorkspace {
     name: string,
     opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticPendingOnOpen?: boolean },
   ) => Promise<void>;
-  goHome: () => Promise<boolean>;
   loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
   markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
@@ -242,7 +241,6 @@ export function useActiveFolderWorkspace(
     setFolderOrder,
   }), [
     folders.bootstrap,
-    folders.goHome,
     folders.handleFolderRemoved,
     folders.openFolder,
     folders.openFolderByName,

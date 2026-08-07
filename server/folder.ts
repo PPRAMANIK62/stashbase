@@ -558,6 +558,20 @@ export function removeRecent(absPath: string): void {
   writeConfig(cfg);
 }
 
+/** Star / unstar a member folder in the library list. Returns false when
+ *  the path is not a member (nothing persisted). Clearing removes the
+ *  field so config.json stays free of `favorite: false` noise. */
+export function setRecentFavorite(absPath: string, favorite: boolean): boolean {
+  const target = filesystemPath.absolute(absPath);
+  const cfg = readConfig();
+  const entry = (cfg.recentFolders ?? []).find((v) => storedFolderPathEquals(v.path, target));
+  if (!entry) return false;
+  if (favorite) entry.favorite = true;
+  else delete entry.favorite;
+  writeConfig(cfg);
+  return true;
+}
+
 // ---------- API key (global) ----------
 
 /** Returns the user's stored embedding key, or undefined if none. */

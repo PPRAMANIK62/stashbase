@@ -5,9 +5,9 @@ export type IndexStatusRequestOutcome<T> =
   | { kind: 'skipped' };
 
 /** Run one active- or explicit-folder status request against the folder
- * transition that started it. Active polling has no work on Welcome or while
- * another folder is opening, and a response becomes stale as soon as a newer
- * folder transition starts. */
+ * transition that started it. Active polling has no work while no folder is
+ * open or while another folder is opening, and a response becomes stale as
+ * soon as a newer folder transition starts. */
 export async function runIndexStatusRequest<T>({
   activeFolderPath,
   activeFolderTransitionInProgress,

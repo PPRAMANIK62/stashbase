@@ -30,7 +30,7 @@ export function QuickOpen() {
   const [recentCommandIds, setRecentCommandIds] = useState<string[]>([]);
   const route = routeQuickAccess(query);
   const commandContext = {
-    hasFolder: Boolean(state.folder && !state.welcomeVisible),
+    hasFolder: Boolean(state.folder),
     hasActiveTab: Boolean(state.activeTabId),
     activeFileIsMarkdown: activeTab?.file?.format === 'md',
   };
@@ -49,7 +49,6 @@ export function QuickOpen() {
     setRecentCommandIds((recent) => [id, ...recent.filter((candidate) => candidate !== id)]);
     close();
     switch (id) {
-      case 'navigation.go-home': void actions.goHome(); break;
       case 'document.new-note': void actions.newNote(); break;
       case 'document.save': void actions.flushSave(); break;
       case 'document.close-editor': void actions.closeActiveTab(); break;
@@ -69,13 +68,13 @@ export function QuickOpen() {
       // veil, so this final topmost check keeps the shortcut from escaping it.
       const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
       const commandsOnly = mode === 'commands';
-      if (blocked || document.querySelector('.modal-veil, .quick-open-blocking') || (!commandsOnly && (state.welcomeVisible || !state.folder))) return;
+      if (blocked || document.querySelector('.modal-veil, .quick-open-blocking') || (!commandsOnly && !state.folder)) return;
       restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setQuery(commandsOnly ? '>' : ''); setActive(0); setOpen(true);
     };
     window.addEventListener('stashbase-open-quick-open', onOpen);
     return () => window.removeEventListener('stashbase-open-quick-open', onOpen);
-  }, [blocked, state.folder, state.welcomeVisible]);
+  }, [blocked, state.folder]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
   useEffect(() => { if (active >= itemCount) setActive(Math.max(0, itemCount - 1)); }, [active, itemCount]);
   if (!open) return null;

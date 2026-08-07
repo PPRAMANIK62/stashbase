@@ -745,9 +745,9 @@ async function createWindow(initialFolder) {
 
   // Swallow ⌘R / Ctrl+R from the keyboard. Electron's default View
   // menu binds it to "Reload", which does a full renderer re-mount —
-  // dropping all tab / nav / search state on the floor. The intentional
-  // "back to Welcome" path is the Home icon in the chrome strip
-  // (`actions.goHome()`), which resets tabs cleanly without re-mounting.
+  // dropping all tab / nav / search state on the floor. Folder switching
+  // happens through the sidebar's library list, which swaps the window's
+  // folder cleanly without re-mounting.
   // The View → Reload menu item is left in place as an escape hatch
   // (mouse click); only the keyboard chord is gone.
   win.webContents.on('before-input-event', (event, input) => {

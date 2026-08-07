@@ -15,7 +15,6 @@ interface ElectronBridge {
   onClipboardImage?: (handler: (offer: ClipboardOffer) => void) => (() => void);
   markClipboardHandled?: (hash: string) => void;
 }
-import { Welcome } from './components/Welcome';
 import { Sidebar } from './components/Sidebar';
 import { MainPane } from './components/MainPane';
 import { ContextMenu, DropVeil } from './components/Overlays';
@@ -31,9 +30,7 @@ import { SettingsPortal, openSettings } from './components/SettingsModal';
 import { QuickOpen } from './components/QuickOpen';
 import { EditorHistoryNavigator } from './components/EditorHistoryNavigator';
 import { DocumentOutlineProvider } from './components/DocumentOutlineContext';
-import { HomeIcon } from './icons';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
-import { DeferredTooltipButton } from './components/DeferredTooltipButton';
 import { OverlayStackProvider } from './components/OverlayStack';
 import { AppProvider, useApp } from './store/AppContext';
 import {
@@ -66,9 +63,8 @@ const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane').then((m
  * Top-level shell. Wraps everything in <AppProvider> (the single
  * store) and mounts the global drag-drop / hotkey side effects.
  *
- * The welcome overlay sits *above* the app via fixed positioning so
- * the rest of the UI keeps its scroll / selection state when the user
- * goes back home (cf. legacy `web/index.html`).
+ * There is no landing page: the app boots straight into the workspace,
+ * and the sidebar's library list is how folders are added and switched.
  */
 export function App() {
   return (
@@ -128,7 +124,7 @@ function AppBody() {
     if (state.chatOpen) setChatMounted(true);
   }, [state.chatOpen]);
   useEffect(() => {
-    if (!state.folderPath || state.welcomeVisible) {
+    if (!state.folderPath) {
       defaultChatFolderRef.current = '';
       return;
     }
@@ -140,7 +136,7 @@ function AppBody() {
       agent,
       tab: makeChatTab(agent, state.chatTabs),
     });
-  }, [dispatch, state.chatTabs, state.folderPath, state.welcomeVisible]);
+  }, [dispatch, state.chatTabs, state.folderPath]);
   useEffect(() => {
     const previous = previousWorkspaceRef.current;
     const folderChanged = previous.folderPath !== state.folderPath;
@@ -186,12 +182,18 @@ function AppBody() {
   useEffect(() => {
     // createWindow registers its requested folder immediately so a second
     // "Open in New Window" click can focus the still-loading window. Preserve
-    // that pending identity until bootstrap either opens it or reports failure.
-    if (initialFolderPending.current && !state.folderPath && !state.welcomeError) return;
+    // that pending identity until bootstrap either opens it or settles
+    // without a folder (open failure surfaces as a toast).
+    if (initialFolderPending.current && !state.folderPath && !state.booted) return;
     initialFolderPending.current = false;
     const bridge = (window as { electron?: ElectronBridge }).electron;
     void bridge?.setWindowFolder?.(state.folderPath || null);
-  }, [state.folderPath, state.welcomeError]);
+    // Boot (including the auto-open of the most recent folder) has pushed
+    // its final window-folder registration. The multi-window smoke keys off
+    // this marker before assigning folders programmatically — without it,
+    // a late boot push could clobber the harness's registration.
+    if (state.booted) document.body.dataset.bootSettled = '1';
+  }, [state.booted, state.folderPath]);
   // macOS fullscreen toggles the `is-fullscreen` body class so the chrome
   // strip can drop its traffic-light inset. That's owned entirely by the
   // preload (registered before page load, so it catches the initial state
@@ -200,22 +202,22 @@ function AppBody() {
     const bridge = (window as { electron?: ElectronBridge }).electron;
     return bridge?.onClipboardImage?.((offer) => {
       if (!offer.dataUrl || !offer.mime?.startsWith('image/')) return;
-      // If the app is still on Welcome, keep the offer in renderer
-      // memory. Main has already de-duped this hash, so dropping it here
-      // would make a screenshot copied just before opening a folder vanish
+      // If no folder is open yet, keep the offer in renderer memory.
+      // Main has already de-duped this hash, so dropping it here would
+      // make a screenshot copied just before opening a folder vanish
       // until the user copies it again.
-      if (state.welcomeVisible || !state.folder) {
+      if (!state.folder) {
         setPendingClipboardOffer(offer);
         return;
       }
       setClipboardOffer(offer);
     });
-  }, [state.folder, state.welcomeVisible]);
+  }, [state.folder]);
   useEffect(() => {
-    if (state.welcomeVisible || !state.folder || !pendingClipboardOffer || clipboardOffer) return;
+    if (!state.folder || !pendingClipboardOffer || clipboardOffer) return;
     setClipboardOffer(pendingClipboardOffer);
     setPendingClipboardOffer(null);
-  }, [clipboardOffer, pendingClipboardOffer, state.folder, state.welcomeVisible]);
+  }, [clipboardOffer, pendingClipboardOffer, state.folder]);
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       if (!e.data) return;
@@ -299,7 +301,6 @@ function AppBody() {
 
   return (
     <>
-      <Welcome />
       {/* Dedicated chrome strip across the very top of the window.
        *  In Electron it doubles as the macOS `hiddenInset` drag region;
        *  the centered folder name plays the role VSCode's titlebar fills
@@ -310,14 +311,12 @@ function AppBody() {
        *  the file header (`.main-head`) so file controls and app
        *  controls stop sharing the same row. */}
       <div className="app-chrome">
-        <div className="app-chrome-left">
-          {!state.welcomeVisible && <HomeChromeButton onClick={() => { void actions.goHome(); }} />}
-        </div>
-        {!state.welcomeVisible && state.folder && (
+        <div className="app-chrome-left" />
+        {state.folder ? (
           <div className="app-chrome-title">{state.folder}</div>
-        )}
+        ) : null}
         <div className="app-chrome-right">
-          {!state.welcomeVisible && <ChatLaunchButtons />}
+          {state.folderPath ? <ChatLaunchButtons /> : null}
         </div>
       </div>
       <div
@@ -334,7 +333,7 @@ function AppBody() {
       >
         <DocumentOutlineProvider>
           <Sidebar />
-          {!state.welcomeVisible && <SidebarSplitter />}
+          <SidebarSplitter />
           <MainPane workspaceHidden={workspaceLayout === 'chat-primary'} />
         </DocumentOutlineProvider>
         {chatMounted && workspaceLayout === 'split' && <ChatSplitter />}
@@ -362,7 +361,7 @@ function AppBody() {
           onClose={() => setPreviewImage(null)}
         />
       )}
-      {clipboardOffer && state.folder && !state.welcomeVisible && (
+      {clipboardOffer && state.folder && (
         <ClipboardImportModal
           offer={clipboardOffer}
           onClose={() => {
@@ -376,7 +375,7 @@ function AppBody() {
       <CascadePromptModal />
       <AlertConfirmModal />
       <Toasts />
-      {!state.welcomeVisible && <EmbedderRequireKeyGate />}
+      {state.folderPath ? <EmbedderRequireKeyGate /> : null}
       <SettingsPortal />
     </>
   );
@@ -402,19 +401,6 @@ function useCompactWorkspace() {
   }, []);
 
   return compact;
-}
-
-function HomeChromeButton({ onClick }: { onClick: () => void }) {
-  return (
-    <DeferredTooltipButton
-      className="inline-flex size-7 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-4"
-      label="Back to Welcome"
-      side="bottom"
-      onClick={onClick}
-    >
-      <HomeIcon />
-    </DeferredTooltipButton>
-  );
 }
 
 /** Decode a `data:` URL into a File. Decodes the base64 (or percent-

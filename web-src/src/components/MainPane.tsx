@@ -62,7 +62,15 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         * The `main-body` class itself is the structural hook for
         * `.main.no-file > :not(.main-body)` in mainpane.css. */}
       <div className={'main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden' + (chromeBand ? ' pt-9' : '')}>
-        {!hasTabs && (
+        {!hasTabs && !state.folderPath && (
+          /* No folder open at all (empty library, or an open failure).
+           * The sidebar's zero-folder block owns the add-folder action;
+           * this pane stays a quiet pointer toward it. */
+          <div className="grid h-full place-items-center p-10 text-center text-base text-muted-foreground">
+            <p className="m-0 leading-[1.9]">Add a folder from the sidebar to get started.</p>
+          </div>
+        )}
+        {!hasTabs && !!state.folderPath && (
           <div className="grid h-full place-items-center p-10 text-center text-base text-muted-foreground">
             <div>
               <p className="m-0 leading-[1.9]">Start a conversation or choose a document from Files.</p>

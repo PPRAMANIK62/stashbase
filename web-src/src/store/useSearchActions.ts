@@ -309,9 +309,9 @@ export function useSearchActions(
             // Drop through to the hard reset below.
           }
         }
-        // No folder open (e.g. just went home). Clear every folder-scoped
-        // indicator so a stale banner from the previous folder doesn't
-        // bleed into the welcome / next-folder view.
+        // No folder open. Clear every folder-scoped indicator so a stale
+        // banner from the previous folder doesn't bleed into the
+        // no-folder / next-folder view.
         syncGen.current += 1;
         openGen.current += 1;
         folderContextPath.current = '';
@@ -335,15 +335,16 @@ export function useSearchActions(
           dispatch({ type: 'ACTIVE_FOLDER', path: '' });
           dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
           dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
-          dispatch({
-            type: 'WELCOME_SHOW',
-            recent: latestLibrary?.recent ?? [],
-            homeDir: latestLibrary?.homeDir,
-          });
-          if (!latestLibrary) {
+          if (latestLibrary) {
+            dispatch({
+              type: 'RECENT_LOADED',
+              recent: latestLibrary.recent ?? [],
+              homeDir: latestLibrary.homeDir,
+            });
+          } else {
             void api.getFolder()
-              .then((j) => dispatch({ type: 'WELCOME_SHOW', recent: j.recent ?? [], homeDir: j.homeDir }))
-              .catch(() => { /* welcome can stay empty until bootstrap/focus */ });
+              .then((j) => dispatch({ type: 'RECENT_LOADED', recent: j.recent ?? [], homeDir: j.homeDir }))
+              .catch(() => { /* the library list can stay stale until the next refresh */ });
           }
         }
       }

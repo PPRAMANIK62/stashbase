@@ -23,6 +23,8 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 export interface RecentFolder {
   path: string;
   openedAt: string;
+  /** User-starred in the Welcome library list. Absent = not a favorite. */
+  favorite?: boolean;
   description?: string;
   descriptionSource?: 'user' | 'ai';
   descriptionUpdatedAt?: string;
