@@ -228,7 +228,7 @@
       place-items: center;
       pointer-events: none;
       border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
-      border-radius: 12px;
+      border-radius: 10px;
       background: color-mix(in srgb, var(--accent) 7%, transparent);
       backdrop-filter: blur(1.5px);
       -webkit-backdrop-filter: blur(1.5px);
@@ -238,8 +238,8 @@
       border-radius: 8px;
       background: var(--card);
       border: 1px solid var(--border);
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
-      font-size: calc(12.5px * var(--ui-scale));
+      box-shadow: 0 4px 14px rgba(var(--shadow-color), 0.12);
+      font-size: calc(12px * var(--ui-scale));
       font-weight: 500;
       color: var(--fg);
     }
@@ -253,7 +253,7 @@
     .agent-head-title {
       flex: 1;
       min-width: 0;
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       color: var(--muted);
       overflow: hidden;
       text-overflow: ellipsis;
@@ -286,7 +286,7 @@
       background: var(--pane);
       border: 1px solid var(--border);
       border-radius: 10px;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+      box-shadow: 0 8px 28px rgba(var(--shadow-color), 0.18);
     }
     .agent-history-search { padding: 2px 2px 6px; }
     .agent-history-search input {
@@ -297,18 +297,18 @@
       color: var(--fg);
       background: var(--hover);
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: 6px;
       outline: none;
     }
     .agent-history-search input::placeholder { color: var(--muted); }
     .agent-history-list { max-height: 320px; overflow-y: auto; }
-    .agent-history-empty { padding: 14px 8px; text-align: center; color: var(--muted); font-size: calc(12.5px * var(--ui-scale)); }
+    .agent-history-empty { padding: 14px 8px; text-align: center; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
     /* Row = the open button (fills width) + hover-revealed actions. */
     .agent-history-row {
       position: relative;
       display: flex;
       align-items: center;
-      border-radius: 7px;
+      border-radius: 6px;
     }
     .agent-history-row:hover { background: var(--hover); }
     .agent-history-row.active { background: var(--active); }
@@ -333,7 +333,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .agent-history-time { flex-shrink: 0; font-size: calc(11.5px * var(--ui-scale)); color: var(--muted); }
+    .agent-history-time { flex-shrink: 0; font-size: calc(11px * var(--ui-scale)); color: var(--muted); }
     .agent-history-rename {
       flex: 1;
       min-width: 0;
@@ -366,7 +366,7 @@
       padding: 0;
       background: transparent;
       color: var(--muted);
-      border-radius: 5px;
+      border-radius: 4px;
       cursor: pointer;
       display: grid;
       place-items: center;
@@ -388,11 +388,11 @@
       background: var(--pane);
       border: 1px solid var(--border);
       border-radius: 10px;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+      box-shadow: 0 12px 32px rgba(var(--shadow-color), 0.22);
       color: var(--fg);
     }
     .agent-history-confirm h2 { margin: 0; font-size: calc(14px * var(--ui-scale)); }
-    .agent-history-confirm p { margin: 8px 0 0; color: var(--muted); font-size: calc(12.5px * var(--ui-scale)); line-height: 1.45; }
+    .agent-history-confirm p { margin: 8px 0 0; color: var(--muted); font-size: calc(12px * var(--ui-scale)); line-height: 1.45; }
     .agent-history-confirm-error { margin-top: 8px; color: #c0392b; font-size: calc(12px * var(--ui-scale)); }
     .agent-history-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
     .agent-history-confirm-actions button {
@@ -446,7 +446,7 @@
       padding: 5px 10px;
       background: var(--pane);
       color: var(--fg);
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 2px 10px rgba(var(--shadow-color), 0.12);
       font: inherit;
       font-size: calc(12px * var(--ui-scale));
       cursor: pointer;
@@ -459,20 +459,20 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 22px;
+      gap: 20px;
       padding: 24px;
       text-align: center;
     }
     .agent-hero-wordmark {
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 8px;
       color: var(--fg);
     }
     .agent-hero-mark { width: 22px; height: 22px; }
     .agent-hero-name {
       font-family: Georgia, 'Times New Roman', ui-serif, serif;
-      font-size: calc(21px * var(--ui-scale));
+      font-size: calc(20px * var(--ui-scale));
       letter-spacing: 0.01em;
     }
     .agent-hero-sprite {
@@ -483,7 +483,7 @@
     .agent-empty,
     .agent-ended {
       color: var(--muted);
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       padding: 8px 2px;
       line-height: 1.5;
     }
@@ -518,7 +518,7 @@
       color: var(--fg);
     }
     .agent-runtime-setup-card h2 { margin: 0; font-size: calc(14px * var(--ui-scale)); }
-    .agent-runtime-setup-card p { margin: 7px 0 12px; color: var(--muted); font-size: calc(12.5px * var(--ui-scale)); line-height: 1.5; }
+    .agent-runtime-setup-card p { margin: 7px 0 12px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); line-height: 1.5; }
     .agent-runtime-setup-card code {
       display: block;
       overflow-x: auto;
@@ -544,7 +544,7 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 9px;
+      gap: 8px;
     }
     .agent-fatal-inline {
       display: flex;
@@ -555,11 +555,11 @@
     }
     .agent-fatal-title {
       font-size: calc(13px * var(--ui-scale));
-      font-weight: 650;
+      font-weight: 600;
     }
     .agent-fatal-detail {
       color: var(--muted);
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
@@ -600,7 +600,7 @@
       z-index: 2;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 11px;
+      border-radius: 10px;
       padding: 9px 12px;
       font-size: calc(13px * var(--ui-scale));
       line-height: 1.5;
@@ -615,7 +615,7 @@
      * line (VSCode sticky-scroll style). The negative spread keeps the
      * shadow at the bottom edge only; kept small per "阴影不用太大". */
     .agent-turn-head.stuck {
-      box-shadow: 0 7px 8px -6px rgba(15, 23, 42, 0.13);
+      box-shadow: 0 7px 8px -6px rgba(var(--shadow-color), 0.13);
     }
     .agent-turn-head.static {
       position: relative;
@@ -690,7 +690,7 @@
       place-items: center;
       padding: 0;
       border: 0;
-      border-radius: 5px;
+      border-radius: 4px;
       background: transparent;
       color: inherit;
       cursor: pointer;
@@ -743,9 +743,9 @@
     .agent-turn-waiting {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       color: var(--muted);
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
     }
     .agent-turn-steer {
       border: 0;
@@ -787,7 +787,7 @@
     .agent-prose :not(pre) > code {
       background: var(--hover);
       padding: 1px 5px;
-      border-radius: 3px;
+      border-radius: 4px;
     }
     .agent-prose ul, .agent-prose ol { padding-left: 1.4em; margin: 0.4em 0; }
     .agent-prose a { color: var(--accent); }
@@ -834,13 +834,13 @@
     .agent-tool-head {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       width: 100%;
       border: 0;
       background: transparent;
       cursor: pointer;
       padding: 7px 10px;
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       text-align: left;
     }
     .agent-tool-chev {
@@ -858,7 +858,7 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
     }
     .agent-tool-status {
       flex-shrink: 0;
@@ -882,7 +882,7 @@
       border-radius: 6px;
       padding: 7px 9px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       line-height: 1.45;
       overflow-x: auto;
       white-space: pre-wrap;
@@ -900,7 +900,7 @@
     .agent-activity-head {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       width: 100%;
       padding: 7px 9px;
       border: 0;
@@ -920,21 +920,21 @@
       display: grid;
       grid-template-columns: 15px minmax(0, 1fr) auto auto;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       padding: 6px 7px;
       border: 1px solid var(--border);
       background: var(--pane);
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
     }
     .agent-artifact-icon { width: 14px; height: 14px; color: var(--accent); }
     .agent-artifact-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
     .agent-artifact-kind { color: var(--muted); text-transform: capitalize; }
-    .agent-artifact button { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: calc(11.5px * var(--ui-scale)); cursor: pointer; }
+    .agent-artifact button { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: calc(11px * var(--ui-scale)); cursor: pointer; }
 
     /* Permission prompt (inside an awaiting tool card) */
     .agent-perm { padding: 0 10px 10px; }
     .agent-perm-title {
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       color: var(--fg);
       margin-bottom: 7px;
     }
@@ -949,7 +949,7 @@
       background: var(--bg);
       color: var(--fg);
       font: inherit;
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       padding: 5px 14px;
       border-radius: 6px;
       cursor: pointer;
@@ -974,12 +974,12 @@
       border-bottom: 1px solid var(--border);
       padding: 4px 9px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       color: var(--muted);
     }
     .agent-diff-body {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       line-height: 1.5;
       overflow-x: auto;
       max-height: 320px;
@@ -1006,7 +1006,7 @@
       color: #c0392b;
       border-radius: 6px;
       padding: 8px 11px;
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       line-height: 1.5;
       white-space: pre-wrap;
     }
@@ -1015,7 +1015,7 @@
     .agent-working {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       color: var(--muted);
       font-size: calc(12px * var(--ui-scale));
       padding: 2px;
@@ -1039,7 +1039,7 @@
       gap: 6px;
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 10px;
       padding: 8px 8px 6px;
     }
     .agent-composer-box:focus-within { border-color: var(--accent); }
@@ -1049,18 +1049,18 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
     }
     .agent-attach-chip {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       max-width: 260px;
       padding: 3px 4px 3px 7px;
       background: var(--hover);
       border: 1px solid var(--border);
       border-radius: 6px;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       color: var(--fg);
     }
     .agent-attach-image-chip {
@@ -1069,7 +1069,7 @@
       height: 64px;
       overflow: hidden;
       border: 1px solid var(--border);
-      border-radius: 9px;
+      border-radius: 8px;
       background: var(--hover);
       box-shadow: 0 1px 2px color-mix(in srgb, #000 28%, transparent);
     }
@@ -1127,7 +1127,7 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .agent-attach-path { overflow: hidden; color: var(--muted); font-size: calc(10.5px * var(--ui-scale)); text-overflow: ellipsis; white-space: nowrap; }
+    .agent-attach-path { overflow: hidden; color: var(--muted); font-size: calc(10px * var(--ui-scale)); text-overflow: ellipsis; white-space: nowrap; }
     .agent-attach-dims { color: var(--muted); flex-shrink: 0; }
     .agent-attach-x {
       display: grid;
@@ -1144,7 +1144,7 @@
       flex-shrink: 0;
     }
     .agent-attach-x:hover { background: var(--border); color: var(--fg); }
-    .agent-attach-loading { font-size: calc(11.5px * var(--ui-scale)); color: var(--muted); }
+    .agent-attach-loading { font-size: calc(11px * var(--ui-scale)); color: var(--muted); }
 
     .agent-input {
       border: 0;
@@ -1179,7 +1179,7 @@
     .agent-composer-bar {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       margin: 0 -8px;
       padding: 6px 8px 0;
       border-top: 1px solid var(--border);
@@ -1202,7 +1202,7 @@
       cursor: pointer;
       display: grid;
       place-items: center;
-      font-size: calc(15px * var(--ui-scale));
+      font-size: calc(14px * var(--ui-scale));
       line-height: 1;
     }
     .agent-bar-btn svg { width: 16px; height: 16px; }
@@ -1216,7 +1216,7 @@
       background: transparent;
       color: var(--muted);
       font: inherit;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       padding: 3px 6px;
       border-radius: 6px;
       cursor: pointer;
@@ -1275,7 +1275,7 @@
       font-weight: 600;
     }
     .agent-mode-menu-head > span + span {
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       line-height: 1.35;
       max-width: 100%;
       overflow: hidden;
@@ -1303,9 +1303,9 @@
     .agent-mode-opt-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; color: var(--muted); }
     .agent-mode-opt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
     .agent-mode-opt-title { font-size: calc(13px * var(--ui-scale)); font-weight: 500; }
-    .agent-mode-opt-desc { font-size: calc(11.5px * var(--ui-scale)); line-height: 1.4; color: var(--muted); }
+    .agent-mode-opt-desc { font-size: calc(11px * var(--ui-scale)); line-height: 1.4; color: var(--muted); }
     .agent-mode-opt-check { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; color: var(--accent); }
-    .agent-model-notice { padding: 6px 0 0; color: var(--muted); font-size: calc(11.5px * var(--ui-scale)); line-height: 1.35; }
+    .agent-model-notice { padding: 6px 0 0; color: var(--muted); font-size: calc(11px * var(--ui-scale)); line-height: 1.35; }
 
     /* Effort footer — icon + label on the left and explicit, touch-friendly
      * choices on the right. Do not make valid effort choices tiny dots. */
@@ -1320,9 +1320,9 @@
       background: color-mix(in srgb, var(--accent) 4%, var(--card));
     }
     .agent-effort-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
-    .agent-effort-label { flex: 1; font-size: calc(12.5px * var(--ui-scale)); color: var(--fg); }
+    .agent-effort-label { flex: 1; font-size: calc(12px * var(--ui-scale)); color: var(--fg); }
     .agent-effort-level { color: var(--muted); }
-    .agent-effort-track { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; padding: 2px 0; }
+    .agent-effort-track { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 4px; padding: 2px 0; }
     .agent-effort-choice {
       min-height: 30px;
       padding: 4px 8px;
@@ -1360,7 +1360,7 @@
       border-radius: 8px;
       background: var(--active);
       color: var(--fg);
-      font-size: calc(15px * var(--ui-scale));
+      font-size: calc(14px * var(--ui-scale));
       cursor: pointer;
       display: grid;
       place-items: center;
@@ -1382,7 +1382,7 @@
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 8px 24px rgba(var(--shadow-color), 0.12);
       padding: 4px;
       z-index: 30;
     }
@@ -1394,23 +1394,23 @@
     .agent-mention-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
     .agent-mention-retry { border: 0; border-radius: 4px; background: var(--active); color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
     .agent-mention-retry:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-    .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10.5px * var(--ui-scale)); }
+    .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10px * var(--ui-scale)); }
     .agent-mention-head > span:first-child { color: var(--fg); font-weight: 600; }
     .agent-mention-item {
       display: flex;
       align-items: flex-start;
-      gap: 7px;
+      gap: 6px;
       width: 100%;
       border: 0;
       background: transparent;
       text-align: left;
       padding: 5px 8px;
-      border-radius: 5px;
+      border-radius: 4px;
       cursor: pointer;
     }
     .agent-mention-item:hover,
     .agent-mention-item.active { background: var(--hover); }
     .agent-mention-icon { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--muted); }
     .agent-mention-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
-    .agent-mention-name { font-size: calc(12.5px * var(--ui-scale)); color: var(--fg); }
+    .agent-mention-name { font-size: calc(12px * var(--ui-scale)); color: var(--fg); }
     .agent-mention-path { font-size: calc(11px * var(--ui-scale)); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -31,7 +31,7 @@
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 6px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 2px 10px rgba(var(--shadow-color), 0.08);
       z-index: 10;
     }
     .find-input {
@@ -42,7 +42,7 @@
       border-radius: 4px;
       background: var(--bg);
       color: var(--fg);
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       font-family: inherit;
       outline: none;
     }
@@ -57,7 +57,7 @@
       min-width: 38px;
       padding: 0 4px;
       color: var(--muted);
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       font-variant-numeric: tabular-nums;
       text-align: right;
     }
@@ -85,7 +85,7 @@
       letter-spacing: 0.5px;
     }
     .find-all-files {
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       color: var(--muted);
       white-space: nowrap;
     }
@@ -511,7 +511,7 @@
       box-sizing: border-box;
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       border-bottom: 1px solid var(--border);
       color: var(--muted);
       background: var(--bg);
@@ -557,7 +557,7 @@
       /* Light surface keeps continuity with the rest of the app —
        * the white PDF page + box-shadow gives enough "paper on a
        * desk" contrast without a heavy dark backdrop. */
-      background: var(--pane, #fafafa);
+      background: var(--pane);
       overflow: auto;
       display: flex;
       flex-direction: column;
@@ -569,7 +569,7 @@
       position: relative;
       width: 100%;
       height: 100%;
-      background: var(--pane, #fafafa);
+      background: var(--pane);
       display: flex;
       flex-direction: column;
       padding-top: 44px; /* clear the breadcrumb / chrome row */
@@ -580,7 +580,7 @@
       flex: 0 0 auto;
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       min-height: 30px;
       padding: 6px 14px;
       box-sizing: border-box;
@@ -594,7 +594,7 @@
       height: 7px;
       flex: 0 0 auto;
       border-radius: 50%;
-      background: var(--accent, #4f7cff);
+      background: var(--accent);
       animation: image-preparation-pulse 1.4s ease-in-out infinite;
     }
     @keyframes image-preparation-pulse {
@@ -626,7 +626,7 @@
       flex: 0 0 auto;
       height: auto;
       border-radius: 4px;
-      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 1px 6px rgba(var(--shadow-color), 0.12);
     }
     /* Floating zoom controls, pinned to the pane (outside the scroll area
      * so they don't move with the image). */
@@ -642,7 +642,7 @@
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+      box-shadow: 0 4px 16px rgba(var(--shadow-color), 0.16);
     }
     .image-zoom-bar button {
       appearance: none;
@@ -653,7 +653,7 @@
       font-size: calc(13px * var(--ui-scale));
       line-height: 1;
       padding: 5px 9px;
-      border-radius: 5px;
+      border-radius: 4px;
       cursor: pointer;
       min-width: 28px;
     }
@@ -720,7 +720,7 @@
     .pdf-chrome .icon-btn {
       width: 26px;
       height: 26px;
-      font-size: calc(15px * var(--ui-scale));
+      font-size: calc(14px * var(--ui-scale));
       line-height: 1;
       background: transparent;
       border: 1px solid transparent;
@@ -791,7 +791,7 @@
     .pdf-page-wrap {
       position: relative;
       background: #fff;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+      box-shadow: 0 1px 3px rgba(var(--shadow-color), 0.12);
     }
     .pdf-page-number {
       position: absolute;
@@ -811,7 +811,7 @@
     }
     .pdf-page-number.current {
       color: var(--accent);
-      background: rgba(0, 153, 197, 0.08);
+      background: rgba(var(--accent-rgb), 0.08);
     }
     .pdf-page-canvas {
       display: block;
@@ -824,14 +824,14 @@
     }
     .pdf-page-highlight {
       position: absolute;
-      border-radius: 3px;
-      background: rgba(46, 116, 230, 0.18);
-      box-shadow: 0 0 0 2px rgba(46, 116, 230, 0.42);
+      border-radius: 4px;
+      background: rgba(var(--accent-rgb), 0.18);
+      box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.42);
       animation: pdf-hit-pulse 1.6s ease-out 1;
     }
     @keyframes pdf-hit-pulse {
-      0% { background: rgba(46, 116, 230, 0.34); box-shadow: 0 0 0 3px rgba(46, 116, 230, 0.56); }
-      100% { background: rgba(46, 116, 230, 0.18); box-shadow: 0 0 0 2px rgba(46, 116, 230, 0.42); }
+      0% { background: rgba(var(--accent-rgb), 0.34); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.56); }
+      100% { background: rgba(var(--accent-rgb), 0.18); box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.42); }
     }
     .pdf-page-placeholder {
       display: flex;
@@ -1056,10 +1056,10 @@
       opacity: 0.4;
     }
     .tab.drop-before {
-      box-shadow: inset 2px 0 0 0 var(--accent, #4a8cff);
+      box-shadow: inset 2px 0 0 0 var(--accent);
     }
     .tab.drop-after {
-      box-shadow: inset -2px 0 0 0 var(--accent, #4a8cff);
+      box-shadow: inset -2px 0 0 0 var(--accent);
     }
 
     .tab-close {
@@ -1193,7 +1193,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 22px;
+      gap: 20px;
       padding: 40px;
     }
     .empty-tab-action {
@@ -1203,7 +1203,7 @@
       color: var(--accent);
       cursor: pointer;
       font: inherit;
-      font-size: calc(15px * var(--ui-scale));
+      font-size: calc(14px * var(--ui-scale));
       font-weight: 500;
       border-radius: 6px;
       display: inline-flex;
@@ -1278,7 +1278,7 @@
 
     .doc code {
       background: var(--pane);
-      border-radius: 3px;
+      border-radius: 4px;
       padding: 1px 5px;
       font: 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
@@ -1338,7 +1338,7 @@
     .drop-veil {
       position: fixed;
       inset: 0;
-      background: rgba(37, 99, 235, .06);
+      background: rgba(var(--accent-rgb), .06);
       border: 2px dashed var(--accent);
       pointer-events: none;
       display: none;
@@ -1436,9 +1436,9 @@
       padding: 4px;
       transform: translateX(-50%);
       border: 0;
-      border-radius: 22px;
+      border-radius: 999px;
       background: rgba(31, 32, 42, 0.96);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+      box-shadow: 0 8px 24px rgba(var(--shadow-color), 0.34);
     }
 
     .image-lightbox-scale {
@@ -1474,7 +1474,7 @@
       user-select: none;
       transition: transform 0.08s ease-out;
       transform-origin: center center;
-      box-shadow: 0 16px 60px rgba(0, 0, 0, 0.35);
+      box-shadow: 0 16px 60px rgba(var(--shadow-color), 0.35);
     }
 
     /* Welcome screen — VSCode/Cursor-style first-run overlay shown when
@@ -1521,8 +1521,8 @@
       margin-bottom: 20px;
       display: grid;
       grid-template-columns: auto 1fr;
-      column-gap: 13px;
-      row-gap: 3px;
+      column-gap: 12px;
+      row-gap: 2px;
       align-items: center;
     }
 
@@ -1542,7 +1542,7 @@
     }
 
     .welcome-title {
-      font-size: calc(25px * var(--ui-scale));
+      font-size: calc(24px * var(--ui-scale));
       font-weight: 600;
       letter-spacing: 0;
       line-height: 1.06;
@@ -1565,7 +1565,7 @@
       display: flex;
       grid-template-columns: none;
       justify-content: flex-start;
-      gap: 9px;
+      gap: 8px;
       margin-bottom: 0;
     }
 
@@ -1581,12 +1581,12 @@
       min-height: 56px;
       padding: 12px 14px;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: 6px;
       background: var(--surface-raised);
       color: var(--fg);
       cursor: pointer;
       text-align: left;
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.035);
+      box-shadow: 0 1px 2px rgba(var(--shadow-color), 0.035);
       transition: border-color 0.12s, background 0.12s, box-shadow 0.12s,
         transform 0.12s;
     }
@@ -1612,7 +1612,7 @@
     .welcome-action:hover {
       border-color: var(--stroke-strong);
       background: var(--surface-hover);
-      box-shadow: 0 3px 10px rgba(16, 24, 40, 0.075);
+      box-shadow: 0 3px 10px rgba(var(--shadow-color), 0.075);
     }
 
     .welcome-action:disabled {
@@ -1637,7 +1637,7 @@
     }
 
     .welcome-action:active {
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+      box-shadow: 0 1px 2px rgba(var(--shadow-color), 0.04);
     }
 
     .welcome-action-icon {
@@ -1646,7 +1646,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border-radius: 7px;
+      border-radius: 6px;
       background: rgba(var(--accent-rgb), 0.08);
       color: var(--accent);
     }
@@ -1657,7 +1657,7 @@
     }
 
     .welcome-action-label {
-      font-size: calc(13.5px * var(--ui-scale));
+      font-size: calc(13px * var(--ui-scale));
       font-weight: 500;
     }
 
@@ -1667,16 +1667,16 @@
       gap: 8px;
       padding: 7px 12px;
       border-color: var(--border);
-      border-radius: 7px;
+      border-radius: 6px;
       background: var(--surface-raised);
       color: var(--muted);
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+      box-shadow: 0 1px 2px rgba(var(--shadow-color), 0.04);
     }
 
     .welcome-actions--header .welcome-action:hover {
       border-color: rgba(var(--accent-rgb), 0.38);
       background: var(--surface-hover);
-      box-shadow: 0 2px 6px rgba(16, 24, 40, 0.07);
+      box-shadow: 0 2px 6px rgba(var(--shadow-color), 0.07);
     }
 
     .welcome-actions--header .welcome-action.is-primary {
@@ -1720,7 +1720,7 @@
     }
 
     .welcome-actions--header .welcome-action-label {
-      font-size: calc(13.5px * var(--ui-scale));
+      font-size: calc(13px * var(--ui-scale));
       font-weight: 600;
     }
 
@@ -1728,13 +1728,13 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 13px;
+      gap: 12px;
       padding: 13px 16px;
       margin-top: 18px;
       border: 1px solid var(--border);
       border-radius: 8px;
       background: color-mix(in srgb, var(--surface-raised) 70%, transparent);
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.028);
+      box-shadow: 0 1px 2px rgba(var(--shadow-color), 0.028);
       color: var(--muted);
     }
 
@@ -1759,14 +1759,14 @@
       min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 2px;
     }
 
     .welcome-mcp-title {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      font-size: calc(15px * var(--ui-scale));
+      font-size: calc(14px * var(--ui-scale));
       font-weight: 600;
       color: var(--fg);
     }
@@ -1774,7 +1774,7 @@
     .welcome-mcp-agent-icons {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       color: var(--muted);
     }
 
@@ -1804,7 +1804,7 @@
       border: 1px solid var(--border);
       background: var(--surface-raised);
       color: var(--accent);
-      border-radius: 7px;
+      border-radius: 6px;
       padding: 7px 11px;
       cursor: pointer;
       font: inherit;
@@ -1822,15 +1822,15 @@
     .welcome-recent {
       margin-top: 0;
       border: 1px solid var(--border);
-      border-radius: 9px;
+      border-radius: 8px;
       background: var(--surface-raised);
-      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.035);
+      box-shadow: 0 1px 2px rgba(var(--shadow-color), 0.035);
       overflow: hidden;
     }
 
     .welcome-recent-head {
       min-height: 62px;
-      font-size: calc(15px * var(--ui-scale));
+      font-size: calc(14px * var(--ui-scale));
       color: var(--fg);
       font-weight: 600;
       padding: 0 18px 0 18px;
@@ -1845,7 +1845,7 @@
     .welcome-recent-title {
       display: flex;
       align-items: center;
-      gap: 11px;
+      gap: 10px;
       min-width: 0;
     }
 
@@ -1945,7 +1945,7 @@
     .welcome-recent-main {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 4px;
       flex: 1 1 auto;
       min-width: 0;
     }
@@ -1968,7 +1968,7 @@
     }
 
     .welcome-recent-name {
-      font-size: calc(13.5px * var(--ui-scale));
+      font-size: calc(13px * var(--ui-scale));
       font-weight: 600;
       flex: 0 1 auto;
       max-width: 36%;
@@ -1979,7 +1979,7 @@
     }
 
     .welcome-recent-path {
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       color: var(--muted);
       flex: 1 1 auto;
       overflow: hidden;
@@ -2013,8 +2013,8 @@
     .welcome-recent-status .warning-mark-text {
       fill: var(--text-on-accent);
       stroke: none;
-      font-size: calc(9.5px * var(--ui-scale));
-      font-weight: 800;
+      font-size: calc(10px * var(--ui-scale));
+      font-weight: 700;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       dominant-baseline: auto;
     }
@@ -2025,7 +2025,7 @@
       height: 24px;
       margin-right: 0;
       border: 0;
-      border-radius: 5px;
+      border-radius: 4px;
       background: transparent;
       color: var(--muted);
       cursor: pointer;
@@ -2181,7 +2181,7 @@
     .welcome-err {
       margin-top: 14px;
       padding: 8px 12px;
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       color: var(--danger);
       background: color-mix(in srgb, var(--danger) 12%, var(--surface-raised));
       border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
@@ -2204,7 +2204,7 @@
 
     .welcome-remove-name {
       color: var(--accent);
-      font-weight: 650;
+      font-weight: 600;
     }
 
     @media (max-width: 720px) {
@@ -2251,7 +2251,7 @@
 
     .settings-header h3 {
       margin: 0;
-      font-size: calc(15px * var(--ui-scale));
+      font-size: calc(14px * var(--ui-scale));
     }
 
     .settings-close {
@@ -2353,7 +2353,7 @@
 
     .settings-section-hint code {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       color: var(--accent);
       white-space: nowrap;
     }
@@ -2556,7 +2556,7 @@
       border-radius: 6px;
       padding: 8px 10px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(12.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       color: var(--fg);
       background: var(--surface-raised);
     }
@@ -2641,7 +2641,7 @@
       gap: 2px;
       padding: 9px 10px;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: 6px;
       background: var(--card);
       color: var(--fg);
       cursor: pointer;
@@ -2662,7 +2662,7 @@
       min-width: 180px;
       height: 34px;
       border: 1px solid var(--border);
-      border-radius: 7px;
+      border-radius: 6px;
       background: var(--card);
       color: var(--fg);
       padding: 0 9px;
@@ -2775,13 +2775,13 @@
       justify-content: space-between;
       gap: 12px;
       padding: 10px 12px;
-      border-radius: 7px;
+      border-radius: 6px;
       background: rgba(var(--accent-rgb), .08);
       color: #0e7490;
     }
 
     .audio-transcript-state.error { background: #fef2f2; color: var(--danger); }
-    .audio-segments { grid-row: 3; min-height: 0; overflow: auto; display: grid; align-content: start; gap: 3px; }
+    .audio-segments { grid-row: 3; min-height: 0; overflow: auto; display: grid; align-content: start; gap: 2px; }
     .audio-segment {
       width: 100%;
       display: grid;
@@ -2823,9 +2823,9 @@
 .editor-history {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--card);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 18px 48px rgba(var(--shadow-color), 0.24);
 }
 .quick-open { width: min(680px, calc(100vw - 32px)); max-height: min(480px, calc(100vh - 64px)); }
 .editor-history { width: min(420px, calc(100vw - 32px)); max-height: min(420px, calc(100vh - 64px)); outline: none; }
@@ -2844,7 +2844,7 @@
 .quick-open-results,
 .editor-history-results { list-style: none; margin: 0; padding: 5px; overflow: auto; max-height: 380px; }
 .quick-open-results li,
-.editor-history-results li { display: flex; justify-content: space-between; gap: 20px; padding: 7px 10px; border-radius: 5px; cursor: default; }
+.editor-history-results li { display: flex; justify-content: space-between; gap: 20px; padding: 7px 10px; border-radius: 4px; cursor: default; }
 .quick-open-results li.active,
 .editor-history-results li.active { color: #fff; background: var(--accent); }
 .quick-open-results small,
