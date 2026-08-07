@@ -13,6 +13,7 @@ import { AgentView } from './AgentView';
 import { LazyLoadBoundary } from './ErrorBoundary';
 import { agentMeta, isAgentKind } from '../agentCatalog';
 import { useApp } from '../store/AppContext';
+import { rememberPreferredAgent } from '../agentPreference';
 
 /** Brand glyph for a tab's agent, shown before its title. */
 function AgentGlyph({ agent }: { agent: string }) {
@@ -49,7 +50,11 @@ export function ChatPane() {
   if (!folder) return null;
 
   return (
-    <div className="chat-pane-shell">
+    <div
+      className="chat-pane-shell"
+      aria-hidden={!state.chatOpen || undefined}
+      inert={!state.chatOpen || undefined}
+    >
       <div className="chat-tabs">
         <div className="chat-tabs-list">
           {tabs.map((tab) => (
@@ -58,7 +63,10 @@ export function ChatPane() {
               className={'chat-tab' + (tab.id === activeId ? ' active' : '')}
               role="tab"
               aria-selected={tab.id === activeId}
-              onClick={() => dispatch({ type: 'CHAT_TAB_ACTIVATE', id: tab.id })}
+              onClick={() => {
+                if (isAgentKind(tab.agent)) rememberPreferredAgent(tab.agent);
+                dispatch({ type: 'CHAT_TAB_ACTIVATE', id: tab.id });
+              }}
               title={tab.title}
             >
               <AgentGlyph agent={tab.agent} />

@@ -35,8 +35,9 @@ re-explaining it.
 
 - A local-file workspace for browsing and maintaining ordinary folders.
 - Document preparation and retrieval that make those folders useful as context.
-- An optional side-panel agent that complements, rather than replaces,
-  bring-your-own-agent workflows.
+- An optional built-in Agent chat that leads before a document is opened and
+  adapts into a side panel beside active source work, complementing rather
+  than replacing bring-your-own-agent workflows.
 
 For the durable decision rules, see [Principles](principles.md). For the
 intended product shape, see [Product Direction](product-direction.md). For the

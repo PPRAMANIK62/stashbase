@@ -29,6 +29,7 @@ import {
 } from './state';
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 import type { AgentKind } from '../agentCatalog';
+import { rememberPreferredAgent } from '../agentPreference';
 import type { EditorHandle, FindController } from './actionTypes';
 import { useFeedbackActions } from './useFeedbackActions';
 import { useFindActions } from './useFindActions';
@@ -442,6 +443,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast,
     toggleEditMode: workspace.toggleEditMode,
     openAgent: (agent) => {
+      rememberPreferredAgent(agent);
       const current = stateRef.current;
       const hasOpenTab = current.chatTabs.some((tab) => tab.agent === agent);
       dispatch({

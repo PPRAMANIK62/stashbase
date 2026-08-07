@@ -8,6 +8,19 @@
     .app.sidebar-collapsed.chat-open {
       grid-template-columns: 44px 1fr 6px var(--chat-width, 480px);
     }
+    /* With no document, Chat is the workspace instead of a narrow side
+     * panel. The document pane remains mounted so switching back preserves
+     * editor state, but its track and splitter disappear. Compact windows
+     * reuse this shape when the user explicitly brings Chat over a document. */
+    .app.chat-primary {
+      grid-template-columns: calc(44px + var(--sidebar-width, 280px)) 0 0 minmax(0, 1fr);
+    }
+    .app.sidebar-collapsed.chat-primary {
+      grid-template-columns: 44px 0 0 minmax(0, 1fr);
+    }
+    .app.chat-primary .main {
+      visibility: hidden;
+    }
 
     /* Match the sidebar's drag handle (globals.css `.sidebar-splitter`):
      * a 6px transparent hit area whose only visible cue is a crisp 2px
@@ -404,6 +417,21 @@
       flex-direction: column;
       gap: 10px;
       scrollbar-width: thin;
+    }
+    /* Full-width Chat should gain working room without turning prose into
+     * viewport-wide lines. Keep the scroll container full-width and center
+     * its content through responsive padding so wheel/trackpad input works
+     * anywhere over the transcript. */
+    .app.chat-primary .agent-messages {
+      padding-right: max(12px, calc((100% - 920px) / 2));
+      padding-left: max(12px, calc((100% - 920px) / 2));
+    }
+    .app.chat-primary .agent-head,
+    .app.chat-primary .agent-composer {
+      width: min(920px, 100%);
+      margin-right: auto;
+      margin-left: auto;
+      box-sizing: border-box;
     }
     .agent-messages > :first-child { margin-top: 12px; }
     .agent-jump-latest {

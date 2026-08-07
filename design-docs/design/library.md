@@ -17,6 +17,9 @@ to migrate them into a StashBase-specific storage model.
   Ctrl+Shift+W as an alternative. Cmd/Ctrl+W remains the active-tab command.
 - Users can create, rename, move, and delete files or folders through explicit
   file operations.
+- A folder opens into a chat-first workspace with the Files sidebar still
+  visible. Selecting or creating a document reveals the source pane and docks
+  the same conversation beside it.
 - The main pane opens the source file the user selected; generated artifacts
   stay hidden.
 - Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
@@ -63,6 +66,9 @@ to migrate them into a StashBase-specific storage model.
 - Sidebar and Agent-panel widths work with pointer input and with
   Arrow/Home/End keys on macOS, Windows, and Linux; reduced-motion users do
   not receive layout movement animation.
+- Closing the last document lets an open Chat reclaim the main area. Hiding
+  Chat is explicit and leaves a lightweight document/chat launcher instead of
+  immediately reopening it.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
   or project-management surface. It groups the file tree and the active
   Markdown document outline into independently collapsible navigation sections.

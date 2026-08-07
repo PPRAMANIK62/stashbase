@@ -1,13 +1,23 @@
 # Agent Panel
 
-The built-in Agent Panel is a compact, VS Code-like side panel for working
-alongside the current local folder. It is a convenient client of StashBase
-context, not a separate AI workspace.
+The built-in Agent Panel is one adaptive chat surface for the current local
+folder. Chat is the primary workspace until a document is opened, then becomes
+a compact, VS Code-like side panel alongside that document. It is a convenient
+client of StashBase context, not a separate AI workspace.
 
 ## Current
 
 - Users can work with supported Agent runtimes in separate chats and restore
   prior chat history.
+- Opening a folder starts a fresh chat with the user's last selected Agent.
+  Codex is the default until the user explicitly selects another Agent. An
+  unavailable preferred runtime remains a visible setup state; StashBase does
+  not silently substitute another runtime.
+- With no document open, Chat fills the workspace beside the Files sidebar.
+  Opening a file, search result, local response link, artifact, or new note
+  moves the same mounted chat into the side panel. Closing the last document
+  expands an open chat again. On compact windows a newly opened document takes
+  priority; explicitly reopening Chat gives it the primary area until hidden.
 - When a runtime supplies its native model catalog, a compact per-session
   selector shows Default plus that runtime's available models. Default leaves
   the user's CLI configuration intact; StashBase never rewrites it or turns the
@@ -30,7 +40,9 @@ context, not a separate AI workspace.
 - Permission requests remain actionable. Limited edit workflows can be
   streamlined, while deletion, commands, network access, and broader access
   stay explicit approval decisions.
-- Agent file outputs and local file links lead back into the local workspace.
+- Agent file outputs refresh the Files sidebar without moving the user away
+  from Chat. Their compact Open affordances and local file links lead back into
+  the local workspace only when the user chooses them.
 - Agent response Markdown supports GFM, but treats raw HTML and remote images
   as inert content; only workspace-relative links and HTTP(S) links are active.
 - If a supported Agent CLI is missing, its launcher opens a compact setup state
@@ -41,6 +53,12 @@ context, not a separate AI workspace.
 
 - Keep the panel quiet: compact controls, restrained chrome, and no decorative
   workbench metaphor.
+- Treat chat-primary and document-side-panel presentation as two layouts of
+  the same mounted session. Layout changes must preserve transcript state,
+  streaming work, attachments, scroll position, and the user's remembered
+  side-panel width.
+- Respect explicit visibility choices. Automatically open Chat once per folder
+  entry, but do not reopen it after the user hides or closes it in that folder.
 - Do not hide permission cards or recovery actions inside collapsed activity.
 - Streaming must not steal reading position from a user inspecting earlier
   transcript content.
@@ -78,7 +96,8 @@ context, not a separate AI workspace.
 - Improve attachment and mention selection, including more focused document
   context handoff.
 - Clarify runtime, recovery, settings, and context diagnostics.
-- Continue refining the low-chrome side-panel visual language.
+- Continue refining the low-chrome adaptive chat and side-panel visual
+  language.
 
 ### Coordinate First
 

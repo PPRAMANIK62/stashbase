@@ -378,14 +378,12 @@ export function AgentView({
           const toolName = toolNamesRef.current.get(ev.id);
           if (shouldRefreshAfterTool(toolName)) {
             const toolFolder = folderPathRef.current;
-            const createdFile = fileInCurrentFolderFromToolResult(toolName, ev.content, toolFolder);
             void (async () => {
               await api.sync(toolFolder).catch(() => { /* turn-end / next poll will surface it */ });
               if (folderPathRef.current !== toolFolder) return;
               await actions.loadFiles();
               if (folderPathRef.current !== toolFolder) return;
               void actions.refreshIndexState();
-              if (createdFile) await actions.selectFile(createdFile);
             })().catch((err) => {
               actions.toast(`Could not refresh files: ${errorText(err)}`, { level: 'error' });
             });
@@ -1007,20 +1005,6 @@ function shouldRefreshAfterTool(name: string | undefined): boolean {
   if (!name) return false;
   if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name)) return true;
   return /^mcp__/.test(name) && /(write|delete|rename|update|set_|create|move)/i.test(name);
-}
-
-function fileInCurrentFolderFromToolResult(toolName: string | undefined, content: string, folder: string): string | null {
-  if (!toolName || !/write_file$/i.test(toolName) || !folder) return null;
-  try {
-    const parsed = JSON.parse(content) as { path?: unknown; ok?: unknown };
-    if (parsed.ok !== true || typeof parsed.path !== 'string') return null;
-    const prefix = `${folder}/`;
-    if (!parsed.path.startsWith(prefix)) return null;
-    const rel = parsed.path.slice(prefix.length);
-    return isSafeFolderRelativePath(rel) ? rel : null;
-  } catch {
-    return null;
-  }
 }
 
 function isSafeFolderRelativePath(path: string): boolean {
