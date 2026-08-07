@@ -4,14 +4,13 @@ import {
   errorMessage,
   type IndexStatus,
 } from '../api';
-import { ClaudeIcon, CodexIcon, CubeLogoIcon, FolderIcon, LibraryIcon, MoreHorizontalIcon, NewFolderIcon, PlugIcon } from '../icons';
+import { CubeLogoIcon, ExternalLinkIcon, FolderIcon, HistoryIcon, MoreHorizontalIcon, NewFolderIcon, StarIcon, TrashIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import type { LibraryFolderStatus } from '../store/state';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
-import { openSettings } from './SettingsModal';
 import { Button } from './ui/button';
-import { Card, CardHeader } from './ui/card';
+import { Card } from './ui/card';
 import { StatusMessage } from './ui/status';
 
 interface ElectronBridge {
@@ -49,6 +48,27 @@ function prettifyHome(abs: string, home: string): string {
 function basenameOfPath(path: string): string {
   const segs = path.split('/').filter(Boolean);
   return segs.pop() || path;
+}
+
+/** Notion-style relative "last opened" label: recency in coarse steps,
+ *  falling back to a short date (with year only when it differs). */
+function formatOpenedAt(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return '';
+  const now = new Date();
+  const minutes = Math.floor((now.getTime() - t) / 60_000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const d = new Date(t);
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return 'Today';
+  const yesterday = new Date(now.getTime() - 86_400_000);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
 }
 
 function folderIndexSnapshot(status: IndexStatus): FolderIndexSnapshot {
@@ -89,6 +109,19 @@ export function Welcome() {
   const [folderIndexSnapshots, setFolderIndexSnapshots] = useState<Record<string, FolderIndexSnapshot>>({});
   const [openingFolder, setOpeningFolder] = useState<{ path: string; name: string } | null>(null);
   const [removing, setRemoving] = useState(false);
+  // UI PREVIEW — favorites ahead of the folder-metadata data model.
+  // Membership lives in local state only (lost on reload) so the full
+  // star → filter loop can be evaluated. Persist once metadata lands.
+  const [tagFilter, setTagFilter] = useState<'recents' | 'favorites'>('recents');
+  const [previewFavorites, setPreviewFavorites] = useState<ReadonlySet<string>>(new Set());
+  const toggleFavorite = useCallback((path: string) => {
+    setPreviewFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path); else next.add(path);
+      return next;
+    });
+    setFolderMenu(null);
+  }, []);
   const welcomeReconcileStartedAt = useRef<Map<string, number>>(new Map());
   const openingRequestRef = useRef(0);
 
@@ -266,30 +299,53 @@ export function Welcome() {
       })()
     : null;
 
+  const visibleFolders = tagFilter === 'favorites'
+    ? state.recent.filter((r) => previewFavorites.has(r.path))
+    : state.recent;
+
   return (
     <div className="welcome fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-pane text-foreground">
       <div className="welcome-inner mt-[clamp(94px,17vh,150px)] w-[min(700px,calc(100vw-56px))] pt-5 pb-8 max-[720px]:mt-14 max-[720px]:w-[min(100%,calc(100vw-28px))]">
-        <div className="mb-5 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-0.5">
+        <div className="welcome-rise mb-7 grid grid-cols-[auto_1fr] items-center gap-x-3.5 gap-y-1">
           <div className="row-span-2 size-12 *:size-full">
             <CubeLogoIcon />
           </div>
-          <div className="text-3xl leading-tight font-semibold">StashBase</div>
+          <div className="text-4xl font-semibold tracking-tight">
+            StashBase<span className="text-accent-amber">.</span>
+          </div>
           <div className="text-lg leading-snug text-muted-foreground">
             Open or create a folder to build your searchable library.
           </div>
         </div>
 
-        <Card variant="raised" className="overflow-hidden">
-          <CardHeader className="min-h-14 justify-between gap-3 bg-accent/5 px-4 py-0 text-lg font-semibold">
-            <span className="flex min-w-0 items-center gap-2.5">
-              <span className="inline-flex size-5 shrink-0 items-center justify-center text-accent [&_svg]:size-[18px]">
-                <LibraryIcon />
-              </span>
-              <span>
-                Library <span className="text-base font-normal text-muted-foreground">· {state.recent.length} {state.recent.length === 1 ? 'folder' : 'folders'}</span>
-              </span>
-            </span>
-            <span className="flex min-w-0 items-center gap-2">
+        <div className="welcome-rise [animation-delay:60ms]">
+          {/* The chips row IS the section header (Notion Library pattern):
+            * chips name the views on the left, actions sit on the right.
+            * No separate title — the brand tagline above already names
+            * the library. */}
+          <div className="mb-2.5 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1">
+              {([
+                { key: 'recents', label: 'Recents', Icon: HistoryIcon },
+                { key: 'favorites', label: 'Favorites', Icon: StarIcon },
+              ] as const).map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-transparent px-3 text-base transition-colors [&_svg]:size-3.5 ${
+                    tagFilter === key
+                      ? 'bg-muted font-medium text-foreground'
+                      : 'text-muted-foreground hover:bg-muted'
+                  }`}
+                  aria-pressed={tagFilter === key}
+                  onClick={() => setTagFilter(key)}
+                >
+                  <Icon />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="flex shrink-0 items-center gap-2">
               <OpenFolderButton
                 shortLabel
                 primary
@@ -304,14 +360,23 @@ export function Welcome() {
                 onOpeningFolder={setOpeningFolder}
               />
             </span>
-          </CardHeader>
-          <div className="flex max-h-[272px] flex-col overflow-y-auto py-1.5">
-            {state.recent.length === 0 && (
-              <div className="px-2.5 py-4 text-center text-sm text-muted-foreground">No folders yet.</div>
+          </div>
+          <Card variant="raised" className="overflow-hidden">
+          {/* No vertical padding: row 1 sits flush under the card edge.
+            * Height tracks the viewport (~430px chrome overhead above and
+            * below), never below 6.5 rows so small windows keep a useful
+            * list and the cut row doubles as the scroll affordance. */}
+          <div className="flex max-h-[max(286px,calc(100vh-430px))] flex-col overflow-y-auto">
+            {visibleFolders.length === 0 && (
+              <div className="px-6 py-9 text-center text-base text-muted-foreground">
+                {tagFilter === 'favorites'
+                  ? 'No favorites yet — star a folder from its ⋯ menu.'
+                  : 'Your library is empty — open a folder to make it searchable.'}
+              </div>
             )}
-            {state.recent.length > 0 && (
+            {visibleFolders.length > 0 && (
               <>
-                {state.recent.map((r) => {
+                {visibleFolders.map((r) => {
                   const segs = r.path.split('/').filter(Boolean);
                   const name = segs.pop() || r.path;
                   const parent = prettifyHome(segs.length ? '/' + segs.join('/') : '/', state.homeDir ?? '');
@@ -325,22 +390,31 @@ export function Welcome() {
                   return (
                     <div
                       key={r.path}
-                      className="flex min-h-11 w-full cursor-pointer items-center border-b border-border px-4 transition-colors last:border-b-0 hover:bg-muted has-[button:first-child:disabled]:hover:bg-transparent"
+                      className={`group flex min-h-11 w-full cursor-pointer items-center border-b border-border px-4 transition-colors last:border-b-0 ${
+                        folderMenu?.path === r.path
+                          ? 'bg-muted'
+                          : 'hover:bg-muted has-[button:first-child:disabled]:hover:bg-transparent'
+                      }`}
                       onClick={() => openRecent(r.path)}
                     >
                       <button
                         type="button"
                         className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 border-0 bg-transparent pr-2 text-left text-foreground disabled:cursor-default"
-                        title={r.path}
                         onClick={(e) => {
                           e.stopPropagation();
                           openRecent(r.path);
                         }}
                       >
+                        {/* Naked glyph, no chip: chips earn their place
+                          * framing rich brand marks (MCP clients); around
+                          * a gray outline they read as empty boxes. */}
                         <FolderIcon className="mx-0.5 size-4 shrink-0 text-muted-foreground opacity-80 [&_path]:stroke-[1.8]" />
                         <span className="flex min-w-0 flex-1 items-center gap-2">
                           <span className="max-w-[36%] min-w-0 truncate text-base font-semibold">{name}</span>
-                          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground max-[720px]:hidden">{parent}</span>
+                          {previewFavorites.has(r.path) && (
+                            <StarIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Favorite" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground max-[720px]:hidden" title={r.path}>{parent}</span>
                           {indexState === 'failed' && (
                             <span
                               className="welcome-recent-status mr-1.5 inline-flex size-[18px] shrink-0 items-center justify-center text-muted-foreground opacity-90 [&_svg]:size-4"
@@ -351,12 +425,16 @@ export function Welcome() {
                             </span>
                           )}
                         </span>
+                        {formatOpenedAt(r.openedAt) && (
+                          <span className="shrink-0 pl-3 text-sm text-muted-foreground max-[720px]:hidden">
+                            {formatOpenedAt(r.openedAt)}
+                          </span>
+                        )}
                       </button>
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        className="shrink-0 text-muted-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
-                        title="More actions"
+                        className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:bg-border aria-expanded:text-foreground aria-expanded:opacity-100"
                         aria-label={`More actions for ${name}`}
                         aria-haspopup="menu"
                         aria-expanded={folderMenu?.path === r.path}
@@ -373,30 +451,7 @@ export function Welcome() {
               </>
             )}
           </div>
-        </Card>
-
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border bg-card/70 px-4 py-3 text-muted-foreground shadow-low max-[720px]:flex-col max-[720px]:items-start">
-          <div className="inline-flex size-6 shrink-0 items-center justify-center text-accent [&_svg]:size-5 [&_svg]:stroke-[1.8]">
-            <PlugIcon />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="inline-flex items-center gap-2 text-lg font-semibold text-foreground">
-              <span>Connect your Agents</span>
-              <span className="inline-flex items-center gap-1 text-muted-foreground [&>svg]:size-4 [&>svg]:shrink-0" aria-hidden="true">
-                <ClaudeIcon />
-                <CodexIcon />
-                <span className="inline-flex size-4 items-center justify-center rounded-full bg-accent/10 pb-px text-sm font-bold text-accent">+</span>
-              </span>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 font-semibold text-accent"
-            onClick={() => openSettings('mcp')}
-          >
-            Open MCP Settings
-          </Button>
+          </Card>
         </div>
 
         {state.welcomeError && (
@@ -414,14 +469,22 @@ export function Welcome() {
       {folderMenu && (
         <Menu
           anchor={{ rect: folderMenu.rect, align: 'right' }}
-          minWidth={190}
+          minWidth={210}
           items={[
             {
-              label: 'Open in New Window',
-              onSelect: () => { void openRecentInNewWindow(folderMenu.path); },
+              label: previewFavorites.has(folderMenu.path) ? 'Remove from Favorites' : 'Add to Favorites',
+              icon: <StarIcon />,
+              onSelect: () => toggleFavorite(folderMenu.path),
             },
             {
+              label: 'Open in New Window',
+              icon: <ExternalLinkIcon />,
+              onSelect: () => { void openRecentInNewWindow(folderMenu.path); },
+            },
+            { separator: true },
+            {
               label: 'Remove from Library',
+              icon: <TrashIcon />,
               detail: 'Will not delete local files',
               danger: true,
               onSelect: () => setConfirmRemove(folderMenu.path),

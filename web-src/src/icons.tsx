@@ -309,6 +309,24 @@ export function CheckIcon({ className }: IconProps) {
   );
 }
 
+export function ExternalLinkIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </svg>
+  );
+}
+
+export function StarIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="m12 2.6 2.94 5.95 6.57.96-4.76 4.63 1.13 6.55L12 17.6l-5.88 3.09 1.13-6.55-4.76-4.63 6.57-.96L12 2.6z" />
+    </svg>
+  );
+}
+
 /** Neutral bot glyph for AGENTS.md, the folder-level agent contract shared
  *  across built-in and external agents. Shape follows Lucide's `bot`
  *  proportions so it feels native next to the other line icons. */
@@ -401,13 +419,15 @@ export function SettingsIcon({ className }: IconProps) {
 
 
 export function CubeLogoIcon({ className }: IconProps) {
+  // Token-driven so the mark keeps its weight and hue in both themes;
+  // hidden back edges stay a step lighter than the lit front edges.
   return (
     <svg className={className} viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <g stroke="#6b7280" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round">
+      <g stroke="var(--stroke-strong)" strokeWidth={18} strokeLinecap="round" strokeLinejoin="round">
         <path d="M92 158 L92 342" />
         <path d="M92 342 L256 436" />
       </g>
-      <g stroke="#0891b2" strokeWidth={20} strokeLinecap="round" strokeLinejoin="round">
+      <g stroke="var(--accent)" strokeWidth={23} strokeLinecap="round" strokeLinejoin="round">
         <path d="M92 158 L256 64 L338 111" />
         <path d="M92 158 L256 252 L420 158" />
         <path d="M420 158 L420 342" />
