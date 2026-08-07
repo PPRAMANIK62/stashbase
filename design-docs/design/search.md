@@ -10,14 +10,15 @@ as the result identity.
 - Semantic retrieval supports meaning-based discovery when configured.
 - In-app search starts from the current folder and can narrow its scope.
 - Results identify the source file, path, and useful evidence such as a snippet
-  or page/timestamp hint.
+  or page/timestamp hint. In-app snippets start at the file's content: a
+  leading YAML frontmatter block never renders in the result list.
 - Semantic results show the strongest matches first, up to a relevance-knee
   count, and reveal the remaining fetched candidates through progressive
   disclosure without another request. The summary reports the visible and
-  available counts (for example, "Showing 8 of 30 ranked candidates"), and
-  each hit carries a per-hit relative match-strength indicator. The indicator
-  is relative to the fetched result set, not an absolute score, because hybrid
-  scores have no absolute meaning.
+  available counts (for example, "8 of 30 results"), and each hit carries a
+  per-hit relative match-strength indicator. The indicator is relative to the
+  fetched result set, not an absolute score, because hybrid scores have no
+  absolute meaning.
 - Prepared PDF, image, DOCX, and media transcript text can be evidence, but
   opening a result returns to the original source file.
 - MCP offers orientation, search with the same file-type categories as the
