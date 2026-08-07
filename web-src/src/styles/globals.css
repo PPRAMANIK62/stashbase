@@ -5,8 +5,12 @@
       --surface-base: #ffffff;
       --surface-raised: #ffffff;
       --surface-sunken: #f6f7f8;
-      --surface-hover: #eef2f3;
-      --surface-selected: #dceff3;
+      /* Hover is a light cool neutral, selected a soft accent-derived
+       * cyan. Both deliberately carry NO green cast — the earlier
+       * #eef2f3/#dceff3 pair read muddy on wide row bands — and both
+       * stay light: heavy washes read dirty at row width. */
+      --surface-hover: #eef0f2;
+      --surface-selected: #d7edf4;
       --text-primary: #202427;
       --text-secondary: #68737a;
       --text-on-accent: #ffffff;
@@ -35,6 +39,10 @@
       /* Raw RGB of --accent, for alpha ramps: rgba(var(--accent-rgb), .08)
        * etc. Change the accent → change both lines, nothing else. */
       --accent-rgb: 8, 145, 178;
+      /* Amber counterpoint of the cyan/amber signature (the .md icon's
+       * #d9a000). Brand moments and file-type marks only — never state;
+       * state yellows are --status-warning. */
+      --accent-amber: #d9a000;
       /* Danger red — destructive actions, error text, failure banners.
        * (chat.css's #e45649 is the One-Dark editor red and the sidebar's
        * #dc2626 is the recording red — different palettes on purpose.) */
@@ -78,6 +86,7 @@
       --border: var(--stroke-subtle);
       --accent: #22b8d8;
       --accent-rgb: 34, 184, 216;
+      --accent-amber: #deb245;
       --danger: #f87171;
       --status-info: var(--accent);
       --status-success: #34d399;
@@ -112,6 +121,7 @@
         --border: var(--stroke-subtle);
         --accent: #22b8d8;
         --accent-rgb: 34, 184, 216;
+        --accent-amber: #deb245;
         --danger: #f87171;
         --status-info: var(--accent);
         --status-success: #34d399;

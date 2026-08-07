@@ -38,9 +38,12 @@ test('theme maps shadcn surface/text semantics and the app dark variant', () => 
 test('chrome type scale and radius scale are the only visual values', () => {
   const styles = read('web-src/src/styles.css');
   // Every text-* utility scales with the interface-size preference.
-  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl']) {
+  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl']) {
     assert.match(styles, new RegExp(`--text-${step}: calc\\([0-9]+px \\* var\\(--ui-scale\\)\\);`));
   }
+  // Brand role: the amber counterpoint is a named token, so warmth-budget
+  // surfaces never restate the literal.
+  assert.match(styles, /--color-accent-amber: var\(--accent-amber\);/);
   for (const [name, px] of [['sm', 'var(--radius-control)'], ['md', 'var(--radius-ui)'], ['lg', '8px'], ['xl', '10px']]) {
     assert.match(styles, new RegExp(`--radius-${name}: ${px.replace(/[()*]/g, (c) => '\\' + c)};`));
   }

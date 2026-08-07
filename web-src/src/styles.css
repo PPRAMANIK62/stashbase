@@ -27,6 +27,10 @@
    * subdued text. The app's legacy `--muted` variable is the text role. */
   --color-muted: var(--hover);
   --color-muted-foreground: var(--muted);
+  /* Selection surface — the accent-tinted "this row is active/chosen"
+   * role (tree selection, open-menu anchor rows). Distinct from `muted`,
+   * which is transient hover. */
+  --color-active: var(--active);
   --color-border: var(--border);
   --color-input: var(--border);
   --color-accent: var(--accent);
@@ -44,6 +48,7 @@
   --color-status-success: var(--status-success);
   --color-status-warning: var(--status-warning);
   --color-status-danger: var(--status-danger);
+  --color-accent-amber: var(--accent-amber);
   --spacing-density: var(--density-gap);
   --spacing-control: var(--density-control);
   --radius-ui: var(--radius-ui);
@@ -62,7 +67,8 @@
   /* UI type scale — the ONLY chrome font sizes, overriding Tailwind's
    * rem-based defaults so every text-* utility scales with the user's
    * interface-size preference. Desktop-density mapping (smaller than web
-   * conventions on purpose): 2xs=10 xs=11 sm=12 base=13 lg=14 xl=16 2xl=20.
+   * conventions on purpose): 2xs=10 xs=11 sm=12 base=13 lg=14 xl=16 2xl=20
+   * 3xl=24 4xl=30 (4xl is display-only — warmth-budget brand moments).
    * Content typography (Markdown reading view, Crepe editor) is separate
    * and follows --reading-font-size. */
   --text-2xs: calc(10px * var(--ui-scale));
@@ -81,8 +87,10 @@
   --text-2xl--line-height: 1.25;
   --text-3xl: calc(24px * var(--ui-scale));
   --text-3xl--line-height: 1.15;
-  --duration-fast: var(--motion-fast);
-  --duration-standard: var(--motion-standard);
+  --text-4xl: calc(30px * var(--ui-scale));
+  --text-4xl--line-height: 1.1;
+  --transition-duration-fast: var(--motion-fast);
+  --transition-duration-standard: var(--motion-standard);
   --ease-ui: var(--motion-ease);
 }
 
