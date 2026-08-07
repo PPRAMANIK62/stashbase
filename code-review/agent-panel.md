@@ -43,6 +43,25 @@ essential opacity feedback remains available. Foundation primitives that are onl
 after an interaction may load at that interaction boundary, preserving the
 enforced initial-renderer budget without making the feature unavailable.
 
+The agent panel's chrome — tab strip, pane header, transcript container,
+tool-activity cards, composer, attachment chips, history menu, and error
+banners — is styled with Tailwind utilities and the shared
+Button/StatusMessage/Menu/Input primitives. `styles/chat.css` keeps only what
+utilities must not own: the `.app` grid tracks and chat splitter, the
+chat-primary centring rules keyed on the `agent-head` / `agent-messages` /
+`agent-composer` hook classes (keep those class names on the utility-styled
+elements), the sticky user-turn header system, `.agent-prose` content
+typography plus the One-Dark tool/diff palette, the `@`-mention popup
+(`.agent-mention-item.active` is a keyboard-navigation querySelector hook),
+and the CodeMirror-owned composer input DOM. `.agent-view` stays a class-name
+routing hook for the global drag-drop handler. Composer pill triggers are
+labelled controls: each carries a leading icon and an accessible name
+("Model", "Permission mode", "Reasoning effort"), and a default-valued model
+or effort pill renders "<Control>: Default" so adjacent Defaults cannot be
+confused. Empty-state starter suggestions only prefill the composer draft
+through the CodeMirror handle — they must never send. The connecting spinner
+is a keyframe animation the global reduced-motion policy stops.
+
 Community contributions can land as useful first iterations, but the long-term design should continue to be simplified toward this side-panel model when needed.
 
 ## Design Rules

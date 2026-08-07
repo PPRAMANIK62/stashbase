@@ -19,9 +19,11 @@ import { useApp } from '../store/AppContext';
 import { makeChatTab } from '../store/state';
 import { NewChatIcon } from '../icons';
 import { Button } from 'react-aria-components';
+import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
 import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
+import { iconGhostButtonClass } from './agent/panelStyles';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
@@ -123,6 +125,9 @@ export function AgentView({
   const idRef = useRef(id); idRef.current = id;
   const titleRef = useRef(title); titleRef.current = title;
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Empty-state starter suggestion → composer draft. Prefill only; the
+  // nonce lets the same template be re-applied after the user edits it.
+  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   const toolNamesRef = useRef<Map<string, string>>(new Map());
@@ -826,20 +831,26 @@ export function AgentView({
   }
 
   return (
+    // `agent-view` stays as a routing hook: useGlobalDragDrop uses
+    // `closest('.agent-view')` to keep panel drops out of folder import.
     <div
-      className="agent-view"
+      className="agent-view relative flex min-h-0 flex-1 flex-col bg-pane"
       onDragOver={onPanelDragOver}
       onDragLeave={onPanelDragLeave}
       onDrop={onPanelDrop}
     >
       {dragOver && (
-        <div className="agent-drop-overlay">
-          <div className="agent-drop-card">Drop files to add as context</div>
+        // pointer-events-none so the overlay never steals the drop or
+        // flickers dragenter/leave; the panel's own handlers take the drop.
+        <div className="pointer-events-none absolute inset-1.5 z-20 grid place-items-center rounded-xl border-2 border-dashed border-accent/55 bg-accent/7 backdrop-blur-[1.5px]">
+          <div className="rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground shadow-elevation">Drop files to add as context</div>
         </div>
       )}
-      <div className="agent-head">
-        <span className="agent-head-title">{title}</span>
-        <div className="agent-head-actions">
+      {/* `agent-head` is a layout hook: the chat-primary grid rules in
+        * styles/chat.css center it to the readable transcript width. */}
+      <div className="agent-head flex items-center gap-2 py-1.5 pr-2 pl-3">
+        <span className="min-w-0 flex-1 overflow-hidden text-sm text-ellipsis whitespace-nowrap text-muted-foreground">{title}</span>
+        <div className="flex shrink-0 gap-0.5">
           {capabilities?.history && (
             <AgentHistoryMenu
               open={historyOpen}
@@ -851,7 +862,7 @@ export function AgentView({
               onActiveDeleted={resetAfterActiveSessionDeleted}
             />
           )}
-          <Button className="agent-head-btn" aria-label={`New ${meta.name} chat`} onPress={newChat}>
+          <Button className={iconGhostButtonClass} aria-label={`New ${meta.name} chat`} onPress={newChat}>
             <NewChatIcon />
           </Button>
         </div>
@@ -894,12 +905,13 @@ export function AgentView({
             const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
             if (isSafeFolderRelativePath(rel)) void actions.selectFile(rel);
           }}
+          onPrefill={(text) => setPrefill({ text, nonce: Date.now() })}
         />
         {phase === 'closed' && (
         !fatal && (
-          <div className="agent-ended">
+          <div className="flex items-center justify-between gap-2.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
             <span>Session ended.</span>
-            <Button className="agent-btn" onPress={reconnect}>Reconnect</Button>
+            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={reconnect}>Reconnect</Button>
           </div>
         )
       )}
@@ -928,6 +940,7 @@ export function AgentView({
         skillState={skillState}
         onRefreshSkills={refreshSkills}
         agentShortName={meta.shortName}
+        prefill={prefill}
         attachments={attachments}
         uploading={uploading}
         onPickFiles={uploadFiles}
@@ -941,6 +954,12 @@ export function AgentView({
     </div>
   );
 }
+
+const runtimeCardWrapClass = 'grid min-h-45 flex-1 place-items-center px-3 py-6';
+const runtimeCardClass = 'w-[min(440px,100%)] rounded-xl border border-border bg-pane p-4 text-foreground';
+const runtimeCardTitleClass = 'm-0 text-lg font-bold';
+const runtimeCardCopyClass = 'mt-1.75 mb-3 text-sm leading-normal text-muted-foreground';
+const runtimeCardActionsClass = 'mt-3 flex justify-end gap-2';
 
 function AgentRuntimeSetup({
   runtime,
@@ -956,14 +975,14 @@ function AgentRuntimeSetup({
   const name = runtime?.label ?? fallbackName;
   const installHint = runtime?.installHint ?? '';
   return (
-    <div className="agent-runtime-setup" role="status">
-      <div className="agent-runtime-setup-card">
-        <h2>{name} is not installed</h2>
-        <p>Install its CLI to start a built-in chat.</p>
-        <code>{installHint}</code>
-        <div className="agent-runtime-setup-actions">
-          <Button className="agent-btn primary" onPress={onCopy}>Copy command</Button>
-          <Button className="agent-btn" onPress={onRefresh}>Refresh status</Button>
+    <div className={runtimeCardWrapClass} role="status">
+      <div className={runtimeCardClass}>
+        <h2 className={runtimeCardTitleClass}>{name} is not installed</h2>
+        <p className={runtimeCardCopyClass}>Install its CLI to start a built-in chat.</p>
+        <code className="block overflow-x-auto rounded-md border border-border bg-background p-2 font-mono text-sm whitespace-nowrap">{installHint}</code>
+        <div className={runtimeCardActionsClass}>
+          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onCopy}>Copy command</Button>
+          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Refresh status</Button>
         </div>
       </div>
     </div>
@@ -972,12 +991,12 @@ function AgentRuntimeSetup({
 
 function AgentRuntimeChecking({ name, onRefresh }: { name: string; onRefresh: () => void }) {
   return (
-    <div className="agent-runtime-setup" role="status">
-      <div className="agent-runtime-setup-card">
-        <h2>Checking {name}</h2>
-        <p>Checking whether its local CLI is installed.</p>
-        <div className="agent-runtime-setup-actions">
-          <Button className="agent-btn" onPress={onRefresh}>Refresh status</Button>
+    <div className={runtimeCardWrapClass} role="status">
+      <div className={runtimeCardClass}>
+        <h2 className={runtimeCardTitleClass}>Checking {name}</h2>
+        <p className={runtimeCardCopyClass}>Checking whether its local CLI is installed.</p>
+        <div className={runtimeCardActionsClass}>
+          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Refresh status</Button>
         </div>
       </div>
     </div>

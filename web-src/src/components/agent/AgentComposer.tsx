@@ -1,9 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, ListBox, ListBoxItem, Menu, MenuItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
-  ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
+  ArrowUpIcon, BoltIcon, BotIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
   FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
 } from '../../icons';
+import { cn } from '../../lib/utils';
 import { useApp } from '../../store/AppContext';
 import { ImageLightbox } from '../ImageLightbox';
 import {
@@ -18,6 +19,10 @@ import { baseName } from './attachments';
 import { changedEffortSelection, effortLabel, effortMenuState, effortOptions } from './effortMenuState';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
+import {
+  attachChipClass, attachIconClass, attachImageChipClass, attachImagePreviewClass,
+  attachImageRemoveClass, attachNameClass, attachRemoveClass, iconGhostButtonClass,
+} from './panelStyles';
 import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from './types';
 import { modelMenuLabel } from './modelState';
 
@@ -27,6 +32,46 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'plan', label: 'Plan', desc: 'Explore and propose a plan before changing files', Icon: ClipboardListIcon },
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
+
+/* Composer-bar pills. Each trigger carries a leading icon plus a
+ * control-naming title/aria-label so adjacent "Default" values stay
+ * distinguishable. Model and effort change the next native session, so
+ * they get the accent-tinted emphasis treatment; the permission-mode pill
+ * stays a quiet utility control. */
+const pillClass =
+  'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
+const pillEmphasisClass =
+  'min-h-7 border border-accent/35 bg-accent/8 text-foreground enabled:hover:border-accent enabled:hover:bg-accent/15 enabled:hover:text-foreground';
+const pillLockedClass = 'cursor-default opacity-60';
+const pillIconClass = 'size-3.5 shrink-0';
+const pillChevronClass = '-ml-px size-3 shrink-0 opacity-75';
+
+/* Upward menus anchored to the pills. */
+const menuPopupClass =
+  'z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-card p-1.5 shadow-elevation';
+const menuHeadClass = 'flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm';
+const optClass =
+  'flex w-full cursor-pointer items-start gap-2.5 rounded-lg border-0 bg-transparent p-2 text-left text-foreground hover:bg-muted data-focused:bg-muted data-highlighted:bg-muted';
+const optActiveClass =
+  'bg-accent/12 shadow-[inset_2px_0_0_var(--accent)] hover:bg-accent/12 data-focused:bg-accent/12 data-highlighted:bg-accent/12';
+const optIconClass = 'mt-px size-4.5 shrink-0 text-muted-foreground';
+const optTextClass = 'flex min-w-0 flex-1 flex-col gap-0.5';
+const optTitleClass = 'text-base font-medium';
+const optDescClass = 'text-xs leading-snug text-muted-foreground';
+const optCheckClass = 'mt-0.5 size-4 shrink-0 text-accent';
+
+/* Explicit, touch-friendly effort choices — never tiny slider dots. */
+const effortChoiceClass =
+  'min-h-7.5 shrink-0 cursor-pointer rounded-md border border-border bg-transparent px-2 py-1 text-xs text-muted-foreground transition-colors duration-fast hover:bg-muted hover:text-foreground';
+const effortChoiceCurClass =
+  'border-accent bg-accent/15 font-semibold text-foreground hover:bg-accent/15 hover:text-foreground';
+
+/* Neutral send button — accent only on hover-when-ready (VSCode-style). */
+const sendClass =
+  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg border p-0 [&_svg]:size-4.5';
+const sendReadyClass =
+  'border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:cursor-default disabled:opacity-40';
+const sendStopClass = 'border-destructive bg-destructive text-primary-foreground';
 
 function AccessMenu({
   mode, open, disabled, onOpenChange, onPick,
@@ -41,31 +86,35 @@ function AccessMenu({
   const ActiveIcon = active.Icon;
   return (
     <MenuTrigger isOpen={open} onOpenChange={onOpenChange}>
-      <Button className="agent-mode-btn" isDisabled={disabled}>
-        <ActiveIcon className="agent-mode-icon" />
+      <Button
+        className={pillClass}
+        isDisabled={disabled}
+        aria-label={`Permission mode: ${active.label} — ${active.desc}`}
+      >
+        <ActiveIcon className={pillIconClass} />
         {active.label}
-        <ChevronDownIcon className="agent-mode-chevron" />
+        <ChevronDownIcon className={pillChevronClass} />
       </Button>
-      <Popover className="agent-mode-menu" placement="top end">
-        <div className="agent-mode-menu-head">
-          <span>Access</span>
+      <Popover className={menuPopupClass} placement="top end">
+        <div className={menuHeadClass}>
+          <span className="font-semibold text-foreground">Permission mode</span>
         </div>
-        <Menu aria-label="Access level" selectionMode="single" selectedKeys={[mode]} onAction={(key) => onPick(key as PermMode)}>
+        <Menu aria-label="Permission mode" selectionMode="single" selectedKeys={[mode]} onAction={(key) => onPick(key as PermMode)}>
           {MODES.map((m) => {
             const Icon = m.Icon;
             return (
               <MenuItem
                 key={m.id}
                 id={m.id}
-                className={({ isSelected }) => 'agent-mode-opt' + (isSelected ? ' active' : '')}
+                className={({ isSelected }) => cn(optClass, isSelected && optActiveClass)}
                 textValue={m.label}
               >
-                <Icon className="agent-mode-opt-icon" />
-                <span className="agent-mode-opt-text">
-                  <span className="agent-mode-opt-title">{m.label}</span>
-                  <span className="agent-mode-opt-desc">{m.desc}</span>
+                <Icon className={optIconClass} />
+                <span className={optTextClass}>
+                  <span className={optTitleClass}>{m.label}</span>
+                  <span className={optDescClass}>{m.desc}</span>
                 </span>
-                {m.id === mode && <CheckIcon className="agent-mode-opt-check" />}
+                {m.id === mode && <CheckIcon className={optCheckClass} />}
               </MenuItem>
             );
           })}
@@ -77,13 +126,13 @@ function AccessMenu({
 
 function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; onSet: (l?: EffortLevel) => void }) {
   return (
-    <div className="agent-effort">
-      <DumbbellIcon className="agent-effort-icon" />
-      <span className="agent-effort-label">
-        Effort <span className="agent-effort-level">({effort ? effortLabel(effort) : 'Default'})</span>
+    <div className="flex items-center gap-2 rounded-lg bg-accent/4 p-2">
+      <DumbbellIcon className="size-4 shrink-0 text-muted-foreground" />
+      <span className="flex-1 text-sm text-foreground">
+        Effort <span className="text-muted-foreground">({effort ? effortLabel(effort) : 'Default'})</span>
       </span>
       <ListBox
-        className="agent-effort-track"
+        className="flex flex-wrap items-center justify-end gap-1 py-0.5"
         aria-label="Effort"
         selectionMode="single"
         selectedKeys={[effort ?? '__default__']}
@@ -92,18 +141,18 @@ function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: 
           if (next !== null) onSet(next);
         }}
       >
-        <ListBoxItem id="__default__" className={({ isSelected }) => 'agent-effort-choice' + (isSelected ? ' cur' : '')} textValue="Default">
+        <ListBoxItem
+          id="__default__"
+          className={({ isSelected }) => cn(effortChoiceClass, isSelected && effortChoiceCurClass)}
+          textValue="Default"
+        >
           Default
         </ListBoxItem>
         {efforts.map((lv) => (
           <ListBoxItem
             key={lv}
             id={lv}
-            className={({ isSelected }) =>
-              'agent-effort-choice'
-              + (isSelected ? ' cur' : '')
-              + (lv === 'max' ? ' max' : '')
-            }
+            className={({ isSelected }) => cn(effortChoiceClass, isSelected && effortChoiceCurClass)}
             aria-label={effortLabel(lv)}
             textValue={effortLabel(lv)}
           >
@@ -127,17 +176,19 @@ function EffortMenu({
   onSetEffort: (level?: EffortLevel) => void;
 }) {
   const state = effortMenuState({ open, disabled, locked });
+  const label = effort ? effortLabel(effort) : 'Default';
   return (
     <MenuTrigger isOpen={state.isOpen} onOpenChange={onOpenChange}>
       <Button
-        className={'agent-mode-btn agent-effort-btn' + (locked ? ' is-locked' : '')}
+        className={cn(pillClass, pillEmphasisClass, locked && pillLockedClass)}
         isDisabled={state.triggerDisabled}
+        aria-label={`Reasoning effort: ${label}`}
       >
-        <DumbbellIcon className="agent-mode-icon" />
-        {effort ? effortLabel(effort) : 'Default'}
-        <ChevronDownIcon className="agent-mode-chevron" />
+        <DumbbellIcon className={pillIconClass} />
+        {effort ? label : 'Effort: Default'}
+        <ChevronDownIcon className={pillChevronClass} />
       </Button>
-      <Popover className="agent-mode-menu effort-only" placement="top end">
+      <Popover className={cn(menuPopupClass, 'w-75 px-2 py-1.5')} placement="top end">
         <div>
           <EffortBar effort={effort} efforts={efforts} onSet={onSetEffort} />
         </div>
@@ -156,24 +207,31 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
   onSetModel: (model?: string) => void;
 }) {
   const defaultSelected = !selectedModel;
+  const label = modelMenuLabel(models, selectedModel, activeModel, resumedSession);
   return (
     <SharedMenu>
-      <SharedMenuTrigger className={'agent-mode-btn agent-model-btn' + (locked ? ' is-locked' : '')} disabled={disabled || locked}>
-        {modelMenuLabel(models, selectedModel, activeModel, resumedSession)}
-        <ChevronDownIcon className="agent-mode-chevron" />
+      <SharedMenuTrigger
+        className={cn(pillClass, pillEmphasisClass, 'max-w-40', locked && pillLockedClass)}
+        disabled={disabled || locked}
+        aria-label={`Model: ${label}`}
+        title={`Model — ${label}`}
+      >
+        <BotIcon className={pillIconClass} />
+        <span className="truncate">{label === 'Default' ? 'Model: Default' : label}</span>
+        <ChevronDownIcon className={pillChevronClass} />
       </SharedMenuTrigger>
       <SharedMenuPortal>
         <SharedMenuPositioner side="top" align="end" sideOffset={6} collisionPadding={8}>
-          <SharedMenuPopup className="agent-mode-menu agent-model-menu" aria-label="Model">
-            <div className="agent-mode-menu-head"><span>Model</span></div>
-            <SharedMenuItem label="Default" className={'agent-mode-opt' + (defaultSelected ? ' active' : '')} onClick={() => onSetModel(undefined)}>
-            <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">Default</span><span className="agent-mode-opt-desc">Use this runtime’s configured model</span></span>
-            {defaultSelected && <CheckIcon className="agent-mode-opt-check" />}
+          <SharedMenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label="Model">
+            <div className={menuHeadClass}><span className="font-semibold text-foreground">Model</span></div>
+            <SharedMenuItem label="Default" className={cn(optClass, defaultSelected && optActiveClass)} onClick={() => onSetModel(undefined)}>
+            <span className={optTextClass}><span className={optTitleClass}>Default</span><span className={optDescClass}>Use this runtime’s configured model</span></span>
+            {defaultSelected && <CheckIcon className={optCheckClass} />}
             </SharedMenuItem>
             {models.map((entry) => (
-              <SharedMenuItem key={entry.id} label={entry.label} className={'agent-mode-opt' + (selectedModel === entry.id ? ' active' : '')} onClick={() => onSetModel(entry.id)}>
-              <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">{entry.label}</span>{entry.description && <span className="agent-mode-opt-desc">{entry.description}</span>}</span>
-              {selectedModel === entry.id && <CheckIcon className="agent-mode-opt-check" />}
+              <SharedMenuItem key={entry.id} label={entry.label} className={cn(optClass, selectedModel === entry.id && optActiveClass)} onClick={() => onSetModel(entry.id)}>
+              <span className={optTextClass}><span className={optTitleClass}>{entry.label}</span>{entry.description && <span className={optDescClass}>{entry.description}</span>}</span>
+              {selectedModel === entry.id && <CheckIcon className={optCheckClass} />}
               </SharedMenuItem>
             ))}
           </SharedMenuPopup>
@@ -185,7 +243,7 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
 
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -213,6 +271,8 @@ export function AgentComposer({
   showModeMenu: boolean;
   showEffortMenu: boolean;
   showModelMenu: boolean;
+  /** Empty-state starter template. Prefills the draft only — never sends. */
+  prefill?: { text: string; nonce: number } | null;
   onPickFiles: (files: File[]) => void;
   onPasteImages: (files: File[]) => void;
   onFocusChange: (focused: boolean) => void;
@@ -238,6 +298,12 @@ export function AgentComposer({
   useEffect(() => {
     if (effortLocked) setEffortOpen(false);
   }, [effortLocked]);
+
+  // Starter-suggestion prefill: replace the draft and keep focus in the
+  // editor so typing continues naturally. Sending stays a user action.
+  useEffect(() => {
+    if (prefill) composerRef.current?.setText(prefill.text);
+  }, [prefill]);
 
   function cycleMode() {
     const i = MODES.findIndex((m) => m.id === mode);
@@ -298,7 +364,9 @@ export function AgentComposer({
   }
 
   return (
-    <div className="agent-composer">
+    // `agent-composer` is a layout hook: the chat-primary grid rules in
+    // styles/chat.css center it to the readable transcript width.
+    <div className="agent-composer relative bg-pane p-2">
       {mention && (choices.length > 0 || mention.kind === 'skill') && (
         <div className="agent-mention">
           <div className="agent-mention-head">
@@ -344,21 +412,21 @@ export function AgentComposer({
           )}
         </div>
       )}
-      <div className="agent-composer-box">
+      <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-background px-2 pt-2 pb-1.5 focus-within:border-accent">
         {(attachments.length > 0 || uploading) && (
-          <div className="agent-attachments">
+          <div className="flex flex-wrap items-center gap-1">
             {attachments.map((a) => a.previewUrl ? (
-              <span key={a.path} className="agent-attach-image-chip">
+              <span key={a.path} className={attachImageChipClass}>
                 <button
                   type="button"
-                  className="agent-attach-image-preview"
+                  className={attachImagePreviewClass}
                   aria-label={`Preview ${a.name}`}
                   onClick={() => setPreviewAttachment(a)}
                 >
                   <img src={a.previewUrl} alt="" />
                 </button>
                 <Button
-                  className="agent-attach-x"
+                  className={attachImageRemoveClass}
                   aria-label={`Remove ${a.name}`}
                   onPress={() => {
                     if (previewAttachment?.path === a.path) setPreviewAttachment(null);
@@ -371,13 +439,13 @@ export function AgentComposer({
                 </Button>
               </span>
             ) : (
-              <span key={a.path} className="agent-attach-chip" title={a.path}>
-                <FileGenericIcon className="agent-attach-icon" />
-                <span className="agent-attach-name">{a.name}</span>
-                <Button className="agent-attach-x" aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>
+              <span key={a.path} className={attachChipClass} title={a.path}>
+                <FileGenericIcon className={attachIconClass} />
+                <span className={attachNameClass}>{a.name}</span>
+                <Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>
               </span>
             ))}
-            {uploading && <span className="agent-attach-loading">Uploading…</span>}
+            {uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
           </div>
         )}
         <MentionComposer
@@ -420,16 +488,18 @@ export function AgentComposer({
             e.target.value = '';
           }}
         />
-        <div className="agent-composer-bar">
+        {/* Action bar under the input. The negative side margins bleed the
+          * top rule past the box padding so it spans edge to edge. */}
+        <div className="-mx-2 flex items-center gap-1 border-t border-border px-2 pt-1.5">
           <Button
-            className="agent-bar-btn"
+            className={iconGhostButtonClass}
             aria-label={uploading ? 'Uploading files' : 'Upload local files'}
             isDisabled={uploading}
             onPress={() => fileInputRef.current?.click()}
           >
             <PlusIcon />
           </Button>
-          <span className="agent-bar-spacer" />
+          <span className="flex-1" />
           {showModelMenu && <ModelMenu selectedModel={selectedModel} activeModel={activeModel} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
           {showModeMenu && (
             <AccessMenu
@@ -452,12 +522,12 @@ export function AgentComposer({
             />
           )}
           {turnActive ? (
-            <Button className="agent-send stop" aria-label="Stop agent" onPress={onStop}>
+            <Button className={cn(sendClass, sendStopClass)} aria-label="Stop agent" onPress={onStop}>
               <StopIcon />
             </Button>
           ) : (
             <Button
-              className="agent-send"
+              className={cn(sendClass, sendReadyClass)}
               aria-label="Send message"
               isDisabled={disabled || uploading || (!text.trim() && attachments.length === 0 && !selectedSkill)}
               onPress={() => composerRef.current?.submit()}
@@ -466,7 +536,7 @@ export function AgentComposer({
             </Button>
           )}
         </div>
-        {modelNotice && <div className="agent-model-notice" role="status">{modelNotice}</div>}
+        {modelNotice && <div className="pt-1.5 text-xs leading-snug text-muted-foreground" role="status">{modelNotice}</div>}
       </div>
       {previewAttachment?.previewUrl && (
         <ImageLightbox

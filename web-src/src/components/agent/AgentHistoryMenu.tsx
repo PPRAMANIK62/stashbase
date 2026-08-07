@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } from 'react-aria-components';
 import { api, type SessionInfo } from '../../api';
 import { EditIcon, HistoryIcon, TrashIcon } from '../../icons';
+import { cn } from '../../lib/utils';
+import { buttonVariants } from '../ui/button';
+import { Input } from '../ui/input';
+import { iconGhostButtonClass } from './panelStyles';
 import type { AgentKind } from './types';
+
+const emptyRowClass = 'px-2 py-3.5 text-center text-sm text-muted-foreground';
 
 function relTime(ms: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
@@ -79,13 +85,16 @@ export function AgentHistoryMenu({
         if (!nextOpen) onClose();
       }}
     >
-      <Button className="agent-head-btn" aria-label="Chat history">
+      <Button className={iconGhostButtonClass} aria-label="Chat history">
         <HistoryIcon />
       </Button>
-      <Popover className="agent-history-menu" placement="bottom end">
+      <Popover
+        className="z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-pane p-1.5 shadow-elevation"
+        placement="bottom end"
+      >
         <Dialog aria-label="Chat history">
-          <div className="agent-history-search">
-            <input
+          <div className="px-0.5 pt-0.5 pb-1.5">
+            <Input
               type="text"
               autoFocus
               placeholder="Search sessions…"
@@ -93,20 +102,25 @@ export function AgentHistoryMenu({
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
-          <div className="agent-history-list">
-            {loading && <div className="agent-history-empty">Loading…</div>}
-            {!loading && loadError && <div className="agent-history-empty">Could not load sessions.</div>}
+          <div className="max-h-80 overflow-y-auto">
+            {loading && <div className={emptyRowClass}>Loading…</div>}
+            {!loading && loadError && <div className={emptyRowClass}>Could not load sessions.</div>}
             {!loading && !loadError && shown.length === 0 && (
-              <div className="agent-history-empty">{q ? 'No matches.' : 'No sessions yet.'}</div>
+              <div className={emptyRowClass}>{q ? 'No matches.' : 'No sessions yet.'}</div>
             )}
             {!loading && shown.map((s) => (
+              // Time and hover-revealed actions share the one right-hand
+              // slot: time shows at rest, hover/focus swaps in edit/delete.
               <div
                 key={s.id}
-                className={'agent-history-row' + (s.id === currentSessionId ? ' active' : '')}
+                className={cn(
+                  'group/row relative flex items-center rounded-md hover:bg-muted',
+                  s.id === currentSessionId && 'bg-accent/10',
+                )}
               >
                 {editingId === s.id ? (
                   <input
-                    className="agent-history-rename"
+                    className="mx-1.5 my-1 min-w-0 flex-1 rounded-md border border-accent bg-background px-1.75 py-1 text-base text-foreground outline-none"
                     autoFocus
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
@@ -118,38 +132,41 @@ export function AgentHistoryMenu({
                   />
                 ) : (
                   <Button
-                    className="agent-history-open"
+                    className="flex min-w-0 flex-1 cursor-pointer items-baseline gap-2 border-0 bg-transparent px-2.25 py-1.75 text-left text-foreground"
                     aria-label={`Resume ${s.title}`}
                     onPress={() => onResume(s.id)}
                   >
-                    <span className="agent-history-title">{s.title}</span>
-                    <span className="agent-history-time">{relTime(s.lastModified)}</span>
+                    <span className="min-w-0 flex-1 truncate text-base">{s.title}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground group-hover/row:hidden group-focus-within/row:hidden">{relTime(s.lastModified)}</span>
                   </Button>
                 )}
-                <div className="agent-history-row-actions">
+                <div className="hidden shrink-0 gap-px pr-1.25 group-hover/row:flex group-focus-within/row:flex">
                   <Button
-                    className="agent-history-act"
+                    className="grid size-6 cursor-pointer place-items-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground hover:bg-border hover:text-foreground [&_svg]:size-3.75"
                     aria-label={`Rename ${s.title}`}
                     onPress={() => { setEditingId(s.id); setEditText(s.title); }}
                   >
                     <EditIcon />
                   </Button>
                   <DialogTrigger onOpenChange={(isOpen) => { if (isOpen) setDeleteError(null); }}>
-                    <Button className="agent-history-act" aria-label={`Delete ${s.title}`}>
+                    <Button
+                      className="grid size-6 cursor-pointer place-items-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground hover:bg-border hover:text-foreground [&_svg]:size-3.75"
+                      aria-label={`Delete ${s.title}`}
+                    >
                       <TrashIcon />
                     </Button>
-                    <ModalOverlay className="agent-history-confirm-overlay" isDismissable>
-                      <Modal className="agent-history-confirm">
+                    <ModalOverlay className="fixed inset-0 z-40 grid place-items-center bg-black/35 p-4" isDismissable>
+                      <Modal className="w-[min(360px,100%)] rounded-xl border border-border bg-pane p-4 text-foreground shadow-elevation">
                         <Dialog role="alertdialog" aria-label="Delete chat session">
                           {({ close }) => (
                             <>
-                              <Heading slot="title">Delete chat?</Heading>
-                              <p>Delete “{s.title}”? This cannot be undone.</p>
-                              {deleteError && <div className="agent-history-confirm-error" role="alert">{deleteError}</div>}
-                              <div className="agent-history-confirm-actions">
-                                <Button onPress={close}>Cancel</Button>
+                              <Heading slot="title" className="m-0 text-lg font-bold">Delete chat?</Heading>
+                              <p className="mt-2 mb-0 text-sm leading-normal text-muted-foreground">Delete “{s.title}”? This cannot be undone.</p>
+                              {deleteError && <div className="mt-2 text-sm text-status-danger" role="alert">{deleteError}</div>}
+                              <div className="mt-4 flex justify-end gap-2">
+                                <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={close}>Cancel</Button>
                                 <Button
-                                  className="danger"
+                                  className={buttonVariants({ variant: 'destructive', size: 'sm' })}
                                   onPress={() => { void remove(s.id).then((deleted) => { if (deleted) close(); }); }}
                                 >
                                   Delete

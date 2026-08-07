@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createElement, type ReactElement } from 'react';
 import test from 'node:test';
-import { ChatSessionBoundary } from '../components/ChatPane';
+import { ChatSessionBoundary, chatStatusClass } from '../components/ChatPane';
 import { LazyLoadBoundary, loadWithRetry } from '../components/ErrorBoundary';
 
 test('lazy module loading retries one transient failure', async () => {
@@ -61,7 +61,7 @@ test('each chat session gets an independently resettable error boundary', () => 
   }>;
 
   assert.equal(element.type, LazyLoadBoundary);
-  assert.equal(element.props.className, 'chat-pane status');
+  assert.equal(element.props.className, chatStatusClass);
   assert.equal(element.props.resetKey, 'chat-1:active');
   assert.equal(element.props.children, child);
 });

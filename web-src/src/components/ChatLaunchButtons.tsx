@@ -40,7 +40,7 @@ export function ChatLaunchButtons() {
   }
 
   return (
-    <div className="chat-launchers">
+    <div className="flex items-center gap-0.5">
       {AGENTS.map((agent) => (
         <LaunchButton
           key={agent.id}
@@ -76,7 +76,7 @@ function LaunchButton({
   const Icon = agent.Icon;
   return (
     <DeferredTooltipButton
-      className={'icon-btn chat-launch' + (active ? ' active' : '')}
+      className={'icon-btn' + (active ? ' bg-accent/8' : '')}
       label={label}
       side="bottom"
       onClick={onClick}

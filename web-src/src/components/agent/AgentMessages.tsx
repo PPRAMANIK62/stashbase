@@ -3,8 +3,26 @@ import { Button } from 'react-aria-components';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
 import { AgentMarkdown } from './AgentMarkdown';
 import { ChevronDownIcon, CopyIcon, EditIcon, FileGenericIcon } from '../../icons';
+import { cn } from '../../lib/utils';
 import { ImageLightbox } from '../ImageLightbox';
+import { buttonVariants } from '../ui/button';
+import { StatusMessage } from '../ui/status';
+import {
+  attachChipClass, attachIconClass, attachImageChipClass, attachImagePreviewClass, attachNameClass,
+} from './panelStyles';
 import type { Attachment, Block, ToolBlock, ToolStatus } from './types';
+
+const outlineSmClass = buttonVariants({ variant: 'outline', size: 'sm' });
+const primarySmClass = buttonVariants({ variant: 'default', size: 'sm' });
+
+/** Accent status dot used by working/queued/running indicators. */
+function Dot() {
+  return <span className="inline-block size-1.75 shrink-0 rounded-full bg-accent" aria-hidden="true" />;
+}
+
+/** Mono detail blocks inside tool cards (input JSON, results, commands). */
+const toolPreClass =
+  'mt-1.5 mb-0 max-h-70 overflow-x-auto overflow-y-auto rounded-md border border-border bg-pane px-2.25 py-1.75 font-mono text-xs leading-normal break-words whitespace-pre-wrap';
 
 export interface QueuedTurnPreview {
   id: string;
@@ -15,7 +33,7 @@ export interface QueuedTurnPreview {
 }
 
 export function MessageList({
-  blocks, queuedTurns, turnActive, phase, fatal, agentName, agentShortName, Icon, editableUserMessageIds, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
+  blocks, queuedTurns, turnActive, phase, fatal, agentName, agentShortName, Icon, editableUserMessageIds, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact, onPrefill,
 }: {
   blocks: Block[];
   queuedTurns: QueuedTurnPreview[];
@@ -32,6 +50,7 @@ export function MessageList({
   onResendUserMessage: (text: string) => void;
   onRetry: () => void;
   onOpenArtifact: (path: string) => void;
+  onPrefill: (text: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -54,9 +73,17 @@ export function MessageList({
   const turns = useMemo(() => groupTurns(blocks), [blocks]);
 
   return (
-    <div className="agent-messages" ref={ref} onScroll={onScroll}>
-      {blocks.length === 0 && phase === 'live' && <Hero name={agentName} Icon={Icon} />}
-      {phase === 'connecting' && <div className="agent-empty">Connecting to {agentShortName}…</div>}
+    // `agent-messages` is a layout hook: the chat-primary grid rules in
+    // styles/chat.css widen its padding to center the readable column.
+    // No top padding — sticky turn headers pin flush to the top; the first
+    // child carries the breathing room instead (it scrolls away).
+    <div
+      className="agent-messages flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-0 pb-2 [scrollbar-width:thin] [&>*:first-child]:mt-3"
+      ref={ref}
+      onScroll={onScroll}
+    >
+      {blocks.length === 0 && phase === 'live' && <Hero name={agentName} Icon={Icon} onPrefill={onPrefill} />}
+      {phase === 'connecting' && <ConnectingNotice agentShortName={agentShortName} />}
       {blocks.length === 0 && phase === 'closed' && fatal && (
         <FatalState fatal={fatal} agentShortName={agentShortName} onRetry={onRetry} />
       )}
@@ -92,13 +119,22 @@ export function MessageList({
       {blocks.length > 0 && phase === 'closed' && fatal && (
         <FatalInline fatal={fatal} agentShortName={agentShortName} onRetry={onRetry} />
       )}
-      {turnActive && <div className="agent-working"><span className="agent-dot" />{agentShortName} is working…</div>}
+      {turnActive && (
+        <div className="flex items-center gap-1.5 p-0.5 text-sm text-muted-foreground">
+          <Dot />{agentShortName} is working…
+        </div>
+      )}
       {showJump && (
-        <Button className="agent-jump-latest" onPress={() => {
-          if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-          stick.current = true;
-          setShowJump(false);
-        }}>Jump to latest ↓</Button>
+        // Must sit above a pinned user-turn header (z-2), otherwise its
+        // upper half is hidden and cannot be clicked while scrolling.
+        <Button
+          className="sticky bottom-2 z-3 cursor-pointer self-center rounded-full border border-border bg-pane px-2.5 py-1.25 text-sm text-foreground shadow-elevation"
+          onPress={() => {
+            if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+            stick.current = true;
+            setShowJump(false);
+          }}
+        >Jump to latest ↓</Button>
       )}
     </div>
   );
@@ -245,7 +281,7 @@ function QueuedTurn({
           {turn.text && <UserMessageText text={turn.text} />}
           <span className="agent-turn-actions">
             <span className="agent-turn-waiting">
-              <span className="agent-dot" />
+              <Dot />
               {label}
             </span>
             {turn.canSteer && turn.status === 'waiting' && (
@@ -271,17 +307,17 @@ function MessageAttachments({ attachments }: { attachments: Attachment[] }) {
           <button
             key={attachment.path}
             type="button"
-            className="agent-attach-image-chip agent-attach-image-static"
+            className={cn(attachImageChipClass, attachImagePreviewClass)}
             aria-label={`Preview ${attachment.name}`}
             onClick={() => setPreviewAttachment(attachment)}
           >
             <img src={attachment.previewUrl} alt="" />
           </button>
         ) : (
-          <span key={attachment.path} className="agent-attach-chip" title={attachment.path}>
-            <FileGenericIcon className="agent-attach-icon" />
-            <span className="agent-attach-name">{attachment.name}</span>
-            {attachment.dims && <span className="agent-attach-dims">{attachment.dims}</span>}
+          <span key={attachment.path} className={attachChipClass} title={attachment.path}>
+            <FileGenericIcon className={attachIconClass} />
+            <span className={attachNameClass}>{attachment.name}</span>
+            {attachment.dims && <span className="shrink-0 text-muted-foreground">{attachment.dims}</span>}
           </span>
         ))}
       </div>
@@ -337,9 +373,9 @@ function InlineUserMessageEditor({
           }
         }}
       />
-      <div className="agent-turn-edit-actions">
-        <Button className="agent-btn" onPress={onCancel}>Cancel</Button>
-        <Button className="agent-btn primary" onPress={onSave}>{saveLabel}</Button>
+      <div className="flex justify-end gap-2">
+        <Button className={outlineSmClass} onPress={onCancel}>Cancel</Button>
+        <Button className={primarySmClass} onPress={onSave}>{saveLabel}</Button>
       </div>
     </div>
   );
@@ -434,6 +470,10 @@ function fatalCopy(fatal: string, agentShortName: string): { title: string; deta
   return { title: `${agentShortName} couldn't continue`, detail: fatal };
 }
 
+const fatalTitleClass = 'text-base font-semibold';
+const fatalDetailClass =
+  'max-h-35 overflow-auto text-sm leading-normal break-words whitespace-pre-wrap text-muted-foreground';
+
 function FatalState({
   fatal, agentShortName, onRetry,
 }: {
@@ -443,12 +483,12 @@ function FatalState({
 }) {
   const copy = fatalCopy(fatal, agentShortName);
   return (
-    <div className="agent-fatal-state">
-      <div className="agent-fatal-card">
-        <div className="agent-fatal-title">{copy.title}</div>
-        <div className="agent-fatal-detail">{copy.detail}</div>
-        <Button className="agent-btn" onPress={onRetry}>Retry</Button>
-      </div>
+    <div className="grid min-h-45 flex-1 place-items-center px-2 py-6">
+      <StatusMessage tone="error" className="flex w-[min(440px,100%)] flex-col items-start gap-2 rounded-xl p-3.5">
+        <div className={fatalTitleClass}>{copy.title}</div>
+        <div className={fatalDetailClass}>{copy.detail}</div>
+        <Button className={outlineSmClass} onPress={onRetry}>Retry</Button>
+      </StatusMessage>
     </div>
   );
 }
@@ -462,24 +502,66 @@ function FatalInline({
 }) {
   const copy = fatalCopy(fatal, agentShortName);
   return (
-    <div className="agent-fatal-inline">
+    <StatusMessage tone="error" className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5">
       <div>
-        <div className="agent-fatal-title">{copy.title}</div>
-        <div className="agent-fatal-detail">{copy.detail}</div>
+        <div className={fatalTitleClass}>{copy.title}</div>
+        <div className={fatalDetailClass}>{copy.detail}</div>
       </div>
-      <Button className="agent-btn" onPress={onRetry}>Retry</Button>
+      <Button className={outlineSmClass} onPress={onRetry}>Retry</Button>
+    </StatusMessage>
+  );
+}
+
+function ConnectingNotice({ agentShortName }: { agentShortName: string }) {
+  return (
+    <div className="flex items-center gap-2 px-0.5 py-2 text-sm text-muted-foreground" role="status">
+      {/* The global reduced-motion policy zeroes this keyframe animation,
+        * leaving a static arc while the text still conveys the state. */}
+      <span
+        className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent"
+        aria-hidden="true"
+      />
+      Connecting to {agentShortName}…
     </div>
   );
 }
 
-function Hero({ name, Icon }: { name: string; Icon: ComponentType<{ className?: string }> }) {
+/** Empty-state starter templates. Selecting one only prefills the
+ * composer draft — sending always stays an explicit user action. */
+const STARTER_SUGGESTIONS: Array<{ label: string; text: string }> = [
+  { label: 'Summarize this folder', text: 'Summarize this folder' },
+  { label: 'What changed recently?', text: 'What changed recently in this folder?' },
+  { label: 'Find notes about …', text: 'Find notes about ' },
+];
+
+/** Warmth-budget empty state: the serif wordmark and mascot stay, with one
+ * muted line of guidance and compact starter suggestions beneath them. */
+function Hero({ name, Icon, onPrefill }: {
+  name: string;
+  Icon: ComponentType<{ className?: string }>;
+  onPrefill: (text: string) => void;
+}) {
   return (
-    <div className="agent-hero">
-      <div className="agent-hero-wordmark">
-        <Icon className="agent-hero-mark" />
-        <span className="agent-hero-name">{name}</span>
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
+      <div className="flex items-center gap-2 text-foreground">
+        <Icon className="size-5.5" />
+        <span className="font-display text-2xl tracking-[0.01em]">{name}</span>
       </div>
       {name === 'Claude Code' && <PixelMascot />}
+      <p className="m-0 max-w-90 text-sm leading-normal text-muted-foreground">
+        Ask about this folder — your files are the context.
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
+        {STARTER_SUGGESTIONS.map((starter) => (
+          <Button
+            key={starter.label}
+            className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'text-muted-foreground hover:text-foreground')}
+            onPress={() => onPrefill(starter.text)}
+          >
+            {starter.label}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -491,7 +573,7 @@ function PixelMascot() {
   px.push([2, 5], [3, 5], [5, 5], [6, 5]);
   const eyes = new Set(['3,2', '5,2']);
   return (
-    <svg className="agent-hero-sprite" viewBox="0 0 9 7" shapeRendering="crispEdges" aria-hidden="true">
+    <svg className="h-12.5 w-16 [image-rendering:pixelated]" viewBox="0 0 9 7" shapeRendering="crispEdges" aria-hidden="true">
       {px.filter(([x, y]) => !eyes.has(`${x},${y}`)).map(([x, y]) => (
         <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={color} />
       ))}
@@ -517,14 +599,16 @@ function BlockView({ block, canEditUserMessage, onPermission, onCopyUserMessage,
       />;
     case 'assistant':
       return (
-        <div className="agent-msg assistant">
-          <div className="agent-prose"><AgentMarkdown markdown={block.text} onOpenArtifact={onOpenArtifact} /></div>
-        </div>
+        <div className="agent-prose"><AgentMarkdown markdown={block.text} onOpenArtifact={onOpenArtifact} /></div>
       );
     case 'thinking':
       return <ThinkingView text={block.text} />;
     case 'error':
-      return <div className="agent-error">{block.text}</div>;
+      return (
+        <StatusMessage tone="error" className="text-sm leading-normal whitespace-pre-wrap">
+          {block.text}
+        </StatusMessage>
+      );
     case 'tool':
       return <ToolCard block={block} onPermission={onPermission} />;
   }
@@ -542,13 +626,24 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
     ? `${failures} step${failures === 1 ? '' : 's'} need attention — ${activitySummary(tools, active)}`
     : activitySummary(tools, active);
   return (
-    <section className={'agent-activity' + (active ? ' active' : '') + (failures ? ' attention' : '')}>
-      <Button className="agent-activity-head" onPress={() => setOpen((value) => !value)} aria-expanded={open}>
-        <ChevronDownIcon className={'agent-activity-chev' + (open ? ' open' : '')} />
-        {active && <span className="agent-dot" />}
-        <span>{summary}</span>
+    // `.attention` (One-Dark red left edge) stays a CSS hook in chat.css.
+    <section
+      className={cn(
+        'agent-activity border-l-2 bg-pane/70',
+        active ? 'border-l-accent' : 'border-border',
+        failures && 'attention',
+      )}
+    >
+      <Button
+        className="flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-2.25 py-1.75 text-left text-sm text-foreground"
+        onPress={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        <ChevronDownIcon className={cn('size-3.25 shrink-0 text-muted-foreground', !open && '-rotate-90')} />
+        {active && <Dot />}
+        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">{summary}</span>
       </Button>
-      {open && <div className="agent-activity-body">{tools.map((tool) => <ToolCard key={tool.id} block={tool} onPermission={onPermission} />)}</div>}
+      {open && <div className="grid gap-1.5 px-2 pb-2">{tools.map((tool) => <ToolCard key={tool.id} block={tool} onPermission={onPermission} />)}</div>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
     </section>
   );
@@ -588,40 +683,50 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
   }
 
   return (
-    <div className={'agent-tool status-' + block.status}>
-      <Button ref={headRef} className="agent-tool-head" onPress={() => setOpen((o) => !o)}>
-        <ChevronDownIcon className="agent-tool-chev" />
-        <span className="agent-tool-name">{toolActivityTitle(block.name, block.input)}</span>
-        {summary && <span className="agent-tool-summary">{summary}</span>}
-        <span className={'agent-tool-status s-' + block.status}>
-          {block.status === 'running' && <span className="agent-dot" />}
+    <div
+      className={cn(
+        'overflow-hidden rounded-lg border bg-background',
+        block.status === 'awaiting' ? 'border-accent' : 'border-border',
+      )}
+    >
+      <Button
+        ref={headRef}
+        className="flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-2.5 py-1.75 text-left text-sm"
+        onPress={() => setOpen((o) => !o)}
+      >
+        <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 font-semibold text-foreground">{toolActivityTitle(block.name, block.input)}</span>
+        {summary && <span className="min-w-0 flex-1 overflow-hidden font-mono text-xs text-ellipsis whitespace-nowrap text-muted-foreground">{summary}</span>}
+        {/* `s-*` keeps the One-Dark status colors from chat.css. */}
+        <span className={'agent-tool-status inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground s-' + block.status}>
+          {block.status === 'running' && <Dot />}
           {STATUS_LABEL[block.status]}
         </span>
       </Button>
 
       {block.status === 'awaiting' && block.permId && (
-        <div className="agent-perm">
-          <div className="agent-perm-title">{block.permTitle ?? `Allow Claude to run ${block.name}?`}</div>
+        <div className="px-2.5 pb-2.5">
+          <div className="mb-1.75 text-sm text-foreground">{block.permTitle ?? `Allow Claude to run ${block.name}?`}</div>
           {diff && <DiffView diff={diff} />}
           {!diff && block.name === 'Bash' && (
-            <pre className="agent-bash">{String(block.input.command ?? '')}</pre>
+            <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>
           )}
-          <div className="agent-perm-actions">
-            <Button className="agent-btn ghost" onPress={() => replyPermission(false)}>Reject</Button>
-            <Button className="agent-btn primary" onPress={() => replyPermission(true)}>Allow</Button>
+          <div className="mt-2.25 flex justify-end gap-2">
+            <Button className={outlineSmClass} onPress={() => replyPermission(false)}>Reject</Button>
+            <Button className={primarySmClass} onPress={() => replyPermission(true)}>Allow</Button>
           </div>
         </div>
       )}
 
       {open && block.status !== 'awaiting' && (
-        <div className="agent-tool-body">
+        <div className="px-2.5 pb-2.5">
           {diff && <DiffView diff={diff} />}
-          {!diff && block.name === 'Bash' && <pre className="agent-bash">{String(block.input.command ?? '')}</pre>}
+          {!diff && block.name === 'Bash' && <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>}
           {!diff && block.name !== 'Bash' && (
-            <pre className="agent-tool-input">{JSON.stringify(block.input, null, 2)}</pre>
+            <pre className={toolPreClass}>{JSON.stringify(block.input, null, 2)}</pre>
           )}
           {block.result != null && block.result !== '' && (
-            <pre className={'agent-tool-result' + (block.status === 'error' ? ' err' : '')}>{clip(block.result)}</pre>
+            <pre className={cn(toolPreClass, 'agent-tool-result', block.status === 'error' && 'err')}>{clip(block.result)}</pre>
           )}
         </div>
       )}
@@ -631,12 +736,18 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
 
 function ArtifactCards({ changes, onOpen }: { changes: Array<{ path: string; kind: string }>; onOpen: (path: string) => void }) {
   if (!changes.length) return null;
-  return <div className="agent-artifacts">{changes.map((change) => (
-    <div className="agent-artifact" key={change.path}>
-      <FileGenericIcon className="agent-artifact-icon" />
-      <span className="agent-artifact-path" title={change.path}>{change.path}</span>
-      <span className="agent-artifact-kind">{change.kind}</span>
-      <Button onPress={() => onOpen(change.path)}>Open</Button>
+  return <div className="grid gap-1 px-2.5 pb-2.25">{changes.map((change) => (
+    <div
+      className="grid grid-cols-[15px_minmax(0,1fr)_auto_auto] items-center gap-1.5 border border-border bg-pane px-1.75 py-1.5 text-xs"
+      key={change.path}
+    >
+      <FileGenericIcon className="size-3.5 text-accent" />
+      <span className="overflow-hidden text-ellipsis whitespace-nowrap text-foreground" title={change.path}>{change.path}</span>
+      <span className="capitalize text-muted-foreground">{change.kind}</span>
+      <Button
+        className="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent"
+        onPress={() => onOpen(change.path)}
+      >Open</Button>
     </div>
   ))}</div>;
 }
@@ -733,7 +844,7 @@ function DiffView({ diff }: { diff: { file: string; rows: DiffRow[] } }) {
         {diff.rows.map((r, i) => (
           <div key={i} className={'agent-diff-row ' + r.type}>
             <span className="agent-diff-gutter">{r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' '}</span>
-            <span className="agent-diff-text">{r.text || ' '}</span>
+            <span className="agent-diff-text">{r.text || ' '}</span>
           </div>
         ))}
       </div>

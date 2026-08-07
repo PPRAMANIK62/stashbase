@@ -31,6 +31,15 @@ client of StashBase context, not a separate AI workspace.
   untouched until the user explicitly chooses a level. Those choices remain
   plainly labeled and easy to select; they are never represented only by
   decorative slider marks.
+- A new chat's empty state keeps the runtime's serif wordmark and adds one
+  muted line of guidance plus two to three compact starter suggestions.
+  Choosing a suggestion only prefills the composer draft; sending stays an
+  explicit user action. While a session connects, the panel shows a small
+  spinner with muted text instead of bare copy.
+- The composer's model, permission-mode, and reasoning-effort controls are
+  compact labelled pills, each with a leading icon and an accessible name.
+  A default-valued model or effort pill reads "Model: Default" /
+  "Effort: Default" so two adjacent Defaults cannot be confused.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
 - A failed turn leaves exactly one persistent inline explanation in the
