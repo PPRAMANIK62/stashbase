@@ -33,6 +33,9 @@ client of StashBase context, not a separate AI workspace.
   decorative slider marks.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
+- A failed turn leaves exactly one persistent inline explanation in the
+  transcript, preferring the runtime's specific message when available. The
+  failure remains attached to its turn before any queued follow-up continues.
 - Users explicitly attach context through mentions, file selection, drag and
   drop, or pasting an image while the composer is focused; the current
   document is never implicit Agent context. Pasted images are transient chat

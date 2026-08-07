@@ -65,6 +65,12 @@ Community contributions can land as useful first iterations, but the long-term d
   or the window becomes wide, unless the user has since changed visibility.
 - Prefer small, familiar agent-chat affordances over a bespoke workbench UI.
 - Treat user-action states as first-class. Permission approvals, retry actions, and stopped-turn editing must remain visible and directly actionable.
+- Treat terminal turn failures as persistent transcript state. Reset the
+  renderer-owned explanation guard on `turn-start`, prefer a live runtime
+  error, and add at most one generic fallback for an otherwise unexplained
+  failed `turn-end`. Record that failure before advancing queued follow-ups;
+  duplicate terminal events must not advance the queue, and successful or
+  cancelled turns must not create an error notice.
 - A discovered missing Agent CLI is a setup state, not a disabled launcher or a
   generic connection failure. Keep its install command copyable and let the
   user re-run discovery after installation; do not conflate it with an
