@@ -58,9 +58,13 @@ routing hook for the global drag-drop handler. Composer pill triggers are
 labelled controls: each carries a leading icon and an accessible name
 ("Model", "Permission mode", "Reasoning effort"), and a default-valued model
 or effort pill renders "<Control>: Default" so adjacent Defaults cannot be
-confused. Empty-state starter suggestions only prefill the composer draft
-through the CodeMirror handle — they must never send. The connecting spinner
-is a keyframe animation the global reduced-motion policy stops.
+confused. An empty chat centers the composer as the hero layout: the
+composer swaps its `agent-composer` width hook for the hero column while
+empty, and keeps a stable React `key` so the same mounted instance (draft,
+CodeMirror state) moves between the hero and bottom layouts. Empty-state
+starter templates only prefill the composer draft through the CodeMirror
+handle — they must never send. The connecting spinner is a keyframe
+animation the global reduced-motion policy stops.
 
 Community contributions can land as useful first iterations, but the long-term design should continue to be simplified toward this side-panel model when needed.
 

@@ -17,6 +17,7 @@ import {
 } from '../ui/menu';
 import { baseName } from './attachments';
 import { changedEffortSelection, effortLabel, effortMenuState, effortOptions } from './effortMenuState';
+import { folderDisplayName, folderPillAriaLabel, shortenFolderPath, type LibraryFolderOption } from './folderState';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import {
@@ -241,9 +242,53 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
   );
 }
 
+/** Cursor-style session-folder picker. A new session binds the picked
+ * library folder (default: the window's current folder); once the chat has
+ * content the pill stays visible but locked — a conversation never rebinds.
+ * Same shared Base UI menu adapter as the model pill. */
+function FolderMenu({ folder, entries, homeDir, locked, disabled, onSetFolder }: {
+  folder: string;
+  entries: LibraryFolderOption[];
+  homeDir: string;
+  locked: boolean;
+  disabled: boolean;
+  onSetFolder: (path: string) => void;
+}) {
+  const name = folderDisplayName(folder);
+  const label = folderPillAriaLabel(name, locked);
+  return (
+    <SharedMenu>
+      <SharedMenuTrigger
+        className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
+        disabled={disabled || locked}
+        aria-label={label}
+        title={`Session folder — ${shortenFolderPath(folder, homeDir)}`}
+      >
+        <FolderIcon className={pillIconClass} />
+        <span className="truncate">{name}</span>
+        <ChevronDownIcon className={pillChevronClass} />
+      </SharedMenuTrigger>
+      <SharedMenuPortal>
+        <SharedMenuPositioner side="top" align="start" sideOffset={6} collisionPadding={8}>
+          <SharedMenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label="Session folder">
+            <div className={menuHeadClass}><span className="font-semibold text-foreground">Session folder</span></div>
+            {entries.map((entry) => (
+              <SharedMenuItem key={entry.path} label={folderDisplayName(entry.path)} className={cn(optClass, folder === entry.path && optActiveClass)} onClick={() => onSetFolder(entry.path)}>
+              <FolderIcon className={optIconClass} />
+              <span className={optTextClass}><span className={optTitleClass}>{folderDisplayName(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
+              {folder === entry.path && <CheckIcon className={optCheckClass} />}
+              </SharedMenuItem>
+            ))}
+          </SharedMenuPopup>
+        </SharedMenuPositioner>
+      </SharedMenuPortal>
+    </SharedMenu>
+  );
+}
+
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionFolder, folderEntries, folderLocked, folderHomeDir, showFolderMenu, onSetFolder, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -262,6 +307,13 @@ export function AgentComposer({
   modelNotice: string | null;
   resumedSession: boolean;
   onSetModel: (model?: string) => void;
+  /** The folder this tab's session is (or will be) bound to. */
+  sessionFolder: string;
+  folderEntries: LibraryFolderOption[];
+  folderLocked: boolean;
+  folderHomeDir: string;
+  showFolderMenu: boolean;
+  onSetFolder: (path: string) => void;
   skills: AgentSkill[];
   skillState: 'available' | 'empty' | 'failed';
   onRefreshSkills: () => void;
@@ -273,6 +325,10 @@ export function AgentComposer({
   showModelMenu: boolean;
   /** Empty-state starter template. Prefills the draft only — never sends. */
   prefill?: { text: string; nonce: number } | null;
+  /** Empty-chat layout: AgentView centers the composer mid-panel, so the
+   * root sizes itself to the hero column instead of the `agent-composer`
+   * chat-primary width hook. Same mounted instance in both layouts. */
+  hero?: boolean;
   onPickFiles: (files: File[]) => void;
   onPasteImages: (files: File[]) => void;
   onFocusChange: (focused: boolean) => void;
@@ -365,8 +421,10 @@ export function AgentComposer({
 
   return (
     // `agent-composer` is a layout hook: the chat-primary grid rules in
-    // styles/chat.css center it to the readable transcript width.
-    <div className="agent-composer relative bg-pane p-2">
+    // styles/chat.css center it to the readable transcript width. In hero
+    // mode the empty-state column (656px = 640px content + own padding)
+    // replaces that hook so the composer centers mid-panel.
+    <div className={cn('relative bg-pane p-2', hero ? 'mx-auto w-[min(656px,100%)]' : 'agent-composer')}>
       {mention && (choices.length > 0 || mention.kind === 'skill') && (
         <div className="agent-mention">
           <div className="agent-mention-head">

@@ -20,11 +20,14 @@ function relTime(ms: number): string {
 }
 
 export function AgentHistoryMenu({
-  open, currentSessionId, agent, onToggle, onClose, onResume, onActiveDeleted,
+  open, currentSessionId, agent, folder, onToggle, onClose, onResume, onActiveDeleted,
 }: {
   open: boolean;
   currentSessionId: string | null;
   agent: AgentKind;
+  /** The tab's currently picked session folder: history lists that
+   *  folder's sessions, so picking folder X shows X's conversations. */
+  folder?: string;
   onToggle: () => void;
   onClose: () => void;
   onResume: (id: string) => void;
@@ -41,7 +44,7 @@ export function AgentHistoryMenu({
   async function refresh() {
     setLoading(true);
     setLoadError(false);
-    try { setSessions(await api.listSessions(agent)); }
+    try { setSessions(await api.listSessions(agent, folder)); }
     catch { setSessions([]); setLoadError(true); }
     finally { setLoading(false); }
   }
@@ -49,7 +52,7 @@ export function AgentHistoryMenu({
   useEffect(() => {
     if (open) { void refresh(); }
     else { setQ(''); setEditingId(null); }
-  }, [open, agent]);
+  }, [open, agent, folder]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -61,13 +64,13 @@ export function AgentHistoryMenu({
     setEditingId(null);
     if (!title) return;
     try {
-      const updated = await api.renameSession(id, title, agent);
+      const updated = await api.renameSession(id, title, agent, folder);
       setSessions((ss) => ss.map((s) => (s.id === id ? updated : s)));
     } catch { /* leave list as-is */ }
   }
 
   async function remove(id: string): Promise<boolean> {
-    try { await api.deleteSession(id, agent); }
+    try { await api.deleteSession(id, agent, folder); }
     catch {
       setDeleteError('Could not delete this session. Try again.');
       return false;

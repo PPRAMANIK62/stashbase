@@ -93,6 +93,9 @@ export class CodexSession {
     resume?: string,
     private accessMode?: AgentAccessMode,
     private model?: string,
+    /** Explicit, membership-validated session folder. Undefined follows the
+     *  window's current folder at connect time (legacy clients). */
+    private folder?: string,
     private onDispose?: (session: CodexSession) => void,
     private spawnProcess: typeof spawnCodexAppServerProcess = spawnCodexAppServerProcess,
   ) {
@@ -109,7 +112,9 @@ export class CodexSession {
 
   private async start(): Promise<void> {
     if (this.closed) return;
-    const cwd = getCurrentFolder();
+    // An explicit folder pins the session; otherwise the session binds the
+    // window's current folder — either way the binding never changes later.
+    const cwd = this.folder ?? getCurrentFolder();
     if (!cwd) {
       this.send({ t: 'error', message: 'No folder open.' });
       this.finish();
@@ -902,8 +907,8 @@ function titleFromPrompt(prompt: string): string {
 
 const sessions = new Set<CodexSession>();
 
-export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string): void {
-  const session = new CodexSession(ws, windowId, effort, resume, access, model, (s) => sessions.delete(s));
+export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string): void {
+  const session = new CodexSession(ws, windowId, effort, resume, access, model, folder, (s) => sessions.delete(s));
   sessions.add(session);
   session.begin();
 }

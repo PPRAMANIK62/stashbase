@@ -255,6 +255,8 @@ class AgentSession {
   /** The SDK session_id, captured from the init message. Sent to the
    *  client so the history dropdown can mark this session active. */
   private sessionId: string | null = null;
+  /** The folder this session is bound to, captured at start. */
+  private cwd: string | null = null;
   private models: AgentModel[] = [];
   private skills = new Set<string>();
 
@@ -265,6 +267,9 @@ class AgentSession {
     private resume?: string,
     private access: PermissionMode = 'default',
     private model?: string,
+    /** Explicit, membership-validated session folder. Undefined follows the
+     *  window's current folder at connect time (legacy clients). */
+    private folder?: string,
     private onDispose?: (session: AgentSession) => void,
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
@@ -281,12 +286,15 @@ class AgentSession {
 
   private async start(): Promise<void> {
     if (this.closed) return;
-    const cwd = getCurrentFolder();
+    // An explicit folder pins the session; otherwise the session binds the
+    // window's current folder — either way the binding never changes later.
+    const cwd = this.folder ?? getCurrentFolder();
     if (!cwd) {
       this.send({ t: 'error', message: 'No folder open.' });
       this.finish();
       return;
     }
+    this.cwd = cwd;
     if (this.closed) return;
     if (this.resume && !(await resumeMatchesCwd(this.resume, cwd))) {
       if (this.closed) return;
@@ -488,7 +496,9 @@ class AgentSession {
     input: Record<string, unknown>,
     opts: { signal: AbortSignal; suggestions?: PermissionUpdate[]; toolUseID: string; title?: string },
   ): Promise<PermissionResult> {
-    const cwd = getCurrentFolder();
+    // Use the session's bound folder, not the window's possibly-different
+    // current folder — the redirect must reflect the cwd the agent runs in.
+    const cwd = this.cwd ?? getCurrentFolder();
     if (cwd) {
       const redirect = nativeDerivedReadRedirect(name, input, cwd, this.nativeDerivedReadRedirected);
       if (redirect) return Promise.resolve(redirect);
@@ -640,6 +650,7 @@ export function attachAgentWebSocket(
   resume?: string,
   access?: AgentAccessMode,
   model?: string,
+  folder?: string,
 ): void {
   const session = new AgentSession(
     ws,
@@ -648,6 +659,7 @@ export function attachAgentWebSocket(
     resume,
     claudePermissionMode(access),
     model,
+    folder,
     (s) => sessions.delete(s),
   );
   sessions.add(session);

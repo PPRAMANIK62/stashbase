@@ -33,16 +33,14 @@ export interface QueuedTurnPreview {
 }
 
 export function MessageList({
-  blocks, queuedTurns, turnActive, phase, fatal, agentName, agentShortName, Icon, editableUserMessageIds, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact, onPrefill,
+  blocks, queuedTurns, turnActive, phase, fatal, agentShortName, editableUserMessageIds, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
 }: {
   blocks: Block[];
   queuedTurns: QueuedTurnPreview[];
   turnActive: boolean;
   phase: 'connecting' | 'live' | 'closed';
   fatal: string | null;
-  agentName: string;
   agentShortName: string;
-  Icon: ComponentType<{ className?: string }>;
   editableUserMessageIds: Set<string>;
   onPermission: (toolBlockId: string, permId: string, allow: boolean) => void;
   onSteerQueued: (id: string) => void;
@@ -50,7 +48,6 @@ export function MessageList({
   onResendUserMessage: (text: string) => void;
   onRetry: () => void;
   onOpenArtifact: (path: string) => void;
-  onPrefill: (text: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -82,7 +79,6 @@ export function MessageList({
       ref={ref}
       onScroll={onScroll}
     >
-      {blocks.length === 0 && phase === 'live' && <Hero name={agentName} Icon={Icon} onPrefill={onPrefill} />}
       {phase === 'connecting' && <ConnectingNotice agentShortName={agentShortName} />}
       {blocks.length === 0 && phase === 'closed' && fatal && (
         <FatalState fatal={fatal} agentShortName={agentShortName} onRetry={onRetry} />
@@ -523,61 +519,6 @@ function ConnectingNotice({ agentShortName }: { agentShortName: string }) {
       />
       Connecting to {agentShortName}…
     </div>
-  );
-}
-
-/** Empty-state starter templates. Selecting one only prefills the
- * composer draft — sending always stays an explicit user action. */
-const STARTER_SUGGESTIONS: Array<{ label: string; text: string }> = [
-  { label: 'Summarize this folder', text: 'Summarize this folder' },
-  { label: 'What changed recently?', text: 'What changed recently in this folder?' },
-  { label: 'Find notes about …', text: 'Find notes about ' },
-];
-
-/** Warmth-budget empty state: the serif wordmark and mascot stay, with one
- * muted line of guidance and compact starter suggestions beneath them. */
-function Hero({ name, Icon, onPrefill }: {
-  name: string;
-  Icon: ComponentType<{ className?: string }>;
-  onPrefill: (text: string) => void;
-}) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
-      <div className="flex items-center gap-2 text-foreground">
-        <Icon className="size-5.5" />
-        <span className="font-display text-2xl tracking-[0.01em]">{name}</span>
-      </div>
-      {name === 'Claude Code' && <PixelMascot />}
-      <p className="m-0 max-w-90 text-sm leading-normal text-muted-foreground">
-        Ask about this folder — your files are the context.
-      </p>
-      <div className="flex flex-wrap items-center justify-center gap-1.5">
-        {STARTER_SUGGESTIONS.map((starter) => (
-          <Button
-            key={starter.label}
-            className={cn(buttonVariants({ variant: 'outline', size: 'xs' }), 'text-muted-foreground hover:text-foreground')}
-            onPress={() => onPrefill(starter.text)}
-          >
-            {starter.label}
-          </Button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PixelMascot() {
-  const color = '#D97757';
-  const px: Array<[number, number]> = [];
-  for (let x = 2; x <= 6; x++) for (let y = 1; y <= 4; y++) px.push([x, y]);
-  px.push([2, 5], [3, 5], [5, 5], [6, 5]);
-  const eyes = new Set(['3,2', '5,2']);
-  return (
-    <svg className="h-12.5 w-16 [image-rendering:pixelated]" viewBox="0 0 9 7" shapeRendering="crispEdges" aria-hidden="true">
-      {px.filter(([x, y]) => !eyes.has(`${x},${y}`)).map(([x, y]) => (
-        <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={color} />
-      ))}
-    </svg>
   );
 }
 

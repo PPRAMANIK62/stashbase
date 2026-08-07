@@ -21,6 +21,7 @@ import { NewChatIcon } from '../icons';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
+import { EmptyChatGreeting, StarterTemplates } from './agent/AgentEmptyState';
 import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { iconGhostButtonClass } from './agent/panelStyles';
@@ -830,6 +831,13 @@ export function AgentView({
     }
   }
 
+  // Empty chat (no turns yet, session usable) renders the hero layout:
+  // greeting + centered composer + starter templates. Any transcript
+  // content, a queued prompt, or a closed/failed session falls back to the
+  // standard transcript-over-bottom-composer layout. The composer keeps its
+  // `key` so the same mounted instance moves between the two layouts.
+  const emptyChat = blocks.length === 0 && queuedTurns.length === 0 && phase !== 'closed' && !fatal;
+
   return (
     // `agent-view` stays as a routing hook: useGlobalDragDrop uses
     // `closest('.agent-view')` to keep panel drops out of folder import.
@@ -885,28 +893,43 @@ export function AgentView({
           onRefresh={() => void refreshRuntimes()}
         />
       ) : <>
-        <MessageList
-          blocks={blocks}
-          queuedTurns={queuedTurns}
-          turnActive={turnActive}
-          phase={phase}
-          fatal={fatal}
-          agentName={meta.name}
-          agentShortName={meta.shortName}
-          Icon={meta.Icon}
-          editableUserMessageIds={editableUserMessageIds}
-          onPermission={replyPermission}
-          onSteerQueued={steerQueuedPrompt}
-          onCopyUserMessage={copyUserMessage}
-          onResendUserMessage={send}
-          onRetry={reconnect}
-          onOpenArtifact={(path) => {
-            const folder = folderPathRef.current;
-            const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
-            if (isSafeFolderRelativePath(rel)) void actions.selectFile(rel);
-          }}
-          onPrefill={(text) => setPrefill({ text, nonce: Date.now() })}
-        />
+        {emptyChat ? (
+          // Empty chat: the composer is the hero. The greeting bottoms out
+          // this flex-[3] band and the templates top the flex-[4] band below
+          // the composer, so the input rests just above the vertical center
+          // (Cursor-style) at every panel height.
+          <div key="empty-above" className="flex min-h-0 flex-[3] flex-col justify-end overflow-hidden px-2">
+            <div className="mx-auto w-[min(640px,100%)]">
+              <EmptyChatGreeting
+                name={meta.name}
+                agentShortName={meta.shortName}
+                Icon={meta.Icon}
+                connecting={phase === 'connecting'}
+              />
+            </div>
+          </div>
+        ) : (
+          <MessageList
+            key="messages"
+            blocks={blocks}
+            queuedTurns={queuedTurns}
+            turnActive={turnActive}
+            phase={phase}
+            fatal={fatal}
+            agentShortName={meta.shortName}
+            editableUserMessageIds={editableUserMessageIds}
+            onPermission={replyPermission}
+            onSteerQueued={steerQueuedPrompt}
+            onCopyUserMessage={copyUserMessage}
+            onResendUserMessage={send}
+            onRetry={reconnect}
+            onOpenArtifact={(path) => {
+              const folder = folderPathRef.current;
+              const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
+              if (isSafeFolderRelativePath(rel)) void actions.selectFile(rel);
+            }}
+          />
+        )}
         {phase === 'closed' && (
         !fatal && (
           <div className="flex items-center justify-between gap-2.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
@@ -916,6 +939,8 @@ export function AgentView({
         )
       )}
       <AgentComposer
+        key="composer"
+        hero={emptyChat}
         phase={phase}
         disabled={phase !== 'live'}
         turnActive={turnActive}
@@ -950,6 +975,13 @@ export function AgentView({
         onSend={send}
         onStop={stop}
       />
+      {emptyChat && (
+        <div key="empty-below" className="flex min-h-0 flex-[4] flex-col overflow-y-auto px-2 [scrollbar-width:thin]">
+          <div className="mx-auto w-[min(640px,100%)] shrink-0">
+            <StarterTemplates onPrefill={(text) => setPrefill({ text, nonce: Date.now() })} />
+          </div>
+        </div>
+      )}
       </>}
     </div>
   );

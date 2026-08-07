@@ -8,6 +8,7 @@
 import type { WebSocket } from 'ws';
 import { CLIS, launchCommandFor } from './terminal.ts';
 import { resolveAgentCli } from './agent-cli.ts';
+import { filesystemPath } from './filesystem-path.ts';
 
 export type AgentId = 'claude' | 'codex';
 export type AgentRuntimeState = 'available' | 'unavailable' | 'failed';
@@ -54,6 +55,39 @@ export interface AgentConnectionOptions {
   access?: AgentAccessMode;
   /** Undefined deliberately means "use the runtime's configured default". */
   model?: string;
+  /** Explicit session folder (a registered library-member root). Undefined
+   * deliberately means "use the window's current folder". Callers must have
+   * validated membership with `resolveAgentSessionFolder`. */
+  folder?: string;
+}
+
+export type AgentSessionFolderResolution =
+  | { ok: true; folder?: string }
+  | { ok: false; message: string };
+
+/** Resolve an optional explicit session folder against library membership.
+ * Absent/empty → follow the window's current folder (folder stays undefined).
+ * Present → it must match a registered member root; the stored member
+ * spelling is returned so downstream path-keyed state stays consistent.
+ * Anything else is rejected — an agent session must never be bound to an
+ * arbitrary filesystem path. */
+export function resolveAgentSessionFolder(
+  requested: unknown,
+  memberRoots: readonly string[],
+): AgentSessionFolderResolution {
+  if (requested == null) return { ok: true };
+  if (typeof requested !== 'string') return { ok: false, message: 'folder must be a library folder path' };
+  const trimmed = requested.trim();
+  if (!trimmed) return { ok: true };
+  if (!filesystemPath.isAbsolute(trimmed)) return { ok: false, message: 'folder must be an absolute library folder path' };
+  for (const root of memberRoots) {
+    try {
+      if (filesystemPath.equal(root, trimmed)) return { ok: true, folder: root };
+    } catch {
+      // A malformed candidate cannot equal a member root; keep checking.
+    }
+  }
+  return { ok: false, message: 'folder is not a registered library folder' };
 }
 
 /** A model is always advertised by the native runtime, never a StashBase list. */

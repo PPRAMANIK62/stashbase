@@ -27,14 +27,14 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
   {
     id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
     capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: false, titleHint: false },
-    attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model),
+    attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder),
     stop: killActiveAgent,
     history: claudeHistoryActions(),
   },
   {
     id: 'codex', label: 'Codex', vendor: 'OpenAI',
     capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: true, titleHint: true },
-    attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model),
+    attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder),
     stop: killActiveCodex,
     history: codexHistoryActions(),
   },

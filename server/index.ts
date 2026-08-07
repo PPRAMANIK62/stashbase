@@ -26,11 +26,12 @@ import {
   isAgentAccessMode,
   parseAgentEffort,
   registerAgentAdapter,
+  resolveAgentSessionFolder,
   stopAgentRuntime,
   type AgentAccessMode,
   type AgentConnectionOptions,
 } from './agent-contract.ts';
-import { onClose, onSwitch, ensureFolderHome } from './folder.ts';
+import { onClose, onSwitch, ensureFolderHome, memberFolderRoots } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { getApiKey, migrateLegacyEmbedderConfig } from './app-config.ts';
 import { bootBindAllFolders, reconcileLibraryFolders } from './state.ts';
@@ -403,7 +404,15 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // because we share the existing http.Server with Vite's HMR proxy.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
-  attachAgentRuntime(agentIdOf(req), ws, connectionOptionsOf(req));
+  // An explicit session folder must be a registered library folder; reject
+  // anything else before a runtime process can be bound to it.
+  const folder = resolveAgentSessionFolder(rawFolderOf(req), memberFolderRoots());
+  if (!folder.ok) {
+    ws.send(JSON.stringify({ t: 'error', message: 'That folder is not part of your library.' }));
+    ws.close();
+    return;
+  }
+  attachAgentRuntime(agentIdOf(req), ws, { ...connectionOptionsOf(req), ...(folder.folder ? { folder: folder.folder } : {}) });
 });
 
 function agentIdOf(req: import('node:http').IncomingMessage): string {
@@ -426,6 +435,17 @@ function modelOf(req: import('node:http').IncomingMessage): string | undefined {
     const value = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`).searchParams.get('model')?.trim();
     return value && value.length <= 200 ? value : undefined;
   } catch { return undefined; }
+}
+
+/** Raw explicit-folder request off the WS URL. Membership validation happens
+ *  in the connection handler via `resolveAgentSessionFolder`. */
+function rawFolderOf(req: import('node:http').IncomingMessage): string | undefined {
+  try {
+    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
+    return u.searchParams.get('folder') ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {

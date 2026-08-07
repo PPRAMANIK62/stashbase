@@ -11,6 +11,7 @@ export function agentConnectionUrl({
   agent,
   model,
   resume,
+  folder,
 }: {
   protocol: string;
   host: string;
@@ -21,10 +22,14 @@ export function agentConnectionUrl({
   agent: string;
   model?: string;
   resume?: string | null;
+  /** Explicit session folder (absolute member-root path). Absent → the
+   * server binds the window's current folder as before. */
+  folder?: string;
 }): string {
   const query = new URLSearchParams({ windowId, access, agent });
   if (effort) query.set('effort', effort);
   if (!resume && model) query.set('model', model);
   if (resume) query.set('resume', resume);
+  if (folder) query.set('folder', folder);
   return `${protocol === 'https:' ? 'wss' : 'ws'}://${host}${endpoint}?${query}`;
 }

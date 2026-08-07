@@ -285,20 +285,27 @@ export const api = {
     send<{ hasKey: false; provider: EmbedderProvider; model: string }>('DELETE', '/api/embedder/key'),
 
   // Agent sessions (chat-panel History dropdown) ----------------
-  /** All local agent sessions for the current folder, newest first. */
-  listSessions: (agent: 'claude' | 'codex' = 'claude') =>
-    getJson<SessionInfo[]>(agentSessionBase(agent)),
+  /** Local agent sessions for the given library folder (defaults to the
+   *  window's current folder), newest first. */
+  listSessions: (agent: 'claude' | 'codex' = 'claude', folder?: string) =>
+    getJson<SessionInfo[]>(agentSessionBase(agent) + folderScopeQuery(folder)),
   /** A session's transcript as renderable blocks (for resume replay). */
-  getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude') =>
-    getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages'),
-  renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude') =>
-    send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id), { title }),
-  deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude') =>
-    send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id)),
+  getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude', folder?: string) =>
+    getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages' + folderScopeQuery(folder)),
+  renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude', folder?: string) =>
+    send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id) + folderScopeQuery(folder), { title }),
+  deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude', folder?: string) =>
+    send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id) + folderScopeQuery(folder)),
 };
 
 function agentSessionBase(agent: 'claude' | 'codex'): string {
   return `/api/agents/${encodeURIComponent(agent)}/sessions`;
+}
+
+/** Explicit session-folder scope for history routes. Absent → the server
+ *  falls back to the window's current folder. */
+function folderScopeQuery(folder?: string): string {
+  return folder ? `?folder=${encodeURIComponent(folder)}` : '';
 }
 
 /** Asset URL for HTML files (used by the preview iframe so relative
