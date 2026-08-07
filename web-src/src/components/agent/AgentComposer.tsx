@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, ListBox, ListBoxItem, Menu, MenuItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
+import { Button, ListBox, ListBoxItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
   ArrowUpIcon, BoltIcon, BotIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
   FileGenericIcon, FolderIcon, HandIcon, LibraryIcon, PlusIcon, StopIcon,
@@ -16,7 +16,7 @@ import {
   MenuTrigger as SharedMenuTrigger,
 } from '../ui/menu';
 import { baseName } from './attachments';
-import { changedEffortSelection, effortLabel, effortMenuState, effortOptions } from './effortMenuState';
+import { changedEffortSelection, effortLabel, effortOptions } from './effortMenuState';
 import {
   folderDisplayName,
   folderScope,
@@ -45,13 +45,10 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
 
 /* Composer-bar pills. Each trigger carries a leading icon plus a
  * control-naming title/aria-label so adjacent "Default" values stay
- * distinguishable. Model and effort change the next native session, so
- * they get the accent-tinted emphasis treatment; the permission-mode pill
- * stays a quiet utility control. */
+ * distinguishable. All pills share one quiet treatment — the session
+ * settings live behind a single trigger, so no pill needs emphasis. */
 const pillClass =
   'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
-const pillEmphasisClass =
-  'min-h-7 border border-accent/35 bg-accent/8 text-foreground enabled:hover:border-accent enabled:hover:bg-accent/15 enabled:hover:text-foreground';
 const pillLockedClass = 'cursor-default opacity-60';
 const pillIconClass = 'size-3.5 shrink-0';
 const pillChevronClass = '-ml-px size-3 shrink-0 opacity-75';
@@ -69,6 +66,7 @@ const optTextClass = 'flex min-w-0 flex-1 flex-col gap-0.5';
 const optTitleClass = 'text-base font-medium';
 const optDescClass = 'text-xs leading-snug text-muted-foreground';
 const optCheckClass = 'mt-0.5 size-4 shrink-0 text-accent';
+const settingsDividerClass = 'mx-1 my-1.5 h-px bg-border';
 
 /* Explicit, touch-friendly effort choices — never tiny slider dots. */
 const effortChoiceClass =
@@ -83,52 +81,135 @@ const sendReadyClass =
   'border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:cursor-default disabled:opacity-40';
 const sendStopClass = 'border-destructive bg-destructive text-primary-foreground';
 
-function AccessMenu({
-  mode, open, disabled, onOpenChange, onPick,
-}: {
-  mode: PermMode;
-  open: boolean;
+/** Model pill — stays its own control so the current model is always
+ * visible on the bar. Locked once the session has content. */
+function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resumedSession, onSetModel }: {
+  selectedModel?: string;
+  activeModel?: string;
+  models: AgentModel[];
+  locked: boolean;
   disabled: boolean;
-  onOpenChange: (open: boolean) => void;
-  onPick: (m: PermMode) => void;
+  resumedSession: boolean;
+  onSetModel: (model?: string) => void;
 }) {
-  const active = MODES.find((m) => m.id === mode) ?? MODES[0];
-  const ActiveIcon = active.Icon;
+  const [open, setOpen] = useState(false);
+  const defaultSelected = !selectedModel;
+  const label = modelMenuLabel(models, selectedModel, activeModel, resumedSession);
+  const pick = (model?: string) => { onSetModel(model); setOpen(false); };
   return (
-    <MenuTrigger isOpen={open} onOpenChange={onOpenChange}>
+    <MenuTrigger isOpen={open} onOpenChange={setOpen}>
+      <Button
+        className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
+        isDisabled={disabled || locked}
+        aria-label={`Model: ${label}`}
+        // RAC forwards global DOM attributes (title) at runtime but its
+        // ButtonProps type omits them; the spread keeps the tooltip typed.
+        {...{ title: `Model — ${label}` }}
+      >
+        <BotIcon className={pillIconClass} />
+        <span className="truncate">{label === 'Default' ? 'Model: Default' : label}</span>
+        <ChevronDownIcon className={pillChevronClass} />
+      </Button>
+      <Popover className={cn(menuPopupClass, 'max-h-[min(360px,55vh)] overflow-auto')} placement="top end">
+        <div className={menuHeadClass}><span className="font-semibold text-foreground">Model</span></div>
+        <button
+          type="button"
+          className={cn(optClass, defaultSelected && optActiveClass)}
+          onClick={() => pick(undefined)}
+        >
+          <span className={optTextClass}>
+            <span className={optTitleClass}>Default</span>
+            <span className={optDescClass}>Use this runtime’s configured model</span>
+          </span>
+          {defaultSelected && <CheckIcon className={optCheckClass} />}
+        </button>
+        {models.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            className={cn(optClass, selectedModel === entry.id && optActiveClass)}
+            onClick={() => pick(entry.id)}
+          >
+            <span className={optTextClass}>
+              <span className={optTitleClass}>{entry.label}</span>
+              {entry.description && <span className={optDescClass}>{entry.description}</span>}
+            </span>
+            {selectedModel === entry.id && <CheckIcon className={optCheckClass} />}
+          </button>
+        ))}
+      </Popover>
+    </MenuTrigger>
+  );
+}
+
+/** Mode pill — the permission-mode list with the effort bar at the bottom
+ * of the same panel (the Claude Code treatment): mode stays visible on the
+ * bar, effort lives one click away and echoes on the trigger only when
+ * non-default ("Ask · High"). If the runtime has no mode control the pill
+ * degrades to an effort-only trigger. */
+function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, efforts, effortLocked, disabled, onSetEffort }: {
+  showMode: boolean;
+  mode: PermMode;
+  onSetMode: (m: PermMode) => void;
+  showEffort: boolean;
+  effort?: EffortLevel;
+  efforts: EffortLevel[];
+  effortLocked: boolean;
+  disabled: boolean;
+  onSetEffort: (level?: EffortLevel) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const active = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const effortSuffix = showEffort && effort ? ` · ${effortLabel(effort)}` : '';
+  const label = showMode
+    ? `${active.label}${effortSuffix}`
+    : (effort ? effortLabel(effort) : 'Effort: Default');
+  const TriggerIcon = showMode ? active.Icon : DumbbellIcon;
+  return (
+    <MenuTrigger isOpen={open} onOpenChange={setOpen}>
       <Button
         className={pillClass}
         isDisabled={disabled}
-        aria-label={`Permission mode: ${active.label} — ${active.desc}`}
+        aria-label={showMode
+          ? `Permission mode: ${active.label} — ${active.desc}${showEffort && effort ? `; reasoning effort ${effortLabel(effort)}` : ''}`
+          : `Reasoning effort: ${effort ? effortLabel(effort) : 'Default'}`}
       >
-        <ActiveIcon className={pillIconClass} />
-        {active.label}
+        <TriggerIcon className={pillIconClass} />
+        {label}
         <ChevronDownIcon className={pillChevronClass} />
       </Button>
       <Popover className={menuPopupClass} placement="top end">
-        <div className={menuHeadClass}>
-          <span className="font-semibold text-foreground">Permission mode</span>
-        </div>
-        <Menu aria-label="Permission mode" selectionMode="single" selectedKeys={[mode]} onAction={(key) => onPick(key as PermMode)}>
-          {MODES.map((m) => {
-            const Icon = m.Icon;
-            return (
-              <MenuItem
+        {showMode && (
+          <div>
+            <div className={menuHeadClass}><span className="font-semibold text-foreground">Mode</span></div>
+            {MODES.map((m) => (
+              <button
                 key={m.id}
-                id={m.id}
-                className={({ isSelected }) => cn(optClass, isSelected && optActiveClass)}
-                textValue={m.label}
+                type="button"
+                className={cn(optClass, m.id === mode && optActiveClass)}
+                onClick={() => { onSetMode(m.id); setOpen(false); }}
               >
-                <Icon className={optIconClass} />
+                <m.Icon className={optIconClass} />
                 <span className={optTextClass}>
                   <span className={optTitleClass}>{m.label}</span>
                   <span className={optDescClass}>{m.desc}</span>
                 </span>
                 {m.id === mode && <CheckIcon className={optCheckClass} />}
-              </MenuItem>
-            );
-          })}
-        </Menu>
+              </button>
+            ))}
+          </div>
+        )}
+        {showEffort && (
+          <div>
+            {showMode && <div className={settingsDividerClass} />}
+            <div
+              className={effortLocked ? 'pointer-events-none opacity-60' : undefined}
+              title={effortLocked ? 'Effort is fixed for this session' : undefined}
+            >
+              <EffortBar effort={effort} efforts={efforts} onSet={onSetEffort} />
+            </div>
+          </div>
+        )}
       </Popover>
     </MenuTrigger>
   );
@@ -171,83 +252,6 @@ function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: 
         ))}
       </ListBox>
     </div>
-  );
-}
-
-function EffortMenu({
-  effort, efforts, open, disabled, locked, onOpenChange, onSetEffort,
-}: {
-  effort?: EffortLevel;
-  efforts: EffortLevel[];
-  open: boolean;
-  disabled: boolean;
-  locked: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSetEffort: (level?: EffortLevel) => void;
-}) {
-  const state = effortMenuState({ open, disabled, locked });
-  const label = effort ? effortLabel(effort) : 'Default';
-  return (
-    <MenuTrigger isOpen={state.isOpen} onOpenChange={onOpenChange}>
-      <Button
-        className={cn(pillClass, pillEmphasisClass, locked && pillLockedClass)}
-        isDisabled={state.triggerDisabled}
-        aria-label={`Reasoning effort: ${label}`}
-      >
-        <DumbbellIcon className={pillIconClass} />
-        {effort ? label : 'Effort: Default'}
-        <ChevronDownIcon className={pillChevronClass} />
-      </Button>
-      <Popover className={cn(menuPopupClass, 'w-75 px-2 py-1.5')} placement="top end">
-        <div>
-          <EffortBar effort={effort} efforts={efforts} onSet={onSetEffort} />
-        </div>
-      </Popover>
-    </MenuTrigger>
-  );
-}
-
-function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resumedSession, onSetModel }: {
-  selectedModel?: string;
-  activeModel?: string;
-  models: AgentModel[];
-  locked: boolean;
-  disabled: boolean;
-  resumedSession: boolean;
-  onSetModel: (model?: string) => void;
-}) {
-  const defaultSelected = !selectedModel;
-  const label = modelMenuLabel(models, selectedModel, activeModel, resumedSession);
-  return (
-    <SharedMenu>
-      <SharedMenuTrigger
-        className={cn(pillClass, pillEmphasisClass, 'max-w-40', locked && pillLockedClass)}
-        disabled={disabled || locked}
-        aria-label={`Model: ${label}`}
-        title={`Model — ${label}`}
-      >
-        <BotIcon className={pillIconClass} />
-        <span className="truncate">{label === 'Default' ? 'Model: Default' : label}</span>
-        <ChevronDownIcon className={pillChevronClass} />
-      </SharedMenuTrigger>
-      <SharedMenuPortal>
-        <SharedMenuPositioner side="top" align="end" sideOffset={6} collisionPadding={8}>
-          <SharedMenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label="Model">
-            <div className={menuHeadClass}><span className="font-semibold text-foreground">Model</span></div>
-            <SharedMenuItem label="Default" className={cn(optClass, defaultSelected && optActiveClass)} onClick={() => onSetModel(undefined)}>
-            <span className={optTextClass}><span className={optTitleClass}>Default</span><span className={optDescClass}>Use this runtime’s configured model</span></span>
-            {defaultSelected && <CheckIcon className={optCheckClass} />}
-            </SharedMenuItem>
-            {models.map((entry) => (
-              <SharedMenuItem key={entry.id} label={entry.label} className={cn(optClass, selectedModel === entry.id && optActiveClass)} onClick={() => onSetModel(entry.id)}>
-              <span className={optTextClass}><span className={optTitleClass}>{entry.label}</span>{entry.description && <span className={optDescClass}>{entry.description}</span>}</span>
-              {selectedModel === entry.id && <CheckIcon className={optCheckClass} />}
-              </SharedMenuItem>
-            ))}
-          </SharedMenuPopup>
-        </SharedMenuPositioner>
-      </SharedMenuPortal>
-    </SharedMenu>
   );
 }
 
@@ -371,18 +375,12 @@ export function AgentComposer({
   const mentionListboxId = useId();
   const [mention, setMention] = useState<MentionQuery>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
-  const [modeOpen, setModeOpen] = useState(false);
-  const [effortOpen, setEffortOpen] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mentionListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (active) composerRef.current?.focus(); }, [active]);
-
-  useEffect(() => {
-    if (effortLocked) setEffortOpen(false);
-  }, [effortLocked]);
 
   // Starter-suggestion prefill: replace the draft and keep focus in the
   // editor so typing continues naturally. Sending stays a user action.
@@ -591,7 +589,8 @@ export function AgentComposer({
           >
             <PlusIcon />
           </Button>
-          <span className="flex-1" />
+          {/* Scope reads left (with the attach control); the run settings
+            * — model, mode — group right next to send. */}
           <ScopeMenu
             scope={sessionScope}
             entries={folderEntries}
@@ -600,24 +599,28 @@ export function AgentComposer({
             disabled={disabled}
             onSetScope={onSetScope}
           />
-          {showModelMenu && <ModelMenu selectedModel={selectedModel} activeModel={activeModel} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
-          {showModeMenu && (
-            <AccessMenu
-              mode={mode}
-              open={modeOpen}
+          <span className="flex-1" />
+          {showModelMenu && (
+            <ModelMenu
+              selectedModel={selectedModel}
+              activeModel={activeModel}
+              models={models}
+              locked={modelLocked}
               disabled={disabled}
-              onOpenChange={(open) => { setModeOpen(open); if (open) setEffortOpen(false); }}
-              onPick={(m) => { onSetMode(m); setModeOpen(false); }}
+              resumedSession={resumedSession}
+              onSetModel={onSetModel}
             />
           )}
-          {showEffortMenu && (
-            <EffortMenu
+          {(showModeMenu || showEffortMenu) && (
+            <ModeMenu
+              showMode={showModeMenu}
+              mode={mode}
+              onSetMode={onSetMode}
+              showEffort={showEffortMenu}
               effort={effort}
-              open={effortOpen}
-              disabled={disabled}
-              locked={effortLocked}
               efforts={compatibleEfforts}
-              onOpenChange={(open) => { setEffortOpen(open); if (open) setModeOpen(false); }}
+              effortLocked={effortLocked}
+              disabled={disabled}
               onSetEffort={onSetEffort}
             />
           )}

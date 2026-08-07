@@ -1,8 +1,9 @@
 /**
  * Empty-chat hero pieces. While a chat has no turns, AgentView centers the
- * composer in the panel: a quiet runtime greeting sits above it and use-case
- * starter templates sit below it (Cursor-style rows: icon, title, one-line
- * description). Selecting a template only prefills the composer draft —
+ * composer in the panel: a connecting status (when applicable) sits above it
+ * and use-case starter templates sit below it (Cursor-style rows: icon,
+ * title, one-line description). Selecting a template only prefills the
+ * composer draft —
  * sending always stays an explicit user action. Copy follows the chat's
  * scope: a folder-bound chat talks about "this folder", a library chat
  * talks about the whole library.
@@ -60,40 +61,25 @@ const LIBRARY_STARTERS: StarterTemplate[] = [
   },
 ];
 
-/** Small wordmark row above the centered composer. The runtime identity is
- * demoted to a caption; the composer itself is the visual focus. While the
- * session connects the guidance line becomes the spinner + muted text. */
-export function EmptyChatGreeting({ name, agentShortName, Icon, connecting, libraryScoped }: {
-  name: string;
+/** Status slot above the centered composer. No wordmark or tagline — the
+ * tab icon and the composer's "Message <Agent>…" placeholder already carry
+ * the runtime identity, and the scope pill carries the scope. Only the
+ * connecting status renders here. */
+export function EmptyChatGreeting({ agentShortName, connecting }: {
   agentShortName: string;
-  Icon: ComponentType<{ className?: string }>;
   connecting: boolean;
-  libraryScoped?: boolean;
 }) {
+  if (!connecting) return null;
   return (
-    <div className="flex flex-col items-center gap-2 pb-4 text-center">
-      <div className="flex items-center gap-2 text-foreground">
-        <Icon className="size-4.5" />
-        <span className="font-display text-lg tracking-[0.01em]">{name}</span>
-      </div>
-      {connecting ? (
-        <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground" role="status">
-          {/* The global reduced-motion policy zeroes this keyframe animation,
-            * leaving a static arc while the text still conveys the state. */}
-          <span
-            className="size-3 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent"
-            aria-hidden="true"
-          />
-          Connecting to {agentShortName}…
-        </p>
-      ) : (
-        <p className="m-0 text-sm text-muted-foreground">
-          {libraryScoped
-            ? 'Ask across your library — every folder you have added is in scope.'
-            : 'Ask about this folder — your files are the context.'}
-        </p>
-      )}
-    </div>
+    <p className="m-0 flex items-center justify-center gap-2 pb-4 text-sm text-muted-foreground" role="status">
+      {/* The global reduced-motion policy zeroes this keyframe animation,
+        * leaving a static arc while the text still conveys the state. */}
+      <span
+        className="size-3 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent"
+        aria-hidden="true"
+      />
+      Connecting to {agentShortName}…
+    </p>
   );
 }
 

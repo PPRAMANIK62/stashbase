@@ -273,15 +273,6 @@ export function scopeDisplayName(scope: ChatScope): string {
   return scope.kind === 'library' ? 'Library' : folderDisplayName(scope.path);
 }
 
-/** The muted header note marking a binding that differs from what the
- * window shows: "in <folder>" for a cross-folder chat, "in Library" for a
- * library-wide chat while the window has a current folder. Null when the
- * binding matches the window (nothing to disambiguate). */
-export function scopeHeaderNote(scope: ChatScope, windowFolder: string): string | null {
-  if (scope.kind === 'library') return windowFolder ? 'in Library' : null;
-  if (windowFolder && scope.path !== windowFolder) return `in ${folderDisplayName(scope.path)}`;
-  return null;
-}
 
 /** Shorten an absolute path for menu detail text: `/Users/foo/Notes` →
  * `~/Notes` when it lives under the user's home dir. */

@@ -28,8 +28,9 @@ to migrate them into a StashBase-specific storage model.
   tabs. New Chat also reopens a hidden chat panel.
 - The sidebar splits folder navigation into two zones separated by a
   hairline and a surface shift. When a folder is open, an active zone under
-  the New Chat button shows that folder's header row (explorer toolbar,
-  drop target, ⋯ menu) with its file tree beneath, on the base surface.
+  the New Chat button shows that folder's header row (explorer toolbar
+  with a chat-history action for that folder's sessions, drop target,
+  ⋯ menu) with its file tree beneath, on the base surface.
   Below it, the Library section lists every other member folder as a single
   compact row on the pane surface — favorites (all of them) pinned first,
   then the rest in recents order. While a folder is active the list caps at
@@ -52,6 +53,12 @@ to migrate them into a StashBase-specific storage model.
   metadata stored with the membership list, and starring never touches
   the folder on disk. New Folder creates a plain directory with no chat
   association.
+- Beside that `+`, the Library header carries a chat-history action for
+  library-wide sessions — so past library chats stay reachable even with
+  no folder selected. The active folder's header carries the same action
+  for that folder's sessions; both list each Agent's chats together and
+  reopen a picked session in the chat panel (see
+  [Agent Panel](agent-panel.md)).
 - The built-in Agent can also add a project: `create_project` (an MCP tool)
   creates a folder — under the default StashBase location unless the user
   names a valid location inside the folder home or a library folder — and

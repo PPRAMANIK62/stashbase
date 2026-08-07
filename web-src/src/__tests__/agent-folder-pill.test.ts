@@ -17,7 +17,6 @@ import {
   nextSessionScope,
   scopeChangedScope,
   scopeDisplayName,
-  scopeHeaderNote,
   scopePillAriaLabel,
   scopeRequestParams,
   shortenFolderPath,
@@ -298,9 +297,6 @@ test('create_project rebind: the pill flips from Library to the project and the 
   assert.equal(scopeDisplayName(after), 'New Project');
   // Until the owning window finishes opening the project, the header marks
   // the cross-scope binding; once the sidebar selection lands, it clears.
-  assert.equal(scopeHeaderNote(after, ''), null);
-  assert.equal(scopeHeaderNote(after, '/Users/me/Projects/Research'), 'in New Project');
-  assert.equal(scopeHeaderNote(after, project), null);
 });
 
 test('scope labels: the library scope is called "Library", never "Global"', () => {
@@ -317,15 +313,6 @@ test('scope labels: the library scope is called "Library", never "Global"', () =
   assert.equal(scopePillAriaLabel(LIBRARY_SCOPE, false), 'Session scope: Library');
 });
 
-test('the header note marks cross-scope bindings, including "in Library"', () => {
-  // A folder chat in another folder's window.
-  assert.equal(scopeHeaderNote(folderScope('/tmp/scratch'), '/Users/me/Projects/Research'), 'in scratch');
-  // A matching binding needs no note.
-  assert.equal(scopeHeaderNote(folderScope('/tmp/scratch'), '/tmp/scratch'), null);
-  // Library chats show "in Library" only while the window has a folder.
-  assert.equal(scopeHeaderNote(LIBRARY_SCOPE, '/tmp/scratch'), 'in Library');
-  assert.equal(scopeHeaderNote(LIBRARY_SCOPE, ''), null);
-});
 
 test('scope equality treats library and folder scopes distinctly', () => {
   assert.equal(chatScopesEqual(LIBRARY_SCOPE, { kind: 'library' }), true);

@@ -24,8 +24,19 @@ client of StashBase context, not a separate AI workspace.
   in place when it differs; any content, unsent draft, attachments, or
   resumed session means a fresh chat instead. New Chat opens the chat
   panel when it is hidden. Switching between open chats belongs to the
-  chat tabs (each carries its Agent's glyph); the pane header keeps only
-  the History menu.
+  chat tabs (each carries its Agent's glyph); the pane header shows only
+  the chat's title — chat history lives in the sidebar (below).
+- Chat history lives on the sidebar's scope headers: the current folder's
+  header row and the Library section header each carry a History action
+  listing that scope's past sessions — both Agents' chats in one list,
+  newest first, each row showing its Agent's glyph. Rename and delete work
+  per row, and one Agent's history failing to load still shows the other's
+  with a quiet inline note. Picking a session opens it in the chat panel
+  under the New Chat reuse rule: a completely blank chat is reused
+  (switching its Agent when needed), otherwise a new chat opens for that
+  session's Agent, and the conversation resumes within its own scope —
+  started chats are never hijacked. The Library header's History keeps
+  library chats reachable even when no folder is selected.
 - Opening a folder starts a fresh chat with the user's last selected Agent
   when the window has no chats yet. Codex is the default until the user
   explicitly selects another Agent. An unavailable preferred runtime remains
@@ -62,13 +73,15 @@ client of StashBase context, not a separate AI workspace.
   plainly labeled and easy to select; they are never represented only by
   decorative slider marks.
 - A new chat's empty state makes the composer the hero: it centers in the
-  panel with a small runtime wordmark and one muted line of guidance above
-  it, and a short list of use-case starter templates (icon, title, one-line
-  description) below it. Choosing a template only prefills the composer
-  draft; sending stays an explicit user action. Once the chat has content —
-  or the session ends or fails — the composer returns to the bottom of the
-  transcript. While a session connects, the panel shows a small spinner with
-  muted text instead of bare copy.
+  panel with a short list of use-case starter templates (icon, title,
+  one-line description) below it. No wordmark or tagline above it — the
+  tab's Agent glyph and the composer's "Message <Agent>…" placeholder
+  already carry the runtime identity, and the scope pill carries the
+  scope. Choosing a template only prefills the composer draft; sending
+  stays an explicit user action. Once the chat has content — or the
+  session ends or fails — the composer returns to the bottom of the
+  transcript. While a session connects, a small spinner with muted text
+  shows above the composer.
 - Each chat is scoped to an explicitly chosen library folder or to the
   whole library. The composer's leftmost pill is a scope picker: a
   "Library" entry above the folder list (every library folder with
@@ -80,8 +93,8 @@ client of StashBase context, not a separate AI workspace.
   When a chat's binding differs from what the window shows, the pane
   header adds a muted note — "in <folder>" for a cross-folder chat, "in
   Library" for a library chat while a folder is open — so cross-scope
-  chats stay legible. The History menu lists sessions for the currently
-  picked scope. `@` mentions plus sidebar-file attachments offer the
+  chats stay legible. The sidebar's History menus list sessions per
+  scope header. `@` mentions plus sidebar-file attachments offer the
   chat's own folder — not the window's — for cross-folder chats, and are
   unavailable in library chats (which retrieve through library search;
   uploaded files still attach).
@@ -94,10 +107,16 @@ client of StashBase context, not a separate AI workspace.
   session appears in that project's History instead of the library's. A
   chat already bound to a folder never moves — the tool still creates and
   registers the project and tells the Agent the chat stays where it is.
-- The composer's model, permission-mode, and reasoning-effort controls are
-  compact labelled pills, each with a leading icon and an accessible name.
-  A default-valued model or effort pill reads "Model: Default" /
-  "Effort: Default" so two adjacent Defaults cannot be confused.
+- The composer bar shows three session facts: the scope pill on the left
+  (beside the attach control), then the model and mode pills grouped on
+  the right next to send. Model stays its own labelled pill and shows a
+  concrete model name whenever the runtime reports one — including the
+  catalog's default for a fresh session — falling back to "Model:
+  Default" only when no identity is known. The mode pill's panel stacks
+  the permission-mode list with the reasoning-effort bar at the bottom
+  (the Claude Code treatment); a non-default effort echoes on the trigger
+  ("Ask · High"). Sections appear only when the runtime supports them;
+  locked controls stay visible but inert.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
 - A failed turn leaves exactly one persistent inline explanation in the

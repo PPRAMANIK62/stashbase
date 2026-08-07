@@ -5,6 +5,7 @@ import {
   ExpandAllIcon,
   ExternalLinkIcon,
   FolderIcon,
+  HistoryIcon,
   LibraryIcon,
   MoreHorizontalIcon,
   NewFileIcon,
@@ -15,23 +16,25 @@ import {
   TrashIcon,
 } from '../icons';
 import { useApp } from '../store/AppContext';
-import { makeChatTab, type LibraryFolderStatus } from '../store/state';
-import { newChatPlan } from './agent/folderState';
-import { AGENTS, type AgentKind } from '../agentCatalog';
+import { makeChatTab, type Action, type LibraryFolderStatus, type State } from '../store/state';
+import { folderScope, LIBRARY_SCOPE, newChatPlan, type ChatScope } from './agent/folderState';
+import { AGENT_META, AGENTS, type AgentKind } from '../agentCatalog';
 import { readPreferredAgent, rememberPreferredAgent } from '../agentPreference';
 import { folderRefsEqual } from '../folderPath';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { DocumentOutline } from './DocumentOutline';
 import { useDocumentOutline } from './DocumentOutlineContext';
+import { lazyWithRetry } from './ErrorBoundary';
 import { libraryListPlan } from './libraryListPlan';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { SearchPanel } from './SearchPanel';
 import { Button } from './ui/button';
+import { PopupLoadingStatus } from './ui/status';
 import { api, errorMessage, type IndexStatus } from '../api';
 import { FILE_MIME } from '../dragMime';
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 
 interface ElectronBridge {
   openFolderDialog?: (opts?: {
@@ -47,6 +50,12 @@ interface ElectronBridge {
 
 const LIBRARY_RECONCILE_COOLDOWN_MS = 30_000;
 const OPEN_FOLDER_WATCHDOG_MS = 20_000;
+
+/** The merged session-history popover loads at its interaction boundary
+ *  so react-aria (which otherwise ships with the lazy chat chunk) stays
+ *  out of the initial renderer bundle. */
+const SessionHistoryPopover = lazyWithRetry(() =>
+  import('./agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
 /** Shorten an absolute path for display: `/Users/foo/Notes` → `~/Notes`
  *  when it lives under the user's home dir. Falls through unchanged
@@ -189,14 +198,7 @@ function NewChatButton() {
   const chevronRef = useRef<HTMLButtonElement | null>(null);
 
   function startChat(agent: AgentKind) {
-    const plan = newChatPlan(state.chatTabs, agent);
-    if (plan.kind === 'reuse') {
-      if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });
-      dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
-    } else {
-      dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
-    }
-    if (!state.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
+    activateChatTabForAgent(state, dispatch, agent);
   }
 
   /** Explicit pick from the chevron menu: creates the chat AND updates
@@ -212,6 +214,11 @@ function NewChatButton() {
     onSelect: () => pickAgent(agent.id),
   }));
 
+  // Read at render time, no state: every rememberPreferredAgent call site
+  // (this menu, the chat pane's launcher, openAgent) dispatches a store
+  // update in the same interaction, so this row re-renders fresh.
+  const preferred = AGENT_META[readPreferredAgent()];
+
   return (
     /* A quiet full-width pill row (Cursor's "New Agent" treatment), not a
      * boxed button — the sidebar's rows carry the hierarchy. The chevron
@@ -222,10 +229,10 @@ function NewChatButton() {
         <button
           type="button"
           className="flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-foreground"
-          title="Start a chat in the current folder, or across the whole library"
+          title={`Start a ${preferred.launcherLabel} chat in the current folder, or across the whole library`}
           onClick={() => startChat(readPreferredAgent())}
         >
-          <PlusIcon className="size-4 flex-none text-muted-foreground" />
+          <preferred.Icon className="size-4 flex-none text-muted-foreground" />
           <span className="min-w-0 truncate">New Chat</span>
         </button>
         <button
@@ -260,6 +267,100 @@ function NewChatButton() {
         />
       )}
     </div>
+  );
+}
+
+/** Ensure the chat panel is open with a tab running `agent` active — the
+ *  blank-tab reuse rule shared by New Chat and the History resume path:
+ *  reuse the one COMPLETELY blank tab (switching its agent in place when
+ *  it differs), else create a fresh tab; open the panel when hidden. */
+function activateChatTabForAgent(
+  state: Pick<State, 'chatTabs' | 'chatOpen'>,
+  dispatch: (a: Action) => void,
+  agent: AgentKind,
+) {
+  const plan = newChatPlan(state.chatTabs, agent);
+  if (plan.kind === 'reuse') {
+    if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });
+    dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
+  } else {
+    dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
+  }
+  if (!state.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
+}
+
+/** History clock on a sidebar scope header: opens the merged
+ *  session-history menu for that scope (both agents' sessions, newest
+ *  first). Picking a session records a pending resume in the store and
+ *  ensures a suitable chat tab is active (the New Chat blank-tab reuse
+ *  rule); that tab's AgentView consumes the request and resumes the
+ *  session within this scope. */
+function ScopeHistoryButton({
+  scope,
+  label,
+  onOpenChange,
+}: {
+  scope: ChatScope;
+  /** Accessible name + tooltip, e.g. "Chat history in Notes". */
+  label: string;
+  /** Lets the owning header hold its hover-revealed cluster visible
+   *  while the menu is open. */
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const { state, dispatch } = useApp();
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+
+  function setOpenReported(next: boolean) {
+    setOpen(next);
+    onOpenChange?.(next);
+  }
+
+  function resumeSession(agent: AgentKind, sessionId: string) {
+    setOpenReported(false);
+    dispatch({
+      type: 'CHAT_RESUME_REQUEST',
+      resume: { agent, sessionId, folder: scope.kind === 'folder' ? scope.path : null },
+    });
+    activateChatTabForAgent(state, dispatch, agent);
+  }
+
+  const rect = open ? buttonRef.current?.getBoundingClientRect() : undefined;
+
+  return (
+    <>
+      <Button
+        ref={buttonRef}
+        variant="ghost"
+        size="icon-sm"
+        className="text-muted-foreground aria-expanded:bg-border aria-expanded:text-foreground"
+        title={label}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpenReported(!open)}
+      ><HistoryIcon /></Button>
+      {open && (
+        <Suspense
+          fallback={(
+            <PopupLoadingStatus
+              label="Opening history…"
+              left={rect?.left ?? 0}
+              top={(rect?.bottom ?? 0) + 4}
+              onCancel={() => setOpenReported(false)}
+            />
+          )}
+        >
+          <SessionHistoryPopover
+            scope={scope}
+            ariaLabel={label}
+            triggerRef={buttonRef}
+            onClose={() => setOpenReported(false)}
+            onResume={resumeSession}
+          />
+        </Suspense>
+      )}
+    </>
   );
 }
 
@@ -381,6 +482,9 @@ function LibrarySections() {
   }, [state.folderPath]);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  // Library-wide chat-history menu open: keeps the header's
+  // hover-revealed actions visible while the popover is up.
+  const [libraryHistoryOpen, setLibraryHistoryOpen] = useState(false);
   const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
   const [folderStates, setFolderStates] = useState<Record<string, LibraryFolderStatus>>({});
   const [openingFolder, setOpeningFolder] = useState<{ path: string; name: string } | null>(null);
@@ -657,7 +761,14 @@ function LibrarySections() {
             </span>
             <span className={sectionTitleClass}>Library</span>
           </button>
-          <div className={sideActionsClass + ' ml-auto'}>
+          <div className={(libraryHistoryOpen ? 'flex gap-0.5' : sideActionsClass) + ' ml-auto'}>
+            {/* Library-scoped chat sessions — covers library chats even in
+              * a no-folder window (which has no active-folder header). */}
+            <ScopeHistoryButton
+              scope={LIBRARY_SCOPE}
+              label="Library chat history"
+              onOpenChange={setLibraryHistoryOpen}
+            />
             <AddFolderMenuButton />
           </div>
         </div>
@@ -842,6 +953,9 @@ function ActiveFolderHeader({
 }) {
   const { state, actions, dispatch } = useApp();
   const [sideHeadDrop, setSideHeadDrop] = useState(false);
+  // Chat-history menu open: hold the hover-revealed action cluster
+  // visible while its popover (portalled outside the sidebar) is up.
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   function onSideHeadDragOver(e: DragEvent<HTMLDivElement>) {
     if (!e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes(FILE_MIME)) return;
@@ -892,7 +1006,7 @@ function ActiveFolderHeader({
           <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
         )}
       </span>
-      <div className={menuOpen ? 'flex gap-0.5' : sideActionsClass}>
+      <div className={menuOpen || historyOpen ? 'flex gap-0.5' : sideActionsClass}>
         <NewNoteButton />
         <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title={'New folder in ' + (state.activeFolder || name)} onClick={() => {
           if (state.activeFolder) dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
@@ -900,6 +1014,13 @@ function ActiveFolderHeader({
         }}><NewFolderIcon /></Button>
         <SyncButton />
         <FolderFoldToggle />
+        {/* This folder's chat sessions — history lives on the scope
+          * headers, not in the chat pane. */}
+        <ScopeHistoryButton
+          scope={folderScope(path)}
+          label={'Chat history in ' + name}
+          onOpenChange={setHistoryOpen}
+        />
         <RootMenuButton name={name} menuOpen={menuOpen} onMenu={onMenu} />
       </div>
     </div>

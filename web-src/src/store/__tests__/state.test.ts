@@ -283,6 +283,40 @@ test('new chat tabs start blank and AgentView updates keep the flag current', ()
   assert.equal(state.chatTabs[0].blank, true);
 });
 
+test('pendingResume channel: request replaces, consume clears, folder-context loss clears', () => {
+  const tab = makeChatTab('claude', []);
+  let state = freshState({ chatTabs: [tab], activeChatTabId: tab.id });
+  assert.equal(state.pendingResume, null);
+
+  state = reducer(state, {
+    type: 'CHAT_RESUME_REQUEST',
+    resume: { agent: 'claude', sessionId: 's1', folder: '/lib/notes' },
+  });
+  assert.deepEqual(state.pendingResume, { agent: 'claude', sessionId: 's1', folder: '/lib/notes' });
+
+  // A newer request replaces an unconsumed one (`folder: null` = the
+  // library scope, matching the boundFolder convention).
+  state = reducer(state, {
+    type: 'CHAT_RESUME_REQUEST',
+    resume: { agent: 'codex', sessionId: 's2', folder: null },
+  });
+  assert.deepEqual(state.pendingResume, { agent: 'codex', sessionId: 's2', folder: null });
+
+  // Consuming clears it; a second consume is a no-op (same state object).
+  state = reducer(state, { type: 'CHAT_RESUME_CONSUMED' });
+  assert.equal(state.pendingResume, null);
+  assert.equal(reducer(state, { type: 'CHAT_RESUME_CONSUMED' }), state);
+
+  // Losing the window's folder context clears an in-flight request too —
+  // the sessions it pointed at were just torn down.
+  state = reducer(state, {
+    type: 'CHAT_RESUME_REQUEST',
+    resume: { agent: 'claude', sessionId: 's3', folder: null },
+  });
+  state = reducer(state, { type: 'CHAT_TABS_RESET' });
+  assert.equal(state.pendingResume, null);
+});
+
 test('loading a different folder clears stale search state', () => {
   const state = freshState({
     folder: 'Old',

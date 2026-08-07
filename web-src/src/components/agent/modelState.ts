@@ -48,6 +48,9 @@ export function modelMenuLabel(
   activeModel: string | undefined,
   resumedSession: boolean,
 ): string {
-  const identity = activeModel ?? selectedModel;
+  // Explicit intent wins over telemetry: once the user picks a model for
+  // the next session, the pill must show that pick even while the runtime
+  // still reports the session's (or catalog's) default identity.
+  const identity = selectedModel ?? activeModel;
   return models.find((entry) => entry.id === identity)?.label ?? (resumedSession ? 'Session model' : 'Default');
 }

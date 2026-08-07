@@ -387,6 +387,12 @@ export function reducer(s: State, a: Action): State {
         ...s,
         chatTabs: s.chatTabs.map((t) => (t.id === a.id ? { ...t, boundFolder: a.folder } : t)),
       };
+    case 'CHAT_RESUME_REQUEST':
+      // A fresh request replaces an unconsumed one — the sidebar ensures a
+      // suitable tab in the same interaction, so at most one is in flight.
+      return { ...s, pendingResume: a.resume };
+    case 'CHAT_RESUME_CONSUMED':
+      return s.pendingResume ? { ...s, pendingResume: null } : s;
     case 'CHAT_TABS_RESET':
       // Wipes ALL tabs — called when the window LOSES its folder context
       // (library removal / another window closing the folder; the server
@@ -395,7 +401,7 @@ export function reducer(s: State, a: Action): State {
       // survive the switch. Fold the panel too, mirroring CHAT_TAB_CLOSE:
       // an empty panel is dead folder and the sidebar's New Chat button
       // is the way back in.
-      return { ...s, chatTabs: [], activeChatTabId: null, chatTabRecencyByAgent: {}, chatOpen: false };
+      return { ...s, chatTabs: [], activeChatTabId: null, chatTabRecencyByAgent: {}, pendingResume: null, chatOpen: false };
     case 'ACTIVE_FOLDER':
       // Semantically "make this folder the user's current target" —
       // also moves the visual focus there.

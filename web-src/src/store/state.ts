@@ -69,6 +69,19 @@ export interface ChatTab {
   boundFolder?: string | null;
 }
 
+/** A session-resume request raised by the sidebar's History menus. The
+ *  sidebar records it here, ensures a suitable chat tab is active, and
+ *  the target tab's AgentView consumes it (CHAT_RESUME_CONSUMED) by
+ *  resuming the session within `folder`'s scope. `folder` uses the
+ *  `boundFolder` convention: an absolute member-folder path, or `null`
+ *  for the library scope. */
+export interface PendingChatResume {
+  /** Agent that owns the session (`claude` / `codex`). */
+  agent: string;
+  sessionId: string;
+  folder: string | null;
+}
+
 export interface OpenFile {
   name: string;
   format: 'md' | 'html' | 'pdf' | 'image' | 'docx' | 'audio';
@@ -240,6 +253,10 @@ export interface State {
   /** Per-agent tab activation history, oldest first. The last id is the
    *  tab that an agent icon selects when reopening that agent. */
   chatTabRecencyByAgent: Record<string, string[]>;
+  /** Un-consumed sidebar History resume request, if any. See
+   *  `PendingChatResume`; a new request replaces an unconsumed one, and
+   *  losing the window's folder context (CHAT_TABS_RESET) clears it. */
+  pendingResume: PendingChatResume | null;
 
   /** User-visible paths whose semantic-search content is still being
    *  embedded/indexed. Keyword search ignores this state and can search
@@ -373,6 +390,7 @@ export const initialState: State = {
   chatTabs: [],
   activeChatTabId: null,
   chatTabRecencyByAgent: {},
+  pendingResume: null,
   pendingSemanticNames: new Set(),
   pendingConversions: [],
   blockedConversions: [],
@@ -462,6 +480,11 @@ export type Action =
    *  handed to another agent. */
   | { type: 'CHAT_TAB_SET_AGENT'; id: string; agent: string }
   | { type: 'CHAT_TAB_SET_SCOPE'; id: string; folder: string | null }
+  /** Sidebar History picked a session: record the resume request for the
+   *  target tab's AgentView to consume. Replaces any unconsumed request. */
+  | { type: 'CHAT_RESUME_REQUEST'; resume: PendingChatResume }
+  /** The target AgentView took ownership of the pending resume. */
+  | { type: 'CHAT_RESUME_CONSUMED' }
   | { type: 'CHAT_TABS_RESET' }
   | { type: 'ACTIVE_FOLDER'; path: string }
   /** Move the sidebar's single focus to `path`. Pure visual highlight

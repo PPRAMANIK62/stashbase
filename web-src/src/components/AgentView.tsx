@@ -21,7 +21,6 @@ import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
 import { EmptyChatGreeting, StarterTemplates } from './agent/AgentEmptyState';
 import { resolveAssistantLink } from './agent/assistantLinkTarget';
-import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
@@ -30,16 +29,18 @@ import {
   chatScopesEqual,
   folderMenuEntries,
   folderMenuLocked,
+  folderScope,
   isBlankChatTab,
+  LIBRARY_SCOPE,
   mentionListingPlan,
   newChatScope,
   nextSessionScope,
   scopeChangedScope,
-  scopeHeaderNote,
   scopeRequestParams,
   windowFolderSwitchPlan,
   type ChatScope,
 } from './agent/folderState';
+import { shouldConsumePendingResume } from './agent/sessionHistory';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
 import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
@@ -142,11 +143,8 @@ export function AgentView({
   const [skills, setSkills] = useState<AgentSkill[]>([]);
   const [skillState, setSkillState] = useState<'available' | 'empty' | 'failed'>('empty');
   const modelControlRef = useRef(modelControl);
-  // The live session's SDK id (from the `session-id` event) — lets the
-  // History dropdown mark the current session active. `resumeIdRef` holds
-  // a session id to resume on the next connect; it rides the connect URL
-  // (like effort) and is consumed-and-cleared there.
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  // `resumeIdRef` holds a session id to resume on the next connect; it
+  // rides the connect URL (like effort) and is consumed-and-cleared there.
   const resumeIdRef = useRef<string | null>(null);
   // Refs mirror the live session id + this tab's id/title so the WS
   // message handler (bound once per connection) reads current values
@@ -154,7 +152,6 @@ export function AgentView({
   const sessionIdRef = useRef<string | null>(null);
   const idRef = useRef(id); idRef.current = id;
   const titleRef = useRef(title); titleRef.current = title;
-  const [historyOpen, setHistoryOpen] = useState(false);
   // Empty-state starter suggestion → composer draft. Prefill only; the
   // nonce lets the same template be re-applied after the user edits it.
   const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
@@ -377,7 +374,6 @@ export function AgentView({
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
-    setCurrentSessionId(null);
     sessionIdRef.current = null;
     toolNamesRef.current.clear();
     openKind.current = null;
@@ -402,16 +398,14 @@ export function AgentView({
     }
   }
 
-  /** Open a past session from the History dropdown: paint its transcript,
-   *  then reconnect with `resume` so the SDK appends to it and the user can
-   *  keep chatting. Unlike `reconnect`, blocks are pre-populated (not
-   *  cleared) with the replayed history. */
-  async function resumeSession(id: string) {
-    setHistoryOpen(false);
-    // Resume within the scope the History menu was scoped to, and pin the
-    // tab's binding to it so the reconnect below carries the same scope —
-    // a resumed session always keeps its own scope.
-    const scope = sessionScope;
+  /** Open a past session from the sidebar's History menu: paint its
+   *  transcript, then reconnect with `resume` so the SDK appends to it and
+   *  the user can keep chatting. Unlike `reconnect`, blocks are
+   *  pre-populated (not cleared) with the replayed history. `scope` is the
+   *  scope the History menu was scoped to; the tab's binding pins to it so
+   *  the reconnect below carries the same scope — a resumed session always
+   *  keeps its own scope. */
+  async function resumeSession(id: string, scope: ChatScope) {
     let hist: Block[] = [];
     try {
       hist = (await api.getSessionMessages(id, agent, scopeRequestParams(scope))) as Block[];
@@ -429,7 +423,6 @@ export function AgentView({
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
-    setCurrentSessionId(id);
     sessionIdRef.current = id;
     toolNamesRef.current.clear();
     openKind.current = null;
@@ -472,7 +465,6 @@ export function AgentView({
         if (mode !== 'default') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode }));
         break;
       case 'session-id':
-        setCurrentSessionId(ev.id);
         sessionIdRef.current = ev.id;
         break;
       case 'models':
@@ -959,15 +951,6 @@ export function AgentView({
     } catch { /* leave the placeholder if the lookup fails */ }
   }
 
-  /** Deleting the session currently shown in this tab leaves the tab open as
-   * a fresh chat. Its old history title must not leak into that new session. */
-  function resetAfterActiveSessionDeleted() {
-    const otherAgentTabs = state.chatTabs.filter((tab) => tab.agent === agent && tab.id !== id);
-    const freshTitle = otherAgentTabs.length === 0 ? 'Untitled' : `Untitled ${otherAgentTabs.length + 1}`;
-    dispatch({ type: 'CHAT_TAB_RENAME', id, title: freshTitle });
-    reconnect();
-  }
-
   const effortLocked = blocks.length > 0 || turnActive;
   const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
   // Session-scope pill state. The shown scope is the live binding once
@@ -987,7 +970,6 @@ export function AgentView({
   });
   // Cross-scope tabs stay legible: "in <folder>" for another folder's
   // chat, "in Library" for a library chat while the window shows a folder.
-  const bindingNote = scopeHeaderNote(sessionScope, state.folderPath);
   const effectiveModel = modelControl.activeModel ?? modelControl.selectedModel;
   const supportedEfforts = modelControl.models.find((entry) => entry.id === effectiveModel)?.supportedEfforts;
   // Report blankness to the tab model: a COMPLETELY blank tab (no
@@ -1006,6 +988,22 @@ export function AgentView({
   useEffect(() => {
     if (storedBlank !== blankNow) dispatch({ type: 'CHAT_TAB_SET_BLANK', id, blank: blankNow });
   }, [blankNow, storedBlank, dispatch, id]);
+
+  // Sidebar History handoff: the sidebar recorded a pending resume and
+  // ensured a suitable tab is active; the ACTIVE, still-blank tab running
+  // the request's agent takes it. Consume-and-clear BEFORE resuming so the
+  // request can never double-fire, and never hijack a non-blank tab.
+  const pendingResume = state.pendingResume;
+  useEffect(() => {
+    if (!pendingResume) return;
+    if (!shouldConsumePendingResume({ active, tabAgent: agent, requestAgent: pendingResume.agent, blank: blankNow })) return;
+    dispatch({ type: 'CHAT_RESUME_CONSUMED' });
+    void resumeSession(
+      pendingResume.sessionId,
+      pendingResume.folder === null ? LIBRARY_SCOPE : folderScope(pendingResume.folder),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- consume once per request/activation; the guards read latest values
+  }, [pendingResume, active]);
 
   function handleDraftChange(hasText: boolean) {
     draftTextRef.current = hasText;
@@ -1078,35 +1076,9 @@ export function AgentView({
           <div className="rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground shadow-elevation">Drop files to add as context</div>
         </div>
       )}
-      {/* `agent-head` is a layout hook: the chat-primary grid rules in
-        * styles/chat.css center it to the readable transcript width. */}
-      <div className="agent-head flex items-center gap-2 py-1.5 pr-2 pl-3">
-        <span className="min-w-0 flex-1 overflow-hidden text-sm text-ellipsis whitespace-nowrap text-muted-foreground">
-          {title}
-          {bindingNote && (
-            // Cross-scope sessions stay legible: mark a tab whose binding
-            // differs from what the window's current folder implies.
-            <span className="ml-1.5 text-xs text-muted-foreground">{bindingNote}</span>
-          )}
-        </span>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {/* History is the header's one action. Creating chats (and
-            * choosing the agent) belongs to the sidebar's New Chat split
-            * button; switching chats belongs to the chat tab strip. */}
-          {capabilities?.history && (
-            <AgentHistoryMenu
-              open={historyOpen}
-              currentSessionId={currentSessionId}
-              agent={agent}
-              scope={sessionScope}
-              onToggle={() => setHistoryOpen((o) => !o)}
-              onClose={() => setHistoryOpen(false)}
-              onResume={resumeSession}
-              onActiveDeleted={resetAfterActiveSessionDeleted}
-            />
-          )}
-        </div>
-      </div>
+      {/* No pane header: the chat tab already names the conversation and
+        * the composer's scope pill carries the binding — repeating either
+        * here was pure noise. */}
       {!runtime ? (
         <AgentRuntimeChecking name={meta.name} onRefresh={() => void refreshRuntimes()} />
       ) : runtimeUnavailable ? (
@@ -1133,11 +1105,8 @@ export function AgentView({
           <div key="empty-above" className="flex min-h-0 flex-[3] flex-col justify-end overflow-hidden px-2">
             <div className="mx-auto w-[min(640px,100%)]">
               <EmptyChatGreeting
-                name={meta.name}
                 agentShortName={meta.shortName}
-                Icon={meta.Icon}
                 connecting={phase === 'connecting'}
-                libraryScoped={sessionScope.kind === 'library'}
               />
             </div>
           </div>

@@ -41,8 +41,28 @@ not write `AGENTS.md`/`CLAUDE.md` bridge files (those belong to member
 folders), and their preamble states that the whole library is in scope with
 `search_library` as the retrieval path. Caveat: if the user adds the folder
 home itself as a library folder, that folder's history and the library
-history coincide (same cwd). The History menu lists sessions for the tab's
-currently picked scope, and resume carries that scope on the reconnect URL.
+history coincide (same cwd).
+
+Chat history lives on the SIDEBAR's scope headers, not in the chat pane:
+the active folder's header row and the Library section header each carry a
+History menu for THEIR scope (the Library header keeps history reachable
+in a no-folder window). One menu merges BOTH agents' session lists for the
+scope — fetched in parallel, newest first, each row tagged with its agent
+so rename/delete route through that runtime (`mergeAgentSessions`); one
+agent's listing failing must not blank the other's, it surfaces as a quiet
+inline note instead. Resume is a store handoff: the sidebar records
+`pendingResume` (`CHAT_RESUME_REQUEST` — `{ agent, sessionId, folder }`,
+`folder: null` meaning the library scope, the `boundFolder` convention)
+and ensures a suitable tab via the New Chat blank-tab reuse plan
+(`newChatPlan`, switching a blank tab's agent in place when needed,
+opening the panel when hidden). The ACTIVE, still-blank tab running the
+request's agent consumes it (`shouldConsumePendingResume`) — dispatching
+`CHAT_RESUME_CONSUMED` BEFORE resuming so a request can never double-fire
+— and reconnects with `resume` plus the request's scope params; a
+non-blank tab is never hijacked, and `CHAT_TABS_RESET` clears an in-flight
+request (its sessions were just torn down). The popover component
+lazy-loads at the clock's interaction boundary so react-aria stays out of
+the budget-enforced initial renderer chunk.
 
 `create_project` is the one sanctioned scope migration. Each live panel
 session carries a private attribution id (`STASHBASE_AGENT_SESSION_ID` in
@@ -122,8 +142,9 @@ switch unmounts the old agent's idle connection (WS teardown on unmount)
 and connects the new agent on a fresh mount; blank tabs carry only
 placeholder titles, so the session-title rename path stays correct.
 There are no other creation surfaces: the tab-strip corner launchers and
-the pane header's `+` are gone — the pane header keeps only the History
-menu, and switching between open chats belongs to the chat tab strip
+the pane header's `+` are gone — the pane header is title-only (chat
+history lives on the sidebar's scope headers, above), and switching
+between open chats belongs to the chat tab strip
 (each tab carries its agent's glyph). The agent registry priming
 (`api.listAgents` → `AGENTS_LOADED`) lives in an always-mounted App
 effect; each AgentView still refreshes the catalog after every
@@ -206,12 +227,14 @@ typography plus the One-Dark tool/diff palette, the `@`-mention popup
 (`.agent-mention-item.active` is a keyboard-navigation querySelector hook),
 and the CodeMirror-owned composer input DOM. `.agent-view` stays a class-name
 routing hook for the global drag-drop handler. Composer pill triggers are
-labelled controls: each carries a leading icon and an accessible name
-("Session folder" / "Session scope: Library", "Model", "Permission mode",
-"Reasoning effort"; the locked scope pill appends "— set for this
-conversation"), and a default-valued model
-or effort pill renders "<Control>: Default" so adjacent Defaults cannot be
-confused. An empty chat centers the composer as the hero layout: the
+labelled controls with a leading icon and an accessible name: the scope
+pill ("Session folder" / "Session scope: Library"; when locked it appends
+"— set for this conversation"), the model pill ("Model: Default" when
+default so adjacent Defaults cannot be confused), and the mode pill
+("Permission mode: …"), whose panel stacks the permission-mode list with
+the effort bar at the bottom. Sections render only when the runtime
+supports them; a locked model pill or effort bar stays visible but inert.
+An empty chat centers the composer as the hero layout: the
 composer swaps its `agent-composer` width hook for the hero column while
 empty, and keeps a stable React `key` so the same mounted instance (draft,
 CodeMirror state) moves between the hero and bottom layouts. Empty-state
