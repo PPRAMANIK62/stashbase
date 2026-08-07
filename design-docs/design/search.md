@@ -34,6 +34,9 @@ as the result identity.
   preparation, indexing, scope, or search mode.
 - Embedding credentials need access only to the configured embedding model;
   provider model-list access is not required.
+- On macOS, saving credentials recovers from a same-owner ACL that blocks the
+  app-owned config directory. Other config access failures explain the
+  ownership or write-access problem without exposing an internal temp path.
 - MCP is context infrastructure, not unrestricted host-filesystem access.
 
 ## Contribution Map
