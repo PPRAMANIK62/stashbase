@@ -498,3 +498,159 @@ test('Codex Edit auto-accepts only ordinary StashBase MCP writes inside the open
   assert.equal(isStashbaseWorkspaceEdit(approval('edit_file', '/workspace/other/note.md'), folder), false);
   assert.equal(isStashbaseWorkspaceEdit(approval('edit_file', '/workspace/project/note.md', 'other'), folder), false);
 });
+
+test('Codex RPC peer enforces request timeout, clears timers, and ignores late responses', async () => {
+  let written = '';
+  const peer = new CodexRpcPeer((line) => { written = line; }, { requestTimeoutMs: 20 });
+  const pending = peer.request('turn/start', { threadId: 't1' });
+  const req = JSON.parse(written) as { id: number };
+
+  await assert.rejects(pending, (err: Error) => {
+    assert.match(err.message, /Codex app-server request timed out: turn\/start/);
+    return true;
+  });
+
+  assert.doesNotThrow(() => {
+    peer.receiveLine(JSON.stringify({ id: req.id, result: { turn: { id: 'late-turn' } } }));
+  });
+});
+
+test('Codex RPC peer clears timers on response, write failure, and peer close', async () => {
+  const successPeer = new CodexRpcPeer(() => {}, { requestTimeoutMs: 100 });
+  const p1 = successPeer.request('initialize', {});
+  successPeer.receiveLine(JSON.stringify({ id: 1, result: { ok: true } }));
+  assert.deepEqual(await p1, { ok: true });
+
+  const failPeer = new CodexRpcPeer(() => { throw new Error('write error'); }, { requestTimeoutMs: 100 });
+  await assert.rejects(failPeer.request('initialize', {}), /write error/);
+
+  const closePeer = new CodexRpcPeer(() => {}, { requestTimeoutMs: 100 });
+  const p3 = closePeer.request('initialize', {});
+  closePeer.close(new Error('connection closed'));
+  await assert.rejects(p3, /connection closed/);
+});
+
+test('Codex Session handles startup timeout by reaching fatal error path', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-timeout-'));
+  runWithWindowId('startup-timeout-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('startup-timeout-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const proc = new FakeCodexProcess();
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'startup-timeout-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => proc as unknown as ChildProcessWithoutNullStreams,
+    30,
+  );
+
+  session.begin();
+  await new Promise((resolve) => setTimeout(resolve, 70));
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
+  const errEvent = events.find((e) => e.t === 'error');
+  assert.ok(errEvent);
+  assert.match(errEvent.message ?? '', /request timed out: initialize/);
+  session.dispose();
+});
+
+test('Codex Session handles turn/start timeout by sending error and clearing busy state', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-turn-timeout-'));
+  runWithWindowId('turn-timeout-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('turn-timeout-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const proc = new FakeCodexProcess();
+  proc.stdin.on('data', (chunk: Buffer) => {
+    const req = JSON.parse(String(chunk)) as { id: number; method: string };
+    if (req.method === 'initialize') proc.stdout.write(`${JSON.stringify({ id: req.id, result: {} })}\n`);
+    else if (req.method === 'model/list') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { data: [] } })}\n`);
+    else if (req.method === 'skills/list') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { data: [] } })}\n`);
+    else if (req.method === 'thread/start') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { thread: { id: 'thread-1' } } })}\n`);
+    // ignore turn/start
+  });
+
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'turn-timeout-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => proc as unknown as ChildProcessWithoutNullStreams,
+    30,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await new Promise((resolve) => setTimeout(resolve, 70));
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string; isError?: boolean });
+  const errorMsg = events.find((e) => e.t === 'error' && /request timed out: turn\/start/.test(e.message ?? ''));
+  assert.ok(errorMsg, `Expected turn/start timeout error event, got: ${JSON.stringify(events)}`);
+
+  const turnEnd = events.find((e) => e.t === 'turn-end');
+  assert.ok(turnEnd);
+  assert.equal(turnEnd.isError, true);
+
+  const runtime = session as unknown as { busy: boolean; activeTurnId: string | null };
+  assert.equal(runtime.busy, false);
+  assert.equal(runtime.activeTurnId, null);
+  session.dispose();
+});
+
+test('Codex Session handles steer timeout without ending an active turn', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-steer-timeout-'));
+  runWithWindowId('steer-timeout-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('steer-timeout-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const proc = new FakeCodexProcess();
+  proc.stdin.on('data', (chunk: Buffer) => {
+    const req = JSON.parse(String(chunk)) as { id: number; method: string };
+    if (req.method === 'initialize') proc.stdout.write(`${JSON.stringify({ id: req.id, result: {} })}\n`);
+    else if (req.method === 'model/list') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { data: [] } })}\n`);
+    else if (req.method === 'skills/list') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { data: [] } })}\n`);
+    else if (req.method === 'thread/start') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { thread: { id: 'thread-1' } } })}\n`);
+    else if (req.method === 'turn/start') proc.stdout.write(`${JSON.stringify({ id: req.id, result: { turn: { id: 'turn-1' } } })}\n`);
+    // ignore turn/steer
+  });
+
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'steer-timeout-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => proc as unknown as ChildProcessWithoutNullStreams,
+    30,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  const runtime = session as unknown as { busy: boolean; activeTurnId: string | null };
+  assert.equal(runtime.busy, true);
+  assert.equal(runtime.activeTurnId, 'turn-1');
+
+  ws.emit('message', JSON.stringify({ t: 'steer', id: 'steer-1', text: 'focus on tests' }));
+  await new Promise((resolve) => setTimeout(resolve, 70));
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; id?: string; ok?: boolean; message?: string });
+  const steerResult = events.find((e) => e.t === 'steer-result' && e.id === 'steer-1');
+  assert.ok(steerResult);
+  assert.equal(steerResult.ok, false);
+  assert.match(steerResult.message ?? '', /request timed out: turn\/steer/);
+
+  assert.equal(runtime.busy, true);
+  assert.equal(runtime.activeTurnId, 'turn-1');
+  session.dispose();
+});
