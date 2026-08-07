@@ -36,6 +36,9 @@ context, not a separate AI workspace.
 - If a supported Agent CLI is missing, its launcher opens a compact setup state
   with the copyable install command and a runtime-refresh action. A missing CLI
   is distinct from a runtime that is installed but failed to start.
+- If a live runtime disconnects unexpectedly, the panel preserves its
+  transcript, clears in-flight activity, explains the terminal cause once, and
+  offers Reconnect. Intentional session teardown remains quiet.
 
 ## Experience Contract
 

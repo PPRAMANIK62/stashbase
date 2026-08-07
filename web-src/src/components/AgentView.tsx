@@ -24,6 +24,7 @@ import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
+import { closeAgentSocketIntentionally, terminalAgentState } from './agent/connectionLifecycle';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
 
@@ -94,6 +95,9 @@ export function AgentView({
   // failed (see `fatal`). `nonce` bumps to force a reconnect.
   const [phase, setPhase] = useState<'connecting' | 'live' | 'closed'>('connecting');
   const [fatal, setFatal] = useState<string | null>(null);
+  const fatalRef = useRef<string | null>(null);
+  fatalRef.current = fatal;
+  const [fatalRecoveryLabel, setFatalRecoveryLabel] = useState<'Retry' | 'Reconnect'>('Retry');
   const [nonce, setNonce] = useState(0);
   // Permission mode for this session — drives the composer's Modes
   // dropdown. Switching it sends `set-mode` so the agent applies it live.
@@ -124,6 +128,7 @@ export function AgentView({
   const [historyOpen, setHistoryOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
+  const exitReceivedRef = useRef(false);
   const toolNamesRef = useRef<Map<string, string>>(new Map());
   // Which streaming block kind is currently "open" (so consecutive text
   // deltas append to one bubble; a tool call closes it).
@@ -180,11 +185,40 @@ export function AgentView({
     setTurnActive(active);
   }
 
+  function finishRendererSession({
+    ready,
+    exitReceived,
+    message,
+  }: {
+    ready: boolean;
+    exitReceived: boolean;
+    message?: string;
+  }) {
+    const input = {
+      ready,
+      exitReceived,
+      agentShortName: meta.shortName,
+      message,
+      currentFatal: fatalRef.current,
+    };
+    const terminal = terminalAgentState({ ...input, blocks: [] });
+    queuedPromptsRef.current = [];
+    openKind.current = null;
+    toolNamesRef.current.clear();
+    setBlocks((currentBlocks) => terminalAgentState({ ...input, blocks: currentBlocks }).blocks);
+    setQueuedTurns(terminal.queuedTurns);
+    setTurnBusy(terminal.turnActive);
+    setFatal(terminal.fatal);
+    setFatalRecoveryLabel(terminal.recoveryLabel);
+    setPhase(terminal.phase);
+  }
+
   useEffect(() => {
     if (!runtime) {
       readyRef.current = false;
       setPhase('connecting');
       setFatal(null);
+      setFatalRecoveryLabel('Retry');
       return;
     }
     // Discovery is authoritative once it has returned. Do not open a socket
@@ -194,9 +228,11 @@ export function AgentView({
       readyRef.current = false;
       setPhase('closed');
       setFatal(null);
+      setFatalRecoveryLabel('Retry');
       return;
     }
     readyRef.current = false;
+    exitReceivedRef.current = false;
     // Consume-and-clear the resume id: it belongs to this one connection,
     // so a later reconnect (Retry / effort change) starts fresh instead of
     // re-resuming.
@@ -217,25 +253,14 @@ export function AgentView({
       handleEvent(ev);
     };
     ws.onclose = () => {
-      queuedPromptsRef.current = [];
-      setQueuedTurns([]);
-      setTurnBusy(false);
-      // Closing before the session was ever ready is a startup failure,
-      // not a normal end — surface it (with a Retry) rather than a quiet
-      // "session ended".
-      if (!readyRef.current) {
-        setFatal((f) => f ?? `Connection closed before ${meta.shortName} started.`);
-        refreshRuntimes();
-      }
-      setPhase('closed');
+      const wasReady = readyRef.current;
+      const sawExit = exitReceivedRef.current;
+      finishRendererSession({ ready: wasReady, exitReceived: sawExit });
+      if (!wasReady) refreshRuntimes();
     };
 
     return () => {
-      // Detach onclose so the reconnect path's teardown doesn't clobber
-      // the fresh 'connecting' state with a stale 'closed'.
-      ws.onclose = null;
-      try { ws.send(JSON.stringify({ t: 'close' })); } catch { /* gone */ }
-      ws.close();
+      closeAgentSocketIntentionally(ws);
     };
   }, [nonce, runtime?.endpoint, runtimeUnavailable, agent, meta.shortName]);
 
@@ -246,6 +271,7 @@ export function AgentView({
     setBlocks([]);
     setEditableUserMessageIds(new Set());
     setFatal(null);
+    setFatalRecoveryLabel('Retry');
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
@@ -258,6 +284,22 @@ export function AgentView({
       modelControlRef.current = next;
       return next;
     });
+    setPhase('connecting');
+    setNonce((n) => n + 1);
+  }
+
+  /** A fatal runtime reconnect keeps the transcript available for context and
+   * diagnosis. The dead native session cannot be resumed implicitly, but the
+   * visible conversation must not disappear as the replacement connects. */
+  function reconnectAfterFatal() {
+    setFatal(null);
+    setFatalRecoveryLabel('Retry');
+    queuedPromptsRef.current = [];
+    setQueuedTurns([]);
+    setTurnBusy(false);
+    toolNamesRef.current.clear();
+    openKind.current = null;
+    resumeIdRef.current = sessionIdRef.current;
     setPhase('connecting');
     setNonce((n) => n + 1);
   }
@@ -291,6 +333,7 @@ export function AgentView({
     setBlocks(hist);
     setEditableUserMessageIds(new Set());
     setFatal(null);
+    setFatalRecoveryLabel('Retry');
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
@@ -453,6 +496,7 @@ export function AgentView({
           queuedPromptsRef.current = [];
           setQueuedTurns([]);
           setTurnBusy(false);
+          setFatalRecoveryLabel('Retry');
           setFatal(ev.message);
           setPhase('closed');
         } else {
@@ -460,10 +504,9 @@ export function AgentView({
         }
         break;
       case 'exit':
-        queuedPromptsRef.current = [];
-        setQueuedTurns([]);
-        setTurnBusy(false);
-        setPhase('closed');
+        exitReceivedRef.current = true;
+        finishRendererSession({ ready: readyRef.current, exitReceived: true, message: ev.message });
+        if (ev.message) refreshRuntimes();
         break;
     }
   }
@@ -871,6 +914,7 @@ export function AgentView({
           turnActive={turnActive}
           phase={phase}
           fatal={fatal}
+          fatalRecoveryLabel={fatalRecoveryLabel}
           agentName={meta.name}
           agentShortName={meta.shortName}
           Icon={meta.Icon}
@@ -879,7 +923,7 @@ export function AgentView({
           onSteerQueued={steerQueuedPrompt}
           onCopyUserMessage={copyUserMessage}
           onResendUserMessage={send}
-          onRetry={reconnect}
+          onRetry={reconnectAfterFatal}
           onOpenArtifact={(path) => {
             const folder = folderPathRef.current;
             const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;

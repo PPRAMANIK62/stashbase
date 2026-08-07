@@ -92,7 +92,7 @@ export type AgentServerEvent =
   | { t: 'steer-result'; id: string; ok: boolean; message?: string }
   | { t: 'turn-end'; isError: boolean }
   | { t: 'error'; message: string }
-  | { t: 'exit' };
+  | { t: 'exit'; message?: string };
 
 export interface AgentHistoryActions {
   list(folder: string | null): Promise<unknown[]>;

@@ -194,7 +194,7 @@ export interface AppActions {
   findPrev: () => void;
 }
 
-const AppContext = createContext<{
+export const AppContext = createContext<{
   state: State;
   actions: AppActions;
   dispatch: (a: Action) => void;

@@ -182,10 +182,7 @@ export class CodexSession {
       rpc.close(err);
       if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
       reportAgentRuntimeFailure('codex', err);
-      if (!this.closed) {
-        this.send({ t: 'error', message: errorMessage(err) });
-        this.handleAppServerExit(true);
-      }
+      if (!this.closed) this.handleAppServerExit(errorMessage(err));
     });
     proc.once('close', (code, signal) => {
       const error = new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`);
@@ -193,8 +190,7 @@ export class CodexSession {
       if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
       if (!this.closed) {
         reportAgentRuntimeFailure('codex', error);
-        this.send({ t: 'error', message: error.message });
-        this.handleAppServerExit(true);
+        this.handleAppServerExit(error.message);
       }
     });
   }
@@ -753,9 +749,9 @@ export class CodexSession {
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
 
-  private finish(): void {
+  private finish(message?: string): void {
     if (this.closed) return;
-    this.send({ t: 'exit' });
+    this.send({ t: 'exit', ...(message ? { message } : {}) });
     this.dispose();
   }
 
@@ -787,16 +783,14 @@ export class CodexSession {
     if (proc) try { proc.kill('SIGTERM'); } catch { /* already gone */ }
   }
 
-  private handleAppServerExit(isError: boolean): void {
+  private handleAppServerExit(message: string): void {
     this.appServerReady = false;
-    if (this.busy) {
-      this.busy = false;
-      this.activeTurnId = null;
-      this.interruptRequested = false;
-      this.interruptingTurnId = null;
-      this.send({ t: 'turn-end', isError });
-      return;
-    }
+    this.busy = false;
+    this.activeTurnId = null;
+    this.interruptRequested = false;
+    this.interruptingTurnId = null;
+    if (!this.ready) this.send({ t: 'error', message });
+    this.finish(this.ready ? message : undefined);
   }
 }
 

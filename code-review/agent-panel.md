@@ -46,6 +46,11 @@ Community contributions can land as useful first iterations, but the long-term d
 ## Design Rules
 
 - Keep the panel renderer-led. Do not change agent transport, session persistence, MCP, indexing, or permission policy just to support presentation changes.
+- Treat a post-ready adapter exit as a terminal session event. Its optional
+  message is the single fatal cause: preserve transcript, clear busy/tool
+  activity, and do not append a second failed-turn notice. A raw post-ready
+  socket close gets the stable agent-specific disconnect fallback; explicit
+  renderer/client teardown must suppress it.
 - Prefer small, familiar agent-chat affordances over a bespoke workbench UI.
 - Treat user-action states as first-class. Permission approvals, retry actions, and stopped-turn editing must remain visible and directly actionable.
 - A discovered missing Agent CLI is a setup state, not a disabled launcher or a
