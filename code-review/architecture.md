@@ -2,7 +2,7 @@
 
 > Code review contract: this document preserves the detailed engineering map for maintainers and AI reviewers. For contributor-facing product orientation, see [design-docs](../design-docs/README.md). This document stays on the main path: how local files become Agent-readable, searchable context exposed through MCP.
 
----
+***
 
 # 1. System Overview
 
@@ -10,8 +10,9 @@ StashBase turns local files into **Agent-ready context**.
 
 The system has two core jobs:
 
-- **Convert**: turn human-facing formats into cleaner Agent-readable text.
-- **Index**: build semantic and keyword indexes so Agents can retrieve local knowledge by meaning.
+* **Convert**: turn human-facing formats into cleaner Agent-readable text.
+
+* **Index**: build semantic and keyword indexes so Agents can retrieve local knowledge by meaning.
 
 The output is exposed through MCP, so the same local context can be used by Claude, Codex, ChatGPT, Cursor, and other MCP-capable clients.
 
@@ -55,7 +56,7 @@ The **Python daemon** owns chunking, embedding, storage, and search through MFS/
 
 The **MCP server** is a Node process. It exposes retrieval, reindexing, and bounded file access to AI clients while the StashBase app is running.
 
----
+***
 
 # 2. Local Files and Scope
 
@@ -63,12 +64,17 @@ StashBase does not introduce a new workspace model. A user points it at ordinary
 
 ## 2.1 Input Paths
 
-- Opening a folder adds that local directory to the indexed set.
-- Opening a folder also ensures a root-level `AGENTS.md` exists. This is a normal user-visible Markdown file that defines the folder's Agent contract; StashBase creates it only when missing and never overwrites user content.
-- Removing a folder from the library clears StashBase-owned state for that folder — index rows, derived text/assets, preparation state, runtime bindings, file-order state, and membership. It never deletes the user's files.
-- Deleting a folder from inside an opened folder is different: that is a normal filesystem delete, guarded by the app's confirmation flow.
-- New Folder opens the native folder picker at `~/Documents/StashBase`. The picker creates or selects a normal local folder; the location is a default, not a boundary.
-- One app window views one folder at a time. Multiple windows may bind
+* Opening a folder adds that local directory to the indexed set.
+
+* Opening a folder also ensures a root-level `AGENTS.md` exists. This is a normal user-visible Markdown file that defines the folder's Agent contract; StashBase creates it only when missing and never overwrites user content.
+
+* Removing a folder from the library clears StashBase-owned state for that folder — index rows, derived text/assets, preparation state, runtime bindings, file-order state, and membership. It never deletes the user's files.
+
+* Deleting a folder from inside an opened folder is different: that is a normal filesystem delete, guarded by the app's confirmation flow.
+
+* New Folder opens the native folder picker at `~/Documents/StashBase`. The picker creates or selects a normal local folder; the location is a default, not a boundary.
+
+* One app window views one folder at a time. Multiple windows may bind
   different current folders concurrently; each renderer's request identity
   selects its server-side folder context. These are UI scopes, not separate
   libraries.
@@ -159,13 +165,26 @@ platforms quit after the last window closes. The real Electron lifecycle smoke
 must send the platform accelerator input, enforce a parent-owned deadline, and
 delete its isolated profile only after the child process exits.
 
+`electron/bug-report-service.cjs` is the sole owner of in-memory bug-report
+drafts. A draft records its main-process-derived source window identity and
+keeps future screenshot, diagnostics, log, and artifact fields private. The
+preload exposes only create, safe-preview, and discard operations: its
+snapshots contain opaque IDs, lifecycle state, timestamps, and availability
+flags, never paths, ownership identities, mutable records, or resource
+handles. An ID is a reference, not authorization. Access is checked against
+the IPC sender's `webContents` identity; binding a future dedicated review
+window transfers renderer access to that window. Closing a source window drops
+only unreviewed drafts, while a review window has its own retirement path.
+Future capture, artifact, clipboard, browser, and cleanup work must extend
+this main-process service rather than moving ownership into a renderer.
+
 Electron owns the child server through a random per-launch shutdown token.
 Quit sends an authenticated loopback shutdown request and waits for the server
 cleanup ladder to exit before terminating Electron. Signals are timeout
 fallbacks only, because Windows child-process signals are forceful rather than
 graceful.
 
----
+***
 
 # 3. Storage
 
@@ -194,10 +213,13 @@ User-visible files stay in the folder tree. StashBase has one user-level config 
 
 The important ownership rule is simple:
 
-- **Original files** belong to the user.
-- **Agent rules files** (`AGENTS.md`, `CLAUDE.md`) are original files too: visible, editable, indexable, and never treated as app-owned derived state.
-- **Converted text and extracted assets** are caches that make non-text formats Agent-readable.
-- **Vector indexes and bookkeeping** are rebuildable machine state.
+* **Original files** belong to the user.
+
+* **Agent rules files** (`AGENTS.md`, `CLAUDE.md`) are original files too: visible, editable, indexable, and never treated as app-owned derived state.
+
+* **Converted text and extracted assets** are caches that make non-text formats Agent-readable.
+
+* **Vector indexes and bookkeeping** are rebuildable machine state.
 
 Deleting derived state may require re-conversion or re-embedding, but it should not destroy original user content.
 
@@ -207,7 +229,7 @@ Deleting derived state may require re-conversion or re-embedding, but it should 
 
 MCP client configuration is not stored in StashBase config. The Settings UI calls the server over HTTP; the server writes the target client's own config file when one-click setup is supported and generates the platform launcher command (`~/.stashbase/bin/stashbase-mcp` on macOS/Linux, `%USERPROFILE%\.stashbase\bin\stashbase-mcp.cmd` on Windows).
 
----
+***
 
 # 4. Format Handling
 
@@ -215,14 +237,14 @@ Different formats have different read and search paths. The product rule is: kee
 
 ## 4.1 Read Path vs Index Path
 
-| Format | Agent read path | Index input |
-|-|-|-|
-| Markdown | Source Markdown | Source Markdown |
-| HTML | Source HTML | Extracted clean text / Markdown representation |
-| Image | Source image | OCR-derived Markdown |
-| PDF | Derived Markdown | Derived Markdown |
-| DOCX | Derived HTML | Extracted clean text from derived HTML |
-| Audio/video media | Timestamped derived Markdown | Timestamped derived Markdown |
+| Format            | Agent read path              | Index input                                    |
+| ----------------- | ---------------------------- | ---------------------------------------------- |
+| Markdown          | Source Markdown              | Source Markdown                                |
+| HTML              | Source HTML                  | Extracted clean text / Markdown representation |
+| Image             | Source image                 | OCR-derived Markdown                           |
+| PDF               | Derived Markdown             | Derived Markdown                               |
+| DOCX              | Derived HTML                 | Extracted clean text from derived HTML         |
+| Audio/video media | Timestamped derived Markdown | Timestamped derived Markdown                   |
 
 Markdown is edited, read, and indexed directly. Milkdown CrepeBuilder is the
 single renderer/editor surface; `web-src/src/markdown.ts` remains solely for
@@ -281,7 +303,7 @@ StashBase owns format-specific preparation. The indexing layer only receives tex
 
 For PDFs and audio, the prepared text is the Agent-readable text form. For HTML and images, the prepared text is an internal indexing input, not a replacement for the source file.
 
----
+***
 
 # 5. Index
 
@@ -316,17 +338,25 @@ Reconcile compares local files against indexed records using content hashes. It 
 
 Common triggers include:
 
-- server boot
-- Welcome loading the library list
-- opening or switching a folder
-- returning focus to the app
-- an Agent turn ending
-- manual Sync
-- MCP `reindex`
-- OpenAI key changes
-- transcription model installation or preference changes when the selected model is installed
+* server boot
 
----
+* Welcome loading the library list
+
+* opening or switching a folder
+
+* returning focus to the app
+
+* an Agent turn ending
+
+* manual Sync
+
+* MCP `reindex`
+
+* OpenAI key changes
+
+* transcription model installation or preference changes when the selected model is installed
+
+***
 
 # 6. Retrieve
 
@@ -336,8 +366,9 @@ Retrieval is how Agents and the UI find relevant local context.
 
 StashBase supports two retrieval paths:
 
-- **Semantic search**: dense vector retrieval, combined with keyword signal through MFS/Milvus.
-- **Keyword search**: literal search over source text plus AppData-derived PDF/OCR/DOCX/audio text, useful when embeddings are unavailable or exact matching is needed. `server/keyword-search.ts` owns its ripgrep and derived-text adapters. `server/retrieval/` is the source-evidence seam shared by keyword and semantic retrieval: it owns visible-source remapping, unavailable-source filtering, source-safe line/page/timestamp locators, flat result identity, availability, and compatibility adapters for existing transports. `server/routes/indexing.ts` owns HTTP request validation and presentation serialization; `server/library-operations/` uses the same retrieval interface for MCP.
+* **Semantic search**: dense vector retrieval, combined with keyword signal through MFS/Milvus.
+
+* **Keyword search**: literal search over source text plus AppData-derived PDF/OCR/DOCX/audio text, useful when embeddings are unavailable or exact matching is needed. `server/keyword-search.ts` owns its ripgrep and derived-text adapters. `server/retrieval/` is the source-evidence seam shared by keyword and semantic retrieval: it owns visible-source remapping, unavailable-source filtering, source-safe line/page/timestamp locators, flat result identity, availability, and compatibility adapters for existing transports. `server/routes/indexing.ts` owns HTTP request validation and presentation serialization; `server/library-operations/` uses the same retrieval interface for MCP.
 
 ## 6.2 Scope
 
@@ -351,13 +382,17 @@ The desktop UI search is scoped to the current folder because the UI is showing 
 
 Search results always use the visible source file as the identity and open target.
 
-- **Markdown / HTML**: hits come from the source file text and point to the source file.
-- **PDF**: hits come from AppData-derived Markdown. The result points to the original PDF path, but Agent text context should use the derived Markdown.
-- **Image**: hits come from AppData OCR Markdown. The result points to the original image path; the OCR text is search evidence, while the image remains the read/view source.
-- **DOCX**: hits come from AppData-derived HTML/text. The result points to the original DOCX path, but Agent text context should use the derived HTML.
-- **Audio**: hits come from timestamped AppData-derived Markdown. The result points to the original audio path, while Agent reads use the transcript text.
+* **Markdown / HTML**: hits come from the source file text and point to the source file.
 
----
+* **PDF**: hits come from AppData-derived Markdown. The result points to the original PDF path, but Agent text context should use the derived Markdown.
+
+* **Image**: hits come from AppData OCR Markdown. The result points to the original image path; the OCR text is search evidence, while the image remains the read/view source.
+
+* **DOCX**: hits come from AppData-derived HTML/text. The result points to the original DOCX path, but Agent text context should use the derived HTML.
+
+* **Audio**: hits come from timestamped AppData-derived Markdown. The result points to the original audio path, while Agent reads use the transcript text.
+
+***
 
 # 7. MCP
 
@@ -369,18 +404,25 @@ StashBase does not embed an LLM. It gives AI clients retrieval tools, explicit r
 
 The core MCP tools are:
 
-- **`library_info()`**: returns the default folder home, opened folders, optional folder descriptions, and embedder information so a client can orient itself.
-- **`search_library(query, folder?, path_prefix?, top_k?)`**: searches the library and returns source paths, chunks, line ranges, and scores.
-- **`reindex(folder?)`**: reconciles disk state with the index after local files change.
+* **`library_info()`**: returns the default folder home, opened folders, optional folder descriptions, and embedder information so a client can orient itself.
+
+* **`search_library(query, folder?, path_prefix?, top_k?)`**: searches the library and returns source paths, chunks, line ranges, and scores.
+
+* **`reindex(folder?)`**: reconciles disk state with the index after local files change.
 
 StashBase also exposes bounded file helpers:
 
-- **`list_directory(path?)`**
-- **`read_file(path)`**
-- **`write_file(path, content, baseVersion?)`**
-- **`edit_file(path, old_text, new_text, replace_all?, baseVersion?)`**
-- **`move_file(path, new_path, cascade?)`**
-- **`delete_file(path)`**
+* **`list_directory(path?)`**
+
+* **`read_file(path)`**
+
+* **`write_file(path, content, baseVersion?)`**
+
+* **`edit_file(path, old_text, new_text, replace_all?, baseVersion?)`**
+
+* **`move_file(path, new_path, cascade?)`**
+
+* **`delete_file(path)`**
 
 These helpers are not a second general-purpose filesystem. They exist because many local Agent clients run in sandboxes where the host user's files are not directly readable or writable. The helpers accept absolute paths under opened folders, hide app-maintained derived artifacts, map PDF/DOCX/media reads to AppData-derived text, and update the semantic index when possible. The only AppData paths `read_file` accepts are manifest-known derived text files whose source PDF, DOCX, or media file still belongs to an opened folder.
 
@@ -388,9 +430,11 @@ One-click MCP setup is available only for clients with stable local config files
 
 The design boundary is:
 
-- MCP provides orientation, retrieval, explicit reindexing, and sandbox-safe access to opened folders.
-- StashBase does not expose arbitrary host paths.
-- External file changes made outside StashBase must call `reindex` when the Agent needs those changes to become searchable.
+* MCP provides orientation, retrieval, explicit reindexing, and sandbox-safe access to opened folders.
+
+* StashBase does not expose arbitrary host paths.
+
+* External file changes made outside StashBase must call `reindex` when the Agent needs those changes to become searchable.
 
 ## 7.2 One Library, One MCP Server
 
@@ -410,7 +454,7 @@ The practical permission boundary in V1 is the opened-folder set. MCP file helpe
 
 Hosted or multi-user versions would need a different permission model.
 
----
+***
 
 # 8. Built-In Agent Panel
 
@@ -441,7 +485,7 @@ The Claude and Codex chrome icons are selectors for the open tab of their agent,
 
 Claude session titles come from the Claude SDK history metadata. Codex threads are listed through Codex app-server's thread APIs and filtered by the current folder `cwd`, not by Codex's internal source kind. Codex threads are named from the first user prompt when StashBase creates the thread so the tab title and History list do not stay on the placeholder.
 
----
+***
 
 # 9. Release Pipeline
 
@@ -453,7 +497,7 @@ Each platform workflow calls `.github/workflows/release-ci-gate.yml` before its 
 
 Version selection, the version-bump commit, tag creation, and GitHub Release publication remain maintainer-controlled.
 
----
+***
 
 # 10. Boundaries
 
@@ -461,11 +505,15 @@ This architecture document does not try to specify every implementation detail.
 
 Details that belong elsewhere:
 
-- desktop UI layout and interaction details
-- PDF/OCR batching, retries, and packaging mechanics
-- low-level daemon lifecycle and lock handling
-- component/file ownership maps
-- built-in Agent panel UI protocol
+* desktop UI layout and interaction details
+
+* PDF/OCR batching, retries, and packaging mechanics
+
+* low-level daemon lifecycle and lock handling
+
+* component/file ownership maps
+
+* built-in Agent panel UI protocol
 
 Those topics can live in engineering notes or module-specific docs. The core architecture remains:
 

@@ -25,6 +25,7 @@ function createApplicationMenuTemplate({
   platform = process.platform,
   onNewWindow,
   onCloseWindow,
+  onReportBug = () => { },
 }) {
   const isMac = platform === 'darwin';
   // Do not use Electron's `role: 'close'`: its Cmd/Ctrl+W binding conflicts
@@ -55,6 +56,15 @@ function createApplicationMenuTemplate({
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Report a Bug',
+          click: () => onReportBug(),
+        },
+      ],
+    },
   ];
 }
 

@@ -136,6 +136,22 @@ test('macOS application menu keeps Cmd+W for tabs and uses Cmd+Shift+W for windo
   assert.equal(closeWindow.accelerator, 'Command+Shift+W');
 });
 
+test('application menu exposes Report Bug from Help without coupling it to renderer UI', () => {
+  let reports = 0;
+  const template = createApplicationMenuTemplate({
+    platform: 'linux',
+    onNewWindow: () => {},
+    onCloseWindow: () => {},
+    onReportBug: () => { reports += 1; },
+  });
+  const helpMenu = template.find((item) => item.label === 'Help');
+  const reportBug = helpMenu.submenu.find((item) => item.label === 'Report Bug…');
+
+  assert.ok(reportBug);
+  reportBug.click();
+  assert.equal(reports, 1);
+});
+
 test('window lifecycle input follows the platform menu mapping without stealing tab chords', () => {
   const ctrlShiftN = {
     type: 'keyDown',
