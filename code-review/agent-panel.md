@@ -48,7 +48,12 @@ currently picked scope, and resume carries that scope on the reconnect URL.
 session carries a private attribution id (`STASHBASE_AGENT_SESSION_ID` in
 its spawn env, forwarded by the stdio MCP host as the
 `x-stashbase-agent-session-id` header — request identity only, exactly like
-`STASHBASE_WINDOW_ID`, and never read from tool arguments). The tool
+`STASHBASE_WINDOW_ID`, and never read from tool arguments). Installed MCP
+host binaries may predate that header; the window-fallback attribution
+covers them: when the session header is absent, the call attributes to the
+request window's ONE session with a turn in flight (a tool call always
+happens inside its caller's turn), and any ambiguity — zero or several
+turn-active sessions — attributes to nobody rather than guessing. The tool
 creates the directory (folder home by default; an explicit `location` must
 be inside the folder home or a member folder), registers it into library
 membership without touching any window's current folder, and then applies

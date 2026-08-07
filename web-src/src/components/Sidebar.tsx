@@ -357,6 +357,35 @@ function LibraryList({ visible }: { visible: boolean }) {
     });
   }, [actions, dispatch, state.homeDir, state.recent]);
 
+  // Library membership can change without this window acting: an agent's
+  // create_project in another window, or an external MCP client. There is
+  // no server→renderer membership push, so poll the lightweight
+  // /api/folder while the sidebar is visible and adopt the list only when
+  // the member set/order actually changed (openedAt churn is ignored —
+  // recency labels refresh on the next explicit action).
+  const recentKeyRef = useRef('');
+  recentKeyRef.current = state.recent.map((r) => r.path).join('\n');
+  useEffect(() => {
+    if (!visible) return undefined;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      void api.getFolder()
+        .then((j) => {
+          if (cancelled) return;
+          const recent = j.recent ?? [];
+          const key = recent.map((r) => r.path).join('\n');
+          if (key !== recentKeyRef.current) {
+            dispatch({ type: 'RECENT_LOADED', recent, homeDir: j.homeDir });
+          }
+        })
+        .catch(() => { /* transient; next tick retries */ });
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [dispatch, visible]);
+
   const removeFolder = useCallback((path: string) => {
     setRemoving(true);
     void (async () => {

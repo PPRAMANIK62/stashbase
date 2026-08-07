@@ -120,6 +120,10 @@ export class CodexSession implements AttributedAgentSession {
     return this.cwd ?? this.folder ?? null;
   }
 
+  turnInFlight(): boolean {
+    return this.busy;
+  }
+
   isLibraryScoped(): boolean {
     return !this.rebound && (this.libraryScoped || this.scope === 'library');
   }

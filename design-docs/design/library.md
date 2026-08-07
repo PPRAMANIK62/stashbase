@@ -14,6 +14,9 @@ to migrate them into a StashBase-specific storage model.
   in New Window) or a same-window reload restores a folder. An empty
   library shows a small zero-folder block in the sidebar with the app
   mark, one line of guidance, and an Add Folder action.
+- The sidebar folder list refreshes itself while visible (a lightweight
+  membership poll), so a project created by an agent in another window or
+  by an external MCP client appears without any user action.
 - A full-width New Chat button sits at the top of the sidebar, above the
   Library section: it opens the chat panel on a chat scoped to the
   window's current folder, or to the whole library when no folder is

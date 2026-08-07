@@ -13,6 +13,7 @@ import {
   requireLibraryStatusFolder,
 } from '../library-file-access.ts';
 import { agentContextFile } from '../library-file-reader.ts';
+import { currentWindowId } from '../folder.ts';
 import { AGENT_SESSION_ID_HEADER } from '../agent-session-registry.ts';
 import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
 import {
@@ -125,6 +126,9 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
         name: req.body?.name,
         location: req.body?.location,
         ...(attribution ? { agentSessionId: attribution } : {}),
+        // Fallback identity for MCP hosts that don't forward the session
+        // header (stale installed binaries): the request's window id.
+        windowId: currentWindowId(),
       }));
     } catch (err: unknown) {
       sendError(res, err);

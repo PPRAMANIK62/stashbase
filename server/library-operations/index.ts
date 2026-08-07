@@ -47,7 +47,7 @@ export interface LibraryOperations {
    * `agentSessionId` is request attribution (header-derived, never a tool
    * argument): a live library-scoped calling session is rebound to the new
    * project; folder-bound and unattributed callers only create + register. */
-  createProject(input: { name: unknown; location?: unknown; agentSessionId?: string }): Promise<unknown>;
+  createProject(input: { name: unknown; location?: unknown; agentSessionId?: string; windowId?: string }): Promise<unknown>;
   listDirectory(path?: unknown): Promise<unknown>;
   read(path: unknown): Promise<unknown>;
   write(input: { path: unknown; content: unknown; baseVersion?: string }): Promise<unknown>;

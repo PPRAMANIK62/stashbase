@@ -301,6 +301,9 @@ class AgentSession implements AttributedAgentSession {
 
   readonly windowId: string;
   readonly agentId = 'claude' as const;
+  /** True between turn-start and turn-end — window-fallback attribution
+   *  (see agent-session-registry.ts) keys off this. */
+  private turnActiveFlag = false;
   /** Private per-session attribution id. Rides the session env
    *  (`STASHBASE_AGENT_SESSION_ID`) → stdio MCP host → request header, so
    *  host-side MCP tools can find the live calling session. */
@@ -315,6 +318,10 @@ class AgentSession implements AttributedAgentSession {
     if (this.rebound) return this.rebound;
     if (this.libraryScoped || this.scope === 'library') return null;
     return this.cwd ?? this.folder ?? null;
+  }
+
+  turnInFlight(): boolean {
+    return this.turnActiveFlag;
   }
 
   isLibraryScoped(): boolean {
@@ -546,6 +553,7 @@ class AgentSession implements AttributedAgentSession {
         break;
       }
       case 'result': {
+        this.turnActiveFlag = false;
         this.send({ t: 'turn-end', isError: msg.is_error === true });
         break;
       }
@@ -599,6 +607,7 @@ class AgentSession implements AttributedAgentSession {
         const skill = typeof msg.skill === 'string' ? msg.skill : undefined;
         if (skill && !this.skills.has(skill)) { this.send({ t: 'error', message: 'That skill is no longer available. Type / to choose another.' }); return; }
         if (!body.trim() && !skill) return;
+        this.turnActiveFlag = true;
         this.send({ t: 'turn-start' });
         this.input.push({
           type: 'user',

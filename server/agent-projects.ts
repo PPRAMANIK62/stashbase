@@ -30,6 +30,7 @@ import { syncFolderNow } from './state.ts';
 import { logger, errorMessage } from './log.ts';
 import {
   attributedAgentSession,
+  attributedSessionForWindow,
   createProjectRebindPlan,
   type AttributedAgentSession,
 } from './agent-session-registry.ts';
@@ -47,6 +48,9 @@ export interface CreateProjectInput {
   /** Request attribution from the `x-stashbase-agent-session-id` header —
    * never a tool argument, so a model cannot claim another session. */
   agentSessionId?: string;
+  /** Owning-window fallback when the MCP host didn't forward the session
+   * header — resolved to the window's one turn-active session. */
+  windowId?: string;
 }
 
 export interface CreateProjectResult {
@@ -126,6 +130,10 @@ export interface CreateProjectDeps {
   /** Bind + reconcile the new folder in the background. */
   syncFolder(abs: string): Promise<unknown>;
   session(attributionId: string | undefined): AttributedAgentSession | null;
+  /** Window-fallback attribution for MCP hosts that don't forward the
+   * session header (stale installed binaries) — the window's one session
+   * with a turn in flight. */
+  sessionForWindow(windowId: string | undefined): AttributedAgentSession | null;
   setOverride(agent: 'claude' | 'codex', nativeSessionId: string, folderAbs: string): void;
   clearOverride(agent: 'claude' | 'codex', nativeSessionId: string): void;
 }
@@ -141,6 +149,7 @@ const productionDeps: CreateProjectDeps = {
   noteTreeChanged,
   syncFolder: (abs) => syncFolderNow(abs, { reason: 'create_project' }),
   session: (attributionId) => attributedAgentSession(attributionId),
+  sessionForWindow: (windowId) => attributedSessionForWindow(windowId),
   setOverride: setAgentSessionFolderOverride,
   clearOverride: clearAgentSessionFolderOverride,
 };
@@ -183,16 +192,17 @@ export async function createProjectFolder(
     .then(() => deps.syncFolder(resolved.target))
     .catch((err: unknown) => log.warn(`create_project: background bind/sync failed for ${resolved.target}: ${errorMessage(err)}`));
 
-  const { rebound, note } = applyRebind(input.agentSessionId, resolved.target, deps);
+  const { rebound, note } = applyRebind(input, resolved.target, deps);
   return { path: resolved.target, name: resolved.name, registered: true, rebound, note };
 }
 
 function applyRebind(
-  attributionId: string | undefined,
+  input: Pick<CreateProjectInput, 'agentSessionId' | 'windowId'>,
   target: string,
   deps: CreateProjectDeps,
 ): { rebound: boolean; note: string } {
-  const session = deps.session(attributionId);
+  const session = deps.session(input.agentSessionId)
+    ?? deps.sessionForWindow(typeof input.windowId === 'string' ? input.windowId : undefined);
   const plan = createProjectRebindPlan(session);
   if (plan.kind === 'none') {
     if (plan.reason === 'folder-bound') {

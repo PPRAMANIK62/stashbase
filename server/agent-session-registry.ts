@@ -22,10 +22,15 @@ export type AttributedAgentId = 'claude' | 'codex';
 /** The narrow live-session surface `create_project` needs. */
 export interface AttributedAgentSession {
   readonly agentId: AttributedAgentId;
+  /** The window that owns this panel session. */
+  readonly windowId: string;
   /** Member folder the session is bound to; null for library-scoped. */
   boundFolder(): string | null;
   /** True while the session is library-wide (and not yet rebound). */
   isLibraryScoped(): boolean;
+  /** True while the session is running a turn (a tool call from the agent
+   * necessarily happens inside its own active turn). */
+  turnInFlight(): boolean;
   /** Native session/thread id (history identity), when known. */
   nativeSessionId(): string | null;
   /** Migrate a library-scoped session's binding to a member folder and
@@ -47,6 +52,24 @@ export function unregisterAttributedAgentSession(id: string): void {
 export function attributedAgentSession(id: string | null | undefined): AttributedAgentSession | null {
   if (typeof id !== 'string' || !id.trim()) return null;
   return sessions.get(id.trim()) ?? null;
+}
+
+/** Window-scoped attribution fallback for MCP hosts that predate the
+ * session-id header (an installed `stashbase-mcp` binary keeps forwarding
+ * only the window id). A tool call happens inside the calling session's
+ * active turn, so "the one session of this window currently running a
+ * turn" identifies the caller precisely; any ambiguity (zero or several
+ * candidates) attributes to nobody rather than guessing. */
+export function attributedSessionForWindow(
+  windowId: string | null | undefined,
+): AttributedAgentSession | null {
+  if (typeof windowId !== 'string' || !windowId.trim()) return null;
+  const id = windowId.trim();
+  const candidates: AttributedAgentSession[] = [];
+  for (const session of sessions.values()) {
+    if (session.windowId === id && session.turnInFlight()) candidates.push(session);
+  }
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 export type CreateProjectRebindPlan =

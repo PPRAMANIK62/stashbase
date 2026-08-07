@@ -50,6 +50,8 @@ interface DepsLog {
 }
 
 function fakeSession(options: {
+  windowId?: string;
+  turnActive?: boolean;
   bound?: string | null;
   library?: boolean;
   nativeId?: string | null;
@@ -58,6 +60,8 @@ function fakeSession(options: {
 }): AttributedAgentSession & { reboundTo: string | null } {
   const session = {
     agentId: 'claude' as const,
+    windowId: options.windowId ?? 'w-test',
+    turnInFlight: () => options.turnActive ?? false,
     reboundTo: null as string | null,
     boundFolder: () => options.bound ?? null,
     isLibraryScoped: () => options.library ?? false,
@@ -72,7 +76,10 @@ function fakeSession(options: {
   return session;
 }
 
-function fakeDeps(session: AttributedAgentSession | null): { deps: CreateProjectDeps; log: DepsLog } {
+function fakeDeps(
+  session: AttributedAgentSession | null,
+  windowSession: AttributedAgentSession | null = null,
+): { deps: CreateProjectDeps; log: DepsLog } {
   const log: DepsLog = { registered: [], agentsFiles: [], treeChanges: 0, synced: [], events: [], overrides: [], cleared: [] };
   const deps: CreateProjectDeps = {
     folderHome: () => HOME,
@@ -81,7 +88,8 @@ function fakeDeps(session: AttributedAgentSession | null): { deps: CreateProject
     ensureAgentsFile: (abs) => { log.agentsFiles.push(abs); return true; },
     noteTreeChanged: () => { log.treeChanges += 1; },
     syncFolder: async (abs) => { log.synced.push(abs); },
-    session: () => session,
+    session: (attributionId) => (attributionId ? session : null),
+    sessionForWindow: (windowId) => (windowId ? windowSession : null),
     setOverride: (agent, id, folder) => { log.events.push('override'); log.overrides.push({ agent, id, folder }); },
     clearOverride: (agent, id) => { log.cleared.push({ agent, id }); },
   };
@@ -151,7 +159,7 @@ test('a library-scoped calling chat is rebound, with the history override persis
 test('a folder-bound calling chat is NEVER rebound — create + register only', async () => {
   const session = fakeSession({ bound: MEMBER, nativeId: 'native-session-2' });
   const { deps, log } = fakeDeps(session);
-  const result = await createProjectFolder({ name: 'KeepBound' }, deps);
+  const result = await createProjectFolder({ name: 'KeepBound', agentSessionId: 'attr-2' }, deps);
   assert.equal(result.rebound, false);
   assert.match(result.note, /stays bound/);
   assert.match(result.note, /Research/);
@@ -163,7 +171,7 @@ test('a folder-bound calling chat is NEVER rebound — create + register only', 
 test('a rebind race with session teardown rolls the override back', async () => {
   const session = fakeSession({ library: true, nativeId: 'native-session-3', rebindResult: false });
   const { deps, log } = fakeDeps(session);
-  const result = await createProjectFolder({ name: 'RacedClose' }, deps);
+  const result = await createProjectFolder({ name: 'RacedClose', agentSessionId: 'attr-3' }, deps);
   assert.equal(result.rebound, false);
   assert.equal(log.overrides.length, 1);
   assert.deepEqual(log.cleared, [{ agent: 'claude', id: 'native-session-3' }]);
@@ -266,4 +274,30 @@ test('history listings: overridden sessions leave the library and join their pro
   assert.equal(historyRowInFolder(project, false, project), true);
   assert.equal(historyRowInFolder(null, true, library), true);
   assert.equal(historyRowInFolder(undefined, false, library), false);
+});
+
+test('window fallback attributes the one turn-active session when the header is missing', async () => {
+  const session = fakeSession({ library: true, nativeId: 'native-session-9', turnActive: true });
+  const { deps, log } = fakeDeps(null, session);
+  const result = await createProjectFolder({ name: 'StaleHost', windowId: 'w-test' }, deps);
+  assert.equal(result.rebound, true);
+  assert.equal(session.reboundTo, path.join(HOME, 'StaleHost'));
+  assert.deepEqual(log.overrides, [{ agent: 'claude', id: 'native-session-9', folder: path.join(HOME, 'StaleHost') }]);
+});
+
+test('window fallback never rebinds a folder-bound session', async () => {
+  const session = fakeSession({ bound: MEMBER, nativeId: 'native-session-10', turnActive: true });
+  const { deps, log } = fakeDeps(null, session);
+  const result = await createProjectFolder({ name: 'StaleHostBound', windowId: 'w-test' }, deps);
+  assert.equal(result.rebound, false);
+  assert.equal(session.reboundTo, null);
+  assert.deepEqual(log.overrides, []);
+});
+
+test('no attribution and no window candidate creates + registers only', async () => {
+  const { deps, log } = fakeDeps(null, null);
+  const result = await createProjectFolder({ name: 'NoCaller', windowId: 'w-test' }, deps);
+  assert.equal(result.rebound, false);
+  assert.match(result.note, /No calling chat session/);
+  assert.deepEqual(log.registered, [path.join(HOME, 'NoCaller')]);
 });
