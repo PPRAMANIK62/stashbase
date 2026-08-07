@@ -34,7 +34,15 @@ to migrate them into a StashBase-specific storage model.
   menu offers favorite toggling, Open in New Window, and Remove from
   Library. Users can star folders as Favorites; favorites are library
   metadata stored with the membership list, and starring never touches
-  the folder on disk.
+  the folder on disk. New Folder creates a plain directory with no chat
+  association.
+- The built-in Agent can also add a project: `create_project` (an MCP tool)
+  creates a folder — under the default StashBase location unless the user
+  names a valid location inside the folder home or a library folder — and
+  registers it into the library, so it appears in every window's sidebar
+  list immediately. Only the window owning the calling chat switches its
+  browse location to the new project; and only a library-scoped chat moves
+  its own binding there (see [Agent Panel](agent-panel.md)).
 - Each window centres on one current folder, with its own file tree, document
   tabs, search state, and Agent panel.
 - Users can open multiple windows from the application menu or a folder action

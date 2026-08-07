@@ -14,6 +14,7 @@ import {
   mentionListingPlan,
   newChatScope,
   nextSessionScope,
+  scopeChangedScope,
   scopeDisplayName,
   scopeHeaderNote,
   scopePillAriaLabel,
@@ -227,6 +228,39 @@ test('connection URL carries the scope: folder=<abs> vs scope=library', () => {
   // History requests ride the same params.
   assert.deepEqual(scopeRequestParams(folderScope('/tmp/scratch')), { folder: '/tmp/scratch' });
   assert.deepEqual(scopeRequestParams(LIBRARY_SCOPE), { scope: 'library' });
+});
+
+test('a server scope-changed event validates into a folder scope, malformed payloads are ignored', () => {
+  const project = '/Users/me/Documents/StashBase/New Project';
+  assert.deepEqual(scopeChangedScope({ kind: 'folder', path: project }), folderScope(project));
+  // Malformed payloads must never corrupt the pill state.
+  assert.equal(scopeChangedScope(null), null);
+  assert.equal(scopeChangedScope('folder'), null);
+  assert.equal(scopeChangedScope({ kind: 'library' }), null);
+  assert.equal(scopeChangedScope({ kind: 'folder' }), null);
+  assert.equal(scopeChangedScope({ kind: 'folder', path: '' }), null);
+  assert.equal(scopeChangedScope({ kind: 'folder', path: '   ' }), null);
+  assert.equal(scopeChangedScope({ kind: 'folder', path: 42 }), null);
+});
+
+test('create_project rebind: the pill flips from Library to the project and the note clears once the window follows', () => {
+  const project = '/Users/me/Documents/StashBase/New Project';
+  // Before: a library-scoped chat in a window with no folder selected.
+  const before = chatScopePill({ connectedScope: LIBRARY_SCOPE, picked: undefined, windowFolder: '', memberPaths: members });
+  assert.deepEqual(before, LIBRARY_SCOPE);
+  assert.equal(scopeDisplayName(before), 'Library');
+
+  // The scope-changed event replaces the connected scope with the project.
+  const rebound = scopeChangedScope({ kind: 'folder', path: project });
+  assert.ok(rebound);
+  const after = chatScopePill({ connectedScope: rebound, picked: undefined, windowFolder: '', memberPaths: members });
+  assert.deepEqual(after, folderScope(project));
+  assert.equal(scopeDisplayName(after), 'New Project');
+  // Until the owning window finishes opening the project, the header marks
+  // the cross-scope binding; once the sidebar selection lands, it clears.
+  assert.equal(scopeHeaderNote(after, ''), null);
+  assert.equal(scopeHeaderNote(after, '/Users/me/Projects/Research'), 'in New Project');
+  assert.equal(scopeHeaderNote(after, project), null);
 });
 
 test('scope labels: the library scope is called "Library", never "Global"', () => {

@@ -272,6 +272,19 @@ export function useFolderActions(
     });
   }, [dispatch, openGeneration, resetFolderScopedState, state]);
 
+  /** A folder joined the library without this window opening it (Agent
+   * create_project in another window, or this one — refreshing twice is
+   * harmless). Membership is sidebar-visible in every window, so refresh
+   * the recents list; nothing else about this window changes. */
+  const handleLibraryFolderAdded = useCallback((_addedPath: string) => {
+    void api.getFolder().then((result) => dispatch({
+      type: 'RECENT_LOADED',
+      recent: result.recent ?? [],
+      homeDir: result.homeDir,
+    }))
+    .catch(() => { /* The next membership refresh will surface it. */ });
+  }, [dispatch]);
+
   const handleFolderRemoved = useCallback((removedPath: string) => {
     const affected = Boolean(
       state.current.folderPath
@@ -347,6 +360,7 @@ export function useFolderActions(
   return {
     bootstrap,
     handleFolderRemoved,
+    handleLibraryFolderAdded,
     openFolder,
     openFolderByName,
     prepareForFolderRemoval,

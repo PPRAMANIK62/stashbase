@@ -37,6 +37,7 @@ import {
   mentionListingPlan,
   newChatScope,
   nextSessionScope,
+  scopeChangedScope,
   scopeHeaderNote,
   scopeRequestParams,
   windowFolderSwitchPlan,
@@ -256,6 +257,16 @@ export function AgentView({
       };
     }).electron;
     bridge?.setAgentComposerFocused?.(focused);
+  }
+
+  /** Tell every OTHER window's sidebar the library gained a member (the
+   *  owning window refreshes through its own openFolder). Desktop-only; the
+   *  browser dev shell has one window and needs no broadcast. */
+  function notifyLibraryFolderAdded(path: string) {
+    const bridge = (window as {
+      electron?: { notifyLibraryFolderAdded?: (folder: string) => Promise<boolean> };
+    }).electron;
+    void bridge?.notifyLibraryFolderAdded?.(path);
   }
 
   function pasteImages(files: File[]) {
@@ -547,6 +558,24 @@ export function AgentView({
           setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not steer Codex: ${ev.message}` }]);
         }
         break;
+      case 'scope-changed': {
+        // The server migrated this session's binding (create_project from a
+        // library-scoped chat): flip the pill/header to the project and have
+        // THIS window — the one owning the chat — select it in the sidebar,
+        // exactly as if the user had clicked the new library entry. Other
+        // windows only receive the membership update.
+        const next = scopeChangedScope(ev.scope);
+        if (!next || next.kind !== 'folder') break;
+        connectedScopeRef.current = next;
+        setConnectedScope(next);
+        notifyLibraryFolderAdded(next.path);
+        if (folderPathRef.current !== next.path) {
+          void actions.openFolder(next.path).catch((err) => {
+            actions.toast(`Could not open the new project: ${errorText(err)}`, { level: 'error' });
+          });
+        }
+        break;
+      }
       case 'turn-end': {
         const terminal = turnErrorTrackerRef.current.finish(ev.isError);
         if (terminal.duplicate) break;

@@ -897,6 +897,21 @@ ipcMain.handle('window:notifyFolderRemoved', (event, folder) => {
   return true;
 });
 
+// A folder joined the library without any window opening it (Agent
+// create_project). Broadcast so every window's sidebar refreshes its
+// membership list; only the notifying (chat-owning) window navigates.
+ipcMain.handle('window:notifyLibraryFolderAdded', (event, folder) => {
+  if (typeof folder !== 'string' || !folder.trim()) return false;
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return false;
+  for (const win of mainWindows) {
+    if (isLiveMainWindow(win) && win !== senderWindow) {
+      win.webContents.send('window:library-folder-added', folder.trim());
+    }
+  }
+  return true;
+});
+
 // Renderer toggles clipboard-image watching (privacy switch). When
 // turning it back on we clear the last-offered hash so the current
 // clipboard image becomes eligible again.

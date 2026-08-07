@@ -16,6 +16,7 @@ import { useSearchActions } from './useSearchActions';
 interface ElectronLifecycleBridge {
   onPrepareContextRelease?: (handler: (reason: string) => Promise<boolean>) => (() => void);
   onFolderRemoved?: (handler: (folder: string) => void) => (() => void);
+  onLibraryFolderAdded?: (handler: (folder: string) => void) => (() => void);
 }
 
 type Dispatch = (action: Action) => void;
@@ -177,6 +178,11 @@ export function useActiveFolderWorkspace(
   }, [folders.handleFolderRemoved]);
 
   useEffect(() => {
+    const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
+    return bridge?.onLibraryFolderAdded?.(folders.handleLibraryFolderAdded);
+  }, [folders.handleLibraryFolderAdded]);
+
+  useEffect(() => {
     void folders.bootstrap();
     void search.refreshIndexState();
     return () => {
@@ -242,6 +248,7 @@ export function useActiveFolderWorkspace(
   }), [
     folders.bootstrap,
     folders.handleFolderRemoved,
+    folders.handleLibraryFolderAdded,
     folders.openFolder,
     folders.openFolderByName,
     folders.prepareForFolderRemoval,

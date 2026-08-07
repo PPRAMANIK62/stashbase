@@ -68,11 +68,14 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'tool', id: 'tool', name: 'Read', input: {} }, { t: 'tool-delta', id: 'tool', delta: 'input' },
     { t: 'tool-result', id: 'tool', content: 'done', isError: false },
     { t: 'permission', id: 'approval', toolUseId: 'tool', name: 'Write', title: null, input: {} },
-    { t: 'steer-result', id: 'queued', ok: true }, { t: 'turn-end', isError: false },
+    { t: 'steer-result', id: 'queued', ok: true },
+    // create_project rebinding a library-scoped chat to the new project.
+    { t: 'scope-changed', scope: { kind: 'folder', path: '/Users/me/Documents/StashBase/Project' } },
+    { t: 'turn-end', isError: false },
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
   ];
   assert.equal(clientEvents.length, 6);
-  assert.equal(events.length, 15);
+  assert.equal(events.length, 16);
 });
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {

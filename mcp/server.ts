@@ -44,6 +44,9 @@ const WEB_BASE = `http://127.0.0.1:${parsePortArg(process.argv.slice(2), 8090)}`
 const server = createLibraryMcpServer({
   webBase: WEB_BASE,
   windowId: process.env.STASHBASE_WINDOW_ID,
+  // Set only when a built-in panel session spawned this host: lets
+  // `create_project` attribute the call to that live session.
+  agentSessionId: process.env.STASHBASE_AGENT_SESSION_ID,
 });
 
 async function main() {

@@ -446,6 +446,17 @@ StashBase also exposes bounded file helpers:
 - **`move_file(path, new_path, cascade?)`**
 - **`delete_file(path)`**
 
+One tool changes library membership: **`create_project(name, location?)`**
+creates a new directory (under the default folder home unless `location`
+names an existing directory inside the folder home or inside a member
+folder — arbitrary host paths are rejected), seeds its `AGENTS.md`,
+registers it into `recentFolders`, and binds/reconciles it in the
+background. When the caller is a live library-scoped built-in panel session
+(identified by the per-session attribution header, see
+[agent-panel.md](agent-panel.md)), that session is rebound to the new
+project; folder-bound sessions and external MCP callers only create +
+register, and the result reports which happened.
+
 These helpers are not a second general-purpose filesystem. They exist because many local Agent clients run in sandboxes where the host user's files are not directly readable or writable. The helpers accept absolute paths under opened folders, hide app-maintained derived artifacts, map PDF/DOCX/media reads to AppData-derived text, and update the semantic index when possible. The only AppData paths `read_file` accepts are manifest-known derived text files whose source PDF, DOCX, or media file still belongs to an opened folder.
 
 One-click MCP setup is available only for clients with stable local config files: Claude Code, Codex CLI, and Claude Desktop on macOS. Other MCP-capable clients use the standard JSON config shown in Settings. Codex is configured with prompting as the default approval mode. Low-risk tools that only orient, read, search, or refresh StashBase-owned index state (`library_info`, `list_directory`, `read_file`, `reindex`, `search_library`) are auto-approved. The built-in Codex panel applies its live Access mode at the MCP-approval bridge: in Edit mode it accepts only StashBase `write_file` and `edit_file` calls within the opened folder; moves and deletions remain on the approval-card path. Switching back to Ask restores the approval card. This does not alter the user's global configuration or approval behavior for other MCP servers.

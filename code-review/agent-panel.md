@@ -18,8 +18,10 @@ Cursor-style scope picker: a "Library" entry above a separator, then the
 library membership (the same source as the sidebar list, favorites pinned).
 It defaults to the window's current folder, and an unbound tab follows the
 window when that default changes. Once the conversation has content, runs a
-turn, or was resumed, the pill stays visible but locked — a live session is
-never rebound to another scope, and its pane header marks a binding that
+turn, or was resumed, the pill stays visible but locked — the user can never
+rebind a live session to another scope (the single server-driven exception
+is the `create_project` migration of a library-scoped chat, below), and its
+pane header marks a binding that
 differs from the window default with a muted note: "in <basename>" for a
 cross-folder chat, "in Library" for a library chat while the window has a
 current folder. The library scope is always called "Library" in UI copy —
@@ -41,6 +43,32 @@ folders), and their preamble states that the whole library is in scope with
 home itself as a library folder, that folder's history and the library
 history coincide (same cwd). The History menu lists sessions for the tab's
 currently picked scope, and resume carries that scope on the reconnect URL.
+
+`create_project` is the one sanctioned scope migration. Each live panel
+session carries a private attribution id (`STASHBASE_AGENT_SESSION_ID` in
+its spawn env, forwarded by the stdio MCP host as the
+`x-stashbase-agent-session-id` header — request identity only, exactly like
+`STASHBASE_WINDOW_ID`, and never read from tool arguments). The tool
+creates the directory (folder home by default; an explicit `location` must
+be inside the folder home or a member folder), registers it into library
+membership without touching any window's current folder, and then applies
+the rebind rule via the live-session registry: only a LIBRARY-scoped
+calling session migrates — its `boundFolder()` flips to the project (so
+folder removal now tears it down), the session emits `scope-changed` on its
+WS, and the renderer updates `connectedScope` (pill/header) and has the
+OWNING window `openFolder` the project; other windows only refresh the
+membership list (Electron `window:library-folder-added` broadcast). A
+folder-bound session is NEVER rebound — the tool result says the chat
+stays bound — and unattributed callers (external MCP clients) only
+create + register. Because both runtimes' native history stores are
+cwd-keyed and the rebound session keeps running with the reserved library
+cwd, a persisted session→folder override
+(AppData `agent-session-folders.json`, written BEFORE the scope-changed
+event) is consulted by every history surface: the library listing excludes
+overridden sessions, the project listing includes them (Codex merges them
+in from the library-cwd listing), direct history actions accept an
+overridden session only for its override folder, Claude resume validation
+accepts the override folder, and deleting the session clears its override.
 
 Because every session is scope-pinned, a window-folder switch is NOT a
 teardown trigger: chat tabs and their running sessions survive the switch,

@@ -5,6 +5,7 @@
  * lifecycle, JSON-RPC correlation, and renderer event normalization.
  */
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
 import type { WebSocket } from 'ws';
 import { buildStashbasePreamble } from './agent-preamble.ts';
@@ -39,6 +40,11 @@ import {
   type ThreadItem,
 } from './codex-protocol.ts';
 import { CodexRpcPeer } from './codex-rpc-transport.ts';
+import {
+  registerAttributedAgentSession,
+  unregisterAttributedAgentSession,
+  type AttributedAgentSession,
+} from './agent-session-registry.ts';
 import { getCurrentFolder, getFolderHome, runWithWindowId } from './folder.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
 import { errorMessage, logger } from './log.ts';
@@ -58,7 +64,7 @@ class CodexTurnCancelledError extends Error {
   }
 }
 
-export class CodexSession {
+export class CodexSession implements AttributedAgentSession {
   private closed = false;
   private ready = false;
   private appServerReady = false;
@@ -87,19 +93,51 @@ export class CodexSession {
   private skillSequence = 0;
 
   readonly windowId: string;
+  readonly agentId = 'codex' as const;
+  /** Private per-session attribution id. Rides the app-server env
+   * (`STASHBASE_AGENT_SESSION_ID`) → stdio MCP host → request header, so
+   * host-side MCP tools can find the live calling session. */
+  readonly attributionId = randomUUID();
 
   /** True for a library-wide session: cwd is the folder home and the
    * session is NOT bound to any member folder — member-folder removal
    * never tears it down (window close / app quit still do). */
   private libraryScoped = false;
 
+  /** Member folder this LIBRARY session was migrated to by `create_project`.
+   * The native thread keeps its cwd (the folder home); the binding,
+   * teardown scope, and history override follow this. */
+  private rebound: string | null = null;
+
   /** The member folder this session is (or will be) bound to. `cwd` is the
    * authoritative binding once the session started; before that, the explicit
    * connect-time folder is the best answer. A library-scoped session is
-   * bound to no member folder and reports null. */
+   * bound to no member folder and reports null — unless `create_project`
+   * rebound it to the new project. */
   boundFolder(): string | null {
+    if (this.rebound) return this.rebound;
     if (this.libraryScoped || this.scope === 'library') return null;
     return this.cwd ?? this.folder ?? null;
+  }
+
+  isLibraryScoped(): boolean {
+    return !this.rebound && (this.libraryScoped || this.scope === 'library');
+  }
+
+  nativeSessionId(): string | null {
+    return this.threadId;
+  }
+
+  /** Migrate this LIBRARY-scoped session's binding to a member folder
+   * (create_project). The native thread keeps running with its original
+   * cwd; only the StashBase-side binding moves, and the renderer is told so
+   * the pill and the owning window's sidebar can follow. A folder-bound
+   * chat is never rebound. */
+  rebindToFolder(folderAbs: string): boolean {
+    if (this.closed || !this.isLibraryScoped()) return false;
+    this.rebound = folderAbs;
+    this.send({ t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
+    return true;
   }
 
   constructor(
@@ -120,6 +158,7 @@ export class CodexSession {
   ) {
     this.windowId = normalizeWindowId(windowId);
     this.resumeThreadId = typeof resume === 'string' && resume.trim() ? resume.trim() : null;
+    registerAttributedAgentSession(this.attributionId, this);
     ws.on('message', (raw) => this.onMessage(String(raw)));
     ws.on('close', () => this.dispose());
     ws.on('error', () => this.dispose());
@@ -185,7 +224,12 @@ export class CodexSession {
   }
 
   private spawnAppServer(cwd: string): void {
-    const proc = this.spawnProcess(cwd, { STASHBASE_WINDOW_ID: this.windowId });
+    const proc = this.spawnProcess(cwd, {
+      STASHBASE_WINDOW_ID: this.windowId,
+      // Session identity for host-side MCP tools (create_project): request
+      // attribution only, never a path-resolution channel.
+      STASHBASE_AGENT_SESSION_ID: this.attributionId,
+    });
     this.proc = proc;
     const rpc = new CodexRpcPeer((line) => {
       if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
@@ -791,6 +835,7 @@ export class CodexSession {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    unregisterAttributedAgentSession(this.attributionId);
     this.onDispose?.(this);
     for (const [, pending] of this.pendingApprovals) {
       this.respond(pending.requestId, { decision: 'cancel' });

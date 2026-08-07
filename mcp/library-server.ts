@@ -29,6 +29,9 @@ export interface LibraryMcpServerOptions {
   webBase: string;
   /** Optional window id forwarded as `x-stashbase-window-id`. */
   windowId?: string;
+  /** Optional per-session attribution id forwarded as
+   * `x-stashbase-agent-session-id` (built-in panel sessions only). */
+  agentSessionId?: string;
   /** Direct in-process adapter used by the app's HTTP MCP transport. */
   operations?: LibraryOperations;
 }
@@ -37,8 +40,8 @@ const DEFAULT_TOP_K = 8;
 const MAX_TOP_K = 25;
 
 export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
-  const { webBase, windowId } = opts;
-  const operations = withMcpErrors(opts.operations ?? createHttpLibraryOperations(webBase, windowId));
+  const { webBase, windowId, agentSessionId } = opts;
+  const operations = withMcpErrors(opts.operations ?? createHttpLibraryOperations(webBase, windowId, agentSessionId));
 
   function filePathArg(args: Record<string, unknown>): unknown {
     return typeof args.path === 'string' && args.path.trim()
@@ -165,6 +168,18 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
 
     if (req.params.name === 'reindex') {
       const result = await operations.reindex({ folder });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    if (req.params.name === 'create_project') {
+      // Attribution comes from the transport (env → header), never from the
+      // model-controlled arguments.
+      const result = await operations.createProject({
+        name: args.name,
+        location: args.location,
+      });
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
@@ -356,6 +371,37 @@ const BUILTIN_TOOLS = [
           },
         },
         required: ['query'],
+      },
+    },
+    {
+      name: 'create_project',
+      description:
+        'Create a NEW project folder and register it into the StashBase library so it ' +
+        'appears in "Your Folders" immediately. Use this when the user wants a fresh ' +
+        'working context (a new project/topic). `name` is a single folder name (no ' +
+        'slashes). By default the project is created under `folder_home`; pass ' +
+        '`location` only when the user names an existing directory inside the folder ' +
+        'home or inside a library folder. When the CALLING chat is a library-scoped ' +
+        'StashBase panel chat, that chat is automatically rebound to the new project ' +
+        '(its scope pill and history move there); a chat already bound to a folder ' +
+        'stays bound — the result reports which happened. Write project files with the ' +
+        'StashBase file tools under the returned absolute `path`.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'New project folder name — one path segment, cross-platform safe.',
+          },
+          location: {
+            type: 'string',
+            description:
+              'Optional absolute path of an existing directory to create the project in. ' +
+              'Must be the folder home, inside it, or inside a library folder. Omit for ' +
+              'the default folder home.',
+          },
+        },
+        required: ['name'],
       },
     },
     {

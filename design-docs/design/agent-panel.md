@@ -76,6 +76,15 @@ client of StashBase context, not a separate AI workspace.
   chat's own folder — not the window's — for cross-folder chats, and are
   unavailable in library chats (which retrieve through library search;
   uploaded files still attach).
+- During a library chat the Agent can create a new project on request: a
+  `create_project` tool creates the folder (under the default folder home
+  unless the user names a valid location), registers it into the library so
+  every window's sidebar lists it, and — with no further user action — the
+  window owning the chat selects it while the chat itself moves to the new
+  project: the scope pill flips from "Library" to the project name and the
+  session appears in that project's History instead of the library's. A
+  chat already bound to a folder never moves — the tool still creates and
+  registers the project and tells the Agent the chat stays where it is.
 - The composer's model, permission-mode, and reasoning-effort controls are
   compact labelled pills, each with a leading icon and an accessible name.
   A default-valued model or effort pill reads "Model: Default" /

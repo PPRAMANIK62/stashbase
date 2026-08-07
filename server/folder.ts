@@ -545,6 +545,15 @@ function pushRecent(absPath: string): void {
   writeConfig(cfg);
 }
 
+/** Register a folder into library membership ("Your Folders") WITHOUT
+ *  changing any window's current folder. This is the same registration
+ *  path opening a folder uses (`pushRecent`), minus the window binding —
+ *  used by `create_project`, which must make the new folder appear in
+ *  every window's sidebar list while only the owning window navigates. */
+export function registerLibraryFolder(absPath: string): void {
+  pushRecent(filesystemPath.absolute(absPath));
+}
+
 /** Remove a folder from the membership list ("Your Folders"). Does NOT
  *  touch the folder on disk — removal only forgets it from the knowledge
  *  base; the caller clears its index rows separately. No-op if absent. */

@@ -6,7 +6,7 @@
  * Delete Chat for every built-in agent.
  */
 import express from 'express';
-import { getCurrentFolder } from '../folder.ts';
+import { getCurrentFolder, getFolderHome } from '../folder.ts';
 import { sendError } from '../http.ts';
 import {
   deleteCodexSession,
@@ -15,6 +15,15 @@ import {
   renameCodexSession,
 } from '../codex-agent.ts';
 import { agentAdapter, type AgentHistoryActions } from '../agent-contract.ts';
+import { httpError } from '../codex-protocol.ts';
+import { filesystemPath } from '../filesystem-path.ts';
+import {
+  agentSessionFolderOverride,
+  agentSessionFolderOverrides,
+  clearAgentSessionFolderOverride,
+  historyRowsForFolder,
+  missingOverriddenSessionIds,
+} from '../agent-session-folders.ts';
 
 export function mount(app: express.Express): void {
   app.get('/api/codex/sessions', async (_req, res) => {
@@ -56,13 +65,60 @@ export function mount(app: express.Express): void {
   });
 }
 
+/** Codex's native thread store is cwd-keyed, so a library chat rebound to a
+ * project by `create_project` still lives under the reserved library cwd.
+ * The persisted session→folder override moves it: the project listing pulls
+ * it in, the library listing drops it, and direct actions accept it for its
+ * override folder only. */
 export function codexHistoryActions(): AgentHistoryActions {
   return {
-    list: (folder) => listCodexSessions(folder),
-    messages: (id, folder) => getCodexSessionMessages(id, folder),
-    rename: (id, title, folder) => renameCodexSession(id, title, folder),
-    remove: (id, folder) => deleteCodexSession(id, folder),
+    async list(folder) {
+      const rows = (await listCodexSessions(folder)) as Array<{ id: string; lastModified: number }>;
+      if (!folder) return rows;
+      const overrides = agentSessionFolderOverrides('codex');
+      const visible = historyRowsForFolder(rows, overrides, folder);
+      const missing = missingOverriddenSessionIds(visible, overrides, folder);
+      if (missing.length) {
+        // Overridden sessions natively live under the reserved library cwd.
+        const home = getFolderHome();
+        if (!pathsEqual(home, folder)) {
+          const homeRows = (await listCodexSessions(home)) as Array<{ id: string; lastModified: number }>;
+          for (const row of homeRows) {
+            if (missing.includes(row.id) && !visible.some((existing) => existing.id === row.id)) {
+              visible.push(row);
+            }
+          }
+          visible.sort((a, b) => b.lastModified - a.lastModified);
+        }
+      }
+      return visible;
+    },
+    messages: (id, folder) => getCodexSessionMessages(id, overrideAwareFolder('read', id, folder)),
+    rename: (id, title, folder) => renameCodexSession(id, title, overrideAwareFolder('rename', id, folder)),
+    async remove(id, folder) {
+      await deleteCodexSession(id, overrideAwareFolder('delete', id, folder));
+      clearAgentSessionFolderOverride('codex', id);
+    },
   };
+}
+
+/** Fold the override into direct-session actions: an overridden session is
+ * addressable only through its override folder — where the native cwd check
+ * would fail, so the base call runs folder-unscoped after this validation. */
+function overrideAwareFolder(action: string, id: string, folder: string | null): string | null {
+  if (!folder) return null;
+  const override = agentSessionFolderOverride('codex', id);
+  if (!override) return folder;
+  if (!pathsEqual(override, folder)) throw httpError(404, `session not found for current folder (${action})`);
+  return null;
+}
+
+function pathsEqual(a: string, b: string): boolean {
+  try {
+    return filesystemPath.equal(a, b);
+  } catch {
+    return false;
+  }
 }
 
 function codexHistory(): AgentHistoryActions {

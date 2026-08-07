@@ -89,6 +89,16 @@ export function chatScopePill(options: {
     ?? nextSessionScope(options.picked, options.windowFolder, options.memberPaths);
 }
 
+/** Validate a server `scope-changed` payload (the session was rebound by
+ * `create_project`) into a ChatScope. Only a folder rebind exists today;
+ * anything malformed is ignored so a bad payload cannot corrupt the pill. */
+export function scopeChangedScope(scope: unknown): ChatScope | null {
+  if (!scope || typeof scope !== 'object') return null;
+  const value = scope as { kind?: unknown; path?: unknown };
+  if (value.kind !== 'folder' || typeof value.path !== 'string' || !value.path.trim()) return null;
+  return folderScope(value.path);
+}
+
 /** The query parameters a scope rides on — the WS connect URL and every
  * session-history request. Folder scope stays the legacy `folder` param;
  * the library scope is an explicit `scope=library`. */

@@ -1,11 +1,19 @@
 /** HTTP adapter for the separately spawned stdio MCP host. */
 import type { LibraryOperations } from '../server/library-operations/index.ts';
 import { LibraryOperationError } from '../server/library-operations/errors.ts';
+import { AGENT_SESSION_ID_HEADER } from '../server/agent-session-registry.ts';
 
-export function createHttpLibraryOperations(webBase: string, windowId?: string): LibraryOperations {
+export function createHttpLibraryOperations(
+  webBase: string,
+  windowId?: string,
+  agentSessionId?: string,
+): LibraryOperations {
   const headers = (extra?: Record<string, string>): Record<string, string> => ({
     ...(extra ?? {}),
     ...(windowId ? { 'x-stashbase-window-id': windowId } : {}),
+    // Per-session attribution for host-side tools (create_project). Comes
+    // from the spawning session's environment, never from tool arguments.
+    ...(agentSessionId ? { [AGENT_SESSION_ID_HEADER]: agentSessionId } : {}),
   });
   const json = async <T>(url: string, init?: RequestInit): Promise<T> => {
     let response: Response;
@@ -40,6 +48,10 @@ export function createHttpLibraryOperations(webBase: string, windowId?: string):
     }),
     reindex: ({ folder } = {}) => json(`${webBase}/api/library/reindex`, {
       method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify(folder ? { folder } : {}),
+    }),
+    createProject: ({ name, location }) => json(`${webBase}/api/library/create-project`, {
+      method: 'POST', headers: headers({ 'content-type': 'application/json' }),
+      body: JSON.stringify({ name, ...(location != null ? { location } : {}) }),
     }),
     listDirectory: (path) => json(`${webBase}/api/library/directory?${pathQuery(path)}`, { headers: headers() }),
     read: (path) => json(`${webBase}/api/library/file?${pathQuery(path)}`, { headers: headers() }),

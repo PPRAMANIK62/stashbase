@@ -178,6 +178,10 @@ export type AgentServerEvent =
   | { t: 'tool-result'; id: string; content: string; isError: boolean }
   | { t: 'permission'; id: string; toolUseId: string; name: string; title: string | null; input: Record<string, unknown> }
   | { t: 'steer-result'; id: string; ok: boolean; message?: string }
+  /** The server migrated this session's scope binding (create_project
+   * rebinding a library-scoped chat to the new project). The renderer
+   * updates its connected scope and the owning window selects the folder. */
+  | { t: 'scope-changed'; scope: { kind: 'folder'; path: string } }
   | { t: 'turn-end'; isError: boolean }
   | { t: 'error'; message: string }
   | { t: 'exit' };
