@@ -162,7 +162,7 @@ function ToastRoot({
       toast={toast}
       swipeDirection={["down", "right"]}
       className={cn(
-        "flex items-start gap-2 rounded-lg border border-border border-l-[3px] bg-background px-3 py-2.5 text-[calc(12.5px*var(--ui-scale))] leading-snug text-foreground shadow-lg outline-none transition-[opacity,transform] duration-standard ease-ui data-[starting-style]:translate-y-1.5 data-[starting-style]:opacity-0 data-[ending-style]:translate-y-1.5 data-[ending-style]:opacity-0",
+        "flex items-start gap-2 rounded-lg border border-border border-l-2 bg-background px-3 py-2.5 text-base leading-snug text-foreground shadow-elevation outline-none transition-[opacity,transform] duration-standard ease-ui data-[starting-style]:translate-y-1.5 data-[starting-style]:opacity-0 data-[ending-style]:translate-y-1.5 data-[ending-style]:opacity-0",
         feedbackToastPolicy[level].accentClass,
         className
       )}
@@ -199,7 +199,7 @@ function ToastAction({ className, ...props }: ToastPrimitive.Action.Props) {
     <ToastPrimitive.Action
       data-slot="toast-action"
       className={cn(
-        "shrink-0 rounded border border-border bg-background px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-[var(--hover)] focus-visible:outline-2 focus-visible:outline-focus",
+        "shrink-0 rounded border border-border bg-background px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-focus",
         className
       )}
       {...props}
@@ -213,7 +213,7 @@ function ToastClose({ className, ...props }: ToastPrimitive.Close.Props) {
       data-slot="toast-close"
       aria-label="Dismiss notification"
       className={cn(
-        "shrink-0 rounded-sm border-0 bg-transparent p-0.5 text-muted hover:text-foreground",
+        "shrink-0 rounded-sm border-0 bg-transparent p-0.5 text-muted-foreground hover:text-foreground",
         className
       )}
       {...props}

@@ -65,13 +65,13 @@ export default function ManagedMenu({
                     <span className="flex min-w-0 flex-col gap-0.5">
                       <span className="whitespace-nowrap">{item.label}</span>
                       {item.detail && (
-                        <span className="text-[calc(11px*var(--ui-scale))] text-muted">
+                        <span className="text-xs text-muted-foreground">
                           {item.detail}
                         </span>
                       )}
                     </span>
                     {item.shortcut && (
-                      <span className="shrink-0 text-[calc(11px*var(--ui-scale))] tracking-[0.04em] text-muted">
+                      <span className="shrink-0 text-xs tracking-[0.04em] text-muted-foreground">
                         {item.shortcut}
                       </span>
                     )}

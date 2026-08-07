@@ -30,7 +30,7 @@ function MenuPopup({ className, ...props }: MenuPrimitive.Popup.Props) {
     <MenuPrimitive.Popup
       data-slot="menu-popup"
       className={cn(
-        "flex min-w-44 flex-col gap-px rounded-[9px] border border-border bg-card p-[5px] text-[calc(12.5px*var(--ui-scale))] text-foreground shadow-elevation outline-none transition-[opacity,transform] duration-fast ease-ui data-[starting-style]:-translate-y-0.5 data-[starting-style]:opacity-0 data-[ending-style]:-translate-y-0.5 data-[ending-style]:opacity-0",
+        "flex min-w-44 flex-col gap-px rounded-xl border border-border bg-card p-1 text-base text-foreground shadow-elevation outline-none transition-[opacity,transform] duration-fast ease-ui data-[starting-style]:-translate-y-0.5 data-[starting-style]:opacity-0 data-[ending-style]:-translate-y-0.5 data-[ending-style]:opacity-0",
         className
       )}
       {...props}
@@ -43,7 +43,7 @@ function MenuItem({ className, ...props }: MenuPrimitive.Item.Props) {
     <MenuPrimitive.Item
       data-slot="menu-item"
       className={cn(
-        "flex w-full cursor-pointer items-center justify-between gap-[18px] rounded-md border-0 bg-transparent px-[9px] py-1.5 text-left text-inherit outline-none data-disabled:cursor-default data-disabled:opacity-45 data-highlighted:bg-[var(--hover)]",
+        "flex w-full cursor-pointer items-center justify-between gap-4 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-inherit outline-none data-disabled:cursor-default data-disabled:opacity-45 data-highlighted:bg-muted",
         className
       )}
       {...props}
