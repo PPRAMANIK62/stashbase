@@ -113,17 +113,21 @@ export function Sidebar() {
 const sideActionsClass =
   'flex gap-0.5 opacity-0 transition-opacity duration-fast group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100';
 
-/* Top tier of the VSCode-style two-row header: a quiet section label on
- * the left; chevron rotation is keyed off the toggle's aria-expanded so
- * the visual state can never drift from the accessible one. */
+/* Section header toggle: a quiet, normal-case label whose chevron sits in
+ * the same 16px leading slot the pill rows use, so the header text lines
+ * up with the row text gutter below it. Chevron rotation is keyed off the
+ * toggle's aria-expanded so the visual state can never drift from the
+ * accessible one. */
 const sectionToggleClass =
-  'inline-flex min-w-0 flex-1 cursor-pointer items-center gap-0.5 border-0 bg-transparent p-0 text-left '
+  'inline-flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left '
   + 'text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none '
-  + '[&>svg]:size-3.5 [&>svg]:flex-none [&>svg]:transition-transform [&>svg]:duration-fast '
-  + 'aria-[expanded=false]:[&>svg]:-rotate-90';
+  + '[&_svg]:size-3 [&_svg]:flex-none [&_svg]:transition-transform [&_svg]:duration-fast '
+  + 'aria-[expanded=false]:[&_svg]:-rotate-90';
 
-const sectionTitleClass =
-  'min-w-0 truncate text-xs font-semibold tracking-[.06em] uppercase text-muted-foreground';
+/* The 16px leading slot that centers the (smaller) section chevron. */
+const sectionChevronClass = 'inline-flex size-4 flex-none items-center justify-center';
+
+const sectionTitleClass = 'min-w-0 truncate text-xs font-medium text-muted-foreground';
 
 /** The Explorer view. The active folder zone (current folder header +
  * file tree), the LIBRARY resource list, and the active Markdown document
@@ -143,10 +147,13 @@ function FilesPanel() {
         * one navigation surface; neither becomes a floating editor companion. */}
       <LibrarySections />
       {hasMarkdownDocument && (
-        <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border ' + (outlineExpanded ? 'flex-[2_1_0%]' : 'flex-none')}>
-          <div className="flex min-h-[30px] items-center justify-between gap-1.5 py-[5px] pr-2 pl-3">
+        /* Sections separate by whitespace, not hairlines. When expanded the
+         * outline keeps a guaranteed slice (min-h) even if the sections
+         * above it fill the panel, then grows into whatever is left. */
+        <section className={'mt-3 flex flex-col overflow-hidden ' + (outlineExpanded ? 'min-h-24 flex-[2_1_0%]' : 'min-h-0 flex-none')}>
+          <div className="flex min-h-[30px] items-center justify-between gap-1.5 py-[5px] pr-2 pl-3.5">
             <button type="button" className={sectionToggleClass} aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
-              <ChevronDownIcon /><span className={sectionTitleClass + ' flex-1'}>Document Outline</span><span className="ml-auto flex-none text-2xs text-muted-foreground">{outline.headings.length}</span>
+              <span className={sectionChevronClass}><ChevronDownIcon /></span><span className={sectionTitleClass + ' flex-1'}>Document Outline</span><span className="ml-auto flex-none text-2xs text-muted-foreground">{outline.headings.length}</span>
             </button>
           </div>
           <div id="sidebar-outline-section" className={outlineExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
@@ -177,17 +184,19 @@ function NewChatButton() {
   }
 
   return (
-    <div className="border-b border-border px-2 py-1.5">
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full justify-center gap-1.5"
+    /* A quiet full-width pill row (Cursor's "New Agent" treatment), not a
+     * boxed button — the sidebar's rows carry the hierarchy. There is no
+     * keyboard shortcut for this action, so no hint is shown. */
+    <div className="flex-none px-1.5 py-1.5">
+      <button
+        type="button"
+        className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-foreground hover:bg-muted"
         title="Start a chat in the current folder, or across the whole library"
         onClick={newChat}
       >
-        <NewChatIcon className="size-3.5" />
-        New Chat
-      </Button>
+        <NewChatIcon className="size-4 flex-none text-muted-foreground" />
+        <span className="min-w-0 truncate">New Chat</span>
+      </button>
     </div>
   );
 }
@@ -284,8 +293,8 @@ function AddFolderMenuButton() {
  *
  *  ACTIVE ZONE — only when this window has a folder open: the current
  *  folder's header row (explorer toolbar, drop target, ⋯ menu) with its
- *  file tree beneath, sitting on the base surface so the working folder
- *  reads as content while the chrome around it stays on the pane surface.
+ *  file tree beneath. It shares the sidebar's one pane surface — the
+ *  inset pill rows, not a surface split, carry the hierarchy.
  *
  *  LIBRARY — every OTHER member folder as a single compact row: favorites
  *  (all of them) pinned first, then the five most recent non-favorites;
@@ -520,18 +529,16 @@ function LibrarySections() {
   const activeFavorite = !!activePath
     && !!state.recent.find((r) => folderRefsEqual(r.path, activePath))?.favorite;
   const showZeroState = !activePath && state.recent.length === 0;
-  // The active zone owns the flexible space while its tree is open; when
-  // it is absent (or folded shut) the LIBRARY section takes over the grow
-  // role instead of leaving dead pane below a capped list.
-  const activeZoneGrows = !!activePath && !state.folderCollapsed;
 
   return (
     <>
       {activePath && (
-        /* ACTIVE ZONE — the window's current folder on the base surface,
-         * split from the pane-surface LIBRARY list below by the section
-         * hairline. The header stays put; only the tree scrolls. */
-        <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border bg-background ' + (activeZoneGrows ? 'flex-[3_1_0%]' : 'flex-none')}>
+        /* ACTIVE ZONE — the window's current folder. It sizes to its
+         * CONTENT up to a 60% cap so LIBRARY follows right after the tree
+         * ends; past the cap the tree scrolls internally. Same quiet pane
+         * surface as the rest of the sidebar — the pill rows carry the
+         * hierarchy, so no hairline or surface split. */
+        <section className="flex max-h-[60%] flex-none flex-col overflow-hidden">
           <ActiveFolderHeader
             name={activeName}
             path={activePath}
@@ -543,28 +550,31 @@ function LibrarySections() {
             * state untouched, so re-expanding restores every inner
             * folder's prior open/closed state. */}
           {!state.folderCollapsed && (
-            <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
               <FileTree />
             </div>
           )}
         </section>
       )}
-      <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border ' + (libraryExpanded ? (activeZoneGrows ? 'max-h-[40%] flex-none' : 'flex-[3_1_0%]') : 'flex-none')}>
-        <div className="flex min-h-[30px] flex-none items-center gap-1.5 pt-2 pr-2 pb-0.5 pl-3">
+      {/* LIBRARY sizes to its content too, shrinking (with an internal
+        * scroll) only when the panel runs out of room — leftover blank
+        * space falls below the last section, never between sections. */}
+      <section className={'mt-3 flex min-h-0 flex-col overflow-hidden ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
+        <div className="flex min-h-[30px] flex-none items-center gap-1.5 py-0.5 pr-2 pl-3.5">
           <button
             type="button"
             className={sectionToggleClass + ' flex-none'}
             aria-expanded={libraryExpanded}
             aria-controls="sidebar-files-section"
             onClick={() => setLibraryExpanded((expanded) => !expanded)}
-          ><ChevronDownIcon /><span className={sectionTitleClass}>Library</span></button>
+          ><span className={sectionChevronClass}><ChevronDownIcon /></span><span className={sectionTitleClass}>Library</span></button>
           <div className={sideActionsClass + ' ml-auto'}>
             <AddFolderMenuButton />
           </div>
         </div>
-        <div id="sidebar-files-section" className={libraryExpanded ? 'flex min-h-0 flex-col overflow-hidden' + (activeZoneGrows ? '' : ' flex-1') : 'hidden'}>
+        <div id="sidebar-files-section" className={libraryExpanded ? 'flex min-h-0 flex-col overflow-hidden' : 'hidden'}>
           {showZeroState ? <ZeroFolderState /> : (
-            <div className="min-h-0 flex-[1_1_auto] overflow-y-auto pb-2">
+            <div className="min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5 pb-2">
               {plan.visible.map((entry) => {
                 const name = basenameOfPath(entry.path);
                 const opening = openingFolder?.path === entry.path;
@@ -573,23 +583,28 @@ function LibrarySections() {
                 return (
                   <div
                     key={entry.path}
-                    className={`group/root relative flex min-h-[26px] items-center pr-2 ${
+                    className={`group/root relative flex min-h-7 items-center rounded-md pr-1 ${
                       menuOpen ? 'bg-muted' : 'hover:bg-muted'
                     }${opening ? ' opacity-60' : ''}`}
                   >
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-0 bg-transparent py-[3px] pr-1 pl-3 text-left text-base text-foreground disabled:cursor-default"
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent py-1 pr-1 pl-2 text-left text-base text-foreground disabled:cursor-default"
                       disabled={!!openingFolder}
                       title={entry.path}
                       onClick={() => openRoot(entry.path)}
                     >
-                      {opening && (
-                        <span className="inline-flex size-4 flex-none items-center justify-center text-muted-foreground [&_svg]:size-3.5 [&_svg]:animate-spin"><SyncIcon /></span>
-                      )}
-                      {!opening && entry.favorite && (
-                        <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
-                      )}
+                      {/* Leading 16px slot: muted folder glyph (spinner while
+                        * opening); favorites carry a small star overlay at the
+                        * glyph's corner instead of a second leading icon. */}
+                      <span className="relative inline-flex size-4 flex-none items-center justify-center text-muted-foreground">
+                        {opening
+                          ? <SyncIcon className="size-3.5 animate-spin" />
+                          : <FolderIcon className="size-4" />}
+                        {!opening && entry.favorite && (
+                          <StarIcon className="absolute -right-1 -bottom-0.5 size-2 fill-current" aria-label="Favorite" />
+                        )}
+                      </span>
                       <span className="min-w-0 truncate">{name}</span>
                       {needsAttention && (
                         <span
@@ -617,11 +632,12 @@ function LibrarySections() {
               {plan.hiddenCount > 0 && (
                 <button
                   type="button"
-                  className="flex min-h-[26px] w-full cursor-pointer items-center border-0 bg-transparent py-[3px] pr-2 pl-3 text-left text-base text-muted-foreground hover:text-foreground focus-visible:text-foreground"
+                  className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1 text-left text-base text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:text-foreground"
                   aria-expanded={showAllFolders}
                   onClick={() => setShowAllFolders((expanded) => !expanded)}
                 >
-                  {showAllFolders ? 'Show fewer' : `Show all ${plan.totalCount}…`}
+                  <span className="size-4 flex-none" aria-hidden="true" />
+                  <span className="min-w-0 truncate">{showAllFolders ? 'Show fewer' : `Show all ${plan.totalCount}…`}</span>
                 </button>
               )}
             </div>
@@ -768,7 +784,7 @@ function ActiveFolderHeader({
     <div
       id="sideHead"
       className={
-        'side-head flex min-h-[26px] flex-none items-center gap-1 py-0.5 pr-2 pl-1'
+        'side-head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-1 pl-1 hover:bg-muted'
         + (sideHeadDrop ? ' drop-target' : '')
         + (rootSelected ? ' active-root' : '')
       }
@@ -782,7 +798,7 @@ function ActiveFolderHeader({
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
         ><ChevronDownIcon /></span>
         <span
-          className="min-w-0 flex-1 truncate text-base font-semibold"
+          className="min-w-0 flex-1 truncate text-base font-medium"
           title={path}
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}
         >{name}</span>

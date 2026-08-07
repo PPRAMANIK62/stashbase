@@ -557,7 +557,11 @@ function CancelledGlyph() {
 
 function agentRulesIcon(basename: string) {
   const normalized = basename.toLowerCase();
-  if (normalized === 'claude.md') return <ClaudeIcon />;
+  // In the tree both rules-book glyphs render monochrome/muted like the
+  // neutral bot — `fill-current` overrides the Claude mark's brand fill so
+  // the icon follows the row's muted icon color. The brand-colored mark
+  // stays where the agent itself is the subject (agent picker / chat).
+  if (normalized === 'claude.md') return <ClaudeIcon className="fill-current" />;
   if (normalized === 'agents.md') return <BotIcon className="agent-rules-icon" />;
   return null;
 }

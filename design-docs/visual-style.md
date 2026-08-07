@@ -72,6 +72,9 @@ them:
   do not relax it for visual trends.
 - Radii stay small and consistent (a control radius and a slightly larger
   UI-surface radius). No pill buttons, no large-radius cards.
+- List hover and selection render as an inset rounded pill — a small-radius
+  row surface inset from the panel edges — never a full-bleed band or an
+  accent edge bar.
 
 ## Motion
 
