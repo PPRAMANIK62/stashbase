@@ -552,9 +552,10 @@ test('Codex Session handles startup timeout by reaching fatal error path', async
   await new Promise((resolve) => setTimeout(resolve, 70));
 
   const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
-  const errEvent = events.find((e) => e.t === 'error');
-  assert.ok(errEvent);
-  assert.match(errEvent.message ?? '', /request timed out: initialize/);
+  const exitEvent = events.find((e) => e.t === 'exit');
+  assert.ok(exitEvent);
+  assert.match(exitEvent.message ?? '', /request timed out: initialize/);
+  assert.equal(ws.readyState, 3);
   session.dispose();
 });
 
@@ -602,6 +603,76 @@ test('Codex Session handles turn/start timeout by sending error and clearing bus
   assert.equal(runtime.busy, false);
   assert.equal(runtime.activeTurnId, null);
   session.dispose();
+});
+
+test('Codex Session fences a timed-out turn/start generation before accepting another turn', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-turn-timeout-fence-'));
+  runWithWindowId('turn-timeout-fence-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('turn-timeout-fence-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const first = new FakeCodexProcess();
+  const second = new FakeCodexProcess();
+  const processes = [first, second];
+  let timedOutRequestId: number | null = null;
+
+  const wireProcess = (proc: FakeCodexProcess, generation: number) => {
+    proc.stdin.on('data', (chunk: Buffer) => {
+      const req = JSON.parse(String(chunk)) as { id: number; method: string };
+      const respond = (result: Record<string, unknown>) => {
+        proc.stdout.write(`${JSON.stringify({ id: req.id, result })}\n`);
+      };
+      if (req.method === 'initialize') respond({});
+      else if (req.method === 'model/list') respond({ data: [] });
+      else if (req.method === 'skills/list') respond({ data: [] });
+      else if (req.method === 'thread/start') respond({ thread: { id: 'thread-1' } });
+      else if (req.method === 'thread/resume') respond({ thread: { id: 'thread-1' } });
+      else if (req.method === 'turn/start' && generation === 1 && timedOutRequestId === null) {
+        timedOutRequestId = req.id;
+      } else if (req.method === 'turn/start') {
+        respond({ turn: { id: 'turn-2' } });
+      }
+    });
+  };
+  wireProcess(first, 1);
+  wireProcess(second, 2);
+
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'turn-timeout-fence-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => processes.shift() as unknown as ChildProcessWithoutNullStreams,
+    30,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'first' }));
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  assert.notEqual(timedOutRequestId, null);
+
+  first.stdout.write(`${JSON.stringify({ id: timedOutRequestId, result: { turn: { id: 'turn-1' } } })}\n`);
+  first.stdout.write(`${JSON.stringify({ method: 'turn/started', params: { turn: { id: 'turn-1' } } })}\n`);
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'second' }));
+  await settle();
+
+  first.stdout.write(`${JSON.stringify({
+    method: 'turn/completed',
+    params: { turn: { id: 'turn-1', status: 'completed' } },
+  })}\n`);
+  await settle();
+
+  const runtime = session as unknown as { busy: boolean; activeTurnId: string | null };
+  assert.equal(first.killed, true, 'the generation with an ambiguous mutating request must be retired');
+  assert.equal(runtime.busy, true);
+  assert.equal(runtime.activeTurnId, 'turn-2');
+  session.dispose();
+  assert.equal(second.killed, true);
 });
 
 test('Codex Session handles steer timeout without ending an active turn', async (t) => {

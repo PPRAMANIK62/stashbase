@@ -36,7 +36,11 @@ import {
   type JsonRpcId,
   type ThreadItem,
 } from './codex-protocol.ts';
-import { CodexRpcPeer, CODEX_RPC_REQUEST_TIMEOUT_MS } from './codex-rpc-transport.ts';
+import {
+  CodexRpcPeer,
+  CodexRpcRequestTimeoutError,
+  CODEX_RPC_REQUEST_TIMEOUT_MS,
+} from './codex-rpc-transport.ts';
 import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
 import { errorMessage, logger } from './log.ts';
@@ -320,6 +324,9 @@ export class CodexSession {
         if (this.interruptRequested) void this.requestInterruptForTurn(id);
       }
     } catch (err: unknown) {
+      if (err instanceof CodexRpcRequestTimeoutError && err.method === 'turn/start') {
+        this.fenceTimedOutTurnStart();
+      }
       this.busy = false;
       this.activeTurnId = null;
       if (!this.closed) {
@@ -328,6 +335,22 @@ export class CodexSession {
         }
         this.send({ t: 'turn-end', isError: !(err instanceof CodexTurnCancelledError) });
       }
+    }
+  }
+
+  /**
+   * `turn/start` mutates native state, so a timeout leaves its outcome
+   * ambiguous. Retire that entire transport generation before allowing
+   * another prompt; otherwise its late lifecycle notifications can overlap
+   * with and clear a newer turn. The next prompt resumes the same thread
+   * through a fresh app-server generation.
+   */
+  private fenceTimedOutTurnStart(): void {
+    const threadId = this.threadId;
+    this.disposeAppServer();
+    if (threadId) {
+      this.threadId = null;
+      this.resumeThreadId = threadId;
     }
   }
 

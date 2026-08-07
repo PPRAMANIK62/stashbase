@@ -7,6 +7,13 @@ import {
 
 export const CODEX_RPC_REQUEST_TIMEOUT_MS = 30000;
 
+export class CodexRpcRequestTimeoutError extends Error {
+  constructor(readonly method: string) {
+    super(`Codex app-server request timed out: ${method}`);
+    this.name = 'CodexRpcRequestTimeoutError';
+  }
+}
+
 interface PendingRpc {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -38,7 +45,7 @@ export class CodexRpcPeer {
       if (timeoutMs > 0) {
         pending.timer = setTimeout(() => {
           this.pending.delete(id);
-          reject(new Error(`Codex app-server request timed out: ${method}`));
+          reject(new CodexRpcRequestTimeoutError(method));
         }, timeoutMs);
         pending.timer.unref?.();
       }
