@@ -333,12 +333,12 @@ test('stale Codex process events and stdout cannot affect a replacement generati
 
   runtime.spawnAppServer(os.tmpdir());
   const staleRpc = runtime.rpc;
-  first.emit('error', new Error('first process failed'));
   runtime.spawnAppServer(os.tmpdir());
   const replacementRpc = runtime.rpc;
   runtime.busy = true;
   runtime.activeTurnId = 'replacement-turn';
 
+  first.emit('error', new Error('first process failed'));
   staleRpc?.receiveLine(JSON.stringify({
     method: 'turn/completed',
     params: { turn: { id: 'stale-turn', status: 'completed' } },
@@ -352,6 +352,79 @@ test('stale Codex process events and stdout cannot affect a replacement generati
   assert.equal(runtime.activeTurnId, 'replacement-turn');
   session.dispose();
   assert.equal(second.killed, true);
+});
+
+test('Codex app-server exit after ready fatally ends an idle session once', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
+  runWithWindowId('idle-exit-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('idle-exit-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(ws as unknown as WebSocket, 'idle-exit-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+
+  native.proc.emit('close', 7, null);
+  await settle();
+
+  const terminal = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string }).filter((event) => event.t === 'exit');
+  assert.deepEqual(terminal, [{ t: 'exit', message: 'Codex app-server exited with code 7.' }]);
+  assert.equal(ws.sent.some((item) => (JSON.parse(item) as { t: string }).t === 'error'), false);
+  assert.equal(ws.readyState, 3);
+});
+
+test('Codex app-server exit during startup retains its fatal cause on exit', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
+  runWithWindowId('startup-exit-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('startup-exit-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeWebSocket();
+  const native = new FakeCodexProcess();
+  native.stdin.once('data', () => native.emit('close', 23, null));
+  const session = new CodexSession(ws as unknown as WebSocket, 'startup-exit-window', undefined, undefined, undefined, undefined, undefined, () => native as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
+  assert.deepEqual(events.filter((event) => event.t === 'exit'), [
+    { t: 'exit', message: 'Codex app-server exited with code 23.' },
+  ]);
+  assert.equal(events.some((event) => event.t === 'error'), false);
+  assert.equal(ws.readyState, 3);
+});
+
+test('Codex app-server exit while working emits no duplicate failed turn', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
+  runWithWindowId('busy-exit-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('busy-exit-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(ws as unknown as WebSocket, 'busy-exit-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  native.proc.emit('close', null, 'SIGKILL');
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
+  assert.deepEqual(events.filter((event) => event.t === 'exit'), [
+    { t: 'exit', message: 'Codex app-server exited with signal SIGKILL.' },
+  ]);
+  assert.equal(events.filter((event) => event.t === 'turn-end').length, 0);
+  assert.equal(events.filter((event) => event.t === 'error').length, 0);
 });
 
 test('closed Codex RPC peers ignore inbound requests and notifications', () => {

@@ -65,9 +65,10 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'permission', id: 'approval', toolUseId: 'tool', name: 'Write', title: null, input: {} },
     { t: 'steer-result', id: 'queued', ok: true }, { t: 'turn-end', isError: false },
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
+    { t: 'exit', message: 'runtime stopped unexpectedly' },
   ];
   assert.equal(clientEvents.length, 6);
-  assert.equal(events.length, 15);
+  assert.equal(events.length, 16);
 });
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {

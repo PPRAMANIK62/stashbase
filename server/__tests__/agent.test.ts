@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
+import type { Query } from '@anthropic-ai/claude-agent-sdk';
+import type { WebSocket } from 'ws';
 import {
+  AgentSession,
   claudeActiveModelEvent,
   claudeModelCatalogFailureEvent,
   claudePermissionMode,
@@ -8,6 +15,33 @@ import {
   claudeSkillPrompt,
   selectClaudeModel,
 } from '../agent.ts';
+import { clearAgentRuntimeFailure } from '../agent-contract.ts';
+import { clearCurrentFolder, runWithWindowId, setCurrentFolder } from '../folder.ts';
+
+class FakeAgentWebSocket extends EventEmitter {
+  readyState = 1;
+  sent: string[] = [];
+  send(value: string): void { this.sent.push(value); }
+  close(): void { this.readyState = 3; this.emit('close'); }
+}
+
+async function settle(): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
+function fakeClaudeQuery(failure?: Error): Query {
+  return {
+    async *[Symbol.asyncIterator]() {
+      if (failure) throw failure;
+    },
+    supportedModels: async () => [],
+    supportedCommands: async () => [],
+    setModel: async () => {},
+    setPermissionMode: async () => {},
+    interrupt: async () => {},
+  } as unknown as Query;
+}
 
 test('Claude adapter preserves supported Shared Agent Contract access modes', () => {
   assert.equal(claudePermissionMode('default'), 'default');
@@ -65,4 +99,93 @@ test('Claude publishes single-slash skill labels and sends the selected native c
   });
   assert.equal(claudeSkillPrompt('prepare the release', 'release-notes'), '/release-notes prepare the release');
   assert.deepEqual(claudeSkillCatalogEvent([]), { t: 'skills', state: 'empty', skills: [] });
+});
+
+test('Claude unexpected iterator EOF after ready emits one useful fatal exit', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
+  runWithWindowId('claude-eof-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('claude');
+    runWithWindowId('claude-eof-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-eof-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => fakeClaudeQuery()) as never,
+    () => '/fake/claude',
+  );
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string });
+  assert.equal(events.some((event) => event.t === 'ready'), true);
+  assert.deepEqual(events.filter((event) => event.t === 'exit'), [
+    { t: 'exit', message: 'Claude session ended unexpectedly.' },
+  ]);
+  assert.equal(events.some((event) => event.t === 'error'), false);
+});
+
+test('Claude iterator rejection after ready emits its cause once without a duplicate error', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
+  runWithWindowId('claude-failure-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('claude');
+    runWithWindowId('claude-failure-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-failure-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => fakeClaudeQuery(new Error('Claude stream failed.'))) as never,
+    () => '/fake/claude',
+  );
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string });
+  assert.deepEqual(events.filter((event) => event.t === 'exit'), [
+    { t: 'exit', message: 'Claude stream failed.' },
+  ]);
+  assert.equal(events.some((event) => event.t === 'error'), false);
+});
+
+test('Claude startup failure puts its cause on the terminal exit', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
+  runWithWindowId('claude-startup-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('claude-startup-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-startup-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => fakeClaudeQuery()) as never,
+    () => null,
+  );
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string });
+  assert.equal(events.some((event) => event.t === 'ready'), false);
+  assert.equal(events.some((event) => event.t === 'error'), false);
+  assert.match(events.find((event) => event.t === 'exit')?.message ?? '', /Claude CLI not found/);
 });

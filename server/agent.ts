@@ -28,7 +28,7 @@
  *     { t: "permission", id, toolUseId, name, title, input }  // needs approve/reject
  *     { t: "turn-end", isError }                       // result message
  *     { t: "error", message }
- *     { t: "exit" }                                    // session ended
+ *     { t: "exit", message? }                          // normal or fatal session end
  */
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -246,7 +246,7 @@ interface Pending {
 }
 
 /** One live Agent-SDK session bridged to one WebSocket. */
-class AgentSession {
+export class AgentSession {
   private input = new Pushable<SDKUserMessage>();
   private q: Query | null = null;
   private pending = new Map<string, Pending>();
@@ -266,6 +266,8 @@ class AgentSession {
     private access: PermissionMode = 'default',
     private model?: string,
     private onDispose?: (session: AgentSession) => void,
+    private queryFactory: typeof query = query,
+    private resolveBinary: () => string | null = resolveClaudeBinary,
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
     ws.on('message', (raw) => this.onMessage(String(raw)));
@@ -283,27 +285,24 @@ class AgentSession {
     if (this.closed) return;
     const cwd = getCurrentFolder();
     if (!cwd) {
-      this.send({ t: 'error', message: 'No folder open.' });
-      this.finish();
+      this.finish('No folder open.');
       return;
     }
     if (this.closed) return;
     if (this.resume && !(await resumeMatchesCwd(this.resume, cwd))) {
       if (this.closed) return;
-      this.send({ t: 'error', message: 'That session belongs to a different folder.' });
-      this.finish();
+      this.finish('That session belongs to a different folder.');
       return;
     }
     if (this.closed) return;
-    const claudeCodeExecutable = resolveClaudeBinary();
+    const claudeCodeExecutable = this.resolveBinary();
     if (!claudeCodeExecutable) {
-      this.send({ t: 'error', message: missingClaudeMessage() });
-      this.finish();
+      this.finish(missingClaudeMessage());
       return;
     }
     if (ensureClaudeBridgeFile(cwd)) noteTreeChanged();
     try {
-      this.q = query({
+      this.q = this.queryFactory({
         prompt: this.input,
         options: {
           cwd,
@@ -351,8 +350,7 @@ class AgentSession {
       });
     } catch (err: unknown) {
       reportAgentRuntimeFailure('claude', err);
-      this.send({ t: 'error', message: errorMessage(err) });
-      this.finish();
+      this.finish(errorMessage(err));
       return;
     }
     if (this.closed) {
@@ -403,15 +401,17 @@ class AgentSession {
   /** Drain the SDK message stream until it ends or errors. */
   private async pump(): Promise<void> {
     if (!this.q) return;
+    let failure: string | undefined;
     try {
       for await (const msg of this.q) this.onSdkMessage(msg);
+      if (!this.closed) failure = 'Claude session ended unexpectedly.';
     } catch (err: unknown) {
       if (!this.closed) {
         reportAgentRuntimeFailure('claude', err);
-        this.send({ t: 'error', message: errorMessage(err) });
+        failure = errorMessage(err);
       }
     }
-    this.finish();
+    this.finish(failure);
   }
 
   private onSdkMessage(msg: SDKMessage): void {
@@ -575,9 +575,9 @@ class AgentSession {
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
 
-  private finish(): void {
+  private finish(message?: string): void {
     if (this.closed) return;
-    this.send({ t: 'exit' });
+    this.send({ t: 'exit', ...(message ? { message } : {}) });
     this.dispose();
   }
 

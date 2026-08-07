@@ -48,6 +48,11 @@ Community contributions can land as useful first iterations, but the long-term d
 ## Design Rules
 
 - Keep the panel renderer-led. Do not change agent transport, session persistence, MCP, indexing, or permission policy just to support presentation changes.
+- Treat an adapter exit, including one during startup, as a terminal session
+  event. Its optional message is the single fatal cause: preserve transcript,
+  clear busy/tool activity, and do not append a second failed-turn notice. A
+  raw post-ready socket close gets the stable agent-specific disconnect
+  fallback; explicit renderer/client teardown must suppress it.
 - Derive the shell layout from Chat visibility, document presence, and compact
   viewport state; do not add RAG/CoWork product modes. The chat-primary layout
   removes the document and splitter grid tracks without unmounting either

@@ -111,8 +111,7 @@ export class CodexSession {
     if (this.closed) return;
     const cwd = getCurrentFolder();
     if (!cwd) {
-      this.send({ t: 'error', message: 'No folder open.' });
-      this.finish();
+      this.finish('No folder open.');
       return;
     }
     if (ensureAgentsFile(cwd)) noteTreeChanged();
@@ -130,8 +129,7 @@ export class CodexSession {
       this.ready = true;
       this.send({ t: 'ready' });
     } catch (err: unknown) {
-      this.send({ t: 'error', message: errorMessage(err) });
-      this.finish();
+      this.finish(errorMessage(err));
     }
   }
 
@@ -182,10 +180,7 @@ export class CodexSession {
       rpc.close(err);
       if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
       reportAgentRuntimeFailure('codex', err);
-      if (!this.closed) {
-        this.send({ t: 'error', message: errorMessage(err) });
-        this.handleAppServerExit(true);
-      }
+      if (!this.closed) this.handleAppServerExit(errorMessage(err));
     });
     proc.once('close', (code, signal) => {
       const error = new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`);
@@ -193,8 +188,7 @@ export class CodexSession {
       if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
       if (!this.closed) {
         reportAgentRuntimeFailure('codex', error);
-        this.send({ t: 'error', message: error.message });
-        this.handleAppServerExit(true);
+        this.handleAppServerExit(error.message);
       }
     });
   }
@@ -753,9 +747,9 @@ export class CodexSession {
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
 
-  private finish(): void {
+  private finish(message?: string): void {
     if (this.closed) return;
-    this.send({ t: 'exit' });
+    this.send({ t: 'exit', ...(message ? { message } : {}) });
     this.dispose();
   }
 
@@ -787,16 +781,17 @@ export class CodexSession {
     if (proc) try { proc.kill('SIGTERM'); } catch { /* already gone */ }
   }
 
-  private handleAppServerExit(isError: boolean): void {
+  private handleAppServerExit(message: string): void {
     this.appServerReady = false;
-    if (this.busy) {
-      this.busy = false;
-      this.activeTurnId = null;
-      this.interruptRequested = false;
-      this.interruptingTurnId = null;
-      this.send({ t: 'turn-end', isError });
-      return;
-    }
+    this.busy = false;
+    this.activeTurnId = null;
+    this.interruptRequested = false;
+    this.interruptingTurnId = null;
+    // The terminal exit owns this cause whether startup completed or not.
+    // Sending a pre-ready `error` first races the renderer's state commit
+    // against the immediate socket close and can replace this detail with a
+    // generic connection-closed message.
+    this.finish(message);
   }
 }
 
