@@ -8,6 +8,12 @@ import { ImagePreview } from './ImagePreview';
 import { TabStrip } from './TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { readPreferredAgent } from '../agentPreference';
+import { Button } from './ui/button';
+
+/** Muted "Loading…" bodies shared by the lazy viewer fallbacks. */
+const VIEWER_LOADING_CLASS = 'p-4 text-base text-muted-foreground';
+const VIEWER_PADDED_LOADING_CLASS = 'p-6 text-base text-muted-foreground';
+const VIEWER_CENTERED_LOADING_CLASS = 'grid h-full place-items-center text-base text-muted-foreground';
 
 const LazyCrepeDocument = lazyWithRetry(() => import('./CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
 const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
@@ -32,6 +38,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   const hasTabs = state.tabs.length > 0;
   const emptyTab = !!activeTab && !cur;
   const resourceResetKey = cur ? `${cur.name}:${cur.version ?? ''}` : undefined;
+  // Reserve room for the absolute-positioned chrome (edit toggle / PDF
+  // controls / floating-actions at top:44px, height ~28px) so editor /
+  // preview content doesn't render underneath it. HTML / image viewers
+  // have no top chrome, so they skip the band and fill from just under
+  // the tab strip.
+  const chromeBand = hasTabs && cur?.format !== 'html' && cur?.format !== 'image';
 
   return (
     <main
@@ -40,32 +52,39 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
       inert={workspaceHidden || undefined}
     >
       {hasTabs && <TabStrip />}
-      <div className="main-body">
+      {/* Content host for every viewer (iframe preview / split editor).
+        * Single-cell grid because a Chromium quirk: when an iframe with
+        * `position: absolute; inset: 0` sits inside a flex child, its
+        * internal initial-containing-block resolves to 0×0 — the iframe
+        * ELEMENT renders at full size but everything inside it (`<html>`,
+        * `<body>`, the user's content) lays out at zero. Grid cells give
+        * children a definite size unambiguously, sidestepping that bug.
+        * The `main-body` class itself is the structural hook for
+        * `.main.no-file > :not(.main-body)` in mainpane.css. */}
+      <div className={'main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden' + (chromeBand ? ' pt-9' : '')}>
         {!hasTabs && (
-          <div className="empty-doc">
+          <div className="grid h-full place-items-center p-10 text-center text-base text-muted-foreground">
             <div>
-              <p>Start a conversation or choose a document from Files.</p>
-              <div className="empty-doc-actions">
-                <button
-                  type="button"
-                  className="empty-doc-action primary"
-                  onClick={() => actions.openAgent(readPreferredAgent())}
-                >
+              <p className="m-0 leading-[1.9]">Start a conversation or choose a document from Files.</p>
+              <div className="mt-3.5 flex justify-center gap-2">
+                <Button onClick={() => actions.openAgent(readPreferredAgent())}>
                   Start chat
-                </button>
-                <button
-                  type="button"
-                  className="empty-doc-action"
+                </Button>
+                <Button
+                  variant="outline"
                   onClick={() => window.dispatchEvent(new Event('stashbase-open-quick-open'))}
                 >
                   Open document
-                </button>
+                </Button>
               </div>
-              <p className="empty-doc-secondary">
+              <p className="mt-3.5 mb-0 leading-[1.9]">
                 Drop files or folders anywhere to stash them, or click{' '}
+                {/* Inline ghost-accent "+" — a small rounded-square add-button
+                  * so the sentence reads as unmistakably clickable. `pb`
+                  * optically lifts the low-sitting "+" glyph to centre. */}
                 <button
                   type="button"
-                  className="empty-doc-new"
+                  className="mx-1 inline-grid size-[1.5em] cursor-pointer place-items-center rounded-sm border border-accent bg-transparent p-0 pb-[0.14em] align-middle leading-none font-medium text-accent transition-colors duration-fast [font-size:inherit] hover:bg-accent/10"
                   onClick={() => { void actions.newNote(); }}
                 >+</button>{' '}
                 for a new note.
@@ -75,8 +94,8 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         )}
         {emptyTab && <EmptyTabLanding />}
         {cur && cur.format === 'md' && (
-          <LazyLoadBoundary className="doc-loading" label="Markdown document" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className="doc-loading">Opening document…</div>}>
+          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="Markdown document" resetKey={resourceResetKey}>
+            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening document…</div>}>
               <LazyCrepeDocument
                 key={activeTab?.id ?? cur.name}
                 tabId={activeTab?.id ?? ''}
@@ -92,8 +111,8 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           <HtmlPreview name={cur.name} />
         )}
         {cur && cur.format === 'docx' && (
-          <LazyLoadBoundary className="docx-preview-loading" label="document preview" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className="docx-preview-loading">Opening document…</div>}>
+          <LazyLoadBoundary className={VIEWER_CENTERED_LOADING_CLASS} label="document preview" resetKey={resourceResetKey}>
+            <Suspense fallback={<div className={VIEWER_CENTERED_LOADING_CLASS}>Opening document…</div>}>
               <LazyDocxPreview name={cur.name} />
             </Suspense>
           </LazyLoadBoundary>
@@ -104,8 +123,8 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           // implementation detail (search hits remap back to the PDF;
           // the derived note must never surface as content). The
           // preparation failure banner + Reprocess live inside PdfPreview.
-          <LazyLoadBoundary className="pdf-loading" label="PDF preview" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className="pdf-loading">Loading PDF…</div>}>
+          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="PDF preview" resetKey={resourceResetKey}>
+            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Loading PDF…</div>}>
               <LazyPdfPreview name={cur.name} />
             </Suspense>
           </LazyLoadBoundary>
@@ -115,43 +134,58 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           <ImagePreview name={cur.name} />
         )}
         {cur && cur.format === 'audio' && (
-          <LazyLoadBoundary className="audio-preview-loading" label="audio preview" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className="audio-preview-loading">Opening audio…</div>}>
+          <LazyLoadBoundary className={VIEWER_PADDED_LOADING_CLASS} label="audio preview" resetKey={resourceResetKey}>
+            <Suspense fallback={<div className={VIEWER_PADDED_LOADING_CLASS}>Opening audio…</div>}>
               <LazyAudioPreview name={cur.name} />
             </Suspense>
           </LazyLoadBoundary>
         )}
       </div>
       {emptyTab && (
-        <div className="main-breadcrumb empty">
-          <span className="seg current">Untitled</span>
+        // Centered placeholder strip for an empty (Untitled) tab —
+        // absolute + 50% transform centers it relative to .main, in the
+        // same slot a breadcrumb path would occupy.
+        <div className="absolute top-11 left-1/2 z-4 flex h-7 max-w-[calc(100%-220px)] -translate-x-1/2 items-center overflow-hidden text-base whitespace-nowrap text-muted-foreground">
+          <span className="px-1 py-0.5">Untitled</span>
         </div>
       )}
       <FindBar />
       {cur && cur.format === 'md' && (
-        <div className={'main-floating-actions' + (editMode ? ' editing' : '')}>
+        /* Floating actions in the main pane's top-right — sits below the
+         * tab strip (unconditionally present whenever there's an open
+         * file, so a fixed offset is safe). The edit toggle lives here on
+         * its own; the save status tucks in next to it while editing. */
+        <div className="absolute top-11 right-3.5 z-5 flex items-center gap-2">
           {editMode && saveStatus.text && (
-            <span className={'save-status' + (saveStatus.cls ? ' ' + saveStatus.cls : '')}>
+            /* "Saved" / "Renaming…" share the default muted grey — green
+             * felt too celebratory for a routine autosave tick. Errors
+             * turn red so they break the visual rhythm. */
+            <span className={'text-sm transition-opacity duration-standard' + (saveStatus.cls === 'error' ? ' text-destructive' : ' text-muted-foreground')}>
               {saveStatus.text}
             </span>
           )}
-          <button
-            className={'icon-btn edit-toggle' + (editMode ? ' editing' : '')}
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground [&_svg:not([class*='size-'])]:size-5.5"
             title={editMode ? 'Switch to Reading View' : 'Switch to Live Editing'}
             aria-label={editMode ? 'Switch to Reading View' : 'Switch to Live Editing'}
             onClick={() => { void actions.toggleEditMode(); }}
           >
-            <EditIcon className="icon-edit" />
-            <PreviewIcon className="icon-preview" />
-          </button>
+            {/* Read mode → edit icon, edit mode → preview icon (eye), so
+              * the button always shows the action it does. The pencil
+              * glyph's artwork fills nearly its whole 24×24 viewBox while
+              * the preview glyph leaves more margin — scale it down to
+              * match the preview's optical size (layout box unchanged). */}
+            {editMode ? <PreviewIcon /> : <EditIcon className="scale-85" />}
+          </Button>
         </div>
       )}
       {cur && cur.format === 'pdf' && (
         // Slot that PdfPreview portals its zoom / page-count chrome
         // into — sits on the same row as back/forward + breadcrumb
         // so we don't waste a row on viewer chrome.
-        <div className="main-floating-actions pdf-chrome-slot" id="pdf-chrome-slot" />
+        <div className="pointer-events-none absolute top-11 right-3.5 left-3.5 z-5 flex items-center justify-stretch gap-2" id="pdf-chrome-slot" />
       )}
     </main>
   );

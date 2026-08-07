@@ -80,7 +80,7 @@ export class LazyLoadBoundary extends Component<LazyLoadBoundaryProps, LazyLoadB
     return (
       <StatusMessage
         tone="error"
-        className={`${this.props.className} lazy-load-error`}
+        className={`${this.props.className} flex min-h-18 items-center justify-center gap-2.5`}
       >
         <span>Could not open {this.props.label}.</span>
         <button

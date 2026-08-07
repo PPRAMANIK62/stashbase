@@ -180,11 +180,15 @@ export function HtmlPreview({ name, derived = false }: { name: string; derived?:
   }, [actions]);
 
   return (
-    <div className="viewer-shell">
+    /* The shell gives the iframe a definite box; the iframe fills the
+     * viewer column — HTML imports control their own width via their own
+     * CSS; MD keeps its ~820px reading column inside the MD iframe's own
+     * body styles. */
+    <div className="relative h-full w-full min-h-0 min-w-0 overflow-hidden bg-white">
       <iframe
         ref={frameRef}
         id="previewFrame"
-        className="html-viewer"
+        className="absolute inset-0 block h-full w-full border-0 bg-white"
         sandbox="allow-scripts allow-same-origin"
         src={src}
         title="HTML preview"

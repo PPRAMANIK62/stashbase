@@ -8,6 +8,8 @@ import { getPreparationFailure } from '../store/fileReadiness';
 import { makeIframeFindController } from './findIframe';
 import { HtmlPreview } from './HtmlPreview';
 import { applyChunkHighlight } from './previewChunkHighlight';
+import { Button } from './ui/button';
+import { StatusMessage } from './ui/status';
 
 const DIRECT_PREVIEW_TIMEOUT_MS = 20_000;
 
@@ -190,43 +192,47 @@ export function DocxPreview({ name }: { name: string }) {
   }
 
   return (
-    <div className="docx-preview">
+    /* DOCX renders directly from the source in the renderer. Search/Agent
+     * preparation continues independently and occupies only the slim
+     * status row, never the document viewport. */
+    <div className="relative box-border flex h-full w-full flex-col overflow-hidden bg-background">
       {failure ? (
-        <div className="docx-preparation-status error" role="status">
-          <span className="docx-preparation-text">
+        <StatusMessage tone="warning" className="flex min-h-7.5 shrink-0 items-center gap-1.5 rounded-none border-x-0 border-t-0 px-3.5 py-1.5">
+          <span className="min-w-0 flex-1">
             {retryError
               ? 'The document is visible, but search preparation could not restart.'
               : 'The document is visible, but its searchable text is unavailable.'}
           </span>
-          <button
-            type="button"
-            className="pdf-failure-retry"
+          <Button
+            variant="outline"
+            size="xs"
+            className="shrink-0"
             disabled={retryBusy}
             onClick={() => { void onRetry(); }}
           >
             {retryBusy ? 'Reprocessing…' : 'Reprocess'}
-          </button>
-        </div>
+          </Button>
+        </StatusMessage>
       ) : preparationStatus ? (
-        <div className="docx-preparation-status" role="status">
-          <span className="image-preparation-dot" aria-hidden="true" />
+        <div className="box-border flex min-h-7.5 shrink-0 items-center gap-1.5 border-b border-border bg-background px-3.5 py-1.5 text-sm text-muted-foreground" role="status">
+          <span className="image-preparation-dot size-1.75 shrink-0 rounded-full bg-accent" aria-hidden="true" />
           {preparationStatus}
         </div>
       ) : null}
-      <div className="docx-preview-body">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-white">
         {directFailed ? (
           <HtmlPreview name={name} derived />
         ) : html ? (
           <iframe
             ref={frameRef}
             id="previewFrame"
-            className="html-viewer"
+            className="absolute inset-0 block h-full w-full border-0 bg-white"
             sandbox="allow-same-origin"
             srcDoc={html}
             title="DOCX preview"
           />
         ) : (
-          <div className="docx-preview-loading">Opening document…</div>
+          <div className="grid h-full place-items-center text-base text-muted-foreground">Opening document…</div>
         )}
       </div>
     </div>

@@ -3,6 +3,8 @@ import { api, errorMessage, versionedAssetUrl } from '../api';
 import { preparationWaitCopy } from '../preparation-copy.ts';
 import { useApp } from '../store/AppContext';
 import { getPreparationFailure } from '../store/fileReadiness';
+import { Button } from './ui/button';
+import { StatusMessage } from './ui/status';
 
 /**
  * In-pane viewer for a standalone image file. The image binary is
@@ -118,39 +120,50 @@ export function ImagePreview({ name }: { name: string }) {
   const displayW = natural ? Math.round((natural.w / dpr) * scale) : undefined;
 
   return (
-    <div className="image-preview">
+    /* pt-11 clears the breadcrumb / chrome row at the top of the pane. */
+    <div className="relative box-border flex h-full w-full flex-col overflow-hidden bg-pane pt-11">
       {failure && (
-        <div className="pdf-failure-banner" role="status">
-          <span className="pdf-failure-text">
+        /* Negative top margin cancels the chrome-row padding so the
+         * banner sits flush under the tab strip. */
+        <StatusMessage tone="warning" className="z-5 -mt-11 flex w-full items-start gap-2.5 rounded-none border-x-0 border-t-0 px-3.5 py-2">
+          <span className="min-w-0 flex-1 overflow-auto [overflow-wrap:anywhere] max-h-[4.5em]">
             {retryError
               ? 'Searchable text is unavailable. Reprocess could not start. Try again.'
               : 'Searchable text is unavailable. The image still opens normally.'}
           </span>
-          <button
-            type="button"
-            className="pdf-failure-retry"
+          <Button
+            variant="outline"
+            size="xs"
+            className="shrink-0"
             disabled={retryBusy}
             onClick={() => { void onRetry(); }}
           >
             {retryBusy ? 'Reprocessing…' : 'Reprocess'}
-          </button>
-        </div>
+          </Button>
+        </StatusMessage>
       )}
       {preparationStatus && (
-        <div className="image-preparation-status" role="status">
-          <span className="image-preparation-dot" aria-hidden="true" />
+        <div className="box-border flex min-h-7.5 shrink-0 items-center gap-1.5 border-b border-border bg-background px-3.5 py-1.5 text-sm text-muted-foreground" role="status">
+          <span className="image-preparation-dot size-1.75 shrink-0 rounded-full bg-accent" aria-hidden="true" />
           {preparationStatus}
         </div>
       )}
-      <div className="image-preview-scroll" ref={scrollRef}>
+      {/* The scroll viewport. Defaults to actual-size content, so a large
+        * image scrolls here rather than being squeezed to fit. */}
+      <div className="min-h-0 flex-1 overflow-auto" ref={scrollRef}>
         {loadError ? (
           <div className="empty-list">
             Couldn’t load this image — the file may have moved or been deleted.
           </div>
         ) : (
-          <div className="image-preview-stage">
+          /* Grows to at least the viewport so a smaller-than-pane image
+           * stays centered, while a larger one expands the stage and the
+           * parent scrolls to every edge (the flex-center-on-an-
+           * overflowing-child clipping trap is avoided by centering the
+           * *stage*, not the img). */
+          <div className="box-border flex min-h-full min-w-full items-center justify-center p-6">
             <img
-              className="image-preview-img"
+              className="block h-auto flex-none rounded-sm shadow-low"
               src={src}
               alt={alt}
               draggable={false}
@@ -164,13 +177,15 @@ export function ImagePreview({ name }: { name: string }) {
         )}
       </div>
       {natural && !loadError && (
-        <div className="image-zoom-bar">
-          <button type="button" title="Zoom out" onClick={() => setScale((s) => clampScale(s / 1.25))}>−</button>
-          <button type="button" className="image-zoom-pct" title="Actual size (100%)" onClick={() => setScale(1)}>
+        /* Floating zoom controls, pinned to the pane (outside the scroll
+         * area so they don't move with the image). */
+        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-border bg-background p-[3px] shadow-elevation">
+          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom out" onClick={() => setScale((s) => clampScale(s / 1.25))}>−</Button>
+          <Button variant="ghost" size="xs" className="min-w-12 px-2 font-normal text-muted-foreground tabular-nums" title="Actual size (100%)" onClick={() => setScale(1)}>
             {Math.round(scale * 100)}%
-          </button>
-          <button type="button" title="Zoom in" onClick={() => setScale((s) => clampScale(s * 1.25))}>+</button>
-          <button type="button" title="Fit to pane" onClick={() => setScale(fitScale())}>Fit</button>
+          </Button>
+          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom in" onClick={() => setScale((s) => clampScale(s * 1.25))}>+</Button>
+          <Button variant="ghost" size="xs" className="px-2 font-normal" title="Fit to pane" onClick={() => setScale(fitScale())}>Fit</Button>
         </div>
       )}
     </div>

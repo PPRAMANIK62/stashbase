@@ -7,6 +7,14 @@ import {
 } from '../editorHistory';
 import { useSettingsBlocking } from '../hooks/useSettingsBlocking';
 import { useApp } from '../store/AppContext';
+import {
+  PICKER_LABEL_CLASS,
+  PICKER_RESULTS_CLASS,
+  PICKER_ROW_CLASS,
+  PICKER_ROW_DETAIL_CLASS,
+  PICKER_VEIL_CLASS,
+  pickerPanelClass,
+} from './pickerChrome';
 
 /** How long Control must stay down before the overlay actually renders. A
  *  quick tap-release resolves inside this window and never paints — only a
@@ -207,13 +215,15 @@ export function EditorHistoryNavigator() {
 
   return (
     <div
-      className="editor-history-veil quick-open-blocking"
+      /* `quick-open-blocking` is a topmost-surface marker class other
+       * overlays query — it carries no styles of its own. */
+      className={`quick-open-blocking ${PICKER_VEIL_CLASS}`}
       role="presentation"
       onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}
     >
       <div
         ref={containerRef}
-        className="editor-history"
+        className={pickerPanelClass('narrow')}
         role="dialog"
         aria-modal="true"
         aria-label="Editor History"
@@ -239,9 +249,9 @@ export function EditorHistoryNavigator() {
         }}
         onBlur={() => close()}
       >
-        <div className="quick-open-label">Editor History</div>
+        <div className={PICKER_LABEL_CLASS}>Editor History</div>
         <ul
-          className="editor-history-results"
+          className={PICKER_RESULTS_CLASS}
           role="listbox"
           aria-label="Recently used editors"
           aria-activedescendant={entries[active] ? `editor-history-${active}` : undefined}
@@ -252,12 +262,12 @@ export function EditorHistoryNavigator() {
               id={`editor-history-${index}`}
               role="option"
               aria-selected={index === active}
-              className={index === active ? 'active' : ''}
+              className={PICKER_ROW_CLASS}
               onMouseMove={() => setActive(index)}
               onMouseDown={(event) => { event.preventDefault(); commit(entry.id); }}
             >
               <span>{entry.label}</span>
-              {entry.preview && <small>preview</small>}
+              {entry.preview && <small className={`${PICKER_ROW_DETAIL_CLASS} italic`}>preview</small>}
             </li>
           ))}
         </ul>

@@ -747,9 +747,9 @@
       dominant-baseline: auto;
     }
 
-    /* Shared icon-button chrome still consumed by App.tsx, MainPane.tsx,
-     * PdfPreview.tsx, and ChatLaunchButtons.tsx. The sidebar's own header
-     * buttons moved to the Button primitive (ghost / icon-sm). */
+    /* Shared icon-button chrome still consumed by App.tsx and
+     * ChatLaunchButtons.tsx. The sidebar's own header buttons and the
+     * main-pane chrome moved to the Button primitive (ghost / icon-sm). */
     .icon-btn {
       width: 28px;
       height: 28px;
