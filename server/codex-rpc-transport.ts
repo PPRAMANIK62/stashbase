@@ -5,6 +5,8 @@ import {
   type JsonRpcId,
 } from './codex-protocol.ts';
 
+export const CODEX_RPC_REQUEST_TIMEOUT_MS = 30000;
+
 interface PendingRpc {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;

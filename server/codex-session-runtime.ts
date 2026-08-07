@@ -36,7 +36,7 @@ import {
   type JsonRpcId,
   type ThreadItem,
 } from './codex-protocol.ts';
-import { CodexRpcPeer } from './codex-rpc-transport.ts';
+import { CodexRpcPeer, CODEX_RPC_REQUEST_TIMEOUT_MS } from './codex-rpc-transport.ts';
 import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
 import { errorMessage, logger } from './log.ts';
@@ -95,6 +95,7 @@ export class CodexSession {
     private model?: string,
     private onDispose?: (session: CodexSession) => void,
     private spawnProcess: typeof spawnCodexAppServerProcess = spawnCodexAppServerProcess,
+    private requestTimeoutMs: number = CODEX_RPC_REQUEST_TIMEOUT_MS,
   ) {
     this.windowId = normalizeWindowId(windowId);
     this.resumeThreadId = typeof resume === 'string' && resume.trim() ? resume.trim() : null;
@@ -162,6 +163,7 @@ export class CodexSession {
       if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
       proc.stdin.write(`${line}\n`);
     }, {
+      requestTimeoutMs: this.requestTimeoutMs,
       onRequest: ({ id, method, params }) => this.onServerRequest({ id, method, params }),
       onNotification: (method, params) => this.onNotification(method, params),
     });
