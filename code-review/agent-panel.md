@@ -71,6 +71,7 @@ Community contributions can land as useful first iterations, but the long-term d
   failed `turn-end`. Record that failure before advancing queued follow-ups;
   duplicate terminal events must not advance the queue, and successful or
   cancelled turns must not create an error notice.
+- Bound live Codex RPC request/response calls with a 30-second timeout (`CODEX_RPC_REQUEST_TIMEOUT_MS`). Stalled startup requests reach the existing fatal error/retry surface; stalled `turn/start` emits an explicit error and clears working state; stalled steering returns a failed steer result (`steer-result(ok: false)`) without ending an active turn. Long-running streamed turns are not capped once `turn/start` acknowledges.
 - A discovered missing Agent CLI is a setup state, not a disabled launcher or a
   generic connection failure. Keep its install command copyable and let the
   user re-run discovery after installation; do not conflate it with an
