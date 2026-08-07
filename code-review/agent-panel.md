@@ -6,7 +6,9 @@ This document captures the product design contract for the built-in Claude/Codex
 
 ## Direction
 
-The built-in Agent panel should feel like a VS Code-style agent side panel for local files, not a separate AI workspace.
+The built-in Agent panel is one folder-scoped chat surface. It should feel like
+a focused chat when no document is open and a VS Code-style side panel when a
+document is active, not a separate AI workspace.
 
 The panel may make agent work easier to scan, but it should stay quiet:
 
@@ -46,6 +48,21 @@ Community contributions can land as useful first iterations, but the long-term d
 ## Design Rules
 
 - Keep the panel renderer-led. Do not change agent transport, session persistence, MCP, indexing, or permission policy just to support presentation changes.
+- Derive the shell layout from Chat visibility, document presence, and compact
+  viewport state; do not add RAG/CoWork product modes. The chat-primary layout
+  removes the document and splitter grid tracks without unmounting either
+  surface. Hidden primary surfaces are inert so zero-width content cannot keep
+  keyboard focus.
+- Opening a folder creates one fresh chat tab for the app-wide preferred
+  Agent. The preference defaults to Codex, changes only through explicit Agent
+  selection, and is recoverable when local UI storage is unavailable. Runtime
+  availability remains authoritative: never silently fall back from an
+  unavailable preferred Agent.
+- Keep the first compact-window document transition document-first. The
+  responsive auto-collapse may be undone by an explicit Chat launcher action;
+  once the user does that, layout effects must not immediately close Chat
+  again. Restore a responsively collapsed chat when the last document closes
+  or the window becomes wide, unless the user has since changed visibility.
 - Prefer small, familiar agent-chat affordances over a bespoke workbench UI.
 - Treat user-action states as first-class. Permission approvals, retry actions, and stopped-turn editing must remain visible and directly actionable.
 - A discovered missing Agent CLI is a setup state, not a disabled launcher or a
@@ -54,6 +71,9 @@ Community contributions can land as useful first iterations, but the long-term d
   installed runtime that has failed.
 - Keep background activity compact. Tool calls may be grouped or summarized, but the user must be able to inspect them when needed.
 - File outputs should be easy to open, but artifact UI should stay lightweight. Prefer rows or compact affordances over large delivery cards.
+- Successful file-changing tools refresh folder and index state but never
+  select their output automatically. Only the user's artifact or local-link
+  action opens a document and causes Chat to dock.
 - Streaming should not steal the user's scroll position. If the user has scrolled away from the bottom, show a clear jump-to-latest affordance.
 - The current document is never implicit agent context. Users attach files by drag/drop, file picker, `@` mention, or a composer-focused image paste. Image paste must reuse transient attachments, preserve accompanying text, and suppress the competing clipboard library-import offer.
 - The top-bar Claude and Codex icons select or toggle existing chats. Creating a new chat belongs to the in-panel `+`.
@@ -91,6 +111,9 @@ The accepted baseline includes:
   locale-independent order, and raw workspace-relative paths remain the
   stable item IDs and inserted tokens.
 - smooth chat-side resize without drag-frequency global state updates
+- adaptive chat-first layout with a centred readable transcript/composer width,
+  side-panel width restoration, explicit-hide precedence, and a document-first
+  compact-window transition
 - compact activity grouping for non-actionable tool calls, with inspectable
   command/read/search labels rather than lifecycle-only summaries
 - visible permission cards outside collapsed activity

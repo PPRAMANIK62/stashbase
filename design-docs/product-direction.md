@@ -13,9 +13,11 @@ with a database, block editor, or proprietary storage model.
 
 ## Agent Panel
 
-The built-in Agent Panel belongs alongside the current folder and document. It
-is a convenient client of StashBase context, not a separate AI workspace and
-not a replacement for external agent clients.
+The built-in Agent Panel belongs to the current folder. Before a document is
+opened, that same chat is the primary workspace; once a document appears, it
+adapts into a side panel alongside the source. It is a convenient client of
+StashBase context, not a separate AI workspace and not a replacement for
+external agent clients.
 
 ## Document Indexing
 

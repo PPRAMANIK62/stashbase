@@ -77,7 +77,10 @@ When you open StashBase for the first time:
 2. **(Optional) Configure semantic search**: If you want AI-powered semantic search, add an OpenAI or OpenRouter API key in **Settings → Embedding**. An OpenAI restricted key needs access only to embeddings with `text-embedding-3-small`; model-list access is not required.
 3. **(Optional) Set up transcription**: To transcribe audio or video, download a speech model from **Settings → Transcription**. Small (465 MiB) is the default; Tiny (74 MiB) and Base (141 MiB) are lighter options. Transcription runs entirely on your machine, with no API cost, and you can cancel or rerun it while viewing the file
 4. **(Optional) Connect to Claude/Codex**: From **Settings → MCP**, connect external AI tools to access your searchable library
-5. Start searching! Use the search box to find files by content
+5. **Start in Chat**: Opening a folder starts a fresh built-in Agent chat.
+   Codex is the first default; after you choose Claude or Codex, StashBase
+   remembers that choice. Selecting a source file brings the document
+   alongside the same conversation.
 
 Your library is **opt-in**: only folders you open in StashBase are indexed. You can remove a folder at any time; StashBase clears its index but never deletes your files from disk.
 
@@ -193,13 +196,19 @@ For manual stdio setup, URL-based clients, Docker access, ports, CORS boundaries
 
 ---
 
-## Built-In Agent Panel
+## Built-In Agent Chat
 
-StashBase includes a built-in panel for running local Agent CLIs such as Claude Code and Codex against the current folder.
+StashBase includes a built-in chat for running local Agent CLIs such as Claude
+Code and Codex against the current folder. Chat fills the workspace until you
+open a document, then adapts into a side panel so the conversation and source
+stay visible together.
 
-The panel is a convenient client of the same MCP server, not a separate knowledge base. It adds:
+The chat is a convenient client of the same MCP server, not a separate
+knowledge base. It adds:
 
 - Sessions run in the current folder, next to the files they work on.
+- A fresh conversation opens with each folder; Codex is the first default and
+  later folder chats use the Agent you last selected.
 - Tool calls and file edits can be reviewed in the app.
 - Session history stays in the Agent CLI's normal storage.
 - `@` mentions find files and folders with forgiving workspace-path search;
