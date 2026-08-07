@@ -177,8 +177,10 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
   await act(async () => {
     LifecycleWebSocket.instances[1]!.event({ t: 'ready' });
     LifecycleWebSocket.instances[1]!.event({ t: 'exit', message: 'Codex app-server exited with code 9.' });
+    LifecycleWebSocket.instances[1]!.close();
   });
   output = renderedText(renderer!);
   assert.match(output, /Codex app-server exited with code 9/);
   assert.equal((output.match(/Codex app-server exited with code 9/g) ?? []).length, 1);
+  assert.match(output, /Reconnect/);
 });

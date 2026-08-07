@@ -255,6 +255,11 @@ export function AgentView({
     ws.onclose = () => {
       const wasReady = readyRef.current;
       const sawExit = exitReceivedRef.current;
+      // A protocol exit already owns the terminal transition (and any fatal
+      // cause). The server closes the socket immediately afterward, before
+      // React may have committed the fatal state, so terminalizing again here
+      // could erase the message with a stale fatalRef.
+      if (sawExit) return;
       finishRendererSession({ ready: wasReady, exitReceived: sawExit });
       if (!wasReady) refreshRuntimes();
     };
