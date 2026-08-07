@@ -14,7 +14,9 @@ directory or a replacement for issues and source code.
    boundaries.
 4. Skim [Use Cases](use-cases.md) for the end-to-end journeys the product
    areas combine into.
-5. Choose a product area below and use its contribution map to orient your
+5. Read [Visual Style](visual-style.md) before changing UI chrome, theming,
+   or component styling.
+6. Choose a product area below and use its contribution map to orient your
    work. Then inspect the current code and open issues for implementation
    details and active coordination.
 
