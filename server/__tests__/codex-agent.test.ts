@@ -377,6 +377,29 @@ test('Codex app-server exit after ready fatally ends an idle session once', asyn
   assert.equal(ws.readyState, 3);
 });
 
+test('Codex app-server exit during startup retains its fatal cause on exit', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
+  runWithWindowId('startup-exit-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('startup-exit-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeWebSocket();
+  const native = new FakeCodexProcess();
+  native.stdin.once('data', () => native.emit('close', 23, null));
+  const session = new CodexSession(ws as unknown as WebSocket, 'startup-exit-window', undefined, undefined, undefined, undefined, undefined, () => native as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
+  assert.deepEqual(events.filter((event) => event.t === 'exit'), [
+    { t: 'exit', message: 'Codex app-server exited with code 23.' },
+  ]);
+  assert.equal(events.some((event) => event.t === 'error'), false);
+  assert.equal(ws.readyState, 3);
+});
+
 test('Codex app-server exit while working emits no duplicate failed turn', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
   runWithWindowId('busy-exit-window', () => setCurrentFolder(folder));

@@ -111,8 +111,7 @@ export class CodexSession {
     if (this.closed) return;
     const cwd = getCurrentFolder();
     if (!cwd) {
-      this.send({ t: 'error', message: 'No folder open.' });
-      this.finish();
+      this.finish('No folder open.');
       return;
     }
     if (ensureAgentsFile(cwd)) noteTreeChanged();
@@ -130,8 +129,7 @@ export class CodexSession {
       this.ready = true;
       this.send({ t: 'ready' });
     } catch (err: unknown) {
-      this.send({ t: 'error', message: errorMessage(err) });
-      this.finish();
+      this.finish(errorMessage(err));
     }
   }
 
@@ -789,8 +787,11 @@ export class CodexSession {
     this.activeTurnId = null;
     this.interruptRequested = false;
     this.interruptingTurnId = null;
-    if (!this.ready) this.send({ t: 'error', message });
-    this.finish(this.ready ? message : undefined);
+    // The terminal exit owns this cause whether startup completed or not.
+    // Sending a pre-ready `error` first races the renderer's state commit
+    // against the immediate socket close and can replace this detail with a
+    // generic connection-closed message.
+    this.finish(message);
   }
 }
 

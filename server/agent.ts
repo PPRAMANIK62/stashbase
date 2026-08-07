@@ -285,22 +285,19 @@ export class AgentSession {
     if (this.closed) return;
     const cwd = getCurrentFolder();
     if (!cwd) {
-      this.send({ t: 'error', message: 'No folder open.' });
-      this.finish();
+      this.finish('No folder open.');
       return;
     }
     if (this.closed) return;
     if (this.resume && !(await resumeMatchesCwd(this.resume, cwd))) {
       if (this.closed) return;
-      this.send({ t: 'error', message: 'That session belongs to a different folder.' });
-      this.finish();
+      this.finish('That session belongs to a different folder.');
       return;
     }
     if (this.closed) return;
     const claudeCodeExecutable = this.resolveBinary();
     if (!claudeCodeExecutable) {
-      this.send({ t: 'error', message: missingClaudeMessage() });
-      this.finish();
+      this.finish(missingClaudeMessage());
       return;
     }
     if (ensureClaudeBridgeFile(cwd)) noteTreeChanged();
@@ -353,8 +350,7 @@ export class AgentSession {
       });
     } catch (err: unknown) {
       reportAgentRuntimeFailure('claude', err);
-      this.send({ t: 'error', message: errorMessage(err) });
-      this.finish();
+      this.finish(errorMessage(err));
       return;
     }
     if (this.closed) {

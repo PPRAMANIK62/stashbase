@@ -161,3 +161,31 @@ test('Claude iterator rejection after ready emits its cause once without a dupli
   ]);
   assert.equal(events.some((event) => event.t === 'error'), false);
 });
+
+test('Claude startup failure puts its cause on the terminal exit', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
+  runWithWindowId('claude-startup-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('claude-startup-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-startup-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => fakeClaudeQuery()) as never,
+    () => null,
+  );
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string });
+  assert.equal(events.some((event) => event.t === 'ready'), false);
+  assert.equal(events.some((event) => event.t === 'error'), false);
+  assert.match(events.find((event) => event.t === 'exit')?.message ?? '', /Claude CLI not found/);
+});
