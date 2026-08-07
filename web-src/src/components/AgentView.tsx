@@ -26,6 +26,7 @@ import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
 import { closeAgentSocketIntentionally, terminalAgentState } from './agent/connectionLifecycle';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
+import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
 import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
 
 let blockSeq = 0;
@@ -133,6 +134,7 @@ export function AgentView({
   // Which streaming block kind is currently "open" (so consecutive text
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
+  const turnErrorTrackerRef = useRef(new TurnErrorTracker());
   const knownFilePaths = useMemo(() => new Set(state.files.map((f) => f.name)), [state.files]);
 
   useEffect(() => {
@@ -398,6 +400,7 @@ export function AgentView({
         break;
       case 'turn-start':
         openKind.current = null;
+        turnErrorTrackerRef.current.start();
         setTurnBusy(true);
         break;
       case 'text':
@@ -426,14 +429,12 @@ export function AgentView({
           const toolName = toolNamesRef.current.get(ev.id);
           if (shouldRefreshAfterTool(toolName)) {
             const toolFolder = folderPathRef.current;
-            const createdFile = fileInCurrentFolderFromToolResult(toolName, ev.content, toolFolder);
             void (async () => {
               await api.sync(toolFolder).catch(() => { /* turn-end / next poll will surface it */ });
               if (folderPathRef.current !== toolFolder) return;
               await actions.loadFiles();
               if (folderPathRef.current !== toolFolder) return;
               void actions.refreshIndexState();
-              if (createdFile) await actions.selectFile(createdFile);
             })().catch((err) => {
               actions.toast(`Could not refresh files: ${errorText(err)}`, { level: 'error' });
             });
@@ -460,7 +461,9 @@ export function AgentView({
           setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not steer Codex: ${ev.message}` }]);
         }
         break;
-      case 'turn-end':
+      case 'turn-end': {
+        const terminal = turnErrorTrackerRef.current.finish(ev.isError);
+        if (terminal.duplicate) break;
         openKind.current = null;
         // A completed turn cannot retain an in-flight tool. Codex normally
         // emits `item/completed` for every tool, but an omitted or unmatched
@@ -486,8 +489,13 @@ export function AgentView({
               if (folderPathRef.current === turnFolder) void actions.refreshIndexState();
             });
         }
-        runNextQueuedPrompt();
+        recordFailureBeforeContinuing(
+          terminal,
+          (message) => setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: message }]),
+          runNextQueuedPrompt,
+        );
         break;
+      }
       case 'error':
         openKind.current = null;
         // Runtime bridges record terminal failures in the shared catalog.
@@ -505,6 +513,7 @@ export function AgentView({
           setFatal(ev.message);
           setPhase('closed');
         } else {
+          turnErrorTrackerRef.current.explain();
           setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: ev.message }]);
         }
         break;
@@ -1056,20 +1065,6 @@ function shouldRefreshAfterTool(name: string | undefined): boolean {
   if (!name) return false;
   if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name)) return true;
   return /^mcp__/.test(name) && /(write|delete|rename|update|set_|create|move)/i.test(name);
-}
-
-function fileInCurrentFolderFromToolResult(toolName: string | undefined, content: string, folder: string): string | null {
-  if (!toolName || !/write_file$/i.test(toolName) || !folder) return null;
-  try {
-    const parsed = JSON.parse(content) as { path?: unknown; ok?: unknown };
-    if (parsed.ok !== true || typeof parsed.path !== 'string') return null;
-    const prefix = `${folder}/`;
-    if (!parsed.path.startsWith(prefix)) return null;
-    const rel = parsed.path.slice(prefix.length);
-    return isSafeFolderRelativePath(rel) ? rel : null;
-  } catch {
-    return null;
-  }
 }
 
 function isSafeFolderRelativePath(path: string): boolean {

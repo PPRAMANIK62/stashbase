@@ -35,6 +35,8 @@ const html = `<!doctype html>
     </main>
   </body>
 </html>`;
+const htmlPath = path.join(smokeRoot, 'tab-strip-layout.html');
+fs.writeFileSync(htmlPath, html, 'utf8');
 
 let finished = false;
 const deadline = setTimeout(() => {
@@ -57,7 +59,11 @@ app.whenReady()
       height: 200,
       webPreferences: { sandbox: true },
     });
-    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    // Loading the complete renderer CSS through a data: URL eventually hits
+    // platform-specific URL limits as the stylesheet grows. The shared smoke
+    // root is already temporary and removed by the runner, so load the same
+    // self-contained fixture as a local file instead.
+    await win.loadFile(htmlPath);
     const layout = await win.webContents.executeJavaScript(`
       (() => {
         const closeRect = document.querySelector('.tab-close').getBoundingClientRect();

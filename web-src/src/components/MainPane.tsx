@@ -7,6 +7,7 @@ import { HtmlPreview } from './HtmlPreview';
 import { ImagePreview } from './ImagePreview';
 import { TabStrip } from './TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
+import { readPreferredAgent } from '../agentPreference';
 
 const LazyCrepeDocument = lazyWithRetry(() => import('./CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
 const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
@@ -23,7 +24,7 @@ const LazyAudioPreview = lazyWithRetry(() => import('./AudioPreview').then((mod)
  * When there are no tabs at all, `.main.no-file > *` hides every child so
  * the pane is a clean canvas.
  */
-export function MainPane() {
+export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolean }) {
   const { state, actions, activeTab } = useApp();
   const cur = activeTab?.file ?? null;
   const editMode = activeTab?.editMode ?? false;
@@ -33,25 +34,43 @@ export function MainPane() {
   const resourceResetKey = cur ? `${cur.name}:${cur.version ?? ''}` : undefined;
 
   return (
-    <main className={'main' + (hasTabs ? '' : ' no-file') + (cur ? ' fmt-' + cur.format : '')}>
+    <main
+      className={'main' + (hasTabs ? '' : ' no-file') + (cur ? ' fmt-' + cur.format : '')}
+      aria-hidden={workspaceHidden || undefined}
+      inert={workspaceHidden || undefined}
+    >
       {hasTabs && <TabStrip />}
       <div className="main-body">
         {!hasTabs && (
-          // One <p> wrapper so the grid centers a single block and the
-          // text keeps normal inline flow — otherwise each <br>/inline
-          // child becomes its own grid item and scatters vertically.
           <div className="empty-doc">
-            <p>
-              Drop files or folders anywhere to stash them<br />
-              — Markdown, HTML, PDFs, images, audio —<br />
-              or click{' '}
-              <button
-                type="button"
-                className="empty-doc-new"
-                onClick={() => { void actions.newNote(); }}
-              >+</button>{' '}
-              for a new note (⌘N)
-            </p>
+            <div>
+              <p>Start a conversation or choose a document from Files.</p>
+              <div className="empty-doc-actions">
+                <button
+                  type="button"
+                  className="empty-doc-action primary"
+                  onClick={() => actions.openAgent(readPreferredAgent())}
+                >
+                  Start chat
+                </button>
+                <button
+                  type="button"
+                  className="empty-doc-action"
+                  onClick={() => window.dispatchEvent(new Event('stashbase-open-quick-open'))}
+                >
+                  Open document
+                </button>
+              </div>
+              <p className="empty-doc-secondary">
+                Drop files or folders anywhere to stash them, or click{' '}
+                <button
+                  type="button"
+                  className="empty-doc-new"
+                  onClick={() => { void actions.newNote(); }}
+                >+</button>{' '}
+                for a new note.
+              </p>
+            </div>
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}

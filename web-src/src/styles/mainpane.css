@@ -1126,6 +1126,33 @@
       margin: 0;
       line-height: 1.9;
     }
+    .empty-doc-actions {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .empty-doc-action {
+      min-height: 30px;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--fg);
+      cursor: pointer;
+    }
+    .empty-doc-action:hover {
+      border-color: var(--stroke-strong);
+      background: var(--hover);
+    }
+    .empty-doc-action.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--text-on-accent);
+    }
+    .empty-doc-secondary {
+      margin-top: 14px !important;
+    }
     /* Inline ghost-accent "+" — a small rounded-square add-button so the
      * sentence "or click + for a new note" reads as unmistakably
      * clickable. Matches the sidebar `.icon-btn` shape (4px radius,
