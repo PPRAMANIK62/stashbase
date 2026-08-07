@@ -37,6 +37,7 @@
     "dev:server": "STASHBASE_DEV_VITE=1 tsx watch server/index.ts",
     "start": "tsx server/index.ts",
     "mcp": "tsx mcp/server.ts",
+    "prototype:folder-chat-tabs": "tsx web-src/src/components/agent/prototypes/folder-chat-tabs/tui.ts",
     "build:web": "vite build --config web-src/vite.config.ts && node scripts/check-renderer-chunks.mjs",
     "build:server": "node scripts/build-server.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",
