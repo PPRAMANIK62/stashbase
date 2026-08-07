@@ -235,7 +235,7 @@ test('chat tab recency survives panel toggles and is cleaned as tabs close', () 
 });
 
 test('CHAT_TAB_SET_AGENT switches only blank tabs and migrates recency', () => {
-  const blank: ChatTab = { id: 'chat-a', agent: 'codex', title: 'Untitled', blank: true };
+  const blank: ChatTab = { id: 'chat-a', agent: 'codex', title: 'New Chat', blank: true };
   const started: ChatTab = { id: 'chat-b', agent: 'codex', title: 'Refactor plan', blank: false };
   let state = freshState({
     chatTabs: [blank, started],
@@ -247,7 +247,7 @@ test('CHAT_TAB_SET_AGENT switches only blank tabs and migrates recency', () => {
   // the new agent's list.
   state = reducer(state, { type: 'CHAT_TAB_SET_AGENT', id: blank.id, agent: 'claude' });
   assert.equal(state.chatTabs[0].agent, 'claude');
-  assert.equal(state.chatTabs[0].title, 'Untitled');
+  assert.equal(state.chatTabs[0].title, 'New Chat');
   assert.deepEqual(state.chatTabRecencyByAgent.codex, [started.id]);
   assert.deepEqual(state.chatTabRecencyByAgent.claude, [blank.id]);
 
@@ -263,14 +263,14 @@ test('CHAT_TAB_SET_AGENT switches only blank tabs and migrates recency', () => {
 });
 
 test('CHAT_TAB_SET_AGENT renumbers the placeholder title for the new agent', () => {
-  const claudeTab: ChatTab = { id: 'chat-a', agent: 'claude', title: 'Untitled', blank: false };
-  const blank: ChatTab = { id: 'chat-b', agent: 'codex', title: 'Untitled', blank: true };
+  const claudeTab: ChatTab = { id: 'chat-a', agent: 'claude', title: 'New Chat', blank: false };
+  const blank: ChatTab = { id: 'chat-b', agent: 'codex', title: 'New Chat', blank: true };
   let state = freshState({ chatTabs: [claudeTab, blank], activeChatTabId: blank.id });
   state = reducer(state, { type: 'CHAT_TAB_SET_AGENT', id: blank.id, agent: 'claude' });
-  // A second claude tab picks up the "Untitled 2" numbering, matching
+  // A second claude tab picks up the "New Chat 2" numbering, matching
   // makeChatTab's per-agent placeholder scheme.
   assert.equal(state.chatTabs[1].agent, 'claude');
-  assert.equal(state.chatTabs[1].title, 'Untitled 2');
+  assert.equal(state.chatTabs[1].title, 'New Chat 2');
 });
 
 test('new chat tabs start blank and AgentView updates keep the flag current', () => {

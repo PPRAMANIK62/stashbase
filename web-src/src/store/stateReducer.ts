@@ -366,12 +366,12 @@ export function reducer(s: State, a: Action): State {
       // (`undefined` blank means the tab's AgentView hasn't reported yet —
       // fresh tabs start blank, so treat it as blank.)
       if (!tab || tab.blank === false || tab.agent === a.agent) return s;
-      // Re-number the placeholder title for the new agent so "Untitled N"
+      // Re-number the placeholder title for the new agent so "New Chat N"
       // stays consistent with makeChatTab's per-agent numbering. A
       // non-placeholder title is preserved (should not occur on a blank tab).
       const sameAgentOthers = s.chatTabs.filter((t) => t.id !== a.id && t.agent === a.agent);
-      const title = /^Untitled( \d+)?$/.test(tab.title.trim())
-        ? (sameAgentOthers.length === 0 ? 'Untitled' : `Untitled ${sameAgentOthers.length + 1}`)
+      const title = /^New Chat( \d+)?$/.test(tab.title.trim())
+        ? (sameAgentOthers.length === 0 ? 'New Chat' : `New Chat ${sameAgentOthers.length + 1}`)
         : tab.title;
       const next = { ...tab, agent: a.agent, title };
       return {

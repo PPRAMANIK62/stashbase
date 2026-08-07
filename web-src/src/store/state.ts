@@ -53,7 +53,7 @@ export interface ChatTab {
   id: string;
   /** Agent id the tab runs (`claude` / `codex` / …). */
   agent: string;
-  /** Display name in the tab strip. Default: `"Untitled"` (plus a
+  /** Display name in the tab strip. Default: `"New Chat"` (plus a
    *  `" N"` suffix on duplicates). */
   title: string;
   /** True while the tab is COMPLETELY blank: no transcript, no active

@@ -72,7 +72,7 @@ interface PromptToSend {
 /** A chat tab still wearing its auto-generated placeholder name, so we
  *  know it's safe to overwrite with the session's derived title. */
 function isDefaultChatTitle(t: string): boolean {
-  return /^Untitled( \d+)?$/.test(t.trim());
+  return /^New Chat( \d+)?$/.test(t.trim());
 }
 
 export function AgentView({
@@ -435,9 +435,9 @@ export function AgentView({
     modelControlRef.current = resumedModelControl;
     setModelControl(resumedModelControl);
     // Name the tab from the resumed session right away — otherwise a tab
-    // opened to a past session stays "Untitled" until the user sends a
-    // new prompt (the `turn-end` path that usually renames never fires on
-    // a pure load). Safe: `maybeNameTab` only overwrites a placeholder.
+    // opened to a past session keeps its "New Chat" placeholder until the
+    // user sends a prompt (the `turn-end` path that usually renames never
+    // fires on a pure load). Safe: `maybeNameTab` only overwrites a placeholder.
     void maybeNameTab();
     setPhase('connecting');
     setNonce((n) => n + 1);
@@ -591,7 +591,7 @@ export function AgentView({
         toolNamesRef.current.clear();
         // Name the tab from the session's derived title (first prompt /
         // SDK summary) once the first turn lands — keeps it in sync with
-        // the History list instead of staying "Untitled".
+        // the History list instead of staying "New Chat".
         void maybeNameTab();
         // The agent may have written files via shell during the turn —
         // reconcile now (deterministic, replaces fs.watch). MCP writes
@@ -934,7 +934,7 @@ export function AgentView({
 
   /** Rename this tab from the session's server-derived title once the
    *  first turn lands. Only fires while the tab still wears its
-   *  "Untitled" placeholder, so a user-set name (or a later turn) never
+   *  "New Chat" placeholder, so a user-set name (or a later turn) never
    *  clobbers it. Uses the same source as the History list, so the two
    *  stay consistent. */
   async function maybeNameTab() {

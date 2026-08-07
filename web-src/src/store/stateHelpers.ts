@@ -96,10 +96,12 @@ export function getActiveTab(s: State): Tab | null {
 }
 
 /** Create a numbered placeholder tab for a new agent conversation. A new
- *  tab starts completely blank (its AgentView keeps the flag current). */
+ *  tab starts completely blank (its AgentView keeps the flag current).
+ *  "New Chat" — not "Untitled" — matches the chat mental model; the first
+ *  turn replaces it with the session's derived title. */
 export function makeChatTab(agent: string, tabs: ChatTab[]): ChatTab {
   const sameAgentTabs = tabs.filter((tab) => tab.agent === agent);
-  const title = sameAgentTabs.length === 0 ? 'Untitled' : `Untitled ${sameAgentTabs.length + 1}`;
+  const title = sameAgentTabs.length === 0 ? 'New Chat' : `New Chat ${sameAgentTabs.length + 1}`;
   return { id: crypto.randomUUID(), agent, title, blank: true };
 }
 

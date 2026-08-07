@@ -10,7 +10,7 @@ function stateWithChatTabs(): State {
     chatOpen: true,
     chatTabs: [
       { id: 'tab-claude', agent: 'claude', title: 'Research notes' },
-      { id: 'tab-codex', agent: 'codex', title: 'Untitled' },
+      { id: 'tab-codex', agent: 'codex', title: 'New Chat' },
     ],
     activeChatTabId: 'tab-claude',
     chatTabRecencyByAgent: { claude: ['tab-claude'], codex: ['tab-codex'] },
