@@ -54,6 +54,9 @@ client of StashBase context, not a separate AI workspace.
 - If a live runtime disconnects unexpectedly, the panel preserves its
   transcript, clears in-flight activity, explains the terminal cause once, and
   offers Reconnect. Intentional session teardown remains quiet.
+- If Codex cannot confirm that a turn started, that turn fails visibly. A
+  later prompt recovers through a fresh native connection so output from the
+  abandoned attempt cannot enter the active chat.
 
 ## Experience Contract
 
