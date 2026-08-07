@@ -94,9 +94,10 @@ export function StarterTemplates({ onPrefill, libraryScoped }: {
         <Button
           key={starter.title}
           // Preflight is intentionally off in this renderer (styles.css), so
-          // native button chrome must be reset here: zero all borders and the
-          // UA background, then re-add only the top hairline separator.
-          className="group flex cursor-pointer items-center gap-3 rounded-lg border-0 border-t border-solid border-border bg-transparent px-2.5 py-3 text-left outline-none first:border-t-0 hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+          // native button chrome must be reset here: zero borders and the UA
+          // background. No separators between rows — the hover surface alone
+          // distinguishes them, keeping the empty state quiet.
+          className="group flex cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2.5 py-3 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
           onPress={() => onPrefill(starter.text)}
         >
           <starter.Icon className="size-4 shrink-0 text-muted-foreground" />

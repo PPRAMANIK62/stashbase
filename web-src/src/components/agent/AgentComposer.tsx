@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, ListBox, ListBoxItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
-  ArrowUpIcon, BoltIcon, BotIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
+  ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
   FileGenericIcon, FolderIcon, HandIcon, LibraryIcon, PlusIcon, StopIcon,
 } from '../../icons';
 import { cn } from '../../lib/utils';
@@ -106,7 +106,8 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
         // ButtonProps type omits them; the spread keeps the tooltip typed.
         {...{ title: `Model — ${label}` }}
       >
-        <BotIcon className={pillIconClass} />
+        {/* Text-only trigger (Cursor-style): the leading glyphs made the
+          * bar read heavy; the label carries the meaning. */}
         <span className="truncate">{label === 'Default' ? 'Model: Default' : label}</span>
         <ChevronDownIcon className={pillChevronClass} />
       </Button>
@@ -164,7 +165,6 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, efforts, effo
   const label = showMode
     ? `${active.label}${effortSuffix}`
     : (effort ? effortLabel(effort) : 'Effort: Default');
-  const TriggerIcon = showMode ? active.Icon : DumbbellIcon;
   return (
     <MenuTrigger isOpen={open} onOpenChange={setOpen}>
       <Button
@@ -174,7 +174,6 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, efforts, effo
           ? `Permission mode: ${active.label} — ${active.desc}${showEffort && effort ? `; reasoning effort ${effortLabel(effort)}` : ''}`
           : `Reasoning effort: ${effort ? effortLabel(effort) : 'Default'}`}
       >
-        <TriggerIcon className={pillIconClass} />
         {label}
         <ChevronDownIcon className={pillChevronClass} />
       </Button>
