@@ -23,6 +23,7 @@ import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { DocumentOutline } from './DocumentOutline';
 import { useDocumentOutline } from './DocumentOutlineContext';
+import { libraryListPlan } from './libraryListPlan';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { SearchPanel } from './SearchPanel';
@@ -124,13 +125,12 @@ const sectionToggleClass =
 const sectionTitleClass =
   'min-w-0 truncate text-xs font-semibold tracking-[.06em] uppercase text-muted-foreground';
 
-/** The Explorer view. The Library folder list (with the active folder's
- * file tree expanded in place) and the active Markdown document outline
- * share this one sidebar as independently collapsible sections. */
+/** The Explorer view. The active folder zone (current folder header +
+ * file tree), the LIBRARY resource list, and the active Markdown document
+ * outline share this one sidebar as stacked sections. */
 function FilesPanel() {
   const { activeTab } = useApp();
   const { outline } = useDocumentOutline();
-  const [libraryExpanded, setLibraryExpanded] = useState(true);
   const [outlineExpanded, setOutlineExpanded] = useState(true);
 
   const hasMarkdownDocument = activeTab?.file?.format === 'md';
@@ -139,25 +139,9 @@ function FilesPanel() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files" role="tabpanel">
       <NewChatButton />
       {/* Explorer sections mirror VS Code's compact disclosure rows. The
-        * library list and the active document's outline intentionally share
+        * folder zones and the active document's outline intentionally share
         * one navigation surface; neither becomes a floating editor companion. */}
-      <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border ' + (libraryExpanded ? 'flex-[3_1_0%]' : 'flex-none')}>
-        <div className="flex min-h-[30px] items-center gap-1.5 pt-2 pr-2 pb-0.5 pl-3">
-          <button
-            type="button"
-            className={sectionToggleClass + ' flex-none'}
-            aria-expanded={libraryExpanded}
-            aria-controls="sidebar-files-section"
-            onClick={() => setLibraryExpanded((expanded) => !expanded)}
-          ><ChevronDownIcon /><span className={sectionTitleClass}>Library</span></button>
-          <div className={sideActionsClass + ' ml-auto'}>
-            <AddFolderMenuButton />
-          </div>
-        </div>
-        <div id="sidebar-files-section" className={libraryExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
-          <LibraryList visible={libraryExpanded} />
-        </div>
-      </section>
+      <LibrarySections />
       {hasMarkdownDocument && (
         <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border ' + (outlineExpanded ? 'flex-[2_1_0%]' : 'flex-none')}>
           <div className="flex min-h-[30px] items-center justify-between gap-1.5 py-[5px] pr-2 pl-3">
@@ -296,12 +280,23 @@ function AddFolderMenuButton() {
   );
 }
 
-/** The Library folder list — every library folder as a root row, with the
- *  window's current folder expanded to its file tree in place (one
- *  expanded root at a time; clicking another root switches this window's
- *  folder). Favorited folders pin to the top; the rest keep recents order. */
-function LibraryList({ visible }: { visible: boolean }) {
+/** The sidebar's two folder zones.
+ *
+ *  ACTIVE ZONE — only when this window has a folder open: the current
+ *  folder's header row (explorer toolbar, drop target, ⋯ menu) with its
+ *  file tree beneath, sitting on the base surface so the working folder
+ *  reads as content while the chrome around it stays on the pane surface.
+ *
+ *  LIBRARY — every OTHER member folder as a single compact row: favorites
+ *  (all of them) pinned first, then the five most recent non-favorites;
+ *  a "Show all N…" row (N = total membership) reveals the rest and
+ *  "Show fewer" collapses back. Disclosure is session-local. Clicking a
+ *  row switches this window's folder in place — the clicked folder moves
+ *  up into the active zone and the previous one drops back into the list. */
+function LibrarySections() {
   const { state, actions, dispatch } = useApp();
+  const [libraryExpanded, setLibraryExpanded] = useState(true);
+  const [showAllFolders, setShowAllFolders] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
@@ -319,20 +314,22 @@ function LibraryList({ visible }: { visible: boolean }) {
     [state.folderPath],
   );
 
-  // Favorites pin to the top; both groups keep the server's recents order.
-  const roots = useMemo(() => {
-    const favorites = state.recent.filter((entry) => entry.favorite);
-    const others = state.recent.filter((entry) => !entry.favorite);
-    const ordered = [...favorites, ...others];
-    // A just-opened folder can precede the library refresh by a beat —
-    // keep the current root visible rather than dropping the tree.
-    if (state.folderPath && !ordered.some((entry) => folderRefsEqual(entry.path, state.folderPath))) {
-      ordered.unshift({ path: state.folderPath, openedAt: '', favorite: false });
-    }
-    return ordered;
-  }, [state.folderPath, state.recent]);
+  const activePath = state.folderPath;
 
-  const otherRootPathsKey = roots
+  // Windowing for the LIBRARY resource list: favorites first, then the five
+  // most recent non-favorites; the active folder never appears here (it
+  // lives in the active zone above). Disclosure is session-local.
+  const plan = useMemo(
+    () => libraryListPlan(state.recent, activePath, showAllFolders),
+    [activePath, showAllFolders, state.recent],
+  );
+
+  // Status polling only covers rows the user can currently see; expanding
+  // the disclosure widens this set on the next effect run.
+  const visibleRowPathsKey = plan.visible.map((entry) => entry.path).join('\n');
+  // Background reconcile still covers every non-current member — hidden
+  // rows included, because recovery must not depend on what is on screen.
+  const otherRootPathsKey = state.recent
     .filter((entry) => !isCurrent(entry.path))
     .map((entry) => entry.path)
     .join('\n');
@@ -366,7 +363,7 @@ function LibraryList({ visible }: { visible: boolean }) {
   const recentKeyRef = useRef('');
   recentKeyRef.current = state.recent.map((r) => r.path).join('\n');
   useEffect(() => {
-    if (!visible) return undefined;
+    if (!libraryExpanded) return undefined;
     let cancelled = false;
     const timer = setInterval(() => {
       void api.getFolder()
@@ -384,7 +381,7 @@ function LibraryList({ visible }: { visible: boolean }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [dispatch, visible]);
+  }, [dispatch, libraryExpanded]);
 
   const removeFolder = useCallback((path: string) => {
     setRemoving(true);
@@ -454,13 +451,13 @@ function LibraryList({ visible }: { visible: boolean }) {
     return () => clearTimeout(timer);
   }, [actions, openingFolder]);
 
-  // Poll non-current folders' index status while the list is visible so
-  // collapsed roots can show a quiet needs-attention dot. The current
-  // folder's readiness is owned by the in-folder surfaces (tree markers,
-  // Search view), which can point at the affected files.
+  // Poll the visible list rows' index status while the list is shown so
+  // they can carry a quiet needs-attention dot. The current folder's
+  // readiness is owned by the in-folder surfaces (tree markers, Search
+  // view), which can point at the affected files.
   useEffect(() => {
-    const paths = otherRootPathsKey ? otherRootPathsKey.split('\n') : [];
-    if (!visible || openingFolder || paths.length === 0) {
+    const paths = visibleRowPathsKey ? visibleRowPathsKey.split('\n') : [];
+    if (!libraryExpanded || openingFolder || paths.length === 0) {
       setFolderStates({});
       return;
     }
@@ -486,14 +483,14 @@ function LibraryList({ visible }: { visible: boolean }) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [openingFolder, otherRootPathsKey, state.libraryFolderStatuses, visible]);
+  }, [libraryExpanded, openingFolder, state.libraryFolderStatuses, visibleRowPathsKey]);
 
   // Background reconcile for the non-current library folders, with a
   // per-folder cooldown: previous library work (conversions, indexing)
   // may still be incomplete, and status polling alone is not recovery.
   useEffect(() => {
     const paths = otherRootPathsKey ? otherRootPathsKey.split('\n') : [];
-    if (!visible || openingFolder || paths.length === 0) return undefined;
+    if (!libraryExpanded || openingFolder || paths.length === 0) return undefined;
     const timer = setTimeout(() => {
       const now = Date.now();
       for (const path of paths) {
@@ -507,7 +504,7 @@ function LibraryList({ visible }: { visible: boolean }) {
       }
     }, 1500);
     return () => clearTimeout(timer);
-  }, [openingFolder, otherRootPathsKey, visible]);
+  }, [libraryExpanded, openingFolder, otherRootPathsKey]);
 
   const removeTarget = confirmRemove
     ? (() => {
@@ -518,74 +515,119 @@ function LibraryList({ visible }: { visible: boolean }) {
       })()
     : null;
 
-  if (roots.length === 0) return <ZeroFolderState />;
-
   const menuEntry = folderMenu ? state.recent.find((r) => r.path === folderMenu.path) : null;
+  const activeName = activePath ? basenameOfPath(activePath) : '';
+  const activeFavorite = !!activePath
+    && !!state.recent.find((r) => folderRefsEqual(r.path, activePath))?.favorite;
+  const showZeroState = !activePath && state.recent.length === 0;
+  // The active zone owns the flexible space while its tree is open; when
+  // it is absent (or folded shut) the LIBRARY section takes over the grow
+  // role instead of leaving dead pane below a capped list.
+  const activeZoneGrows = !!activePath && !state.folderCollapsed;
 
   return (
-    <div className="flex-1 overflow-y-auto pb-2">
-      {roots.map((entry) => {
-        const current = isCurrent(entry.path);
-        const name = basenameOfPath(entry.path);
-        if (current) {
-          return (
-            <CurrentRootRow
-              key={entry.path}
-              name={name}
-              path={entry.path}
-              favorite={!!entry.favorite}
-              onMenu={(rect) => setFolderMenu({ path: entry.path, name, rect })}
-              menuOpen={folderMenu?.path === entry.path}
-            />
-          );
-        }
-        const opening = openingFolder?.path === entry.path;
-        const needsAttention = folderStates[entry.path] === 'failed';
-        const menuOpen = folderMenu?.path === entry.path;
-        return (
-          <div
-            key={entry.path}
-            className={`group/root relative flex min-h-[26px] items-center pr-2 ${
-              menuOpen ? 'bg-muted' : 'hover:bg-muted'
-            }${opening ? ' opacity-60' : ''}`}
-          >
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-0 bg-transparent py-[3px] pr-1 pl-1 text-left text-base text-foreground disabled:cursor-default"
-              disabled={!!openingFolder}
-              title={entry.path}
-              onClick={() => openRoot(entry.path)}
-            >
-              <span className={'inline-flex size-4 flex-none items-center justify-center text-muted-foreground [&_svg]:size-3.5' + (opening ? ' [&_svg]:animate-spin' : ' [&_svg]:-rotate-90')}>
-                {opening ? <SyncIcon /> : <ChevronDownIcon />}
-              </span>
-              <span className="min-w-0 truncate font-semibold">{name}</span>
-              {entry.favorite && (
-                <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
-              )}
-              {needsAttention && (
-                <span
-                  className="size-1.5 shrink-0 rounded-full bg-status-warning"
-                  role="img"
-                  aria-label="Search needs attention"
-                  title="Some files in this folder could not be prepared for search."
-                />
-              )}
-            </button>
-            <span
-              className={`flex items-center ${
-                menuOpen ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
-              }`}
-            >
-              <RootMenuButton
-                name={name}
-                menuOpen={menuOpen}
-                onMenu={(rect) => setFolderMenu({ path: entry.path, name, rect })}
-              />
-            </span>
+    <>
+      {activePath && (
+        /* ACTIVE ZONE — the window's current folder on the base surface,
+         * split from the pane-surface LIBRARY list below by the section
+         * hairline. The header stays put; only the tree scrolls. */
+        <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border bg-background ' + (activeZoneGrows ? 'flex-[3_1_0%]' : 'flex-none')}>
+          <ActiveFolderHeader
+            name={activeName}
+            path={activePath}
+            favorite={activeFavorite}
+            menuOpen={folderMenu?.path === activePath}
+            onMenu={(rect) => setFolderMenu({ path: activePath, name: activeName, rect })}
+          />
+          {/* Collapsing hides the list but leaves the `expanded` set in
+            * state untouched, so re-expanding restores every inner
+            * folder's prior open/closed state. */}
+          {!state.folderCollapsed && (
+            <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+              <FileTree />
+            </div>
+          )}
+        </section>
+      )}
+      <section className={'flex min-h-0 flex-col overflow-hidden border-b border-border ' + (libraryExpanded ? (activeZoneGrows ? 'max-h-[40%] flex-none' : 'flex-[3_1_0%]') : 'flex-none')}>
+        <div className="flex min-h-[30px] flex-none items-center gap-1.5 pt-2 pr-2 pb-0.5 pl-3">
+          <button
+            type="button"
+            className={sectionToggleClass + ' flex-none'}
+            aria-expanded={libraryExpanded}
+            aria-controls="sidebar-files-section"
+            onClick={() => setLibraryExpanded((expanded) => !expanded)}
+          ><ChevronDownIcon /><span className={sectionTitleClass}>Library</span></button>
+          <div className={sideActionsClass + ' ml-auto'}>
+            <AddFolderMenuButton />
           </div>
-        );
-      })}
+        </div>
+        <div id="sidebar-files-section" className={libraryExpanded ? 'flex min-h-0 flex-col overflow-hidden' + (activeZoneGrows ? '' : ' flex-1') : 'hidden'}>
+          {showZeroState ? <ZeroFolderState /> : (
+            <div className="min-h-0 flex-[1_1_auto] overflow-y-auto pb-2">
+              {plan.visible.map((entry) => {
+                const name = basenameOfPath(entry.path);
+                const opening = openingFolder?.path === entry.path;
+                const needsAttention = folderStates[entry.path] === 'failed';
+                const menuOpen = folderMenu?.path === entry.path;
+                return (
+                  <div
+                    key={entry.path}
+                    className={`group/root relative flex min-h-[26px] items-center pr-2 ${
+                      menuOpen ? 'bg-muted' : 'hover:bg-muted'
+                    }${opening ? ' opacity-60' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-0 bg-transparent py-[3px] pr-1 pl-3 text-left text-base text-foreground disabled:cursor-default"
+                      disabled={!!openingFolder}
+                      title={entry.path}
+                      onClick={() => openRoot(entry.path)}
+                    >
+                      {opening && (
+                        <span className="inline-flex size-4 flex-none items-center justify-center text-muted-foreground [&_svg]:size-3.5 [&_svg]:animate-spin"><SyncIcon /></span>
+                      )}
+                      {!opening && entry.favorite && (
+                        <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
+                      )}
+                      <span className="min-w-0 truncate">{name}</span>
+                      {needsAttention && (
+                        <span
+                          className="size-1.5 shrink-0 rounded-full bg-status-warning"
+                          role="img"
+                          aria-label="Search needs attention"
+                          title="Some files in this folder could not be prepared for search."
+                        />
+                      )}
+                    </button>
+                    <span
+                      className={`flex items-center ${
+                        menuOpen ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
+                      }`}
+                    >
+                      <RootMenuButton
+                        name={name}
+                        menuOpen={menuOpen}
+                        onMenu={(rect) => setFolderMenu({ path: entry.path, name, rect })}
+                      />
+                    </span>
+                  </div>
+                );
+              })}
+              {plan.hiddenCount > 0 && (
+                <button
+                  type="button"
+                  className="flex min-h-[26px] w-full cursor-pointer items-center border-0 bg-transparent py-[3px] pr-2 pl-3 text-left text-base text-muted-foreground hover:text-foreground focus-visible:text-foreground"
+                  aria-expanded={showAllFolders}
+                  onClick={() => setShowAllFolders((expanded) => !expanded)}
+                >
+                  {showAllFolders ? 'Show fewer' : `Show all ${plan.totalCount}…`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
       {folderMenu && (
         <Menu
           anchor={{ rect: folderMenu.rect, align: 'right' }}
@@ -646,11 +688,11 @@ function LibraryList({ visible }: { visible: boolean }) {
           </div>
         </ModalShell>
       )}
-    </div>
+    </>
   );
 }
 
-/** The ⋯ trigger shared by every root row. */
+/** The ⋯ trigger shared by every folder row. */
 function RootMenuButton({
   name,
   menuOpen,
@@ -678,14 +720,14 @@ function RootMenuButton({
   );
 }
 
-/** The expanded root — the window's current folder. Carries the classic
- *  explorer toolbar (new note / new folder / sync / fold) plus the same
- *  ⋯ folder menu as the collapsed roots, and hosts the file tree. The
- *  `#sideHead` id and `drop-target` / `active-root` state classes stay
- *  CSS-driven: `useGlobalDragDrop` toggles `drop-target` imperatively on
- *  #sideHead, and both rules share the tree's exempted selected/drop
- *  styling (see sidebar.css). */
-function CurrentRootRow({
+/** The active zone's header row — the window's current folder. Carries the
+ *  classic explorer toolbar (new note / new folder / sync / fold) plus the
+ *  same ⋯ folder menu as the library rows. The `#sideHead` id and
+ *  `drop-target` / `active-root` state classes stay CSS-driven:
+ *  `useGlobalDragDrop` toggles `drop-target` imperatively on #sideHead, and
+ *  both rules share the tree's exempted selected/drop styling (see
+ *  sidebar.css). */
+function ActiveFolderHeader({
   name,
   path,
   favorite,
@@ -723,48 +765,42 @@ function CurrentRootRow({
   const rootSelected = state.selectedPath === '';
 
   return (
-    <>
-      <div
-        id="sideHead"
-        className={
-          'side-head flex min-h-[26px] items-center gap-1 py-0.5 pr-2 pl-1'
-          + (sideHeadDrop ? ' drop-target' : '')
-          + (rootSelected ? ' active-root' : '')
-        }
-        onDragOver={onSideHeadDragOver}
-        onDragLeave={onSideHeadDragLeave}
-        onDrop={onSideHeadDrop}
-      >
-        <span className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-foreground">
-          <span
-            className={'inline-flex size-4 flex-none items-center justify-center text-muted-foreground transition-transform duration-fast [&_svg]:size-3.5' + (state.folderCollapsed ? ' -rotate-90' : '')}
-            onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
-          ><ChevronDownIcon /></span>
-          <span
-            className="min-w-0 flex-1 truncate text-base font-semibold"
-            title={path}
-            onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}
-          >{name}</span>
-          {favorite && (
-            <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
-          )}
-        </span>
-        <div className={menuOpen ? 'flex gap-0.5' : sideActionsClass}>
-          <NewNoteButton />
-          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title={'New folder in ' + (state.activeFolder || name)} onClick={() => {
-            if (state.activeFolder) dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
-            dispatch({ type: 'NEW_FOLDER_INPUT', open: true });
-          }}><NewFolderIcon /></Button>
-          <SyncButton />
-          <FolderFoldToggle />
-          <RootMenuButton name={name} menuOpen={menuOpen} onMenu={onMenu} />
-        </div>
+    <div
+      id="sideHead"
+      className={
+        'side-head flex min-h-[26px] flex-none items-center gap-1 py-0.5 pr-2 pl-1'
+        + (sideHeadDrop ? ' drop-target' : '')
+        + (rootSelected ? ' active-root' : '')
+      }
+      onDragOver={onSideHeadDragOver}
+      onDragLeave={onSideHeadDragLeave}
+      onDrop={onSideHeadDrop}
+    >
+      <span className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-foreground">
+        <span
+          className={'inline-flex size-4 flex-none items-center justify-center text-muted-foreground transition-transform duration-fast [&_svg]:size-3.5' + (state.folderCollapsed ? ' -rotate-90' : '')}
+          onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
+        ><ChevronDownIcon /></span>
+        <span
+          className="min-w-0 flex-1 truncate text-base font-semibold"
+          title={path}
+          onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}
+        >{name}</span>
+        {favorite && (
+          <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
+        )}
+      </span>
+      <div className={menuOpen ? 'flex gap-0.5' : sideActionsClass}>
+        <NewNoteButton />
+        <Button variant="ghost" size="icon-sm" className="text-muted-foreground" title={'New folder in ' + (state.activeFolder || name)} onClick={() => {
+          if (state.activeFolder) dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
+          dispatch({ type: 'NEW_FOLDER_INPUT', open: true });
+        }}><NewFolderIcon /></Button>
+        <SyncButton />
+        <FolderFoldToggle />
+        <RootMenuButton name={name} menuOpen={menuOpen} onMenu={onMenu} />
       </div>
-      {/* Collapsing hides the list but leaves the `expanded` set in
-        * state untouched, so re-expanding restores every inner
-        * folder's prior open/closed state. */}
-      {!state.folderCollapsed && <FileTree />}
-    </>
+    </div>
   );
 }
 

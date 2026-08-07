@@ -21,16 +21,23 @@ to migrate them into a StashBase-specific storage model.
   Library section: it opens the chat panel on a chat scoped to the
   window's current folder, or to the whole library when no folder is
   current, reusing a completely blank chat instead of stacking empty tabs.
-- The sidebar's Library section lists every library folder as a root row —
-  favorited folders pinned to the top, the rest in Recents order. The
-  window's current folder is the one expanded root showing the file tree
-  beneath it; clicking a collapsed root switches this window's folder in
-  place. Switching resets the folder-scoped document tabs and search state,
-  but keeps the window's chat tabs and their running Agent sessions — each
-  chat is pinned to its own scope (a library folder, or the whole library)
-  — and surfaces a welcome chat for the new folder without disturbing any
-  started chat or unsent draft. Collapsed roots show a subtle
-  warning dot when files in that folder could not be prepared for search.
+- The sidebar splits folder navigation into two zones separated by a
+  hairline and a surface shift. When a folder is open, an active zone under
+  the New Chat button shows that folder's header row (explorer toolbar,
+  drop target, ⋯ menu) with its file tree beneath, on the base surface.
+  Below it, the Library section lists every other member folder as a single
+  compact row on the pane surface — favorites (all of them) pinned first,
+  then the five most recent non-favorites; a "Show all N…" row (N = total
+  library membership) reveals the rest and collapses back via "Show fewer".
+  The disclosure is session-local and starts collapsed. Clicking a row
+  switches this window's folder in place: the clicked folder moves up into
+  the active zone and the previous one drops back into the list. Switching
+  resets the folder-scoped document tabs and search state, but keeps the
+  window's chat tabs and their running Agent sessions — each chat is pinned
+  to its own scope (a library folder, or the whole library) — and surfaces
+  a welcome chat for the new folder without disturbing any started chat or
+  unsent draft. Visible library rows show a subtle warning dot when files
+  in that folder could not be prepared for search.
 - A `+` button in the Library header offers Open Folder… (any folder on
   disk, indexed in place) and New Folder… (created under the default
   StashBase location) through the native picker; a folder row's actions
@@ -110,9 +117,10 @@ to migrate them into a StashBase-specific storage model.
   Chat is explicit and leaves a lightweight document/chat launcher instead of
   immediately reopening it.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
-  or project-management surface. It groups the library folder list (with the
-  current folder's file tree expanded in place) and the active Markdown
-  document outline into independently collapsible navigation sections.
+  or project-management surface. It stacks the active folder zone (current
+  folder header and file tree), the Library folder list, and the active
+  Markdown document outline as navigation sections; the Library and outline
+  sections stay independently collapsible.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
 - Command Palette exposes only safe, context-available actions the app already
