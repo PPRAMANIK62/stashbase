@@ -24,6 +24,54 @@ test('renderer foundation keeps Tailwind utility-only and maps semantic tokens',
   assert.match(styles, /--radius-control:/);
 });
 
+test('theme maps shadcn surface/text semantics and the app dark variant', () => {
+  const styles = read('web-src/src/styles.css');
+  // `muted` is the subtle SURFACE role; `muted-foreground` the subdued text.
+  assert.match(styles, /--color-muted: var\(--hover\);/);
+  assert.match(styles, /--color-muted-foreground: var\(--muted\);/);
+  assert.match(styles, /--color-input:/);
+  // dark: must follow data-theme, not the raw media query.
+  assert.match(styles, /@custom-variant dark/);
+  assert.match(styles, /:root\[data-theme='dark'\] &/);
+});
+
+test('chrome type scale and radius scale are the only visual values', () => {
+  const styles = read('web-src/src/styles.css');
+  // Every text-* utility scales with the interface-size preference.
+  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl']) {
+    assert.match(styles, new RegExp(`--text-${step}: calc\\([0-9]+px \\* var\\(--ui-scale\\)\\);`));
+  }
+  for (const [name, px] of [['sm', 'var(--radius-control)'], ['md', 'var(--radius-ui)'], ['lg', '8px'], ['xl', '10px']]) {
+    assert.match(styles, new RegExp(`--radius-${name}: ${px.replace(/[()*]/g, (c) => '\\' + c)};`));
+  }
+
+  // Legacy CSS stays on the shared scale: no half-pixel chrome sizes, no
+  // off-palette accent blues, no odd font weights. (.doc rendered-document
+  // typography is the one allowed exemption, all inside mainpane.css.)
+  const legacy = ['globals', 'chat', 'sidebar', 'mainpane']
+    .map((name) => read(`web-src/src/styles/${name}.css`))
+    .join('\n');
+  assert.doesNotMatch(legacy, /font-size: calc\((9|10|11|13)\.5px/);
+  assert.doesNotMatch(legacy, /font-weight: *(650|800)\b/);
+  assert.doesNotMatch(legacy, /46, ?116, ?230|#4a8cff|#4f7cff/);
+  const doc = read('web-src/src/styles/mainpane.css');
+  const halfPixel = doc.match(/12\.5px/g) ?? [];
+  assert.ok(halfPixel.length <= 2, `unexpected half-pixel sizes outside .doc: ${halfPixel.length}`);
+
+  // Migrated components consume named tokens, not arbitrary-value escapes.
+  const componentDirs = ['web-src/src/components', 'web-src/src/components/ui', 'web-src/src/components/agent', 'web-src/src/components/settings', 'web-src/src/components/embedder'];
+  for (const dir of componentDirs) {
+    const full = path.join(root, dir);
+    if (!fs.existsSync(full)) continue;
+    for (const file of fs.readdirSync(full)) {
+      if (!file.endsWith('.tsx')) continue;
+      const source = read(path.join(dir, file));
+      assert.doesNotMatch(source, /text-\[calc\(/, `${dir}/${file} uses an arbitrary scaled font size — use the text-* ramp`);
+      assert.doesNotMatch(source, /bg-\[var\(--hover\)\]/, `${dir}/${file} uses bg-[var(--hover)] — use bg-muted`);
+    }
+  }
+});
+
 test('shadcn generation is configured for Base UI and renderer aliases', () => {
   const config = JSON.parse(read('components.json')) as Record<string, unknown>;
   assert.equal(config.style, 'base-nova');
