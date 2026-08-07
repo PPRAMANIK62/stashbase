@@ -54,7 +54,7 @@ them:
 
 ## Surfaces and Depth
 
-- Three surface levels — sunken (panels, chrome strip), base (content), and
+- Three surface levels — sunken (panels, tab strip), base (content), and
   raised (cards, popovers) — establish hierarchy through background shifts.
 - Separation comes from 1px subtle strokes and surface changes, not shadows.
 - Shadow is reserved for transient overlays (menus, dialogs, toasts) — the

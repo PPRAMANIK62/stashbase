@@ -38,8 +38,10 @@ change.
 
 ## CSS exemptions — the only rules allowed to stay in styles/*.css
 
-- **Electron chrome** (globals.css): `.app` grid and splitters, `.app-chrome`
-  drag regions, traffic-light insets, `body.is-electron` variants,
+- **Electron chrome** (globals.css): `.app` grid and splitters, the macOS
+  drag regions (the `.sidebar-drag-zone` traffic-light clearance band and
+  the `.tab-strip` empty-background drag with its `no-drag` opt-outs —
+  there is no titlebar strip), `body.is-electron` variants,
   reduced-motion policy block.
 - **Tab strip** (mainpane.css): `electron/tab-strip-layout-smoke.cjs` reads
   this file raw and asserts layout from it — migrate the test before

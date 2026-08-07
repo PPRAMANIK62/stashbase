@@ -17,7 +17,7 @@ import { FILE_MIME } from '../dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
 import { useApp } from '../store/AppContext';
 import { makeChatTab } from '../store/state';
-import { NewChatIcon } from '../icons';
+import { PlusIcon } from '../icons';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
@@ -1111,7 +1111,7 @@ export function AgentView({
             />
           )}
           <Button className={iconGhostButtonClass} aria-label={`New ${meta.name} chat`} onPress={newChat}>
-            <NewChatIcon />
+            <PlusIcon />
           </Button>
         </div>
       </div>

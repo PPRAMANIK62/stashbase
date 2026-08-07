@@ -5,8 +5,8 @@ import {
   ExpandAllIcon,
   ExternalLinkIcon,
   FolderIcon,
+  LibraryIcon,
   MoreHorizontalIcon,
-  NewChatIcon,
   NewFileIcon,
   NewFolderIcon,
   PlusIcon,
@@ -98,6 +98,12 @@ export function Sidebar() {
      * `group/sidebar` drives the hover-reveal of the header action
      * icons (see the side-actions class strings below). */
     <aside className="sidebar group/sidebar relative flex h-full min-h-0 min-w-0 flex-row overflow-hidden border-r border-border bg-pane">
+      {/* macOS Electron only (display:none elsewhere): the quiet band at
+        * the column's top that the traffic lights float over, doubling as
+        * the window drag region now that there is no titlebar strip.
+        * Structural rules live in globals.css (Electron chrome
+        * exemption) — `-webkit-app-region` needs a real element. */}
+      <div className="sidebar-drag-zone" aria-hidden="true" />
       <ActivityBar />
       {/* The panel that swaps content based on `state.activeSidebarView`;
         * it owns the vertical stack (header / list). */}
@@ -115,17 +121,17 @@ const sideActionsClass =
 
 /* Section header toggle: a quiet, normal-case label whose chevron sits in
  * the same 16px leading slot the pill rows use, so the header text lines
- * up with the row text gutter below it. Chevron rotation is keyed off the
- * toggle's aria-expanded so the visual state can never drift from the
- * accessible one. */
+ * up with the row text gutter below it. Rotation lives on the chevron slot
+ * (not `[&_svg]` on the button) so other glyphs in the header stay put —
+ * callers rotate the slot from the same state that drives aria-expanded. */
 const sectionToggleClass =
   'inline-flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left '
-  + 'text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none '
-  + '[&_svg]:size-3 [&_svg]:flex-none [&_svg]:transition-transform [&_svg]:duration-fast '
-  + 'aria-[expanded=false]:[&_svg]:-rotate-90';
+  + 'text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none';
 
 /* The 16px leading slot that centers the (smaller) section chevron. */
-const sectionChevronClass = 'inline-flex size-4 flex-none items-center justify-center';
+const sectionChevronClass =
+  'inline-flex size-4 flex-none items-center justify-center transition-transform duration-fast '
+  + '[&_svg]:size-3 [&_svg]:flex-none';
 
 const sectionTitleClass = 'min-w-0 truncate text-xs font-medium text-muted-foreground';
 
@@ -153,7 +159,7 @@ function FilesPanel() {
         <section className={'mt-3 flex flex-col overflow-hidden ' + (outlineExpanded ? 'min-h-24 flex-[2_1_0%]' : 'min-h-0 flex-none')}>
           <div className="flex min-h-[30px] items-center justify-between gap-1.5 py-[5px] pr-2 pl-3.5">
             <button type="button" className={sectionToggleClass} aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
-              <span className={sectionChevronClass}><ChevronDownIcon /></span><span className={sectionTitleClass + ' flex-1'}>Document Outline</span><span className="ml-auto flex-none text-2xs text-muted-foreground">{outline.headings.length}</span>
+              <span className={sectionChevronClass + (outlineExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span><span className={sectionTitleClass + ' flex-1'}>Document Outline</span><span className="ml-auto flex-none text-2xs text-muted-foreground">{outline.headings.length}</span>
             </button>
           </div>
           <div id="sidebar-outline-section" className={outlineExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
@@ -194,7 +200,7 @@ function NewChatButton() {
         title="Start a chat in the current folder, or across the whole library"
         onClick={newChat}
       >
-        <NewChatIcon className="size-4 flex-none text-muted-foreground" />
+        <PlusIcon className="size-4 flex-none text-muted-foreground" />
         <span className="min-w-0 truncate">New Chat</span>
       </button>
     </div>
@@ -582,7 +588,7 @@ function LibrarySections() {
             aria-expanded={libraryExpanded}
             aria-controls="sidebar-files-section"
             onClick={() => setLibraryExpanded((expanded) => !expanded)}
-          ><span className={sectionChevronClass}><ChevronDownIcon /></span><span className={sectionTitleClass}>Library</span></button>
+          ><span className={sectionChevronClass + (libraryExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span><LibraryIcon className="size-3.5 flex-none" /><span className={sectionTitleClass}>Library</span></button>
           <div className={sideActionsClass + ' ml-auto'}>
             <AddFolderMenuButton />
           </div>
@@ -799,7 +805,7 @@ function ActiveFolderHeader({
     <div
       id="sideHead"
       className={
-        'side-head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-1 pl-1 hover:bg-muted'
+        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-1 pl-1 hover:bg-muted'
         + (sideHeadDrop ? ' drop-target' : '')
         + (rootSelected ? ' active-root' : '')
       }
@@ -808,10 +814,15 @@ function ActiveFolderHeader({
       onDrop={onSideHeadDrop}
     >
       <span className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-foreground">
+        {/* Folder glyph at rest; the pointer swaps in the fold chevron so
+          * the collapse affordance appears only when it's actionable. */}
         <span
-          className={'inline-flex size-4 flex-none items-center justify-center text-muted-foreground transition-transform duration-fast [&_svg]:size-3.5' + (state.folderCollapsed ? ' -rotate-90' : '')}
+          className="inline-flex size-4 flex-none items-center justify-center text-muted-foreground [&_svg]:size-3.5"
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
-        ><ChevronDownIcon /></span>
+        >
+          <FolderIcon className="group-hover/head:hidden" />
+          <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/head:inline-flex' + (state.folderCollapsed ? ' -rotate-90' : '')}><ChevronDownIcon /></span>
+        </span>
         <span
           className="min-w-0 flex-1 truncate text-base font-medium"
           title={path}

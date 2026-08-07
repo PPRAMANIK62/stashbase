@@ -25,7 +25,6 @@ import { ClipboardImportModal, type ClipboardOffer } from './components/Clipboar
 import { CascadePromptModal } from './components/CascadePromptModal';
 import { AlertConfirmModal } from './components/AlertConfirmModal';
 import { Toasts } from './components/Toasts';
-import { ChatLaunchButtons } from './components/ChatLaunchButtons';
 import { SettingsPortal, openSettings } from './components/SettingsModal';
 import { QuickOpen } from './components/QuickOpen';
 import { EditorHistoryNavigator } from './components/EditorHistoryNavigator';
@@ -101,7 +100,7 @@ function AppBody() {
     compact: compactWorkspace,
   });
   // Mount the chat panel lazily on first open and then NEVER
-  // unmount it — top-bar agent selectors only hide the column via CSS,
+  // unmount it — the tab-strip agent launchers only hide the column via CSS,
   // the underlying agent WebSocket sessions stay alive. Killing them
   // on every collapse would lose Claude Code's chat history and any
   // in-flight agent run. The in-panel "new chat" `+` is how the user
@@ -225,8 +224,8 @@ function AppBody() {
     // late boot push could clobber the harness's registration.
     if (state.booted) document.body.dataset.bootSettled = '1';
   }, [state.booted, state.folderPath]);
-  // macOS fullscreen toggles the `is-fullscreen` body class so the chrome
-  // strip can drop its traffic-light inset. That's owned entirely by the
+  // macOS fullscreen toggles the `is-fullscreen` body class so the sidebar
+  // can drop its traffic-light drag zone. That's owned entirely by the
   // preload (registered before page load, so it catches the initial state
   // push even when the window starts in fullscreen) — see preload.cjs.
   useEffect(() => {
@@ -332,24 +331,13 @@ function AppBody() {
 
   return (
     <>
-      {/* Dedicated chrome strip across the very top of the window.
-       *  In Electron it doubles as the macOS `hiddenInset` drag region;
-       *  the centered folder name plays the role VSCode's titlebar fills
-       *  (current folder identity), and the embedder picker sits at the
-       *  right. The sidebar has no explicit toggle button — it's
-       *  resized (and collapsed) by dragging its right edge, à la
-       *  VSCode; the activity rail always stays visible. Pulled out of
-       *  the file header (`.main-head`) so file controls and app
-       *  controls stop sharing the same row. */}
-      <div className="app-chrome">
-        <div className="app-chrome-left" />
-        {state.folder ? (
-          <div className="app-chrome-title">{state.folder}</div>
-        ) : null}
-        <div className="app-chrome-right">
-          {state.folderPath ? <ChatLaunchButtons /> : null}
-        </div>
-      </div>
+      {/* No dedicated titlebar strip, Cursor-style: the folder identity
+       *  lives in `document.title` (the OS titlebar / Mission Control),
+       *  the agent launchers sit in the tab strip's right corner, and on
+       *  macOS Electron the traffic lights float over the sidebar's top
+       *  drag zone (globals.css). The sidebar has no explicit toggle
+       *  button — it's resized (and collapsed) by dragging its right
+       *  edge, à la VSCode; the activity rail always stays visible. */}
       <div
         className={
           'app'

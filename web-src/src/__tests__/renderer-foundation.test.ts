@@ -148,7 +148,14 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
 
   const preload = read('electron/preload.cjs');
   assert.match(preload, /platform-\$\{process\.platform\}/);
-  assert.match(read('web-src/src/styles/globals.css'), /platform-darwin \.app-chrome-left/);
+  // Cursor-style chrome: no titlebar strip — the traffic lights float
+  // over the sidebar's top drag zone and the tab strip's empty
+  // background doubles as the other macOS drag surface.
+  const globals = read('web-src/src/styles/globals.css');
+  assert.doesNotMatch(globals, /app-chrome/);
+  assert.match(globals, /platform-darwin \.sidebar-drag-zone/);
+  assert.match(globals, /platform-darwin \.tab-strip/);
+  assert.match(read('web-src/src/components/Sidebar.tsx'), /className="sidebar-drag-zone"/);
 });
 
 test('shared overlays own loading modality, popup positioning, and focus return', () => {

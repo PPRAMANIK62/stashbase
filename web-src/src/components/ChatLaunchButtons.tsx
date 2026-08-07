@@ -1,9 +1,9 @@
 /**
- * Chrome-row chat launchers — one icon-only button per agent (Claude,
- * Codex), VSCode-style. Each icon selects its agent's most recently active
- * tab, creates a tab only when that agent has none, and toggles the panel
- * closed when clicked again while active. The in-panel `+` creates new tabs.
- *
+ * Chat launchers in the tab strip's right corner — one icon-only button
+ * per agent (Claude, Codex), Cursor-style. Each icon selects its agent's
+ * most recently active tab, creates a tab only when that agent has none,
+ * and toggles the panel closed when clicked again while active. The
+ * in-panel `+` creates new tabs.
  */
 import { useEffect, useRef } from 'react';
 import { api, type Agent, type AgentsResponse } from '../api';
@@ -77,8 +77,8 @@ function LaunchButton({
   return (
     <DeferredTooltipButton
       className={
-        /* Neutral 28px icon container shared with the chrome's home
-         * button — brand marks render muted at rest, tinted when the
+        /* Neutral 28px icon container per the sidebar pill language —
+         * brand marks render muted at rest, tinted when the
          * agent's panel is the active one. */
         'inline-flex size-7 cursor-pointer items-center justify-center rounded-sm border-0 p-0 '
         + 'text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-4 '

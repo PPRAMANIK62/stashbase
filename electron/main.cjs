@@ -654,8 +654,9 @@ async function createWindow(initialFolder) {
     minWidth: 720,
     minHeight: 480,
     // Initial OS-level title; the renderer adds the current folder once it
-    // opens so Mission Control/task switchers can distinguish windows. The
-    // visible in-window title is still drawn by the custom HTML chrome.
+    // opens so Mission Control/task switchers can distinguish windows.
+    // There is no in-window titlebar strip — document.title is the only
+    // place the folder identity is spelled out.
     title: 'StashBase',
     backgroundColor: '#fafafa',
     titleBarStyle: 'hiddenInset',
@@ -727,11 +728,11 @@ async function createWindow(initialFolder) {
     void openHttpExternal(url, 'navigation URL');
   });
 
-  // macOS fullscreen hides the traffic lights, so the chrome strip
-  // shouldn't reserve room for them. Push state to the renderer so CSS
-  // can flip a body class. Send the initial state once the renderer is
-  // up in case the window started fullscreen (rare but possible via
-  // `Restore Window` on relaunch).
+  // macOS fullscreen hides the traffic lights, so the sidebar shouldn't
+  // reserve its top drag-zone clearance for them. Push state to the
+  // renderer so CSS can flip a body class. Send the initial state once
+  // the renderer is up in case the window started fullscreen (rare but
+  // possible via `Restore Window` on relaunch).
   function pushFullscreen() {
     if (win.isDestroyed()) return;
     win.webContents.send('fullscreen-change', win.isFullScreen());

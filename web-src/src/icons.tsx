@@ -74,18 +74,6 @@ export function PlusIcon({ className }: IconProps) {
   );
 }
 
-/** Chat bubble with a plus — "new chat" (Lucide `message-square-plus`),
- *  matching the VSCode chat panel's new-conversation glyph. */
-export function NewChatIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <line x1="9" y1="10" x2="15" y2="10" />
-      <line x1="12" y1="7" x2="12" y2="13" />
-    </svg>
-  );
-}
-
 /** `</>` — code / edit-mode glyph for the composer mode button. */
 export function CodeIcon({ className }: IconProps) {
   return (
@@ -161,6 +149,18 @@ export function NewFolderIcon({ className }: IconProps) {
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
       <line x1="12" y1="11" x2="12" y2="17" />
       <line x1="9" y1="14" x2="15" y2="14" />
+    </svg>
+  );
+}
+
+/** Leaning book spines (Lucide `library`) — the Library section glyph. */
+export function LibraryIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="m16 6 4 14" />
+      <path d="M12 6v14" />
+      <path d="M8 8v12" />
+      <path d="M4 4v16" />
     </svg>
   );
 }
@@ -251,17 +251,6 @@ export function TrashIcon({ className }: IconProps) {
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       <line x1="10" y1="11" x2="10" y2="17" />
       <line x1="14" y1="11" x2="14" y2="17" />
-    </svg>
-  );
-}
-
-/** Library collection — Lucide `archive`. */
-export function LibraryIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <rect width="20" height="5" x="2" y="3" rx="1" />
-      <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
-      <path d="M10 12h4" />
     </svg>
   );
 }

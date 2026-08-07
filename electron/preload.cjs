@@ -45,9 +45,9 @@ window.addEventListener('DOMContentLoaded', () => {
   document.body.classList.add('is-electron', `platform-${process.platform}`);
 });
 
-// macOS green-button fullscreen hides the traffic lights, so the chrome
-// strip drops its left inset (the `is-fullscreen` body class). Own this in
-// the preload, not a renderer React effect: the listener is registered at
+// macOS green-button fullscreen hides the traffic lights, so the sidebar
+// drops its top drag-zone clearance (the `is-fullscreen` body class). Own
+// this in the preload, not a renderer React effect: the listener is registered at
 // preload top-level — before the page loads — so the initial state push
 // (main sends it on did-finish-load) is caught even when the window STARTS
 // in fullscreen. A React effect can attach its listener after that push has
