@@ -5,12 +5,13 @@
       --surface-base: #ffffff;
       --surface-raised: #ffffff;
       --surface-sunken: #f6f7f8;
-      /* Hover is a light cool neutral, selected a soft accent-derived
-       * cyan. Both deliberately carry NO green cast — the earlier
-       * #eef2f3/#dceff3 pair read muddy on wide row bands — and both
-       * stay light: heavy washes read dirty at row width. */
+      /* Hover is a light cool neutral; selected is one step stronger in
+       * the same neutral ramp with only a whisper of cool cast — cyan
+       * washes at row width read loud, so the accent is reserved for
+       * focus rings, progress, and small interactive emphasis, never
+       * selection surfaces. */
       --surface-hover: #eef0f2;
-      --surface-selected: #d7edf4;
+      --surface-selected: #e2e7ea;
       --text-primary: #202427;
       --text-secondary: #68737a;
       --text-on-accent: #ffffff;
@@ -69,7 +70,7 @@
       --surface-raised: #242a2e;
       --surface-sunken: #15191c;
       --surface-hover: #30383d;
-      --surface-selected: #164955;
+      --surface-selected: #353f45;
       --text-primary: #edf2f3;
       --text-secondary: #aab5ba;
       --text-on-accent: #06191f;
@@ -104,7 +105,7 @@
         --surface-raised: #242a2e;
         --surface-sunken: #15191c;
         --surface-hover: #30383d;
-        --surface-selected: #164955;
+        --surface-selected: #353f45;
         --text-primary: #edf2f3;
         --text-secondary: #aab5ba;
         --text-on-accent: #06191f;

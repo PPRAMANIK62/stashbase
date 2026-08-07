@@ -187,7 +187,7 @@ function NewChatButton() {
     /* A quiet full-width pill row (Cursor's "New Agent" treatment), not a
      * boxed button — the sidebar's rows carry the hierarchy. There is no
      * keyboard shortcut for this action, so no hint is shown. */
-    <div className="flex-none px-1.5 py-1.5">
+    <div className="flex-none px-1.5 pt-2 pb-3">
       <button
         type="button"
         className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-foreground hover:bg-muted"
@@ -304,7 +304,19 @@ function AddFolderMenuButton() {
  *  up into the active zone and the previous one drops back into the list. */
 function LibrarySections() {
   const { state, actions, dispatch } = useApp();
-  const [libraryExpanded, setLibraryExpanded] = useState(true);
+  // Library defaults COLLAPSED while a folder is active (it anchors to
+  // the sidebar bottom, out of the way) and expanded when the window has
+  // no folder (it IS the main content then). A presence transition
+  // resets the default; manual toggles win until the next transition.
+  const [libraryExpanded, setLibraryExpanded] = useState(() => !state.folderPath);
+  const hadFolderRef = useRef(!!state.folderPath);
+  useEffect(() => {
+    const hasFolder = !!state.folderPath;
+    if (hadFolderRef.current !== hasFolder) {
+      hadFolderRef.current = hasFolder;
+      setLibraryExpanded(!hasFolder);
+    }
+  }, [state.folderPath]);
   const [showAllFolders, setShowAllFolders] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
@@ -559,7 +571,10 @@ function LibrarySections() {
       {/* LIBRARY sizes to its content too, shrinking (with an internal
         * scroll) only when the panel runs out of room — leftover blank
         * space falls below the last section, never between sections. */}
-      <section className={'mt-3 flex min-h-0 flex-col overflow-hidden ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
+      {/* While a folder is active the Library anchors to the sidebar
+        * BOTTOM (mt-auto) so the working tree keeps the room; with no
+        * folder it flows as the main content. */}
+      <section className={(activePath ? 'mt-auto ' : 'mt-3 ') + 'flex min-h-0 flex-col overflow-hidden ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
         <div className="flex min-h-[30px] flex-none items-center gap-1.5 py-0.5 pr-2 pl-3.5">
           <button
             type="button"

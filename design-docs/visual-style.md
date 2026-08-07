@@ -26,7 +26,9 @@ Two elements make StashBase recognizably itself; strengthen them, never dilute
 them:
 
 - **Cyan + amber color pair.** Cyan is the working accent — interactive
-  emphasis, selection, focus, progress, info. Amber is the counterpoint,
+  emphasis, focus, progress, info — but NOT selection surfaces: selected
+  rows/pills use a quiet neutral one step past hover, because accent
+  washes at row width read loud. Amber is the counterpoint,
   used sparingly where the brand shows (file-type marks, the occasional
   brand moment). The pairing comes from the `.html`/`.md` file icons and is
   deliberately not the generic AI-product purple. Sparingly is a hard
