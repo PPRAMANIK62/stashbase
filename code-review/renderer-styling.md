@@ -55,7 +55,7 @@ change.
   `.pdf-page-highlight` + keyframes, spinner keyframes referenced by the
   reduced-motion block.
 - **Style-free marker classes** kept as querySelector/behavior hooks only
-  (e.g. `.welcome`, `.agent-view`, `quick-open-veil`) — do not re-grow
+  (e.g. `.agent-view`, `quick-open-veil`) — do not re-grow
   styling onto them.
 
 Small still-unmigrated stragglers (`.migrate-*` cascade modal content,

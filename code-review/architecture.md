@@ -115,9 +115,9 @@ lives in [§6.2](#62-scope). The in-app search UI is scoped to the current
 window's folder and can narrow further to one subfolder and to file-type
 categories.
 
-On server boot, StashBase binds every library folder into the daemon and then reconciles them in the background. The Welcome screen also reconciles library folders with a short cooldown and polls folder status when it is idle. While a folder is actively opening, Welcome status polling and reconcile are deferred so navigation does not compete with preparation work.
+On server boot, StashBase binds every library folder into the daemon and then reconciles them in the background. The sidebar library list also reconciles the non-current library folders with a short cooldown and polls their status while it is visible and idle. While a folder is actively opening, that polling and reconcile are deferred so navigation does not compete with preparation work.
 
-Opening a folder is a navigation action first and a preparation action second. Once the server accepts the target folder, the renderer enters the folder view before recursive file listing, file ordering, or index status finish. Those follow in the background. Going Home follows the same rule in reverse: the renderer returns to Welcome immediately, and the server-side folder close runs in the background.
+Opening a folder is a navigation action first and a preparation action second. Once the server accepts the target folder, the renderer enters the folder view before recursive file listing, file ordering, or index status finish. Those follow in the background. There is no landing page: a window that boots without a current folder auto-opens the most recent library folder, and an empty library leaves the window on the no-folder workspace with the sidebar's add-folder affordance.
 
 Each opened folder can carry a short optional description in app config. The description is orientation metadata for humans and Agents: it explains what the folder is for, but it is not indexed content and it does not define access scope. It can be written by the user first and later generated or refreshed by AI. Removing a folder from "Your Folders" removes its description with the folder membership record.
 
@@ -379,7 +379,7 @@ Reconcile compares local files against indexed records using content hashes. It 
 Common triggers include:
 
 - server boot
-- Welcome loading the library list
+- the sidebar library list, for non-current folders while visible
 - opening or switching a folder
 - returning focus to the app
 - an Agent turn ending

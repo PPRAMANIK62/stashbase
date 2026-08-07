@@ -82,9 +82,9 @@ them:
 
 ## Warmth Budget
 
-The Welcome screen and empty states are the only places the brand is allowed
-a little warmth — display-size type, the single amber moment, a touch more
-spacing. The serif voice stays in content surfaces (editor titles, agent
+Empty states — such as the sidebar's zero-folder library block — are the only
+places the brand is allowed a little warmth: the app mark, the single amber
+moment, a touch more spacing. The serif voice stays in content surfaces (editor titles, agent
 prose); chrome, including brand chrome, speaks sans so one screen never mixes
 personalities. Everywhere else the chrome stays neutral so the user's content
 provides the character.
