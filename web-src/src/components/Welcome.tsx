@@ -10,6 +10,8 @@ import type { LibraryFolderStatus } from '../store/state';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
 import { openSettings } from './SettingsModal';
+import { Button } from './ui/button';
+import { Card, CardHeader } from './ui/card';
 import { StatusMessage } from './ui/status';
 
 interface ElectronBridge {
@@ -265,49 +267,47 @@ export function Welcome() {
     : null;
 
   return (
-    <div className="welcome">
-      <div className="welcome-inner">
-        <div className="welcome-brand">
-          <div className="welcome-logo">
+    <div className="welcome fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-pane text-foreground">
+      <div className="welcome-inner mt-[clamp(94px,17vh,150px)] w-[min(700px,calc(100vw-56px))] pt-5 pb-8 max-[720px]:mt-14 max-[720px]:w-[min(100%,calc(100vw-28px))]">
+        <div className="mb-5 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-0.5">
+          <div className="row-span-2 size-12 *:size-full">
             <CubeLogoIcon />
           </div>
-          <div className="welcome-title">StashBase</div>
-          <div className="welcome-sub">
+          <div className="text-3xl leading-tight font-semibold">StashBase</div>
+          <div className="text-lg leading-snug text-muted-foreground">
             Open or create a folder to build your searchable library.
           </div>
         </div>
 
-        <div className="welcome-recent">
-          <div className="welcome-recent-head">
-            <span className="welcome-recent-title">
-              <span className="welcome-recent-head-icon">
+        <Card variant="raised" className="overflow-hidden">
+          <CardHeader className="min-h-14 justify-between gap-3 bg-accent/5 px-4 py-0 text-lg font-semibold">
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="inline-flex size-5 shrink-0 items-center justify-center text-accent [&_svg]:size-[18px]">
                 <LibraryIcon />
               </span>
               <span>
-                Library <span className="welcome-recent-count">· {state.recent.length} {state.recent.length === 1 ? 'folder' : 'folders'}</span>
+                Library <span className="text-base font-normal text-muted-foreground">· {state.recent.length} {state.recent.length === 1 ? 'folder' : 'folders'}</span>
               </span>
             </span>
-            <div className="welcome-recent-head-right">
-              <div className="welcome-actions welcome-actions--header">
-                <OpenFolderButton
-                  shortLabel
-                  primary
-                  disabled={!!openingFolder}
-                  onOpeningFolder={setOpeningFolder}
-                />
-                <NewFolderButton
-                  shortLabel
-                  disabled={!!openingFolder}
-                  folderHome={folderHome}
-                  refreshFolderHome={refreshFolderHome}
-                  onOpeningFolder={setOpeningFolder}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="welcome-recent-list">
+            <span className="flex min-w-0 items-center gap-2">
+              <OpenFolderButton
+                shortLabel
+                primary
+                disabled={!!openingFolder}
+                onOpeningFolder={setOpeningFolder}
+              />
+              <NewFolderButton
+                shortLabel
+                disabled={!!openingFolder}
+                folderHome={folderHome}
+                refreshFolderHome={refreshFolderHome}
+                onOpeningFolder={setOpeningFolder}
+              />
+            </span>
+          </CardHeader>
+          <div className="flex max-h-[272px] flex-col overflow-y-auto py-1.5">
             {state.recent.length === 0 && (
-              <div className="welcome-recent-empty">No folders yet.</div>
+              <div className="px-2.5 py-4 text-center text-sm text-muted-foreground">No folders yet.</div>
             )}
             {state.recent.length > 0 && (
               <>
@@ -325,38 +325,37 @@ export function Welcome() {
                   return (
                     <div
                       key={r.path}
-                      className="welcome-recent-row"
+                      className="flex min-h-11 w-full cursor-pointer items-center border-b border-border px-4 transition-colors last:border-b-0 hover:bg-muted has-[button:first-child:disabled]:hover:bg-transparent"
                       onClick={() => openRecent(r.path)}
                     >
                       <button
                         type="button"
-                        className="welcome-recent-open"
+                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 border-0 bg-transparent pr-2 text-left text-foreground disabled:cursor-default"
                         title={r.path}
                         onClick={(e) => {
                           e.stopPropagation();
                           openRecent(r.path);
                         }}
                       >
-                        <FolderIcon />
-                        <span className="welcome-recent-main">
-                          <span className="welcome-recent-line">
-                            <span className="welcome-recent-name">{name}</span>
-                            <span className="welcome-recent-path">{parent}</span>
-                            {indexState === 'failed' && (
-                              <span
-                                className="welcome-recent-status is-failed"
-                                aria-label="Search needs attention"
-                                title="Some files in this folder could not be prepared for search."
-                              >
-                                <WarningMark />
-                              </span>
-                            )}
-                          </span>
+                        <FolderIcon className="mx-0.5 size-4 shrink-0 text-muted-foreground opacity-80 [&_path]:stroke-[1.8]" />
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="max-w-[36%] min-w-0 truncate text-base font-semibold">{name}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground max-[720px]:hidden">{parent}</span>
+                          {indexState === 'failed' && (
+                            <span
+                              className="welcome-recent-status mr-1.5 inline-flex size-[18px] shrink-0 items-center justify-center text-muted-foreground opacity-90 [&_svg]:size-4"
+                              aria-label="Search needs attention"
+                              title="Some files in this folder could not be prepared for search."
+                            >
+                              <WarningMark />
+                            </span>
+                          )}
                         </span>
                       </button>
-                      <button
-                        type="button"
-                        className="welcome-recent-more"
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="shrink-0 text-muted-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
                         title="More actions"
                         aria-label={`More actions for ${name}`}
                         aria-haspopup="menu"
@@ -367,40 +366,41 @@ export function Welcome() {
                         }}
                       >
                         <MoreHorizontalIcon />
-                      </button>
+                      </Button>
                     </div>
                   );
                 })}
               </>
             )}
           </div>
-        </div>
+        </Card>
 
-        <div className="welcome-mcp">
-          <div className="welcome-mcp-icon">
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border bg-card/70 px-4 py-3 text-muted-foreground shadow-low max-[720px]:flex-col max-[720px]:items-start">
+          <div className="inline-flex size-6 shrink-0 items-center justify-center text-accent [&_svg]:size-5 [&_svg]:stroke-[1.8]">
             <PlugIcon />
           </div>
-          <div className="welcome-mcp-text">
-            <div className="welcome-mcp-title">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="inline-flex items-center gap-2 text-lg font-semibold text-foreground">
               <span>Connect your Agents</span>
-              <span className="welcome-mcp-agent-icons" aria-hidden="true">
+              <span className="inline-flex items-center gap-1 text-muted-foreground [&>svg]:size-4 [&>svg]:shrink-0" aria-hidden="true">
                 <ClaudeIcon />
                 <CodexIcon />
-                <span className="welcome-mcp-agent-more">+</span>
+                <span className="inline-flex size-4 items-center justify-center rounded-full bg-accent/10 pb-px text-sm font-bold text-accent">+</span>
               </span>
             </div>
           </div>
-          <button
-            className="welcome-mcp-btn"
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 font-semibold text-accent"
             onClick={() => openSettings('mcp')}
           >
             Open MCP Settings
-          </button>
+          </Button>
         </div>
 
         {state.welcomeError && (
-          <StatusMessage tone="error" className="welcome-err">
+          <StatusMessage tone="error" className="mt-3.5">
             {state.welcomeError}
           </StatusMessage>
         )}
@@ -435,33 +435,31 @@ export function Welcome() {
           title="Remove from Library?"
           description={
             <>
-            StashBase will remove <strong className="welcome-remove-name">{removeTarget.name}</strong> from your Library.
+            StashBase will remove <strong className="font-semibold text-accent">{removeTarget.name}</strong> from your Library.
             It will <strong>not</strong> delete the folder or its files from your disk.
             </>
           }
           onCancel={removing ? () => { /* wait for removal */ } : () => setConfirmRemove(null)}
           top
         >
-          <div className="welcome-remove-path" title={removeTarget.path}>
+          <div className="mt-2 truncate text-sm text-muted-foreground" title={removeTarget.path}>
             {removeTarget.parent}
           </div>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="modal-btn"
+          <div className="mt-4 flex justify-end gap-2">
+            <Button
+              variant="outline"
               disabled={removing}
               onClick={() => setConfirmRemove(null)}
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              className="modal-btn danger"
+            </Button>
+            <Button
+              variant="destructive"
               disabled={removing}
               onClick={() => removeFolder(removeTarget.path)}
             >
               {removing ? 'Removing…' : 'Remove'}
-            </button>
+            </Button>
           </div>
         </ModalShell>
       )}
@@ -521,18 +519,17 @@ function OpenFolderButton({
     }
   }
   return (
-    <button
-      className={'welcome-action' + (primary ? ' is-primary' : '')}
-      type="button"
+    <Button
+      variant={primary ? 'default' : 'outline'}
+      size="sm"
+      className="font-semibold"
       onClick={onClick}
       disabled={busy || disabled}
       title="Add any folder on your disk to the library — indexed in place, not copied"
     >
-      <span className="welcome-action-icon">
-        <FolderIcon />
-      </span>
-      <span className="welcome-action-label">{shortLabel ? 'Open' : 'Open folder'}</span>
-    </button>
+      <FolderIcon data-icon="inline-start" />
+      {shortLabel ? 'Open' : 'Open folder'}
+    </Button>
   );
 }
 
@@ -584,17 +581,16 @@ function NewFolderButton({
   }
 
   return (
-    <button
-      className="welcome-action"
-      type="button"
+    <Button
+      variant="outline"
+      size="sm"
+      className="font-semibold"
       onClick={onClick}
       disabled={busy || disabled}
       title="Create or choose a folder under the default StashBase location and add it to the library"
     >
-      <span className="welcome-action-icon">
-        <NewFolderIcon />
-      </span>
-      <span className="welcome-action-label">{shortLabel ? 'New' : 'New folder'}</span>
-    </button>
+      <NewFolderIcon data-icon="inline-start" />
+      {shortLabel ? 'New' : 'New folder'}
+    </Button>
   );
 }

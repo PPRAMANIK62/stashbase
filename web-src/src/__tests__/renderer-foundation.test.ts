@@ -38,7 +38,7 @@ test('theme maps shadcn surface/text semantics and the app dark variant', () => 
 test('chrome type scale and radius scale are the only visual values', () => {
   const styles = read('web-src/src/styles.css');
   // Every text-* utility scales with the interface-size preference.
-  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl']) {
+  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl']) {
     assert.match(styles, new RegExp(`--text-${step}: calc\\([0-9]+px \\* var\\(--ui-scale\\)\\);`));
   }
   for (const [name, px] of [['sm', 'var(--radius-control)'], ['md', 'var(--radius-ui)'], ['lg', '8px'], ['xl', '10px']]) {

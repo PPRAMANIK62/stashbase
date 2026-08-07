@@ -79,6 +79,8 @@
   --text-xl--line-height: 1.35;
   --text-2xl: calc(20px * var(--ui-scale));
   --text-2xl--line-height: 1.25;
+  --text-3xl: calc(24px * var(--ui-scale));
+  --text-3xl--line-height: 1.15;
   --duration-fast: var(--motion-fast);
   --duration-standard: var(--motion-standard);
   --ease-ui: var(--motion-ease);
