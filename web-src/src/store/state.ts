@@ -61,6 +61,12 @@ export interface ChatTab {
    *  attachments. Maintained by the tab's AgentView; a blank tab is the
    *  reusable welcome tab for New Chat and window-folder switches. */
   blank?: boolean;
+  /** The folder the tab's CONNECTED session is bound to (`null` =
+   *  library scope, undefined = not connected yet). Maintained by the
+   *  tab's AgentView; lets the window-folder switch skip spawning a
+   *  welcome tab when the active chat already targets the new folder
+   *  (the create_project auto-select case). */
+  boundFolder?: string | null;
 }
 
 export interface OpenFile {
@@ -451,6 +457,7 @@ export type Action =
   /** AgentView reports whether its tab is completely blank (reusable as a
    *  welcome tab). See `ChatTab.blank`. */
   | { type: 'CHAT_TAB_SET_BLANK'; id: string; blank: boolean }
+  | { type: 'CHAT_TAB_SET_SCOPE'; id: string; folder: string | null }
   | { type: 'CHAT_TABS_RESET' }
   | { type: 'ACTIVE_FOLDER'; path: string }
   /** Move the sidebar's single focus to `path`. Pure visual highlight

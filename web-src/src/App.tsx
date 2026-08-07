@@ -45,7 +45,7 @@ import {
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_MAX_WIDTH,
 } from './store/state';
-import { blankTabToReuse } from './components/agent/folderState';
+import { switchWelcomeTabPlan } from './components/agent/folderState';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { getWindowId } from './api';
 import { api } from './api';
@@ -158,12 +158,14 @@ function AppBody() {
       });
       return;
     }
-    const reuseId = blankTabToReuse(state.chatTabs, agent);
-    if (reuseId) {
-      if (state.activeChatTabId !== reuseId) dispatch({ type: 'CHAT_TAB_ACTIVATE', id: reuseId });
-    } else {
+    const plan = switchWelcomeTabPlan(state.chatTabs, state.activeChatTabId, state.folderPath, agent);
+    if (plan.kind === 'activate') {
+      if (state.activeChatTabId !== plan.id) dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
+    } else if (plan.kind === 'new') {
       dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
     }
+    // plan.kind === 'none': the active chat is already bound to the new
+    // folder (create_project auto-select) — it IS the working entry.
   }, [dispatch, state.activeChatTabId, state.booted, state.chatTabs, state.folderPath]);
   useEffect(() => {
     const previous = previousWorkspaceRef.current;

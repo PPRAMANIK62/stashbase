@@ -96,12 +96,16 @@ to each tab on a switch is a three-way plan (`windowFolderSwitchPlan`):
 - **keep** — everything else keeps its binding untouched.
 
 The blank definition above is THE blank-tab rule (`isBlankChatTab`), and
-each tab's AgentView mirrors it into `ChatTab.blank`. The sidebar's New
-Chat button and the window-folder switch both consume it through
-`blankTabToReuse`: reuse a blank tab (preferring the preferred agent's)
-as the welcome tab, else create a new tab and make it active. On a folder
-switch this must not change panel visibility; only the no-tabs
-folder-open path opens the panel with its one fresh tab.
+each tab's AgentView mirrors it into `ChatTab.blank` (and its connected
+binding into `ChatTab.boundFolder`). The sidebar's New Chat button
+consumes it through `blankTabToReuse`; the window-folder switch goes
+through `switchWelcomeTabPlan`: when the ACTIVE tab is already bound to
+the new folder (create_project auto-select, or switching back to a chat's
+own folder) NO welcome tab is spawned — that conversation is the working
+entry; otherwise reuse a blank tab (preferring the preferred agent's),
+else create a new tab and make it active. On a folder switch this must
+not change panel visibility; only the no-tabs folder-open path opens the
+panel with its one fresh tab.
 
 Session teardown happens only on: native window close/retire (`onClose` →
 `stopAgentRuntime` per window — this includes library-scoped sessions),

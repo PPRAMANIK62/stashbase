@@ -192,6 +192,33 @@ export function blankTabToReuse(
   return (preferred ?? blanks[0])?.id ?? null;
 }
 
+/** What the chat panel does when the WINDOW's folder switches:
+ * - the ACTIVE tab is already bound to the new folder → nothing. The
+ *   conversation the user is looking at IS the working entry for that
+ *   folder (create_project auto-select, or clicking back to a chat's own
+ *   folder) — spawning a welcome tab over it would be hostile.
+ * - a completely blank tab exists → activate it (it follows the window
+ *   default on its next connect).
+ * - otherwise → create a fresh welcome tab.
+ */
+export type SwitchWelcomeTabPlan =
+  | { kind: 'none' }
+  | { kind: 'activate'; id: string }
+  | { kind: 'new' };
+
+export function switchWelcomeTabPlan(
+  tabs: readonly { id: string; agent: string; blank?: boolean; boundFolder?: string | null }[],
+  activeTabId: string | null,
+  newFolderPath: string,
+  preferredAgent: string,
+): SwitchWelcomeTabPlan {
+  const active = activeTabId ? tabs.find((tab) => tab.id === activeTabId) : undefined;
+  if (active && active.boundFolder === newFolderPath) return { kind: 'none' };
+  const reuse = blankTabToReuse(tabs, preferredAgent);
+  if (reuse) return { kind: 'activate', id: reuse };
+  return { kind: 'new' };
+}
+
 /** The file listing that feeds `@` mentions and folder-file attachment
  * validation for a scope:
  * - window-folder scope → the window's own listing;

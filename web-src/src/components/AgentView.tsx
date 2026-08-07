@@ -324,6 +324,14 @@ export function AgentView({
     );
     connectedScopeRef.current = sessionScope;
     setConnectedScope(sessionScope);
+    // Mirror the binding into the tab model: the window-folder switch
+    // logic skips spawning a welcome tab when the active chat already
+    // targets the new folder.
+    dispatch({
+      type: 'CHAT_TAB_SET_SCOPE',
+      id: idRef.current,
+      folder: sessionScope.kind === 'folder' ? sessionScope.path : null,
+    });
     const endpoint = runtime?.endpoint ?? '/ws/agent';
     const wsUrl = agentConnectionUrl({
       protocol: location.protocol, host: location.host, endpoint,
@@ -568,6 +576,10 @@ export function AgentView({
         if (!next || next.kind !== 'folder') break;
         connectedScopeRef.current = next;
         setConnectedScope(next);
+        // Update the tab-model binding BEFORE opening the folder, so the
+        // switch effect sees the active tab already bound to the project
+        // and does not activate a welcome tab over this conversation.
+        dispatch({ type: 'CHAT_TAB_SET_SCOPE', id: idRef.current, folder: next.path });
         notifyLibraryFolderAdded(next.path);
         if (folderPathRef.current !== next.path) {
           void actions.openFolder(next.path).catch((err) => {

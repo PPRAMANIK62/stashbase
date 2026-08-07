@@ -21,6 +21,7 @@ import {
   scopeRequestParams,
   shortenFolderPath,
   shouldFollowWindowFolder,
+  switchWelcomeTabPlan,
   windowFolderSwitchPlan,
 } from '../components/agent/folderState.ts';
 
@@ -294,4 +295,24 @@ test('scope equality treats library and folder scopes distinctly', () => {
   assert.equal(chatScopesEqual(folderScope('/a'), LIBRARY_SCOPE), false);
   assert.equal(chatScopesEqual(undefined, undefined), true);
   assert.equal(chatScopesEqual(LIBRARY_SCOPE, undefined), false);
+});
+
+test('switchWelcomeTabPlan: an active tab already bound to the new folder means no welcome tab', () => {
+  const tabs = [
+    { id: 't1', agent: 'claude', blank: false, boundFolder: '/lib/proj' },
+    { id: 't2', agent: 'claude', blank: true },
+  ];
+  assert.deepEqual(switchWelcomeTabPlan(tabs, 't1', '/lib/proj', 'claude'), { kind: 'none' });
+});
+
+test('switchWelcomeTabPlan: otherwise reuse a blank tab, else create', () => {
+  const tabs = [
+    { id: 't1', agent: 'claude', blank: false, boundFolder: '/lib/other' },
+    { id: 't2', agent: 'claude', blank: true },
+  ];
+  assert.deepEqual(switchWelcomeTabPlan(tabs, 't1', '/lib/proj', 'claude'), { kind: 'activate', id: 't2' });
+  assert.deepEqual(
+    switchWelcomeTabPlan([{ id: 't1', agent: 'claude', blank: false, boundFolder: '/lib/other' }], 't1', '/lib/proj', 'claude'),
+    { kind: 'new' },
+  );
 });

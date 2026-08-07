@@ -381,6 +381,11 @@ export function reducer(s: State, a: Action): State {
         ...s,
         chatTabs: s.chatTabs.map((t) => (t.id === a.id ? { ...t, blank: a.blank } : t)),
       };
+    case 'CHAT_TAB_SET_SCOPE':
+      return {
+        ...s,
+        chatTabs: s.chatTabs.map((t) => (t.id === a.id ? { ...t, boundFolder: a.folder } : t)),
+      };
     case 'CHAT_TABS_RESET':
       // Wipes ALL tabs — called when the window LOSES its folder context
       // (library removal / another window closing the folder; the server
