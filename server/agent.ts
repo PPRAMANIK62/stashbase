@@ -3,8 +3,10 @@
  * xterm, this bridges the **Claude Agent SDK** to a WebSocket as a
  * stream of structured panel events (text / thinking / tool calls /
  * permission prompts), so the renderer can paint a VSCode-style chat
- * panel instead of a terminal. One session per chat tab; switching
- * folders tears every session down (the SDK's cwd is then stale).
+ * panel instead of a terminal. One session per chat tab. Every session
+ * is pinned to an explicit member folder (its cwd) at connect time, so
+ * a window-folder switch leaves it running; teardown happens on window
+ * close, library folder removal, and app quit.
  *
  * Auth: the SDK reads the same credential store the user's `claude`
  * login populated (Keychain / `~/.claude`), so a Pro/Max subscription
@@ -54,7 +56,7 @@ import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeBridgeFile } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
-import { isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode } from './agent-contract.ts';
+import { disposeSessionsBoundToFolder, isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode } from './agent-contract.ts';
 import type { AgentClientEvent, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
 import { detectViewerFormat } from './format.ts';
 import { isAgentReadableDerivedTextReady } from './library-file-reader.ts';
@@ -279,6 +281,13 @@ class AgentSession {
   }
 
   readonly windowId: string;
+
+  /** The member folder this session is (or will be) bound to. `cwd` is the
+   *  authoritative binding once the session started; before that, the
+   *  explicit connect-time folder is the best answer. */
+  boundFolder(): string | null {
+    return this.cwd ?? this.folder ?? null;
+  }
 
   begin(): void {
     runWithWindowId(this.windowId, () => { void this.start(); });
@@ -639,8 +648,8 @@ function stringifyToolResult(content: unknown): string {
   return content == null ? '' : JSON.stringify(content);
 }
 
-/** Live agent sessions — one per structured chat tab. Folder switch tears
- *  them all down (the SDK cwd is then meaningless). */
+/** Live agent sessions — one per structured chat tab. Each is pinned to a
+ *  member folder; a window-folder switch leaves them running. */
 const sessions = new Set<AgentSession>();
 
 export function attachAgentWebSocket(
@@ -667,7 +676,8 @@ export function attachAgentWebSocket(
 }
 
 /** Kill every live agent session (optionally for one window). Called on
- *  folder switch / close — the session's cwd no longer makes sense. */
+ *  window close / retire and app shutdown — never on a folder switch;
+ *  sessions are folder-bound and survive the window moving elsewhere. */
 export function killActiveAgent(windowId?: string): void {
   for (const session of [...sessions]) {
     if (!windowId || session.windowId === windowId) {
@@ -675,6 +685,13 @@ export function killActiveAgent(windowId?: string): void {
       sessions.delete(session);
     }
   }
+}
+
+/** Kill the live agent sessions bound to one member folder, across all
+ *  windows. Library folder removal calls this so a removed folder cannot
+ *  keep running sessions. */
+export function killAgentSessionsForFolder(folderAbs: string): void {
+  disposeSessionsBoundToFolder(sessions, folderAbs);
 }
 
 function normalizeAgentWindowId(windowId: string | null | undefined): string {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  crossFolderListingRoot,
   folderDisplayName,
   folderMenuEntries,
   folderMenuLocked,
@@ -9,6 +10,7 @@ import {
   folderPillFolder,
   nextSessionFolder,
   shortenFolderPath,
+  shouldFollowWindowFolder,
 } from '../components/agent/folderState.ts';
 
 const recent = [
@@ -68,6 +70,36 @@ test('the pill locks once the conversation has content, a turn runs, or the sess
   assert.equal(folderMenuLocked(true, false, false), true);
   assert.equal(folderMenuLocked(false, true, false), true);
   assert.equal(folderMenuLocked(false, false, true), true);
+});
+
+test('only an unbound, empty, idle tab follows a window folder switch', () => {
+  const base = {
+    connectedFolder: '/tmp/scratch',
+    picked: undefined,
+    resumedSession: false,
+    hasContent: false,
+    turnActive: false,
+    windowFolder: '/Users/me/Projects/Research',
+  };
+  assert.equal(shouldFollowWindowFolder(base), true);
+  // Same folder → nothing to follow.
+  assert.equal(shouldFollowWindowFolder({ ...base, windowFolder: '/tmp/scratch' }), false);
+  // A conversation with content, a running turn, an explicit pick, or a
+  // resumed session never rebinds.
+  assert.equal(shouldFollowWindowFolder({ ...base, hasContent: true }), false);
+  assert.equal(shouldFollowWindowFolder({ ...base, turnActive: true }), false);
+  assert.equal(shouldFollowWindowFolder({ ...base, picked: '/tmp/scratch' }), false);
+  assert.equal(shouldFollowWindowFolder({ ...base, resumedSession: true }), false);
+  // No live binding yet, or no window folder → the next connect handles it.
+  assert.equal(shouldFollowWindowFolder({ ...base, connectedFolder: null }), false);
+  assert.equal(shouldFollowWindowFolder({ ...base, windowFolder: '' }), false);
+});
+
+test('mention/attachment scoping uses the session folder only when it differs from the window', () => {
+  assert.equal(crossFolderListingRoot('/tmp/scratch', '/Users/me/Projects/Research'), '/tmp/scratch');
+  assert.equal(crossFolderListingRoot('/tmp/scratch', '/tmp/scratch'), null);
+  assert.equal(crossFolderListingRoot(null, '/Users/me/Projects/Research'), null);
+  assert.equal(crossFolderListingRoot('/tmp/scratch', ''), null);
 });
 
 test('pill labels expose the binding and its locked state', () => {

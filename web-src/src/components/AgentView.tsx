@@ -11,7 +11,7 @@
  * See design-docs/architecture.md §8 for the shared library path.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse } from '../api';
+import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse, type FileMeta, type FolderMeta } from '../api';
 import { AGENT_META, type AgentKind } from '../agentCatalog';
 import { FILE_MIME } from '../dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
@@ -28,12 +28,14 @@ import { iconGhostButtonClass } from './agent/panelStyles';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
 import {
+  crossFolderListingRoot,
   folderDisplayName,
   folderMenuEntries,
   folderMenuLocked,
   folderMenuVisible,
   folderPillFolder,
   nextSessionFolder,
+  shouldFollowWindowFolder,
 } from './agent/folderState';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
@@ -154,7 +156,50 @@ export function AgentView({
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
   const turnErrorTrackerRef = useRef(new TurnErrorTracker());
-  const knownFilePaths = useMemo(() => new Set(state.files.map((f) => f.name)), [state.files]);
+  // Cross-folder tabs get their own file listing: `@` mentions, folder-file
+  // attachment validation, and context resolution must run against the
+  // session's bound folder, not the window's current one.
+  const listingRoot = crossFolderListingRoot(connectedFolder, state.folderPath);
+  const [sessionListing, setSessionListing] = useState<{ files: FileMeta[]; folders: FolderMeta[] } | null>(null);
+  const [sessionListingNonce, setSessionListingNonce] = useState(0);
+  useEffect(() => {
+    if (!listingRoot) {
+      setSessionListing(null);
+      return;
+    }
+    let cancelled = false;
+    void api.listFiles(listingRoot)
+      .then((payload) => {
+        if (!cancelled) setSessionListing({ files: payload.files, folders: payload.folders });
+      })
+      .catch(() => {
+        // Keep whatever listing we had; the next turn/tool refresh retries.
+      });
+    return () => { cancelled = true; };
+  }, [listingRoot, sessionListingNonce]);
+  const mentionFiles = listingRoot ? sessionListing?.files ?? [] : state.files;
+  const mentionFolders = listingRoot ? sessionListing?.folders ?? [] : state.folders;
+  const knownFilePaths = useMemo(() => new Set(mentionFiles.map((f) => f.name)), [mentionFiles]);
+  // An unbound tab that is still empty follows the window's folder: a
+  // sidebar switch reconnects its next (empty) session to the new folder.
+  // Bound tabs — content, queued prompts, an explicit pick, or a resume —
+  // keep their session and transcript untouched.
+  const blocksLengthRef = useRef(0);
+  blocksLengthRef.current = blocks.length;
+  const queuedCountRef = useRef(0);
+  queuedCountRef.current = queuedTurns.length;
+  useEffect(() => {
+    if (!shouldFollowWindowFolder({
+      connectedFolder: connectedFolderRef.current,
+      picked: pickedFolderRef.current,
+      resumedSession: modelControlRef.current.resumedSession,
+      hasContent: blocksLengthRef.current > 0 || queuedCountRef.current > 0,
+      turnActive: turnActiveRef.current,
+      windowFolder: state.folderPath,
+    })) return;
+    reconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follow-mode only reacts to window-folder changes
+  }, [state.folderPath]);
 
   useEffect(() => {
     // Fast Refresh runs an effect cleanup before reapplying it while keeping
@@ -367,8 +412,12 @@ export function AgentView({
         refreshRuntimes();
         // Starting a built-in agent can create root-level instruction files
         // (`AGENTS.md`, and for Claude the `CLAUDE.md` bridge). Refresh the
-        // tree immediately instead of waiting for the next index-status poll.
+        // tree immediately instead of waiting for the next index-status poll;
+        // a cross-folder session refreshes its own folder's listing too.
         void actions.loadFiles(folderPathRef.current || undefined);
+        if (connectedFolderRef.current && connectedFolderRef.current !== folderPathRef.current) {
+          setSessionListingNonce((n) => n + 1);
+        }
         // A fresh session always starts at permissionMode 'default'; if the
         // user had picked a non-default mode, re-apply it so a reconnect
         // (Retry / effort change) doesn't silently reset it.
@@ -427,7 +476,12 @@ export function AgentView({
             const toolFolder = connectedFolderRef.current ?? folderPathRef.current;
             void (async () => {
               await api.sync(toolFolder).catch(() => { /* turn-end / next poll will surface it */ });
-              if (folderPathRef.current !== toolFolder) return;
+              if (folderPathRef.current !== toolFolder) {
+                // Cross-folder tab: refresh the session-folder listing so
+                // mentions and attachment validation see the new files.
+                setSessionListingNonce((n) => n + 1);
+                return;
+              }
               await actions.loadFiles();
               if (folderPathRef.current !== toolFolder) return;
               void actions.refreshIndexState();
@@ -483,6 +537,7 @@ export function AgentView({
             .catch(() => { /* next status poll surfaces it */ })
             .finally(() => {
               if (folderPathRef.current === turnFolder) void actions.refreshIndexState();
+              else setSessionListingNonce((n) => n + 1);
             });
         }
         recordFailureBeforeContinuing(
@@ -649,8 +704,11 @@ export function AgentView({
 
   async function resolveFolderContext(path: string): Promise<AgentContextFile | null> {
     if (!knownFilePaths.has(path)) return null;
+    // Resolve against the session's bound folder — a cross-folder tab must
+    // not look the file up under the window's current folder.
+    const contextFolder = connectedFolderRef.current ?? folderPathRef.current;
     try {
-      return await api.agentContextFile(folderPathRef.current, path);
+      return await api.agentContextFile(contextFolder, path);
     } catch {
       return null;
     }
@@ -720,12 +778,12 @@ export function AgentView({
     }
   }
 
-  /** Add chips for files already in the folder (dragged from the sidebar);
-   *  no upload needed — just reference their existing path. */
+  /** Add chips for files already in the session's folder (dragged from the
+   *  sidebar); no upload needed — just reference their existing path. */
   function addFolderFiles(paths: string[]) {
     const clean = paths.filter((p) => p && knownFilePaths.has(p));
     const skipped = paths.filter((p) => p && !knownFilePaths.has(p)).length;
-    if (skipped) actions.toast('Only files from the current folder can be attached.', { level: 'warning' });
+    if (skipped) actions.toast("Only files from this chat's folder can be attached.", { level: 'warning' });
     const add = clean.map((p) => ({ path: p, name: baseName(p) }));
     if (add.length) setAttachments((a) => mergeAttachments(a, add));
   }
@@ -1041,6 +1099,8 @@ export function AgentView({
         showModeMenu={capabilities?.modes === true}
         showEffortMenu={capabilities?.effort === true}
         showModelMenu={modelMenuVisible(capabilities?.models === true, modelControl.models)}
+        mentionFiles={mentionFiles}
+        mentionFolders={mentionFolders}
         skills={skills}
         skillState={skillState}
         onRefreshSkills={refreshSkills}

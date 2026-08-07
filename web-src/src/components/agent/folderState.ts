@@ -59,6 +59,39 @@ export function folderPillFolder(options: {
     ?? nextSessionFolder(options.picked, options.windowFolder, options.memberPaths);
 }
 
+/** True when an unbound, still-empty tab should follow a window-folder
+ * switch by reconnecting its next session to the new folder. A tab with an
+ * explicit pick, a resumed session, any transcript content, or a running
+ * turn keeps its binding — a conversation never rebinds. */
+export function shouldFollowWindowFolder(options: {
+  connectedFolder: string | null;
+  picked: string | undefined;
+  resumedSession: boolean;
+  hasContent: boolean;
+  turnActive: boolean;
+  windowFolder: string;
+}): boolean {
+  return Boolean(options.windowFolder)
+    && !options.picked
+    && !options.resumedSession
+    && !options.hasContent
+    && !options.turnActive
+    && options.connectedFolder != null
+    && options.connectedFolder !== options.windowFolder;
+}
+
+/** The folder whose file listing feeds `@` mentions and folder-file
+ * attachment validation: the live session's binding when it differs from
+ * the window's current folder, else null (use the window's own listing). */
+export function crossFolderListingRoot(
+  connectedFolder: string | null,
+  windowFolder: string,
+): string | null {
+  return connectedFolder && windowFolder && connectedFolder !== windowFolder
+    ? connectedFolder
+    : null;
+}
+
 /** Locked exactly like the model menu — a transcript (including a resumed
  * one) or an active turn means the conversation is bound to its folder. */
 export function folderMenuLocked(hasTranscript: boolean, turnActive: boolean, resumedSession: boolean): boolean {

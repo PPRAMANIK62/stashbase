@@ -75,7 +75,12 @@ export const api = {
     send<Record<string, never>>('PUT', '/api/file-order', { parentPath, names }),
 
   // Files / folders listing --------------------------------------
-  listFiles: () => getJson<FilesPayload>('/api/files'),
+  // `folder` (optional) lists an explicit library-member folder instead of
+  // the window's current one — used by cross-folder chat tabs for mention
+  // and attachment scoping.
+  listFiles: (folder?: string) => getJson<FilesPayload>(
+    folder ? `/api/files?folder=${encodeURIComponent(folder)}` : '/api/files',
+  ),
   statFile: (name: string) => head('/api/files/' + encodePath(name)),
 
   // CRUD ---------------------------------------------------------

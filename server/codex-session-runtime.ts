@@ -9,6 +9,7 @@ import readline from 'node:readline';
 import type { WebSocket } from 'ws';
 import { buildStashbasePreamble } from './agent-preamble.ts';
 import {
+  disposeSessionsBoundToFolder,
   isAgentAccessMode,
   reportAgentRuntimeFailure,
   type AgentAccessMode,
@@ -85,6 +86,13 @@ export class CodexSession {
   private skillSequence = 0;
 
   readonly windowId: string;
+
+  /** The member folder this session is (or will be) bound to. `cwd` is the
+   * authoritative binding once the session started; before that, the explicit
+   * connect-time folder is the best answer. */
+  boundFolder(): string | null {
+    return this.cwd ?? this.folder ?? null;
+  }
 
   constructor(
     private ws: WebSocket,
@@ -913,6 +921,9 @@ export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort
   session.begin();
 }
 
+/** Kill live Codex sessions (optionally for one window). Called on window
+ * close / retire and app shutdown — never on a folder switch; sessions are
+ * folder-bound and survive the window moving elsewhere. */
 export function killActiveCodex(windowId?: string): void {
   for (const session of [...sessions]) {
     if (!windowId || session.windowId === windowId) {
@@ -920,6 +931,13 @@ export function killActiveCodex(windowId?: string): void {
       sessions.delete(session);
     }
   }
+}
+
+/** Kill the live Codex sessions bound to one member folder, across all
+ * windows. Library folder removal calls this so a removed folder cannot keep
+ * running sessions. */
+export function killCodexSessionsForFolder(folderAbs: string): void {
+  disposeSessionsBoundToFolder(sessions, folderAbs);
 }
 
 function normalizeWindowId(windowId: string | null | undefined): string {

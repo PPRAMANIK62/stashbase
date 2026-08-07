@@ -3,6 +3,7 @@ import { api, type FolderState } from '../api';
 import { folderRefsEqual, isAbsoluteFolderRef } from '../folderPath';
 import { createFolderMutationQueue } from '../folderTransition';
 import type { EditorHandle } from './actionTypes';
+import { folderScopedResetActions, type FolderResetReason } from './folderScopedReset';
 import type { Action, LibraryFolderStatus, State } from './state';
 import type { ToastOptions } from './useFeedbackActions';
 
@@ -117,7 +118,7 @@ export function useFolderActions(
   } = dependencies;
   const folderMutations = useRef(createFolderMutationQueue()).current;
 
-  const resetFolderScopedState = useCallback(() => {
+  const resetFolderScopedState = useCallback((reason: FolderResetReason) => {
     const previous = state.current;
     if (previous.folderPath) {
       dispatch({
@@ -133,21 +134,10 @@ export function useFolderActions(
     importIndexGrace.current.clear();
     keyBackfillGrace.current.clear();
     folderContextPath.current = '';
-    dispatch({ type: 'TABS_RESET' });
-    dispatch({ type: 'CHAT_TABS_RESET' });
-    dispatch({ type: 'SIDEBAR_VIEW', view: 'files' });
-    dispatch({ type: 'FILTER', q: '' });
-    dispatch({ type: 'SEARCH_CLEAR' });
-    dispatch({ type: 'ACTIVE_FOLDER', path: '' });
-    dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
-    dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
-    dispatch({ type: 'BLOCKED_CONVERSIONS', paths: [] });
-    dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
-    dispatch({ type: 'CONVERSION_SCHEDULER_STATE', revision: 0, versions: {} });
-    dispatch({ type: 'INDEX_WARNING', warning: null });
-    dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
-    dispatch({ type: 'SYNC_RUNNING', running: false });
-    dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
+    // Chat tabs survive a folder SWITCH (agent sessions are folder-bound
+    // server-side); they reset only when the window loses its folder
+    // context — see folderScopedReset.ts.
+    for (const action of folderScopedResetActions(reason)) dispatch(action);
   }, [
     dispatch,
     folderContextPath,
@@ -165,7 +155,7 @@ export function useFolderActions(
     generation: number,
   ) => {
     if (generation !== openGeneration.current) return false;
-    resetFolderScopedState();
+    resetFolderScopedState('switch');
     dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
     commitOpenedFolderNavigation(dispatch, folderContextPath, expected);
     return true;
@@ -273,7 +263,7 @@ export function useFolderActions(
   const prepareForFolderRemoval = useCallback((removedPath: string) => {
     if (!state.current.folderPath || !folderRefsEqual(state.current.folderPath, removedPath)) return;
     openGeneration.current += 1;
-    resetFolderScopedState();
+    resetFolderScopedState('folder-lost');
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
     dispatch({
       type: 'RECENT_LOADED',

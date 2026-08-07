@@ -25,6 +25,37 @@ absence falls back to the window's current folder exactly as before. The
 History menu lists sessions for the tab's currently picked folder, and resume
 carries that folder on the reconnect URL.
 
+Because every session is folder-pinned, a window-folder switch is NOT a
+teardown trigger: chat tabs and their running sessions survive the switch,
+transcripts (including queued prompts and failed-turn notices) untouched.
+Bound tabs keep their binding and the "in <basename>" header note; an
+unbound tab that is still empty (no transcript, no queued prompt, no active
+turn, no explicit pick, not resumed) follows the window by reconnecting its
+next session to the new folder. Session teardown happens only on: native
+window close/retire (`onClose` → `stopAgentRuntime` per window), library
+folder removal (`stopAgentRuntimeForFolder` ends every session BOUND to the
+removed folder across all windows, plus the window-close path for windows
+currently showing it), and the app-quit cleanup ladder. The renderer
+mirrors this: a folder switch keeps `chatTabs` (see
+`folderScopedResetActions('switch')`), while losing the window's folder
+context (removal, another window closing it) still resets them; the
+one-fresh-chat-tab-on-folder-open behavior only fires when the window has
+no chat tabs at all.
+
+Cross-folder tabs stay scoped to their session folder end to end: `@`
+mention ranking and folder-file attachment validation use the session
+folder's listing (`GET /api/files?folder=` — membership-validated),
+`agent-context-file` resolution passes the session folder (the route is
+folder-explicit: it takes an absolute member path and validates membership),
+and turn-end/tool reconcile syncs the session's folder without reloading the
+window's tree. The built-in agent's MCP file tools are absolute-path based;
+`STASHBASE_WINDOW_ID` in the session env is request identity only, not a
+path-resolution channel. A non-absolute MCP path is a legacy compatibility
+ref resolved under the default folder home — never against the window's
+current folder — so a window-folder switch cannot misroute a bound
+session's MCP file operations; the bound folder reaches native tools through
+the session cwd and the system-prompt preamble.
+
 The panel may make agent work easier to scan, but it should stay quiet:
 
 - low chrome
@@ -94,10 +125,13 @@ Community contributions can land as useful first iterations, but the long-term d
   surface. Hidden primary surfaces are inert so zero-width content cannot keep
   keyboard focus.
 - Opening a folder creates one fresh chat tab for the app-wide preferred
-  Agent. The preference defaults to Codex, changes only through explicit Agent
-  selection, and is recoverable when local UI storage is unavailable. Runtime
-  availability remains authoritative: never silently fall back from an
-  unavailable preferred Agent.
+  Agent — but only when the window has no chat tabs. Existing tabs (and their
+  folder-bound sessions) survive folder switches, so a switch never spawns an
+  extra tab or forces the panel open. The preference defaults to Codex,
+  changes only through explicit Agent selection, and is recoverable when
+  local UI storage is unavailable. Runtime availability remains
+  authoritative: never silently fall back from an unavailable preferred
+  Agent.
 - Keep the first compact-window document transition document-first. The
   responsive auto-collapse may be undone by an explicit Chat launcher action;
   once the user does that, layout effects must not immediately close Chat

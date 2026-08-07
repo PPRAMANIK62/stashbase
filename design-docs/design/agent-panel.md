@@ -9,10 +9,19 @@ client of StashBase context, not a separate AI workspace.
 
 - Users can work with supported Agent runtimes in separate chats and restore
   prior chat history.
-- Opening a folder starts a fresh chat with the user's last selected Agent.
-  Codex is the default until the user explicitly selects another Agent. An
-  unavailable preferred runtime remains a visible setup state; StashBase does
-  not silently substitute another runtime.
+- Opening a folder starts a fresh chat with the user's last selected Agent
+  when the window has no chats yet. Codex is the default until the user
+  explicitly selects another Agent. An unavailable preferred runtime remains
+  a visible setup state; StashBase does not silently substitute another
+  runtime.
+- Chats survive switching the window's folder: every chat is pinned to its
+  own library folder, so changing the sidebar's current folder keeps the
+  open chat tabs and their running sessions intact. A chat whose folder
+  differs from the window keeps working against its own folder — mentions,
+  attachments, and context resolve there — while a not-yet-started empty
+  chat simply follows the window to the new folder. Chats end when their
+  window closes, when their folder is removed from the library, or on app
+  quit.
 - With no document open, Chat fills the workspace beside the Files sidebar.
   Opening a file, search result, local response link, artifact, or new note
   moves the same mounted chat into the side panel. Closing the last document
@@ -48,7 +57,8 @@ client of StashBase context, not a separate AI workspace.
   show their own folder. When a chat's folder differs from the window's
   current folder, the pane header adds a muted "in <folder>" note so
   cross-folder chats stay legible. The History menu lists sessions for the
-  currently picked folder.
+  currently picked folder, and `@` mentions plus sidebar-file attachments
+  offer the chat's own folder — not the window's — for cross-folder chats.
 - The composer's model, permission-mode, and reasoning-effort controls are
   compact labelled pills, each with a leading icon and an accessible name.
   A default-valued model or effort pill reads "Model: Default" /

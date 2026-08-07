@@ -5,7 +5,7 @@ import {
   FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
 } from '../../icons';
 import { cn } from '../../lib/utils';
-import { useApp } from '../../store/AppContext';
+import type { FileMeta, FolderMeta } from '../../api';
 import { ImageLightbox } from '../ImageLightbox';
 import {
   Menu as SharedMenu,
@@ -288,7 +288,7 @@ function FolderMenu({ folder, entries, homeDir, locked, disabled, onSetFolder }:
 
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionFolder, folderEntries, folderLocked, folderHomeDir, showFolderMenu, onSetFolder, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionFolder, folderEntries, folderLocked, folderHomeDir, showFolderMenu, onSetFolder, mentionFiles, mentionFolders, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -314,6 +314,11 @@ export function AgentComposer({
   folderHomeDir: string;
   showFolderMenu: boolean;
   onSetFolder: (path: string) => void;
+  /** File/folder listing that feeds `@` mention ranking. For a tab bound to
+   * another library folder this is the SESSION folder's listing, not the
+   * window's. */
+  mentionFiles: FileMeta[];
+  mentionFolders: FolderMeta[];
   skills: AgentSkill[];
   skillState: 'available' | 'empty' | 'failed';
   onRefreshSkills: () => void;
@@ -339,7 +344,6 @@ export function AgentComposer({
   const [text, setText] = useState('');
   const composerRef = useRef<MentionComposerHandle>(null);
   const mentionListboxId = useId();
-  const { state } = useApp();
   const [mention, setMention] = useState<MentionQuery>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [modeOpen, setModeOpen] = useState(false);
@@ -368,8 +372,8 @@ export function AgentComposer({
 
   const suggestions = useMemo(() => {
     if (!mention || mention.kind !== 'mention') return [];
-    return rankMentionSuggestions(state.files, state.folders, mention.q);
-  }, [mention, state.files, state.folders]);
+    return rankMentionSuggestions(mentionFiles, mentionFolders, mention.q);
+  }, [mention, mentionFiles, mentionFolders]);
 
   const skillSuggestions = useMemo(() => mention?.kind === 'skill'
     ? skills.filter((skill) => skill.label.toLowerCase().includes(mention.q.toLowerCase()) || (skill.description ?? '').toLowerCase().includes(mention.q.toLowerCase()))

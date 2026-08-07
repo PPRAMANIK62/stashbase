@@ -130,6 +130,10 @@ function AppBody() {
     }
     if (defaultChatFolderRef.current === state.folderPath) return;
     defaultChatFolderRef.current = state.folderPath;
+    // Chat tabs (and their folder-bound sessions) survive folder switches,
+    // so only a window with NO chat tabs gets the one fresh tab on folder
+    // open — a switch must not spawn extras or yank the panel open.
+    if (state.chatTabs.length > 0) return;
     const agent = readPreferredAgent();
     dispatch({
       type: 'CHAT_AGENT_OPEN',

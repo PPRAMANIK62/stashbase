@@ -5,6 +5,7 @@ import {
   attachAgentRuntime,
   clearAgentRuntimeFailure,
   discoverAgentRuntimes,
+  disposeSessionsBoundToFolder,
   parseAgentEffort,
   registerAgentAdapter,
   reportAgentRuntimeFailure,
@@ -27,6 +28,7 @@ test('Claude and Codex declare every Shared Agent Contract panel behavior', () =
     }
     assert.equal(typeof adapter.attach, 'function');
     assert.equal(typeof adapter.stop, 'function');
+    assert.equal(typeof adapter.stopFolder, 'function');
     assert.equal(typeof adapter.history.list, 'function');
     assert.equal(typeof adapter.history.messages, 'function');
     assert.equal(typeof adapter.history.rename, 'function');
@@ -121,6 +123,31 @@ test('an explicit session folder is accepted only when it is a registered librar
   assert.equal(resolveAgentSessionFolder('relative/path', members).ok, false);
   assert.equal(resolveAgentSessionFolder(['/Users/me/Projects/Research'], members).ok, false);
   assert.equal(resolveAgentSessionFolder('/anything', []).ok, false);
+});
+
+test('folder-bound teardown ends only the sessions bound to the removed folder', () => {
+  const makeSession = (bound: string | null) => {
+    const session = {
+      disposed: false,
+      boundFolder: () => bound,
+      dispose() { session.disposed = true; },
+    };
+    return session;
+  };
+  const removedA = makeSession('/Users/me/Projects/Research');
+  // Equivalent spelling still matches — comparison is filesystem identity.
+  const removedB = makeSession('/Users/me/Projects/Research/');
+  const otherFolder = makeSession('/Users/me/Documents/StashBase/Notes');
+  const unstarted = makeSession(null);
+  const sessions = new Set([removedA, removedB, otherFolder, unstarted]);
+
+  disposeSessionsBoundToFolder(sessions, '/Users/me/Projects/Research');
+
+  assert.equal(removedA.disposed, true);
+  assert.equal(removedB.disposed, true);
+  assert.equal(otherFolder.disposed, false);
+  assert.equal(unstarted.disposed, false);
+  assert.deepEqual([...sessions], [otherFolder, unstarted]);
 });
 
 test('unsupported runtime connections return a contract error and close cleanly', () => {

@@ -7,6 +7,7 @@
 export {
   attachCodexWebSocket,
   killActiveCodex,
+  killCodexSessionsForFolder,
 } from './codex-session-runtime.ts';
 export {
   codexAccessOptions,

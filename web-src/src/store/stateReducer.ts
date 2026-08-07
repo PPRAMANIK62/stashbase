@@ -377,11 +377,13 @@ export function reducer(s: State, a: Action): State {
         chatTabs: s.chatTabs.map((t) => (t.id === a.id ? { ...t, title: a.title } : t)),
       };
     case 'CHAT_TABS_RESET':
-      // Wipes ALL tabs — called on folder switch (the server kills every
-      // agent session in that flow; the frontend drops its tab list too
-      // or we'd render panels bound to the old folder). Fold the panel too,
-      // mirroring CHAT_TAB_CLOSE: an empty panel is dead folder and the
-      // launchers are the only way back in.
+      // Wipes ALL tabs — called when the window LOSES its folder context
+      // (library removal / another window closing the folder; the server
+      // ends this window's agent sessions in those flows). A plain folder
+      // switch never dispatches this: sessions are folder-bound and tabs
+      // survive the switch. Fold the panel too, mirroring CHAT_TAB_CLOSE:
+      // an empty panel is dead folder and the launchers are the only way
+      // back in.
       return { ...s, chatTabs: [], activeChatTabId: null, chatTabRecencyByAgent: {}, chatOpen: false };
     case 'ACTIVE_FOLDER':
       // Semantically "make this folder the user's current target" —

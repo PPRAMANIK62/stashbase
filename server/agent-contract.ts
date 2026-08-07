@@ -142,7 +142,39 @@ export interface AgentAdapter {
   capabilities: AgentCapabilities;
   attach(ws: WebSocket, options: AgentConnectionOptions): void;
   stop(windowId?: string): void;
+  /** End every live session bound to this member folder, across all windows.
+   * Library folder removal uses this — a removed folder must not keep
+   * running sessions, even in windows currently showing another folder. */
+  stopFolder(folderAbs: string): void;
   history: AgentHistoryActions;
+}
+
+/** The registry entry shape both runtime session sets satisfy. */
+export interface FolderBoundAgentSession {
+  boundFolder(): string | null;
+  dispose(): void;
+}
+
+/** Dispose exactly the sessions bound to `folderAbs` (filesystem identity
+ * comparison), leaving sessions bound to other folders running. Shared by the
+ * Claude and Codex registries so folder removal has one teardown semantic. */
+export function disposeSessionsBoundToFolder<T extends FolderBoundAgentSession>(
+  sessions: Set<T>,
+  folderAbs: string,
+): void {
+  for (const session of [...sessions]) {
+    const bound = session.boundFolder();
+    let matches = false;
+    try {
+      matches = bound != null && filesystemPath.equal(bound, folderAbs);
+    } catch {
+      matches = false;
+    }
+    if (matches) {
+      session.dispose();
+      sessions.delete(session);
+    }
+  }
 }
 
 export interface AgentRuntimeDescriptor {
@@ -221,6 +253,10 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
 
 export function stopAgentRuntime(id: AgentId, windowId?: string): void {
   agentAdapter(id)?.stop(windowId);
+}
+
+export function stopAgentRuntimeForFolder(id: AgentId, folderAbs: string): void {
+  agentAdapter(id)?.stopFolder(folderAbs);
 }
 
 export function reportAgentRuntimeFailure(id: AgentId, error: unknown): void {

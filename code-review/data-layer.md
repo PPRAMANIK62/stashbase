@@ -211,6 +211,9 @@ User files belong to the user. Library removal removes only app-owned state.
 Removing a folder from the library:
 
 - removes it from `~/.stashbase/config.json` `recentFolders`
+- ends every built-in Agent session bound to that folder, in every window —
+  folder-bound sessions survive window folder switches, so removal cannot
+  rely on window teardown alone
 - cancels queued/running conversions under that folder path
 - clears semantic index rows under that folder path
 - deletes AppData-derived text/assets for sources under that folder
@@ -444,7 +447,7 @@ Current contract:
   folder or another folder transition is in progress. The sidebar library
   list owns explicit status polling for the non-current library folders
   while it is visible.
-- Folder-switch side effects such as index sync and Agent-session cleanup are scheduled after the open-folder response, so they cannot turn navigation into a failed request.
+- Folder-switch side effects such as index sync are scheduled after the open-folder response, so they cannot turn navigation into a failed request. A folder switch does not tear down Agent sessions — they are folder-bound and end only on window close, library folder removal, or app quit (see [agent-panel.md](agent-panel.md)).
 - Folder-sync queue cleanup consumes rejected promises; an indexer or daemon startup failure records an index warning but must not exit the Node server.
 - Losing the active folder (removal, or another window closing it) resets renderer folder state to the no-folder workspace without waiting on server-side cleanup.
 - Library status polling and reconcile are deferred while a folder open is in progress.

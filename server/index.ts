@@ -31,7 +31,7 @@ import {
   type AgentAccessMode,
   type AgentConnectionOptions,
 } from './agent-contract.ts';
-import { onClose, onSwitch, ensureFolderHome, memberFolderRoots } from './folder.ts';
+import { onClose, ensureFolderHome, memberFolderRoots } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { getApiKey, migrateLegacyEmbedderConfig } from './app-config.ts';
 import { bootBindAllFolders, reconcileLibraryFolders } from './state.ts';
@@ -494,13 +494,11 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
   }
 }
 
-// Tear the agent session down when the user switches folders — it was
-// bound to the old cwd; the renderer reconnects for the new folder when
-// the user opens the panel again.
-onSwitch((newRoot, windowId) => {
-  stopAgentRuntime('claude', windowId);
-  stopAgentRuntime('codex', windowId);
-});
+// Agent sessions are pinned to an explicit member folder, so a window
+// switching folders does NOT tear them down — the chat tabs and their
+// running sessions survive the switch. Teardown remains on window
+// close/retire (below), library folder removal (routes/library.ts via
+// stopAgentRuntimeForFolder), and app shutdown.
 onClose((_oldRoot, windowId) => {
   stopAgentRuntime('claude', windowId);
   stopAgentRuntime('codex', windowId);

@@ -37,6 +37,7 @@ import { noteTreeChanged } from '../watcher.ts';
 import { deleteDerivedForSource, deleteDerivedUnderFolder, type DerivedCleanupStats } from '../derived-store.ts';
 import { deleteFileOrderForRoot } from '../file-order.ts';
 import { ensureAgentsFile } from '../agent-rules.ts';
+import { stopAgentRuntimeForFolder } from '../agent-contract.ts';
 
 const log = logger('routes/folder');
 
@@ -189,6 +190,11 @@ export function mount(app: express.Express): void {
       // Tear down any live window bound to it FIRST (kills terminal sessions
       // whose cwd is inside this folder).
       clearFolderPath(abs);
+      // Built-in Agent sessions are folder-pinned and survive window folder
+      // switches, so removal must also end the sessions BOUND to this folder
+      // — including ones in windows currently showing another folder.
+      stopAgentRuntimeForFolder('claude', abs);
+      stopAgentRuntimeForFolder('codex', abs);
       try { clearRecordsUnder(abs); }
       catch (err: unknown) { log.warn(`conversion-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
       try { deleteFileOrderForRoot(abs); }
