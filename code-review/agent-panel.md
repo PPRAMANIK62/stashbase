@@ -97,8 +97,7 @@ to each tab on a switch is a three-way plan (`windowFolderSwitchPlan`):
 
 The blank definition above is THE blank-tab rule (`isBlankChatTab`), and
 each tab's AgentView mirrors it into `ChatTab.blank` (and its connected
-binding into `ChatTab.boundFolder`). The sidebar's New Chat button
-consumes it through `blankTabToReuse`; the window-folder switch goes
+binding into `ChatTab.boundFolder`). The window-folder switch goes
 through `switchWelcomeTabPlan`: when the ACTIVE tab is already bound to
 the new folder (create_project auto-select, or switching back to a chat's
 own folder) NO welcome tab is spawned — that conversation is the working
@@ -106,6 +105,29 @@ entry; otherwise reuse a blank tab (preferring the preferred agent's),
 else create a new tab and make it active. On a folder switch this must
 not change panel visibility; only the no-tabs folder-open path opens the
 panel with its one fresh tab.
+
+Chat creation has ONE entry point: the sidebar's New Chat split button.
+Its main area creates with the app-wide preferred agent
+(`readPreferredAgent`); its chevron menu ("Choose agent for new chat")
+creates with an explicit agent AND updates that preference
+(`rememberPreferredAgent` — clicking a chat tab also updates it).
+Creation goes through `newChatPlan`: reuse the one COMPLETELY blank tab
+regardless of its agent — when the agent differs, switch the blank tab's
+agent in place via `CHAT_TAB_SET_AGENT` (the reducer refuses any tab
+with `blank === false`, renumbers the placeholder title, and migrates
+the tab's per-agent recency entry) — else create a fresh tab. New Chat
+opens the panel when hidden (the existing `CHAT_TOGGLE` path). The
+AgentView mount is keyed by tab id AND agent, so an in-place agent
+switch unmounts the old agent's idle connection (WS teardown on unmount)
+and connects the new agent on a fresh mount; blank tabs carry only
+placeholder titles, so the session-title rename path stays correct.
+There are no other creation surfaces: the tab-strip corner launchers and
+the pane header's `+` are gone — the pane header keeps only the History
+menu, and switching between open chats belongs to the chat tab strip
+(each tab carries its agent's glyph). The agent registry priming
+(`api.listAgents` → `AGENTS_LOADED`) lives in an always-mounted App
+effect; each AgentView still refreshes the catalog after every
+connection outcome.
 
 Session teardown happens only on: native window close/retire (`onClose` →
 `stopAgentRuntime` per window — this includes library-scoped sessions),
@@ -216,7 +238,8 @@ Community contributions can land as useful first iterations, but the long-term d
   authoritative: never silently fall back from an unavailable preferred
   Agent.
 - Keep the first compact-window document transition document-first. The
-  responsive auto-collapse may be undone by an explicit Chat launcher action;
+  responsive auto-collapse may be undone by an explicit chat-reveal action
+  (the sidebar's New Chat, or the empty pane's Start chat);
   once the user does that, layout effects must not immediately close Chat
   again. Restore a responsively collapsed chat when the last document closes
   or the window becomes wide, unless the user has since changed visibility.
@@ -228,9 +251,9 @@ Community contributions can land as useful first iterations, but the long-term d
   failed `turn-end`. Record that failure before advancing queued follow-ups;
   duplicate terminal events must not advance the queue, and successful or
   cancelled turns must not create an error notice.
-- A discovered missing Agent CLI is a setup state, not a disabled launcher or a
-  generic connection failure. Keep its install command copyable and let the
-  user re-run discovery after installation; do not conflate it with an
+- A discovered missing Agent CLI is a setup state, not a disabled entry point
+  or a generic connection failure. Keep its install command copyable and let
+  the user re-run discovery after installation; do not conflate it with an
   installed runtime that has failed.
 - Keep background activity compact. Tool calls may be grouped or summarized, but the user must be able to inspect them when needed.
 - File outputs should be easy to open, but artifact UI should stay lightweight. Prefer rows or compact affordances over large delivery cards.
@@ -239,7 +262,10 @@ Community contributions can land as useful first iterations, but the long-term d
   action opens a document and causes Chat to dock.
 - Streaming should not steal the user's scroll position. If the user has scrolled away from the bottom, show a clear jump-to-latest affordance.
 - The current document is never implicit agent context. Users attach files by drag/drop, file picker, `@` mention, or a composer-focused image paste. Image paste must reuse transient attachments, preserve accompanying text, and suppress the competing clipboard library-import offer.
-- The tab-strip corner Claude and Codex icons select or toggle existing chats. Creating a new chat belongs to the in-panel `+`.
+- The sidebar's New Chat split button owns chat creation and agent selection
+  (its chevron menu also updates the default agent); chat tabs own switching
+  between open chats. The pane header carries only the History menu — no
+  corner launchers, no in-panel `+`.
 - Model catalogs and identifiers belong to their native runtime: use Claude's
   SDK discovery and Codex app-server `model/list`, never a shared hard-coded
   list. `undefined` means Default and must not change global CLI settings.
@@ -267,7 +293,8 @@ Community contributions can land as useful first iterations, but the long-term d
 
 The accepted baseline includes:
 
-- per-agent chat tab selection and toggle behavior
+- chat-tab switching with per-agent most-recent selection (`CHAT_AGENT_OPEN`
+  reveals an agent's most recent tab)
 - keyboard navigation for `@` file and folder mentions. Ranking normalizes
   Unicode accents and ignores case, punctuation, whitespace, and path
   separators; basename matches precede path-only matches, ties use a

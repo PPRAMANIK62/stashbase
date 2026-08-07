@@ -16,8 +16,9 @@ import {
 } from '../icons';
 import { useApp } from '../store/AppContext';
 import { makeChatTab, type LibraryFolderStatus } from '../store/state';
-import { blankTabToReuse } from './agent/folderState';
-import { readPreferredAgent } from '../agentPreference';
+import { newChatPlan } from './agent/folderState';
+import { AGENTS, type AgentKind } from '../agentCatalog';
+import { readPreferredAgent, rememberPreferredAgent } from '../agentPreference';
 import { folderRefsEqual } from '../folderPath';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
@@ -172,37 +173,92 @@ function FilesPanel() {
 }
 
 /** Full-width New Chat entry above the Library section (Cursor's "New
- *  Agent" position). Opens the chat panel on a tab scoped to the window's
- *  current folder — or to the whole Library when no folder is current.
- *  Reuses a completely blank tab when one exists (preferring the
- *  preferred agent's); otherwise creates a fresh tab for the preferred
- *  agent. The reused/created tab's scope resolves to the window default
- *  on connect, so no scope needs to be threaded here. */
+ *  Agent" position) — the app's ONE chat-creation entry point, a split
+ *  button. The main area starts a chat with the last-selected agent; the
+ *  chevron at the row's right edge opens a menu to start with a specific
+ *  agent AND make it the new default. Creation reuses the one completely
+ *  blank tab regardless of its agent (switching the blank tab's agent in
+ *  place when it differs — `newChatPlan`); any content, draft,
+ *  attachments, or resumed session means a fresh tab instead. Opens the
+ *  chat panel when hidden. The reused/created tab's scope resolves to
+ *  the window default (current folder, else Library) on connect, so no
+ *  scope needs to be threaded here. */
 function NewChatButton() {
   const { state, dispatch } = useApp();
+  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
+  const chevronRef = useRef<HTMLButtonElement | null>(null);
 
-  function newChat() {
-    const agent = readPreferredAgent();
-    const reuseId = blankTabToReuse(state.chatTabs, agent);
-    if (reuseId) dispatch({ type: 'CHAT_TAB_ACTIVATE', id: reuseId });
-    else dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
+  function startChat(agent: AgentKind) {
+    const plan = newChatPlan(state.chatTabs, agent);
+    if (plan.kind === 'reuse') {
+      if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });
+      dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
+    } else {
+      dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
+    }
     if (!state.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
   }
 
+  /** Explicit pick from the chevron menu: creates the chat AND updates
+   *  the app-wide default agent for later New Chat clicks. */
+  function pickAgent(agent: AgentKind) {
+    rememberPreferredAgent(agent);
+    startChat(agent);
+  }
+
+  const agentItems: MenuItem[] = AGENTS.map((agent) => ({
+    label: `New ${agent.launcherLabel} Chat`,
+    icon: <agent.Icon />,
+    onSelect: () => pickAgent(agent.id),
+  }));
+
   return (
     /* A quiet full-width pill row (Cursor's "New Agent" treatment), not a
-     * boxed button — the sidebar's rows carry the hierarchy. There is no
-     * keyboard shortcut for this action, so no hint is shown. */
+     * boxed button — the sidebar's rows carry the hierarchy. The chevron
+     * is a subtle affordance revealed on hover/focus (and while its menu
+     * is open). There is no keyboard shortcut, so no hint is shown. */
     <div className="flex-none px-1.5 pt-2 pb-3">
-      <button
-        type="button"
-        className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-foreground hover:bg-muted"
-        title="Start a chat in the current folder, or across the whole library"
-        onClick={newChat}
-      >
-        <PlusIcon className="size-4 flex-none text-muted-foreground" />
-        <span className="min-w-0 truncate">New Chat</span>
-      </button>
+      <div className="group/newchat flex min-h-7 w-full items-center rounded-md hover:bg-muted">
+        <button
+          type="button"
+          className="flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-foreground"
+          title="Start a chat in the current folder, or across the whole library"
+          onClick={() => startChat(readPreferredAgent())}
+        >
+          <PlusIcon className="size-4 flex-none text-muted-foreground" />
+          <span className="min-w-0 truncate">New Chat</span>
+        </button>
+        <button
+          ref={chevronRef}
+          type="button"
+          className={
+            'mr-1 inline-flex size-5 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent '
+            + 'text-muted-foreground hover:bg-border hover:text-foreground focus-visible:opacity-100 '
+            + '[&_svg]:size-3.5 '
+            /* Always visible (muted): the arrow IS the discoverability of
+             * the agent menu — hover-only would hide the affordance. */
+            + (menuAnchor ? 'bg-border text-foreground' : '')
+          }
+          aria-label="Choose agent for new chat"
+          aria-haspopup="menu"
+          aria-expanded={!!menuAnchor}
+          onClick={() => {
+            if (menuAnchor) { setMenuAnchor(null); return; }
+            const rect = chevronRef.current?.getBoundingClientRect();
+            if (rect) setMenuAnchor(rect);
+          }}
+        >
+          <ChevronDownIcon />
+        </button>
+      </div>
+      {menuAnchor && (
+        <Menu
+          anchor={{ rect: menuAnchor, align: 'right' }}
+          minWidth={210}
+          items={agentItems}
+          onClose={() => setMenuAnchor(null)}
+        />
+      )}
     </div>
   );
 }
@@ -255,13 +311,13 @@ function AddFolderMenuButton() {
     {
       label: 'Open Folder…',
       icon: <FolderIcon />,
-      title: 'Add any folder on your disk to the library — indexed in place, not copied',
+      detail: 'Any folder on your disk, indexed in place',
       onSelect: () => { void openExistingFolder(); },
     },
     {
       label: 'New Folder…',
       icon: <NewFolderIcon />,
-      title: 'Create or choose a folder under the default StashBase location',
+      detail: 'Created under the StashBase folder home',
       onSelect: () => { void newFolderFromHome(); },
     },
   ];
@@ -286,7 +342,7 @@ function AddFolderMenuButton() {
       {anchor && (
         <Menu
           anchor={{ rect: anchor, align: 'right' }}
-          minWidth={190}
+          minWidth={210}
           items={items}
           onClose={() => setAnchor(null)}
         />
@@ -303,11 +359,11 @@ function AddFolderMenuButton() {
  *  inset pill rows, not a surface split, carry the hierarchy.
  *
  *  LIBRARY — every OTHER member folder as a single compact row: favorites
- *  (all of them) pinned first, then the five most recent non-favorites;
- *  a "Show all N…" row (N = total membership) reveals the rest and
- *  "Show fewer" collapses back. Disclosure is session-local. Clicking a
- *  row switches this window's folder in place — the clicked folder moves
- *  up into the active zone and the previous one drops back into the list. */
+ *  (all of them) pinned first, then the rest in recents order. The list
+ *  caps at a fixed height and scrolls internally — a half-row peek at the
+ *  cap hints at the overflow. Clicking a row switches this window's folder
+ *  in place — the clicked folder moves up into the active zone and the
+ *  previous one drops back into the list. */
 function LibrarySections() {
   const { state, actions, dispatch } = useApp();
   // Library defaults COLLAPSED while a folder is active (it anchors to
@@ -323,7 +379,6 @@ function LibrarySections() {
       setLibraryExpanded(!hasFolder);
     }
   }, [state.folderPath]);
-  const [showAllFolders, setShowAllFolders] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
@@ -343,16 +398,17 @@ function LibrarySections() {
 
   const activePath = state.folderPath;
 
-  // Windowing for the LIBRARY resource list: favorites first, then the five
-  // most recent non-favorites; the active folder never appears here (it
-  // lives in the active zone above). Disclosure is session-local.
+  // Ordering for the LIBRARY resource list: favorites first, then the rest
+  // in recents order; the active folder never appears here (it lives in
+  // the active zone above). All rows render — overflow is handled by the
+  // list's fixed-height scroll, not disclosure.
   const plan = useMemo(
-    () => libraryListPlan(state.recent, activePath, showAllFolders),
-    [activePath, showAllFolders, state.recent],
+    () => libraryListPlan(state.recent, activePath),
+    [activePath, state.recent],
   );
 
-  // Status polling only covers rows the user can currently see; expanding
-  // the disclosure widens this set on the next effect run.
+  // Status polling covers every rendered row (the whole membership —
+  // scrolled-out rows included, since scrolling shouldn't change liveness).
   const visibleRowPathsKey = plan.visible.map((entry) => entry.path).join('\n');
   // Background reconcile still covers every non-current member — hidden
   // rows included, because recovery must not depend on what is on screen.
@@ -580,22 +636,39 @@ function LibrarySections() {
       {/* While a folder is active the Library anchors to the sidebar
         * BOTTOM (mt-auto) so the working tree keeps the room; with no
         * folder it flows as the main content. */}
-      <section className={(activePath ? 'mt-auto ' : 'mt-3 ') + 'flex min-h-0 flex-col overflow-hidden ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
-        <div className="flex min-h-[30px] flex-none items-center gap-1.5 py-0.5 pr-2 pl-3.5">
+      {/* pb lines the collapsed header's centre up with the rail's
+        * settings gear (rail py-1 + h-10 button → centre 24px from the
+        * bottom; the 30px header centres at 15px, so 9px makes up the
+        * difference). */}
+      <section className={(activePath ? 'mt-auto ' : 'mt-3 ') + 'flex min-h-0 flex-col overflow-hidden pb-[9px] ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
+        <div className="group/lib flex min-h-[30px] flex-none items-center gap-1.5 py-0.5 pr-2 pl-3.5">
           <button
             type="button"
             className={sectionToggleClass + ' flex-none'}
             aria-expanded={libraryExpanded}
             aria-controls="sidebar-files-section"
             onClick={() => setLibraryExpanded((expanded) => !expanded)}
-          ><span className={sectionChevronClass + (libraryExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span><LibraryIcon className="size-3.5 flex-none" /><span className={sectionTitleClass}>Library</span></button>
+          >
+            {/* Same treatment as the active-folder header: the Library
+              * glyph at rest, the fold chevron under the pointer. */}
+            <span className="inline-flex size-4 flex-none items-center justify-center [&_svg]:size-3.5">
+              <LibraryIcon className="group-hover/lib:hidden" />
+              <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/lib:inline-flex' + (libraryExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span>
+            </span>
+            <span className={sectionTitleClass}>Library</span>
+          </button>
           <div className={sideActionsClass + ' ml-auto'}>
             <AddFolderMenuButton />
           </div>
         </div>
         <div id="sidebar-files-section" className={libraryExpanded ? 'flex min-h-0 flex-col overflow-hidden' : 'hidden'}>
           {showZeroState ? <ZeroFolderState /> : (
-            <div className="min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5 pb-2">
+            /* With a folder active the list is a fixed-height window: up
+             * to five 28px rows plus a half-row peek — the peek is the
+             * scroll affordance (macOS scrollbars stay hidden until the
+             * user scrolls); shorter memberships size to content. With no
+             * folder the Library IS the panel content, so no cap. */
+            <div className={(activePath ? 'max-h-[154px] ' : '') + 'min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5 pb-2'}>
               {plan.visible.map((entry) => {
                 const name = basenameOfPath(entry.path);
                 const opening = openingFolder?.path === entry.path;
@@ -610,7 +683,7 @@ function LibrarySections() {
                   >
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent py-1 pr-1 pl-2 text-left text-base text-foreground disabled:cursor-default"
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent py-1 pr-1 pl-2 text-left text-base text-foreground/80 group-hover/root:text-foreground disabled:cursor-default"
                       disabled={!!openingFolder}
                       title={entry.path}
                       onClick={() => openRoot(entry.path)}
@@ -621,7 +694,7 @@ function LibrarySections() {
                       <span className="relative inline-flex size-4 flex-none items-center justify-center text-muted-foreground">
                         {opening
                           ? <SyncIcon className="size-3.5 animate-spin" />
-                          : <FolderIcon className="size-4" />}
+                          : <FolderIcon className="size-3.5" />}
                         {!opening && entry.favorite && (
                           <StarIcon className="absolute -right-1 -bottom-0.5 size-2 fill-current" aria-label="Favorite" />
                         )}
@@ -650,17 +723,6 @@ function LibrarySections() {
                   </div>
                 );
               })}
-              {plan.hiddenCount > 0 && (
-                <button
-                  type="button"
-                  className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 py-1 text-left text-base text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:text-foreground"
-                  aria-expanded={showAllFolders}
-                  onClick={() => setShowAllFolders((expanded) => !expanded)}
-                >
-                  <span className="size-4 flex-none" aria-hidden="true" />
-                  <span className="min-w-0 truncate">{showAllFolders ? 'Show fewer' : `Show all ${plan.totalCount}…`}</span>
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -760,10 +822,11 @@ function RootMenuButton({
 /** The active zone's header row — the window's current folder. Carries the
  *  classic explorer toolbar (new note / new folder / sync / fold) plus the
  *  same ⋯ folder menu as the library rows. The `#sideHead` id and
- *  `drop-target` / `active-root` state classes stay CSS-driven:
- *  `useGlobalDragDrop` toggles `drop-target` imperatively on #sideHead, and
- *  both rules share the tree's exempted selected/drop styling (see
- *  sidebar.css). */
+ *  `drop-target` state class stay CSS-driven: `useGlobalDragDrop` toggles
+ *  `drop-target` imperatively on #sideHead, sharing the tree's exempted
+ *  drop styling (see sidebar.css). The header carries no persistent
+ *  selected surface — its position above the tree already marks it as the
+ *  current folder. */
 function ActiveFolderHeader({
   name,
   path,
@@ -799,21 +862,18 @@ function ActiveFolderHeader({
     // `#sideHead` closest. We don't double-handle here.
   }
 
-  const rootSelected = state.selectedPath === '';
-
   return (
     <div
       id="sideHead"
       className={
-        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-1 pl-1 hover:bg-muted'
+        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-1 pl-2 hover:bg-muted'
         + (sideHeadDrop ? ' drop-target' : '')
-        + (rootSelected ? ' active-root' : '')
       }
       onDragOver={onSideHeadDragOver}
       onDragLeave={onSideHeadDragLeave}
       onDrop={onSideHeadDrop}
     >
-      <span className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-foreground">
+      <span className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-foreground">
         {/* Folder glyph at rest; the pointer swaps in the fold chevron so
           * the collapse affordance appears only when it's actionable. */}
         <span

@@ -122,17 +122,6 @@
       font-weight: 500;
     }
 
-    /* FOLDER header gets the same selected-state styling as
-     * `.tree-row.folder.active-folder` when `activeFolder === ''` —
-     * VSCode-style folder-root selected indication so the user
-     * can tell where `+ new note` will create. Kept as CSS (the
-     * `.side-head` layout itself is utilities in Sidebar.tsx): the
-     * `--active` selected-surface token has no Tailwind color role yet,
-     * and this must stay in lockstep with the exempted tree rules. */
-    .side-head.active-root {
-      background: var(--active);
-    }
-
     /* Drop indicators for drag-to-reorder. Inset shadow draws a 2px
      * accent line at the top (above) or bottom (below) edge of the
      * row, signalling "the dragged item will land here". `above` /

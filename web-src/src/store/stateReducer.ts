@@ -288,29 +288,6 @@ export function reducer(s: State, a: Action): State {
       return { ...s, chatWidth: clampChatWidth(a.width) };
     case 'AGENTS_LOADED':
       return { ...s, agents: a.agents };
-    case 'CHAT_AGENT_TOGGLE': {
-      const activeTab = s.chatTabs.find((tab) => tab.id === s.activeChatTabId);
-      if (s.chatOpen && activeTab?.agent === a.agent) {
-        return { ...s, chatOpen: false };
-      }
-      const existingTab = mostRecentChatTab(s, a.agent);
-      if (existingTab) {
-        return {
-          ...s,
-          chatOpen: true,
-          activeChatTabId: existingTab.id,
-          chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, existingTab),
-        };
-      }
-      if (!a.tab) return s;
-      return {
-        ...s,
-        chatOpen: true,
-        chatTabs: [...s.chatTabs, a.tab],
-        activeChatTabId: a.tab.id,
-        chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, a.tab),
-      };
-    }
     case 'CHAT_AGENT_OPEN': {
       const existingTab = mostRecentChatTab(s, a.agent);
       if (existingTab) {
@@ -356,8 +333,9 @@ export function reducer(s: State, a: Action): State {
         chatTabRecencyByAgent: nextActiveTab
           ? rememberChatTab(forgetChatTab(s.chatTabRecencyByAgent, closedTab), nextActiveTab)
           : forgetChatTab(s.chatTabRecencyByAgent, closedTab),
-        // Closing the last chat window folds the panel — the launchers
-        // are the only way back in, and an empty panel is just dead folder.
+        // Closing the last chat window folds the panel — the sidebar's
+        // New Chat button is the way back in, and an empty panel is just
+        // dead folder.
         chatOpen: nextTabs.length === 0 ? false : s.chatOpen,
       };
     }
@@ -381,6 +359,29 @@ export function reducer(s: State, a: Action): State {
         ...s,
         chatTabs: s.chatTabs.map((t) => (t.id === a.id ? { ...t, blank: a.blank } : t)),
       };
+    case 'CHAT_TAB_SET_AGENT': {
+      const tab = s.chatTabs.find((t) => t.id === a.id);
+      // Blank tabs only: a tab with content, a draft, attachments, or a
+      // resumed session is user work and must never switch agent in place.
+      // (`undefined` blank means the tab's AgentView hasn't reported yet —
+      // fresh tabs start blank, so treat it as blank.)
+      if (!tab || tab.blank === false || tab.agent === a.agent) return s;
+      // Re-number the placeholder title for the new agent so "Untitled N"
+      // stays consistent with makeChatTab's per-agent numbering. A
+      // non-placeholder title is preserved (should not occur on a blank tab).
+      const sameAgentOthers = s.chatTabs.filter((t) => t.id !== a.id && t.agent === a.agent);
+      const title = /^Untitled( \d+)?$/.test(tab.title.trim())
+        ? (sameAgentOthers.length === 0 ? 'Untitled' : `Untitled ${sameAgentOthers.length + 1}`)
+        : tab.title;
+      const next = { ...tab, agent: a.agent, title };
+      return {
+        ...s,
+        chatTabs: s.chatTabs.map((t) => (t.id === a.id ? next : t)),
+        // Move the tab's recency entry from the old agent's list to the
+        // new agent's, so per-agent most-recent lookups stay coherent.
+        chatTabRecencyByAgent: rememberChatTab(forgetChatTab(s.chatTabRecencyByAgent, tab), next),
+      };
+    }
     case 'CHAT_TAB_SET_SCOPE':
       return {
         ...s,
@@ -392,8 +393,8 @@ export function reducer(s: State, a: Action): State {
       // ends this window's agent sessions in those flows). A plain folder
       // switch never dispatches this: sessions are folder-bound and tabs
       // survive the switch. Fold the panel too, mirroring CHAT_TAB_CLOSE:
-      // an empty panel is dead folder and the launchers are the only way
-      // back in.
+      // an empty panel is dead folder and the sidebar's New Chat button
+      // is the way back in.
       return { ...s, chatTabs: [], activeChatTabId: null, chatTabRecencyByAgent: {}, chatOpen: false };
     case 'ACTIVE_FOLDER':
       // Semantically "make this folder the user's current target" —

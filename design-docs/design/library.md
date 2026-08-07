@@ -17,19 +17,25 @@ to migrate them into a StashBase-specific storage model.
 - The sidebar folder list refreshes itself while visible (a lightweight
   membership poll), so a project created by an agent in another window or
   by an external MCP client appears without any user action.
-- A full-width New Chat button sits at the top of the sidebar, above the
-  Library section: it opens the chat panel on a chat scoped to the
-  window's current folder, or to the whole library when no folder is
-  current, reusing a completely blank chat instead of stacking empty tabs.
+- A full-width New Chat split button sits at the top of the sidebar,
+  above the Library section — the app's one chat-creation entry point.
+  Its main area starts a chat with the last-selected Agent; a subtle
+  chevron at the row's right edge offers New Claude Code Chat / New
+  Codex Chat, and picking one also makes that Agent the new default. The
+  chat is scoped to the window's current folder, or to the whole library
+  when no folder is current, and a completely blank chat is reused
+  (switching its Agent in place when needed) instead of stacking empty
+  tabs. New Chat also reopens a hidden chat panel.
 - The sidebar splits folder navigation into two zones separated by a
   hairline and a surface shift. When a folder is open, an active zone under
   the New Chat button shows that folder's header row (explorer toolbar,
   drop target, ⋯ menu) with its file tree beneath, on the base surface.
   Below it, the Library section lists every other member folder as a single
   compact row on the pane surface — favorites (all of them) pinned first,
-  then the five most recent non-favorites; a "Show all N…" row (N = total
-  library membership) reveals the rest and collapses back via "Show fewer".
-  The disclosure is session-local and starts collapsed. Clicking a row
+  then the rest in recents order. While a folder is active the list caps at
+  a fixed height (about five rows, with a half-row peek hinting at the
+  overflow) and scrolls internally; with no folder open the Library is the
+  panel's main content and fills the available space. Clicking a row
   switches this window's folder in place: the clicked folder moves up into
   the active zone and the previous one drops back into the list. Switching
   resets the folder-scoped document tabs and search state, but keeps the
@@ -114,8 +120,8 @@ to migrate them into a StashBase-specific storage model.
   Arrow/Home/End keys on macOS, Windows, and Linux; reduced-motion users do
   not receive layout movement animation.
 - Closing the last document lets an open Chat reclaim the main area. Hiding
-  Chat is explicit and leaves a lightweight document/chat launcher instead of
-  immediately reopening it.
+  Chat is explicit and stays hidden; the sidebar's New Chat button is the
+  way back in.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
   or project-management surface. It stacks the active folder zone (current
   folder header and file tree), the Library folder list, and the active

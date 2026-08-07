@@ -4,8 +4,8 @@
  * Claude Agent SDK bridge; Codex routes to the Codex app-server bridge.
  * All tabs stay mounted at once so switching preserves each session's
  * state (inactive tabs are absolutely-positioned + `visibility: hidden`).
- * Chrome-row agent icons select or toggle existing chats; this panel's
- * per-agent `+` button is the explicit new-chat control.
+ * The sidebar's New Chat split button is the one creation entry point;
+ * the tabs here switch between (and close) existing chats.
  */
 import * as React from 'react';
 import type { ReactNode } from 'react';
@@ -66,7 +66,7 @@ export function ChatPane() {
       inert={!state.chatOpen || undefined}
     >
       {/* Cursor-style tab strip. Scrolls horizontally when many tabs are
-        * open; new tabs come from the chrome-row launchers, so it is
+        * open; new tabs come from the sidebar's New Chat button, so it is
         * tabs-only. */}
       <div className="flex min-h-8 items-stretch gap-1 px-1.5 pt-1.5 pb-1">
         <div className="flex flex-1 gap-0.5 overflow-x-auto overflow-y-hidden [scrollbar-width:thin]">
@@ -116,7 +116,12 @@ export function ChatPane() {
             aria-hidden={tab.id !== activeId}
           >
             <ChatSessionBoundary tabId={tab.id} active={tab.id === activeId}>
+              {/* Keyed by tab id AND agent: when the New Chat split button
+                * switches a blank tab's agent in place, the old agent's
+                * idle connection tears down with its unmounting AgentView
+                * and the new agent connects on a fresh mount. */}
               <AgentView
+                key={`${tab.id}:${tab.agent}`}
                 active={tab.id === activeId}
                 id={tab.id}
                 title={tab.title}
@@ -127,9 +132,8 @@ export function ChatPane() {
         ))}
         {tabs.length === 0 && (
           <div className={chatStatusClass}>
-            No active chat. Click <strong>New Chat</strong> in the sidebar, or
-            the <strong>Claude</strong> / <strong>Codex</strong> button in the
-            top bar, to start one.
+            No active chat. Click <strong>New Chat</strong> in the sidebar to
+            start one.
           </div>
         )}
       </div>

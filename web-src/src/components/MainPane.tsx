@@ -22,8 +22,7 @@ const LazyAudioPreview = lazyWithRetry(() => import('./AudioPreview').then((mod)
 
 /**
  * Right rail. Layout from top to bottom:
- *   • TabStrip                   (when any tab is open; the agent
- *     launchers sit in its right corner)
+ *   • TabStrip                   (when any tab is open)
  *   • main-body                  (preview / md editor / empty-tab landing)
  *   • absolute-positioned chrome (top-right, `top: 44px` to clear the tab
  *     strip): the md edit toggle + save status, and the PDF control slot.

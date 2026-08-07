@@ -207,12 +207,17 @@
      * `.sidebar-drag-zone` element overlaying it is the window drag
      * region. (A real element, not ::before — Chromium ignores
      * `-webkit-app-region` on pseudo-elements.) Browser and non-darwin
-     * windows have no traffic lights, so they get neither the band nor
-     * the drag zone; macOS fullscreen hides the lights, and the
-     * `.is-fullscreen` body class (driven by Electron IPC via the
-     * preload) collapses the clearance with them. */
+     * windows have no traffic lights, so they get no drag zone; there,
+     * and in macOS fullscreen (lights hidden, `.is-fullscreen` body
+     * class driven by Electron IPC via the preload), the band shrinks
+     * to a 10px breather rather than collapsing to zero — content
+     * pressed against the window edge reads as a bug, not density. */
     .sidebar-drag-zone {
       display: none;
+    }
+
+    .sidebar {
+      padding-top: 10px;
     }
 
     body.is-electron.platform-darwin .sidebar {
@@ -231,7 +236,7 @@
     }
 
     body.is-electron.platform-darwin.is-fullscreen .sidebar {
-      padding-top: 0;
+      padding-top: 10px;
     }
 
     body.is-electron.platform-darwin.is-fullscreen .sidebar-drag-zone {
@@ -241,10 +246,10 @@
     /* The tab strip's EMPTY background is the other drag surface — the
      * strip spans the top of the main pane, so grabbing the gap after
      * the last tab moves the window exactly like a titlebar. Tabs are
-     * draggable divs (in-strip reorder) and the corner holds the agent
-     * launchers, so every interactive child opts out: `.tab` here, and
-     * buttons via the global no-drag list below. Fullscreen drops the
-     * region alongside the traffic-light clearance. */
+     * draggable divs (in-strip reorder), so every interactive child
+     * opts out: `.tab` here, and buttons via the global no-drag list
+     * below. Fullscreen drops the region alongside the traffic-light
+     * clearance. */
     body.is-electron.platform-darwin .tab-strip {
       -webkit-app-region: drag;
     }

@@ -100,12 +100,24 @@ function AppBody() {
     compact: compactWorkspace,
   });
   // Mount the chat panel lazily on first open and then NEVER
-  // unmount it — the tab-strip agent launchers only hide the column via CSS,
+  // unmount it — hiding the panel only collapses the column via CSS,
   // the underlying agent WebSocket sessions stay alive. Killing them
   // on every collapse would lose Claude Code's chat history and any
-  // in-flight agent run. The in-panel "new chat" `+` is how the user
-  // starts a fresh session.
+  // in-flight agent run. The sidebar's New Chat split button is how the
+  // user starts a fresh session (and reopens the hidden panel).
   const [chatMounted, setChatMounted] = useState(state.chatOpen);
+  // Prime the agent registry once per window (always-mounted home: the
+  // chat surfaces are lazy/conditional). Each AgentView refreshes the
+  // catalog after every connection outcome so runtime failures and
+  // retries stay visible; this initial fetch keeps runtime states
+  // loading before any chat surface mounts.
+  useEffect(() => {
+    let cancelled = false;
+    api.listAgents().then((r) => {
+      if (!cancelled) dispatch({ type: 'AGENTS_LOADED', agents: r.clis });
+    }).catch(() => { /* renderer falls back to local defaults */ });
+    return () => { cancelled = true; };
+  }, [dispatch]);
   useEffect(() => {
     let receivedWindowUpdate = false;
     const unsubscribe = subscribeToAppearance((preferences) => {
@@ -333,11 +345,11 @@ function AppBody() {
     <>
       {/* No dedicated titlebar strip, Cursor-style: the folder identity
        *  lives in `document.title` (the OS titlebar / Mission Control),
-       *  the agent launchers sit in the tab strip's right corner, and on
-       *  macOS Electron the traffic lights float over the sidebar's top
-       *  drag zone (globals.css). The sidebar has no explicit toggle
-       *  button — it's resized (and collapsed) by dragging its right
-       *  edge, à la VSCode; the activity rail always stays visible. */}
+       *  and on macOS Electron the traffic lights float over the
+       *  sidebar's top drag zone (globals.css). The sidebar has no
+       *  explicit toggle button — it's resized (and collapsed) by
+       *  dragging its right edge, à la VSCode; the activity rail always
+       *  stays visible. */}
       <div
         className={
           'app'

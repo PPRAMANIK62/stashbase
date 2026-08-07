@@ -445,10 +445,9 @@ export type Action =
   | { type: 'CHAT_TOGGLE' }
   | { type: 'CHAT_WIDTH'; width: number }
   | { type: 'AGENTS_LOADED'; agents: State['agents'] }
-  /** Select or toggle an agent from a chrome icon. `tab` is supplied only
-   *  when that agent has no open tabs. */
-  | { type: 'CHAT_AGENT_TOGGLE'; agent: string; tab?: ChatTab }
-  /** Reveal an Agent Panel session without toggling an already-visible panel. */
+  /** Reveal an agent's most recent Agent Panel session (opening the panel
+   *  when hidden) without toggling an already-visible panel. `tab` is
+   *  supplied only when that agent has no open tabs. */
   | { type: 'CHAT_AGENT_OPEN'; agent: string; tab?: ChatTab }
   | { type: 'CHAT_TAB_NEW'; tab: ChatTab }
   | { type: 'CHAT_TAB_CLOSE'; id: string }
@@ -457,6 +456,11 @@ export type Action =
   /** AgentView reports whether its tab is completely blank (reusable as a
    *  welcome tab). See `ChatTab.blank`. */
   | { type: 'CHAT_TAB_SET_BLANK'; id: string; blank: boolean }
+  /** Switch a COMPLETELY BLANK tab's agent in place (the New Chat split
+   *  button reusing a blank tab of the other agent). The reducer refuses
+   *  the switch for any tab with `blank === false` — user work is never
+   *  handed to another agent. */
+  | { type: 'CHAT_TAB_SET_AGENT'; id: string; agent: string }
   | { type: 'CHAT_TAB_SET_SCOPE'; id: string; folder: string | null }
   | { type: 'CHAT_TABS_RESET' }
   | { type: 'ACTIVE_FOLDER'; path: string }

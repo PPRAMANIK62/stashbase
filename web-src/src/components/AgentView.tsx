@@ -16,17 +16,13 @@ import { AGENT_META, type AgentKind } from '../agentCatalog';
 import { FILE_MIME } from '../dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
 import { useApp } from '../store/AppContext';
-import { makeChatTab } from '../store/state';
-import { PlusIcon } from '../icons';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from './ui/button';
-import { ChatLaunchButtons } from './ChatLaunchButtons';
 import { AgentComposer } from './agent/AgentComposer';
 import { EmptyChatGreeting, StarterTemplates } from './agent/AgentEmptyState';
 import { resolveAssistantLink } from './agent/assistantLinkTarget';
 import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
-import { iconGhostButtonClass } from './agent/panelStyles';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
 import {
@@ -281,7 +277,7 @@ export function AgentView({
     void uploadFiles(files);
   }
 
-  // A launcher can be clicked before the chrome's initial discovery request
+  // A chat can be opened before the app's initial discovery request
   // settles. Keep that tab out of the WebSocket path until its runtime has a
   // descriptor, so a missing CLI never briefly becomes a generic failure.
   useEffect(() => {
@@ -633,7 +629,7 @@ export function AgentView({
         // Runtime bridges record terminal failures in the shared catalog.
         // Refresh for both startup and active-session errors: regular turn
         // errors leave the descriptor unchanged, while an app-server exit
-        // immediately changes the launcher from available to failed.
+        // immediately flips the runtime's descriptor from available to failed.
         refreshRuntimes();
         // An error before the session is ready is fatal (e.g. no folder
         // open / not authenticated); mid-session it's just a notice.
@@ -963,11 +959,6 @@ export function AgentView({
     } catch { /* leave the placeholder if the lookup fails */ }
   }
 
-  /** Spawn a fresh chat tab for the same agent from the in-panel `+`. */
-  function newChat() {
-    dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
-  }
-
   /** Deleting the session currently shown in this tab leaves the tab open as
    * a fresh chat. Its old history title must not leak into that new session. */
   function resetAfterActiveSessionDeleted() {
@@ -1099,11 +1090,9 @@ export function AgentView({
           )}
         </span>
         <div className="flex shrink-0 items-center gap-0.5">
-          {/* Agent launchers live here too: in the chat-primary layout the
-            * document tab strip (their other home) is not rendered, and
-            * switching agents must stay one click away. */}
-          <ChatLaunchButtons />
-          <span className="mx-1 h-4 w-px flex-none bg-border" aria-hidden="true" />
+          {/* History is the header's one action. Creating chats (and
+            * choosing the agent) belongs to the sidebar's New Chat split
+            * button; switching chats belongs to the chat tab strip. */}
           {capabilities?.history && (
             <AgentHistoryMenu
               open={historyOpen}
@@ -1116,9 +1105,6 @@ export function AgentView({
               onActiveDeleted={resetAfterActiveSessionDeleted}
             />
           )}
-          <Button className={iconGhostButtonClass} aria-label={`New ${meta.name} chat`} onPress={newChat}>
-            <PlusIcon />
-          </Button>
         </div>
       </div>
       {!runtime ? (

@@ -1,6 +1,5 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { useApp } from '../store/AppContext';
-import { ChatLaunchButtons } from './ChatLaunchButtons';
 
 const TAB_MIME = 'application/x-stashbase-tab';
 
@@ -8,10 +7,7 @@ const TAB_MIME = 'application/x-stashbase-tab';
  * Tab strip at the top of the main pane — one chip per open tab plus a
  * `+` button. Left-click activates, `×` (or middle-click) closes, `+`
  * pushes an empty tab (Obsidian-style). The active tab gets a stronger
- * background; inactive tabs are muted; long names ellipsize. The agent
- * launchers (Claude / Codex) sit in a fixed corner container at the
- * strip's right edge, Cursor-style — a sibling of `.tab-strip-inner`
- * so tab overflow scrolls under them instead of pushing them away.
+ * background; inactive tabs are muted; long names ellipsize.
  *
  * Preview tabs (single-click in the sidebar) render their label
  * italic. Double-clicking the tab title promotes it to pinned — same
@@ -99,12 +95,11 @@ export function TabStrip() {
   }
 
   return (
-    /* Utilities (not .tab-strip CSS) make the strip a flex row for the
-     * corner — electron/tab-strip-layout-smoke.cjs consumes mainpane.css
-     * raw, so the metrics it asserts stay in the stylesheet. */
-    <div className="tab-strip flex items-end">
+    /* Layout metrics live in .tab-strip / .tab-strip-inner CSS —
+     * electron/tab-strip-layout-smoke.cjs consumes mainpane.css raw. */
+    <div className="tab-strip">
       <div
-        className="tab-strip-inner min-w-0 flex-1"
+        className="tab-strip-inner"
         ref={stripRef}
         onDragOver={onStripDragOver}
         onDrop={onStripDrop}
@@ -173,15 +168,6 @@ export function TabStrip() {
           title="New tab"
           onClick={() => { void actions.newTab(); }}
         >+</button>
-      </div>
-      {/* Agent launchers in the strip's right corner — the reopen entry
-        * when the chat panel is hidden, present regardless of folder
-        * state (library chats need them too). `self-center` matches
-        * `.tab-new`'s vertical centering; the buttons opt out of the
-        * strip's Electron drag region via the global
-        * `body.is-electron button` no-drag rule. */}
-      <div className="ml-auto flex flex-none items-center self-center pl-2 pr-0.5">
-        <ChatLaunchButtons />
       </div>
     </div>
   );

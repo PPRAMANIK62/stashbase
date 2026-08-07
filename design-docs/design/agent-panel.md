@@ -13,10 +13,19 @@ client of StashBase context, not a separate AI workspace.
   library ("Library"). With no folder selected, users can still ask across
   the whole library — a library chat searches all folders, runs against no
   single folder, and keeps its own history separate from any folder's.
-- A New Chat button at the top of the sidebar (above the Library list)
-  opens the chat panel on a chat scoped to the window's current folder —
-  or to the Library when no folder is current. It reuses a completely
-  blank chat when one exists instead of stacking empty tabs.
+- A New Chat split button at the top of the sidebar (above the Library
+  list) is the one place chats are created and Agents are chosen. Its
+  main area starts a chat with the last-selected Agent; a subtle chevron
+  at the row's right edge offers New Claude Code Chat / New Codex Chat,
+  and picking one also updates the default for later New Chat clicks.
+  The chat is scoped to the window's current folder — or to the Library
+  when no folder is current — and it reuses a completely blank chat when
+  one exists instead of stacking empty tabs, switching that chat's Agent
+  in place when it differs; any content, unsent draft, attachments, or
+  resumed session means a fresh chat instead. New Chat opens the chat
+  panel when it is hidden. Switching between open chats belongs to the
+  chat tabs (each carries its Agent's glyph); the pane header keeps only
+  the History menu.
 - Opening a folder starts a fresh chat with the user's last selected Agent
   when the window has no chats yet. Codex is the default until the user
   explicitly selects another Agent. An unavailable preferred runtime remains
@@ -106,9 +115,10 @@ client of StashBase context, not a separate AI workspace.
   the local workspace only when the user chooses them.
 - Agent response Markdown supports GFM, but treats raw HTML and remote images
   as inert content; only workspace-relative links and HTTP(S) links are active.
-- If a supported Agent CLI is missing, its launcher opens a compact setup state
-  with the copyable install command and a runtime-refresh action. A missing CLI
-  is distinct from a runtime that is installed but failed to start.
+- If a supported Agent CLI is missing, opening a chat for it shows a compact
+  setup state with the copyable install command and a runtime-refresh action.
+  A missing CLI is distinct from a runtime that is installed but failed to
+  start.
 
 ## Experience Contract
 

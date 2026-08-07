@@ -12,6 +12,7 @@ import {
   isBlankChatTab,
   LIBRARY_SCOPE,
   mentionListingPlan,
+  newChatPlan,
   newChatScope,
   nextSessionScope,
   scopeChangedScope,
@@ -193,6 +194,44 @@ test('blank-tab reuse prefers the preferred agent and never picks non-blank tabs
   // No blank tabs at all → create a new one.
   assert.equal(blankTabToReuse(tabs.filter((tab) => tab.blank !== true), 'claude'), null);
   assert.equal(blankTabToReuse([], 'claude'), null);
+});
+
+test('newChatPlan reuses any blank tab, switching its agent when it differs', () => {
+  // The preferred agent's own blank tab: plain reuse, no switch.
+  assert.deepEqual(
+    newChatPlan([
+      { id: 'a', agent: 'claude', blank: false },
+      { id: 'b', agent: 'claude', blank: true },
+    ], 'claude'),
+    { kind: 'reuse', id: 'b', switchAgent: false },
+  );
+  // A blank tab of the OTHER agent is still the reusable welcome tab —
+  // its agent switches in place instead of stacking a second empty tab.
+  assert.deepEqual(
+    newChatPlan([{ id: 'b', agent: 'codex', blank: true }], 'claude'),
+    { kind: 'reuse', id: 'b', switchAgent: true },
+  );
+  // With both agents' blanks present, the requested agent's wins (no switch).
+  assert.deepEqual(
+    newChatPlan([
+      { id: 'b', agent: 'codex', blank: true },
+      { id: 'c', agent: 'claude', blank: true },
+    ], 'claude'),
+    { kind: 'reuse', id: 'c', switchAgent: false },
+  );
+});
+
+test('newChatPlan creates a fresh tab when no completely blank tab exists', () => {
+  // Content, drafts, attachments, and resumes all clear `blank`
+  // (isBlankChatTab) — those tabs are user work, never reused.
+  assert.deepEqual(
+    newChatPlan([
+      { id: 'a', agent: 'claude', blank: false },
+      { id: 'b', agent: 'codex', blank: false },
+    ], 'claude'),
+    { kind: 'new' },
+  );
+  assert.deepEqual(newChatPlan([], 'codex'), { kind: 'new' });
 });
 
 test('mention/attachment scoping follows the session scope', () => {
