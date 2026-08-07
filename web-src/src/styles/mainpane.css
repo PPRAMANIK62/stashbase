@@ -1483,8 +1483,8 @@
     /* ---- Welcome (Tailwind-migrated) ---------------------------------
      * Layout and skin live in Welcome.tsx utility classes. This block
      * keeps only what utilities can't own: Electron window-drag chrome,
-     * the spinner keyframes (globals.css reduced-motion references
-     * .welcome-loading-spinner), the folder-picker list that
+     * the spinner and entrance keyframes (globals.css reduced-motion
+     * references .welcome-loading-spinner), the folder-picker list that
      * Sidebar.tsx still shares, and SVG-internal warning-mark fills. */
     body.is-electron .welcome::before {
       content: '';
@@ -1534,6 +1534,20 @@
 
     @keyframes welcome-spin {
       to { transform: rotate(360deg); }
+    }
+
+    /* One-shot entrance for the welcome brand moment: blocks fade-rise
+     * with a small stagger (per-block animation-delay set in Welcome.tsx).
+     * `both` keeps blocks hidden through their delay and settled after.
+     * The global reduced-motion rule zeroes the duration, leaving only an
+     * imperceptible (<150ms) delayed appearance with no movement. */
+    .welcome-rise {
+      animation: welcome-rise var(--motion-standard) var(--motion-ease) both;
+    }
+
+    @keyframes welcome-rise {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
     }
 
     .welcome-open-list {
@@ -1638,136 +1652,12 @@
     .modal-card.settings-card {
       width: min(760px, 94vw);
       /* Fixed height — the modal must NOT resize when switching tabs.
-       * Each panel scrolls inside .settings-content instead. */
+       * Each panel scrolls inside the dialog's tabpanel region instead. */
       height: min(78vh, 640px);
       padding: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-    }
-
-    .settings-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .settings-header h3 {
-      margin: 0;
-      font-size: calc(14px * var(--ui-scale));
-    }
-
-    .settings-close {
-      width: 28px;
-      height: 28px;
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      font-size: calc(20px * var(--ui-scale));
-      line-height: 1;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.12s, color 0.12s;
-    }
-
-    .settings-close:hover {
-      color: var(--fg);
-      background: var(--hover);
-    }
-
-    .settings-close:disabled {
-      cursor: default;
-      opacity: 0.45;
-    }
-
-    .settings-body {
-      display: grid;
-      grid-template-columns: 180px 1fr;
-      min-height: 0;
-      flex: 1;
-    }
-
-    .settings-nav {
-      display: flex;
-      flex-direction: column;
-      padding: 12px 8px;
-      border-right: 1px solid var(--border);
-      background: var(--pane);
-      gap: 2px;
-    }
-
-    .settings-nav-item {
-      text-align: left;
-      padding: 7px 12px;
-      border: 0;
-      background: transparent;
-      color: var(--fg);
-      font: inherit;
-      font-size: calc(13px * var(--ui-scale));
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.12s, color 0.12s;
-    }
-
-    .settings-nav-item:hover {
-      background: var(--hover);
-    }
-
-    .settings-nav-item:disabled {
-      cursor: default;
-      opacity: 0.55;
-    }
-
-    .settings-nav-item:disabled:hover {
-      background: transparent;
-    }
-
-    .settings-nav-item.current {
-      background: rgba(var(--accent-rgb), 0.10);
-      color: var(--accent);
-      font-weight: 600;
-    }
-
-    .settings-content {
-      padding: 20px 24px;
-      overflow-y: auto;
-      min-width: 0;
-    }
-
-    .settings-section + .settings-section {
-      margin-top: 22px;
-      padding-top: 18px;
-      border-top: 1px solid var(--border);
-    }
-
-    .settings-section-title {
-      font-size: calc(13px * var(--ui-scale));
-      font-weight: 600;
-      color: var(--fg);
-      margin-bottom: 4px;
-    }
-
-    .settings-section-hint {
-      font-size: calc(12px * var(--ui-scale));
-      color: var(--muted);
-      line-height: 1.5;
-      margin-bottom: 10px;
-    }
-
-    .settings-section-hint code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11px * var(--ui-scale));
-      color: var(--accent);
-      white-space: nowrap;
-    }
-
-
-    .settings-actions-row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
     }
 
     .embedding-provider-row {
@@ -1844,13 +1734,6 @@
       min-width: 0;
     }
 
-    /* A hint that trails *below* the action row (secondary detail —
-     * privacy note, storage location, …). Sits at the bottom. */
-    .settings-hint-foot {
-      margin-top: 14px;
-      margin-bottom: 0;
-    }
-
     /* Folder-home migration: per-conflict resolver. One row per colliding
      * folder name + a segmented Keep both / Skip / Overwrite control. */
     .migrate-conflict-list {
@@ -1915,105 +1798,11 @@
       color: var(--danger);
     }
 
-    .settings-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
     /* Screen-recording status — a coloured, bold state word leading an
      * otherwise-muted hint line (no heavy card; matches the flat style
      * of the other settings tabs). */
     .capture-state-ok { color: var(--accent); font-weight: 600; }
     .capture-state-warn { color: #b45309; font-weight: 600; }
-
-    .settings-note,
-    .settings-ok,
-    .settings-error {
-      font-size: calc(12px * var(--ui-scale));
-      line-height: 1.45;
-      margin: 0;
-    }
-
-    .settings-note {
-      color: var(--muted);
-    }
-
-    .settings-ok {
-      color: #047857;
-    }
-
-    .settings-error {
-      color: var(--danger);
-    }
-
-    .settings-field-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      min-width: 0;
-    }
-
-    .settings-text-input {
-      flex: 1;
-      min-width: 0;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(12px * var(--ui-scale));
-      color: var(--fg);
-      background: var(--surface-raised);
-    }
-
-    .settings-primary-btn,
-    .settings-secondary-btn {
-      height: 32px;
-      border-radius: 6px;
-      padding: 0 12px;
-      font: inherit;
-      font-size: calc(12px * var(--ui-scale));
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.12s, border-color 0.12s, filter 0.12s;
-    }
-
-    .settings-primary-btn {
-      border: 1px solid var(--accent);
-      background: var(--accent);
-      color: var(--text-on-accent);
-    }
-    .settings-primary-btn:hover:not(:disabled) {
-      filter: brightness(0.96);
-    }
-
-    .settings-secondary-btn {
-      border: 1px solid var(--border);
-      background: var(--surface-raised);
-      color: var(--fg);
-    }
-    .settings-secondary-btn:hover:not(:disabled) {
-      background: var(--hover);
-      border-color: #b9bdc4;
-    }
-
-    /* Destructive secondary (e.g. Remove key) — red text/border, red
-     * wash on hover. Matches the accent/red palette used elsewhere. */
-    .settings-secondary-btn.danger {
-      color: var(--danger);
-      border-color: rgba(220, 38, 38, 0.3);
-    }
-    .settings-secondary-btn.danger:hover:not(:disabled) {
-      background: rgba(220, 38, 38, 0.06);
-      border-color: rgba(220, 38, 38, 0.45);
-    }
-
-    .settings-primary-btn:disabled,
-    .settings-secondary-btn:disabled,
-    .settings-text-input:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
 
     .modal-btn.danger {
       color: var(--danger);
@@ -2021,57 +1810,6 @@
     }
     .modal-btn.danger:hover:not(:disabled) {
       background: rgba(220, 38, 38, 0.06);
-    }
-
-    .settings-panel-loading {
-      color: var(--muted);
-      font-size: calc(13px * var(--ui-scale));
-      padding: 12px 0;
-    }
-
-    .appearance-group { margin-top: 22px; }
-    .appearance-options {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 9px;
-    }
-    .appearance-option {
-      display: flex;
-      min-width: 0;
-      min-height: 54px;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: center;
-      gap: 2px;
-      padding: 9px 10px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--card);
-      color: var(--fg);
-      cursor: pointer;
-      text-align: left;
-    }
-    .appearance-option:hover { background: var(--hover); }
-    .appearance-option.selected {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 1px var(--accent);
-    }
-    .appearance-option small { color: var(--muted); font-size: calc(11px * var(--ui-scale)); line-height: 1.25; }
-    .appearance-option:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-    }
-
-    .settings-select {
-      min-width: 180px;
-      height: 34px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--card);
-      color: var(--fg);
-      padding: 0 9px;
-      font: inherit;
     }
 
     .transcription-model-list {

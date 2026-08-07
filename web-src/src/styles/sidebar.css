@@ -468,14 +468,11 @@
       min-width: 0;
     }
 
-    .mcp-http-field-controls .settings-text-input {
-      height: 32px;
-    }
-
+    /* Match the 28px Input/Button row height in the URL-access fields. */
     .mcp-config-copy.mcp-http-copy {
-      width: 32px;
-      height: 32px;
-      flex: 0 0 32px;
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
     }
 
     .mcp-http-actions {

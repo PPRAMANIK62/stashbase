@@ -7,6 +7,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type McpHttpStatus } from '../../api';
 import { MCP_CLIENTS, mcpClientLabel, type McpClientId } from '../../agentCatalog';
 import { CopyIcon, CheckIcon } from '../../icons';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 
 interface McpConfigureResult {
   client?: McpClientId;
@@ -213,9 +215,9 @@ export function McpClientsPanel() {
   }
 
   return (
-    <div className="settings-section">
-      <div className="settings-section-title">MCP clients</div>
-      <div className="settings-section-hint">
+    <div>
+      <div className="mb-1 text-base font-semibold">MCP clients</div>
+      <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
         Connect StashBase to your agents. Restart each app after connecting.
       </div>
       <div className="mcp-client-list">
@@ -262,14 +264,14 @@ export function McpClientsPanel() {
       )}
 
       <div className="mcp-http-settings">
-        <div className="settings-section-title">URL access</div>
-        <div className="settings-section-hint">
+        <div className="mb-1 text-base font-semibold">URL access</div>
+        <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
           For server-side MCP clients that cannot launch the local command. Browser pages are not supported.
         </div>
         {http ? (
           <>
             {http.settingsError && (
-              <div className="settings-error">
+              <div className="text-sm text-destructive">
                 URL access settings are unavailable: {http.settingsError}
               </div>
             )}
@@ -282,18 +284,18 @@ export function McpClientsPanel() {
             <div className="mcp-http-field">
               <label htmlFor="mcp-http-token">Bearer token</label>
               <div className="mcp-http-field-controls">
-                <input
+                <Input
                   id="mcp-http-token"
-                  className="settings-text-input"
+                  className="flex-1 font-mono text-sm"
                   type={showToken ? 'text' : 'password'}
                   readOnly
                   spellCheck={false}
                   value={http.token ?? ''}
                   placeholder={http.settingsError ? 'Unavailable' : undefined}
                 />
-                <button type="button" className="settings-secondary-btn" disabled={!http.token} onClick={() => setShowToken((shown) => !shown)}>
+                <Button variant="outline" size="sm" disabled={!http.token} onClick={() => setShowToken((shown) => !shown)}>
                   {showToken ? 'Hide' : 'Show'}
-                </button>
+                </Button>
                 <CopyButton
                   copied={copied === 'token'}
                   disabled={!http.token}
@@ -303,9 +305,9 @@ export function McpClientsPanel() {
               </div>
             </div>
             <div className="mcp-http-actions">
-              <button type="button" className="settings-secondary-btn" disabled={httpBusy || !http.token} onClick={() => void rotateToken()}>
+              <Button variant="outline" size="sm" disabled={httpBusy || !http.token} onClick={() => void rotateToken()}>
                 Rotate token…
-              </button>
+              </Button>
               <label className="mcp-http-docker-toggle">
                 <input
                   type="checkbox"
@@ -319,9 +321,9 @@ export function McpClientsPanel() {
             <div className="mcp-http-field">
               <label htmlFor="mcp-http-docker-port">Docker port</label>
               <div className="mcp-http-field-controls">
-                <input
+                <Input
                   id="mcp-http-docker-port"
-                  className="settings-text-input"
+                  className="flex-1 font-mono text-sm"
                   type="number"
                   min={1024}
                   max={65535}
@@ -330,17 +332,17 @@ export function McpClientsPanel() {
                   disabled={httpBusy || http.dockerAccess || !!http.settingsError}
                   onChange={(event) => setDockerPortInput(event.target.value)}
                 />
-                <button
-                  type="button"
-                  className="settings-secondary-btn"
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={httpBusy || http.dockerAccess || !!http.settingsError || dockerPortInput === String(http.dockerPort)}
                   onClick={() => void saveDockerPort()}
                 >
                   Save port
-                </button>
+                </Button>
               </div>
             </div>
-            <div className="settings-section-hint settings-hint-foot">
+            <div className="mt-3.5 text-sm leading-normal text-muted-foreground">
               Disabled by default. Enabling opens a separate token-gated MCP-only port on host interfaces; no other StashBase API is exposed. Disable access before changing the port. Docker Desktop or the host firewall must allow that port.
             </div>
             {http.dockerAccess && (
@@ -351,24 +353,24 @@ export function McpClientsPanel() {
                   copied={copied === 'docker'}
                   onCopy={() => void copyText(http.dockerUrl, 'docker')}
                 />
-                <div className={http.dockerActive ? 'settings-ok' : 'settings-error'}>
+                <div className={http.dockerActive ? 'text-sm text-status-success' : 'text-sm text-destructive'}>
                   {http.dockerActive
                     ? 'Docker listener is active.'
                     : `Docker listener is not active${http.dockerError ? `: ${http.dockerError}` : '.'}`}
                 </div>
-                <div className="settings-section-hint settings-hint-foot">
+                <div className="mt-3.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
                   Native Linux Docker Engine also needs <code>--add-host=host.docker.internal:host-gateway</code> or the equivalent Compose <code>extra_hosts</code> entry.
                 </div>
               </>
             )}
           </>
         ) : (
-          <div className="settings-note">Loading URL access…</div>
+          <div className="text-sm text-muted-foreground">Loading URL access…</div>
         )}
       </div>
 
       <div className="mcp-other">
-        <div className="settings-section-hint">
+        <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
           For any other MCP-compatible agent, paste this configuration into its MCP settings:
         </div>
         <div className="mcp-config-preview">
@@ -397,7 +399,7 @@ function McpHttpField(props: { label: string; value: string; copied: boolean; on
     <div className="mcp-http-field">
       <label htmlFor={id}>{props.label}</label>
       <div className="mcp-http-field-controls">
-        <input id={id} className="settings-text-input" type="text" readOnly spellCheck={false} value={props.value} />
+        <Input id={id} className="flex-1 font-mono text-sm" type="text" readOnly spellCheck={false} value={props.value} />
         <CopyButton copied={props.copied} onCopy={props.onCopy} label={props.label} />
       </div>
     </div>
