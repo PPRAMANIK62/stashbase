@@ -79,6 +79,7 @@ function fakeSession(options: {
 function fakeDeps(
   session: AttributedAgentSession | null,
   windowSession: AttributedAgentSession | null = null,
+  globalSession: AttributedAgentSession | null = null,
 ): { deps: CreateProjectDeps; log: DepsLog } {
   const log: DepsLog = { registered: [], agentsFiles: [], treeChanges: 0, synced: [], events: [], overrides: [], cleared: [] };
   const deps: CreateProjectDeps = {
@@ -90,6 +91,7 @@ function fakeDeps(
     syncFolder: async (abs) => { log.synced.push(abs); },
     session: (attributionId) => (attributionId ? session : null),
     sessionForWindow: (windowId) => (windowId ? windowSession : null),
+    turnActiveSession: () => globalSession,
     setOverride: (agent, id, folder) => { log.events.push('override'); log.overrides.push({ agent, id, folder }); },
     clearOverride: (agent, id) => { log.cleared.push({ agent, id }); },
   };
@@ -300,4 +302,13 @@ test('no attribution and no window candidate creates + registers only', async ()
   assert.equal(result.rebound, false);
   assert.match(result.note, /No calling chat session/);
   assert.deepEqual(log.registered, [path.join(HOME, 'NoCaller')]);
+});
+
+test('global turn-active fallback attributes when no identity survived the spawn chain', async () => {
+  const session = fakeSession({ library: true, nativeId: 'native-session-11', turnActive: true });
+  const { deps, log } = fakeDeps(null, null, session);
+  const result = await createProjectFolder({ name: 'EnvStripped' }, deps);
+  assert.equal(result.rebound, true);
+  assert.equal(session.reboundTo, path.join(HOME, 'EnvStripped'));
+  assert.deepEqual(log.overrides, [{ agent: 'claude', id: 'native-session-11', folder: path.join(HOME, 'EnvStripped') }]);
 });

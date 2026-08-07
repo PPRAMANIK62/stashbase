@@ -31,6 +31,7 @@ import { logger, errorMessage } from './log.ts';
 import {
   attributedAgentSession,
   attributedSessionForWindow,
+  attributedTurnActiveSession,
   createProjectRebindPlan,
   type AttributedAgentSession,
 } from './agent-session-registry.ts';
@@ -134,6 +135,10 @@ export interface CreateProjectDeps {
    * session header (stale installed binaries) — the window's one session
    * with a turn in flight. */
   sessionForWindow(windowId: string | undefined): AttributedAgentSession | null;
+  /** Last-resort attribution when no identity survived the MCP spawn
+   * chain (Codex sanitizes the env): the app-wide single turn-active
+   * session, or null on any ambiguity. */
+  turnActiveSession(): AttributedAgentSession | null;
   setOverride(agent: 'claude' | 'codex', nativeSessionId: string, folderAbs: string): void;
   clearOverride(agent: 'claude' | 'codex', nativeSessionId: string): void;
 }
@@ -150,6 +155,7 @@ const productionDeps: CreateProjectDeps = {
   syncFolder: (abs) => syncFolderNow(abs, { reason: 'create_project' }),
   session: (attributionId) => attributedAgentSession(attributionId),
   sessionForWindow: (windowId) => attributedSessionForWindow(windowId),
+  turnActiveSession: () => attributedTurnActiveSession(),
   setOverride: setAgentSessionFolderOverride,
   clearOverride: clearAgentSessionFolderOverride,
 };
@@ -202,7 +208,8 @@ function applyRebind(
   deps: CreateProjectDeps,
 ): { rebound: boolean; note: string } {
   const session = deps.session(input.agentSessionId)
-    ?? deps.sessionForWindow(typeof input.windowId === 'string' ? input.windowId : undefined);
+    ?? deps.sessionForWindow(typeof input.windowId === 'string' ? input.windowId : undefined)
+    ?? deps.turnActiveSession();
   const plan = createProjectRebindPlan(session);
   if (plan.kind === 'none') {
     if (plan.reason === 'folder-bound') {

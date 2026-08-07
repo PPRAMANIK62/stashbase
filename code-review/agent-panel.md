@@ -53,7 +53,10 @@ host binaries may predate that header; the window-fallback attribution
 covers them: when the session header is absent, the call attributes to the
 request window's ONE session with a turn in flight (a tool call always
 happens inside its caller's turn), and any ambiguity — zero or several
-turn-active sessions — attributes to nobody rather than guessing. The tool
+turn-active sessions — attributes to nobody rather than guessing. Some
+hosts (Codex) sanitize the env entirely, dropping both ids; the final
+tier attributes to the app-wide SINGLE turn-active session under the same
+ambiguity guard. The tool
 creates the directory (folder home by default; an explicit `location` must
 be inside the folder home or a member folder), registers it into library
 membership without touching any window's current folder, and then applies

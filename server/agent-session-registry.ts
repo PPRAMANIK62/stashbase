@@ -72,6 +72,22 @@ export function attributedSessionForWindow(
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+/** Last-resort attribution when NO identity reached the request at all —
+ * some MCP hosts (Codex) spawn their MCP servers with a sanitized
+ * environment, so neither the session nor the window id survives the
+ * spawn chain. A tool call still happens inside its caller's turn, so
+ * when exactly ONE registered session app-wide has a turn in flight, that
+ * is the caller. Any ambiguity attributes to nobody: on a single-user
+ * desktop two simultaneous turns are rare, and guessing wrong would
+ * rebind someone else's chat. */
+export function attributedTurnActiveSession(): AttributedAgentSession | null {
+  const candidates: AttributedAgentSession[] = [];
+  for (const session of sessions.values()) {
+    if (session.turnInFlight()) candidates.push(session);
+  }
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 export type CreateProjectRebindPlan =
   | { kind: 'none'; reason: 'no-session' }
   | { kind: 'none'; reason: 'folder-bound'; folder: string }
