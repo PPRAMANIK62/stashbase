@@ -74,10 +74,25 @@ export interface FolderState {
   homeDir?: string;
 }
 
+export interface UnsupportedFileSummary {
+  sourceCode: number;
+  other: number;
+  otherExtensions: Array<{
+    extension: string;
+    count: number;
+  }>;
+}
+
+export interface OnboardingPreferences {
+  sourceCodeNoticeVersion?: number;
+  unsupportedFormatsNoticeVersion?: number;
+}
+
 export interface FilesPayload {
   files: FileMeta[];
   folders: FolderMeta[];
   folder: string;
+  unsupportedFiles?: UnsupportedFileSummary;
 }
 
 export interface FileBody {
