@@ -21,6 +21,13 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 - StashBase owns tab lifecycle, saving, conflict/version handling, local asset
   storage, local navigation, image lightbox, Find, anchors, search highlighting,
   app styling, and the trust boundary.
+- Each open Markdown tab owns one retained CrepeBuilder surface. Inactive
+  surfaces stay mounted but hidden; only the active surface may register the
+  save/focus handle, Find controller, outline, pending-anchor work, or pending
+  search highlighting. Registration cleanup must be ownership-aware so an old
+  tab cannot clear a newer active tab's handle. Closing a tab destroys its
+  builder, and replacing a preview tab keys the surface by both tab and file
+  identity so the displaced builder is destroyed.
 - Theme integration uses semantic StashBase tokens plus a scoped Milkdown token
   bridge. Milkdown's frame stylesheet assigns its variables directly on its
   root, so inherited app tokens alone are insufficient: keep the bridge more
@@ -49,6 +56,10 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   never the surrounding application UI. They must continue to work after mode
   switches and document replacements. Match navigation scrolls the document's
   own scroller, rather than the renderer window.
+- Crepe creation has explicit creating, ready, and failed presentation states.
+  The editor shell remains non-paintable until ready; creation failure must
+  replace it with an actionable retry surface rather than an indefinite blank
+  pane.
 - Heading IDs derive from rendered heading text and remain stable enough for
   same-note and cross-note anchor navigation.
 - Document outlines read heading nodes from the retained ProseMirror document.
@@ -93,4 +104,7 @@ link validation, serialization/refresh behavior, document-scoped Find, and
 local image path derivation whenever those seams change. Manually verify a
 Markdown document in the running Electron app in both Writer Mode and Reading
 View, including the slash menu, tables, code blocks, math, and link
-handling.
+handling. For retained-tab lifecycle changes, run the bounded real-Electron
+smoke and verify repeated switches preserve ready DOM identity without a naked
+active shell, while preview replacement and tab close destroy only their owned
+builders.

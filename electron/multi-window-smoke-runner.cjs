@@ -9,6 +9,7 @@ const { buildElectronSmokeArgs } = require('./multi-window.cjs');
 const { waitForChildExit } = require('./smoke-process.cjs');
 
 const LAYOUT_SMOKE_TIMEOUT_MS = 30_000;
+const MARKDOWN_LIFECYCLE_SMOKE_TIMEOUT_MS = 100_000;
 const WINDOW_SMOKE_TIMEOUT_MS = 75_000;
 
 function reservePort() {
@@ -30,7 +31,7 @@ function reservePort() {
   });
 }
 
-function runElectron(electronPath, script, port, smokeRoot, launch) {
+function runElectron({ electronPath, script, port, smokeRoot, launch, timeoutMs }) {
   const child = spawn(electronPath, buildElectronSmokeArgs(process.platform, script, port), {
     cwd: path.resolve(__dirname, '..'),
     env: {
@@ -50,9 +51,6 @@ function runElectron(electronPath, script, port, smokeRoot, launch) {
     // including the server descendant. Windows uses taskkill /T instead.
     detached: process.platform !== 'win32',
   });
-  const timeoutMs = launch === 'layout'
-    ? LAYOUT_SMOKE_TIMEOUT_MS
-    : WINDOW_SMOKE_TIMEOUT_MS;
   return waitForChildExit(child, { launch, timeoutMs });
 }
 
@@ -60,12 +58,28 @@ async function main() {
   const electronPath = require('electron');
   const script = path.join(__dirname, 'multi-window-smoke.cjs');
   const layoutScript = path.join(__dirname, 'tab-strip-layout-smoke.cjs');
+  const markdownLifecycleScript = path.join(__dirname, 'markdown-tab-lifecycle-smoke.cjs');
   const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-real-window-smoke-'));
   try {
     const port = await reservePort();
-    await runElectron(electronPath, layoutScript, port, smokeRoot, 'layout');
-    await runElectron(electronPath, script, port, smokeRoot, 1);
-    await runElectron(electronPath, script, port, smokeRoot, 2);
+    await runElectron({
+      electronPath,
+      script: layoutScript,
+      port,
+      smokeRoot,
+      launch: 'layout',
+      timeoutMs: LAYOUT_SMOKE_TIMEOUT_MS,
+    });
+    await runElectron({
+      electronPath,
+      script: markdownLifecycleScript,
+      port,
+      smokeRoot,
+      launch: 'markdown-lifecycle',
+      timeoutMs: MARKDOWN_LIFECYCLE_SMOKE_TIMEOUT_MS,
+    });
+    await runElectron({ electronPath, script, port, smokeRoot, launch: 1, timeoutMs: WINDOW_SMOKE_TIMEOUT_MS });
+    await runElectron({ electronPath, script, port, smokeRoot, launch: 2, timeoutMs: WINDOW_SMOKE_TIMEOUT_MS });
     console.log(`real multi-window relaunch smoke passed on ${process.platform}`);
   } finally {
     fs.rmSync(smokeRoot, {

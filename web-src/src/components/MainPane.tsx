@@ -44,6 +44,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   // have no top chrome, so they skip the band and fill from just under
   // the tab strip.
   const chromeBand = hasTabs && cur?.format !== 'html' && cur?.format !== 'image';
+  const markdownTabs = state.tabs.filter((tab) => tab.file?.format === 'md');
 
   return (
     <main
@@ -101,20 +102,33 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}
-        {cur && cur.format === 'md' && (
-          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="Markdown document" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening document…</div>}>
-              <LazyCrepeDocument
-                key={activeTab?.id ?? cur.name}
-                tabId={activeTab?.id ?? ''}
-                name={cur.name}
-                content={cur.content}
-                readOnly={!editMode}
-                active
-              />
-            </Suspense>
-          </LazyLoadBoundary>
-        )}
+        {markdownTabs.map((tab) => {
+          const file = tab.file!;
+          const active = tab.id === state.activeTabId;
+          return (
+            <div
+              key={`${tab.id}:${file.name}`}
+              className="markdown-tab-layer"
+              hidden={!active}
+            >
+              <LazyLoadBoundary
+                className={VIEWER_LOADING_CLASS}
+                label="Markdown document"
+                resetKey={`${file.name}:${file.version ?? ''}`}
+              >
+                <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening document…</div>}>
+                  <LazyCrepeDocument
+                    tabId={tab.id}
+                    name={file.name}
+                    content={file.content}
+                    readOnly={!tab.editMode}
+                    active={active}
+                  />
+                </Suspense>
+              </LazyLoadBoundary>
+            </div>
+          );
+        })}
         {cur && !editMode && cur.format === 'html' && (
           <HtmlPreview name={cur.name} />
         )}

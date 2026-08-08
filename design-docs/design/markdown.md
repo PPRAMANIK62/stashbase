@@ -11,6 +11,10 @@ Agent without a conversion layer becoming the product.
   changes the retained document's interaction boundary; Reading View blocks
   mutation, hides authoring controls, and preserves history and selection
   across a mode switch.
+- Open Markdown tabs retain their ready document surfaces while inactive, so
+  switching tabs reveals the existing document without a blank initialization
+  frame. A document that is still opening or failed to open shows an explicit,
+  recoverable status instead of an empty editor shell.
 - CommonMark plus GFM provides document structure, lists and task lists,
   links, images, tables, code blocks, strikethrough, and footnotes. Crepe's
   authoring controls add a slash/block menu, a contextual selection toolbar,
