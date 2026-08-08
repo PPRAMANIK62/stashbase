@@ -22,6 +22,7 @@ to migrate them into a StashBase-specific storage model.
   the same conversation beside it.
 - The main pane opens the source file the user selected; generated artifacts
   stay hidden.
+- PDF tabs retain their active reading position (page number) across tab switches during a session. Reusing a preview tab for a different file resets the stored page position.
 - Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
   strip's `+` button — distinct from Cmd/Ctrl+N, which creates a note file.
 - Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active

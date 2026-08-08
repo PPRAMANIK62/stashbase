@@ -283,3 +283,36 @@ test('scope and type filter changes clear both modes\' results', () => {
   const cleared = reducer(scoped, { type: 'SEARCH_SCOPE', scope: null });
   assert.equal(cleared.searchScope, null);
 });
+
+test('PDF page number is retained in tab state, and reset when replacing file', () => {
+  let state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'doc1.pdf', format: 'pdf', content: '' },
+    preview: true,
+  });
+  const tabId = state.activeTabId!;
+  assert.equal(state.tabs[0].pdfPage, undefined);
+
+  // Set the PDF page
+  state = reducer(state, { type: 'TAB_PDF_PAGE', id: tabId, page: 4 });
+  assert.equal(state.tabs[0].pdfPage, 4);
+
+  // Open a new tab (not replacing preview)
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'doc2.pdf', format: 'pdf', content: '' },
+    newTab: true,
+  });
+  assert.equal(state.tabs.length, 2);
+  assert.equal(state.tabs[0].pdfPage, 4); // retained on the first tab
+  assert.equal(state.tabs[1].pdfPage, undefined); // undefined on the second tab
+
+  // Reuse preview tab to open another file (doc3.pdf) -> should clear the pdfPage
+  state = reducer(state, { type: 'ACTIVATE_TAB', id: tabId });
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'doc3.pdf', format: 'pdf', content: '' },
+    preview: true,
+  });
+  assert.equal(state.tabs[0].pdfPage, undefined); // reset / not leaked from doc1.pdf
+});
