@@ -145,10 +145,14 @@ export function reducer(s: State, a: Action): State {
       const tab = getActiveTab(s);
       if (!tab?.file) return s;
       const file = { ...tab.file, ...a.patch };
+      const pdfSourceChanged = tab.file.format === 'pdf'
+        && a.patch.version !== undefined
+        && a.patch.version !== tab.file.version;
       const renamed = a.patch.name && s.selectedPath === tab.file.name;
       return {
         ...patchActiveTab(s, {
           file,
+          ...(pdfSourceChanged ? { pdfPage: undefined } : {}),
         }),
         selectedPath: renamed ? a.patch.name! : s.selectedPath,
       };

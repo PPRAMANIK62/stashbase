@@ -103,6 +103,8 @@ export interface Tab {
    *  the user navigates to a different file. */
   pendingHighlight: PendingHighlight | null;
   saveStatus: SaveStatus;
+  /** Last page viewed in this PDF tab for the renderer session. A different
+   *  file or source version clears it before the viewer reloads. */
   pdfPage?: number;
 }
 

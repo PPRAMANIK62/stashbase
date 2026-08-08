@@ -154,6 +154,22 @@ test('a save acknowledgement advances the version without replacing the live doc
   assert.equal(next.tabs[0].file?.version, 'after');
 });
 
+test('replacing a PDF source version clears its saved page', () => {
+  let state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'paper.pdf', format: 'pdf', content: '', version: 'before' },
+  });
+  const tabId = state.activeTabId!;
+  state = reducer(state, { type: 'TAB_PDF_PAGE', id: tabId, page: 10 });
+
+  const unchanged = reducer(state, { type: 'FILE_PATCH', patch: { version: 'before' } });
+  assert.equal(unchanged.tabs[0].pdfPage, 10);
+
+  const replaced = reducer(state, { type: 'FILE_PATCH', patch: { version: 'after' } });
+  assert.equal(replaced.tabs[0].file?.version, 'after');
+  assert.equal(replaced.tabs[0].pdfPage, undefined);
+});
+
 test('only dirty missing document tabs survive sidebar pruning', () => {
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',
@@ -284,7 +300,7 @@ test('scope and type filter changes clear both modes\' results', () => {
   assert.equal(cleared.searchScope, null);
 });
 
-test('PDF page number is retained in tab state, and reset when replacing file', () => {
+test('PDF page numbers are isolated per tab and reset when replacing a file', () => {
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',
     body: { name: 'doc1.pdf', format: 'pdf', content: '' },
@@ -303,9 +319,16 @@ test('PDF page number is retained in tab state, and reset when replacing file', 
     body: { name: 'doc2.pdf', format: 'pdf', content: '' },
     newTab: true,
   });
+  const secondTabId = state.activeTabId!;
   assert.equal(state.tabs.length, 2);
   assert.equal(state.tabs[0].pdfPage, 4); // retained on the first tab
   assert.equal(state.tabs[1].pdfPage, undefined); // undefined on the second tab
+
+  state = reducer(state, { type: 'TAB_PDF_PAGE', id: secondTabId, page: 2 });
+  state = reducer(state, { type: 'ACTIVATE_TAB', id: tabId });
+  assert.equal(state.tabs.find((tab) => tab.id === tabId)?.pdfPage, 4);
+  state = reducer(state, { type: 'ACTIVATE_TAB', id: secondTabId });
+  assert.equal(state.tabs.find((tab) => tab.id === secondTabId)?.pdfPage, 2);
 
   // Reuse preview tab to open another file (doc3.pdf) -> should clear the pdfPage
   state = reducer(state, { type: 'ACTIVATE_TAB', id: tabId });
