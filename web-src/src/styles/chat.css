@@ -44,25 +44,29 @@
     }
 
     /* Match the sidebar's drag handle (globals.css `.sidebar-splitter`):
-     * a 6px transparent hit area whose only visible cue is a crisp 2px
-     * line drawn by `::after` on hover/active — not a fat colored band. */
+     * a 6px hit area whose only visible cue is a crisp line drawn by
+     * `::after` — not a fat colored band. The strip is painted CANVAS so
+     * it reads as part of the chat panel; left transparent it exposed a
+     * 6px slice of the white body between the sunken tab strip and the
+     * canvas panel. */
     .chat-splitter {
       grid-column: 3;
       grid-row: 1;
       position: relative;
       cursor: col-resize;
-      background: transparent;
+      background: var(--canvas);
     }
     /* This line is the panel's only left divider: a 1px `--border` seam at
      * rest (the panel itself has no border-left), brightening to a 2px accent
-     * on hover/active. Pinned flush to the panel edge (right: 0) so there's
+     * on hover/active. Pinned to the strip's LEFT edge — the true main|chat
+     * boundary now that the strip belongs to the panel side — so there's
      * a single line, not a splitter line + a separate panel border. */
     .chat-splitter::after {
       content: '';
       position: absolute;
       top: 0;
       bottom: 0;
-      right: 0;
+      left: 0;
       width: 1px;
       background: var(--border);
       transition: background .12s, width .12s;
