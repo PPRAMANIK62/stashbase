@@ -1,21 +1,19 @@
 /**
  * Empty-chat hero pieces. While a chat has no turns, AgentView centers the
  * composer in the panel: a connecting status (when applicable) sits above it
- * and use-case starter templates sit below it (Cursor-style rows: icon,
- * title, one-line description). Selecting a template only prefills the
- * composer draft —
+ * and a row of use-case starter chips sits below it (Cursor-style capsules:
+ * icon + short title). Selecting a chip only prefills the composer draft —
  * sending always stays an explicit user action. Copy follows the chat's
  * scope: a folder-bound chat talks about "this folder", a library chat
  * talks about the whole library.
  */
-import type { ComponentType } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
 import { Button } from 'react-aria-components';
-import { ChevronDownIcon, EditIcon, FolderIcon, SearchIcon } from '../../icons';
+import { EditIcon, FolderIcon, SearchIcon } from '../../icons';
 
 interface StarterTemplate {
   Icon: ComponentType<{ className?: string }>;
   title: string;
-  description: string;
   text: string;
 }
 
@@ -23,19 +21,16 @@ const FOLDER_STARTERS: StarterTemplate[] = [
   {
     Icon: SearchIcon,
     title: 'Find answers in your docs',
-    description: 'Ask a question, answered from the files in this folder',
     text: 'Answer from my files: ',
   },
   {
     Icon: EditIcon,
     title: 'Draft a document',
-    description: 'Write a design doc, report, or summary from your notes',
     text: 'Draft a document about ',
   },
   {
     Icon: FolderIcon,
     title: 'Organize this folder',
-    description: 'Summarize what is here and suggest a cleaner structure',
     text: 'Summarize this folder and suggest how to organize it',
   },
 ];
@@ -44,22 +39,54 @@ const LIBRARY_STARTERS: StarterTemplate[] = [
   {
     Icon: SearchIcon,
     title: 'Find answers in your library',
-    description: 'Ask a question, answered from any folder you have added',
     text: 'Answer from my library: ',
   },
   {
     Icon: EditIcon,
     title: 'Draft a document',
-    description: 'Write a design doc, report, or summary from your notes',
     text: 'Draft a document about ',
   },
   {
     Icon: FolderIcon,
     title: 'Survey your library',
-    description: 'Summarize the folders here and what each one holds',
     text: 'Summarize the folders in my library and what each contains',
   },
 ];
+
+/** Inline token chip inside a hint sentence — mono, quiet. */
+function HintKey({ children }: { children: ReactNode }) {
+  return <code className="rounded-sm bg-muted px-1 py-px font-mono text-[11px] text-foreground">{children}</code>;
+}
+
+/* Rotating capability hints. Every line states a real, shipping
+ * capability for its scope — folder chats offer @ mentions, library
+ * chats do not (they retrieve through library search). Built lazily:
+ * module-level JSX executes on import, which breaks under the classic
+ * JSX transform the node test loader applies to this file. */
+const folderHints = (): ReactNode[] => [
+  <>Type <HintKey>@</HintKey> to bring a file from this folder into context</>,
+  <>Type <HintKey>/</HintKey> to use a skill from your Agent runtime</>,
+  <>Drop files or paste an image to attach them</>,
+];
+const libraryHints = (): ReactNode[] => [
+  <>Answers draw on every folder in your library</>,
+  <>Type <HintKey>/</HintKey> to use a skill from your Agent runtime</>,
+  <>Drop files or paste an image to attach them</>,
+];
+
+/** Bottom-anchored capability hint for the empty chat. One muted line,
+ * picked per mount — it fills the void below the starters with something
+ * true and useful, so the empty state reads intentional rather than
+ * unfinished. */
+export function EmptyChatHint({ libraryScoped }: { libraryScoped?: boolean }) {
+  const hints = libraryScoped ? libraryHints() : folderHints();
+  const [index] = useState(() => Math.floor(Math.random() * hints.length));
+  return (
+    <p className="m-0 pt-6 pb-3 text-center text-xs text-muted-foreground">
+      {hints[index % hints.length]}
+    </p>
+  );
+}
 
 /** Status slot above the centered composer. No wordmark or tagline — the
  * tab icon and the composer's "Message <Agent>…" placeholder already carry
@@ -89,23 +116,18 @@ export function StarterTemplates({ onPrefill, libraryScoped }: {
 }) {
   const starters = libraryScoped ? LIBRARY_STARTERS : FOLDER_STARTERS;
   return (
-    <div className="flex flex-col pt-5">
+    <div className="flex flex-wrap gap-2 pt-5">
       {starters.map((starter) => (
         <Button
           key={starter.title}
-          // Preflight is intentionally off in this renderer (styles.css), so
-          // native button chrome must be reset here: zero borders and the UA
-          // background. No separators between rows — the hover surface alone
-          // distinguishes them, keeping the empty state quiet.
-          className="group flex cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2.5 py-3 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+          // The full radius is the one sanctioned pill shape in the app:
+          // starter chips are transient content-level suggestions, not
+          // chrome controls (see design-docs/visual-style.md).
+          className="flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm text-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
           onPress={() => onPrefill(starter.text)}
         >
-          <starter.Icon className="size-4 shrink-0 text-muted-foreground" />
-          <span className="flex min-w-0 flex-1 items-baseline gap-2.5">
-            <span className="shrink-0 text-sm font-medium text-foreground">{starter.title}</span>
-            <span className="truncate text-sm text-muted-foreground">{starter.description}</span>
-          </span>
-          <ChevronDownIcon className="size-3.5 shrink-0 -rotate-90 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+          <starter.Icon className="size-3.5 shrink-0 text-muted-foreground" />
+          {starter.title}
         </Button>
       ))}
     </div>

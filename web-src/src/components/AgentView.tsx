@@ -19,7 +19,7 @@ import { useApp } from '../store/AppContext';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
-import { EmptyChatGreeting, StarterTemplates } from './agent/AgentEmptyState';
+import { EmptyChatGreeting, EmptyChatHint, StarterTemplates } from './agent/AgentEmptyState';
 import { resolveAssistantLink } from './agent/assistantLinkTarget';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
@@ -429,8 +429,10 @@ export function AgentView({
     resumeIdRef.current = id;
     // The previous tab may have been configured for another model. Clear it
     // before reconnecting so the locked resumed chat cannot mislabel itself.
+    // No notice line: the locked model pill (and its tooltip) already says
+    // the session keeps its own model — notices are for failures only.
     const resumedModelControl: ModelControlState = {
-      models: [], notice: 'This resumed session retains the model chosen by its native runtime.', resumedSession: true,
+      models: [], notice: null, resumedSession: true,
     };
     modelControlRef.current = resumedModelControl;
     setModelControl(resumedModelControl);
@@ -1064,7 +1066,12 @@ export function AgentView({
     // `agent-view` stays as a routing hook: useGlobalDragDrop uses
     // `closest('.agent-view')` to keep panel drops out of folder import.
     <div
-      className="agent-view relative flex min-h-0 flex-1 flex-col bg-pane"
+      // Documents are paper (base); chat sits on the CANVAS role — a cool
+      // near-white between paper and chrome, identical in BOTH layouts,
+      // floating its white cards (user turns, composer, code blocks). The
+      // surface never changes with layout, so opening a document only
+      // resizes the panel — no mode jump.
+      className="agent-view relative flex min-h-0 flex-1 flex-col bg-canvas"
       onDragOver={onPanelDragOver}
       onDragLeave={onPanelDragLeave}
       onDrop={onPanelDrop}
@@ -1207,6 +1214,12 @@ export function AgentView({
               onPrefill={(text) => setPrefill({ text, nonce: Date.now() })}
               libraryScoped={sessionScope.kind === 'library'}
             />
+          </div>
+          {/* mt-auto pins the hint to the pane's bottom edge when there is
+            * room, turning the leftover space into deliberate composition;
+            * on short panels it simply stacks below the starters. */}
+          <div className="mt-auto shrink-0">
+            <EmptyChatHint libraryScoped={sessionScope.kind === 'library'} />
           </div>
         </div>
       )}

@@ -43,14 +43,13 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
 
-/* Composer-bar pills. Each trigger carries a leading icon plus a
+/* Composer-bar pills. Triggers are text-only (label + chevron) with a
  * control-naming title/aria-label so adjacent "Default" values stay
  * distinguishable. All pills share one quiet treatment — the session
  * settings live behind a single trigger, so no pill needs emphasis. */
 const pillClass =
   'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
 const pillLockedClass = 'cursor-default opacity-60';
-const pillIconClass = 'size-3.5 shrink-0';
 const pillChevronClass = '-ml-px size-3 shrink-0 opacity-75';
 
 /* Upward menus anchored to the pills. */
@@ -101,10 +100,10 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
       <Button
         className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
         isDisabled={disabled || locked}
-        aria-label={`Model: ${label}`}
+        aria-label={`Model: ${label}${locked ? ' — fixed for this conversation' : ''}`}
         // RAC forwards global DOM attributes (title) at runtime but its
         // ButtonProps type omits them; the spread keeps the tooltip typed.
-        {...{ title: `Model — ${label}` }}
+        {...{ title: locked ? `Model — ${label} (fixed for this conversation)` : `Model — ${label}` }}
       >
         {/* Text-only trigger (Cursor-style): the leading glyphs made the
           * bar read heavy; the label carries the meaning. */}
@@ -280,7 +279,9 @@ function ScopeMenu({ scope, entries, homeDir, locked, disabled, onSetScope }: {
           ? 'Session scope — the whole library'
           : `Session folder — ${shortenFolderPath(scope.path, homeDir)}`}
       >
-        {isLibrary ? <LibraryIcon className={pillIconClass} /> : <FolderIcon className={pillIconClass} />}
+        {/* No leading glyph on the trigger: the scope NAME is the content
+          * (often carrying the user's own emoji), and a folder icon next
+          * to it reads as a double mark. The menu's rows keep icons. */}
         <span className="truncate">{name}</span>
         <ChevronDownIcon className={pillChevronClass} />
       </SharedMenuTrigger>
@@ -450,7 +451,7 @@ export function AgentComposer({
     // styles/chat.css center it to the readable transcript width. In hero
     // mode the empty-state column (656px = 640px content + own padding)
     // replaces that hook so the composer centers mid-panel.
-    <div className={cn('relative bg-pane p-2', hero ? 'mx-auto w-[min(656px,100%)]' : 'agent-composer')}>
+    <div className={cn('relative p-2', hero ? 'mx-auto w-[min(656px,100%)]' : 'agent-composer')}>
       {mention && (choices.length > 0 || mention.kind === 'skill') && (
         <div className="agent-mention">
           <div className="agent-mention-head">
@@ -496,7 +497,14 @@ export function AgentComposer({
           )}
         </div>
       )}
-      <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-background px-2 pt-2 pb-1.5 focus-within:border-accent">
+      <div className={cn(
+        'flex flex-col gap-1.5 rounded-xl border border-border bg-background px-2 pt-2 pb-1.5 focus-within:border-accent',
+        // Hero (empty-state) presentation: the composer is the visual
+        // anchor of an otherwise bare pane, so it earns a taller resting
+        // input and the one sanctioned non-overlay shadow. Docked mode
+        // stays flat and compact beside a document.
+        hero && 'shadow-raised [&_.cm-editor]:min-h-16',
+      )}>
         {(attachments.length > 0 || uploading) && (
           <div className="flex flex-wrap items-center gap-1">
             {attachments.map((a) => a.previewUrl ? (
