@@ -504,8 +504,12 @@ explicitly restored from History may reconnect the same native id at another
 effort while preserving its rendered transcript. Codex and ordinary populated
 live chats remain locked. The server registers live ownership of each Claude
 native session id before a resumed query starts. Acquisition serializes by id,
-retires any current owner, and waits for SDK iterator/query cleanup to finish;
-an interrupt control acknowledgement alone is not native-process retirement.
+but only after verifying that the requested session belongs to the requesting
+window's current folder. It then retires any current owner and waits for SDK
+iterator/query cleanup to finish; an interrupt control acknowledgement alone
+is not native-process retirement. Rejected or early-closed acquisitions never
+replace the current owner or retain an ownership claim, and disposal releases
+every id claimed by that session.
 Claude replay keeps the SDK-selected active-chain UUIDs authoritative but
 reads the matching raw session JSONL entry for effort, since the SDK history
 shape intentionally omits entry-level native metadata.
