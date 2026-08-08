@@ -62,7 +62,7 @@
     }
 
     .preparation-failure-icon {
-      color: #9aa0a6;
+      color: var(--muted);
       opacity: .9;
     }
 
@@ -142,8 +142,8 @@
      * same highlight when it's the drop target (= move to root). */
     .tree-row.folder.drop-target,
     .side-head.drop-target {
-      background: rgba(217, 160, 0, 0.18);
-      box-shadow: inset 2px 0 0 #d9a000;
+      background: rgba(var(--accent-amber-rgb), 0.18);
+      box-shadow: inset 2px 0 0 var(--accent-amber);
     }
 
     .tree-row .chev {
@@ -210,26 +210,10 @@
       text-overflow: ellipsis;
     }
 
-    .tree-children {
-      position: relative;
-    }
-
-    /* Obsidian-style indent guide. Each folder's children wrapper sets
-     * `--guide-left` based on the folder's depth so the line aligns
-     * with that folder's chevron. Nested folders draw their own line,
-     * giving one guide per ancestor level. */
-    .tree-children::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: var(--guide-left, 33px);
-      width: 1px;
-      background: #d0d0d0;
-      pointer-events: none;
-      z-index: 1;
-    }
-
+    /* No indent guides: they are an IDE idiom that earns its keep at
+     * code-repo nesting depth. Library trees are shallow, indentation
+     * plus chevrons carry the structure, and the sidebar stays quiet
+     * (document-tool reference class: Notion/Craft/Finder draw none). */
     .tree-children.collapsed {
       display: none;
     }

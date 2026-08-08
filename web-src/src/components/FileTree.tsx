@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import { BotIcon, ChevronDownIcon, ClaudeIcon } from '../icons';
 import type { FileMeta, FolderMeta } from '../api';
@@ -339,7 +339,6 @@ function FolderRow({
       </div>
       <div
         className={'tree-children' + (isExpanded ? '' : ' collapsed')}
-        style={{ '--guide-left': `${depth * 14 + 33}px` } as CSSProperties}
       >
         {state.newFolderInputOpen && state.activeFolder === node.path && (
           <NewFolderInput parentPath={node.path} depth={depth + 1} />

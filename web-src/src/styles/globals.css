@@ -4,14 +4,25 @@
        * styles consume these roles instead of assuming a light literal. */
       --surface-base: #ffffff;
       --surface-raised: #ffffff;
-      --surface-sunken: #f6f7f8;
-      /* Hover is a light cool neutral; selected is one step stronger in
-       * the same neutral ramp with only a whisper of cool cast — cyan
+      /* Sunken must be a PERCEPTIBLE step below base in both themes —
+       * the sidebar/rail/tab-strip vs content separation is carried by
+       * this delta, not by the hairline alone. Calibrated live: ~8 RGB
+       * points off white is invisible, ~13 reads heavy; this sits at
+       * ~10 with a cool (blue-leaning) cast so it stays airy. */
+      --surface-sunken: #f3f5f7;
+      /* Chat workbench canvas — its own role between paper (base) and
+       * chrome (sunken): a cool, blue-leaning near-white. Distinct from
+       * BOTH neighbours so sidebar↔chat and chat↔document each read as
+       * a surface change (calibrated live with the gray-calibrator jig). */
+      --surface-canvas: #f9fbfd;
+      /* Hover is a light cool neutral one step past sunken (rows hover
+       * on sunken panels too); selected is one step stronger in the
+       * same neutral ramp with only a whisper of cool cast — cyan
        * washes at row width read loud, so the accent is reserved for
        * focus rings, progress, and small interactive emphasis, never
        * selection surfaces. */
-      --surface-hover: #eef0f2;
-      --surface-selected: #e2e7ea;
+      --surface-hover: #eaedf0;
+      --surface-selected: #e0e5e9;
       --text-primary: #202427;
       --text-secondary: #68737a;
       --text-on-accent: #ffffff;
@@ -31,6 +42,7 @@
       --muted: var(--text-secondary);
       --bg: var(--surface-base);
       --pane: var(--surface-sunken);
+      --canvas: var(--surface-canvas);
       --card: var(--surface-raised);
       --border: var(--stroke-subtle);
       /* Cyan accent — matches the .html file icon. Paired with the
@@ -44,6 +56,7 @@
        * #d9a000). Brand moments and file-type marks only — never state;
        * state yellows are --status-warning. */
       --accent-amber: #d9a000;
+      --accent-amber-rgb: 217, 160, 0;
       /* Danger red — destructive actions, error text, failure banners.
        * (chat.css's #e45649 is the One-Dark editor red and the sidebar's
        * #dc2626 is the recording red — different palettes on purpose.) */
@@ -68,7 +81,10 @@
       color-scheme: dark;
       --surface-base: #1b1f22;
       --surface-raised: #242a2e;
-      --surface-sunken: #15191c;
+      --surface-sunken: #13181c;
+      /* Dark canvas sits between base and sunken; provisional — calibrate
+       * against real dark-mode use the way the light value was. */
+      --surface-canvas: #171c20;
       --surface-hover: #30383d;
       --surface-selected: #353f45;
       --text-primary: #edf2f3;
@@ -83,11 +99,13 @@
       --muted: var(--text-secondary);
       --bg: var(--surface-base);
       --pane: var(--surface-sunken);
+      --canvas: var(--surface-canvas);
       --card: var(--surface-raised);
       --border: var(--stroke-subtle);
       --accent: #22b8d8;
       --accent-rgb: 34, 184, 216;
       --accent-amber: #deb245;
+      --accent-amber-rgb: 222, 178, 69;
       --danger: #f87171;
       --status-info: var(--accent);
       --status-success: #34d399;
@@ -103,7 +121,8 @@
         color-scheme: dark;
         --surface-base: #1b1f22;
         --surface-raised: #242a2e;
-        --surface-sunken: #15191c;
+        --surface-sunken: #13181c;
+        --surface-canvas: #171c20;
         --surface-hover: #30383d;
         --surface-selected: #353f45;
         --text-primary: #edf2f3;
@@ -118,11 +137,13 @@
         --muted: var(--text-secondary);
         --bg: var(--surface-base);
         --pane: var(--surface-sunken);
+        --canvas: var(--surface-canvas);
         --card: var(--surface-raised);
         --border: var(--stroke-subtle);
         --accent: #22b8d8;
         --accent-rgb: 34, 184, 216;
         --accent-amber: #deb245;
+        --accent-amber-rgb: 222, 178, 69;
         --danger: #f87171;
         --status-info: var(--accent);
         --status-success: #34d399;
@@ -201,11 +222,11 @@
 
     /* No dedicated titlebar, Cursor-style — in Electron with
      * `hiddenInset` the macOS traffic lights (inset at x:14, y:12)
-     * float over the sidebar column instead. The sidebar reserves a
-     * quiet 36px band at its top: no content, no border, just the
-     * column's own --pane background showing through, and the
-     * `.sidebar-drag-zone` element overlaying it is the window drag
-     * region. (A real element, not ::before — Chromium ignores
+     * float over the sidebar column instead. The rail and panel each
+     * reserve a quiet 36px band at their top (--titlebar-clearance):
+     * no content, just the columns' own backgrounds showing through,
+     * and the `.sidebar-drag-zone` element overlaying it is the window
+     * drag region. (A real element, not ::before — Chromium ignores
      * `-webkit-app-region` on pseudo-elements.) Browser and non-darwin
      * windows have no traffic lights, so they get no drag zone; there,
      * and in macOS fullscreen (lights hidden, `.is-fullscreen` body
@@ -216,12 +237,56 @@
       display: none;
     }
 
-    .sidebar {
-      padding-top: 10px;
+    /* The clearance lives INSIDE each column (rail pt / panel pt), never
+     * as padding on the .sidebar container — container padding would cut
+     * the rail's full-height border-r short of the window's top edge,
+     * which reads as a broken line whenever the window isn't maximized. */
+    :root {
+      --titlebar-clearance: 10px;
     }
 
-    body.is-electron.platform-darwin .sidebar {
-      padding-top: 36px;
+    body.is-electron.platform-darwin {
+      --titlebar-clearance: 36px;
+    }
+
+    body.is-electron.platform-darwin.is-fullscreen {
+      --titlebar-clearance: 10px;
+    }
+
+    /* Rail top padding = clearance + the panel's own first-row offset
+     * (NewChatButton's pt-2), so the first rail icon centers on the New
+     * Chat row — the rail's rhythm mirrors the panel's (see
+     * ActivityBar.tsx). */
+    .activity-rail {
+      position: relative;
+      padding-top: calc(var(--titlebar-clearance) + 8px);
+    }
+
+    /* The rail↔panel divider is a gradient seam, not a border: it fades
+     * in from transparent across the titlebar clearance, so on macOS it
+     * never cuts through the traffic lights, yet below them it reads as
+     * a normal full hairline — no broken-off line in any window state. */
+    .activity-rail::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 1px;
+      /* Stay FULLY transparent through the light band (lights end ~y26
+       * inside the 36px clearance), then fade in over the next 16px —
+       * a half-alpha hairline passing between the lights would still
+       * read as a cut. */
+      background: linear-gradient(
+        to bottom,
+        transparent calc(var(--titlebar-clearance) - 6px),
+        var(--border) calc(var(--titlebar-clearance) + 10px)
+      );
+      pointer-events: none;
+    }
+
+    .sidebar-panel {
+      padding-top: var(--titlebar-clearance);
     }
 
     body.is-electron.platform-darwin .sidebar-drag-zone {
@@ -233,10 +298,6 @@
       height: 36px;
       z-index: 6;
       -webkit-app-region: drag;
-    }
-
-    body.is-electron.platform-darwin.is-fullscreen .sidebar {
-      padding-top: 10px;
     }
 
     body.is-electron.platform-darwin.is-fullscreen .sidebar-drag-zone {

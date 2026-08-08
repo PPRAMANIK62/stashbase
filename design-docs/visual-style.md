@@ -56,10 +56,20 @@ them:
 
 - Three surface levels — sunken (panels, tab strip), base (content), and
   raised (cards, popovers) — establish hierarchy through background shifts.
+- Documents are paper, chat is workbench canvas: document panes own the
+  base surface — the app's only pure content white — while the Agent chat
+  sits on its own canvas role, a cool near-white between paper and the
+  sunken chrome, identical in both of its layouts (chat-primary and
+  docked), floating its cards (user turns, composer, code blocks). All
+  three neighbours — chrome, canvas, paper — stay mutually perceptible.
+  A layout change resizes a pane; it never recolors one — surface roles
+  must not depend on layout, or switching reads as a mode jump.
 - Separation comes from 1px subtle strokes and surface changes, not shadows.
 - Shadow is reserved for transient overlays (menus, dialogs, toasts) — the
   one elevation treatment — so floating things read as floating and nothing
-  else does.
+  else does. One standing exception: the empty-chat hero composer carries a
+  minimal raised shadow (the `raised` shadow role) so the anchor of an
+  otherwise bare pane has presence; docked composers stay flat.
 - Section titles live OUTSIDE their cards: hierarchy comes from type weight
   and spacing, never from a tinted header band inside the card.
 - List interaction states are neutral: a light cool-gray hover that persists
@@ -73,10 +83,28 @@ them:
   Density is what makes the app feel like a tool rather than a landing page;
   do not relax it for visual trends.
 - Radii stay small and consistent (a control radius and a slightly larger
-  UI-surface radius). No pill buttons, no large-radius cards.
+  UI-surface radius). No pill buttons, no large-radius cards. The one
+  sanctioned capsule is the empty-chat starter chip: a transient,
+  content-level suggestion may render as a bordered pill; persistent
+  chrome controls never do.
 - List hover and selection render as an inset rounded pill — a small-radius
   row surface inset from the panel edges — never a full-bleed band or an
   accent edge bar.
+
+## Composition
+
+- Content columns have a stated maximum width (the chat transcript and the
+  empty-state column are the reference cases); text never runs a wide pane
+  edge to edge.
+- Every empty state names one deliberate anchor. The hero element — usually
+  the composer — carries visible weight, and leftover space below it is
+  closed by a single bottom-anchored muted capability hint. Whitespace must
+  read as intended, never as missing content; no wordmark or tagline does
+  this work.
+- Hero groups sit on the pane's optical center; a block that drifts low
+  reads as unfinished.
+- Siblings share one grid line: the hero, its starter chips, and any hint
+  align to the same content edge.
 
 ## Motion
 

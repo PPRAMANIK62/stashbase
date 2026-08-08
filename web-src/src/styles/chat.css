@@ -83,7 +83,10 @@
       grid-row: 1;
       min-width: 0;
       overflow: hidden;
-      background: var(--pane);
+      /* Canvas, not pane: the shell (chat tab row included) shares the
+       * chat surface so the panel reads as one sheet distinct from both
+       * the sidebar chrome and the document paper. */
+      background: var(--canvas);
       display: flex;
       flex-direction: column;
     }
