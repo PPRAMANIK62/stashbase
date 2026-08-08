@@ -116,8 +116,9 @@ export function Sidebar() {
       <div className="sidebar-drag-zone" aria-hidden="true" />
       <ActivityBar />
       {/* The panel that swaps content based on `state.activeSidebarView`;
-        * it owns the vertical stack (header / list). */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        * it owns the vertical stack (header / list). `sidebar-panel`
+        * carries the titlebar clearance (globals.css). */}
+      <div className="sidebar-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {state.activeSidebarView === 'search' ? <SearchPanel /> : <FilesPanel />}
       </div>
     </aside>
@@ -493,6 +494,9 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
   // hover-revealed actions visible while the popover is up.
   const [libraryHistoryOpen, setLibraryHistoryOpen] = useState(false);
   const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
+  // Library row whose History popup is open — keeps that row's
+  // hover-revealed action cluster visible while the popup shows.
+  const [historyOpenPath, setHistoryOpenPath] = useState<string | null>(null);
   const [folderStates, setFolderStates] = useState<Record<string, LibraryFolderStatus>>({});
   const [openingFolder, setOpeningFolder] = useState<{ path: string; name: string } | null>(null);
   const reconcileStartedAt = useRef<Map<string, number>>(new Map());
@@ -749,9 +753,9 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
         * BOTTOM (mt-auto) so the working tree keeps the room; with no
         * folder it flows as the main content. */}
       {/* pb lines the collapsed header's centre up with the rail's
-        * settings gear (rail py-1 + h-10 button → centre 24px from the
+        * settings gear (rail pb-2.5 + h-7 button → centre 24px from the
         * bottom; the 30px header centres at 15px, so 9px makes up the
-        * difference). */}
+        * difference — change one side, change both). */}
       <section className={(activePath ? 'mt-auto ' : 'mt-3 ') + 'flex min-h-0 flex-col overflow-hidden pb-[9px] ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
         <div className="group/lib flex min-h-[30px] flex-none items-center gap-1.5 py-0.5 pr-2 pl-3.5">
           <button
@@ -830,9 +834,16 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                     </button>
                     <span
                       className={`flex items-center ${
-                        menuOpen ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
+                        menuOpen || historyOpenPath === entry.path ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
                       }`}
                     >
+                      {/* Every scope carries its own History entry (the
+                        * same affordance as the Library header's clock). */}
+                      <ScopeHistoryButton
+                        scope={folderScope(entry.path)}
+                        label={`Chat history in ${name}`}
+                        onOpenChange={(open) => setHistoryOpenPath(open ? entry.path : null)}
+                      />
                       <RootMenuButton
                         name={name}
                         menuOpen={menuOpen}
