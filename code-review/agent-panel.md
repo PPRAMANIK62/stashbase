@@ -114,6 +114,16 @@ Community contributions can land as useful first iterations, but the long-term d
   resumed chats and surface that identity; a generic “session model” label is
   not sufficient. Preserve a fallback notice if later initialization reports
   the active Default model.
+  Claude history replay uses the SDK's sanitized message UUIDs as the
+  authoritative active-chain selection, then joins the newest assistant UUID
+  to its raw native JSONL entry because the SDK response strips entry-level
+  effort, parent, and sidechain metadata. Sidechains are stale for this purpose. A
+  missing or unsupported newer value is unknown, never permission to fall back
+  to an older supported value or the renderer default. Keep legacy
+  messages-only routes stable and make renderer replay tolerate a protocol-v1
+  server retained during restart. Changing effort on an idle restored session
+  must retain its transcript and resume the same native id after the prior
+  native writer has retired.
 
 ## Current Baseline
 

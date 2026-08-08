@@ -19,6 +19,9 @@
  * the transcript the client paints before reconnecting.
  */
 import express from 'express';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   listSessions,
   getSessionMessages,
@@ -26,6 +29,7 @@ import {
   renameSession,
   deleteSession,
   type SDKSessionInfo,
+  type SessionMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { getCurrentFolder } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
@@ -109,7 +113,16 @@ export function mount(app: express.Express): void {
 
 /** Claude's compatibility adapter delegates the panel's history actions to
  * the SDK store without exposing those SDK details to routes or renderer. */
-export function claudeHistoryActions(): AgentHistoryActions {
+interface ClaudeHistoryDependencies {
+  getMessages: typeof getSessionMessages;
+  readNativeTranscript: typeof readClaudeNativeTranscript;
+  belongsToFolder: typeof sessionBelongsToFolder;
+}
+
+export function claudeHistoryActions(overrides: Partial<ClaudeHistoryDependencies> = {}): AgentHistoryActions {
+  const getMessages = overrides.getMessages ?? getSessionMessages;
+  const readNativeTranscript = overrides.readNativeTranscript ?? readClaudeNativeTranscript;
+  const belongsToFolder = overrides.belongsToFolder ?? sessionBelongsToFolder;
   return {
     async list(folder) {
       const sessions = await listSessions();
@@ -118,8 +131,21 @@ export function claudeHistoryActions(): AgentHistoryActions {
         .sort((a, b) => b.lastModified - a.lastModified);
     },
     async messages(id, folder) {
-      if (!(await sessionBelongsToFolder(id, folder))) throw new SessionNotFoundError();
-      return transcriptToBlocks(await getSessionMessages(id));
+      if (!(await belongsToFolder(id, folder))) throw new SessionNotFoundError();
+      return transcriptToBlocks(await getMessages(id));
+    },
+    async replay(id, folder) {
+      if (!(await belongsToFolder(id, folder))) throw new SessionNotFoundError();
+      // The SDK intentionally sanitizes history after selecting the active
+      // chain. Keep those UUIDs for chain authority, but join them back to the
+      // raw JSONL entries to recover metadata the SDK response omits.
+      const messages = await getMessages(id);
+      const native = await readNativeTranscript(id);
+      return {
+        protocol: 2,
+        messages: transcriptToBlocks(messages),
+        effort: claudeTranscriptEffort(native, messages),
+      };
     },
     async rename(id, title, folder) {
       if (!(await sessionBelongsToFolder(id, folder))) throw new SessionNotFoundError();
@@ -132,6 +158,62 @@ export function claudeHistoryActions(): AgentHistoryActions {
       await deleteSession(id);
     },
   };
+}
+
+type NativeTranscriptEntry = {
+  type: string;
+  uuid?: string;
+  parentUuid?: string | null;
+  isSidechain?: boolean;
+  effort?: unknown;
+  message?: unknown;
+};
+
+const CLAUDE_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+
+/** Recover raw effort for the newest assistant UUID selected by the SDK's
+ * active-chain reader. A future value is deliberately unknown; walking back
+ * would silently replace newer native semantics with stale supported data. */
+export function claudeTranscriptEffort(
+  native: NativeTranscriptEntry[],
+  active: Array<Pick<SessionMessage, 'type' | 'uuid'>>,
+): string | null {
+  const byId = new Map(native.flatMap((entry) =>
+    typeof entry.uuid === 'string' && entry.uuid ? [[entry.uuid, entry] as const] : []));
+  const latest = [...active].reverse().find((entry) => entry.type === 'assistant');
+  if (!latest) return null;
+  const raw = byId.get(latest.uuid);
+  const message = raw?.message as { effort?: unknown } | null | undefined;
+  const value = raw?.effort ?? message?.effort;
+  return typeof value === 'string' && CLAUDE_EFFORTS.has(value) ? value : null;
+}
+
+/** Read the native session JSONL without trusting the renderer-supplied id as
+ * a path. Claude may use a hashed project-directory name, so search only the
+ * immediate SDK projects directories for the exact UUID filename. */
+export async function readClaudeNativeTranscript(sessionId: string): Promise<NativeTranscriptEntry[]> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) return [];
+  const configDir = process.env.CLAUDE_CONFIG_DIR?.trim() || path.join(os.homedir(), '.claude');
+  const projectsDir = path.join(configDir, 'projects');
+  let projects: import('node:fs').Dirent[];
+  try { projects = await fs.readdir(projectsDir, { withFileTypes: true }); }
+  catch { return []; }
+  for (const project of projects) {
+    if (!project.isDirectory() && !project.isSymbolicLink()) continue;
+    try {
+      const text = await fs.readFile(path.join(projectsDir, project.name, `${sessionId}.jsonl`), 'utf8');
+      return text.split(/\r?\n/).flatMap((line): NativeTranscriptEntry[] => {
+        if (!line.trim()) return [];
+        try {
+          const value = JSON.parse(line) as NativeTranscriptEntry;
+          return value && typeof value === 'object' && typeof value.type === 'string' ? [value] : [];
+        } catch { return []; }
+      });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return [];
+    }
+  }
+  return [];
 }
 
 function claudeHistory(): AgentHistoryActions {

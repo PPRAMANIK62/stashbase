@@ -108,6 +108,8 @@ export function AgentView({
   // default; an explicit choice rides the connect URL for a new session.
   const [effort, setEffort] = useState<EffortLevel | undefined>(undefined);
   const effortRef = useRef<EffortLevel | undefined>(undefined);
+  const [restoredClaudeSession, setRestoredClaudeSession] = useState(false);
+  const [effortInherited, setEffortInherited] = useState(false);
   // User intent and runtime telemetry must stay separate: an active model
   // reached through Default must never become an explicit override later.
   const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
@@ -284,6 +286,8 @@ export function AgentView({
     setTurnBusy(false);
     setCurrentSessionId(null);
     sessionIdRef.current = null;
+    setRestoredClaudeSession(false);
+    setEffortInherited(false);
     toolNamesRef.current.clear();
     openKind.current = null;
     setModelControl((current) => {
@@ -331,7 +335,13 @@ export function AgentView({
     setHistoryOpen(false);
     let hist: Block[] = [];
     try {
-      hist = (await api.getSessionMessages(id, agent)) as Block[];
+      const replay = await api.getSessionReplay(id, agent);
+      hist = replay.messages as Block[];
+      const inheritedEffort = agent === 'claude' ? replay.effort ?? undefined : undefined;
+      setEffort(inheritedEffort);
+      effortRef.current = inheritedEffort;
+      setRestoredClaudeSession(agent === 'claude');
+      setEffortInherited(agent === 'claude' && replay.effort === null);
     } catch {
       actions.toast('Could not load that session.', { level: 'error' });
       return;
@@ -770,15 +780,20 @@ export function AgentView({
     wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: m }));
   }
 
-  /** Change thinking effort. The SDK fixes effort at session construction
-   *  (no live setter), so we apply it by reconnecting — but only when the
-   *  chat is still empty, so we never discard a real conversation. With
-   *  history present it takes effect on the next new chat. */
+  /** Change thinking effort. Restored idle transcripts reconnect to the same
+   * native session; their visible history is retained. */
   function changeEffort(level: EffortLevel | undefined) {
-    if (blocks.length > 0 || turnActive) return;
+    if (turnActive || (blocks.length > 0 && !restoredClaudeSession)) return;
     setEffort(level);
     effortRef.current = level;
-    reconnect();
+    setEffortInherited(false);
+    if (blocks.length > 0 && sessionIdRef.current) {
+      resumeIdRef.current = sessionIdRef.current;
+      setPhase('connecting');
+      setNonce((n) => n + 1);
+    } else {
+      reconnect();
+    }
   }
 
   /** Changing model starts a new native session. A resumed or populated
@@ -825,7 +840,7 @@ export function AgentView({
     reconnect();
   }
 
-  const effortLocked = blocks.length > 0 || turnActive;
+  const effortLocked = turnActive || (blocks.length > 0 && !restoredClaudeSession);
   const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
   const effectiveModel = modelControl.activeModel ?? modelControl.selectedModel;
   const supportedEfforts = modelControl.models.find((entry) => entry.id === effectiveModel)?.supportedEfforts;
@@ -960,6 +975,7 @@ export function AgentView({
         mode={mode}
         onSetMode={changeMode}
         effort={effort}
+        effortInherited={effortInherited}
         onSetEffort={changeEffort}
         effortLocked={effortLocked}
         selectedModel={modelControl.selectedModel}

@@ -19,6 +19,7 @@ import type {
   PdfStatusEntry,
   SearchHit,
   SessionBlock,
+  SessionReplay,
   SessionInfo,
   SyncResult,
   TranscriptionModelId,
@@ -30,6 +31,7 @@ import type {
 } from './apiTypes';
 import type { SearchTypeCategory } from '../../shared/search-types.ts';
 import {
+  ApiError,
   encodePath,
   getWindowId,
   getJson,
@@ -287,6 +289,19 @@ export const api = {
   /** A session's transcript as renderable blocks (for resume replay). */
   getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude') =>
     getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages'),
+  /** Prefer protocol-v2 metadata, but tolerate a protocol-v1 server retained
+   * across an application restart/update. */
+  getSessionReplay: async (id: string, agent: 'claude' | 'codex' = 'claude'): Promise<SessionReplay> => {
+    const base = agentSessionBase(agent) + '/' + encodeURIComponent(id);
+    try {
+      const replay = await getJson<SessionReplay>(base + '/replay');
+      if (replay?.protocol === 2 && Array.isArray(replay.messages)) return replay;
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 404) throw err;
+      // Protocol-v1 server: fall through to the stable endpoint.
+    }
+    return { protocol: 2, messages: await getJson<SessionBlock[]>(base + '/messages'), effort: null };
+  },
   renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude') =>
     send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id), { title }),
   deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude') =>

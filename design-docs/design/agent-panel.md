@@ -31,6 +31,11 @@ client of StashBase context, not a separate AI workspace.
   untouched until the user explicitly chooses a level. Those choices remain
   plainly labeled and easy to select; they are never represented only by
   decorative slider marks.
+  Resumed Claude chats recover effort from their native active transcript
+  chain. Unknown or newer unsupported metadata remains visibly inherited
+  rather than being replaced by a renderer default, and an idle restored chat
+  can explicitly reconnect at another effort without losing its transcript or
+  native session identity.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
 - A failed turn leaves exactly one persistent inline explanation in the

@@ -4,6 +4,7 @@ import * as React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { AgentView } from '../components/AgentView';
 import { MessageList } from '../components/agent/AgentMessages';
+import { AgentComposer } from '../components/agent/AgentComposer';
 import { AGENT_META } from '../agentCatalog';
 import { AppContext, type AppActions } from '../store/AppContext';
 import { initialState, type State } from '../store/state';
@@ -164,6 +165,7 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
   assert.match(output, /Reconnect/);
   assert.doesNotMatch(output, /Codex is working/);
   assert.doesNotMatch(output, /Running/);
+  assert.equal(renderer!.root.findByType(AgentComposer).props.effortLocked, true);
 
   buttonNamed(renderer!.root, 'Reconnect');
   await act(async () => { renderer!.root.findByType(MessageList).props.onRetry(); });

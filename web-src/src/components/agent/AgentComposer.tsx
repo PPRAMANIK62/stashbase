@@ -75,12 +75,12 @@ function AccessMenu({
   );
 }
 
-function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; onSet: (l?: EffortLevel) => void }) {
+function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
   return (
     <div className="agent-effort">
       <DumbbellIcon className="agent-effort-icon" />
       <span className="agent-effort-label">
-        Effort <span className="agent-effort-level">({effort ? effortLabel(effort) : 'Default'})</span>
+        Effort <span className="agent-effort-level">({effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'})</span>
       </span>
       <ListBox
         className="agent-effort-track"
@@ -116,10 +116,11 @@ function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: 
 }
 
 function EffortMenu({
-  effort, efforts, open, disabled, locked, onOpenChange, onSetEffort,
+  effort, efforts, inherited, open, disabled, locked, onOpenChange, onSetEffort,
 }: {
   effort?: EffortLevel;
   efforts: EffortLevel[];
+  inherited: boolean;
   open: boolean;
   disabled: boolean;
   locked: boolean;
@@ -134,12 +135,12 @@ function EffortMenu({
         isDisabled={state.triggerDisabled}
       >
         <DumbbellIcon className="agent-mode-icon" />
-        {effort ? effortLabel(effort) : 'Default'}
+        {effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'}
         <ChevronDownIcon className="agent-mode-chevron" />
       </Button>
       <Popover className="agent-mode-menu effort-only" placement="top end">
         <div>
-          <EffortBar effort={effort} efforts={efforts} onSet={onSetEffort} />
+          <EffortBar effort={effort} efforts={efforts} inherited={inherited} onSet={onSetEffort} />
         </div>
       </Popover>
     </MenuTrigger>
@@ -185,7 +186,7 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
 
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortInherited, effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -194,6 +195,7 @@ export function AgentComposer({
   mode: PermMode;
   onSetMode: (mode: PermMode) => void;
   effort?: EffortLevel;
+  effortInherited: boolean;
   onSetEffort: (level?: EffortLevel) => void;
   effortLocked: boolean;
   supportedEfforts?: string[];
@@ -443,6 +445,7 @@ export function AgentComposer({
           {showEffortMenu && (
             <EffortMenu
               effort={effort}
+              inherited={effortInherited}
               open={effortOpen}
               disabled={disabled}
               locked={effortLocked}

@@ -8,6 +8,7 @@ import type { Query } from '@anthropic-ai/claude-agent-sdk';
 import type { WebSocket } from 'ws';
 import {
   AgentSession,
+  ClaudeNativeSessionOwnership,
   claudeActiveModelEvent,
   claudeModelCatalogFailureEvent,
   claudePermissionMode,
@@ -17,6 +18,7 @@ import {
 } from '../agent.ts';
 import { clearAgentRuntimeFailure } from '../agent-contract.ts';
 import { clearCurrentFolder, runWithWindowId, setCurrentFolder } from '../folder.ts';
+import { claudeTranscriptEffort } from '../routes/sessions.ts';
 
 class FakeAgentWebSocket extends EventEmitter {
   readyState = 1;
@@ -53,6 +55,111 @@ test('Claude adapter preserves supported Shared Agent Contract access modes', ()
 test('Claude adapter defaults invalid access modes to Ask', () => {
   assert.equal(claudePermissionMode(), 'default');
   assert.equal(claudePermissionMode('bypassPermissions'), 'default');
+});
+
+test('Claude replay recovers Max from the latest active transcript chain', () => {
+  assert.equal(claudeTranscriptEffort([
+    { type: 'assistant', uuid: 'a1', parentUuid: null, message: { effort: 'high' } },
+    { type: 'user', uuid: 'u2', parentUuid: 'a1', message: {} },
+    { type: 'assistant', uuid: 'a2', parentUuid: 'u2', effort: 'max', message: {} },
+  ], [
+    { type: 'assistant', uuid: 'a1' },
+    { type: 'user', uuid: 'u2' },
+    { type: 'assistant', uuid: 'a2' },
+  ]), 'max');
+});
+
+test('Claude replay ignores newer sidechain effort metadata', () => {
+  assert.equal(claudeTranscriptEffort([
+    { type: 'assistant', uuid: 'active', parentUuid: null, message: { effort: 'max' } },
+    { type: 'assistant', uuid: 'branch', parentUuid: null, isSidechain: true, message: { effort: 'high' } },
+    { type: 'user', uuid: 'leaf', parentUuid: 'active', message: {} },
+  ], [
+    { type: 'assistant', uuid: 'active' },
+    { type: 'user', uuid: 'leaf' },
+  ]), 'max');
+});
+
+test('Claude replay treats missing and future effort metadata as unknown', () => {
+  assert.equal(claudeTranscriptEffort([
+    { type: 'assistant', uuid: 'old', parentUuid: null, message: { effort: 'max' } },
+    { type: 'assistant', uuid: 'new', parentUuid: 'old', message: { effort: 'ultra' } },
+  ], [
+    { type: 'assistant', uuid: 'old' },
+    { type: 'assistant', uuid: 'new' },
+  ]), null);
+  assert.equal(claudeTranscriptEffort([
+    { type: 'assistant', uuid: 'only', parentUuid: null, message: {} },
+  ], [{ type: 'assistant', uuid: 'only' }]), null);
+});
+
+test('Claude native ownership is active before reconnect and serializes acquisition through retirement', async () => {
+  let retire!: () => void;
+  const retired = new Promise<void>((resolve) => { retire = resolve; });
+  let disposed = false;
+  const oldSession = {
+    dispose() { disposed = true; },
+    retirement() { return retired; },
+  } as unknown as AgentSession;
+  const replacement = {} as AgentSession;
+  const ownership = new ClaudeNativeSessionOwnership();
+  ownership.register('native-1', oldSession);
+
+  let acquired = false;
+  const acquiring = ownership.acquire('native-1', replacement).then(() => { acquired = true; });
+  await settle();
+  assert.equal(disposed, true);
+  assert.equal(acquired, false);
+  retire();
+  await acquiring;
+  assert.equal(acquired, true);
+});
+
+test('Claude retirement waits for the SDK stream to exit after interrupt acknowledgement', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-retire-'));
+  runWithWindowId('claude-retire-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('claude-retire-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  let finishStream!: () => void;
+  const streamGate = new Promise<void>((resolve) => { finishStream = resolve; });
+  async function* stream() {
+    yield { type: 'system', subtype: 'init', session_id: 'native-retire', model: 'native-model' } as never;
+    await streamGate;
+  }
+  const native = Object.assign(stream(), {
+    supportedModels: async () => [],
+    supportedCommands: async () => [],
+    setModel: async () => {},
+    setPermissionMode: async () => {},
+    interrupt: async () => {},
+  }) as unknown as Query;
+  const ws = new FakeAgentWebSocket();
+  let retirement: Promise<void> | undefined;
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-retire-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    (_session, pending) => { retirement = pending; },
+    (() => native) as never,
+    () => '/fake/claude',
+  );
+  session.begin();
+  await settle();
+  session.dispose();
+  await settle();
+  assert.ok(retirement);
+  let retired = false;
+  void retirement.then(() => { retired = true; });
+  await settle();
+  assert.equal(retired, false);
+  finishStream();
+  await retirement;
+  assert.equal(retired, true);
 });
 
 test('Claude model selection recovers visibly when the SDK rejects a discovered model', async () => {
