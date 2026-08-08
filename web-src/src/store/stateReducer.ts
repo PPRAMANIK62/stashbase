@@ -129,6 +129,7 @@ export function reducer(s: State, a: Action): State {
           saveStatus: { text: '', cls: '' },
           pendingAnchor: null,
           pendingHighlight: null,
+          pdfPage: undefined,
           // Only touch `preview` when explicitly asked — in-place anchor
           // nav reuses the same tab and must keep its existing
           // preview/pinned status.
@@ -463,6 +464,11 @@ export function reducer(s: State, a: Action): State {
       return {
         ...s,
         tabs: s.tabs.map((t) => (t.id === a.id ? { ...t, preview: false } : t)),
+      };
+    case 'TAB_PDF_PAGE':
+      return {
+        ...s,
+        tabs: s.tabs.map((t) => (t.id === a.id ? { ...t, pdfPage: a.page } : t)),
       };
     case 'TABS_REORDER': {
       const fromIdx = s.tabs.findIndex((t) => t.id === a.id);

@@ -106,7 +106,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           // preparation failure banner + Reprocess live inside PdfPreview.
           <LazyLoadBoundary className="pdf-loading" label="PDF preview" resetKey={resourceResetKey}>
             <Suspense fallback={<div className="pdf-loading">Loading PDF…</div>}>
-              <LazyPdfPreview name={cur.name} />
+              <LazyPdfPreview key={activeTab?.id} name={cur.name} />
             </Suspense>
           </LazyLoadBoundary>
         )}

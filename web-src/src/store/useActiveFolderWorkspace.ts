@@ -60,6 +60,7 @@ export interface ActiveFolderWorkspace {
   consumePendingScroll: () => void;
   consumePendingHighlight: () => void;
   toggleEditMode: () => Promise<void>;
+  updateTabPdfPage: (tabId: string, page: number) => void;
   newNote: () => Promise<void>;
   newFolder: (path: string) => Promise<void>;
   deleteFile: (name: string) => Promise<void>;
@@ -266,6 +267,7 @@ export function useActiveFolderWorkspace(
     documents.selectFile,
     documents.selectFileWithHighlight,
     documents.toggleEditMode,
+    documents.updateTabPdfPage,
     files.deleteFile,
     files.deleteFolder,
     files.moveFile,

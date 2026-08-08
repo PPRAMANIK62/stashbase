@@ -103,6 +103,7 @@ export interface Tab {
    *  the user navigates to a different file. */
   pendingHighlight: PendingHighlight | null;
   saveStatus: SaveStatus;
+  pdfPage?: number;
 }
 
 /** Search-hit-derived highlight signal: which lines (for HTML / MD /
@@ -482,6 +483,7 @@ export type Action =
    *  Triggered by double-click on a sidebar file, double-click on the
    *  tab title, or entering edit mode on the tab. */
   | { type: 'PROMOTE_TAB'; id: string }
+  | { type: 'TAB_PDF_PAGE'; id: string; page: number }
   /** Move tab `id` to immediately before tab `beforeId` (drag-reorder).
    *  `beforeId === null` appends to the end. No-op when the relative
    *  position wouldn't change — keeps the reducer idempotent so a
