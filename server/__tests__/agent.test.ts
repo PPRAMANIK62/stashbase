@@ -78,3 +78,45 @@ test('Claude publishes single-slash skill labels and sends the selected native c
   assert.equal(claudeSkillPrompt('prepare the release', 'release-notes'), '/release-notes prepare the release');
   assert.deepEqual(claudeSkillCatalogEvent([]), { t: 'skills', state: 'empty', skills: [] });
 });
+
+test('folder-trust pre-acceptance merges into ~/.claude.json without clobbering', async () => {
+  const { ensureClaudeFolderTrust } = await import('../agent-rules.ts');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-trust-'));
+  const file = path.join(dir, 'claude.json');
+
+  // Missing file → created with only the trust entry.
+  ensureClaudeFolderTrust('/Users/me/Notes', file);
+  let config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(config.projects['/Users/me/Notes'].hasTrustDialogAccepted, true);
+
+  // Existing config: sibling keys and other projects survive; the target
+  // project's other fields survive too.
+  fs.writeFileSync(file, JSON.stringify({
+    numStartups: 7,
+    projects: {
+      '/Users/me/Notes': { history: ['x'], hasTrustDialogAccepted: false },
+      '/elsewhere': { hasTrustDialogAccepted: false },
+    },
+  }));
+  ensureClaudeFolderTrust('/Users/me/Notes', file);
+  config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(config.numStartups, 7);
+  assert.deepEqual(config.projects['/Users/me/Notes'].history, ['x']);
+  assert.equal(config.projects['/Users/me/Notes'].hasTrustDialogAccepted, true);
+  assert.equal(config.projects['/elsewhere'].hasTrustDialogAccepted, false);
+
+  // Already trusted → no rewrite (mtime-insensitive check via content).
+  const before = fs.readFileSync(file, 'utf8');
+  ensureClaudeFolderTrust('/Users/me/Notes', file);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+
+  // Malformed JSON → left untouched, no throw.
+  fs.writeFileSync(file, '{not json');
+  ensureClaudeFolderTrust('/Users/me/Notes', file);
+  assert.equal(fs.readFileSync(file, 'utf8'), '{not json');
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});

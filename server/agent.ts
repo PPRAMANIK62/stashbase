@@ -55,7 +55,7 @@ import { logger, errorMessage } from './log.ts';
 import { getCurrentFolder, getFolderHome, memberRootForAbs, runWithWindowId } from './folder.ts';
 import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
-import { ensureClaudeBridgeFile } from './agent-rules.ts';
+import { ensureClaudeBridgeFile, ensureClaudeFolderTrust } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { disposeSessionsBoundToFolder, isAgentAccessMode, reportAgentRuntimeFailure, resolveSessionBinding, type AgentAccessMode } from './agent-contract.ts';
 import type { AgentClientEvent, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
@@ -379,6 +379,10 @@ class AgentSession implements AttributedAgentSession {
     // Instruction bridge files belong to member folders; a library-wide
     // session must not write them into the folder home container.
     if (!this.libraryScoped && ensureClaudeBridgeFile(cwd)) noteTreeChanged();
+    // Pre-accept Claude's folder-trust gate for the session cwd (library
+    // sessions run in the folder home — same gate). Without this a NEW
+    // folder's headless session hangs at "working" with no visible prompt.
+    ensureClaudeFolderTrust(cwd);
     try {
       this.q = query({
         prompt: this.input,

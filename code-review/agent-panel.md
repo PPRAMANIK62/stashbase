@@ -43,6 +43,15 @@ folders), and their preamble states that the whole library is in scope with
 home itself as a library folder, that folder's history and the library
 history coincide (same cwd).
 
+Claude session start pre-accepts the CLI's folder-trust gate for the
+session cwd (`ensureClaudeFolderTrust` → `hasTrustDialogAccepted` in
+`~/.claude.json`): a headless SDK session cannot show the trust dialog and
+hangs at "working" otherwise, and Claude Code exposes no trust flag or env
+override. Library membership is the user's explicit trust act, so this is
+consent propagation, not a permission bypass — the write is a conservative
+merge (one project's flag only; malformed config left untouched) and a
+failure must never block the session.
+
 Chat history lives on the SIDEBAR's scope headers, not in the chat pane:
 the active folder's header row and the Library section header each carry a
 History menu for THEIR scope (the Library header keeps history reachable
