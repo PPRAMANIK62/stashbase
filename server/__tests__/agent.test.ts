@@ -115,6 +115,88 @@ test('Claude native ownership is active before reconnect and serializes acquisit
   assert.equal(acquired, true);
 });
 
+test('Claude resume validates folder scope before acquiring native ownership', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-resume-scope-'));
+  runWithWindowId('claude-resume-scope-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('claude-resume-scope-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeAgentWebSocket();
+  let acquired = false;
+  let queryStarted = false;
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-resume-scope-window',
+    'max',
+    'native-other-folder',
+    'default',
+    undefined,
+    undefined,
+    (() => { queryStarted = true; return fakeClaudeQuery(); }) as never,
+    () => '/fake/claude',
+    async () => false,
+  );
+
+  session.begin(async () => { acquired = true; return true; });
+  await settle();
+
+  assert.equal(acquired, false);
+  assert.equal(queryStarted, false);
+  assert.equal(ws.sent.some((item) => JSON.parse(item).message === 'That session belongs to a different folder.'), true);
+});
+
+test('Claude native ownership does not retain closed acquisitions', async () => {
+  let closedDisposed = 0;
+  const closed = {
+    isClosed: true,
+    dispose() { closedDisposed += 1; },
+    retirement() { return Promise.resolve(); },
+  } as unknown as AgentSession;
+  const ownership = new ClaudeNativeSessionOwnership();
+
+  assert.equal(await ownership.acquire('native-closed', closed), false);
+
+  let registeredDisposed = false;
+  const registered = {
+    isClosed: false,
+    dispose() { registeredDisposed = true; },
+    retirement() { return Promise.resolve(); },
+  } as unknown as AgentSession;
+  ownership.register('native-closed', registered);
+  assert.equal(await ownership.acquire('native-closed', { isClosed: false } as AgentSession), true);
+  assert.equal(registeredDisposed, true);
+  assert.equal(closedDisposed, 0);
+});
+
+test('Claude native ownership releases every id claimed by a disposed session', async () => {
+  const ownership = new ClaudeNativeSessionOwnership();
+  const owner = { isClosed: false } as AgentSession;
+  ownership.register('resume-id', owner);
+  ownership.register('native-id', owner);
+  ownership.release(owner);
+
+  let resumeOwnerDisposed = false;
+  let nativeOwnerDisposed = false;
+  const resumeOwner = {
+    isClosed: false,
+    dispose() { resumeOwnerDisposed = true; },
+    retirement() { return Promise.resolve(); },
+  } as unknown as AgentSession;
+  const nativeOwner = {
+    isClosed: false,
+    dispose() { nativeOwnerDisposed = true; },
+    retirement() { return Promise.resolve(); },
+  } as unknown as AgentSession;
+  ownership.register('resume-id', resumeOwner);
+  ownership.register('native-id', nativeOwner);
+
+  assert.equal(await ownership.acquire('resume-id', { isClosed: false } as AgentSession), true);
+  assert.equal(await ownership.acquire('native-id', { isClosed: false } as AgentSession), true);
+  assert.equal(resumeOwnerDisposed, true);
+  assert.equal(nativeOwnerDisposed, true);
+});
+
 test('Claude retirement waits for the SDK stream to exit after interrupt acknowledgement', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-retire-'));
   runWithWindowId('claude-retire-window', () => setCurrentFolder(folder));

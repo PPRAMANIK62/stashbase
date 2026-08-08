@@ -270,6 +270,7 @@ export class AgentSession {
     private onDispose?: (session: AgentSession, retirement: Promise<void>) => void,
     private queryFactory: typeof query = query,
     private resolveBinary: () => string | null = resolveClaudeBinary,
+    private resumeBelongsToFolder: typeof resumeMatchesCwd = resumeMatchesCwd,
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
     ws.on('message', (raw) => this.onMessage(String(raw)));
@@ -278,16 +279,16 @@ export class AgentSession {
   }
 
   readonly windowId: string;
-  get nativeSessionId(): string | null { return this.sessionId; }
+  get isClosed(): boolean { return this.closed; }
   retirement(): Promise<void> {
     return this.retirementTask ?? Promise.resolve();
   }
 
-  begin(): void {
-    runWithWindowId(this.windowId, () => { void this.start(); });
+  begin(beforeNativeStart?: () => Promise<boolean>): void {
+    runWithWindowId(this.windowId, () => { void this.start(beforeNativeStart); });
   }
 
-  private async start(): Promise<void> {
+  private async start(beforeNativeStart?: () => Promise<boolean>): Promise<void> {
     if (this.closed) return;
     const cwd = getCurrentFolder();
     if (!cwd) {
@@ -295,12 +296,26 @@ export class AgentSession {
       return;
     }
     if (this.closed) return;
-    if (this.resume && !(await resumeMatchesCwd(this.resume, cwd))) {
+    if (this.resume && !(await this.resumeBelongsToFolder(this.resume, cwd))) {
       if (this.closed) return;
       this.finish('That session belongs to a different folder.');
       return;
     }
     if (this.closed) return;
+    if (beforeNativeStart) {
+      let mayStart = false;
+      try { mayStart = await beforeNativeStart(); }
+      catch (err: unknown) {
+        this.finish(errorMessage(err));
+        return;
+      }
+      if (!mayStart || this.closed) return;
+      const activeFolder = getCurrentFolder();
+      if (!activeFolder || !filesystemPath.equal(activeFolder, cwd)) {
+        this.finish('The folder changed before the session started.');
+        return;
+      }
+    }
     const claudeCodeExecutable = this.resolveBinary();
     if (!claudeCodeExecutable) {
       this.finish(missingClaudeMessage());
@@ -656,18 +671,19 @@ function stringifyToolResult(content: unknown): string {
  *  them all down (the SDK cwd is then meaningless). */
 const sessions = new Set<AgentSession>();
 
-/** Serializes ownership of one persisted Claude transcript. Active ownership
- * is registered before a resumed query starts, so a reconnect cannot race
- * ahead of the old WebSocket close event. */
+/** Serializes ownership of one persisted Claude transcript. After folder
+ * validation, active ownership is registered before a resumed query starts so
+ * a reconnect cannot race ahead of the old WebSocket close event. */
 export class ClaudeNativeSessionOwnership {
   private active = new Map<string, AgentSession>();
+  private ownedIds = new Map<AgentSession, Set<string>>();
   private tails = new Map<string, Promise<void>>();
 
   register(id: string, session: AgentSession): void {
-    if (!this.active.has(id)) this.active.set(id, session);
+    if (!this.active.has(id)) this.claim(id, session);
   }
 
-  async acquire(id: string, session: AgentSession): Promise<void> {
+  async acquire(id: string, session: AgentSession): Promise<boolean> {
     const previousTail = this.tails.get(id) ?? Promise.resolve();
     let release!: () => void;
     const tail = new Promise<void>((resolve) => { release = resolve; });
@@ -675,20 +691,42 @@ export class ClaudeNativeSessionOwnership {
     this.tails.set(id, queued);
     await previousTail;
     try {
+      if (session.isClosed) return false;
       const previous = this.active.get(id);
       if (previous && previous !== session) {
         previous.dispose();
         await previous.retirement();
       }
-      this.active.set(id, session);
+      if (session.isClosed) return false;
+      this.claim(id, session);
+      return true;
     } finally {
       release();
       if (this.tails.get(id) === queued) this.tails.delete(id);
     }
   }
 
-  release(id: string, session: AgentSession): void {
-    if (this.active.get(id) === session) this.active.delete(id);
+  release(session: AgentSession): void {
+    const ids = this.ownedIds.get(session);
+    if (!ids) return;
+    for (const id of ids) {
+      if (this.active.get(id) === session) this.active.delete(id);
+    }
+    this.ownedIds.delete(session);
+  }
+
+  private claim(id: string, session: AgentSession): void {
+    const previous = this.active.get(id);
+    if (previous === session) return;
+    if (previous) {
+      const previousIds = this.ownedIds.get(previous);
+      previousIds?.delete(id);
+      if (previousIds?.size === 0) this.ownedIds.delete(previous);
+    }
+    this.active.set(id, session);
+    const ids = this.ownedIds.get(session) ?? new Set<string>();
+    ids.add(id);
+    this.ownedIds.set(session, ids);
   }
 }
 
@@ -711,14 +749,11 @@ export function attachAgentWebSocket(
     model,
     (s, retirement) => {
       sessions.delete(s);
-      if (s.nativeSessionId) {
-        const nativeId = s.nativeSessionId;
-        void retirement.finally(() => nativeOwnership.release(nativeId, s));
-      }
+      void retirement.finally(() => nativeOwnership.release(s));
     },
   );
   sessions.add(session);
-  if (resume) void nativeOwnership.acquire(resume, session).then(() => session.begin());
+  if (resume) session.begin(() => nativeOwnership.acquire(resume, session));
   else session.begin();
 }
 
