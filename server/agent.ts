@@ -257,6 +257,8 @@ export class AgentSession {
   private sessionId: string | null = null;
   private models: AgentModel[] = [];
   private skills = new Set<string>();
+  private pumpTask: Promise<void> | null = null;
+  private retirementTask: Promise<void> | null = null;
 
   constructor(
     private ws: WebSocket,
@@ -265,7 +267,7 @@ export class AgentSession {
     private resume?: string,
     private access: PermissionMode = 'default',
     private model?: string,
-    private onDispose?: (session: AgentSession) => void,
+    private onDispose?: (session: AgentSession, retirement: Promise<void>) => void,
     private queryFactory: typeof query = query,
     private resolveBinary: () => string | null = resolveClaudeBinary,
   ) {
@@ -276,6 +278,10 @@ export class AgentSession {
   }
 
   readonly windowId: string;
+  get nativeSessionId(): string | null { return this.sessionId; }
+  retirement(): Promise<void> {
+    return this.retirementTask ?? Promise.resolve();
+  }
 
   begin(): void {
     runWithWindowId(this.windowId, () => { void this.start(); });
@@ -360,7 +366,7 @@ export class AgentSession {
     await this.publishModels();
     await this.publishSkills();
     this.send({ t: 'ready' });
-    void this.pump();
+    this.pumpTask = this.pump();
   }
 
   /** Ask the SDK rather than encoding Claude aliases or release names here.
@@ -421,6 +427,7 @@ export class AgentSession {
     const sid = (msg as { session_id?: unknown }).session_id;
     if (!this.sessionId && typeof sid === 'string' && sid) {
       this.sessionId = sid;
+      nativeOwnership.register(sid, this);
       this.send({ t: 'session-id', id: sid });
     }
     if (msg.type === 'system' && msg.subtype === 'init' && msg.model) {
@@ -584,16 +591,32 @@ export class AgentSession {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
-    this.onDispose?.(this);
+    // Closing input prevents another prompt from entering this query. The
+    // retirement task then waits beyond interrupt acknowledgement until the
+    // SDK iterator/query has actually finished its process cleanup.
+    this.input.end();
+    this.retirementTask = this.retireNativeQuery();
+    this.onDispose?.(this, this.retirementTask);
     // Resolve any dangling permission prompts so the SDK loop unwinds.
     for (const [, p] of this.pending) {
       p.cleanup?.();
       p.resolve({ behavior: 'deny', message: 'Session closed.' });
     }
     this.pending.clear();
-    void this.q?.interrupt().catch(() => { /* already gone */ });
-    this.input.end();
     try { this.ws.close(); } catch { /* already closed */ }
+  }
+
+  private async retireNativeQuery(): Promise<void> {
+    const query = this.q;
+    if (!query) return;
+    try { await query.interrupt(); } catch { /* continue through cleanup */ }
+    if (this.pumpTask) {
+      await this.pumpTask.catch(() => { /* pump already reported the cause */ });
+    } else {
+      // Disposal can race startup before pump begins. AsyncGenerator.return()
+      // waits for the SDK query's generator-finally/process cleanup.
+      try { await query.return(undefined); } catch { /* already gone */ }
+    }
   }
 }
 
@@ -633,6 +656,44 @@ function stringifyToolResult(content: unknown): string {
  *  them all down (the SDK cwd is then meaningless). */
 const sessions = new Set<AgentSession>();
 
+/** Serializes ownership of one persisted Claude transcript. Active ownership
+ * is registered before a resumed query starts, so a reconnect cannot race
+ * ahead of the old WebSocket close event. */
+export class ClaudeNativeSessionOwnership {
+  private active = new Map<string, AgentSession>();
+  private tails = new Map<string, Promise<void>>();
+
+  register(id: string, session: AgentSession): void {
+    if (!this.active.has(id)) this.active.set(id, session);
+  }
+
+  async acquire(id: string, session: AgentSession): Promise<void> {
+    const previousTail = this.tails.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const tail = new Promise<void>((resolve) => { release = resolve; });
+    const queued = previousTail.then(() => tail);
+    this.tails.set(id, queued);
+    await previousTail;
+    try {
+      const previous = this.active.get(id);
+      if (previous && previous !== session) {
+        previous.dispose();
+        await previous.retirement();
+      }
+      this.active.set(id, session);
+    } finally {
+      release();
+      if (this.tails.get(id) === queued) this.tails.delete(id);
+    }
+  }
+
+  release(id: string, session: AgentSession): void {
+    if (this.active.get(id) === session) this.active.delete(id);
+  }
+}
+
+const nativeOwnership = new ClaudeNativeSessionOwnership();
+
 export function attachAgentWebSocket(
   ws: WebSocket,
   windowId = 'default',
@@ -648,10 +709,17 @@ export function attachAgentWebSocket(
     resume,
     claudePermissionMode(access),
     model,
-    (s) => sessions.delete(s),
+    (s, retirement) => {
+      sessions.delete(s);
+      if (s.nativeSessionId) {
+        const nativeId = s.nativeSessionId;
+        void retirement.finally(() => nativeOwnership.release(nativeId, s));
+      }
+    },
   );
   sessions.add(session);
-  session.begin();
+  if (resume) void nativeOwnership.acquire(resume, session).then(() => session.begin());
+  else session.begin();
 }
 
 /** Kill every live agent session (optionally for one window). Called on

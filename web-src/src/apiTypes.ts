@@ -106,6 +106,13 @@ export type SessionBlock =
   | { kind: 'thinking'; id: string; text: string }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
 
+export interface SessionReplay {
+  protocol: 2;
+  messages: SessionBlock[];
+  /** Null means inherited/unknown and must not become a resume override. */
+  effort: string | null;
+}
+
 export interface IndexStatus {
   folder?: string;
   total: number;
