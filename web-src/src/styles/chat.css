@@ -357,16 +357,14 @@
       padding: 4px 0 6px;
     }
 
-    /* One-Dark editor palette — tool/diff status colors are content
-     * signals, deliberately distinct from the app's semantic status
-     * tokens (see globals.css color notes). The layout of these elements
-     * lives in utility classes; only the palette stays here. */
-    .agent-tool-status.s-done { color: #50a14f; }
+    /* Tool STATUS is UI state, so it speaks the app's semantic status
+     * tokens. The One-Dark palette below (diff tints/gutters) stays
+     * literal on purpose — diffs are CONTENT, rendered in the editor's
+     * own color world, not the chrome's. */
+    .agent-tool-status.s-done { color: var(--status-success); }
     .agent-tool-status.s-error,
-    .agent-tool-status.s-denied { color: #e45649; }
-    .agent-tool-status.s-awaiting { color: var(--accent); }
-    .agent-tool-result.err { color: #e45649; }
-    .agent-activity.attention { border-left-color: #e45649; }
+    .agent-tool-status.s-denied { color: var(--status-danger); }
+    .agent-tool-result.err { color: var(--status-danger); }
 
     /* Inline diff (also One-Dark add/del tints) */
     .agent-diff {

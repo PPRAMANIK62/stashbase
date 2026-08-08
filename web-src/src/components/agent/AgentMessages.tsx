@@ -14,6 +14,7 @@ import type { Attachment, Block, ToolBlock, ToolStatus } from './types';
 
 const outlineSmClass = buttonVariants({ variant: 'outline', size: 'sm' });
 const primarySmClass = buttonVariants({ variant: 'default', size: 'sm' });
+const ghostSmClass = buttonVariants({ variant: 'ghost', size: 'sm' });
 
 /** Accent status dot used by working/queued/running indicators. */
 function Dot() {
@@ -567,24 +568,22 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
     ? `${failures} step${failures === 1 ? '' : 's'} need attention — ${activitySummary(tools, active)}`
     : activitySummary(tools, active);
   return (
-    // `.attention` (One-Dark red left edge) stays a CSS hook in chat.css.
-    <section
-      className={cn(
-        'agent-activity border-l-2 bg-pane/70',
-        active ? 'border-l-accent' : 'border-border',
-        failures && 'attention',
-      )}
-    >
+    // Activity is narration, not a construct: a quiet text-level
+    // disclosure in the reading column (Cursor's "Explored 1 search"
+    // register) — no full-width band, no left edge. Failures color the
+    // summary text; permission cards never enter these groups, so
+    // nothing actionable can hide behind the collapse.
+    <section className="agent-activity">
       <Button
-        className="flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-2.25 py-1.75 text-left text-sm text-foreground"
+        className="flex w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left text-sm hover:bg-muted"
         onPress={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
         <ChevronDownIcon className={cn('size-3.25 shrink-0 text-muted-foreground', !open && '-rotate-90')} />
         {active && <Dot />}
-        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">{summary}</span>
+        <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap', failures ? 'text-status-danger' : 'text-muted-foreground')}>{summary}</span>
       </Button>
-      {open && <div className="grid gap-1.5 px-2 pb-2">{tools.map((tool) => <ToolCard key={tool.id} block={tool} onPermission={onPermission} />)}</div>}
+      {open && <div className="grid gap-1.5 py-1 pr-1 pl-5">{tools.map((tool) => <ToolCard key={tool.id} block={tool} onPermission={onPermission} />)}</div>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
     </section>
   );
@@ -623,37 +622,47 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
     requestAnimationFrame(() => headRef.current?.focus());
   }
 
+  const awaiting = block.status === 'awaiting';
   return (
-    <div
-      className={cn(
-        'overflow-hidden rounded-lg border bg-background',
-        block.status === 'awaiting' ? 'border-accent' : 'border-border',
-      )}
-    >
+    // The approval moment keeps the QUIETEST chrome (plain card, no accent
+    // outline): the ask lives in the title, the payload renders exactly
+    // once, and the single primary button is the only emphasis. Permission
+    // semantics are untouched — approval stays an explicit click.
+    <div className="overflow-hidden rounded-lg border border-border bg-background">
       <Button
         ref={headRef}
         className="flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-2.5 py-1.75 text-left text-sm"
         onPress={() => setOpen((o) => !o)}
       >
         <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 font-semibold text-foreground">{toolActivityTitle(block.name, block.input)}</span>
-        {summary && <span className="min-w-0 flex-1 overflow-hidden font-mono text-xs text-ellipsis whitespace-nowrap text-muted-foreground">{summary}</span>}
-        {/* `s-*` keeps the One-Dark status colors from chat.css. */}
-        <span className={'agent-tool-status inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground s-' + block.status}>
-          {block.status === 'running' && <Dot />}
-          {STATUS_LABEL[block.status]}
+        <span className="shrink-0 font-semibold text-foreground">
+          {/* Pending approval is a QUESTION — never the past-tense activity
+            * title while nothing has run yet. */}
+          {awaiting ? (block.permTitle ?? askTitle(block.name)) : toolActivityTitle(block.name, block.input)}
         </span>
+        {/* While awaiting, the body shows the full payload — repeating a
+          * truncated copy in the head is noise. Ditto the status word:
+          * the Allow/Reject row IS the status. */}
+        {summary && !awaiting && <span className="min-w-0 flex-1 overflow-hidden font-mono text-xs text-ellipsis whitespace-nowrap text-muted-foreground">{summary}</span>}
+        {!awaiting && (
+          <span className={'agent-tool-status inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground s-' + block.status}>
+            {block.status === 'running' && <Dot />}
+            {STATUS_LABEL[block.status]}
+          </span>
+        )}
       </Button>
 
-      {block.status === 'awaiting' && block.permId && (
+      {awaiting && block.permId && (
         <div className="px-2.5 pb-2.5">
-          <div className="mb-1.75 text-sm text-foreground">{block.permTitle ?? `Allow Claude to run ${block.name}?`}</div>
           {diff && <DiffView diff={diff} />}
           {!diff && block.name === 'Bash' && (
             <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>
           )}
+          {!diff && block.name !== 'Bash' && (
+            <pre className={toolPreClass}>{JSON.stringify(block.input, null, 2)}</pre>
+          )}
           <div className="mt-2.25 flex justify-end gap-2">
-            <Button className={outlineSmClass} onPress={() => replyPermission(false)}>Reject</Button>
+            <Button className={ghostSmClass} onPress={() => replyPermission(false)}>Reject</Button>
             <Button className={primarySmClass} onPress={() => replyPermission(true)}>Allow</Button>
           </div>
         </div>
@@ -719,6 +728,14 @@ function commandActions(input: Record<string, unknown>): CommandAction[] {
   return Array.isArray(input.actions)
     ? input.actions.filter((action): action is CommandAction => !!action && typeof action === 'object')
     : [];
+}
+
+/** Question-form title for a pending approval — the card head carries the
+ * ask, so the body needs no separate prompt line. */
+function askTitle(name: string): string {
+  if (name === 'Bash') return 'Run this command?';
+  if (name === 'File change') return 'Apply these changes?';
+  return `Allow ${name}?`;
 }
 
 function toolActivityTitle(name: string, input: Record<string, unknown>): string {
