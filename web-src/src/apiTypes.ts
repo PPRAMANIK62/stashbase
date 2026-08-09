@@ -145,6 +145,11 @@ export interface IndexStatus {
    *  upToDate, this ignores orphaned/hidden index rows that are not
    *  relevant to search-readiness accounting. */
   visibleIndexingSettled?: boolean;
+  semanticIndexing?: {
+    state: 'disabled' | 'awaiting-decision' | 'paused' | 'partial-paused' | 'indexing' | 'partial-indexing' | 'ready' | 'failed';
+    sourceCount?: number;
+    estimatedBytes?: number;
+  };
   /** False while the server is still loading the index cache for a folder. */
   indexReady?: boolean;
   /** Folder-relative paths of PDF/image/DOCX sources that are queued or

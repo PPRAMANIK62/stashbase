@@ -53,6 +53,10 @@ The **Node process** owns application logic, file operations, conversion orchest
 
 The **Python daemon** owns chunking, embedding, storage, and search through MFS/Milvus Lite. It does not know how to convert PDFs, images, or HTML; those decisions stay in StashBase.
 
+The Node reconcile owner also owns semantic-workload preflight and the durable
+per-folder continue/defer decision. Renderer surfaces display its summary and
+send decisions; they never duplicate scanning, hashing, or freshness rules.
+
 The **MCP server** is a Node process. It exposes retrieval, reindexing, and bounded file access to AI clients while the StashBase app is running.
 
 ---

@@ -188,6 +188,8 @@ export const api = {
     getJson<IndexStatus>(folder ? `/api/index-status?folder=${encodeURIComponent(folder)}` : '/api/index-status'),
   dismissIndexWarning: (folder?: string) =>
     send<{ ok: boolean }>('POST', '/api/index-warning/dismiss', { folder }),
+  semanticIndexingDecision: (decision: 'start' | 'defer', folder?: string) =>
+    send<{ ok: boolean }>('POST', '/api/semantic-indexing/decision', { decision, folder }),
 
   /** Full per-file preparation status, library-wide, keyed by absolute
    *  source path. */

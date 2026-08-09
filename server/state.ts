@@ -23,6 +23,13 @@ import { clearStaleMilvusLock } from './stale-lock.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { logger, errorMessage } from './log.ts';
 import { globalVectorStoreDir } from './local-data.ts';
+import {
+  clearSemanticIndexingDecision,
+  getSemanticIndexingDecision,
+  setSemanticIndexingDecision,
+  type SemanticIndexingDecision,
+} from './state-db.ts';
+import type { SemanticWorkloadEstimate } from './semantic-workload.ts';
 
 const log = logger('state');
 
@@ -68,6 +75,49 @@ export async function deleteFolderRuntimeState(folderRoot: string): Promise<void
   const root = filesystemPath.identity(folderRoot);
   indexWarnings.delete(root);
   folderSyncGeneration.delete(root);
+  clearSemanticIndexingDecision(folderRoot);
+}
+
+export function getSemanticIndexingState(folderRoot: string): SemanticIndexingDecision | null {
+  return getSemanticIndexingDecision(folderRoot);
+}
+
+export function deferSemanticIndexing(folderRoot: string): void {
+  const current = getSemanticIndexingDecision(folderRoot);
+  if (current) setSemanticIndexingDecision(folderRoot, 'paused', current);
+}
+
+export async function startSemanticIndexing(folderRoot: string): Promise<SyncResult> {
+  return syncFolderNow(folderRoot, {
+    reason: 'user started semantic indexing', forceEmbedding: true, clearDecisionAtStart: true,
+  });
+}
+
+export function semanticSyncPolicy(folderRoot: string, forceEmbedding = false): {
+  shouldPauseEmbedding: (workload: SemanticWorkloadEstimate) => boolean;
+  publishPaused: (workload: SemanticWorkloadEstimate) => boolean;
+  commitEmbedding: () => boolean;
+} {
+  return {
+    shouldPauseEmbedding: (workload) => {
+      if (forceEmbedding) return false;
+      const existing = getSemanticIndexingDecision(folderRoot);
+      if (existing?.decision === 'paused') return true;
+      return workload.large;
+    },
+    publishPaused: (workload) => {
+      const existing = getSemanticIndexingDecision(folderRoot);
+      return setSemanticIndexingDecision(
+        folderRoot,
+        existing?.decision === 'paused' ? 'paused' : 'awaiting-decision',
+        workload,
+      );
+    },
+    commitEmbedding: () => {
+      const existing = getSemanticIndexingDecision(folderRoot);
+      return !existing || clearSemanticIndexingDecision(folderRoot);
+    },
+  };
 }
 
 /** Resolve the runtime embedder config. Returns null
@@ -245,39 +295,50 @@ function syncTouchedVisibleTree(result: SyncResult): boolean {
 
 const folderSyncQueues = new Map<string, Promise<unknown>>();
 
-export async function syncFolderNow(
-  folderRoot: string,
-  opts: { reason?: string; shouldContinue?: () => boolean } = {},
-): Promise<SyncResult> {
-  const syncFolderRoot = filesystemPath.absolute(folderRoot);
-  const queueKey = filesystemPath.identity(syncFolderRoot);
+export function enqueueFolderSyncOperation<T>(queueKey: string, operation: () => Promise<T>): Promise<T> {
   const prev = folderSyncQueues.get(queueKey) ?? Promise.resolve();
-  const next = prev
-    .catch(() => undefined)
-    .then(() => syncFolderNowInner(syncFolderRoot, opts));
-  const settled = next
-    .catch(() => undefined)
-    .finally(() => {
-      if (folderSyncQueues.get(queueKey) === settled) {
-        folderSyncQueues.delete(queueKey);
-      }
-    });
+  const next = prev.catch(() => undefined).then(operation);
+  const settled = next.catch(() => undefined).finally(() => {
+    if (folderSyncQueues.get(queueKey) === settled) folderSyncQueues.delete(queueKey);
+  });
   folderSyncQueues.set(queueKey, settled);
   return next;
 }
 
-async function syncFolderNowInner(
+export async function syncFolderNow(
   folderRoot: string,
-  opts: { reason?: string; shouldContinue?: () => boolean },
+  opts: { reason?: string; shouldContinue?: () => boolean; forceEmbedding?: boolean; clearDecisionAtStart?: boolean } = {},
+): Promise<SyncResult> {
+  const syncFolderRoot = filesystemPath.absolute(folderRoot);
+  const queueKey = filesystemPath.identity(syncFolderRoot);
+  return enqueueFolderSyncOperation(queueKey, () => runFolderSyncOperation(syncFolderRoot, opts));
+}
+
+export async function runFolderSyncOperation(
+  folderRoot: string,
+  opts: { reason?: string; shouldContinue?: () => boolean; forceEmbedding?: boolean; clearDecisionAtStart?: boolean },
+  deps: {
+    indexer: Indexer;
+    bind: (folderRoot: string) => Promise<void>;
+    sync: typeof syncIndex;
+    semanticEnabled?: boolean;
+  } = { indexer, bind: bindIndexerForFolder, sync: syncIndex },
 ): Promise<SyncResult> {
   const syncGeneration = currentFolderSyncGeneration(folderRoot);
   const shouldContinue = () => shouldContinueFolderSync(folderRoot, syncGeneration, opts.shouldContinue);
   try {
-    await bindIndexerForFolder(folderRoot);
+    if (opts.clearDecisionAtStart && !clearSemanticIndexingDecision(folderRoot)) {
+      throw new Error('semantic indexing decision could not be cleared');
+    }
+    await deps.bind(folderRoot);
     if (!shouldContinue()) {
       return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
     }
-    const result = await syncIndex(indexer, folderRoot, { shouldContinue });
+    const result = await deps.sync(deps.indexer, folderRoot, {
+      shouldContinue,
+      semanticEnabled: deps.semanticEnabled,
+      ...semanticSyncPolicy(folderRoot, opts.forceEmbedding),
+    });
     if (result.cancelled) {
       return result;
     }

@@ -26,7 +26,12 @@ import {
   prepareConvertibleSource,
   reprocessConvertibleSource,
 } from '../conversion-dispatch.ts';
-import { clearIndexWarning, syncFolderNow } from '../state.ts';
+import {
+  clearIndexWarning,
+  deferSemanticIndexing,
+  startSemanticIndexing,
+  syncFolderNow,
+} from '../state.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { sendError } from '../http.ts';
 import { filesystemPath } from '../filesystem-path.ts';
@@ -236,6 +241,28 @@ export function mount(app: express.Express): void {
       // and active read-only tab from disk.
       if (!result.cancelled) noteTreeChanged();
       res.json(result);
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  app.post('/api/semantic-indexing/decision', async (req, res) => {
+    try {
+      const { folderRoot } = requireRequestFolder(parseFolderParam(req.body?.folder));
+      const decision = req.body?.decision;
+      if (decision === 'defer') {
+        deferSemanticIndexing(folderRoot);
+        res.json({ ok: true });
+        return;
+      }
+      if (decision === 'start') {
+        void startSemanticIndexing(folderRoot).catch((err: unknown) => {
+          log.warn(`start semantic indexing failed for ${folderRoot}: ${err instanceof Error ? err.message : String(err)}`);
+        });
+        res.status(202).json({ ok: true });
+        return;
+      }
+      res.status(400).json({ error: 'decision must be "start" or "defer"' });
     } catch (err: unknown) {
       sendError(res, err);
     }

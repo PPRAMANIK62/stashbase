@@ -14,6 +14,7 @@ import type {
   PreparationFailure,
   ConversionProgress,
   IndexWarning,
+  IndexStatus,
   SearchHit,
   Agent,
   UnsupportedFileSummary,
@@ -236,6 +237,7 @@ export interface State {
    *  embedded/indexed. Keyword search ignores this state and can search
    *  converted/source text without embeddings. */
   pendingSemanticNames: Set<string>;
+  semanticIndexing: NonNullable<IndexStatus['semanticIndexing']> | null;
   /** Folder-relative paths of PDF/image/DOCX conversions that are queued or
    *  running. Kept for search-readiness accounting and refresh timing. */
   pendingConversions: string[];
@@ -368,6 +370,7 @@ export const initialState: State = {
   activeChatTabId: null,
   chatTabRecencyByAgent: {},
   pendingSemanticNames: new Set(),
+  semanticIndexing: null,
   pendingConversions: [],
   blockedConversions: [],
   conversionProgress: {},
@@ -456,6 +459,7 @@ export type Action =
    *  — does not touch expand state, activeFolder, or the open file. */
   | { type: 'SELECT_PATH'; path: string }
   | { type: 'PENDING_SEMANTIC_NAMES'; names: Set<string> }
+  | { type: 'SEMANTIC_INDEXING_STATE'; state: State['semanticIndexing'] }
   | { type: 'PENDING_CONVERSIONS'; paths: string[] }
   | { type: 'BLOCKED_CONVERSIONS'; paths: string[] }
   | { type: 'CONVERSION_PROGRESS'; progress: Record<string, ConversionProgress> }

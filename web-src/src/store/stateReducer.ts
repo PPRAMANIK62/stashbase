@@ -408,6 +408,8 @@ export function reducer(s: State, a: Action): State {
       return { ...s, selectedPath: a.path };
     case 'PENDING_SEMANTIC_NAMES':
       return { ...s, pendingSemanticNames: a.names };
+    case 'SEMANTIC_INDEXING_STATE':
+      return { ...s, semanticIndexing: a.state };
     case 'PENDING_CONVERSIONS':
       return { ...s, pendingConversions: a.paths };
     case 'BLOCKED_CONVERSIONS':

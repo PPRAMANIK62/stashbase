@@ -14,7 +14,7 @@ import { DocumentOutline } from './DocumentOutline';
 import { useDocumentOutline } from './DocumentOutlineContext';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
-import { SearchPanel } from './SearchPanel';
+import { SearchPanel, SemanticIndexingNotice } from './SearchPanel';
 import { api, errorMessage } from '../api';
 import { FILE_MIME } from '../dragMime';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
@@ -98,6 +98,7 @@ function FilesPanel() {
           </div>
         </div>
         <div id="sidebar-files-section" className="sidebar-section-body">
+          <SemanticIndexingNotice />
           <div
             id="sideHead"
             className={
