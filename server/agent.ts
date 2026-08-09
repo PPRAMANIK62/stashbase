@@ -251,6 +251,7 @@ export class AgentSession {
   private q: Query | null = null;
   private pending = new Map<string, Pending>();
   private closed = false;
+  private interruptRequested = false;
   private nativeDerivedReadRedirected = new Set<string>();
   /** The SDK session_id, captured from the init message. Sent to the
    *  client so the history dropdown can mark this session active. */
@@ -449,6 +450,10 @@ export class AgentSession {
       this.send(claudeActiveModelEvent(this.models, msg.model));
     }
     if (msg.type === 'system' && msg.subtype === 'commands_changed') this.publishSkillCommands(msg.commands);
+    if (msg.type === 'system' && msg.subtype === 'api_retry') {
+      log.info(`Claude SDK is retrying: attempt ${msg.attempt} of ${msg.max_retries} (delay ${msg.retry_delay_ms}ms)`);
+      return;
+    }
     switch (msg.type) {
       case 'stream_event': {
         // Partial deltas → typewriter streaming for text + thinking.
@@ -495,7 +500,43 @@ export class AgentSession {
         break;
       }
       case 'result': {
-        this.send({ t: 'turn-end', isError: msg.is_error === true });
+        const isError = msg.is_error === true;
+        const wasCancelled = this.interruptRequested;
+
+        if (isError && !wasCancelled) {
+          const errorsField = (msg as any).errors;
+          const rawErrors = (Array.isArray(errorsField) ? errorsField : [])
+            .map((e: any) => typeof e === 'string' ? e.trim() : '')
+            .filter((e: string) => e.length > 0);
+
+          const uniqueErrors = Array.from(new Set(rawErrors));
+          let finalMessage = '';
+
+          if (uniqueErrors.length > 0) {
+            finalMessage = uniqueErrors.join('; ');
+            if (finalMessage.length > 2000) {
+              finalMessage = finalMessage.slice(0, 2000);
+            }
+          } else {
+            const subtype = msg.subtype;
+            if (subtype === 'error_max_turns') {
+              finalMessage = 'Claude stopped after reaching the maximum number of turns.';
+            } else if (subtype === 'error_max_budget_usd') {
+              finalMessage = 'Claude stopped after reaching the configured budget.';
+            } else if (subtype === 'error_max_structured_output_retries') {
+              finalMessage = 'Claude could not produce the requested structured response.';
+            } else {
+              finalMessage = 'Claude failed before completing the turn.';
+            }
+          }
+
+          if (finalMessage) {
+            this.send({ t: 'error', message: finalMessage });
+          }
+        }
+
+        this.send({ t: 'turn-end', isError: isError && !wasCancelled });
+        this.interruptRequested = false;
         break;
       }
       default:
@@ -547,6 +588,7 @@ export class AgentSession {
         if (skill && !this.skills.has(skill)) { this.send({ t: 'error', message: 'That skill is no longer available. Type / to choose another.' }); return; }
         if (!body.trim() && !skill) return;
         this.send({ t: 'turn-start' });
+        this.interruptRequested = false;
         this.input.push({
           type: 'user',
           message: { role: 'user', content: claudeSkillPrompt(body, skill) },
@@ -584,6 +626,7 @@ export class AgentSession {
         break;
       }
       case 'interrupt':
+        this.interruptRequested = true;
         void this.q?.interrupt().catch(() => { /* not streaming yet */ });
         break;
       case 'close':

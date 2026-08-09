@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import type { Query } from '@anthropic-ai/claude-agent-sdk';
+import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { WebSocket } from 'ws';
 import {
   AgentSession,
@@ -32,10 +32,16 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
-function fakeClaudeQuery(failure?: Error): Query {
+function fakeClaudeQuery(failureOrMessages?: Error | SDKMessage[], failure?: Error): Query {
   return {
     async *[Symbol.asyncIterator]() {
-      if (failure) throw failure;
+      if (Array.isArray(failureOrMessages)) {
+        for (const msg of failureOrMessages) {
+          yield msg;
+        }
+      }
+      const err = failure ?? (failureOrMessages instanceof Error ? failureOrMessages : undefined);
+      if (err) throw err;
     },
     supportedModels: async () => [],
     supportedCommands: async () => [],
@@ -377,4 +383,333 @@ test('Claude startup failure puts its cause on the terminal exit', async (t) => 
   assert.equal(events.some((event) => event.t === 'ready'), false);
   assert.equal(events.some((event) => event.t === 'error'), false);
   assert.match(events.find((event) => event.t === 'exit')?.message ?? '', /Claude CLI not found/);
+});
+
+test('Claude Session final result with errors preserves and truncates messages', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-err-preserve-'));
+  runWithWindowId('claude-err-preserve-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('claude');
+    runWithWindowId('claude-err-preserve-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeAgentWebSocket();
+  const mockMessages: SDKMessage[] = [
+    {
+      type: 'result',
+      subtype: 'error_during_execution',
+      is_error: true,
+      errors: ['Request timed out', 'Request timed out  ', 'Network unreachable'],
+      duration_ms: 100,
+      duration_api_ms: 50,
+      num_turns: 1,
+      stop_reason: 'error',
+      total_cost_usd: 0.01,
+      usage: { input_tokens: 10, output_tokens: 5 } as any,
+      modelUsage: {},
+      permission_denials: [],
+      uuid: 'msg-123' as any,
+      session_id: 'session-123',
+    },
+  ];
+
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-err-preserve-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => fakeClaudeQuery(mockMessages)) as never,
+    () => '/fake/claude',
+  );
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string; isError?: boolean });
+  
+  // Verify error event contains deduplicated, joined message
+  const errorEvent = events.find((e) => e.t === 'error');
+  assert.ok(errorEvent);
+  assert.equal(errorEvent.message, 'Request timed out; Network unreachable');
+
+  // Verify turn-end event isError is true
+  const turnEndEvent = events.find((e) => e.t === 'turn-end');
+  assert.ok(turnEndEvent);
+  assert.equal(turnEndEvent.isError, true);
+});
+
+test('Claude Session final result with no error text uses subtype fallbacks', async (t) => {
+  const subtypes = [
+    'error_max_turns',
+    'error_max_budget_usd',
+    'error_max_structured_output_retries',
+    'error_during_execution',
+  ] as const;
+  const expectedMessages = [
+    'Claude stopped after reaching the maximum number of turns.',
+    'Claude stopped after reaching the configured budget.',
+    'Claude could not produce the requested structured response.',
+    'Claude failed before completing the turn.',
+  ];
+
+  for (let i = 0; i < subtypes.length; i++) {
+    const subtype = subtypes[i]!;
+    const expected = expectedMessages[i]!;
+
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), `stashbase-claude-fallback-${i}-`));
+    runWithWindowId(`claude-fallback-window-${i}`, () => setCurrentFolder(folder));
+    t.after(() => {
+      clearAgentRuntimeFailure('claude');
+      runWithWindowId(`claude-fallback-window-${i}`, () => clearCurrentFolder());
+      fs.rmSync(folder, { recursive: true, force: true });
+    });
+
+    const ws = new FakeAgentWebSocket();
+    const mockMessages: SDKMessage[] = [
+      {
+        type: 'result',
+        subtype,
+        is_error: true,
+        errors: [],
+        duration_ms: 100,
+        duration_api_ms: 50,
+        num_turns: 1,
+        stop_reason: 'error',
+        total_cost_usd: 0.01,
+        usage: { input_tokens: 10, output_tokens: 5 } as any,
+        modelUsage: {},
+        permission_denials: [],
+        uuid: 'msg-123' as any,
+        session_id: 'session-123',
+      },
+    ];
+
+    const session = new AgentSession(
+      ws as unknown as WebSocket,
+      `claude-fallback-window-${i}`,
+      undefined,
+      undefined,
+      'default',
+      undefined,
+      undefined,
+      (() => fakeClaudeQuery(mockMessages)) as never,
+      () => '/fake/claude',
+    );
+    session.begin();
+    await settle();
+
+    const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string });
+    const errorEvent = events.find((e) => e.t === 'error');
+    assert.ok(errorEvent, `Expected error event for subtype ${subtype}`);
+    assert.equal(errorEvent.message, expected);
+  }
+});
+
+test('Claude Session handles transient api_retry warnings without permanent errors', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-retry-'));
+  runWithWindowId('claude-retry-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('claude');
+    runWithWindowId('claude-retry-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeAgentWebSocket();
+  const mockMessages: SDKMessage[] = [
+    {
+      type: 'system',
+      subtype: 'api_retry',
+      attempt: 1,
+      max_retries: 3,
+      retry_delay_ms: 1000,
+      error_status: null,
+      error: 'unknown',
+      uuid: 'retry-uuid' as any,
+      session_id: 'session-123',
+    },
+    {
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      duration_ms: 100,
+      duration_api_ms: 50,
+      num_turns: 1,
+      result: 'Hello output',
+      stop_reason: 'end_turn',
+      total_cost_usd: 0.01,
+      usage: { input_tokens: 10, output_tokens: 5 } as any,
+      modelUsage: {},
+      permission_denials: [],
+      uuid: 'msg-123' as any,
+      session_id: 'session-123',
+    },
+  ];
+
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-retry-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => fakeClaudeQuery(mockMessages)) as never,
+    () => '/fake/claude',
+  );
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string });
+  // Verify api_retry did not emit error to client, and turn finishes successfully
+  assert.equal(events.some((e) => e.t === 'error'), false);
+  const turnEndEvent = events.find((e) => e.t === 'turn-end');
+  assert.ok(turnEndEvent);
+  assert.equal((turnEndEvent as any).isError, false);
+});
+
+test('Claude Session handles api_retry followed by terminal failure', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-retry-fail-'));
+  runWithWindowId('claude-retry-fail-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('claude');
+    runWithWindowId('claude-retry-fail-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeAgentWebSocket();
+  const mockMessages: SDKMessage[] = [
+    {
+      type: 'system',
+      subtype: 'api_retry',
+      attempt: 1,
+      max_retries: 3,
+      retry_delay_ms: 1000,
+      error_status: null,
+      error: 'unknown',
+      uuid: 'retry-uuid' as any,
+      session_id: 'session-123',
+    },
+    {
+      type: 'result',
+      subtype: 'error_during_execution',
+      is_error: true,
+      errors: ['Request timed out'],
+      duration_ms: 100,
+      duration_api_ms: 50,
+      num_turns: 1,
+      stop_reason: 'error',
+      total_cost_usd: 0.01,
+      usage: { input_tokens: 10, output_tokens: 5 } as any,
+      modelUsage: {},
+      permission_denials: [],
+      uuid: 'msg-123' as any,
+      session_id: 'session-123',
+    },
+  ];
+
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-retry-fail-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => fakeClaudeQuery(mockMessages)) as never,
+    () => '/fake/claude',
+  );
+  session.begin();
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string; isError?: boolean });
+  // Verify only one final error message and a failed turn-end are emitted
+  const errorEvents = events.filter((e) => e.t === 'error');
+  assert.equal(errorEvents.length, 1);
+  assert.equal(errorEvents[0]?.message, 'Request timed out');
+
+  const turnEndEvent = events.find((e) => e.t === 'turn-end');
+  assert.ok(turnEndEvent);
+  assert.equal(turnEndEvent.isError, true);
+});
+
+test('Claude Session user cancellation returns non-red turn-end', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-cancel-'));
+  runWithWindowId('claude-cancel-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('claude');
+    runWithWindowId('claude-cancel-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeAgentWebSocket();
+  let triggerResult: (() => void) | null = null;
+  const resultPromise = new Promise<void>((resolve) => {
+    triggerResult = resolve;
+  });
+
+  const queryFactory = () => {
+    return {
+      async *[Symbol.asyncIterator]() {
+        await resultPromise;
+        yield {
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          errors: ['Interrupted by user'],
+          duration_ms: 100,
+          duration_api_ms: 50,
+          num_turns: 1,
+          stop_reason: 'error',
+          total_cost_usd: 0.01,
+          usage: { input_tokens: 10, output_tokens: 5 } as any,
+          modelUsage: {},
+          permission_denials: [],
+          uuid: 'msg-123' as any,
+          session_id: 'session-123',
+        };
+      },
+      supportedModels: async () => [],
+      supportedCommands: async () => [],
+      setModel: async () => {},
+      setPermissionMode: async () => {},
+      interrupt: async () => {},
+    } as unknown as Query;
+  };
+
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-cancel-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    queryFactory as any,
+    () => '/fake/claude',
+  );
+  session.begin();
+  await settle();
+
+  // Send prompt
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'run query' }));
+  await settle();
+
+  // Send interrupt client event
+  ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+
+  // Trigger the result
+  triggerResult!();
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string; isError?: boolean });
+  
+  // Verify client received turn-end with isError: false, and no error message
+  assert.equal(events.some((e) => e.t === 'error'), false);
+  const turnEndEvent = events.find((e) => e.t === 'turn-end');
+  assert.ok(turnEndEvent);
+  assert.equal(turnEndEvent.isError, false);
 });
