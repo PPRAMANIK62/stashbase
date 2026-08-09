@@ -80,6 +80,7 @@ Community contributions can land as useful first iterations, but the long-term d
   prompt recover through a fresh native connection. Late events from the
   abandoned start must not enter the renderer; the server-side timeout and
   generation-fencing contract lives in [architecture.md](architecture.md).
+- Claude session error normalization must preserve execution failure details before emitting `turn-end`: trim and deduplicate SDK error lists to a joined message capped at 2,000 characters, resolve max-turn, max-budget, and structured-retry error subtypes to stable fallback copy, and treat transient api_retry warnings as retry-in-progress without ending the turn.
 - A discovered missing Agent CLI is a setup state, not a disabled launcher or a
   generic connection failure. Keep its install command copyable and let the
   user re-run discovery after installation; do not conflate it with an
