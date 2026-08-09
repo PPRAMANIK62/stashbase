@@ -75,12 +75,16 @@ Community contributions can land as useful first iterations, but the long-term d
   error, and add at most one generic fallback for an otherwise unexplained
   failed `turn-end`. Record that failure before advancing queued follow-ups;
   duplicate terminal events must not advance the queue, and successful or
-  cancelled turns must not create an error notice.
+  interrupted turns must not create an error notice.
 - Present a stalled Codex `turn/start` as one failed turn, then let a later
   prompt recover through a fresh native connection. Late events from the
   abandoned start must not enter the renderer; the server-side timeout and
   generation-fencing contract lives in [architecture.md](architecture.md).
-- Codex session error normalization must distinguish between retryable warnings and fatal failures: an error event with `willRetry: true` represents retry-in-progress and must not settle the turn or emit a permanent error to the client, while `willRetry: false` (or unspecified) represents a terminal failure and must emit one error and settle the active turn exactly once. A terminal error notification followed by `turn/completed` must suppress duplicate error and terminal events for that same active turn.
+- Correlate every Codex error notification to the active turn through its
+  protocol `turnId`. `willRetry: true` is retry-in-progress and must not settle
+  the turn or emit a permanent error; `willRetry: false` may emit one error and
+  settle only the matching turn once. Ignore repeated or late terminal events,
+  and treat native `interrupted` completion as non-error.
 - A discovered missing Agent CLI is a setup state, not a disabled launcher or a
   generic connection failure. Keep its install command copyable and let the
   user re-run discovery after installation; do not conflate it with an
