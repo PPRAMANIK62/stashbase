@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import type { Query } from '@anthropic-ai/claude-agent-sdk';
+import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { WebSocket } from 'ws';
 import {
   AgentSession,
@@ -32,10 +32,16 @@ async function settle(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
-function fakeClaudeQuery(failure?: Error): Query {
+function fakeClaudeQuery(failureOrMessages?: Error | SDKMessage[], failure?: Error): Query {
   return {
     async *[Symbol.asyncIterator]() {
-      if (failure) throw failure;
+      if (Array.isArray(failureOrMessages)) {
+        for (const msg of failureOrMessages) {
+          yield msg;
+        }
+      }
+      const err = failure ?? (failureOrMessages instanceof Error ? failureOrMessages : undefined);
+      if (err) throw err;
     },
     supportedModels: async () => [],
     supportedCommands: async () => [],
@@ -43,6 +49,130 @@ function fakeClaudeQuery(failure?: Error): Query {
     setPermissionMode: async () => {},
     interrupt: async () => {},
   } as unknown as Query;
+}
+
+interface TurnEvent {
+  t: string;
+  message?: string;
+  isError?: boolean;
+}
+
+function claudeErrorResult(
+  subtype: 'error_during_execution' | 'error_max_turns' | 'error_max_budget_usd' | 'error_max_structured_output_retries',
+  errors: unknown,
+): SDKMessage {
+  return {
+    type: 'result',
+    subtype,
+    is_error: true,
+    errors,
+    duration_ms: 100,
+    duration_api_ms: 50,
+    num_turns: 1,
+    stop_reason: 'error',
+    total_cost_usd: 0.01,
+    usage: { input_tokens: 10, output_tokens: 5 },
+    modelUsage: {},
+    permission_denials: [],
+    uuid: 'test-result',
+    session_id: 'test-session',
+  } as unknown as SDKMessage;
+}
+
+function claudeSuccessResult(): SDKMessage {
+  return {
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    duration_ms: 100,
+    duration_api_ms: 50,
+    num_turns: 1,
+    result: 'Finished',
+    stop_reason: 'end_turn',
+    total_cost_usd: 0.01,
+    usage: { input_tokens: 10, output_tokens: 5 },
+    modelUsage: {},
+    permission_denials: [],
+    uuid: 'test-result',
+    session_id: 'test-session',
+  } as unknown as SDKMessage;
+}
+
+function claudeRetryMessage(): SDKMessage {
+  return {
+    type: 'system',
+    subtype: 'api_retry',
+    attempt: 1,
+    max_retries: 3,
+    retry_delay_ms: 1000,
+    error_status: null,
+    error: 'unknown',
+    uuid: 'test-retry',
+    session_id: 'test-session',
+  } as unknown as SDKMessage;
+}
+
+async function startScriptedClaudeTurn(
+  t: { after(callback: () => void): void },
+  windowId: string,
+  messages: SDKMessage[],
+  interrupt: () => Promise<void> = async () => {},
+): Promise<{
+  ws: FakeAgentWebSocket;
+  releaseMessages(): void;
+  turnEvents(): TurnEvent[];
+}> {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), `stashbase-${windowId}-`));
+  runWithWindowId(windowId, () => setCurrentFolder(folder));
+
+  let releaseMessages!: () => void;
+  const messageGate = new Promise<void>((resolve) => { releaseMessages = resolve; });
+  let finishStream!: () => void;
+  const streamGate = new Promise<void>((resolve) => { finishStream = resolve; });
+  const nativeQuery = {
+    async *[Symbol.asyncIterator]() {
+      await messageGate;
+      for (const message of messages) yield message;
+      await streamGate;
+    },
+    supportedModels: async () => [],
+    supportedCommands: async () => [],
+    setModel: async () => {},
+    setPermissionMode: async () => {},
+    interrupt,
+  } as unknown as Query;
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    windowId,
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => nativeQuery) as never,
+    () => '/fake/claude',
+  );
+  t.after(() => {
+    finishStream();
+    session.dispose();
+    clearAgentRuntimeFailure('claude');
+    runWithWindowId(windowId, () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'run query' }));
+  await settle();
+
+  return {
+    ws,
+    releaseMessages,
+    turnEvents: () => ws.sent
+      .map((value) => JSON.parse(value) as TurnEvent)
+      .filter((event) => event.t === 'turn-start' || event.t === 'error' || event.t === 'turn-end'),
+  };
 }
 
 test('Claude adapter preserves supported Shared Agent Contract access modes', () => {
@@ -377,4 +507,132 @@ test('Claude startup failure puts its cause on the terminal exit', async (t) => 
   assert.equal(events.some((event) => event.t === 'ready'), false);
   assert.equal(events.some((event) => event.t === 'error'), false);
   assert.match(events.find((event) => event.t === 'exit')?.message ?? '', /Claude CLI not found/);
+});
+
+test('Claude final errors are normalized, bounded, and ordered before turn-end', async (t) => {
+  const oversized = 'x'.repeat(2100);
+  const expectedMessage = `Request timed out; ${oversized}`.slice(0, 2000);
+  const turn = await startScriptedClaudeTurn(t, 'claude-error-window', [
+    claudeErrorResult('error_during_execution', [
+      ' Request timed out ',
+      'Request timed out',
+      oversized,
+    ]),
+  ]);
+
+  turn.releaseMessages();
+  await settle();
+
+  assert.equal(expectedMessage.length, 2000);
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: expectedMessage },
+    { t: 'turn-end', isError: true },
+  ]);
+});
+
+test('Claude malformed or empty error lists use stable subtype fallbacks', async (t) => {
+  const cases = [
+    ['error_max_turns', null, 'Claude stopped after reaching the maximum number of turns.'],
+    ['error_max_budget_usd', 'not-an-array', 'Claude stopped after reaching the configured budget.'],
+    ['error_max_structured_output_retries', [null, '  '], 'Claude could not produce the requested structured response.'],
+    ['error_during_execution', undefined, 'Claude failed before completing the turn.'],
+  ] as const;
+
+  for (const [index, [subtype, errors, expectedMessage]] of cases.entries()) {
+    const turn = await startScriptedClaudeTurn(t, `claude-fallback-window-${index}`, [
+      claudeErrorResult(subtype, errors),
+    ]);
+    turn.releaseMessages();
+    await settle();
+
+    assert.deepEqual(turn.turnEvents(), [
+      { t: 'turn-start' },
+      { t: 'error', message: expectedMessage },
+      { t: 'turn-end', isError: true },
+    ]);
+  }
+});
+
+test('Claude api_retry followed by success emits no permanent error', async (t) => {
+  const turn = await startScriptedClaudeTurn(t, 'claude-retry-window', [
+    claudeRetryMessage(),
+    claudeSuccessResult(),
+  ]);
+
+  turn.releaseMessages();
+  await settle();
+
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'turn-end', isError: false },
+  ]);
+});
+
+test('Claude api_retry followed by failure emits one ordered terminal error', async (t) => {
+  const turn = await startScriptedClaudeTurn(t, 'claude-retry-fail-window', [
+    claudeRetryMessage(),
+    claudeErrorResult('error_during_execution', ['Request timed out']),
+  ]);
+
+  turn.releaseMessages();
+  await settle();
+
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: 'Request timed out' },
+    { t: 'turn-end', isError: true },
+  ]);
+});
+
+test('Claude ignores repeated terminal results for an already settled turn', async (t) => {
+  const failure = claudeErrorResult('error_during_execution', ['Request timed out']);
+  const turn = await startScriptedClaudeTurn(t, 'claude-duplicate-result-window', [failure, failure]);
+
+  turn.releaseMessages();
+  await settle();
+
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: 'Request timed out' },
+    { t: 'turn-end', isError: true },
+  ]);
+});
+
+test('Claude user cancellation stays non-red when its terminal result repeats', async (t) => {
+  const interrupted = claudeErrorResult('error_during_execution', ['Interrupted by user']);
+  const turn = await startScriptedClaudeTurn(t, 'claude-cancel-window', [interrupted, interrupted]);
+
+  turn.ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+  turn.releaseMessages();
+  await settle();
+
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'turn-end', isError: false },
+  ]);
+});
+
+test('Claude interrupt rejection does not hide a later execution failure', async (t) => {
+  let rejectInterrupt!: (error: Error) => void;
+  const interruptResult = new Promise<void>((_resolve, reject) => { rejectInterrupt = reject; });
+  const turn = await startScriptedClaudeTurn(
+    t,
+    'claude-interrupt-failure-window',
+    [claudeErrorResult('error_during_execution', ['Request timed out'])],
+    () => interruptResult,
+  );
+
+  turn.ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  turn.releaseMessages();
+  await settle();
+  rejectInterrupt(new Error('interrupt unavailable'));
+  await settle();
+
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: 'Request timed out' },
+    { t: 'turn-end', isError: true },
+  ]);
 });
