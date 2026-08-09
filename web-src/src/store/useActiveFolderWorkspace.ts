@@ -48,6 +48,7 @@ export interface ActiveFolderWorkspace {
     },
   ) => Promise<void>;
   dismissIndexWarning: () => Promise<void>;
+  decideSemanticIndexing: (decision: 'start' | 'defer') => Promise<void>;
   setFolderOrder: (parentPath: string, names: string[]) => Promise<void>;
   selectFile: (name: string) => Promise<void>;
   selectFileWithHighlight: (name: string, hit: PendingHighlight) => Promise<void>;
@@ -249,6 +250,7 @@ export function useActiveFolderWorkspace(
     folders.openFolderByName,
     folders.prepareForFolderRemoval,
     search.dismissIndexWarning,
+    search.decideSemanticIndexing,
     search.markVisibleFilesPendingForSearch,
     search.refreshIndexState,
     search.runSearch,

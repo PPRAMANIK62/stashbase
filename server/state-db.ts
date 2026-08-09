@@ -2,12 +2,13 @@
  * Library-level transactional state in the per-machine app data directory.
  *
  * This is StashBase-owned state, separate from MFS/Milvus' `store/`
- * schema. It holds exactly one thing: durable file preparation failures,
+ * schema. It holds non-derivable workflow decisions: durable file preparation
+ * failures and per-folder semantic-indexing deferrals,
  * which are non-derivable — a failed extraction/index attempt can look
  * identical on disk to one that hasn't run — and drives per-file
  * recovery affordances.
  *
- * Everything else lives at its authoritative source: the daemon/store
+ * Other derived indexing truth lives at its authoritative source: the daemon/store
  * owns the per-file hash + index state (via `scan_diff`), the filesystem
  * answers "does this file exist", and `~/.stashbase/config.json` holds
  * library folders and embedder config. (Earlier `files` and `index_queue`
@@ -162,6 +163,15 @@ function migrate(conn: BetterSqlite3.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS conversions_status_idx ON conversions(status, last_attempt_at);
+
+    CREATE TABLE IF NOT EXISTS semantic_indexing_decisions (
+      folder_identity TEXT PRIMARY KEY,
+      folder_path TEXT NOT NULL,
+      decision TEXT NOT NULL CHECK (decision IN ('awaiting-decision', 'paused')),
+      source_count INTEGER NOT NULL,
+      estimated_bytes INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
+    );
 
     -- 2026-06: only failures are persisted now. in-flight lives in
     -- process memory (a crash kills the conversion with us — persisting
@@ -447,4 +457,53 @@ export function listConversionStatus(status: ConversionStatus): Array<{ path: st
       ...(row.doneAt ? { doneAt: row.doneAt } : {}),
     },
   }));
+}
+
+export interface SemanticIndexingDecision {
+  decision: 'awaiting-decision' | 'paused';
+  sourceCount: number;
+  estimatedBytes: number;
+  updatedAt: string;
+}
+
+export function getSemanticIndexingDecision(folderRoot: string): SemanticIndexingDecision | null {
+  const conn = getStateDb();
+  if (!conn) return null;
+  const row = conn.prepare(`
+    SELECT decision, source_count AS sourceCount, estimated_bytes AS estimatedBytes,
+           updated_at AS updatedAt
+    FROM semantic_indexing_decisions WHERE folder_identity = ?
+  `).get(filesystemPath.identity(folderRoot)) as SemanticIndexingDecision | undefined;
+  return row ?? null;
+}
+
+export function setSemanticIndexingDecision(
+  folderRoot: string,
+  decision: SemanticIndexingDecision['decision'],
+  workload: { sourceCount: number; estimatedBytes: number },
+): boolean {
+  const conn = getStateDb();
+  if (!conn) return false;
+  const folderPath = filesystemPath.absolute(folderRoot);
+  conn.prepare(`
+    INSERT INTO semantic_indexing_decisions
+      (folder_identity, folder_path, decision, source_count, estimated_bytes, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(folder_identity) DO UPDATE SET
+      folder_path = excluded.folder_path, decision = excluded.decision,
+      source_count = excluded.source_count, estimated_bytes = excluded.estimated_bytes,
+      updated_at = excluded.updated_at
+  `).run(
+    filesystemPath.identity(folderPath), folderPath, decision,
+    workload.sourceCount, workload.estimatedBytes, new Date().toISOString(),
+  );
+  return true;
+}
+
+export function clearSemanticIndexingDecision(folderRoot: string): boolean {
+  const conn = getStateDb();
+  if (!conn) return false;
+  conn.prepare('DELETE FROM semantic_indexing_decisions WHERE folder_identity = ?')
+    .run(filesystemPath.identity(folderRoot));
+  return true;
 }

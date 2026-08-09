@@ -13,13 +13,14 @@
  * to plain PyMuPDF text extraction when the richer layout pass fails.
  */
 import { spawn } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
+import fs, { closeSync, existsSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
 import { derivedNoteFor, derivedBundleFor, derivedBatchesFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn } from './python-host.ts';
 import {
   discoverNewSources,
+  derivedIsFresh,
   indexFreshDerived,
   maybeConvert,
   TransientConversionError,
@@ -58,6 +59,35 @@ export function derivedPathsForPdf(pdfAbsPath: string): { notePath: string; bund
     notePath: derivedNoteFor(pdfAbsPath),
     bundleDir: derivedBundleFor(pdfAbsPath),
   };
+}
+
+export function currentDerivedTextPathForPdf(sourceAbs: string, known?: { sourceMtimeMs: number; derivedMtimeMs: number }): string | null {
+  return derivedIsFresh(PDF_SPEC, sourceAbs, known) ? derivedPathsForPdf(sourceAbs).notePath : null;
+}
+
+export async function currentDerivedTextPathForPdfAsync(
+  sourceAbs: string,
+  known: { sourceMtimeMs: number; derivedMtimeMs: number },
+): Promise<string | null> {
+  const notePath = derivedPathsForPdf(sourceAbs).notePath;
+  return known.derivedMtimeMs >= known.sourceMtimeMs
+    && await derivedTailContains(notePath, PDF_COMPLETE_MARKER, 4096) ? notePath : null;
+}
+
+async function derivedTailContains(file: string, marker: string, tailBytes: number): Promise<boolean> {
+  let handle: fs.promises.FileHandle | null = null;
+  try {
+    handle = await fs.promises.open(file, 'r');
+    const stat = await handle.stat();
+    const length = Math.min(stat.size, tailBytes);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, Math.max(0, stat.size - length));
+    return buffer.toString('utf8').includes(marker);
+  } catch {
+    return false;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
 }
 
 function cleanupDerivedPdf(pdfAbsPath: string): void {

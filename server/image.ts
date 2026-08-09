@@ -15,11 +15,11 @@
  * failures cover images and PDFs through one path.
  */
 import { spawn } from 'node:child_process';
-import { closeSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
+import fs, { closeSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
 import { isImageFile } from './format.ts';
 import { derivedNoteFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn } from './python-host.ts';
-import { discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
+import { derivedIsFresh, discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
 import { lowerExtractorPriority, spawnOptionsForExtractor, terminateExtractorTree } from './extractor-process.ts';
 
 const OCR_COMPLETE_MARKER = '<!-- stashbase-ocr-conversion: complete -->';
@@ -28,6 +28,31 @@ const OCR_COMPLETE_MARKER = '<!-- stashbase-ocr-conversion: complete -->';
  *  the user's opened folder (see `derived-store.ts`). No image bundle. */
 export function derivedNotePathForImage(imageAbsPath: string): string {
   return derivedNoteFor(imageAbsPath);
+}
+
+export function currentDerivedTextPathForImage(sourceAbs: string, known?: { sourceMtimeMs: number; derivedMtimeMs: number }): string | null {
+  return derivedIsFresh(IMAGE_SPEC, sourceAbs, known) ? derivedNotePathForImage(sourceAbs) : null;
+}
+
+export async function currentDerivedTextPathForImageAsync(
+  sourceAbs: string,
+  known: { sourceMtimeMs: number; derivedMtimeMs: number },
+): Promise<string | null> {
+  const notePath = derivedNotePathForImage(sourceAbs);
+  if (known.derivedMtimeMs < known.sourceMtimeMs) return null;
+  let handle: fs.promises.FileHandle | null = null;
+  try {
+    handle = await fs.promises.open(notePath, 'r');
+    const stat = await handle.stat();
+    const length = Math.min(stat.size, 2048);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, Math.max(0, stat.size - length));
+    return buffer.toString('utf8').includes(OCR_COMPLETE_MARKER) ? notePath : null;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
 }
 
 function cleanupDerivedImage(imageAbsPath: string): void {

@@ -28,6 +28,7 @@ import { cancelConversion } from './conversion.ts';
 import { clearRecord } from './conversion-status.ts';
 import { deleteDerivedForSource, knownDerivedSourcesUnderFolder } from './derived-store.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import { estimateSemanticWorkload, type SemanticWorkloadEstimate } from './semantic-workload.ts';
 
 const log = logger('sync');
 
@@ -99,6 +100,8 @@ export interface SyncResult {
    *  target folder/window is no longer current. Any arrays are partial work
    *  completed before cancellation was observed. */
   cancelled?: boolean;
+  /** Embedding was intentionally stopped by the folder's preflight state. */
+  semanticPaused?: boolean;
 }
 
 export interface SyncOptions {
@@ -106,6 +109,41 @@ export interface SyncOptions {
    *  in-flight upsert, but checking between files stops stale imports from
    *  continuing through the rest of a large folder after a folder switch. */
   shouldContinue?: () => boolean;
+  /** Pure decision after the authoritative hash diff. No state is published yet. */
+  shouldPauseEmbedding?: (workload: SemanticWorkloadEstimate) => boolean;
+  /** Publish only after every known-stale row has been invalidated. */
+  publishPaused?: (workload: SemanticWorkloadEstimate) => boolean;
+  /** Atomically release an existing decision immediately before upserts. */
+  commitEmbedding?: () => boolean;
+  /** Test seam; production derives this exclusively from Settings. */
+  semanticEnabled?: boolean;
+}
+
+/** Transactional pause transition. Known-stale rows are invalidated before
+ * the decision becomes visible; any invalidation or persistence failure falls
+ * back to execution so reconcile can replace stale content. */
+export async function publishSemanticPause(
+  indexer: Pick<Indexer, 'deleteFile'>,
+  root: string,
+  modified: string[],
+  workload: SemanticWorkloadEstimate,
+  failed: { name: string; error: string }[],
+  publish?: (workload: SemanticWorkloadEstimate) => boolean,
+): Promise<boolean> {
+  const failuresBeforeInvalidation = failed.length;
+  for (const sourcePath of modified) {
+    try { await indexer.deleteFile(sourcePath); }
+    catch (err: unknown) { failed.push({ name: sourcePath, error: errorMessage(err) }); }
+  }
+  if (failed.length !== failuresBeforeInvalidation) {
+    log.warn(`semantic preflight invalidation failed for "${root}"; continuing indexing to replace stale rows`);
+    return false;
+  }
+  if (!publish?.(workload)) {
+    log.warn(`semantic preflight state unavailable for "${root}"; continuing indexing`);
+    return false;
+  }
+  return true;
 }
 
 function emptyResult(cancelled = false): SyncResult {
@@ -215,7 +253,7 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   // the log with one failure per file. Conversion discovery still
   // runs so PDFs/images can produce AppData derived text for keyword search
     // and future reindex.
-  if (!getApiKey()) {
+  if (!(opts.semanticEnabled ?? !!getApiKey())) {
     cleanupMissingConvertedSources(root);
     discoverConvertedSources(root);
     log.info(`no embedding key — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
@@ -224,6 +262,8 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
 
   if (shouldStop(opts)) return emptyResult(true);
   const diff = await indexer.syncDiff(root);
+  const workload = await estimateSemanticWorkload(root, diff);
+  const pauseRequested = opts.shouldPauseEmbedding?.(workload) ?? false;
   const failed: { name: string; error: string }[] = [];
   const excludedRemoved = await removeExcludedIndexedFiles(indexer, root, failed);
   cleanupMissingConvertedSources(root);
@@ -321,6 +361,29 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   // PDF/image must first clear the old source identity and any stale
   // target artifacts, then queue a fresh conversion for the new path.
   discoverConvertedSources(root);
+
+  // Preparation remains independent and useful for keyword search. Stale
+  // vector rows were removed above; stop before any derived/source upsert.
+  if (pauseRequested) {
+    const published = await publishSemanticPause(
+      indexer, root, diff.modified, workload, failed, opts.publishPaused,
+    );
+    if (published) {
+      return {
+        added: [], modified: [], removed: toFolderRelList(root, removedDone),
+        renamed: toFolderRelList(root, renamedDone),
+        failed: toFolderRelFailures(root, failed), semanticPaused: true,
+      };
+    }
+  }
+  if (!pauseRequested && opts.commitEmbedding && !opts.commitEmbedding()) {
+    log.warn(`semantic decision could not be cleared for "${root}"; leaving indexing paused`);
+    return {
+      added: [], modified: [], removed: toFolderRelList(root, removedDone),
+      renamed: toFolderRelList(root, renamedDone),
+      failed: toFolderRelFailures(root, failed), semanticPaused: true,
+    };
+  }
 
   const convertedAddedDone = await indexFreshConvertedSources(indexer, root, diff.added, failed, opts);
   if (convertedAddedDone.cancelled) {

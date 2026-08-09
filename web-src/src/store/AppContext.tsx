@@ -88,6 +88,7 @@ export interface AppActions {
   ) => Promise<void>;
   /** Clear the active folder's background-index warning. */
   dismissIndexWarning: () => Promise<void>;
+  decideSemanticIndexing: (decision: 'start' | 'defer') => Promise<void>;
   /** Replace a folder's ordered child list (manual sidebar ordering).
    *  Optimistic — state updates immediately, then a PUT is fired.
    *  Failure of the PUT rolls the renderer back to whatever the server
@@ -435,6 +436,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadFiles: workspace.loadFiles, markVisibleFilesPendingForSearch: workspace.markVisibleFilesPendingForSearch,
     refreshIndexState: workspace.refreshIndexState, runSync: workspace.runSync, runSearch: workspace.runSearch,
     setFolderOrder: workspace.setFolderOrder, dismissIndexWarning: workspace.dismissIndexWarning,
+    decideSemanticIndexing: workspace.decideSemanticIndexing,
     selectFile: workspace.selectFile, selectFileWithHighlight: workspace.selectFileWithHighlight,
     openInNewTab: workspace.openInNewTab, newTab: workspace.newTab, closeTab: workspace.closeTab,
     closeActiveTab: workspace.closeActiveTab, activateTab: workspace.activateTab,
