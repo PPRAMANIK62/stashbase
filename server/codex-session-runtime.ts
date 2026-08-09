@@ -29,6 +29,7 @@ import {
 } from './codex-approval.ts';
 import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
 import {
+  codexTurnStatus,
   stringValue,
   toolResultFromItem,
   toolStartFromItem,
@@ -674,7 +675,7 @@ export class CodexSession {
       case 'turn/started': {
         const turn = params.turn as JsonObject | undefined;
         const turnId = stringValue(turn?.id);
-        if (turnId) {
+        if (this.busy && turnId) {
           this.activeTurnId = turnId;
           if (this.interruptRequested) void this.requestInterruptForTurn(turnId);
         }
@@ -733,58 +734,60 @@ export class CodexSession {
     const turn = params.turn as JsonObject | undefined;
     const id = stringValue(turn?.id);
 
-    // 1. Suppress duplicate events if already settled or mismatching turn
-    if (!this.busy || !this.activeTurnId || id !== this.activeTurnId) {
-      return;
-    }
+    if (!this.isActiveTurn(id)) return;
 
-    const status = stringValue(turn?.status);
+    const status = codexTurnStatus(turn?.status);
     const error = turn?.error as JsonObject | undefined;
-    let message = stringValue(error?.message);
+    let message = usefulMessage(error?.message);
 
-    // 2. Preserve user interruption/cancellation as non-error
-    const isCancelled = status === 'cancelled' || this.interruptRequested || (this.interruptingTurnId === id);
-    if (isCancelled) {
-      this.busy = false;
-      this.activeTurnId = null;
-      this.interruptRequested = false;
-      this.interruptingTurnId = null;
-      this.send({ t: 'turn-end', isError: false });
+    const isInterrupted = status === 'interrupted'
+      || this.interruptRequested
+      || this.interruptingTurnId === id;
+    if (isInterrupted) {
+      this.settleActiveTurn(id, false);
       return;
     }
 
-    // 3. Fallback error message if status is failed but no message exists
     if (status === 'failed' && !message) {
       message = 'Codex failed before completing the turn.';
     }
 
-    if (message) {
-      this.send({ t: 'error', message });
-    }
-
-    this.busy = false;
-    this.activeTurnId = null;
-    this.interruptRequested = false;
-    this.interruptingTurnId = null;
-    this.send({ t: 'turn-end', isError: status === 'failed' || !!message });
+    if (message) this.send({ t: 'error', message });
+    this.settleActiveTurn(id, status === 'failed' || !!message);
   }
 
   private onErrorNotification(params: JsonObject): void {
-    // 1. Ignore retryable notifications on the UI side
+    const turnId = stringValue(params.turnId);
+    if (!this.isActiveTurn(turnId)) return;
+
     if (params.willRetry === true) {
       log.info(`Codex reported a retryable error: ${notificationMessage(params)}`);
       return;
     }
 
-    // 2. Process terminal notifications (willRetry: false or undefined)
+    const isInterrupted = this.interruptRequested || this.interruptingTurnId === turnId;
+    if (isInterrupted) {
+      this.settleActiveTurn(turnId, false);
+      return;
+    }
+
     const message = notificationMessage(params) || 'Codex reported an error.';
     this.send({ t: 'error', message });
-    
+    this.settleActiveTurn(turnId, true);
+  }
+
+  private isActiveTurn(turnId: string): boolean {
+    return this.busy && !!this.activeTurnId && turnId === this.activeTurnId;
+  }
+
+  private settleActiveTurn(turnId: string, isError: boolean): boolean {
+    if (!this.isActiveTurn(turnId)) return false;
     this.busy = false;
     this.activeTurnId = null;
     this.interruptRequested = false;
     this.interruptingTurnId = null;
-    this.send({ t: 'turn-end', isError: true });
+    this.send({ t: 'turn-end', isError });
+    return true;
   }
 
   private onToolOutputDelta(params: JsonObject): void {
@@ -885,14 +888,19 @@ function protocolNoticeFromParams(params: JsonObject): string {
 }
 
 function notificationMessage(params: JsonObject): string {
-  const direct = stringValue(params.message);
+  const direct = usefulMessage(params.message);
   if (direct) return direct;
   const error = params.error;
   if (error && typeof error === 'object') {
-    const fromError = stringValue((error as JsonObject).message);
+    const fromError = usefulMessage((error as JsonObject).message);
     if (fromError) return fromError;
   }
   return '';
+}
+
+function usefulMessage(value: unknown): string {
+  const message = stringValue(value);
+  return message.trim() ? message : '';
 }
 
 function toolNameFromRequest(params: JsonObject): string {
