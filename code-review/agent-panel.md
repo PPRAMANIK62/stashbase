@@ -80,7 +80,13 @@ Community contributions can land as useful first iterations, but the long-term d
   prompt recover through a fresh native connection. Late events from the
   abandoned start must not enter the renderer; the server-side timeout and
   generation-fencing contract lives in [architecture.md](architecture.md).
-- Claude session error normalization must preserve execution failure details before emitting `turn-end`: trim and deduplicate SDK error lists to a joined message capped at 2,000 characters, resolve max-turn, max-budget, and structured-retry error subtypes to stable fallback copy, and treat transient api_retry warnings as retry-in-progress without ending the turn.
+- Claude session error normalization must preserve execution failure details
+  before emitting `turn-end`: trim and deduplicate SDK error lists to a joined
+  message capped at 2,000 characters, resolve max-turn, max-budget, and
+  structured-retry error subtypes to stable fallback copy, and treat transient
+  `api_retry` warnings as retry-in-progress without ending the turn. Settle
+  only the active turn once, ignore repeated or late results, and keep the
+  final result authoritative when the native interrupt request rejects.
 - Correlate every Codex error notification to the active turn through its
   protocol `turnId`. `willRetry: true` is retry-in-progress and must not settle
   the turn or emit a permanent error; `willRetry: false` may emit one error and
