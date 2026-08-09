@@ -778,3 +778,254 @@ test('Codex Session handles steer timeout without ending an active turn', async 
   assert.equal(runtime.activeTurnId, 'turn-1');
   session.dispose();
 });
+
+test('Codex Session failed turn completed with message preserves it', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-preserve-'));
+  runWithWindowId('err-preserve-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('err-preserve-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'err-preserve-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  // Send failed turn with an error message
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'turn/completed',
+    params: {
+      turn: {
+        id: 'turn-1',
+        status: 'failed',
+        error: { message: 'sandbox service offline' },
+      },
+    },
+  })}\n`);
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string; isError?: boolean });
+  const errorEvent = events.find((e) => e.t === 'error');
+  assert.ok(errorEvent);
+  assert.equal(errorEvent.message, 'sandbox service offline');
+
+  const turnEndEvent = events.find((e) => e.t === 'turn-end');
+  assert.ok(turnEndEvent);
+  assert.equal(turnEndEvent.isError, true);
+  session.dispose();
+});
+
+test('Codex Session failed turn completed without message uses fallback', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-fallback-'));
+  runWithWindowId('err-fallback-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('err-fallback-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'err-fallback-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  // Send failed turn with NO error message
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'turn/completed',
+    params: {
+      turn: {
+        id: 'turn-1',
+        status: 'failed',
+      },
+    },
+  })}\n`);
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string; isError?: boolean });
+  const errorEvent = events.find((e) => e.t === 'error');
+  assert.ok(errorEvent);
+  assert.equal(errorEvent.message, 'Codex failed before completing the turn.');
+
+  const turnEndEvent = events.find((e) => e.t === 'turn-end');
+  assert.ok(turnEndEvent);
+  assert.equal(turnEndEvent.isError, true);
+  session.dispose();
+});
+
+test('Codex Session error with willRetry: true does not settle turn', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-willretry-true-'));
+  runWithWindowId('willretry-true-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('willretry-true-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'willretry-true-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  // Send warning/error event with willRetry: true
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'error',
+    params: {
+      message: 'transient rate limit',
+      willRetry: true,
+    },
+  })}\n`);
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string });
+  // Verify NO error or turn-end was emitted to the WebSocket client
+  assert.equal(events.some((e) => e.t === 'error'), false);
+  assert.equal(events.some((e) => e.t === 'turn-end'), false);
+
+  const runtime = session as unknown as { busy: boolean };
+  assert.equal(runtime.busy, true);
+  session.dispose();
+});
+
+test('Codex Session error with willRetry: false settles turn and ignores later completed event', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-willretry-false-'));
+  runWithWindowId('willretry-false-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('willretry-false-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'willretry-false-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  // Send terminal error with willRetry: false
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'error',
+    params: {
+      message: 'fatal crash',
+      willRetry: false,
+    },
+  })}\n`);
+  await settle();
+
+  const eventsAfterError = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string; isError?: boolean });
+  const errorEvent = eventsAfterError.find((e) => e.t === 'error');
+  assert.ok(errorEvent);
+  assert.equal(errorEvent.message, 'fatal crash');
+
+  const turnEndEvent = eventsAfterError.find((e) => e.t === 'turn-end');
+  assert.ok(turnEndEvent);
+  assert.equal(turnEndEvent.isError, true);
+
+  // Clear websocket sent history to verify no new events are sent
+  ws.sent = [];
+
+  // Now send subsequent turn/completed event (which Codex app-server might send on cleanup)
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'turn/completed',
+    params: {
+      turn: {
+        id: 'turn-1',
+        status: 'failed',
+        error: { message: 'fatal crash' },
+      },
+    },
+  })}\n`);
+  await settle();
+
+  const eventsAfterCompleted = ws.sent.map((item) => JSON.parse(item) as { t: string });
+  // Verify NO duplicate events were sent
+  assert.equal(eventsAfterCompleted.some((e) => e.t === 'error'), false);
+  assert.equal(eventsAfterCompleted.some((e) => e.t === 'turn-end'), false);
+
+  session.dispose();
+});
+
+test('Codex Session user cancellation returns isError: false and no red error', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-cancel-'));
+  runWithWindowId('cancel-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    clearAgentRuntimeFailure('codex');
+    runWithWindowId('cancel-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'cancel-window',
+    undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+
+  // Simulate user stop/interrupt action
+  ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+
+  // Send turn completion representing cancelled turn
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'turn/completed',
+    params: {
+      turn: {
+        id: 'turn-1',
+        status: 'cancelled',
+      },
+    },
+  })}\n`);
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string; isError?: boolean });
+  // Verify client received turn-end with isError: false, and no error message
+  assert.equal(events.some((e) => e.t === 'error'), false);
+  const turnEndEvent = events.find((e) => e.t === 'turn-end');
+  assert.ok(turnEndEvent);
+  assert.equal(turnEndEvent.isError, false);
+
+  session.dispose();
+});
