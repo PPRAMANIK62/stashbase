@@ -51,6 +51,130 @@ function fakeClaudeQuery(failureOrMessages?: Error | SDKMessage[], failure?: Err
   } as unknown as Query;
 }
 
+interface TurnEvent {
+  t: string;
+  message?: string;
+  isError?: boolean;
+}
+
+function claudeErrorResult(
+  subtype: 'error_during_execution' | 'error_max_turns' | 'error_max_budget_usd' | 'error_max_structured_output_retries',
+  errors: unknown,
+): SDKMessage {
+  return {
+    type: 'result',
+    subtype,
+    is_error: true,
+    errors,
+    duration_ms: 100,
+    duration_api_ms: 50,
+    num_turns: 1,
+    stop_reason: 'error',
+    total_cost_usd: 0.01,
+    usage: { input_tokens: 10, output_tokens: 5 },
+    modelUsage: {},
+    permission_denials: [],
+    uuid: 'test-result',
+    session_id: 'test-session',
+  } as unknown as SDKMessage;
+}
+
+function claudeSuccessResult(): SDKMessage {
+  return {
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    duration_ms: 100,
+    duration_api_ms: 50,
+    num_turns: 1,
+    result: 'Finished',
+    stop_reason: 'end_turn',
+    total_cost_usd: 0.01,
+    usage: { input_tokens: 10, output_tokens: 5 },
+    modelUsage: {},
+    permission_denials: [],
+    uuid: 'test-result',
+    session_id: 'test-session',
+  } as unknown as SDKMessage;
+}
+
+function claudeRetryMessage(): SDKMessage {
+  return {
+    type: 'system',
+    subtype: 'api_retry',
+    attempt: 1,
+    max_retries: 3,
+    retry_delay_ms: 1000,
+    error_status: null,
+    error: 'unknown',
+    uuid: 'test-retry',
+    session_id: 'test-session',
+  } as unknown as SDKMessage;
+}
+
+async function startScriptedClaudeTurn(
+  t: { after(callback: () => void): void },
+  windowId: string,
+  messages: SDKMessage[],
+  interrupt: () => Promise<void> = async () => {},
+): Promise<{
+  ws: FakeAgentWebSocket;
+  releaseMessages(): void;
+  turnEvents(): TurnEvent[];
+}> {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), `stashbase-${windowId}-`));
+  runWithWindowId(windowId, () => setCurrentFolder(folder));
+
+  let releaseMessages!: () => void;
+  const messageGate = new Promise<void>((resolve) => { releaseMessages = resolve; });
+  let finishStream!: () => void;
+  const streamGate = new Promise<void>((resolve) => { finishStream = resolve; });
+  const nativeQuery = {
+    async *[Symbol.asyncIterator]() {
+      await messageGate;
+      for (const message of messages) yield message;
+      await streamGate;
+    },
+    supportedModels: async () => [],
+    supportedCommands: async () => [],
+    setModel: async () => {},
+    setPermissionMode: async () => {},
+    interrupt,
+  } as unknown as Query;
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    windowId,
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => nativeQuery) as never,
+    () => '/fake/claude',
+  );
+  t.after(() => {
+    finishStream();
+    session.dispose();
+    clearAgentRuntimeFailure('claude');
+    runWithWindowId(windowId, () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'run query' }));
+  await settle();
+
+  return {
+    ws,
+    releaseMessages,
+    turnEvents: () => ws.sent
+      .map((value) => JSON.parse(value) as TurnEvent)
+      .filter((event) => event.t === 'turn-start' || event.t === 'error' || event.t === 'turn-end'),
+  };
+}
+
 test('Claude adapter preserves supported Shared Agent Contract access modes', () => {
   assert.equal(claudePermissionMode('default'), 'default');
   assert.equal(claudePermissionMode('acceptEdits'), 'acceptEdits');
@@ -385,331 +509,130 @@ test('Claude startup failure puts its cause on the terminal exit', async (t) => 
   assert.match(events.find((event) => event.t === 'exit')?.message ?? '', /Claude CLI not found/);
 });
 
-test('Claude Session final result with errors preserves and truncates messages', async (t) => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-err-preserve-'));
-  runWithWindowId('claude-err-preserve-window', () => setCurrentFolder(folder));
-  t.after(() => {
-    clearAgentRuntimeFailure('claude');
-    runWithWindowId('claude-err-preserve-window', () => clearCurrentFolder());
-    fs.rmSync(folder, { recursive: true, force: true });
-  });
+test('Claude final errors are normalized, bounded, and ordered before turn-end', async (t) => {
+  const oversized = 'x'.repeat(2100);
+  const expectedMessage = `Request timed out; ${oversized}`.slice(0, 2000);
+  const turn = await startScriptedClaudeTurn(t, 'claude-error-window', [
+    claudeErrorResult('error_during_execution', [
+      ' Request timed out ',
+      'Request timed out',
+      oversized,
+    ]),
+  ]);
 
-  const ws = new FakeAgentWebSocket();
-  const mockMessages: SDKMessage[] = [
-    {
-      type: 'result',
-      subtype: 'error_during_execution',
-      is_error: true,
-      errors: ['Request timed out', 'Request timed out  ', 'Network unreachable'],
-      duration_ms: 100,
-      duration_api_ms: 50,
-      num_turns: 1,
-      stop_reason: 'error',
-      total_cost_usd: 0.01,
-      usage: { input_tokens: 10, output_tokens: 5 } as any,
-      modelUsage: {},
-      permission_denials: [],
-      uuid: 'msg-123' as any,
-      session_id: 'session-123',
-    },
-  ];
-
-  const session = new AgentSession(
-    ws as unknown as WebSocket,
-    'claude-err-preserve-window',
-    undefined,
-    undefined,
-    'default',
-    undefined,
-    undefined,
-    (() => fakeClaudeQuery(mockMessages)) as never,
-    () => '/fake/claude',
-  );
-  session.begin();
+  turn.releaseMessages();
   await settle();
 
-  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string; isError?: boolean });
-  
-  // Verify error event contains deduplicated, joined message
-  const errorEvent = events.find((e) => e.t === 'error');
-  assert.ok(errorEvent);
-  assert.equal(errorEvent.message, 'Request timed out; Network unreachable');
-
-  // Verify turn-end event isError is true
-  const turnEndEvent = events.find((e) => e.t === 'turn-end');
-  assert.ok(turnEndEvent);
-  assert.equal(turnEndEvent.isError, true);
+  assert.equal(expectedMessage.length, 2000);
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: expectedMessage },
+    { t: 'turn-end', isError: true },
+  ]);
 });
 
-test('Claude Session final result with no error text uses subtype fallbacks', async (t) => {
-  const subtypes = [
-    'error_max_turns',
-    'error_max_budget_usd',
-    'error_max_structured_output_retries',
-    'error_during_execution',
+test('Claude malformed or empty error lists use stable subtype fallbacks', async (t) => {
+  const cases = [
+    ['error_max_turns', null, 'Claude stopped after reaching the maximum number of turns.'],
+    ['error_max_budget_usd', 'not-an-array', 'Claude stopped after reaching the configured budget.'],
+    ['error_max_structured_output_retries', [null, '  '], 'Claude could not produce the requested structured response.'],
+    ['error_during_execution', undefined, 'Claude failed before completing the turn.'],
   ] as const;
-  const expectedMessages = [
-    'Claude stopped after reaching the maximum number of turns.',
-    'Claude stopped after reaching the configured budget.',
-    'Claude could not produce the requested structured response.',
-    'Claude failed before completing the turn.',
-  ];
 
-  for (let i = 0; i < subtypes.length; i++) {
-    const subtype = subtypes[i]!;
-    const expected = expectedMessages[i]!;
-
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), `stashbase-claude-fallback-${i}-`));
-    runWithWindowId(`claude-fallback-window-${i}`, () => setCurrentFolder(folder));
-    t.after(() => {
-      clearAgentRuntimeFailure('claude');
-      runWithWindowId(`claude-fallback-window-${i}`, () => clearCurrentFolder());
-      fs.rmSync(folder, { recursive: true, force: true });
-    });
-
-    const ws = new FakeAgentWebSocket();
-    const mockMessages: SDKMessage[] = [
-      {
-        type: 'result',
-        subtype,
-        is_error: true,
-        errors: [],
-        duration_ms: 100,
-        duration_api_ms: 50,
-        num_turns: 1,
-        stop_reason: 'error',
-        total_cost_usd: 0.01,
-        usage: { input_tokens: 10, output_tokens: 5 } as any,
-        modelUsage: {},
-        permission_denials: [],
-        uuid: 'msg-123' as any,
-        session_id: 'session-123',
-      },
-    ];
-
-    const session = new AgentSession(
-      ws as unknown as WebSocket,
-      `claude-fallback-window-${i}`,
-      undefined,
-      undefined,
-      'default',
-      undefined,
-      undefined,
-      (() => fakeClaudeQuery(mockMessages)) as never,
-      () => '/fake/claude',
-    );
-    session.begin();
+  for (const [index, [subtype, errors, expectedMessage]] of cases.entries()) {
+    const turn = await startScriptedClaudeTurn(t, `claude-fallback-window-${index}`, [
+      claudeErrorResult(subtype, errors),
+    ]);
+    turn.releaseMessages();
     await settle();
 
-    const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string });
-    const errorEvent = events.find((e) => e.t === 'error');
-    assert.ok(errorEvent, `Expected error event for subtype ${subtype}`);
-    assert.equal(errorEvent.message, expected);
+    assert.deepEqual(turn.turnEvents(), [
+      { t: 'turn-start' },
+      { t: 'error', message: expectedMessage },
+      { t: 'turn-end', isError: true },
+    ]);
   }
 });
 
-test('Claude Session handles transient api_retry warnings without permanent errors', async (t) => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-retry-'));
-  runWithWindowId('claude-retry-window', () => setCurrentFolder(folder));
-  t.after(() => {
-    clearAgentRuntimeFailure('claude');
-    runWithWindowId('claude-retry-window', () => clearCurrentFolder());
-    fs.rmSync(folder, { recursive: true, force: true });
-  });
+test('Claude api_retry followed by success emits no permanent error', async (t) => {
+  const turn = await startScriptedClaudeTurn(t, 'claude-retry-window', [
+    claudeRetryMessage(),
+    claudeSuccessResult(),
+  ]);
 
-  const ws = new FakeAgentWebSocket();
-  const mockMessages: SDKMessage[] = [
-    {
-      type: 'system',
-      subtype: 'api_retry',
-      attempt: 1,
-      max_retries: 3,
-      retry_delay_ms: 1000,
-      error_status: null,
-      error: 'unknown',
-      uuid: 'retry-uuid' as any,
-      session_id: 'session-123',
-    },
-    {
-      type: 'result',
-      subtype: 'success',
-      is_error: false,
-      duration_ms: 100,
-      duration_api_ms: 50,
-      num_turns: 1,
-      result: 'Hello output',
-      stop_reason: 'end_turn',
-      total_cost_usd: 0.01,
-      usage: { input_tokens: 10, output_tokens: 5 } as any,
-      modelUsage: {},
-      permission_denials: [],
-      uuid: 'msg-123' as any,
-      session_id: 'session-123',
-    },
-  ];
-
-  const session = new AgentSession(
-    ws as unknown as WebSocket,
-    'claude-retry-window',
-    undefined,
-    undefined,
-    'default',
-    undefined,
-    undefined,
-    (() => fakeClaudeQuery(mockMessages)) as never,
-    () => '/fake/claude',
-  );
-  session.begin();
+  turn.releaseMessages();
   await settle();
 
-  const events = ws.sent.map((value) => JSON.parse(value) as { t: string });
-  // Verify api_retry did not emit error to client, and turn finishes successfully
-  assert.equal(events.some((e) => e.t === 'error'), false);
-  const turnEndEvent = events.find((e) => e.t === 'turn-end');
-  assert.ok(turnEndEvent);
-  assert.equal((turnEndEvent as any).isError, false);
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'turn-end', isError: false },
+  ]);
 });
 
-test('Claude Session handles api_retry followed by terminal failure', async (t) => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-retry-fail-'));
-  runWithWindowId('claude-retry-fail-window', () => setCurrentFolder(folder));
-  t.after(() => {
-    clearAgentRuntimeFailure('claude');
-    runWithWindowId('claude-retry-fail-window', () => clearCurrentFolder());
-    fs.rmSync(folder, { recursive: true, force: true });
-  });
+test('Claude api_retry followed by failure emits one ordered terminal error', async (t) => {
+  const turn = await startScriptedClaudeTurn(t, 'claude-retry-fail-window', [
+    claudeRetryMessage(),
+    claudeErrorResult('error_during_execution', ['Request timed out']),
+  ]);
 
-  const ws = new FakeAgentWebSocket();
-  const mockMessages: SDKMessage[] = [
-    {
-      type: 'system',
-      subtype: 'api_retry',
-      attempt: 1,
-      max_retries: 3,
-      retry_delay_ms: 1000,
-      error_status: null,
-      error: 'unknown',
-      uuid: 'retry-uuid' as any,
-      session_id: 'session-123',
-    },
-    {
-      type: 'result',
-      subtype: 'error_during_execution',
-      is_error: true,
-      errors: ['Request timed out'],
-      duration_ms: 100,
-      duration_api_ms: 50,
-      num_turns: 1,
-      stop_reason: 'error',
-      total_cost_usd: 0.01,
-      usage: { input_tokens: 10, output_tokens: 5 } as any,
-      modelUsage: {},
-      permission_denials: [],
-      uuid: 'msg-123' as any,
-      session_id: 'session-123',
-    },
-  ];
-
-  const session = new AgentSession(
-    ws as unknown as WebSocket,
-    'claude-retry-fail-window',
-    undefined,
-    undefined,
-    'default',
-    undefined,
-    undefined,
-    (() => fakeClaudeQuery(mockMessages)) as never,
-    () => '/fake/claude',
-  );
-  session.begin();
+  turn.releaseMessages();
   await settle();
 
-  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string; isError?: boolean });
-  // Verify only one final error message and a failed turn-end are emitted
-  const errorEvents = events.filter((e) => e.t === 'error');
-  assert.equal(errorEvents.length, 1);
-  assert.equal(errorEvents[0]?.message, 'Request timed out');
-
-  const turnEndEvent = events.find((e) => e.t === 'turn-end');
-  assert.ok(turnEndEvent);
-  assert.equal(turnEndEvent.isError, true);
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: 'Request timed out' },
+    { t: 'turn-end', isError: true },
+  ]);
 });
 
-test('Claude Session user cancellation returns non-red turn-end', async (t) => {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-cancel-'));
-  runWithWindowId('claude-cancel-window', () => setCurrentFolder(folder));
-  t.after(() => {
-    clearAgentRuntimeFailure('claude');
-    runWithWindowId('claude-cancel-window', () => clearCurrentFolder());
-    fs.rmSync(folder, { recursive: true, force: true });
-  });
+test('Claude ignores repeated terminal results for an already settled turn', async (t) => {
+  const failure = claudeErrorResult('error_during_execution', ['Request timed out']);
+  const turn = await startScriptedClaudeTurn(t, 'claude-duplicate-result-window', [failure, failure]);
 
-  const ws = new FakeAgentWebSocket();
-  let triggerResult: (() => void) | null = null;
-  const resultPromise = new Promise<void>((resolve) => {
-    triggerResult = resolve;
-  });
+  turn.releaseMessages();
+  await settle();
 
-  const queryFactory = () => {
-    return {
-      async *[Symbol.asyncIterator]() {
-        await resultPromise;
-        yield {
-          type: 'result',
-          subtype: 'error_during_execution',
-          is_error: true,
-          errors: ['Interrupted by user'],
-          duration_ms: 100,
-          duration_api_ms: 50,
-          num_turns: 1,
-          stop_reason: 'error',
-          total_cost_usd: 0.01,
-          usage: { input_tokens: 10, output_tokens: 5 } as any,
-          modelUsage: {},
-          permission_denials: [],
-          uuid: 'msg-123' as any,
-          session_id: 'session-123',
-        };
-      },
-      supportedModels: async () => [],
-      supportedCommands: async () => [],
-      setModel: async () => {},
-      setPermissionMode: async () => {},
-      interrupt: async () => {},
-    } as unknown as Query;
-  };
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: 'Request timed out' },
+    { t: 'turn-end', isError: true },
+  ]);
+});
 
-  const session = new AgentSession(
-    ws as unknown as WebSocket,
-    'claude-cancel-window',
-    undefined,
-    undefined,
-    'default',
-    undefined,
-    undefined,
-    queryFactory as any,
-    () => '/fake/claude',
+test('Claude user cancellation stays non-red when its terminal result repeats', async (t) => {
+  const interrupted = claudeErrorResult('error_during_execution', ['Interrupted by user']);
+  const turn = await startScriptedClaudeTurn(t, 'claude-cancel-window', [interrupted, interrupted]);
+
+  turn.ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+  turn.releaseMessages();
+  await settle();
+
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'turn-end', isError: false },
+  ]);
+});
+
+test('Claude interrupt rejection does not hide a later execution failure', async (t) => {
+  let rejectInterrupt!: (error: Error) => void;
+  const interruptResult = new Promise<void>((_resolve, reject) => { rejectInterrupt = reject; });
+  const turn = await startScriptedClaudeTurn(
+    t,
+    'claude-interrupt-failure-window',
+    [claudeErrorResult('error_during_execution', ['Request timed out'])],
+    () => interruptResult,
   );
-  session.begin();
+
+  turn.ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  turn.releaseMessages();
+  await settle();
+  rejectInterrupt(new Error('interrupt unavailable'));
   await settle();
 
-  // Send prompt
-  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'run query' }));
-  await settle();
-
-  // Send interrupt client event
-  ws.emit('message', JSON.stringify({ t: 'interrupt' }));
-  await settle();
-
-  // Trigger the result
-  triggerResult!();
-  await settle();
-
-  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string; isError?: boolean });
-  
-  // Verify client received turn-end with isError: false, and no error message
-  assert.equal(events.some((e) => e.t === 'error'), false);
-  const turnEndEvent = events.find((e) => e.t === 'turn-end');
-  assert.ok(turnEndEvent);
-  assert.equal(turnEndEvent.isError, false);
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: 'Request timed out' },
+    { t: 'turn-end', isError: true },
+  ]);
 });

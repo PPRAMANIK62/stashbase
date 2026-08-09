@@ -60,6 +60,7 @@ import { detectViewerFormat } from './format.ts';
 import { isAgentReadableDerivedTextReady } from './library-file-reader.ts';
 
 type ClaudeSkillCommand = { name: string; description: string; argumentHint: string };
+type ClaudeResultMessage = Extract<SDKMessage, { type: 'result' }>;
 
 export function claudeSkillCatalogEvent(commands: readonly ClaudeSkillCommand[]): Extract<AgentServerEvent, { t: 'skills' }> {
   const skills: AgentSkill[] = commands.filter((command) => Boolean(command.name)).map((command) => ({ id: command.name, label: command.name, ...(command.description ? { description: command.description } : {}), ...(command.argumentHint ? { argumentHint: command.argumentHint } : {}) }));
@@ -251,7 +252,10 @@ export class AgentSession {
   private q: Query | null = null;
   private pending = new Map<string, Pending>();
   private closed = false;
+  private turnActive = false;
+  private turnGeneration = 0;
   private interruptRequested = false;
+  private interruptTask: Promise<void> | null = null;
   private nativeDerivedReadRedirected = new Set<string>();
   /** The SDK session_id, captured from the init message. Sent to the
    *  client so the history dropdown can mark this session active. */
@@ -500,48 +504,70 @@ export class AgentSession {
         break;
       }
       case 'result': {
-        const isError = msg.is_error === true;
-        const wasCancelled = this.interruptRequested;
-
-        if (isError && !wasCancelled) {
-          const errorsField = (msg as any).errors;
-          const rawErrors = (Array.isArray(errorsField) ? errorsField : [])
-            .map((e: any) => typeof e === 'string' ? e.trim() : '')
-            .filter((e: string) => e.length > 0);
-
-          const uniqueErrors = Array.from(new Set(rawErrors));
-          let finalMessage = '';
-
-          if (uniqueErrors.length > 0) {
-            finalMessage = uniqueErrors.join('; ');
-            if (finalMessage.length > 2000) {
-              finalMessage = finalMessage.slice(0, 2000);
-            }
-          } else {
-            const subtype = msg.subtype;
-            if (subtype === 'error_max_turns') {
-              finalMessage = 'Claude stopped after reaching the maximum number of turns.';
-            } else if (subtype === 'error_max_budget_usd') {
-              finalMessage = 'Claude stopped after reaching the configured budget.';
-            } else if (subtype === 'error_max_structured_output_retries') {
-              finalMessage = 'Claude could not produce the requested structured response.';
-            } else {
-              finalMessage = 'Claude failed before completing the turn.';
-            }
-          }
-
-          if (finalMessage) {
-            this.send({ t: 'error', message: finalMessage });
-          }
+        const pendingInterrupt = this.interruptTask;
+        if (pendingInterrupt) {
+          const resultGeneration = this.turnGeneration;
+          void pendingInterrupt.then(() => {
+            if (this.turnGeneration === resultGeneration) this.onClaudeResult(msg);
+          });
+        } else {
+          this.onClaudeResult(msg);
         }
-
-        this.send({ t: 'turn-end', isError: isError && !wasCancelled });
-        this.interruptRequested = false;
         break;
       }
       default:
         break;
     }
+  }
+
+  private onClaudeResult(msg: ClaudeResultMessage): void {
+    // The SDK result is terminal authority for one active turn. Ignore
+    // duplicate or late terminal messages before they can append another
+    // persistent error or settle a queued follow-up twice.
+    if (!this.turnActive) return;
+    const isError = msg.is_error === true;
+    const wasCancelled = this.interruptRequested;
+    this.turnActive = false;
+    this.interruptRequested = false;
+    this.interruptTask = null;
+
+    if (isError && !wasCancelled) {
+      const errorsField = (msg as { errors?: unknown }).errors;
+      const rawErrors = Array.isArray(errorsField)
+        ? errorsField.flatMap((entry: unknown) => {
+            if (typeof entry !== 'string') return [];
+            const trimmed = entry.trim();
+            return trimmed ? [trimmed] : [];
+          })
+        : [];
+
+      const uniqueErrors = Array.from(new Set(rawErrors));
+      let finalMessage = '';
+
+      if (uniqueErrors.length > 0) {
+        finalMessage = uniqueErrors.join('; ');
+        if (finalMessage.length > 2000) {
+          finalMessage = finalMessage.slice(0, 2000);
+        }
+      } else {
+        const subtype = msg.subtype;
+        if (subtype === 'error_max_turns') {
+          finalMessage = 'Claude stopped after reaching the maximum number of turns.';
+        } else if (subtype === 'error_max_budget_usd') {
+          finalMessage = 'Claude stopped after reaching the configured budget.';
+        } else if (subtype === 'error_max_structured_output_retries') {
+          finalMessage = 'Claude could not produce the requested structured response.';
+        } else {
+          finalMessage = 'Claude failed before completing the turn.';
+        }
+      }
+
+      if (finalMessage) {
+        this.send({ t: 'error', message: finalMessage });
+      }
+    }
+
+    this.send({ t: 'turn-end', isError: isError && !wasCancelled });
   }
 
   /** SDK permission callback. Auto-allow reads; round-trip writes/exec to
@@ -587,8 +613,14 @@ export class AgentSession {
         const skill = typeof msg.skill === 'string' ? msg.skill : undefined;
         if (skill && !this.skills.has(skill)) { this.send({ t: 'error', message: 'That skill is no longer available. Type / to choose another.' }); return; }
         if (!body.trim() && !skill) return;
-        this.send({ t: 'turn-start' });
+        // The renderer queues follow-ups and sends them only after the active
+        // terminal event. Refuse an out-of-contract concurrent prompt rather
+        // than letting one SDK result settle the wrong turn.
+        if (this.turnActive) return;
+        this.turnActive = true;
+        this.turnGeneration += 1;
         this.interruptRequested = false;
+        this.send({ t: 'turn-start' });
         this.input.push({
           type: 'user',
           message: { role: 'user', content: claudeSkillPrompt(body, skill) },
@@ -625,10 +657,35 @@ export class AgentSession {
         }
         break;
       }
-      case 'interrupt':
+      case 'interrupt': {
+        if (!this.turnActive || !this.q || this.interruptRequested) break;
+        const interruptedGeneration = this.turnGeneration;
+        let nativeInterrupt: Promise<void>;
+        try {
+          nativeInterrupt = this.q.interrupt();
+        } catch (err: unknown) {
+          log.debug(`Claude interrupt request failed: ${errorMessage(err)}`);
+          break;
+        }
         this.interruptRequested = true;
-        void this.q?.interrupt().catch(() => { /* not streaming yet */ });
+        const trackedInterrupt = nativeInterrupt.then(
+          () => {
+            if (this.interruptTask === trackedInterrupt) this.interruptTask = null;
+          },
+          (err: unknown) => {
+            // A rejected native interrupt did not cancel the turn. Clear only
+            // the matching active generation so a late rejection cannot alter
+            // a later prompt's cancellation state.
+            if (this.interruptTask === trackedInterrupt) this.interruptTask = null;
+            if (this.turnActive && this.turnGeneration === interruptedGeneration) {
+              this.interruptRequested = false;
+            }
+            log.debug(`Claude interrupt request failed: ${errorMessage(err)}`);
+          },
+        );
+        this.interruptTask = trackedInterrupt;
         break;
+      }
       case 'close':
         this.dispose();
         break;
