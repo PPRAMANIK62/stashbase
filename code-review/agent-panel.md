@@ -80,6 +80,7 @@ Community contributions can land as useful first iterations, but the long-term d
   prompt recover through a fresh native connection. Late events from the
   abandoned start must not enter the renderer; the server-side timeout and
   generation-fencing contract lives in [architecture.md](architecture.md).
+- Codex session error normalization must distinguish between retryable warnings and fatal failures: an error event with `willRetry: true` represents retry-in-progress and must not settle the turn or emit a permanent error to the client, while `willRetry: false` (or unspecified) represents a terminal failure and must emit one error and settle the active turn exactly once. A terminal error notification followed by `turn/completed` must suppress duplicate error and terminal events for that same active turn.
 - A discovered missing Agent CLI is a setup state, not a disabled launcher or a
   generic connection failure. Keep its install command copyable and let the
   user re-run discovery after installation; do not conflate it with an

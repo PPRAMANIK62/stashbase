@@ -731,10 +731,37 @@ export class CodexSession {
 
   private onTurnCompleted(params: JsonObject): void {
     const turn = params.turn as JsonObject | undefined;
+    const id = stringValue(turn?.id);
+
+    // 1. Suppress duplicate events if already settled or mismatching turn
+    if (!this.busy || !this.activeTurnId || id !== this.activeTurnId) {
+      return;
+    }
+
     const status = stringValue(turn?.status);
     const error = turn?.error as JsonObject | undefined;
-    const message = stringValue(error?.message);
-    if (message) this.send({ t: 'error', message });
+    let message = stringValue(error?.message);
+
+    // 2. Preserve user interruption/cancellation as non-error
+    const isCancelled = status === 'cancelled' || this.interruptRequested || (this.interruptingTurnId === id);
+    if (isCancelled) {
+      this.busy = false;
+      this.activeTurnId = null;
+      this.interruptRequested = false;
+      this.interruptingTurnId = null;
+      this.send({ t: 'turn-end', isError: false });
+      return;
+    }
+
+    // 3. Fallback error message if status is failed but no message exists
+    if (status === 'failed' && !message) {
+      message = 'Codex failed before completing the turn.';
+    }
+
+    if (message) {
+      this.send({ t: 'error', message });
+    }
+
     this.busy = false;
     this.activeTurnId = null;
     this.interruptRequested = false;
@@ -743,15 +770,21 @@ export class CodexSession {
   }
 
   private onErrorNotification(params: JsonObject): void {
+    // 1. Ignore retryable notifications on the UI side
+    if (params.willRetry === true) {
+      log.info(`Codex reported a retryable error: ${notificationMessage(params)}`);
+      return;
+    }
+
+    // 2. Process terminal notifications (willRetry: false or undefined)
     const message = notificationMessage(params) || 'Codex reported an error.';
     this.send({ t: 'error', message });
-    if (params.willRetry === false) {
-      this.busy = false;
-      this.activeTurnId = null;
-      this.interruptRequested = false;
-      this.interruptingTurnId = null;
-      this.send({ t: 'turn-end', isError: true });
-    }
+    
+    this.busy = false;
+    this.activeTurnId = null;
+    this.interruptRequested = false;
+    this.interruptingTurnId = null;
+    this.send({ t: 'turn-end', isError: true });
   }
 
   private onToolOutputDelta(params: JsonObject): void {
