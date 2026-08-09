@@ -199,6 +199,24 @@ For each folder, reconcile checks:
 
 Only changed content should be embedded. A no-op reconcile should not spend embedding tokens. When no OpenAI key is configured, reconcile still discovers PDF/image/DOCX/audio work and keeps keyword-searchable derived text fresh; semantic indexing is skipped and reported as disabled. Audio without the selected local model is not queued and does not become a durable failure.
 
+Large-workload preflight consumes the same authoritative content-hash diff.
+Added and modified indexable sources count; hash-reused renames and no-op scans
+do not. Reconcile invalidates every known-stale modified row before publishing
+an awaiting or paused state. Invalidation failure or unavailable durable state
+falls back to normal indexing; it must never expose an unsafe or invisible
+pause. Known current prepared text contributes its byte size through bounded,
+asynchronous metadata reads, then the same format-specific completion,
+extractable-text, transcript-manifest, source-hash, and compatibility checks
+used by reconcile; mtime alone is never preparation truth. Preflight must not
+synchronously stat a large folder on the Node thread. Resume is serialized behind older folder reconcile
+work and clears the decision inside that queue entry. While paused, an upsert retains a row whose source hash is unchanged and
+invalidates a row whose hash changed. Conversion completion follows the same
+rule. Semantic retrieval additionally excludes daemon-pending identities for
+paused folders, so even a failed delete cannot publish known-stale evidence.
+Explicit Start indexing is the only operation that clears a durable pause.
+Every valid new convertible source counts before preparation exists; only its
+known-text byte contribution waits for a current validated representation.
+
 External writes are not immediately searchable. Editors, Git, cloud sync, terminal commands, and external Agents change the filesystem outside StashBase's write path. They become searchable after reconcile. StashBase-owned file helper writes should schedule or perform index maintenance as part of the write when possible.
 
 ---
@@ -329,6 +347,7 @@ Review invariants:
 - Auxiliary classifiers have a fixed capacity and share task cancellation ownership.
 - Extractor cancellation owns the whole descendant tree: POSIX signals the detached process group, while Windows uses `taskkill /T /F` (`server/extractor-process.ts:38-79`).
 - A stale final artifact is unavailable for the entire queued interval; resumable PDF batches and audio checkpoints never count as final artifacts.
+- Semantic workload estimation treats the daemon's content-hash `modified` set as stronger than derived timestamps: modified convertible sources count toward the source threshold but their pre-existing prepared bytes never count. Added-source prepared volume is accepted only through asynchronous format-specific completion validation; large DOCX analysis and audio JSON/schema validation run in a bounded worker-thread lane, so neither filesystem reads nor CPU parsing monopolise the server event loop.
 - Folder removal, source delete/rename, and shutdown consult the scheduler so queued or native work is not invisible.
 - File/folder rename and delete validate the requested mutation before cancelling work, then cancel queued/running source and preview tasks and await handle/lane release before touching disk. Successful operations clean stale derived ownership and rediscover convertible sources at new paths in both the active-folder and library/MCP surfaces (`server/file-operation-guard.ts:1-8`, `server/routes/file-mutations.ts:35-209`, `server/library-file-mutations.ts:78-198`, `server/routes/folders.ts:58-173`, `server/conversion-dispatch.ts:15-51`). Library mutations retain their own folder context and version checks when no window has that folder open; the cross-platform integration gate exercises this through MCP, the library HTTP routes, and the mutation service with isolated application-data roots (`server/library-file-mutations.test.ts:16-155`).
 - Disk-backed imports never perform a potentially multi-gigabyte copy or an oversized whole-text read on the Node event loop; disconnect cancellation removes the unpublished same-directory temporary, final publication cannot replace a concurrently created destination, startup reclaims dead staging and identity-proven incomplete fallback reservations, and the 8 MiB indexing budget never changes whether publication itself succeeded.

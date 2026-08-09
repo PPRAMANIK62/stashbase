@@ -148,6 +148,11 @@ them into a new storage model. PDFs, DOCX files, images, audio, and video gain
 searchable representations while the original files remain visible in their
 existing locations.
 
+For a large new or changed archive, the folder remains immediately usable and
+StashBase explains the pending semantic workload before consuming embedding
+quota. The user can defer it, continue with files and keyword search, and start
+semantic indexing later from the persistent notice.
+
 The user can search for “Why did this project reject PostgreSQL?” or “Which
 papers compared these two methods?” without remembering the original wording.
 Results point back to the source files, making it easy to check the surrounding
