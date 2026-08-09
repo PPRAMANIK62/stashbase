@@ -16,6 +16,7 @@ import type {
   IndexWarning,
   SearchHit,
   Agent,
+  UnsupportedFileSummary,
 } from '../api';
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 
@@ -174,6 +175,8 @@ export interface State {
 
   files: FileMeta[];
   folders: FolderMeta[];
+  unsupportedFiles?: UnsupportedFileSummary;
+  unsupportedModalOpen?: boolean;
 
   /** Manual sidebar ordering — map of `parentPath` → ordered list of
    *  child basenames. Empty map = use default (folders-first +
@@ -345,6 +348,8 @@ export const initialState: State = {
   libraryFolderStatuses: {},
   files: [],
   folders: [],
+  unsupportedFiles: undefined,
+  unsupportedModalOpen: false,
   fileOrder: {},
   tabs: [],
   recentFilePaths: [],
@@ -399,7 +404,7 @@ export type Action =
   | { type: 'LIBRARY_FOLDER_STATUS'; path: string; status: LibraryFolderStatus }
   | { type: 'LIBRARY_FOLDER_STATUS_REMOVE'; path: string }
   | { type: 'FOLDER_CONTEXT'; folder: string; folderPath: string }
-  | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string }
+  | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string; unsupportedFiles?: UnsupportedFileSummary }
   | { type: 'FILE_ORDER_LOADED'; order: Record<string, string[]> }
   /** Replace one folder's ordered list (optimistic update before the
    *  PUT lands). Names list may include entries that no longer exist
@@ -494,4 +499,5 @@ export type Action =
   | { type: 'NEW_FOLDER_INPUT'; open: boolean }
   | { type: 'FIND_OPEN' }
   | { type: 'FIND_CLOSE' }
-  | { type: 'FIND_SET'; patch: Partial<State['find']> };
+  | { type: 'FIND_SET'; patch: Partial<State['find']> }
+  | { type: 'UNSUPPORTED_MODAL'; open: boolean };

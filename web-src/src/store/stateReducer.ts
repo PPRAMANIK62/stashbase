@@ -68,6 +68,7 @@ export function reducer(s: State, a: Action): State {
         folders: a.folders,
         folder: a.folder,
         folderPath,
+        unsupportedFiles: a.unsupportedFiles,
         ...(folderChanged
           ? {
               activeSidebarView: 'files' as const,
@@ -82,6 +83,7 @@ export function reducer(s: State, a: Action): State {
               // filters are per-folder session state too.
               searchScope: null,
               searchTypes: [],
+              unsupportedModalOpen: false,
             }
           : {}),
       };
@@ -509,5 +511,7 @@ export function reducer(s: State, a: Action): State {
       return { ...s, find: { ...s.find, open: false, current: 0, total: 0 } };
     case 'FIND_SET':
       return { ...s, find: { ...s.find, ...a.patch } };
+    case 'UNSUPPORTED_MODAL':
+      return { ...s, unsupportedModalOpen: a.open };
   }
 }

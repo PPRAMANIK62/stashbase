@@ -1,5 +1,18 @@
 export type JsonObject = Record<string, unknown>;
 export type JsonRpcId = string | number;
+export type CodexTurnStatus = 'completed' | 'interrupted' | 'failed' | 'inProgress';
+
+export function codexTurnStatus(value: unknown): CodexTurnStatus | '' {
+  switch (value) {
+    case 'completed':
+    case 'interrupted':
+    case 'failed':
+    case 'inProgress':
+      return value;
+    default:
+      return '';
+  }
+}
 
 export interface ThreadItem {
   type?: unknown;

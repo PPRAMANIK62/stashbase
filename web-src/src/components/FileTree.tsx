@@ -152,6 +152,18 @@ export function FileTree() {
 
   const inputAtRoot = state.newFolderInputOpen && state.activeFolder === '';
   if (root.children.length === 0 && !inputAtRoot) {
+    const { sourceCode = 0, other = 0 } = state.unsupportedFiles || {};
+    const total = sourceCode + other;
+    if (total > 0) {
+      return (
+        <div className="empty-list">
+          <div style={{ fontWeight: 600, color: 'var(--fg)', marginBottom: '4px' }}>No supported files found</div>
+          <div style={{ fontSize: '11px', opacity: 0.8, lineHeight: 1.4 }}>
+            StashBase found {total} file{total === 1 ? '' : 's'} in this folder, but none can currently be displayed or indexed. Nothing on disk was changed.
+          </div>
+        </div>
+      );
+    }
     return <div className="empty-list">No notes yet — click + to create one</div>;
   }
   return (
