@@ -21,18 +21,20 @@ the application.
 - A report must be reviewed before any future sharing action. Redaction is a
   defence in depth measure, never a replacement for informed user review.
 
-## Current: Phase 1 Draft Boundary
+## Current: Draft And Collection Boundary
 
-Phase 1 establishes the report lifecycle boundary only. Selecting **Report
-Bug…** creates an in-memory draft through the Electron main process and opens
-a temporary native placeholder. It does not capture a screenshot, inspect the
-workspace, collect diagnostics or logs, create files, copy data, open a
-browser, or submit anything.
+Selecting **Report Bug…** creates an in-memory draft through the Electron main
+process. Draft creation attempts to capture the selected StashBase window,
+collect the fixed diagnostics allowlist, and read a bounded recent server-log
+excerpt. Collection failures leave the individual resource unavailable rather
+than failing the whole draft. The native menu still uses a temporary
+confirmation placeholder and discards its draft afterward; the review and
+sharing outcomes are not implemented yet.
 
-Each draft reserves private application-owned fields for the later screenshot,
-diagnostics, log excerpt, and report metadata. Those fields remain empty in
-Phase 1. Reserving them inside the owner prevents later work from making a
-renderer the source of truth merely to add a feature.
+Screenshots and log text remain private application-owned data. Renderer-safe
+snapshots contain resource availability and size metadata plus a copy of the
+fixed, non-sensitive diagnostics allowlist; they never contain screenshot
+bytes, log text, paths, handles, source-window identities, or mutable records.
 
 ## Ownership And Access
 
@@ -45,8 +47,8 @@ The renderer-facing lifecycle surface is deliberately small:
 
 | Action | Renderer receives | Never exposed |
 |---|---|---|
-| Create draft | Opaque ID and safe snapshot | Source-window identity, paths, handles, artifacts |
-| Read preview metadata | ID, state, timestamps, availability flags | Draft internals and collected content |
+| Create draft | Opaque ID and safe snapshot | Source-window identity, paths, handles, screenshot bytes, log text |
+| Read preview metadata | ID, state, timestamps, availability/size flags, allowlisted diagnostics | Mutable draft internals and sensitive collected content |
 | Discard draft | Success or a structured safe error | Cleanup implementation details |
 
 Snapshots are copies, not mutable views of the main-process record. A draft
@@ -59,9 +61,9 @@ Closing a source window discards its unreviewed in-memory drafts. A future
 review window has its own retirement path, so closing the originating window
 does not invalidate an already-open review session.
 
-## Privacy Rules For Future Phases
+## Privacy Rules
 
-The later collection pipeline must keep these rules intact:
+The collection pipeline and later report outcomes must keep these rules intact:
 
 - Capture only the selected StashBase window, never the operating-system
   desktop or another application.
@@ -71,8 +73,10 @@ The later collection pipeline must keep these rules intact:
   locale, network data, environment variables, or configuration values.
 - Read only a bounded recent application-log excerpt. Never attach complete
   log history.
-- Redact recognized credentials and the user's home path before preview and
-  again before writing any future artifact.
+- Derive home-path replacement from the exact `os.homedir()` value and redact
+  recognized credentials before preview. Independently scan the redacted
+  result and exclude it when suspicious content remains. Scan again before
+  writing any future artifact.
 - Do not collect `config.json`, API keys, MCP bearer tokens, Agent
   transcripts, folder lists, or source-file contents.
 - Keep screenshots in main-process memory for preview where possible. A future
@@ -80,6 +84,9 @@ The later collection pipeline must keep these rules intact:
 - Future save, clipboard, reveal, browser, temporary-file, and cleanup work
   stays main-process-owned and extends the draft lifecycle rather than adding
   renderer-side privileged access.
+- Never print collected screenshot, diagnostic, log, or report content into
+  the application log. Redaction and aggregate detector counts do not replace
+  user review or the ability to exclude an artifact.
 
 ## Contribution Map
 
@@ -87,16 +94,17 @@ The later collection pipeline must keep these rules intact:
 
 - Main-process-owned in-memory drafts with sender-bound authorization.
 - Minimal renderer IPC with opaque IDs and safe snapshots.
-- Native menu entry with a temporary Phase 1 placeholder.
+- Current-window-only in-memory screenshot capture, fixed diagnostics, and
+  bounded log-tail collection.
+- Credential/home-path redaction with a fail-closed post-redaction scan.
+- Native menu entry with a temporary review placeholder.
 
 ### Next
 
-- Capture the selected application window and retain the image privately until
-  the user reviews it.
-- Add the fixed diagnostics allowlist, bounded log collection, and tested
-  redaction boundary.
-- Replace the placeholder with a user-review surface that can exclude
-  artifacts and collect report text.
+- Replace the placeholder with a user-review surface that previews the
+  screenshot, can exclude screenshot/log resources, and collects report text.
+- Add temporary artifact creation, bounded cleanup, save/copy fallbacks, and
+  the explicit browser handoff described by Issue #114.
 
 ### Coordinate First
 

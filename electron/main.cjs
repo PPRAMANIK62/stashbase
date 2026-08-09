@@ -617,7 +617,6 @@ async function openBugReportPlaceholder(win) {
     // a menu action into an Electron crash or leave the draft reachable.
     console.warn(`[electron] bug report placeholder failed: ${err?.message ?? err}`);
   } finally {
-    console.log("Created draft id, source webcontent id : ", created.draft.id, " ", source.webContentsId);
     bugReports.discardDraft(created.draft.id, source.webContentsId);
   }
 }

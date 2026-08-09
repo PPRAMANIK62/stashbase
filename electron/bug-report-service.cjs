@@ -1,8 +1,7 @@
 'use strict';
 
-console.log("Report-Service Triggered");
-
 const crypto = require('node:crypto');
+const { scanBugReportText } = require('./bug-report-redaction.cjs');
 
 const DRAFT_STATE = Object.freeze({
   DRAFT: 'draft',
@@ -120,9 +119,14 @@ function safeLog(value) {
   ) {
     return null;
   }
+  // Collectors are not trusted merely because they run in the main process.
+  // Scan their output independently so an incomplete redaction pass cannot
+  // make sensitive text eligible for preview or future artifact creation.
+  const scanned = scanBugReportText(value.text);
+  if (!scanned.safe) return null;
   return Object.freeze({
     text: value.text,
-    byteLength: value.byteLength,
+    byteLength: Buffer.byteLength(value.text, 'utf8'),
     truncated: value.truncated,
     redactionCount: value.redactionCount,
   });
@@ -225,8 +229,8 @@ function createBugReportService({
             windowId: source.windowId,
           },
           reviewWebContentsId: null,
-          // Future phases populate these main-process-only fields. None are
-          // returned to renderers or persisted during Phase 1.
+          // Collected resources remain main-process-owned and are never
+          // persisted merely because a draft was created.
           screenshot: null,
           diagnostics: null,
           log: null,
@@ -246,52 +250,6 @@ function createBugReportService({
         draft.log = log;
         draft.updatedAt = toIso(now);
 
-        // draft data log-start
-
-        console.log('\n========== BUG REPORT DRAFT STORE ==========');
-
-        console.log('Current draft id:', draft.id);
-        console.log('Total drafts:', drafts.size);
-
-        for (const [id, d] of drafts.entries()) {
-          console.dir(
-            {
-              id,
-              state: d.state,
-              source: d.source,
-              reviewWebContentsId: d.reviewWebContentsId,
-              createdAt: d.createdAt,
-              updatedAt: d.updatedAt,
-
-              screenshot: d.screenshot
-                ? {
-                  mimeType: d.screenshot.mimeType,
-                  byteLength: d.screenshot.bytes.length,
-                }
-                : null,
-
-              diagnostics: d.diagnostics,
-
-              log: d.log
-                ? {
-                  byteLength: d.log.byteLength,
-                  truncated: d.log.truncated,
-                  redactionCount: d.log.redactionCount,
-                  preview:
-                    d.log.text.length > 200
-                      ? d.log.text.slice(0, 200) + '...'
-                      : d.log.text,
-                }
-                : null,
-            },
-            { depth: null }
-          );
-        }
-
-        console.log('============================================\n');
-
-        //Log complete log-end
-
         return { ok: true, draft: safePreview(draft) };
       } catch {
         return fail(ERROR.UNAVAILABLE);
@@ -307,17 +265,6 @@ function createBugReportService({
       const found = findAccessibleDraft(id, senderWebContentsId);
       if (!found.ok) return found;
       drafts.delete(found.draft.id);
-
-
-      //Discard draft log-start
-      console.log(
-        `Discarding draft ${found.draft.id} (owner ${senderWebContentsId})`
-      );
-
-      console.log('Remaining drafts:', drafts.size);
-
-      //Discard draft log-end
-
       return { ok: true };
     },
 

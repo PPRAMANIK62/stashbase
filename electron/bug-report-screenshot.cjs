@@ -1,7 +1,5 @@
 'use strict';
 
-console.log("Screenshot");
-
 /** Capture one already-authorized BrowserWindow's page in memory. This module
  * intentionally accepts WebContents rather than a screen/window selector, so
  * it cannot broaden capture to the desktop or an arbitrary native window. */

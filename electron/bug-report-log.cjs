@@ -1,8 +1,7 @@
 'use strict';
 
-console.log("BUG-Report-Log");
 const fs = require('node:fs');
-const { redactBugReportText } = require('./bug-report-redaction.cjs');
+const { prepareBugReportText } = require('./bug-report-redaction.cjs');
 
 const MAX_LOG_TAIL_BYTES = 32 * 1024;
 
@@ -39,16 +38,23 @@ function readApplicationLogTail({
   }
 }
 
-function collectRedactedApplicationLog(options) {
-  const tail = readApplicationLogTail(options);
+function collectRedactedApplicationLog(options = {}) {
+  const {
+    homeDir,
+    redact,
+    scan,
+    ...tailOptions
+  } = options;
+  const tail = readApplicationLogTail(tailOptions);
   if (!tail) return null;
-  const redacted = redactBugReportText(tail.text);
+  const prepared = prepareBugReportText(tail.text, { homeDir, redact, scan });
+  if (!prepared.ok) return null;
   return {
-    text: redacted.text,
-    byteLength: Buffer.byteLength(redacted.text, 'utf8'),
+    text: prepared.text,
+    byteLength: Buffer.byteLength(prepared.text, 'utf8'),
     truncated: tail.truncated,
     bytesRead: tail.bytesRead,
-    redactionCount: redacted.redactionCount,
+    redactionCount: prepared.redactionCount,
   };
 }
 

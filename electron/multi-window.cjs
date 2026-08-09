@@ -60,7 +60,7 @@ function createApplicationMenuTemplate({
       label: 'Help',
       submenu: [
         {
-          label: 'Report a Bug',
+          label: 'Report Bug…',
           click: () => onReportBug(),
         },
       ],

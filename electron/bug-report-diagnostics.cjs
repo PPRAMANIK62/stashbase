@@ -1,6 +1,5 @@
 'use strict';
 
-console.log("Diagnostic Called");
 const os = require('node:os');
 
 function freezeDiagnostics(value) {

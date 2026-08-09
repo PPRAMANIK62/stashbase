@@ -167,16 +167,25 @@ delete its isolated profile only after the child process exits.
 
 `electron/bug-report-service.cjs` is the sole owner of in-memory bug-report
 drafts. A draft records its main-process-derived source window identity and
-keeps future screenshot, diagnostics, log, and artifact fields private. The
-preload exposes only create, safe-preview, and discard operations: its
-snapshots contain opaque IDs, lifecycle state, timestamps, and availability
-flags, never paths, ownership identities, mutable records, or resource
-handles. An ID is a reference, not authorization. Access is checked against
-the IPC sender's `webContents` identity; binding a future dedicated review
-window transfers renderer access to that window. Closing a source window drops
-only unreviewed drafts, while a review window has its own retirement path.
-Future capture, artifact, clipboard, browser, and cleanup work must extend
-this main-process service rather than moving ownership into a renderer.
+privately retains current-window screenshot bytes and bounded redacted log
+text. Diagnostics are restricted to the fixed product allowlist. The preload
+exposes only create, safe-preview, and discard operations: snapshots contain
+opaque IDs, lifecycle state, timestamps, resource size/availability metadata,
+and copied allowlisted diagnostics, never paths, ownership identities,
+mutable records, screenshot bytes, log text, or resource handles. An ID is a
+reference, not authorization. Access is checked against the IPC sender's
+`webContents` identity; binding a dedicated review window transfers renderer
+access to that window. Closing a source window drops only unreviewed drafts,
+while a review window has its own retirement path.
+
+Collection is best effort and cannot fail the whole draft. Log preparation
+uses the exact `os.homedir()` value, redacts recognized sensitive fields, and
+runs an independent fail-closed scan; the service scans collector output again
+before marking it available. Suspicious text is excluded, and collected
+content must never be echoed into application logs. Any future artifact writer
+must repeat the scan immediately before writing. Review, artifact exclusion,
+clipboard, browser, save, reveal, and cleanup work must extend this
+main-process service rather than moving ownership into a renderer.
 
 Electron owns the child server through a random per-launch shutdown token.
 Quit sends an authenticated loopback shutdown request and waits for the server
