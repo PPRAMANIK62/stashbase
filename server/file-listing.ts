@@ -29,9 +29,19 @@ export interface FolderEntry {
   path: string;
 }
 
+export interface UnsupportedFileSummary {
+  sourceCode: number;
+  other: number;
+  otherExtensions: Array<{
+    extension: string;
+    count: number;
+  }>;
+}
+
 export interface FolderListing {
   files: FileEntry[];
   folders: FolderEntry[];
+  unsupportedFiles: UnsupportedFileSummary;
 }
 
 /** Per-file preview cache keyed by absolute path. Avoids re-reading
@@ -46,50 +56,219 @@ const previewCache = new Map<string, PreviewCacheEntry>();
 
 onSwitch(() => previewCache.clear());
 
-/** Recursive walk of the folder. Returns every visible subfolder plus every
- *  recognised note/viewer file. */
-export function listFilesAndFolders(): FolderListing {
-  const root = folderRoot();
+const SOURCE_EXTENSIONS = new Set<string>([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.py', '.pyw',
+  '.go', '.rs',
+  '.java', '.kt', '.kts', '.scala',
+  '.c', '.h', '.cc', '.cpp', '.cxx', '.hpp',
+  '.cs',
+  '.rb', '.php',
+  '.swift', '.m', '.mm',
+  '.dart',
+  '.ex', '.exs',
+  '.lua', '.r',
+  '.sh', '.bash', '.zsh', '.fish', '.ps1',
+  '.sql',
+  '.vue', '.svelte',
+  '.css', '.scss', '.less',
+  '.ipynb',
+]);
+
+const SOURCE_BASENAMES = new Set<string>([
+  'dockerfile',
+  'makefile',
+  'cmakelists.txt',
+]);
+
+function classifyUnsupportedFile(name: string): 'source' | 'other' {
+  const base = name.toLowerCase();
+  if (SOURCE_BASENAMES.has(base)) return 'source';
+
+  const ext = path.extname(name).toLowerCase();
+  if (SOURCE_EXTENSIONS.has(ext)) return 'source';
+
+  return 'other';
+}
+
+function getNormalizedExtension(name: string): string {
+  const ext = path.extname(name).toLowerCase();
+  return ext === '' ? 'no extension' : ext;
+}
+
+interface UnsupportedInfo {
+  sourceCode: number;
+  other: number;
+  otherExtensions: Record<string, number>;
+}
+
+interface ScanResult {
+  isKept: boolean;
+  files: FileEntry[];
+  folders: FolderEntry[];
+  unsupportedFiles: UnsupportedInfo;
+}
+
+function scanDirectory(dir: string, prefix: string): ScanResult {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return {
+      isKept: false,
+      files: [],
+      folders: [],
+      unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
+    };
+  }
+
+  const noteStems = new Set<string>();
+  const legacyDerivedStems = new Set<string>();
+  for (const e of entries) {
+    if (!e.isFile()) continue;
+    const m = e.name.match(/^(.+)\.(md|markdown|html|htm|pdf)$/i);
+    if (m) noteStems.add(m[1]);
+    const src = e.name.match(LEGACY_DERIVED_SOURCE_RE);
+    if (src) legacyDerivedStems.add(src[1]);
+  }
+
+  const acceptedEntries: fs.Dirent[] = [];
+  for (const e of entries) {
+    if (isCloudPlaceholderName(e.name)) continue;
+    if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
+    if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
+    if (e.isFile() && e.name.startsWith('.')) {
+      if (isDerivedScratchName(e.name)) continue;
+      if (isDerivedNoteName(e.name)) continue;
+      if (isLegacyDerivedNoteName(e.name, legacyDerivedStems)) continue;
+    }
+    if (e.isDirectory() && e.name.endsWith('_files')) {
+      const stem = e.name.slice(0, -'_files'.length);
+      if (noteStems.has(stem)) continue;
+      if (stem.startsWith('.')) continue;
+    }
+    if (e.isDirectory() && isDerivedScratchName(e.name)) continue;
+
+    acceptedEntries.push(e);
+  }
+
+  // If there are no accepted entries, this folder is physically empty.
+  if (acceptedEntries.length === 0) {
+    return {
+      isKept: true,
+      files: [],
+      folders: prefix ? [{ path: prefix }] : [],
+      unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
+    };
+  }
+
   const files: FileEntry[] = [];
   const folders: FolderEntry[] = [];
-  const seen = new Set<string>();
-  walk(root, '', (rel, full, ent) => {
-    if (ent.isDirectory()) {
-      folders.push({ path: rel });
-      return;
-    }
-    if (!ent.isFile()) return;
-    if (ent.name.endsWith('.tmp')) return;
-    const format = detectViewerFormat(ent.name);
-    if (!format) return;
-    let st: fs.Stats;
-    try { st = fs.statSync(full); } catch { return; }
-    seen.add(full);
+  const unsupportedFiles: UnsupportedInfo = { sourceCode: 0, other: 0, otherExtensions: {} };
+  let hasSupportedInSubtree = false;
+  let hasKeptSubfolder = false;
 
-    const cached = previewCache.get(full);
-    let entry: Pick<FileEntry, 'heading' | 'snippet' | 'imported_at'>;
-    if (cached && cached.mtimeMs === st.mtimeMs) {
-      entry = { heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
-    } else if (format === 'pdf' || format === 'image' || format === 'docx' || format === 'audio') {
-      const imported_at = st.mtime.toISOString();
-      previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at });
-      entry = { heading: '', snippet: '', imported_at };
-    } else {
-      let content: string;
-      try { content = fs.readFileSync(full, 'utf8'); } catch { return; }
-      const { heading, snippet } = preview(content, format);
-      const imported_at = st.mtime.toISOString();
-      previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
-      entry = { heading, snippet, imported_at };
+  for (const e of acceptedEntries) {
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    const full = path.join(dir, e.name);
+
+    if (e.isDirectory()) {
+      const subResult = scanDirectory(full, rel);
+      if (subResult.isKept) {
+        hasKeptSubfolder = true;
+        files.push(...subResult.files);
+        folders.push(...subResult.folders);
+      }
+      unsupportedFiles.sourceCode += subResult.unsupportedFiles.sourceCode;
+      unsupportedFiles.other += subResult.unsupportedFiles.other;
+      for (const [ext, count] of Object.entries(subResult.unsupportedFiles.otherExtensions)) {
+        unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + count;
+      }
+    } else if (e.isFile()) {
+      if (e.name.endsWith('.tmp')) continue;
+
+      const format = detectViewerFormat(e.name);
+      if (format) {
+        hasSupportedInSubtree = true;
+        let st: fs.Stats;
+        try { st = fs.statSync(full); } catch { continue; }
+
+        const cached = previewCache.get(full);
+        let entry: Pick<FileEntry, 'heading' | 'snippet' | 'imported_at'>;
+        if (cached && cached.mtimeMs === st.mtimeMs) {
+          entry = { heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
+        } else if (format === 'pdf' || format === 'image' || format === 'docx' || format === 'audio') {
+          const imported_at = st.mtime.toISOString();
+          previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at });
+          entry = { heading: '', snippet: '', imported_at };
+        } else {
+          let content: string;
+          try { content = fs.readFileSync(full, 'utf8'); } catch { continue; }
+          const { heading, snippet } = preview(content, format);
+          const imported_at = st.mtime.toISOString();
+          previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
+          entry = { heading, snippet, imported_at };
+        }
+        files.push({ name: rel, format, size: st.size, ...entry });
+      } else {
+        const classification = classifyUnsupportedFile(e.name);
+        if (classification === 'source') {
+          unsupportedFiles.sourceCode++;
+        } else {
+          unsupportedFiles.other++;
+          const ext = getNormalizedExtension(e.name);
+          unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + 1;
+        }
+      }
     }
-    files.push({ name: rel, format, size: st.size, ...entry });
-  });
+  }
+
+  const isKept = hasSupportedInSubtree || hasKeptSubfolder;
+  if (isKept && prefix) {
+    folders.push({ path: prefix });
+  }
+
+  return {
+    isKept,
+    files,
+    folders,
+    unsupportedFiles,
+  };
+}
+
+export function listFilesAndFolders(): FolderListing {
+  const root = folderRoot();
+  const scanResult = scanDirectory(root, '');
+
+  const otherExtensions = Object.entries(scanResult.unsupportedFiles.otherExtensions)
+    .map(([extension, count]) => ({ extension, count }))
+    .sort((a, b) => {
+      if (a.count !== b.count) {
+        return b.count - a.count;
+      }
+      return a.extension.localeCompare(b.extension);
+    });
+
+  const seen = new Set<string>();
+  for (const f of scanResult.files) {
+    seen.add(path.join(root, f.name));
+  }
   for (const key of previewCache.keys()) {
     if (!seen.has(key)) previewCache.delete(key);
   }
-  files.sort((a, b) => (a.name < b.name ? -1 : 1));
-  folders.sort((a, b) => (a.path < b.path ? -1 : 1));
-  return { files, folders };
+
+  scanResult.files.sort((a, b) => (a.name < b.name ? -1 : 1));
+  scanResult.folders.sort((a, b) => (a.path < b.path ? -1 : 1));
+
+  return {
+    files: scanResult.files,
+    folders: scanResult.folders,
+    unsupportedFiles: {
+      sourceCode: scanResult.unsupportedFiles.sourceCode,
+      other: scanResult.unsupportedFiles.other,
+      otherExtensions,
+    },
+  };
 }
 
 export function listFiles(): FileEntry[] {

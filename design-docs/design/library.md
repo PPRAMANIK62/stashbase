@@ -73,6 +73,7 @@ to migrate them into a StashBase-specific storage model.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
   or project-management surface. It groups the file tree and the active
   Markdown document outline into independently collapsible navigation sections.
+- StashBase displays only supported document and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a persistent callout banner in the Files panel.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
 - Command Palette exposes only safe, context-available actions the app already

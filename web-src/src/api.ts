@@ -28,6 +28,7 @@ import type {
   AudioTranscriptState,
   AudioPreviewStatus,
   UploadResult,
+  OnboardingPreferences,
 } from './apiTypes';
 import type { SearchTypeCategory } from '../../shared/search-types.ts';
 import {
@@ -75,6 +76,10 @@ export const api = {
   // Files / folders listing --------------------------------------
   listFiles: () => getJson<FilesPayload>('/api/files'),
   statFile: (name: string) => head('/api/files/' + encodePath(name)),
+
+  getOnboarding: () => getJson<OnboardingPreferences>('/api/onboarding'),
+  putOnboarding: (patch: Partial<OnboardingPreferences>) =>
+    send<OnboardingPreferences>('PUT', '/api/onboarding', patch),
 
   // CRUD ---------------------------------------------------------
   createNote: (content: string, dir: string) =>

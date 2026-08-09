@@ -124,6 +124,7 @@ function FilesPanel() {
             </div>
           </div>
           <div className={'file-list' + (state.folderCollapsed ? ' collapsed' : '')}>
+            <UnsupportedFilesCallout />
             <FileTree />
           </div>
         </div>
@@ -342,5 +343,81 @@ function FolderFoldToggle() {
         }
       }}
     >{allCollapsed ? <ExpandAllIcon /> : <CollapseAllIcon />}</button>
+  );
+}
+
+function formatExtensions(otherExtensions: Array<{ extension: string; count: number }>): string {
+  const list = otherExtensions.map((e) => e.extension);
+  const top3 = list.slice(0, 3);
+  const remaining = list.length - 3;
+  let base = top3.join(', ');
+  if (remaining > 0) {
+    base += ` and ${remaining} more format${remaining === 1 ? '' : 's'}`;
+  }
+  return base;
+}
+
+function UnsupportedFilesCallout() {
+  const { state, dispatch } = useApp();
+  const { sourceCode = 0, other = 0, otherExtensions = [] } = state.unsupportedFiles || {};
+  const total = sourceCode + other;
+
+  if (total === 0 || state.welcomeVisible) return null;
+
+  const showSource = sourceCode > 0;
+  const showOther = other > 0;
+
+  let title = '';
+  let body: React.ReactNode = null;
+
+  if (showSource && showOther) {
+    title = 'Some files are hidden';
+    body = (
+      <>
+        {sourceCode} source-code files &middot; {other} other unsupported files
+      </>
+    );
+  } else if (showSource) {
+    title = 'Source code is hidden';
+    body = (
+      <>
+        {sourceCode} source-code and project files are not shown or indexed. Nothing on disk was changed.
+      </>
+    );
+  } else if (showOther) {
+    title = 'Some file formats are hidden';
+    const extList = formatExtensions(otherExtensions);
+    body = (
+      <>
+        {other} unsupported files ({extList}) are not shown or indexed.
+      </>
+    );
+  }
+
+  return (
+    <div className="unsupported-files-banner">
+      <svg
+        style={{ width: '16px', height: '16px', flexShrink: 0, marginTop: '2px', color: 'var(--muted)' }}
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div className="unsupported-files-banner-copy">
+        <div className="unsupported-files-banner-title">{title}</div>
+        <div style={{ fontSize: '11px', opacity: 0.9 }}>
+          {body}
+          <button
+            type="button"
+            className="unsupported-files-details-btn"
+            onClick={() => dispatch({ type: 'UNSUPPORTED_MODAL', open: true })}
+          >
+            Details
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

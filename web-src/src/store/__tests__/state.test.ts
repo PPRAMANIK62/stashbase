@@ -339,3 +339,42 @@ test('PDF page numbers are isolated per tab and reset when replacing a file', ()
   });
   assert.equal(state.tabs[0].pdfPage, undefined); // reset / not leaked from doc1.pdf
 });
+
+test('FILES_LOADED captures unsupportedFiles and folder change resets modal state', () => {
+  const summary = {
+    sourceCode: 3,
+    other: 1,
+    otherExtensions: [{ extension: '.zip', count: 1 }],
+  };
+
+  let state = reducer(freshState({ unsupportedModalOpen: true }), {
+    type: 'FILES_LOADED',
+    files: [],
+    folders: [],
+    folder: 'notes',
+    folderPath: '/notes',
+    unsupportedFiles: summary,
+  });
+
+  assert.deepEqual(state.unsupportedFiles, summary);
+
+  state = reducer(state, {
+    type: 'FILES_LOADED',
+    files: [],
+    folders: [],
+    folder: 'other',
+    folderPath: '/other',
+    unsupportedFiles: undefined,
+  });
+
+  assert.equal(state.unsupportedFiles, undefined);
+  assert.equal(state.unsupportedModalOpen, false);
+});
+
+test('UNSUPPORTED_MODAL toggle action updates state', () => {
+  let state = reducer(freshState(), { type: 'UNSUPPORTED_MODAL', open: true });
+  assert.equal(state.unsupportedModalOpen, true);
+
+  state = reducer(state, { type: 'UNSUPPORTED_MODAL', open: false });
+  assert.equal(state.unsupportedModalOpen, false);
+});

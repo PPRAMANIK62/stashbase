@@ -155,6 +155,7 @@ export interface AppActions {
     },
   ) => string;
   toggleEditMode: () => Promise<void>;
+  setUnsupportedModalOpen: (open: boolean) => void;
   /** Reveal an existing Agent Panel session or create its first tab. This only
    * changes renderer layout; permissions and Agent context remain unchanged. */
   openAgent: (agent: AgentKind) => void;
@@ -285,6 +286,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       folders: j.folders ?? [],
       folder: j.folder ?? 'notes',
       folderPath: expectedFolderPath,
+      unsupportedFiles: j.unsupportedFiles,
     });
     return files;
   }, []);
@@ -445,6 +447,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     alert: showAlert, confirm: askConfirm, resolveModal,
     toast,
     toggleEditMode: workspace.toggleEditMode,
+    setUnsupportedModalOpen: workspace.setUnsupportedModalOpen,
     openAgent: (agent) => {
       rememberPreferredAgent(agent);
       const current = stateRef.current;
