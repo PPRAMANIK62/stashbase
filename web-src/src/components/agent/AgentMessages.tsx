@@ -579,7 +579,7 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
         onPress={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
-        <ChevronDownIcon className={cn('size-3.25 shrink-0 text-muted-foreground', !open && '-rotate-90')} />
+        <ChevronDownIcon className={cn('size-3 shrink-0 text-muted-foreground', !open && '-rotate-90')} />
         {active && <Dot />}
         <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap', failures ? 'text-status-danger' : 'text-muted-foreground')}>{summary}</span>
       </Button>
@@ -688,7 +688,7 @@ function ArtifactCards({ changes, onOpen }: { changes: Array<{ path: string; kin
   if (!changes.length) return null;
   return <div className="grid gap-1 px-2.5 pb-2.25">{changes.map((change) => (
     <div
-      className="grid grid-cols-[15px_minmax(0,1fr)_auto_auto] items-center gap-1.5 border border-border bg-pane px-1.75 py-1.5 text-xs"
+      className="grid grid-cols-[15px_minmax(0,1fr)_auto_auto] items-center gap-1.5 rounded-md border border-border bg-pane px-1.75 py-1.5 text-xs"
       key={change.path}
     >
       <FileGenericIcon className="size-3.5 text-accent" />

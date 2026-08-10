@@ -137,7 +137,7 @@ const sideActionsClass =
  * callers rotate the slot from the same state that drives aria-expanded. */
 const sectionToggleClass =
   'inline-flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left '
-  + 'text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none';
+  + 'text-muted-foreground hover:text-foreground focus-visible:text-foreground';
 
 /* The 16px leading slot that centers the (smaller) section chevron. */
 const sectionChevronClass =
@@ -244,11 +244,14 @@ function NewChatButton() {
           type="button"
           className={
             'mr-1 inline-flex size-5 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent '
-            + 'text-muted-foreground hover:bg-border hover:text-foreground focus-visible:opacity-100 '
+            /* bg-active, not bg-muted: this control nests inside a row
+             * that already hovers to bg-muted, so its own states need
+             * the one-step-darker surface to read. */
+            + 'text-muted-foreground hover:bg-active hover:text-foreground focus-visible:opacity-100 '
             + '[&_svg]:size-3.5 '
             /* Always visible (muted): the arrow IS the discoverability of
              * the agent menu — hover-only would hide the affordance. */
-            + (menuAnchor ? 'bg-border text-foreground' : '')
+            + (menuAnchor ? 'bg-active text-foreground' : '')
           }
           aria-label="Choose agent for new chat"
           aria-haspopup="menu"
@@ -337,7 +340,7 @@ function ScopeHistoryButton({
         ref={buttonRef}
         variant="ghost"
         size="icon-sm"
-        className="text-muted-foreground aria-expanded:bg-border aria-expanded:text-foreground"
+        className="text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
         title={label}
         aria-label={label}
         aria-haspopup="dialog"
@@ -433,7 +436,7 @@ function AddFolderMenuButton() {
         ref={buttonRef}
         variant="ghost"
         size="icon-sm"
-        className="text-muted-foreground aria-expanded:bg-border aria-expanded:text-foreground"
+        className="text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
         title="Add folder to library"
         aria-label="Add folder to library"
         aria-haspopup="menu"
@@ -800,7 +803,7 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                 return (
                   <div
                     key={entry.path}
-                    className={`group/root relative flex min-h-7 items-center rounded-md pr-1 ${
+                    className={`group/root relative flex min-h-7 items-center rounded-md pr-0.5 ${
                       menuOpen ? 'bg-muted' : 'hover:bg-muted'
                     }${opening ? ' opacity-60' : ''}`}
                   >
@@ -814,10 +817,13 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                       {/* Leading 16px slot: muted folder glyph (spinner while
                         * opening); favorites carry a small star overlay at the
                         * glyph's corner instead of a second leading icon. */}
+                      {/* size-4 icons match the file tree's 16px leading
+                        * glyphs — rows share one icon size; the quieter
+                        * 14px tier belongs to section headers. */}
                       <span className="relative inline-flex size-4 flex-none items-center justify-center text-muted-foreground">
                         {opening
-                          ? <SyncIcon className="size-3.5 animate-spin" />
-                          : <FolderIcon className="size-3.5" />}
+                          ? <SyncIcon className="size-4 animate-spin" />
+                          : <FolderIcon className="size-4" />}
                         {!opening && entry.favorite && (
                           <StarIcon className="absolute -right-1 -bottom-0.5 size-2 fill-current" aria-label="Favorite" />
                         )}
@@ -833,13 +839,13 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                       )}
                     </button>
                     <span
-                      /* gap-1, not the headers' gap-0.5: the ⋯ here is
-                       * icon-xs (24px) vs the header's icon-sm + (28px), and
-                       * the rows sit 2px further from the panel edge
-                       * (px-1.5 + pr-1 vs the header's pr-2). 24+4 = 28+2-2,
-                       * so the row's clock lands on the header's clock
-                       * column — change any of those sizes, re-derive. */
-                      className={`flex items-center gap-1 ${
+                      /* Same geometry as the Library header's cluster:
+                       * icon-sm buttons, gap-0.5, and an 8px effective
+                       * right inset (container px-1.5 + row pr-0.5 =
+                       * the header's pr-2) — so the clock and trailing
+                       * icons form two clean columns across header and
+                       * rows. Change one side, change both. */
+                      className={`flex items-center gap-0.5 ${
                         menuOpen || historyOpenPath === entry.path ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
                       }`}
                     >
@@ -972,8 +978,8 @@ function RootMenuButton({
   return (
     <Button
       variant="ghost"
-      size="icon-xs"
-      className="shrink-0 text-muted-foreground aria-expanded:bg-border aria-expanded:text-foreground"
+      size="icon-sm"
+      className="shrink-0 text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
       aria-label={`More actions for ${name}`}
       aria-haspopup="menu"
       aria-expanded={menuOpen}
@@ -1107,7 +1113,7 @@ function ZeroFolderState() {
   return (
     <div className="flex flex-col items-start gap-3 px-4 pt-5 pb-4">
       <div className="size-9 *:size-full"><CubeLogoIcon /></div>
-      <p className="m-0 text-base leading-snug text-muted-foreground">
+      <p className="m-0 text-sm leading-snug text-muted-foreground">
         Add a folder to build your searchable library.
       </p>
       {typeof bridge?.openFolderDialog === 'function' && (

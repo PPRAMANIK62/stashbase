@@ -27,11 +27,11 @@ export const attachImagePreviewClass =
 
 /** Floating × on an image chip. */
 export const attachImageRemoveClass =
-  'absolute top-1 right-1 grid size-4 cursor-pointer place-items-center rounded-full border border-border/80 bg-background/75 p-0 text-foreground [&_svg]:block [&_svg]:size-2.25 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:stroke-[1.7] [&_svg]:[stroke-linecap:round]';
+  'absolute top-1 right-1 grid size-4 cursor-pointer place-items-center rounded-full border border-border/80 bg-background/75 p-0 text-foreground [&_svg]:block [&_svg]:size-2.25 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:stroke-2 [&_svg]:[stroke-linecap:round]';
 
 /** Inline × on a text file chip. */
 export const attachRemoveClass =
-  'grid size-4 shrink-0 cursor-pointer place-items-center rounded-sm border-0 bg-transparent p-0 text-lg leading-none text-muted-foreground hover:bg-border hover:text-foreground';
+  'grid size-4 shrink-0 cursor-pointer place-items-center rounded-sm border-0 bg-transparent p-0 text-lg leading-none text-muted-foreground hover:bg-active hover:text-foreground';
 
 export const attachIconClass = 'size-3.25 shrink-0 text-muted-foreground';
 

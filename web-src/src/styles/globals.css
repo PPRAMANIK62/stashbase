@@ -45,16 +45,15 @@
       --canvas: var(--surface-canvas);
       --card: var(--surface-raised);
       --border: var(--stroke-subtle);
-      /* Cyan accent — matches the .html file icon. Paired with the
-       * #d9a000 amber on .md icons, the two are the project's color
-       * signature (see `.tree-row.file.format-*` comments). */
+      /* Cyan accent — the app's single accent hue (rail active state,
+       * focus ring, selection moments, the cube logo). */
       --accent: #0891b2;
       /* Raw RGB of --accent, for alpha ramps: rgba(var(--accent-rgb), .08)
        * etc. Change the accent → change both lines, nothing else. */
       --accent-rgb: 8, 145, 178;
-      /* Amber counterpoint of the cyan/amber signature (the .md icon's
-       * #d9a000). Brand moments and file-type marks only — never state;
-       * state yellows are --status-warning. */
+      /* Amber counterpoint — rare brand moments only (drag-into-folder
+       * tint), never state; state yellows are --status-warning. File-type
+       * icons carry their own Material brand fills (FileTree.tsx). */
       --accent-amber: #d9a000;
       --accent-amber-rgb: 217, 160, 0;
       /* Danger red — destructive actions, error text, failure banners.

@@ -211,8 +211,10 @@
       color: var(--accent);
     }
     .agent-turn-expand-icon {
-      width: 13px;
-      height: 13px;
+      /* 12px — the app-wide disclosure-chevron size (tree rows, section
+       * headers, tool cards); no odd one out. */
+      width: 12px;
+      height: 12px;
       transition: transform .12s ease;
     }
     .agent-turn-expand-icon.open {
@@ -235,7 +237,7 @@
       place-items: center;
       padding: 0;
       border: 0;
-      border-radius: 4px;
+      border-radius: var(--radius-ui);
       background: transparent;
       color: inherit;
       cursor: pointer;
@@ -444,7 +446,9 @@
       box-sizing: border-box;
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      /* 10px matches the composer/session-history popovers — one radius
+       * for every floating menu surface. */
+      border-radius: 10px;
       box-shadow: 0 8px 24px rgba(var(--shadow-color), 0.12);
       padding: 4px;
       z-index: 30;
@@ -456,7 +460,7 @@
     .agent-mention-list { max-height: 182px; overflow-y: auto; scroll-padding-block: 4px; }
     .agent-mention-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
     .agent-mention-retry { border: 0; border-radius: 4px; background: var(--active); color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
-    .agent-mention-retry:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+    .agent-mention-retry:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
     .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10px * var(--ui-scale)); }
     .agent-mention-head > span:first-child { color: var(--fg); font-weight: 600; }
     .agent-mention-item {
@@ -468,7 +472,9 @@
       background: transparent;
       text-align: left;
       padding: 5px 8px;
-      border-radius: 4px;
+      /* Selectable list rows share --radius-ui with tree rows and menu
+       * items. */
+      border-radius: var(--radius-ui);
       cursor: pointer;
     }
     .agent-mention-item:hover,

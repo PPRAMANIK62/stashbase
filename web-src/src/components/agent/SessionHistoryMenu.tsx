@@ -169,7 +169,7 @@ export function SessionHistoryMenu({
                 )}
                 <div className="hidden shrink-0 gap-px pr-1.25 group-hover/row:flex group-focus-within/row:flex">
                   <Button
-                    className="grid size-6 cursor-pointer place-items-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground hover:bg-border hover:text-foreground [&_svg]:size-3.75"
+                    className="grid size-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-active hover:text-foreground [&_svg]:size-3.75"
                     aria-label={`Rename ${row.title}`}
                     onPress={() => { setEditingKey(key); setEditText(row.title); }}
                   >
@@ -177,7 +177,7 @@ export function SessionHistoryMenu({
                   </Button>
                   <DialogTrigger onOpenChange={(isOpen) => { if (isOpen) setDeleteError(null); }}>
                     <Button
-                      className="grid size-6 cursor-pointer place-items-center rounded-sm border-0 bg-transparent p-0 text-muted-foreground hover:bg-border hover:text-foreground [&_svg]:size-3.75"
+                      className="grid size-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-active hover:text-foreground [&_svg]:size-3.75"
                       aria-label={`Delete ${row.title}`}
                     >
                       <TrashIcon />

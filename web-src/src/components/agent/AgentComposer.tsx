@@ -48,7 +48,7 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
  * distinguishable. All pills share one quiet treatment — the session
  * settings live behind a single trigger, so no pill needs emphasis. */
 const pillClass =
-  'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
+  'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
 const pillLockedClass = 'cursor-default opacity-60';
 const pillChevronClass = '-ml-px size-3 shrink-0 opacity-75';
 
@@ -57,7 +57,7 @@ const menuPopupClass =
   'z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-card p-1.5 shadow-elevation';
 const menuHeadClass = 'flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm';
 const optClass =
-  'flex w-full cursor-pointer items-start gap-2.5 rounded-lg border-0 bg-transparent p-2 text-left text-foreground hover:bg-muted data-focused:bg-muted data-highlighted:bg-muted';
+  'flex w-full cursor-pointer items-start gap-2.5 rounded-md border-0 bg-transparent p-2 text-left text-foreground hover:bg-muted data-focused:bg-muted data-highlighted:bg-muted';
 const optActiveClass =
   'bg-accent/12 shadow-[inset_2px_0_0_var(--accent)] hover:bg-accent/12 data-focused:bg-accent/12 data-highlighted:bg-accent/12';
 const optIconClass = 'mt-px size-4.5 shrink-0 text-muted-foreground';
@@ -75,7 +75,7 @@ const effortChoiceCurClass =
 
 /* Neutral send button — accent only on hover-when-ready (VSCode-style). */
 const sendClass =
-  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg border p-0 [&_svg]:size-4.5';
+  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border p-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4.5';
 const sendReadyClass =
   'border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:cursor-default disabled:opacity-40';
 const sendStopClass = 'border-destructive bg-destructive text-primary-foreground';

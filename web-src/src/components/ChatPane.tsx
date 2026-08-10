@@ -74,7 +74,9 @@ export function ChatPane() {
             <div
               key={tab.id}
               className={cn(
-                'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-md border border-transparent border-b-0 py-1 pr-1.5 pl-2.5 text-sm whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
+                // text-base (13px) matches the document tabs in the main
+                // pane — the two tab strips are one role, one size.
+                'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-md border border-transparent border-b-0 py-1 pr-1.5 pl-2.5 text-base whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
                 tab.id === activeId && 'border-border bg-background pb-1.25 font-medium text-foreground hover:bg-background',
               )}
               role="tab"

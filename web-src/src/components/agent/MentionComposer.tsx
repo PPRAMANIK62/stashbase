@@ -356,7 +356,10 @@ export function MentionComposer({
             }
           }),
           EditorView.theme({
-            '&': { minHeight: '44px', maxHeight: '144px', font: 'inherit', fontSize: '13px' },
+            // Scaled like every other chrome text (text-base = 13px at
+            // scale 1) — a raw px here was the one input that ignored the
+            // UI-scale setting.
+            '&': { minHeight: '44px', maxHeight: '144px', font: 'inherit', fontSize: 'calc(13px * var(--ui-scale))' },
             '&.cm-focused': { outline: 'none' },
             '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.5' },
             '.cm-content': { minHeight: '38px', padding: '8px 2px 0', caretColor: 'var(--fg)' },
