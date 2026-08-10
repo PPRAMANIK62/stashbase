@@ -48,6 +48,7 @@ export interface ActiveFolderWorkspace {
     },
   ) => Promise<void>;
   dismissIndexWarning: () => Promise<void>;
+  decideSemanticIndexing: (decision: 'start' | 'defer') => Promise<void>;
   setFolderOrder: (parentPath: string, names: string[]) => Promise<void>;
   selectFile: (name: string) => Promise<void>;
   selectFileWithHighlight: (name: string, hit: PendingHighlight) => Promise<void>;
@@ -60,6 +61,8 @@ export interface ActiveFolderWorkspace {
   consumePendingScroll: () => void;
   consumePendingHighlight: () => void;
   toggleEditMode: () => Promise<void>;
+  updateTabPdfPage: (tabId: string, page: number) => void;
+  setUnsupportedModalOpen: (open: boolean) => void;
   newNote: () => Promise<void>;
   newFolder: (path: string) => Promise<void>;
   deleteFile: (name: string) => Promise<void>;
@@ -253,6 +256,7 @@ export function useActiveFolderWorkspace(
     folders.openFolderByName,
     folders.prepareForFolderRemoval,
     search.dismissIndexWarning,
+    search.decideSemanticIndexing,
     search.markVisibleFilesPendingForSearch,
     search.refreshIndexState,
     search.runSearch,
@@ -271,6 +275,8 @@ export function useActiveFolderWorkspace(
     documents.selectFile,
     documents.selectFileWithHighlight,
     documents.toggleEditMode,
+    documents.updateTabPdfPage,
+    documents.setUnsupportedModalOpen,
     files.deleteFile,
     files.deleteFolder,
     files.moveFile,

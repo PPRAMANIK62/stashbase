@@ -74,10 +74,25 @@ export interface FolderState {
   homeDir?: string;
 }
 
+export interface UnsupportedFileSummary {
+  sourceCode: number;
+  other: number;
+  otherExtensions: Array<{
+    extension: string;
+    count: number;
+  }>;
+}
+
+export interface OnboardingPreferences {
+  sourceCodeNoticeVersion?: number;
+  unsupportedFormatsNoticeVersion?: number;
+}
+
 export interface FilesPayload {
   files: FileMeta[];
   folders: FolderMeta[];
   folder: string;
+  unsupportedFiles?: UnsupportedFileSummary;
 }
 
 export interface FileBody {
@@ -106,6 +121,13 @@ export type SessionBlock =
   | { kind: 'thinking'; id: string; text: string }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
 
+export interface SessionReplay {
+  protocol: 2;
+  messages: SessionBlock[];
+  /** Null means inherited/unknown and must not become a resume override. */
+  effort: string | null;
+}
+
 export interface IndexStatus {
   folder?: string;
   total: number;
@@ -123,6 +145,11 @@ export interface IndexStatus {
    *  upToDate, this ignores orphaned/hidden index rows that are not
    *  relevant to search-readiness accounting. */
   visibleIndexingSettled?: boolean;
+  semanticIndexing?: {
+    state: 'disabled' | 'awaiting-decision' | 'paused' | 'partial-paused' | 'indexing' | 'partial-indexing' | 'ready' | 'failed';
+    sourceCount?: number;
+    estimatedBytes?: number;
+  };
   /** False while the server is still loading the index cache for a folder. */
   indexReady?: boolean;
   /** Folder-relative paths of PDF/image/DOCX sources that are queued or

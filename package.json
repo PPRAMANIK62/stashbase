@@ -57,7 +57,7 @@
     "test:conversion-scheduler": "node --import tsx --test server/filesystem-path.test.ts server/folder-relative-path.test.ts server/folder-window.test.ts server/window-context-route.test.ts server/internal-shutdown-route.test.ts server/files.test.ts server/file-hash.test.ts server/http.test.ts server/markdown-source-format.test.ts server/keyword-search.test.ts server/index-status.test.ts server/indexer-mfs-path.test.ts server/session-path.test.ts server/conversion-scheduler.test.ts server/conversion-auxiliary.test.ts server/conversion-status.test.ts server/conversion.test.ts server/extractor-process.test.ts server/audio-transcription.test.ts server/transcription-models.test.ts server/transcription-provider.test.ts server/transcription-runtime.test.ts server/transcription-tools.test.ts server/upload.test.ts",
     "test:library-files": "node --import tsx --test server/library-file-mutations.test.ts server/library-operations/index.test.ts server/routes/library-files.test.ts",
     "test:retrieval": "node --import tsx --test server/retrieval/index.test.ts",
-    "test:agent": "node --import tsx --test server/__tests__/agent.test.ts server/__tests__/agent-contract.test.ts server/__tests__/agent-projects.test.ts server/__tests__/codex-agent.test.ts",
+    "test:agent": "node --import tsx --test server/__tests__/agent.test.ts server/__tests__/agent-contract.test.ts server/__tests__/agent-history-routes.test.ts server/__tests__/agent-projects.test.ts server/__tests__/codex-agent.test.ts",
     "test:agent:native": "node --import tsx --test server/__tests__/agent-native-smoke.test.ts",
     "test:mcp": "node --import tsx --test server/__tests__/mcp-http-settings.test.ts server/__tests__/mcp-http-service.test.ts server/__tests__/mcp-http-transport.test.ts server/__tests__/shutdown-cleanup.test.ts",
     "test:release-gate": "node --test scripts/require-green-ci.test.mjs",
@@ -193,7 +193,8 @@
     "linux": {
       "category": "Office",
       "target": [
-        "deb"
+        "deb",
+        "AppImage"
       ],
       "icon": "build/icons"
     },
@@ -203,12 +204,12 @@
         "libnss3",
         "libatk1.0-0",
         "libatk-bridge2.0-0",
-        "libgdk-pixbuf2.0-0",
+        "libgdk-pixbuf-2.0-0 | libgdk-pixbuf2.0-0",
         "libgtk-3-0",
         "libx11-xcb1",
         "libxcb-dri3-0",
         "libxtst6",
-        "libasound2"
+        "libasound2 | libasound2t64"
       ]
     }
   },
@@ -251,6 +252,7 @@
     "@types/node": "^22.10.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/react-test-renderer": "19.1.0",
     "@types/sanitize-html": "^2.16.1",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.1",
@@ -259,6 +261,7 @@
     "electron-builder": "^26.0.12",
     "esbuild": "^0.28.0",
     "http-proxy-middleware": "^4.0.0",
+    "react-test-renderer": "19.2.6",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.20.0",
     "typescript": "^5.7.3",

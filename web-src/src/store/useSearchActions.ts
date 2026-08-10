@@ -205,6 +205,7 @@ export function useSearchActions(
         lastTreeVersion.current >= 0 && newTreeVersion !== lastTreeVersion.current;
       lastTreeVersion.current = newTreeVersion;
       dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: newPending });
+      dispatch({ type: 'SEMANTIC_INDEXING_STATE', state: s.semanticIndexing ?? null });
       if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
       if (blockedChanged) dispatch({ type: 'BLOCKED_CONVERSIONS', paths: newBlocked });
       const incomingProgress = s.conversionProgress ?? {};
@@ -475,7 +476,15 @@ export function useSearchActions(
     }
   }, []);
 
+  const decideSemanticIndexing = useCallback(async (decision: 'start' | 'defer') => {
+    const folderAtStart = stateRef.current.folderPath;
+    if (!folderAtStart) return;
+    await api.semanticIndexingDecision(decision, folderAtStart);
+    await refreshIndexState(folderAtStart);
+  }, [refreshIndexState]);
+
   return {
+    decideSemanticIndexing,
     dismissIndexWarning,
     markVisibleFilesPendingForSearch,
     refreshIndexState,

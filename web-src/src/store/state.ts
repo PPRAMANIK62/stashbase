@@ -14,8 +14,10 @@ import type {
   PreparationFailure,
   ConversionProgress,
   IndexWarning,
+  IndexStatus,
   SearchHit,
   Agent,
+  UnsupportedFileSummary,
 } from '../api';
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 
@@ -127,6 +129,9 @@ export interface Tab {
    *  the user navigates to a different file. */
   pendingHighlight: PendingHighlight | null;
   saveStatus: SaveStatus;
+  /** Last page viewed in this PDF tab for the renderer session. A different
+   *  file or source version clears it before the viewer reloads. */
+  pdfPage?: number;
 }
 
 /** Search-hit-derived highlight signal: which lines (for HTML / MD /
@@ -199,6 +204,8 @@ export interface State {
 
   files: FileMeta[];
   folders: FolderMeta[];
+  unsupportedFiles?: UnsupportedFileSummary;
+  unsupportedModalOpen?: boolean;
 
   /** Manual sidebar ordering — map of `parentPath` → ordered list of
    *  child basenames. Empty map = use default (folders-first +
@@ -262,6 +269,7 @@ export interface State {
    *  embedded/indexed. Keyword search ignores this state and can search
    *  converted/source text without embeddings. */
   pendingSemanticNames: Set<string>;
+  semanticIndexing: NonNullable<IndexStatus['semanticIndexing']> | null;
   /** Folder-relative paths of PDF/image/DOCX conversions that are queued or
    *  running. Kept for search-readiness accounting and refresh timing. */
   pendingConversions: string[];
@@ -373,6 +381,8 @@ export const initialState: State = {
   libraryFolderStatuses: {},
   files: [],
   folders: [],
+  unsupportedFiles: undefined,
+  unsupportedModalOpen: false,
   fileOrder: {},
   tabs: [],
   recentFilePaths: [],
@@ -392,6 +402,7 @@ export const initialState: State = {
   chatTabRecencyByAgent: {},
   pendingResume: null,
   pendingSemanticNames: new Set(),
+  semanticIndexing: null,
   pendingConversions: [],
   blockedConversions: [],
   conversionProgress: {},
@@ -426,7 +437,7 @@ export type Action =
   | { type: 'LIBRARY_FOLDER_STATUS'; path: string; status: LibraryFolderStatus }
   | { type: 'LIBRARY_FOLDER_STATUS_REMOVE'; path: string }
   | { type: 'FOLDER_CONTEXT'; folder: string; folderPath: string }
-  | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string }
+  | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string; unsupportedFiles?: UnsupportedFileSummary }
   | { type: 'FILE_ORDER_LOADED'; order: Record<string, string[]> }
   /** Replace one folder's ordered list (optimistic update before the
    *  PUT lands). Names list may include entries that no longer exist
@@ -491,6 +502,7 @@ export type Action =
    *  — does not touch expand state, activeFolder, or the open file. */
   | { type: 'SELECT_PATH'; path: string }
   | { type: 'PENDING_SEMANTIC_NAMES'; names: Set<string> }
+  | { type: 'SEMANTIC_INDEXING_STATE'; state: State['semanticIndexing'] }
   | { type: 'PENDING_CONVERSIONS'; paths: string[] }
   | { type: 'BLOCKED_CONVERSIONS'; paths: string[] }
   | { type: 'CONVERSION_PROGRESS'; progress: Record<string, ConversionProgress> }
@@ -525,6 +537,7 @@ export type Action =
    *  Triggered by double-click on a sidebar file, double-click on the
    *  tab title, or entering edit mode on the tab. */
   | { type: 'PROMOTE_TAB'; id: string }
+  | { type: 'TAB_PDF_PAGE'; id: string; page: number }
   /** Move tab `id` to immediately before tab `beforeId` (drag-reorder).
    *  `beforeId === null` appends to the end. No-op when the relative
    *  position wouldn't change — keeps the reducer idempotent so a
@@ -533,4 +546,5 @@ export type Action =
   | { type: 'NEW_FOLDER_INPUT'; open: boolean }
   | { type: 'FIND_OPEN' }
   | { type: 'FIND_CLOSE' }
-  | { type: 'FIND_SET'; patch: Partial<State['find']> };
+  | { type: 'FIND_SET'; patch: Partial<State['find']> }
+  | { type: 'UNSUPPORTED_MODAL'; open: boolean };

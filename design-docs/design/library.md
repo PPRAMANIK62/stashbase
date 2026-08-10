@@ -90,6 +90,7 @@ to migrate them into a StashBase-specific storage model.
   Agent-contract files (`AGENTS.md`, `CLAUDE.md`) are ordinary visible
   Markdown, and agents can still read and write dot-directory config
   directly.
+- PDF tabs retain their active reading position (page number) across tab switches during a session. Reusing a preview tab for a different file resets the stored page position.
 - Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
   strip's `+` button — distinct from Cmd/Ctrl+N, which creates a note file.
 - Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active
@@ -109,10 +110,15 @@ to migrate them into a StashBase-specific storage model.
 - Search results and agent file links return users to those source files.
 - Root-level `AGENTS.md` and optional `CLAUDE.md` bridge files are visible,
   editable user files. StashBase only creates missing defaults.
+- Opening a folder starts changed-content indexing checks in the background.
+  When the pending semantic workload is unusually large, a persistent,
+  non-blocking notice lets the user start it or leave it paused for that folder.
 
 ## Experience Contract
 
 - Opening a folder should feel like navigation, not a long preparation task.
+- Deferring semantic indexing must not block browsing, editing, preparation, or
+  keyword search, and the decision must remain recoverable after restart.
 - Opening or closing one window must not switch or close another window's
   folder context.
 - Window lifecycle shortcuts must not be interpreted as document-tab commands.
@@ -144,6 +150,7 @@ to migrate them into a StashBase-specific storage model.
   with the Library folder list anchored at the bottom — the outline belongs
   to the working context above the global list. The Library and outline
   sections stay independently collapsible.
+- StashBase displays only supported document and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a persistent callout banner in the Files panel.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
 - Command Palette exposes only safe, context-available actions the app already

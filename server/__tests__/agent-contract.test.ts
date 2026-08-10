@@ -73,9 +73,10 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'scope-changed', scope: { kind: 'folder', path: '/Users/me/Documents/StashBase/Project' } },
     { t: 'turn-end', isError: false },
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
+    { t: 'exit', message: 'runtime stopped unexpectedly' },
   ];
   assert.equal(clientEvents.length, 6);
-  assert.equal(events.length, 16);
+  assert.equal(events.length, 17);
 });
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {

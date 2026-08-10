@@ -155,6 +155,22 @@ test('a save acknowledgement advances the version without replacing the live doc
   assert.equal(next.tabs[0].file?.version, 'after');
 });
 
+test('replacing a PDF source version clears its saved page', () => {
+  let state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'paper.pdf', format: 'pdf', content: '', version: 'before' },
+  });
+  const tabId = state.activeTabId!;
+  state = reducer(state, { type: 'TAB_PDF_PAGE', id: tabId, page: 10 });
+
+  const unchanged = reducer(state, { type: 'FILE_PATCH', patch: { version: 'before' } });
+  assert.equal(unchanged.tabs[0].pdfPage, 10);
+
+  const replaced = reducer(state, { type: 'FILE_PATCH', patch: { version: 'after' } });
+  assert.equal(replaced.tabs[0].file?.version, 'after');
+  assert.equal(replaced.tabs[0].pdfPage, undefined);
+});
+
 test('only dirty missing document tabs survive sidebar pruning', () => {
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',
@@ -368,4 +384,83 @@ test('scope and type filter changes clear both modes\' results', () => {
 
   const cleared = reducer(scoped, { type: 'SEARCH_SCOPE', scope: null });
   assert.equal(cleared.searchScope, null);
+});
+
+test('PDF page numbers are isolated per tab and reset when replacing a file', () => {
+  let state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'doc1.pdf', format: 'pdf', content: '' },
+    preview: true,
+  });
+  const tabId = state.activeTabId!;
+  assert.equal(state.tabs[0].pdfPage, undefined);
+
+  // Set the PDF page
+  state = reducer(state, { type: 'TAB_PDF_PAGE', id: tabId, page: 4 });
+  assert.equal(state.tabs[0].pdfPage, 4);
+
+  // Open a new tab (not replacing preview)
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'doc2.pdf', format: 'pdf', content: '' },
+    newTab: true,
+  });
+  const secondTabId = state.activeTabId!;
+  assert.equal(state.tabs.length, 2);
+  assert.equal(state.tabs[0].pdfPage, 4); // retained on the first tab
+  assert.equal(state.tabs[1].pdfPage, undefined); // undefined on the second tab
+
+  state = reducer(state, { type: 'TAB_PDF_PAGE', id: secondTabId, page: 2 });
+  state = reducer(state, { type: 'ACTIVATE_TAB', id: tabId });
+  assert.equal(state.tabs.find((tab) => tab.id === tabId)?.pdfPage, 4);
+  state = reducer(state, { type: 'ACTIVATE_TAB', id: secondTabId });
+  assert.equal(state.tabs.find((tab) => tab.id === secondTabId)?.pdfPage, 2);
+
+  // Reuse preview tab to open another file (doc3.pdf) -> should clear the pdfPage
+  state = reducer(state, { type: 'ACTIVATE_TAB', id: tabId });
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'doc3.pdf', format: 'pdf', content: '' },
+    preview: true,
+  });
+  assert.equal(state.tabs[0].pdfPage, undefined); // reset / not leaked from doc1.pdf
+});
+
+test('FILES_LOADED captures unsupportedFiles and folder change resets modal state', () => {
+  const summary = {
+    sourceCode: 3,
+    other: 1,
+    otherExtensions: [{ extension: '.zip', count: 1 }],
+  };
+
+  let state = reducer(freshState({ unsupportedModalOpen: true }), {
+    type: 'FILES_LOADED',
+    files: [],
+    folders: [],
+    folder: 'notes',
+    folderPath: '/notes',
+    unsupportedFiles: summary,
+  });
+
+  assert.deepEqual(state.unsupportedFiles, summary);
+
+  state = reducer(state, {
+    type: 'FILES_LOADED',
+    files: [],
+    folders: [],
+    folder: 'other',
+    folderPath: '/other',
+    unsupportedFiles: undefined,
+  });
+
+  assert.equal(state.unsupportedFiles, undefined);
+  assert.equal(state.unsupportedModalOpen, false);
+});
+
+test('UNSUPPORTED_MODAL toggle action updates state', () => {
+  let state = reducer(freshState(), { type: 'UNSUPPORTED_MODAL', open: true });
+  assert.equal(state.unsupportedModalOpen, true);
+
+  state = reducer(state, { type: 'UNSUPPORTED_MODAL', open: false });
+  assert.equal(state.unsupportedModalOpen, false);
 });

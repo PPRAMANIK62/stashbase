@@ -35,13 +35,14 @@ export interface QueuedTurnPreview {
 }
 
 export function MessageList({
-  blocks, queuedTurns, turnActive, phase, fatal, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
+  blocks, queuedTurns, turnActive, phase, fatal, fatalRecoveryLabel, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
 }: {
   blocks: Block[];
   queuedTurns: QueuedTurnPreview[];
   turnActive: boolean;
   phase: 'connecting' | 'live' | 'closed';
   fatal: string | null;
+  fatalRecoveryLabel: 'Retry' | 'Reconnect';
   agentShortName: string;
   onPermission: (toolBlockId: string, permId: string, allow: boolean) => void;
   onSteerQueued: (id: string) => void;
@@ -82,7 +83,7 @@ export function MessageList({
     >
       {phase === 'connecting' && <ConnectingNotice agentShortName={agentShortName} />}
       {blocks.length === 0 && phase === 'closed' && fatal && (
-        <FatalState fatal={fatal} agentShortName={agentShortName} onRetry={onRetry} />
+        <FatalState fatal={fatal} agentShortName={agentShortName} recoveryLabel={fatalRecoveryLabel} onRetry={onRetry} />
       )}
       {turns.map((turn) => (
         <div className="agent-turn" key={turn.key}>
@@ -113,7 +114,7 @@ export function MessageList({
         />
       ))}
       {blocks.length > 0 && phase === 'closed' && fatal && (
-        <FatalInline fatal={fatal} agentShortName={agentShortName} onRetry={onRetry} />
+        <FatalInline fatal={fatal} agentShortName={agentShortName} recoveryLabel={fatalRecoveryLabel} onRetry={onRetry} />
       )}
       {turnActive && !tailBlockSpeaks(blocks) && (
         // Generic tail status renders only when no visible block already
@@ -535,10 +536,11 @@ const fatalDetailClass =
   'max-h-35 overflow-auto text-sm leading-normal break-words whitespace-pre-wrap text-muted-foreground';
 
 function FatalState({
-  fatal, agentShortName, onRetry,
+  fatal, agentShortName, recoveryLabel, onRetry,
 }: {
   fatal: string;
   agentShortName: string;
+  recoveryLabel: 'Retry' | 'Reconnect';
   onRetry: () => void;
 }) {
   const copy = fatalCopy(fatal, agentShortName);
@@ -547,17 +549,18 @@ function FatalState({
       <StatusMessage tone="error" className="flex w-[min(440px,100%)] flex-col items-start gap-2 rounded-xl p-3.5">
         <div className={fatalTitleClass}>{copy.title}</div>
         <div className={fatalDetailClass}>{copy.detail}</div>
-        <Button className={outlineSmClass} onPress={onRetry}>Retry</Button>
+        <Button className={outlineSmClass} onPress={onRetry}>{recoveryLabel}</Button>
       </StatusMessage>
     </div>
   );
 }
 
 function FatalInline({
-  fatal, agentShortName, onRetry,
+  fatal, agentShortName, recoveryLabel, onRetry,
 }: {
   fatal: string;
   agentShortName: string;
+  recoveryLabel: 'Retry' | 'Reconnect';
   onRetry: () => void;
 }) {
   const copy = fatalCopy(fatal, agentShortName);
@@ -567,7 +570,7 @@ function FatalInline({
         <div className={fatalTitleClass}>{copy.title}</div>
         <div className={fatalDetailClass}>{copy.detail}</div>
       </div>
-      <Button className={outlineSmClass} onPress={onRetry}>Retry</Button>
+      <Button className={outlineSmClass} onPress={onRetry}>{recoveryLabel}</Button>
     </StatusMessage>
   );
 }

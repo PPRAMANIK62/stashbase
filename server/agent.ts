@@ -31,7 +31,7 @@
  *     { t: "permission", id, toolUseId, name, title, input }  // needs approve/reject
  *     { t: "turn-end", isError }                       // result message
  *     { t: "error", message }
- *     { t: "exit" }                                    // session ended
+ *     { t: "exit", message? }                          // normal or fatal session end
  */
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -69,6 +69,7 @@ import { detectViewerFormat } from './format.ts';
 import { isAgentReadableDerivedTextReady } from './library-file-reader.ts';
 
 type ClaudeSkillCommand = { name: string; description: string; argumentHint: string };
+type ClaudeResultMessage = Extract<SDKMessage, { type: 'result' }>;
 
 export function claudeSkillCatalogEvent(commands: readonly ClaudeSkillCommand[]): Extract<AgentServerEvent, { t: 'skills' }> {
   const skills: AgentSkill[] = commands.filter((command) => Boolean(command.name)).map((command) => ({ id: command.name, label: command.name, ...(command.description ? { description: command.description } : {}), ...(command.argumentHint ? { argumentHint: command.argumentHint } : {}) }));
@@ -255,11 +256,15 @@ interface Pending {
 }
 
 /** One live Agent-SDK session bridged to one WebSocket. */
-class AgentSession implements AttributedAgentSession {
+export class AgentSession implements AttributedAgentSession {
   private input = new Pushable<SDKUserMessage>();
   private q: Query | null = null;
   private pending = new Map<string, Pending>();
   private closed = false;
+  private turnActive = false;
+  private turnGeneration = 0;
+  private interruptRequested = false;
+  private interruptTask: Promise<void> | null = null;
   private nativeDerivedReadRedirected = new Set<string>();
   /** The SDK session_id, captured from the init message. Sent to the
    *  client so the history dropdown can mark this session active. */
@@ -276,6 +281,8 @@ class AgentSession implements AttributedAgentSession {
   private rebound: string | null = null;
   private models: AgentModel[] = [];
   private skills = new Set<string>();
+  private pumpTask: Promise<void> | null = null;
+  private retirementTask: Promise<void> | null = null;
 
   constructor(
     private ws: WebSocket,
@@ -284,13 +291,16 @@ class AgentSession implements AttributedAgentSession {
     private resume?: string,
     private access: PermissionMode = 'default',
     private model?: string,
+    private onDispose?: (session: AgentSession, retirement: Promise<void>) => void,
+    private queryFactory: typeof query = query,
+    private resolveBinary: () => string | null = resolveClaudeBinary,
+    private resumeBelongsToFolder: typeof resumeMatchesCwd = resumeMatchesCwd,
     /** Explicit, membership-validated session folder. Undefined with no
      *  library scope follows the window's current folder at connect time
      *  (legacy clients), else the library. */
     private folder?: string,
     /** Explicit library-wide scope (`scope=library` on the connect URL). */
     private scope?: 'library',
-    private onDispose?: (session: AgentSession) => void,
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
     registerAttributedAgentSession(this.attributionId, this);
@@ -301,9 +311,6 @@ class AgentSession implements AttributedAgentSession {
 
   readonly windowId: string;
   readonly agentId = 'claude' as const;
-  /** True between turn-start and turn-end — window-fallback attribution
-   *  (see agent-session-registry.ts) keys off this. */
-  private turnActiveFlag = false;
   /** Private per-session attribution id. Rides the session env
    *  (`STASHBASE_AGENT_SESSION_ID`) → stdio MCP host → request header, so
    *  host-side MCP tools can find the live calling session. */
@@ -321,7 +328,7 @@ class AgentSession implements AttributedAgentSession {
   }
 
   turnInFlight(): boolean {
-    return this.turnActiveFlag;
+    return this.turnActive;
   }
 
   isLibraryScoped(): boolean {
@@ -344,11 +351,16 @@ class AgentSession implements AttributedAgentSession {
     return true;
   }
 
-  begin(): void {
-    runWithWindowId(this.windowId, () => { void this.start(); });
+  get isClosed(): boolean { return this.closed; }
+  retirement(): Promise<void> {
+    return this.retirementTask ?? Promise.resolve();
   }
 
-  private async start(): Promise<void> {
+  begin(beforeNativeStart?: () => Promise<boolean>): void {
+    runWithWindowId(this.windowId, () => { void this.start(beforeNativeStart); });
+  }
+
+  private async start(beforeNativeStart?: () => Promise<boolean>): Promise<void> {
     if (this.closed) return;
     // An explicit folder pins the session; an explicit library scope (or
     // no folder anywhere) binds the folder home as the reserved library
@@ -363,17 +375,35 @@ class AgentSession implements AttributedAgentSession {
     this.libraryScoped = binding.libraryScoped;
     this.cwd = cwd;
     if (this.closed) return;
-    if (this.resume && !(await resumeMatchesCwd(this.resume, cwd))) {
+    if (this.resume && !(await this.resumeBelongsToFolder(this.resume, cwd))) {
       if (this.closed) return;
-      this.send({ t: 'error', message: 'That session belongs to a different folder.' });
-      this.finish();
+      this.finish('That session belongs to a different folder.');
       return;
     }
     if (this.closed) return;
-    const claudeCodeExecutable = resolveClaudeBinary();
+    if (beforeNativeStart) {
+      let mayStart = false;
+      try { mayStart = await beforeNativeStart(); }
+      catch (err: unknown) {
+        this.finish(errorMessage(err));
+        return;
+      }
+      if (!mayStart || this.closed) return;
+      // Legacy clients inherit the window folder at connect time, so a
+      // folder switch during ownership handoff invalidates that start.
+      // Explicit folder/library scopes are pinned independently of later
+      // window navigation and must survive it.
+      if (!this.folder && this.scope !== 'library') {
+        const activeFolder = getCurrentFolder();
+        if (!activeFolder || !filesystemPath.equal(activeFolder, cwd)) {
+          this.finish('The folder changed before the session started.');
+          return;
+        }
+      }
+    }
+    const claudeCodeExecutable = this.resolveBinary();
     if (!claudeCodeExecutable) {
-      this.send({ t: 'error', message: missingClaudeMessage() });
-      this.finish();
+      this.finish(missingClaudeMessage());
       return;
     }
     // Instruction bridge files belong to member folders; a library-wide
@@ -384,7 +414,7 @@ class AgentSession implements AttributedAgentSession {
     // folder's headless session hangs at "working" with no visible prompt.
     ensureClaudeFolderTrust(cwd);
     try {
-      this.q = query({
+      this.q = this.queryFactory({
         prompt: this.input,
         options: {
           cwd,
@@ -435,8 +465,7 @@ class AgentSession implements AttributedAgentSession {
       });
     } catch (err: unknown) {
       reportAgentRuntimeFailure('claude', err);
-      this.send({ t: 'error', message: errorMessage(err) });
-      this.finish();
+      this.finish(errorMessage(err));
       return;
     }
     if (this.closed) {
@@ -446,7 +475,7 @@ class AgentSession implements AttributedAgentSession {
     await this.publishModels();
     await this.publishSkills();
     this.send({ t: 'ready' });
-    void this.pump();
+    this.pumpTask = this.pump();
   }
 
   /** Ask the SDK rather than encoding Claude aliases or release names here.
@@ -487,15 +516,17 @@ class AgentSession implements AttributedAgentSession {
   /** Drain the SDK message stream until it ends or errors. */
   private async pump(): Promise<void> {
     if (!this.q) return;
+    let failure: string | undefined;
     try {
       for await (const msg of this.q) this.onSdkMessage(msg);
+      if (!this.closed) failure = 'Claude session ended unexpectedly.';
     } catch (err: unknown) {
       if (!this.closed) {
         reportAgentRuntimeFailure('claude', err);
-        this.send({ t: 'error', message: errorMessage(err) });
+        failure = errorMessage(err);
       }
     }
-    this.finish();
+    this.finish(failure);
   }
 
   private onSdkMessage(msg: SDKMessage): void {
@@ -505,12 +536,17 @@ class AgentSession implements AttributedAgentSession {
     const sid = (msg as { session_id?: unknown }).session_id;
     if (!this.sessionId && typeof sid === 'string' && sid) {
       this.sessionId = sid;
+      nativeOwnership.register(sid, this);
       this.send({ t: 'session-id', id: sid });
     }
     if (msg.type === 'system' && msg.subtype === 'init' && msg.model) {
       this.send(claudeActiveModelEvent(this.models, msg.model));
     }
     if (msg.type === 'system' && msg.subtype === 'commands_changed') this.publishSkillCommands(msg.commands);
+    if (msg.type === 'system' && msg.subtype === 'api_retry') {
+      log.info(`Claude SDK is retrying: attempt ${msg.attempt} of ${msg.max_retries} (delay ${msg.retry_delay_ms}ms)`);
+      return;
+    }
     switch (msg.type) {
       case 'stream_event': {
         // Partial deltas → typewriter streaming for text + thinking.
@@ -557,13 +593,70 @@ class AgentSession implements AttributedAgentSession {
         break;
       }
       case 'result': {
-        this.turnActiveFlag = false;
-        this.send({ t: 'turn-end', isError: msg.is_error === true });
+        const pendingInterrupt = this.interruptTask;
+        if (pendingInterrupt) {
+          const resultGeneration = this.turnGeneration;
+          void pendingInterrupt.then(() => {
+            if (this.turnGeneration === resultGeneration) this.onClaudeResult(msg);
+          });
+        } else {
+          this.onClaudeResult(msg);
+        }
         break;
       }
       default:
         break;
     }
+  }
+
+  private onClaudeResult(msg: ClaudeResultMessage): void {
+    // The SDK result is terminal authority for one active turn. Ignore
+    // duplicate or late terminal messages before they can append another
+    // persistent error or settle a queued follow-up twice.
+    if (!this.turnActive) return;
+    const isError = msg.is_error === true;
+    const wasCancelled = this.interruptRequested;
+    this.turnActive = false;
+    this.interruptRequested = false;
+    this.interruptTask = null;
+
+    if (isError && !wasCancelled) {
+      const errorsField = (msg as { errors?: unknown }).errors;
+      const rawErrors = Array.isArray(errorsField)
+        ? errorsField.flatMap((entry: unknown) => {
+            if (typeof entry !== 'string') return [];
+            const trimmed = entry.trim();
+            return trimmed ? [trimmed] : [];
+          })
+        : [];
+
+      const uniqueErrors = Array.from(new Set(rawErrors));
+      let finalMessage = '';
+
+      if (uniqueErrors.length > 0) {
+        finalMessage = uniqueErrors.join('; ');
+        if (finalMessage.length > 2000) {
+          finalMessage = finalMessage.slice(0, 2000);
+        }
+      } else {
+        const subtype = msg.subtype;
+        if (subtype === 'error_max_turns') {
+          finalMessage = 'Claude stopped after reaching the maximum number of turns.';
+        } else if (subtype === 'error_max_budget_usd') {
+          finalMessage = 'Claude stopped after reaching the configured budget.';
+        } else if (subtype === 'error_max_structured_output_retries') {
+          finalMessage = 'Claude could not produce the requested structured response.';
+        } else {
+          finalMessage = 'Claude failed before completing the turn.';
+        }
+      }
+
+      if (finalMessage) {
+        this.send({ t: 'error', message: finalMessage });
+      }
+    }
+
+    this.send({ t: 'turn-end', isError: isError && !wasCancelled });
   }
 
   /** SDK permission callback. Auto-allow reads; round-trip writes/exec to
@@ -611,7 +704,13 @@ class AgentSession implements AttributedAgentSession {
         const skill = typeof msg.skill === 'string' ? msg.skill : undefined;
         if (skill && !this.skills.has(skill)) { this.send({ t: 'error', message: 'That skill is no longer available. Type / to choose another.' }); return; }
         if (!body.trim() && !skill) return;
-        this.turnActiveFlag = true;
+        // The renderer queues follow-ups and sends them only after the active
+        // terminal event. Refuse an out-of-contract concurrent prompt rather
+        // than letting one SDK result settle the wrong turn.
+        if (this.turnActive) return;
+        this.turnActive = true;
+        this.turnGeneration += 1;
+        this.interruptRequested = false;
         this.send({ t: 'turn-start' });
         this.input.push({
           type: 'user',
@@ -649,9 +748,35 @@ class AgentSession implements AttributedAgentSession {
         }
         break;
       }
-      case 'interrupt':
-        void this.q?.interrupt().catch(() => { /* not streaming yet */ });
+      case 'interrupt': {
+        if (!this.turnActive || !this.q || this.interruptRequested) break;
+        const interruptedGeneration = this.turnGeneration;
+        let nativeInterrupt: Promise<void>;
+        try {
+          nativeInterrupt = this.q.interrupt();
+        } catch (err: unknown) {
+          log.debug(`Claude interrupt request failed: ${errorMessage(err)}`);
+          break;
+        }
+        this.interruptRequested = true;
+        const trackedInterrupt = nativeInterrupt.then(
+          () => {
+            if (this.interruptTask === trackedInterrupt) this.interruptTask = null;
+          },
+          (err: unknown) => {
+            // A rejected native interrupt did not cancel the turn. Clear only
+            // the matching active generation so a late rejection cannot alter
+            // a later prompt's cancellation state.
+            if (this.interruptTask === trackedInterrupt) this.interruptTask = null;
+            if (this.turnActive && this.turnGeneration === interruptedGeneration) {
+              this.interruptRequested = false;
+            }
+            log.debug(`Claude interrupt request failed: ${errorMessage(err)}`);
+          },
+        );
+        this.interruptTask = trackedInterrupt;
         break;
+      }
       case 'close':
         this.dispose();
         break;
@@ -663,9 +788,9 @@ class AgentSession implements AttributedAgentSession {
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
 
-  private finish(): void {
+  private finish(message?: string): void {
     if (this.closed) return;
-    this.send({ t: 'exit' });
+    this.send({ t: 'exit', ...(message ? { message } : {}) });
     this.dispose();
   }
 
@@ -673,16 +798,32 @@ class AgentSession implements AttributedAgentSession {
     if (this.closed) return;
     this.closed = true;
     unregisterAttributedAgentSession(this.attributionId);
-    this.onDispose?.(this);
+    // Closing input prevents another prompt from entering this query. The
+    // retirement task then waits beyond interrupt acknowledgement until the
+    // SDK iterator/query has actually finished its process cleanup.
+    this.input.end();
+    this.retirementTask = this.retireNativeQuery();
+    this.onDispose?.(this, this.retirementTask);
     // Resolve any dangling permission prompts so the SDK loop unwinds.
     for (const [, p] of this.pending) {
       p.cleanup?.();
       p.resolve({ behavior: 'deny', message: 'Session closed.' });
     }
     this.pending.clear();
-    void this.q?.interrupt().catch(() => { /* already gone */ });
-    this.input.end();
     try { this.ws.close(); } catch { /* already closed */ }
+  }
+
+  private async retireNativeQuery(): Promise<void> {
+    const query = this.q;
+    if (!query) return;
+    try { await query.interrupt(); } catch { /* continue through cleanup */ }
+    if (this.pumpTask) {
+      await this.pumpTask.catch(() => { /* pump already reported the cause */ });
+    } else {
+      // Disposal can race startup before pump begins. AsyncGenerator.return()
+      // waits for the SDK query's generator-finally/process cleanup.
+      try { await query.return(undefined); } catch { /* already gone */ }
+    }
   }
 }
 
@@ -732,6 +873,67 @@ function stringifyToolResult(content: unknown): string {
  *  member folder; a window-folder switch leaves them running. */
 const sessions = new Set<AgentSession>();
 
+/** Serializes ownership of one persisted Claude transcript. After folder
+ * validation, active ownership is registered before a resumed query starts so
+ * a reconnect cannot race ahead of the old WebSocket close event. */
+export class ClaudeNativeSessionOwnership {
+  private active = new Map<string, AgentSession>();
+  private ownedIds = new Map<AgentSession, Set<string>>();
+  private tails = new Map<string, Promise<void>>();
+
+  register(id: string, session: AgentSession): void {
+    if (!this.active.has(id)) this.claim(id, session);
+  }
+
+  async acquire(id: string, session: AgentSession): Promise<boolean> {
+    const previousTail = this.tails.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const tail = new Promise<void>((resolve) => { release = resolve; });
+    const queued = previousTail.then(() => tail);
+    this.tails.set(id, queued);
+    await previousTail;
+    try {
+      if (session.isClosed) return false;
+      const previous = this.active.get(id);
+      if (previous && previous !== session) {
+        previous.dispose();
+        await previous.retirement();
+      }
+      if (session.isClosed) return false;
+      this.claim(id, session);
+      return true;
+    } finally {
+      release();
+      if (this.tails.get(id) === queued) this.tails.delete(id);
+    }
+  }
+
+  release(session: AgentSession): void {
+    const ids = this.ownedIds.get(session);
+    if (!ids) return;
+    for (const id of ids) {
+      if (this.active.get(id) === session) this.active.delete(id);
+    }
+    this.ownedIds.delete(session);
+  }
+
+  private claim(id: string, session: AgentSession): void {
+    const previous = this.active.get(id);
+    if (previous === session) return;
+    if (previous) {
+      const previousIds = this.ownedIds.get(previous);
+      previousIds?.delete(id);
+      if (previousIds?.size === 0) this.ownedIds.delete(previous);
+    }
+    this.active.set(id, session);
+    const ids = this.ownedIds.get(session) ?? new Set<string>();
+    ids.add(id);
+    this.ownedIds.set(session, ids);
+  }
+}
+
+const nativeOwnership = new ClaudeNativeSessionOwnership();
+
 export function attachAgentWebSocket(
   ws: WebSocket,
   windowId = 'default',
@@ -749,12 +951,19 @@ export function attachAgentWebSocket(
     resume,
     claudePermissionMode(access),
     model,
+    (s, retirement) => {
+      sessions.delete(s);
+      void retirement.finally(() => nativeOwnership.release(s));
+    },
+    undefined,
+    undefined,
+    undefined,
     folder,
     scope,
-    (s) => sessions.delete(s),
   );
   sessions.add(session);
-  session.begin();
+  if (resume) session.begin(() => nativeOwnership.acquire(resume, session));
+  else session.begin();
 }
 
 /** Kill every live agent session (optionally for one window). Called on

@@ -124,6 +124,12 @@ export interface AppConfigFile {
   /** Bounded, user-wide presentation preferences. These deliberately avoid
    * arbitrary theme, font, spacing, and layout customization. */
   appearance?: Partial<AppearancePreferences>;
+  onboarding?: OnboardingPreferences;
+}
+
+export interface OnboardingPreferences {
+  sourceCodeNoticeVersion?: number;
+  unsupportedFormatsNoticeVersion?: number;
 }
 
 export function readAppConfigStrict(): AppConfigFile {
@@ -430,4 +436,20 @@ export function migrateLegacyEmbedderConfig(): void {
   delete cfg.embedder.openaiKey;
   writeAppConfig(cfg);
   log.info('migrated legacy embedder.openaiKey into active embedder config');
+}
+
+export function getOnboardingPreferences(): OnboardingPreferences {
+  return readAppConfig().onboarding ?? {};
+}
+
+export function setOnboardingPreferences(next: Partial<OnboardingPreferences>): OnboardingPreferences {
+  const cfg = readAppConfig();
+  const current = cfg.onboarding ?? {};
+  const updated = {
+    ...current,
+    ...next,
+  };
+  cfg.onboarding = updated;
+  writeAppConfigStrict(cfg);
+  return updated;
 }

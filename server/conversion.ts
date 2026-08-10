@@ -130,11 +130,15 @@ export function setDerivedNoteIndexer(
  *  old derived text → re-convert. This is the change-detection signal now
  *  that the derived text lives in app data (path-hash keyed, so its
  *  location doesn't change when the source content changes). */
-function derivedIsFresh(spec: DerivedFreshnessSpec, absPath: string): boolean {
+export function derivedIsFresh(
+  spec: DerivedFreshnessSpec,
+  absPath: string,
+  known?: { sourceMtimeMs: number; derivedMtimeMs: number },
+): boolean {
   try {
     const derivedAbs = spec.derivedNote(absPath);
-    const derivedMtime = fs.statSync(derivedAbs).mtimeMs;
-    const sourceMtime = fs.statSync(absPath).mtimeMs;
+    const derivedMtime = known?.derivedMtimeMs ?? fs.statSync(derivedAbs).mtimeMs;
+    const sourceMtime = known?.sourceMtimeMs ?? fs.statSync(absPath).mtimeMs;
     return derivedMtime >= sourceMtime && (spec.derivedReady?.(absPath, derivedAbs) ?? true);
   } catch {
     return false; // derived missing (or source gone) → not fresh

@@ -67,6 +67,7 @@ import { blake3File } from './file-hash.ts';
 import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
+import { mount as mountOnboardingRoutes } from './routes/onboarding.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from './agent-adapters.ts';
 
 const log = logger('server');
@@ -277,6 +278,7 @@ if (!DEV_VITE) {
 // before a window has an open folder, so mount them before the gate.
 mountWindowContextRoutes(app);
 mountLibraryRoutes(app);
+mountOnboardingRoutes(app);
 
 // Route-prefix gate: every API path under these roots needs an open
 // folder. Centralises the NO_FOLDER 412 response so individual handlers

@@ -32,6 +32,7 @@ import {
 } from './codex-approval.ts';
 import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
 import {
+  codexTurnStatus,
   stringValue,
   toolResultFromItem,
   toolStartFromItem,
@@ -39,7 +40,11 @@ import {
   type JsonRpcId,
   type ThreadItem,
 } from './codex-protocol.ts';
-import { CodexRpcPeer } from './codex-rpc-transport.ts';
+import {
+  CodexRpcPeer,
+  CodexRpcRequestTimeoutError,
+  CODEX_RPC_REQUEST_TIMEOUT_MS,
+} from './codex-rpc-transport.ts';
 import {
   registerAttributedAgentSession,
   unregisterAttributedAgentSession,
@@ -163,6 +168,7 @@ export class CodexSession implements AttributedAgentSession {
     private scope?: 'library',
     private onDispose?: (session: CodexSession) => void,
     private spawnProcess: typeof spawnCodexAppServerProcess = spawnCodexAppServerProcess,
+    private requestTimeoutMs: number = CODEX_RPC_REQUEST_TIMEOUT_MS,
   ) {
     this.windowId = normalizeWindowId(windowId);
     this.resumeThreadId = typeof resume === 'string' && resume.trim() ? resume.trim() : null;
@@ -206,8 +212,7 @@ export class CodexSession implements AttributedAgentSession {
       this.ready = true;
       this.send({ t: 'ready' });
     } catch (err: unknown) {
-      this.send({ t: 'error', message: errorMessage(err) });
-      this.finish();
+      this.finish(errorMessage(err));
     }
   }
 
@@ -243,6 +248,7 @@ export class CodexSession implements AttributedAgentSession {
       if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
       proc.stdin.write(`${line}\n`);
     }, {
+      requestTimeoutMs: this.requestTimeoutMs,
       onRequest: ({ id, method, params }) => this.onServerRequest({ id, method, params }),
       onNotification: (method, params) => this.onNotification(method, params),
     });
@@ -263,10 +269,7 @@ export class CodexSession implements AttributedAgentSession {
       rpc.close(err);
       if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
       reportAgentRuntimeFailure('codex', err);
-      if (!this.closed) {
-        this.send({ t: 'error', message: errorMessage(err) });
-        this.handleAppServerExit(true);
-      }
+      if (!this.closed) this.handleAppServerExit(errorMessage(err));
     });
     proc.once('close', (code, signal) => {
       const error = new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`);
@@ -274,8 +277,7 @@ export class CodexSession implements AttributedAgentSession {
       if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
       if (!this.closed) {
         reportAgentRuntimeFailure('codex', error);
-        this.send({ t: 'error', message: error.message });
-        this.handleAppServerExit(true);
+        this.handleAppServerExit(error.message);
       }
     });
   }
@@ -405,6 +407,9 @@ export class CodexSession implements AttributedAgentSession {
         if (this.interruptRequested) void this.requestInterruptForTurn(id);
       }
     } catch (err: unknown) {
+      if (err instanceof CodexRpcRequestTimeoutError && err.method === 'turn/start') {
+        this.fenceTimedOutTurnStart();
+      }
       this.busy = false;
       this.activeTurnId = null;
       if (!this.closed) {
@@ -413,6 +418,22 @@ export class CodexSession implements AttributedAgentSession {
         }
         this.send({ t: 'turn-end', isError: !(err instanceof CodexTurnCancelledError) });
       }
+    }
+  }
+
+  /**
+   * `turn/start` mutates native state, so a timeout leaves its outcome
+   * ambiguous. Retire that entire transport generation before allowing
+   * another prompt; otherwise its late lifecycle notifications can overlap
+   * with and clear a newer turn. The next prompt resumes the same thread
+   * through a fresh app-server generation.
+   */
+  private fenceTimedOutTurnStart(): void {
+    const threadId = this.threadId;
+    this.disposeAppServer();
+    if (threadId) {
+      this.threadId = null;
+      this.resumeThreadId = threadId;
     }
   }
 
@@ -746,7 +767,7 @@ export class CodexSession implements AttributedAgentSession {
       case 'turn/started': {
         const turn = params.turn as JsonObject | undefined;
         const turnId = stringValue(turn?.id);
-        if (turnId) {
+        if (this.busy && turnId) {
           this.activeTurnId = turnId;
           if (this.interruptRequested) void this.requestInterruptForTurn(turnId);
         }
@@ -803,27 +824,62 @@ export class CodexSession implements AttributedAgentSession {
 
   private onTurnCompleted(params: JsonObject): void {
     const turn = params.turn as JsonObject | undefined;
-    const status = stringValue(turn?.status);
+    const id = stringValue(turn?.id);
+
+    if (!this.isActiveTurn(id)) return;
+
+    const status = codexTurnStatus(turn?.status);
     const error = turn?.error as JsonObject | undefined;
-    const message = stringValue(error?.message);
+    let message = usefulMessage(error?.message);
+
+    const isInterrupted = status === 'interrupted'
+      || this.interruptRequested
+      || this.interruptingTurnId === id;
+    if (isInterrupted) {
+      this.settleActiveTurn(id, false);
+      return;
+    }
+
+    if (status === 'failed' && !message) {
+      message = 'Codex failed before completing the turn.';
+    }
+
     if (message) this.send({ t: 'error', message });
+    this.settleActiveTurn(id, status === 'failed' || !!message);
+  }
+
+  private onErrorNotification(params: JsonObject): void {
+    const turnId = stringValue(params.turnId);
+    if (!this.isActiveTurn(turnId)) return;
+
+    if (params.willRetry === true) {
+      log.info(`Codex reported a retryable error: ${notificationMessage(params)}`);
+      return;
+    }
+
+    const isInterrupted = this.interruptRequested || this.interruptingTurnId === turnId;
+    if (isInterrupted) {
+      this.settleActiveTurn(turnId, false);
+      return;
+    }
+
+    const message = notificationMessage(params) || 'Codex reported an error.';
+    this.send({ t: 'error', message });
+    this.settleActiveTurn(turnId, true);
+  }
+
+  private isActiveTurn(turnId: string): boolean {
+    return this.busy && !!this.activeTurnId && turnId === this.activeTurnId;
+  }
+
+  private settleActiveTurn(turnId: string, isError: boolean): boolean {
+    if (!this.isActiveTurn(turnId)) return false;
     this.busy = false;
     this.activeTurnId = null;
     this.interruptRequested = false;
     this.interruptingTurnId = null;
-    this.send({ t: 'turn-end', isError: status === 'failed' || !!message });
-  }
-
-  private onErrorNotification(params: JsonObject): void {
-    const message = notificationMessage(params) || 'Codex reported an error.';
-    this.send({ t: 'error', message });
-    if (params.willRetry === false) {
-      this.busy = false;
-      this.activeTurnId = null;
-      this.interruptRequested = false;
-      this.interruptingTurnId = null;
-      this.send({ t: 'turn-end', isError: true });
-    }
+    this.send({ t: 'turn-end', isError });
+    return true;
   }
 
   private onToolOutputDelta(params: JsonObject): void {
@@ -844,9 +900,9 @@ export class CodexSession implements AttributedAgentSession {
     try { this.ws.send(JSON.stringify(obj)); } catch { /* ws gone */ }
   }
 
-  private finish(): void {
+  private finish(message?: string): void {
     if (this.closed) return;
-    this.send({ t: 'exit' });
+    this.send({ t: 'exit', ...(message ? { message } : {}) });
     this.dispose();
   }
 
@@ -879,16 +935,17 @@ export class CodexSession implements AttributedAgentSession {
     if (proc) try { proc.kill('SIGTERM'); } catch { /* already gone */ }
   }
 
-  private handleAppServerExit(isError: boolean): void {
+  private handleAppServerExit(message: string): void {
     this.appServerReady = false;
-    if (this.busy) {
-      this.busy = false;
-      this.activeTurnId = null;
-      this.interruptRequested = false;
-      this.interruptingTurnId = null;
-      this.send({ t: 'turn-end', isError });
-      return;
-    }
+    this.busy = false;
+    this.activeTurnId = null;
+    this.interruptRequested = false;
+    this.interruptingTurnId = null;
+    // The terminal exit owns this cause whether startup completed or not.
+    // Sending a pre-ready `error` first races the renderer's state commit
+    // against the immediate socket close and can replace this detail with a
+    // generic connection-closed message.
+    this.finish(message);
   }
 }
 
@@ -924,14 +981,19 @@ function protocolNoticeFromParams(params: JsonObject): string {
 }
 
 function notificationMessage(params: JsonObject): string {
-  const direct = stringValue(params.message);
+  const direct = usefulMessage(params.message);
   if (direct) return direct;
   const error = params.error;
   if (error && typeof error === 'object') {
-    const fromError = stringValue((error as JsonObject).message);
+    const fromError = usefulMessage((error as JsonObject).message);
     if (fromError) return fromError;
   }
   return '';
+}
+
+function usefulMessage(value: unknown): string {
+  const message = stringValue(value);
+  return message.trim() ? message : '';
 }
 
 function toolNameFromRequest(params: JsonObject): string {

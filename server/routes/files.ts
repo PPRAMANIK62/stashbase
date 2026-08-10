@@ -83,6 +83,7 @@ export function mount(app: express.Express): void {
         folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
         files: listing.files,
         folders: listing.folders,
+        unsupportedFiles: listing.unsupportedFiles,
       });
     } catch (err: unknown) {
       sendError(res, err);

@@ -122,6 +122,11 @@ client of StashBase context, not a separate AI workspace.
   (the Claude Code treatment); a non-default effort echoes on the trigger
   ("Ask · High"). Sections appear only when the runtime supports them;
   locked controls stay visible but inert.
+- Resumed Claude chats recover effort from their native active transcript
+  chain. Unknown or newer unsupported metadata remains visibly inherited
+  rather than being replaced by a renderer default, and an idle restored chat
+  can explicitly reconnect at another effort without losing its transcript or
+  native session identity.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
 - A failed turn leaves exactly one persistent inline explanation in the
@@ -143,6 +148,12 @@ client of StashBase context, not a separate AI workspace.
   setup state with the copyable install command and a runtime-refresh action.
   A missing CLI is distinct from a runtime that is installed but failed to
   start.
+- If a live runtime disconnects unexpectedly, the panel preserves its
+  transcript, clears in-flight activity, explains the terminal cause once, and
+  offers Reconnect. Intentional session teardown remains quiet.
+- If Codex cannot confirm that a turn started, that turn fails visibly. A
+  later prompt recovers through a fresh native connection so output from the
+  abandoned attempt cannot enter the active chat.
 
 ## Experience Contract
 

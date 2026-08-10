@@ -42,6 +42,12 @@ test('a resumed Agent session still carries its own explicit folder', () => {
   assert.equal(url.searchParams.get('folder'), '/Users/me/Other');
 });
 
+test('a resumed Agent session omits inherited unknown effort', () => {
+  const url = new URL(agentConnectionUrl({ ...base, effort: undefined, resume: 'historic-session' }));
+  assert.equal(url.searchParams.get('effort'), null);
+  assert.equal(url.searchParams.get('resume'), 'historic-session');
+});
+
 test('model control visibility, locking label, active identity, and fallback state are deterministic', () => {
   const models = [{ id: 'native-model', label: 'Native model' }];
   assert.equal(modelMenuVisible(true, models), true);

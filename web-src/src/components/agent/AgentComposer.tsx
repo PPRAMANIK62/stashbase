@@ -147,12 +147,13 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
  * bar, effort lives one click away and echoes on the trigger only when
  * non-default ("Ask · High"). If the runtime has no mode control the pill
  * degrades to an effort-only trigger. */
-function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, efforts, effortLocked, disabled, onSetEffort }: {
+function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, effortInherited, efforts, effortLocked, disabled, onSetEffort }: {
   showMode: boolean;
   mode: PermMode;
   onSetMode: (m: PermMode) => void;
   showEffort: boolean;
   effort?: EffortLevel;
+  effortInherited: boolean;
   efforts: EffortLevel[];
   effortLocked: boolean;
   disabled: boolean;
@@ -160,10 +161,11 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, efforts, effo
 }) {
   const [open, setOpen] = useState(false);
   const active = MODES.find((m) => m.id === mode) ?? MODES[0];
-  const effortSuffix = showEffort && effort ? ` · ${effortLabel(effort)}` : '';
+  const effortName = effort ? effortLabel(effort) : effortInherited ? 'Inherited' : 'Default';
+  const effortSuffix = showEffort && (effort || effortInherited) ? ` · ${effortName}` : '';
   const label = showMode
     ? `${active.label}${effortSuffix}`
-    : (effort ? effortLabel(effort) : 'Effort: Default');
+    : `Effort: ${effortName}`;
   return (
     <MenuTrigger isOpen={open} onOpenChange={setOpen}>
       <Button
@@ -171,7 +173,7 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, efforts, effo
         isDisabled={disabled}
         aria-label={showMode
           ? `Permission mode: ${active.label} — ${active.desc}${showEffort && effort ? `; reasoning effort ${effortLabel(effort)}` : ''}`
-          : `Reasoning effort: ${effort ? effortLabel(effort) : 'Default'}`}
+          : `Reasoning effort: ${effortName}`}
       >
         {label}
         <ChevronDownIcon className={pillChevronClass} />
@@ -204,7 +206,7 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, efforts, effo
               className={effortLocked ? 'pointer-events-none opacity-60' : undefined}
               title={effortLocked ? 'Effort is fixed for this session' : undefined}
             >
-              <EffortBar effort={effort} efforts={efforts} onSet={onSetEffort} />
+              <EffortBar effort={effort} efforts={efforts} inherited={effortInherited} onSet={onSetEffort} />
             </div>
           </div>
         )}
@@ -213,12 +215,12 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, efforts, effo
   );
 }
 
-function EffortBar({ effort, efforts, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; onSet: (l?: EffortLevel) => void }) {
+function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
   return (
     <div className="flex items-center gap-2 rounded-lg bg-accent/4 p-2">
       <DumbbellIcon className="size-4 shrink-0 text-muted-foreground" />
       <span className="flex-1 text-sm text-foreground">
-        Effort <span className="text-muted-foreground">({effort ? effortLabel(effort) : 'Default'})</span>
+        Effort <span className="text-muted-foreground">({effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'})</span>
       </span>
       <ListBox
         className="flex flex-wrap items-center justify-end gap-1 py-0.5"
@@ -314,7 +316,7 @@ function ScopeMenu({ scope, entries, homeDir, locked, disabled, onSetScope }: {
 
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionScope, folderEntries, folderLocked, folderHomeDir, onSetScope, onDraftChange, mentionFiles, mentionFolders, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortInherited, effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionScope, folderEntries, folderLocked, folderHomeDir, onSetScope, onDraftChange, mentionFiles, mentionFolders, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -323,6 +325,7 @@ export function AgentComposer({
   mode: PermMode;
   onSetMode: (mode: PermMode) => void;
   effort?: EffortLevel;
+  effortInherited: boolean;
   onSetEffort: (level?: EffortLevel) => void;
   effortLocked: boolean;
   supportedEfforts?: string[];
@@ -632,6 +635,7 @@ export function AgentComposer({
               onSetMode={onSetMode}
               showEffort={showEffortMenu}
               effort={effort}
+              effortInherited={effortInherited}
               efforts={compatibleEfforts}
               effortLocked={effortLocked}
               disabled={disabled}

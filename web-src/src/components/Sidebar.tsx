@@ -29,7 +29,7 @@ import { lazyWithRetry } from './ErrorBoundary';
 import { libraryListPlan } from './libraryListPlan';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
-import { SearchPanel } from './SearchPanel';
+import { SearchPanel, SemanticIndexingNotice } from './SearchPanel';
 import { Button } from './ui/button';
 import { PopupLoadingStatus } from './ui/status';
 import { api, errorMessage, type IndexStatus } from '../api';
@@ -743,6 +743,8 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
             * folder's prior open/closed state. */}
           {!state.folderCollapsed && (
             <div className="scrollbar-quiet min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+              <SemanticIndexingNotice />
+              <UnsupportedFilesCallout />
               <FileTree />
             </div>
           )}
@@ -1141,3 +1143,44 @@ function NewNoteButton() {
   );
 }
 
+function formatExtensions(otherExtensions: Array<{ extension: string; count: number }>): string {
+  const list = otherExtensions.map((entry) => entry.extension);
+  const visible = list.slice(0, 3);
+  const remaining = list.length - visible.length;
+  return visible.join(', ') + (remaining > 0
+    ? ` and ${remaining} more format${remaining === 1 ? '' : 's'}`
+    : '');
+}
+
+/** Keep the main branch's unsupported-file disclosure in the redesigned
+ * explorer without restoring its legacy CSS surface. */
+function UnsupportedFilesCallout() {
+  const { state, dispatch } = useApp();
+  const { sourceCode = 0, other = 0, otherExtensions = [] } = state.unsupportedFiles || {};
+  if (sourceCode + other === 0) return null;
+
+  const title = sourceCode > 0 && other > 0
+    ? 'Some files are hidden'
+    : sourceCode > 0
+      ? 'Source code is hidden'
+      : 'Some file formats are hidden';
+  const detail = sourceCode > 0 && other > 0
+    ? `${sourceCode} source-code files · ${other} other unsupported files`
+    : sourceCode > 0
+      ? `${sourceCode} source-code and project files are not shown or indexed.`
+      : `${other} unsupported files (${formatExtensions(otherExtensions)}) are not shown or indexed.`;
+
+  return (
+    <div className="mx-1.5 mb-2 rounded-lg border border-border bg-muted/45 px-2.5 py-2 text-xs leading-snug text-muted-foreground">
+      <div className="font-semibold text-foreground">{title}</div>
+      <div className="mt-0.5">
+        {detail}{' '}
+        <button
+          type="button"
+          className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent underline underline-offset-2"
+          onClick={() => dispatch({ type: 'UNSUPPORTED_MODAL', open: true })}
+        >Details</button>
+      </div>
+    </div>
+  );
+}

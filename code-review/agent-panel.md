@@ -257,6 +257,11 @@ Community contributions can land as useful first iterations, but the long-term d
 ## Design Rules
 
 - Keep the panel renderer-led. Do not change agent transport, session persistence, MCP, indexing, or permission policy just to support presentation changes.
+- Treat an adapter exit, including one during startup, as a terminal session
+  event. Its optional message is the single fatal cause: preserve transcript,
+  clear busy/tool activity, and do not append a second failed-turn notice. A
+  raw post-ready socket close gets the stable agent-specific disconnect
+  fallback; explicit renderer/client teardown must suppress it.
 - Derive the shell layout from Chat visibility, document presence, and compact
   viewport state; do not add RAG/CoWork product modes. The chat-primary layout
   removes the document and splitter grid tracks without unmounting either
@@ -287,10 +292,26 @@ Community contributions can land as useful first iterations, but the long-term d
   error, and add at most one generic fallback for an otherwise unexplained
   failed `turn-end`. Record that failure before advancing queued follow-ups;
   duplicate terminal events must not advance the queue, and successful or
-  cancelled turns must not create an error notice.
-- A discovered missing Agent CLI is a setup state, not a disabled entry point
-  or a generic connection failure. Keep its install command copyable and let
-  the user re-run discovery after installation; do not conflate it with an
+  interrupted turns must not create an error notice.
+- Present a stalled Codex `turn/start` as one failed turn, then let a later
+  prompt recover through a fresh native connection. Late events from the
+  abandoned start must not enter the renderer; the server-side timeout and
+  generation-fencing contract lives in [architecture.md](architecture.md).
+- Claude session error normalization must preserve execution failure details
+  before emitting `turn-end`: trim and deduplicate SDK error lists to a joined
+  message capped at 2,000 characters, resolve max-turn, max-budget, and
+  structured-retry error subtypes to stable fallback copy, and treat transient
+  `api_retry` warnings as retry-in-progress without ending the turn. Settle
+  only the active turn once, ignore repeated or late results, and keep the
+  final result authoritative when the native interrupt request rejects.
+- Correlate every Codex error notification to the active turn through its
+  protocol `turnId`. `willRetry: true` is retry-in-progress and must not settle
+  the turn or emit a permanent error; `willRetry: false` may emit one error and
+  settle only the matching turn once. Ignore repeated or late terminal events,
+  and treat native `interrupted` completion as non-error.
+- A discovered missing Agent CLI is a setup state, not a disabled launcher or a
+  generic connection failure. Keep its install command copyable and let the
+  user re-run discovery after installation; do not conflate it with an
   installed runtime that has failed.
 - Keep background activity compact. Tool calls may be grouped or summarized, but the user must be able to inspect them when needed.
 - File outputs should be easy to open, but artifact UI should stay lightweight. Prefer rows or compact affordances over large delivery cards.
@@ -325,6 +346,12 @@ Community contributions can land as useful first iterations, but the long-term d
   resumed chats and surface that identity; a generic “session model” label is
   not sufficient. Preserve a fallback notice if later initialization reports
   the active Default model.
+  For resumed Claude history, render the server-reported effort and keep
+  missing or unsupported metadata visibly inherited instead of inventing a
+  renderer default. Replay must tolerate a protocol-v1 server retained during
+  restart. Changing effort on an idle restored session retains its rendered
+  transcript and native identity; the server-side history and writer lifecycle
+  contract lives in [architecture.md](architecture.md).
 
 ## Current Baseline
 

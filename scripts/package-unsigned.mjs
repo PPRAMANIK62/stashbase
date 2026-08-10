@@ -18,7 +18,7 @@ const target = args.includes('--dir')
   : platform === 'win'
     ? ['nsis', 'zip']
     : platform === 'linux'
-      ? ['deb']
+      ? []
       : ['dmg', 'zip'];
 const xattr = fs.existsSync('/usr/bin/xattr') ? '/usr/bin/xattr' : 'xattr';
 const packageManagerCli = process.env.npm_execpath;

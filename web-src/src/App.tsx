@@ -58,6 +58,9 @@ import {
 } from './workspaceLayout';
 
 const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane').then((mod) => ({ default: mod.ChatPane })));
+const LazyUnsupportedFilesModalGate = lazyWithRetry(() =>
+  import('./components/UnsupportedFilesModal').then((mod) => ({ default: mod.UnsupportedFilesModalGate })),
+);
 
 /**
  * Top-level shell. Wraps everything in <AppProvider> (the single
@@ -404,6 +407,9 @@ function AppBody() {
         />
       )}
       <CascadePromptModal />
+      <Suspense fallback={null}>
+        <LazyUnsupportedFilesModalGate />
+      </Suspense>
       <AlertConfirmModal />
       <Toasts />
       {state.folderPath ? <EmbedderRequireKeyGate /> : null}

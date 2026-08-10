@@ -87,6 +87,7 @@ export interface AppActions {
   ) => Promise<void>;
   /** Clear the active folder's background-index warning. */
   dismissIndexWarning: () => Promise<void>;
+  decideSemanticIndexing: (decision: 'start' | 'defer') => Promise<void>;
   /** Replace a folder's ordered child list (manual sidebar ordering).
    *  Optimistic — state updates immediately, then a PUT is fired.
    *  Failure of the PUT rolls the renderer back to whatever the server
@@ -123,6 +124,8 @@ export interface AppActions {
    *  (rendered the chunk overlay / kicked off the PDF text search)
    *  so a re-render doesn't re-trigger the effect. */
   consumePendingHighlight: () => void;
+  /** Update the last viewed PDF page for tabId to page. */
+  updateTabPdfPage: (tabId: string, page: number) => void;
   /** Settle the pending cascade dialog with the user's choice. The
    *  rename action awaits this. */
   resolveCascadePrompt: (decision: CascadeDecision) => void;
@@ -152,6 +155,7 @@ export interface AppActions {
     },
   ) => string;
   toggleEditMode: () => Promise<void>;
+  setUnsupportedModalOpen: (open: boolean) => void;
   /** Reveal an existing Agent Panel session or create its first tab. This only
    * changes renderer layout; permissions and Agent context remain unchanged. */
   openAgent: (agent: AgentKind) => void;
@@ -194,7 +198,7 @@ export interface AppActions {
   findPrev: () => void;
 }
 
-const AppContext = createContext<{
+export const AppContext = createContext<{
   state: State;
   actions: AppActions;
   dispatch: (a: Action) => void;
@@ -282,6 +286,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       folders: j.folders ?? [],
       folder: j.folder ?? 'notes',
       folderPath: expectedFolderPath,
+      unsupportedFiles: j.unsupportedFiles,
     });
     return files;
   }, []);
@@ -432,15 +437,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadFiles: workspace.loadFiles, markVisibleFilesPendingForSearch: workspace.markVisibleFilesPendingForSearch,
     refreshIndexState: workspace.refreshIndexState, runSync: workspace.runSync, runSearch: workspace.runSearch,
     setFolderOrder: workspace.setFolderOrder, dismissIndexWarning: workspace.dismissIndexWarning,
+    decideSemanticIndexing: workspace.decideSemanticIndexing,
     selectFile: workspace.selectFile, selectFileWithHighlight: workspace.selectFileWithHighlight,
     openInNewTab: workspace.openInNewTab, newTab: workspace.newTab, closeTab: workspace.closeTab,
     closeActiveTab: workspace.closeActiveTab, activateTab: workspace.activateTab,
     navigateTo: workspace.navigateTo, consumePendingScroll: workspace.consumePendingScroll,
     consumePendingHighlight: workspace.consumePendingHighlight,
+    updateTabPdfPage: workspace.updateTabPdfPage,
     resolveCascadePrompt,
     alert: showAlert, confirm: askConfirm, resolveModal,
     toast,
     toggleEditMode: workspace.toggleEditMode,
+    setUnsupportedModalOpen: workspace.setUnsupportedModalOpen,
     openAgent: (agent) => {
       rememberPreferredAgent(agent);
       const current = stateRef.current;

@@ -50,6 +50,7 @@ import {
   type ChatScope,
 } from './agent/folderState';
 import { shouldConsumePendingResume } from './agent/sessionHistory';
+import { closeAgentSocketIntentionally, terminalAgentState } from './agent/connectionLifecycle';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
 import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
@@ -120,6 +121,9 @@ export function AgentView({
   // failed (see `fatal`). `nonce` bumps to force a reconnect.
   const [phase, setPhase] = useState<'connecting' | 'live' | 'closed'>('connecting');
   const [fatal, setFatal] = useState<string | null>(null);
+  const fatalRef = useRef<string | null>(null);
+  fatalRef.current = fatal;
+  const [fatalRecoveryLabel, setFatalRecoveryLabel] = useState<'Retry' | 'Reconnect'>('Retry');
   const [nonce, setNonce] = useState(0);
   // Permission mode for this session — drives the composer's Modes
   // dropdown. Switching it sends `set-mode` so the agent applies it live.
@@ -129,6 +133,8 @@ export function AgentView({
   // default; an explicit choice rides the connect URL for a new session.
   const [effort, setEffort] = useState<EffortLevel | undefined>(undefined);
   const effortRef = useRef<EffortLevel | undefined>(undefined);
+  const [restoredClaudeSession, setRestoredClaudeSession] = useState(false);
+  const [effortInherited, setEffortInherited] = useState(false);
   // User intent and runtime telemetry must stay separate: an active model
   // reached through Default must never become an explicit override later.
   const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
@@ -165,6 +171,7 @@ export function AgentView({
   const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
+  const exitReceivedRef = useRef(false);
   const toolNamesRef = useRef<Map<string, string>>(new Map());
   // Which streaming block kind is currently "open" (so consecutive text
   // deltas append to one bubble; a tool call closes it).
@@ -294,11 +301,40 @@ export function AgentView({
     setTurnActive(active);
   }
 
+  function finishRendererSession({
+    ready,
+    exitReceived,
+    message,
+  }: {
+    ready: boolean;
+    exitReceived: boolean;
+    message?: string;
+  }) {
+    const input = {
+      ready,
+      exitReceived,
+      agentShortName: meta.shortName,
+      message,
+      currentFatal: fatalRef.current,
+    };
+    const terminal = terminalAgentState({ ...input, blocks: [] });
+    queuedPromptsRef.current = [];
+    openKind.current = null;
+    toolNamesRef.current.clear();
+    setBlocks((currentBlocks) => terminalAgentState({ ...input, blocks: currentBlocks }).blocks);
+    setQueuedTurns(terminal.queuedTurns);
+    setTurnBusy(terminal.turnActive);
+    setFatal(terminal.fatal);
+    setFatalRecoveryLabel(terminal.recoveryLabel);
+    setPhase(terminal.phase);
+  }
+
   useEffect(() => {
     if (!runtime) {
       readyRef.current = false;
       setPhase('connecting');
       setFatal(null);
+      setFatalRecoveryLabel('Retry');
       return;
     }
     // Discovery is authoritative once it has returned. Do not open a socket
@@ -308,9 +344,11 @@ export function AgentView({
       readyRef.current = false;
       setPhase('closed');
       setFatal(null);
+      setFatalRecoveryLabel('Retry');
       return;
     }
     readyRef.current = false;
+    exitReceivedRef.current = false;
     // Consume-and-clear the resume id: it belongs to this one connection,
     // so a later reconnect (Retry / effort change) starts fresh instead of
     // re-resuming.
@@ -350,25 +388,19 @@ export function AgentView({
       handleEvent(ev);
     };
     ws.onclose = () => {
-      queuedPromptsRef.current = [];
-      setQueuedTurns([]);
-      setTurnBusy(false);
-      // Closing before the session was ever ready is a startup failure,
-      // not a normal end — surface it (with a Retry) rather than a quiet
-      // "session ended".
-      if (!readyRef.current) {
-        setFatal((f) => f ?? `Connection closed before ${meta.shortName} started.`);
-        refreshRuntimes();
-      }
-      setPhase('closed');
+      const wasReady = readyRef.current;
+      const sawExit = exitReceivedRef.current;
+      // A protocol exit already owns the terminal transition (and any fatal
+      // cause). The server closes the socket immediately afterward, before
+      // React may have committed the fatal state, so terminalizing again here
+      // could erase the message with a stale fatalRef.
+      if (sawExit) return;
+      finishRendererSession({ ready: wasReady, exitReceived: sawExit });
+      if (!wasReady) refreshRuntimes();
     };
 
     return () => {
-      // Detach onclose so the reconnect path's teardown doesn't clobber
-      // the fresh 'connecting' state with a stale 'closed'.
-      ws.onclose = null;
-      try { ws.send(JSON.stringify({ t: 'close' })); } catch { /* gone */ }
-      ws.close();
+      closeAgentSocketIntentionally(ws);
     };
   }, [nonce, runtime?.endpoint, runtimeUnavailable, agent, meta.shortName]);
 
@@ -378,10 +410,13 @@ export function AgentView({
     releaseAllAttachmentPreviews();
     setBlocks([]);
     setFatal(null);
+    setFatalRecoveryLabel('Retry');
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
     sessionIdRef.current = null;
+    setRestoredClaudeSession(false);
+    setEffortInherited(false);
     toolNamesRef.current.clear();
     openKind.current = null;
     setModelControl((current) => {
@@ -389,6 +424,22 @@ export function AgentView({
       modelControlRef.current = next;
       return next;
     });
+    setPhase('connecting');
+    setNonce((n) => n + 1);
+  }
+
+  /** A fatal runtime reconnect keeps the transcript available for context and
+   * diagnosis. The dead native session cannot be resumed implicitly, but the
+   * visible conversation must not disappear as the replacement connects. */
+  function reconnectAfterFatal() {
+    setFatal(null);
+    setFatalRecoveryLabel('Retry');
+    queuedPromptsRef.current = [];
+    setQueuedTurns([]);
+    setTurnBusy(false);
+    toolNamesRef.current.clear();
+    openKind.current = null;
+    resumeIdRef.current = sessionIdRef.current;
     setPhase('connecting');
     setNonce((n) => n + 1);
   }
@@ -415,7 +466,13 @@ export function AgentView({
   async function resumeSession(id: string, scope: ChatScope) {
     let hist: Block[] = [];
     try {
-      hist = (await api.getSessionMessages(id, agent, scopeRequestParams(scope))) as Block[];
+      const replay = await api.getSessionReplay(id, agent, scopeRequestParams(scope));
+      hist = replay.messages as Block[];
+      const inheritedEffort = agent === 'claude' ? replay.effort ?? undefined : undefined;
+      setEffort(inheritedEffort);
+      effortRef.current = inheritedEffort;
+      setRestoredClaudeSession(agent === 'claude');
+      setEffortInherited(agent === 'claude' && replay.effort === null);
     } catch {
       actions.toast('Could not load that session.', { level: 'error' });
       return;
@@ -426,6 +483,7 @@ export function AgentView({
     releaseAllAttachmentPreviews();
     setBlocks(hist);
     setFatal(null);
+    setFatalRecoveryLabel('Retry');
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
@@ -637,6 +695,7 @@ export function AgentView({
           queuedPromptsRef.current = [];
           setQueuedTurns([]);
           setTurnBusy(false);
+          setFatalRecoveryLabel('Retry');
           setFatal(ev.message);
           setPhase('closed');
         } else {
@@ -645,10 +704,9 @@ export function AgentView({
         }
         break;
       case 'exit':
-        queuedPromptsRef.current = [];
-        setQueuedTurns([]);
-        setTurnBusy(false);
-        setPhase('closed');
+        exitReceivedRef.current = true;
+        finishRendererSession({ ready: readyRef.current, exitReceived: true, message: ev.message });
+        if (ev.message) refreshRuntimes();
         break;
     }
   }
@@ -896,15 +954,20 @@ export function AgentView({
     wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: m }));
   }
 
-  /** Change thinking effort. The SDK fixes effort at session construction
-   *  (no live setter), so we apply it by reconnecting — but only when the
-   *  chat is still empty, so we never discard a real conversation. With
-   *  history present it takes effect on the next new chat. */
+  /** Change thinking effort. Restored idle transcripts reconnect to the same
+   * native session; their visible history is retained. */
   function changeEffort(level: EffortLevel | undefined) {
-    if (blocks.length > 0 || turnActive) return;
+    if (turnActive || (blocks.length > 0 && !restoredClaudeSession)) return;
     setEffort(level);
     effortRef.current = level;
-    reconnect();
+    setEffortInherited(false);
+    if (blocks.length > 0 && sessionIdRef.current) {
+      resumeIdRef.current = sessionIdRef.current;
+      setPhase('connecting');
+      setNonce((n) => n + 1);
+    } else {
+      reconnect();
+    }
   }
 
   /** Pick the session scope (a library folder, or the whole library) for
@@ -951,7 +1014,7 @@ export function AgentView({
     } catch { /* leave the placeholder if the lookup fails */ }
   }
 
-  const effortLocked = blocks.length > 0 || turnActive;
+  const effortLocked = turnActive || (blocks.length > 0 && !restoredClaudeSession);
   const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
   // Session-scope pill state. The shown scope is the live binding once
   // connected, else the scope the next session would bind (picked scope or
@@ -1123,12 +1186,13 @@ export function AgentView({
             turnActive={turnActive}
             phase={phase}
             fatal={fatal}
+            fatalRecoveryLabel={fatalRecoveryLabel}
             agentShortName={meta.shortName}
             onPermission={replyPermission}
             onSteerQueued={steerQueuedPrompt}
             onCopyUserMessage={copyUserMessage}
             onResendUserMessage={send}
-            onRetry={reconnect}
+            onRetry={reconnectAfterFatal}
             onOpenArtifact={(path) => {
               const action = resolveAssistantLink(path, {
                 scopeFolder: connectedScopeRef.current?.kind === 'folder' ? connectedScopeRef.current.path : null,
@@ -1169,6 +1233,7 @@ export function AgentView({
         mode={mode}
         onSetMode={changeMode}
         effort={effort}
+        effortInherited={effortInherited}
         onSetEffort={changeEffort}
         effortLocked={effortLocked}
         selectedModel={modelControl.selectedModel}

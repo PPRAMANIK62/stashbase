@@ -184,11 +184,14 @@ export type AgentServerEvent =
   | { t: 'scope-changed'; scope: { kind: 'folder'; path: string } }
   | { t: 'turn-end'; isError: boolean }
   | { t: 'error'; message: string }
-  | { t: 'exit' };
+  | { t: 'exit'; message?: string };
 
 export interface AgentHistoryActions {
   list(folder: string | null): Promise<unknown[]>;
   messages(id: string, folder: string | null): Promise<unknown[]>;
+  /** Protocol-v2 replay metadata. Optional keeps third-party/older adapters
+   * compatible with the established messages-only history contract. */
+  replay?(id: string, folder: string | null): Promise<unknown>;
   rename(id: string, title: string, folder: string | null): Promise<unknown>;
   remove(id: string, folder: string | null): Promise<void>;
 }
