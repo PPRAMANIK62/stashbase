@@ -69,6 +69,8 @@ sudo apt install ./StashBase-*-linux-amd64.deb
 
 Run the same command with a newer package to update. To remove StashBase, run `sudo apt remove stashbase`.
 
+For a portable build, download `StashBase-*-linux-*.AppImage`, make it executable with `chmod +x`, and run it directly.
+
 ### First Launch
 
 When you open StashBase for the first time:
@@ -253,20 +255,13 @@ areas without duplicating the source tree:
 
 For contributors and developers building locally, and for platforms without a prebuilt installer.
 
-### Linux Prerequisites (Ubuntu / Debian)
+### Linux prerequisites (Ubuntu / Debian)
 
-Ensure Node.js (>= 22.12.0), pnpm, Python 3.10+, `gcc`, `g++`, `make`, `pkg-config`, and `cmake` are installed:
+Install Node.js 22.12+, pnpm, Python 3.10+, and the native build tools used by the packaged sidecars:
 
 ```bash
-# Node.js 22 & pnpm (via NVM)
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-source ~/.nvm/nvm.sh
-nvm install 22
-corepack enable
-corepack prepare pnpm@latest --activate
+sudo apt install build-essential binutils cmake curl git nasm pkg-config python3 python3-venv xz-utils
 ```
-
-### Build Steps
 
 ```bash
 git clone https://github.com/liliu-z/stashbase
@@ -278,33 +273,17 @@ pnpm setup:python
 pnpm build:web
 pnpm electron
 
-# Development mode (access web app at http://localhost:8090 or run pnpm electron)
+# Development mode
 pnpm dev
 
 # Build a distributable app for your platform
 pnpm dist        # macOS
 pnpm dist:win    # Windows
-pnpm dist:linux  # Linux (.deb & AppImage)
+pnpm dist:linux  # Linux (.deb and .AppImage)
 
 # Optional: include the local PDF/OCR extractor sidecar
 pnpm build:python-extract-sidecar
 ```
-
-### Agent Panel Setup (Claude Code & OpenAI Codex)
-
-To use the built-in Agent panel with Codex or Claude Code:
-
-1. Install the CLI tool globally:
-   ```bash
-   npm install -g @openai/codex        # For Codex
-   npm install -g @anthropic-ai/claude-code  # For Claude Code
-   ```
-2. Authenticate the CLI:
-   ```bash
-   codex login     # For Codex
-   claude login    # For Claude Code
-   ```
-3. Alternatively, enter your API keys directly in StashBase **Settings (⚙️ icon)**.
 
 Before opening a PR:
 
