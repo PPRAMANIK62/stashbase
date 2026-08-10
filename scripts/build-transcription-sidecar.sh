@@ -219,6 +219,10 @@ mkdir -p "$FFMPEG_BUILD"
 
 FFMPEG_EXTRA_LDFLAGS="-L$PREFIX/lib"
 FFMPEG_EXTRA_CFLAGS="-I$PREFIX/include"
+FFMPEG_ASSEMBLY_ARGS=()
+if ! command -v nasm >/dev/null 2>&1; then
+  FFMPEG_ASSEMBLY_ARGS+=(--disable-x86asm)
+fi
 if [[ "$HOST_PLATFORM" == "win32" ]]; then
   FFMPEG_EXTRA_LDFLAGS="$FFMPEG_EXTRA_LDFLAGS -static"
 elif [[ "$HOST_PLATFORM" == "darwin" ]]; then
@@ -240,7 +244,7 @@ fi
     --disable-autodetect \
     --disable-gpl \
     --disable-nonfree \
-    --disable-x86asm \
+    "${FFMPEG_ASSEMBLY_ARGS[@]}" \
     --disable-ffplay \
     --enable-libopus \
     --disable-everything \
@@ -358,15 +362,13 @@ elif [[ "$HOST_PLATFORM" == "linux" ]]; then
   for binary in "$OUT/whisper-cli" "$OUT/ffmpeg" "$OUT/ffprobe"; do
     REQUIRED_GLIBC="$(maximum_required_symbol "$binary" GLIBC)"
     REQUIRED_GLIBCXX="$(maximum_required_symbol "$binary" GLIBCXX)"
-    if [[ "${STASHBASE_SKIP_ABI_CHECK:-0}" != "1" ]]; then
-      if version_is_above "$REQUIRED_GLIBC" "$LINUX_GLIBC_BASELINE"; then
-        echo "$(basename "$binary") requires GLIBC_$REQUIRED_GLIBC, above baseline $LINUX_GLIBC_BASELINE" >&2
-        exit 1
-      fi
-      if version_is_above "$REQUIRED_GLIBCXX" "$LINUX_GLIBCXX_BASELINE"; then
-        echo "$(basename "$binary") requires GLIBCXX_$REQUIRED_GLIBCXX, above baseline $LINUX_GLIBCXX_BASELINE" >&2
-        exit 1
-      fi
+    if version_is_above "$REQUIRED_GLIBC" "$LINUX_GLIBC_BASELINE"; then
+      echo "$(basename "$binary") requires GLIBC_$REQUIRED_GLIBC, above baseline $LINUX_GLIBC_BASELINE" >&2
+      exit 1
+    fi
+    if version_is_above "$REQUIRED_GLIBCXX" "$LINUX_GLIBCXX_BASELINE"; then
+      echo "$(basename "$binary") requires GLIBCXX_$REQUIRED_GLIBCXX, above baseline $LINUX_GLIBCXX_BASELINE" >&2
+      exit 1
     fi
   done
 elif command -v objdump >/dev/null 2>&1; then

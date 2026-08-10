@@ -18,7 +18,7 @@ const target = args.includes('--dir')
   : platform === 'win'
     ? ['nsis', 'zip']
     : platform === 'linux'
-      ? ['deb']
+      ? []
       : ['dmg', 'zip'];
 const xattr = fs.existsSync('/usr/bin/xattr') ? '/usr/bin/xattr' : 'xattr';
 const packageManagerCli = process.env.npm_execpath;
@@ -403,7 +403,6 @@ function assertTranscriptionToolsForPlatform() {
 }
 
 function assertLinuxTranscriptionAbi(binaries, issues) {
-  if (process.env.STASHBASE_SKIP_ABI_CHECK === '1') return;
   for (const [file, label] of binaries) {
     const output = execFileSync('objdump', ['-T', file], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
     for (const [family, baseline] of [
