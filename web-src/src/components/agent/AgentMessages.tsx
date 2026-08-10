@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNod
 import { Button } from 'react-aria-components';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
 import { AgentMarkdown } from './AgentMarkdown';
-import { ChevronDownIcon, CopyIcon, EditIcon, FileGenericIcon } from '../../icons';
+import { ChevronDownIcon, CopyIcon, EditIcon, FileGenericIcon, MoreHorizontalIcon } from '../../icons';
+import { Menu, type MenuItem } from '../Menu';
 import { cn } from '../../lib/utils';
 import { ImageLightbox } from '../ImageLightbox';
 import { buttonVariants } from '../ui/button';
@@ -34,7 +35,7 @@ export interface QueuedTurnPreview {
 }
 
 export function MessageList({
-  blocks, queuedTurns, turnActive, phase, fatal, agentShortName, editableUserMessageIds, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
+  blocks, queuedTurns, turnActive, phase, fatal, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
 }: {
   blocks: Block[];
   queuedTurns: QueuedTurnPreview[];
@@ -42,7 +43,6 @@ export function MessageList({
   phase: 'connecting' | 'live' | 'closed';
   fatal: string | null;
   agentShortName: string;
-  editableUserMessageIds: Set<string>;
   onPermission: (toolBlockId: string, permId: string, allow: boolean) => void;
   onSteerQueued: (id: string) => void;
   onCopyUserMessage: (text: string) => void;
@@ -91,14 +91,13 @@ export function MessageList({
               block={turn.head}
               scrollRef={ref}
               sticky={queuedTurns.length === 0}
-              canEdit={editableUserMessageIds.has(turn.head.id)}
               onCopy={onCopyUserMessage}
               onSendEdit={onResendUserMessage}
             />
           )}
           <TurnBody
             blocks={turn.body}
-            editableUserMessageIds={editableUserMessageIds}
+            liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
             onPermission={onPermission}
             onCopyUserMessage={onCopyUserMessage}
             onResendUserMessage={onResendUserMessage}
@@ -116,9 +115,14 @@ export function MessageList({
       {blocks.length > 0 && phase === 'closed' && fatal && (
         <FatalInline fatal={fatal} agentShortName={agentShortName} onRetry={onRetry} />
       )}
-      {turnActive && (
+      {turnActive && !tailBlockSpeaks(blocks) && (
+        // Generic tail status renders only when no visible block already
+        // narrates the moment — a running tool group shimmers its own
+        // summary, live thinking shimmers "Thinking", and an awaiting
+        // permission card means the agent is waiting on the USER, where
+        // "is working…" would be a lie.
         <div className="flex items-center gap-1.5 p-0.5 text-sm text-muted-foreground">
-          <Dot />{agentShortName} is working…
+          <Dot /><span className="agent-shimmer">{agentShortName} is working…</span>
         </div>
       )}
       {showJump && (
@@ -135,6 +139,15 @@ export function MessageList({
       )}
     </div>
   );
+}
+
+/** True when the stream's last block already carries its own live status
+ *  (see the generic tail's comment in MessageList). */
+function tailBlockSpeaks(blocks: Block[]): boolean {
+  const tail = blocks[blocks.length - 1];
+  if (!tail) return false;
+  if (tail.kind === 'thinking') return true;
+  return tail.kind === 'tool' && (tail.status === 'running' || tail.status === 'awaiting');
 }
 
 interface Turn { key: string; head: Extract<Block, { kind: 'user' }> | null; body: Block[] }
@@ -154,9 +167,11 @@ function groupTurns(blocks: Block[]): Turn[] {
   return turns;
 }
 
-function TurnBody({ blocks, editableUserMessageIds, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
+function TurnBody({ blocks, liveBlockId, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
   blocks: Block[];
-  editableUserMessageIds: Set<string>;
+  /** The stream's last block while the turn is active — the one block
+   *  whose meta label may shimmer as "working". */
+  liveBlockId: string | null;
   onPermission: (t: string, p: string, a: boolean) => void;
   onCopyUserMessage: (text: string) => void;
   onResendUserMessage: (text: string) => void;
@@ -180,7 +195,7 @@ function TurnBody({ blocks, editableUserMessageIds, onPermission, onCopyUserMess
     : <BlockView
       key={group.id}
       block={group}
-      canEditUserMessage={editableUserMessageIds.has(group.id)}
+      live={group.id === liveBlockId}
       onPermission={onPermission}
       onCopyUserMessage={onCopyUserMessage}
       onResendUserMessage={onResendUserMessage}
@@ -190,12 +205,11 @@ function TurnBody({ blocks, editableUserMessageIds, onPermission, onCopyUserMess
 }
 
 function UserTurnHead({
-  block, scrollRef, sticky = true, canEdit, onCopy, onSendEdit,
+  block, scrollRef, sticky = true, onCopy, onSendEdit,
 }: {
   block: Extract<Block, { kind: 'user' }>;
   scrollRef?: RefObject<HTMLDivElement | null>;
   sticky?: boolean;
-  canEdit: boolean;
   onCopy: (text: string) => void;
   onSendEdit: (text: string) => void;
 }) {
@@ -227,7 +241,7 @@ function UserTurnHead({
   return (
     <>
       {sticky && <span ref={sentinelRef} className="agent-turn-sentinel" aria-hidden="true" />}
-      <div className={'agent-turn-head' + (block.text && !editing ? ' has-actions' : '') + (sticky ? '' : ' static') + (stuck ? ' stuck' : '')}>
+      <div className={'agent-turn-head' + (sticky ? '' : ' static') + (stuck ? ' stuck' : '')}>
         {block.attachments && block.attachments.length > 0 && <MessageAttachments attachments={block.attachments} />}
         {editing ? (
           <InlineUserMessageEditor
@@ -247,11 +261,15 @@ function UserTurnHead({
           />
         ) : (
           <>
-            {block.text && <UserMessageText text={block.text} />}
+            {block.text && (
+              <UserMessageText
+                text={block.text}
+                attachmentPaths={block.attachments?.map((attachment) => attachment.path)}
+              />
+            )}
             {block.text && (
               <UserMessageActions
                 text={block.text}
-                canEdit={canEdit}
                 onCopy={onCopy}
                 onEdit={() => setEditing(true)}
               />
@@ -275,7 +293,12 @@ function QueuedTurn({
       <div className="agent-turn-head queued">
         {turn.attachments && turn.attachments.length > 0 && <MessageAttachments attachments={turn.attachments} />}
         <div className="agent-turn-line">
-          {turn.text && <UserMessageText text={turn.text} />}
+          {turn.text && (
+            <UserMessageText
+              text={turn.text}
+              attachmentPaths={turn.attachments?.map((attachment) => attachment.path)}
+            />
+          )}
           <span className="agent-turn-actions">
             <span className="agent-turn-waiting">
               <Dot />
@@ -384,14 +407,34 @@ const FILE_MENTION_RE = new RegExp(
   `(^|\\s)@([^\\n]*?\\.(?:${VIEWABLE_FILE_EXTENSION_ALTERNATION}))(?![/.])`,
   'gi',
 );
+/* Bare multi-segment paths (`topic/note.md`) chip too: history replay and
+ * some runtimes serialize a mention without its `@`, and a raw relative
+ * path glued into prose is the single roughest thing a transcript can
+ * show. At least one `/` is required so ordinary "README.md" prose stays
+ * text; the lookahead permits CJK or punctuation right after the
+ * extension while rejecting longer paths/words. */
+const BARE_FILE_PATH_RE = new RegExp(
+  `(^|\\s)((?:[^\\s/@]+/)+[^\\s/]+?\\.(?:${VIEWABLE_FILE_EXTENSION_ALTERNATION}))(?![\\w./])`,
+  'gi',
+);
 
-function UserMessageText({ text }: { text: string }) {
+/** Flatten mention syntax for plain-text surfaces (tab titles, previews):
+ * `@topic/note.md` and bare multi-segment paths read as just the file
+ * name. The transcript renders chips instead — this is for places that
+ * can only hold a string. */
+export function flattenFileMentions(text: string): string {
+  return text
+    .replace(FILE_MENTION_RE, (_raw, lead: string, path: string) => `${lead}${baseName(path)}`)
+    .replace(BARE_FILE_PATH_RE, (_raw, lead: string, path: string) => `${lead}${baseName(path)}`);
+}
+
+function UserMessageText({ text, attachmentPaths }: { text: string; attachmentPaths?: string[] }) {
   const [open, setOpen] = useState(false);
   const preview = userTextPreview(text);
   const collapsible = preview !== text;
   return (
     <span className="agent-turn-text">
-      {renderUserFileMentions(open || !collapsible ? text : preview)}
+      {renderUserFileMentions(open || !collapsible ? text : preview, attachmentPaths)}
       {collapsible && !open && <span className="agent-turn-ellipsis">…</span>}
       {collapsible && (
         <Button
@@ -407,34 +450,56 @@ function UserMessageText({ text }: { text: string }) {
 }
 
 /** The composer serializes its atomic @-mention widget as @<path>. Restore
- * that same compact file chip in the transcript without treating ordinary
- * inline code or assistant prose as an attachment. */
-function renderUserFileMentions(text: string): ReactNode[] {
+ * that same compact file chip in the transcript — for `@`-prefixed
+ * mentions, bare multi-segment paths, and exact occurrences of this
+ * turn's attachment paths (any boundary — attachment paths are known
+ * verbatim, so spaces and CJK adjacency are fine). Overlapping hits keep
+ * the earliest, longest match. */
+function renderUserFileMentions(text: string, attachmentPaths: string[] = []): ReactNode[] {
+  const hits: Array<{ start: number; end: number; path: string; lead: string }> = [];
+  const collect = (re: RegExp) => {
+    re.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text))) {
+      const [raw, lead, path] = match;
+      hits.push({ start: match.index, end: match.index + raw.length, path, lead });
+    }
+  };
+  collect(FILE_MENTION_RE);
+  collect(BARE_FILE_PATH_RE);
+  for (const path of attachmentPaths) {
+    if (!path) continue;
+    let from = 0;
+    for (let at = text.indexOf(path, from); at !== -1; at = text.indexOf(path, from)) {
+      hits.push({ start: at, end: at + path.length, path, lead: '' });
+      from = at + path.length;
+    }
+  }
+  hits.sort((a, b) => a.start - b.start || b.end - a.end);
   const parts: ReactNode[] = [];
   let cursor = 0;
-  let match: RegExpExecArray | null;
-  FILE_MENTION_RE.lastIndex = 0;
-  while ((match = FILE_MENTION_RE.exec(text))) {
-    const [raw, leading, path] = match;
-    const start = match.index;
-    if (start > cursor) parts.push(text.slice(cursor, start));
-    if (leading) parts.push(leading);
+  for (const hit of hits) {
+    if (hit.start < cursor) continue;
+    if (hit.start > cursor) parts.push(text.slice(cursor, hit.start));
+    if (hit.lead) parts.push(hit.lead);
     parts.push(
-      <span key={`${start}:${path}`} className="agent-file-mention" title={path} aria-label={`File mention: ${path}`}>
-        {baseName(path)}
+      <span key={`${hit.start}:${hit.path}`} className="agent-file-mention" title={hit.path} aria-label={`File mention: ${hit.path}`}>
+        {baseName(hit.path)}
       </span>,
     );
-    cursor = start + raw.length;
+    cursor = hit.end;
   }
   if (cursor < text.length) parts.push(text.slice(cursor));
   return parts.length ? parts : [text];
 }
 
+/** Copy + edit on every user message (ChatGPT-history register). Editing
+ * resends the edited text as a NEW prompt — agent sessions cannot rewind,
+ * so this is resend-from-history, never a fork. */
 function UserMessageActions({
-  text, canEdit, onCopy, onEdit,
+  text, onCopy, onEdit,
 }: {
   text: string;
-  canEdit: boolean;
   onCopy: (text: string) => void;
   onEdit: () => void;
 }) {
@@ -443,11 +508,9 @@ function UserMessageActions({
       <Button aria-label="Copy message" onPress={() => onCopy(text)}>
         <CopyIcon />
       </Button>
-      {canEdit && (
-        <Button aria-label="Edit and resend" onPress={onEdit}>
-          <EditIcon />
-        </Button>
-      )}
+      <Button aria-label="Edit and resend" onPress={onEdit}>
+        <EditIcon />
+      </Button>
     </div>
   );
 }
@@ -523,9 +586,9 @@ function ConnectingNotice({ agentShortName }: { agentShortName: string }) {
   );
 }
 
-function BlockView({ block, canEditUserMessage, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
+function BlockView({ block, live, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
   block: Block;
-  canEditUserMessage: boolean;
+  live?: boolean;
   onPermission: (t: string, p: string, a: boolean) => void;
   onCopyUserMessage: (text: string) => void;
   onResendUserMessage: (text: string) => void;
@@ -535,16 +598,13 @@ function BlockView({ block, canEditUserMessage, onPermission, onCopyUserMessage,
     case 'user':
       return <UserTurnHead
         block={block}
-        canEdit={canEditUserMessage}
         onCopy={onCopyUserMessage}
         onSendEdit={onResendUserMessage}
       />;
     case 'assistant':
-      return (
-        <div className="agent-prose"><AgentMarkdown markdown={block.text} onOpenArtifact={onOpenArtifact} /></div>
-      );
+      return <AssistantBlock text={block.text} onCopy={onCopyUserMessage} onOpenArtifact={onOpenArtifact} />;
     case 'thinking':
-      return <ThinkingView text={block.text} />;
+      return <ThinkingView text={block.text} active={live} />;
     case 'error':
       return (
         <StatusMessage tone="error" className="text-sm leading-normal whitespace-pre-wrap">
@@ -581,7 +641,7 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
       >
         <ChevronDownIcon className={cn('size-3 shrink-0 text-muted-foreground', !open && '-rotate-90')} />
         {active && <Dot />}
-        <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap', failures ? 'text-status-danger' : 'text-muted-foreground')}>{summary}</span>
+        <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap', failures ? 'text-status-danger' : 'text-muted-foreground', active && !failures && 'agent-shimmer')}>{summary}</span>
       </Button>
       {open && <div className="grid gap-1.5 py-1 pr-1 pl-5">{tools.map((tool) => <ToolCard key={tool.id} block={tool} onPermission={onPermission} />)}</div>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
@@ -589,15 +649,51 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
   );
 }
 
-function ThinkingView({ text }: { text: string }) {
+function ThinkingView({ text, active }: { text: string; active?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={'agent-thinking' + (open ? ' open' : '')}>
       <Button className="agent-thinking-head" onPress={() => setOpen((o) => !o)}>
         <ChevronDownIcon className="agent-thinking-chev" />
-        <span>Thinking</span>
+        {/* Shimmers while this is the stream's live block — the label
+          * itself signals "working" (Cursor register). */}
+        <span className={active ? 'agent-shimmer' : undefined}>Thinking</span>
       </Button>
       {open && <div className="agent-thinking-body">{text}</div>}
+    </div>
+  );
+}
+
+/** Assistant prose with a corner ⋯ actions menu (Copy for now, room for
+ * fork/retry later). Hidden until the block is hovered or focused; the
+ * canvas backing keeps it legible over the prose's last line. */
+function AssistantBlock({ text, onCopy, onOpenArtifact }: {
+  text: string;
+  onCopy: (text: string) => void;
+  onOpenArtifact: (path: string) => void;
+}) {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const items: MenuItem[] = [
+    { label: 'Copy Message', icon: <CopyIcon />, onSelect: () => onCopy(text) },
+  ];
+  return (
+    <div className="group/assistant relative">
+      <div className="agent-prose"><AgentMarkdown markdown={text} onOpenArtifact={onOpenArtifact} /></div>
+      <Button
+        className={cn(
+          'absolute right-0 -bottom-1 grid size-5.5 cursor-pointer place-items-center rounded-md border-0 bg-canvas p-0 text-muted-foreground opacity-0 transition-opacity duration-fast group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100 hover:bg-muted hover:text-foreground',
+          anchor && 'bg-active text-foreground opacity-100',
+        )}
+        aria-label="Message actions"
+        aria-haspopup="menu"
+        aria-expanded={!!anchor}
+        onPress={(e) => setAnchor((prev) => (prev ? null : (e.target as HTMLElement).getBoundingClientRect()))}
+      >
+        <MoreHorizontalIcon className="size-4" />
+      </Button>
+      {anchor && (
+        <Menu anchor={{ rect: anchor, align: 'right' }} minWidth={170} items={items} onClose={() => setAnchor(null)} />
+      )}
     </div>
   );
 }
@@ -645,7 +741,7 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
           * the Allow/Reject row IS the status. */}
         {summary && !awaiting && <span className="min-w-0 flex-1 overflow-hidden font-mono text-xs text-ellipsis whitespace-nowrap text-muted-foreground">{summary}</span>}
         {!awaiting && (
-          <span className={'agent-tool-status inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground s-' + block.status}>
+          <span className={cn('agent-tool-status inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground', `s-${block.status}`, block.status === 'running' && 'agent-shimmer')}>
             {block.status === 'running' && <Dot />}
             {STATUS_LABEL[block.status]}
           </span>
@@ -659,7 +755,7 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
             <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>
           )}
           {!diff && block.name !== 'Bash' && (
-            <pre className={toolPreClass}>{JSON.stringify(block.input, null, 2)}</pre>
+            <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>
           )}
           <div className="mt-2.25 flex justify-end gap-2">
             <Button className={ghostSmClass} onPress={() => replyPermission(false)}>Reject</Button>
@@ -673,7 +769,7 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
           {diff && <DiffView diff={diff} />}
           {!diff && block.name === 'Bash' && <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>}
           {!diff && block.name !== 'Bash' && (
-            <pre className={toolPreClass}>{JSON.stringify(block.input, null, 2)}</pre>
+            <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>
           )}
           {block.result != null && block.result !== '' && (
             <pre className={cn(toolPreClass, 'agent-tool-result', block.status === 'error' && 'err')}>{clip(block.result)}</pre>
@@ -686,7 +782,10 @@ function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t:
 
 function ArtifactCards({ changes, onOpen }: { changes: Array<{ path: string; kind: string }>; onOpen: (path: string) => void }) {
   if (!changes.length) return null;
-  return <div className="grid gap-1 px-2.5 pb-2.25">{changes.map((change) => (
+  // One card per file — a path written repeatedly in one activity group
+  // keeps its latest kind.
+  const unique = [...new Map(changes.map((change) => [change.path, change])).values()];
+  return <div className="grid gap-1 px-2.5 pb-2.25">{unique.map((change) => (
     <div
       className="grid grid-cols-[15px_minmax(0,1fr)_auto_auto] items-center gap-1.5 rounded-md border border-border bg-pane px-1.75 py-1.5 text-xs"
       key={change.path}
@@ -703,6 +802,14 @@ function ArtifactCards({ changes, onOpen }: { changes: Array<{ path: string; kin
 }
 
 function fileChanges(block: ToolBlock): Array<{ path: string; kind: string }> {
+  // MCP file mutations (write_file / edit_file) surface as artifacts too:
+  // "work leaves an openable result" is a system guarantee, not something
+  // the model must remember to link in prose.
+  if (/(?:write_file|edit_file)$/i.test(block.name)) {
+    const path = mcpArgs(block.input).path;
+    if (typeof path !== 'string' || !path) return [];
+    return [{ path, kind: /edit_file$/i.test(block.name) ? 'edited' : 'wrote' }];
+  }
   if (block.name !== 'File change') return [];
   const raw = Array.isArray(block.input.changes) ? block.input.changes : [];
   return raw.flatMap((item) => {
@@ -747,8 +854,16 @@ function toolActivityTitle(name: string, input: Record<string, unknown>): string
     return 'Ran command';
   }
   if (/read_file$/i.test(name)) {
-    const path = input.path ?? input.file_path;
+    const path = mcpArgs(input).path ?? input.file_path;
     return typeof path === 'string' ? `Read ${baseName(path)}` : 'Read file';
+  }
+  if (/write_file$/i.test(name)) {
+    const path = mcpArgs(input).path;
+    return typeof path === 'string' ? `Wrote ${baseName(path)}` : 'Wrote file';
+  }
+  if (/edit_file$/i.test(name)) {
+    const path = mcpArgs(input).path;
+    return typeof path === 'string' ? `Edited ${baseName(path)}` : 'Edited file';
   }
   if (/list_directory$/i.test(name)) return 'Listed files';
   if (/search/i.test(name)) return 'Searched files';
@@ -776,6 +891,7 @@ function activitySummary(tools: ToolBlock[], active?: ToolBlock): string {
         else commands++;
       }
     } else if (/read_file$/i.test(tool.name)) reads++;
+    else if (/(?:write_file|edit_file)$/i.test(tool.name)) changes++;
     else if (/list_directory$/i.test(tool.name)) lists++;
     else if (/search/i.test(tool.name)) searches++;
     else if (tool.name === 'File change') changes++;
@@ -786,10 +902,12 @@ function activitySummary(tools: ToolBlock[], active?: ToolBlock): string {
     lists && `listed ${lists} folder${lists === 1 ? '' : 's'}`,
     searches && `searched ${searches} time${searches === 1 ? '' : 's'}`,
     commands && `ran ${commands} command${commands === 1 ? '' : 's'}`,
-    changes && `changed ${changes} file set${changes === 1 ? '' : 's'}`,
+    changes && `changed ${changes} file${changes === 1 ? '' : 's'}`,
     toolsUsed && `used ${toolsUsed} tool${toolsUsed === 1 ? '' : 's'}`,
   ].filter(Boolean);
-  return labels.length ? labels.join(', ') : 'Worked';
+  const summary = labels.length ? labels.join(', ') : 'worked';
+  // Sentence-cap the summary (Cursor's "Explored 1 search" register).
+  return summary.charAt(0).toUpperCase() + summary.slice(1);
 }
 
 type DiffRow = { type: 'ctx' | 'del' | 'add'; text: string };
@@ -860,3 +978,45 @@ function toolSummary(name: string, input: Record<string, unknown>): string {
 const baseName = (p: string) => p.split('/').pop() || p;
 const clipInline = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '…' : s);
 const clip = (s: string) => (s.length > 4000 ? s.slice(0, 4000) + '\n…(truncated)' : s);
+
+/** Tool payloads render for HUMANS deciding or inspecting, not for
+ * machines: hoist MCP-style `arguments`, drop empty scaffolding fields
+ * (`server: ""`), and print string values verbatim — real newlines,
+ * clipped to a screenful — never a JSON-escaped dump of a whole
+ * document. Falls back to pretty JSON when nothing survives the
+ * filter. */
+const PAYLOAD_LINE_LIMIT = 14;
+const PAYLOAD_CHAR_LIMIT = 1200;
+
+function clipPayloadText(value: string): string {
+  let out = value.split('\n').slice(0, PAYLOAD_LINE_LIMIT).join('\n');
+  if (out.length > PAYLOAD_CHAR_LIMIT) out = out.slice(0, PAYLOAD_CHAR_LIMIT);
+  if (out.length < value.length) {
+    return `${out}\n… (+${(value.length - out.length).toLocaleString()} chars)`;
+  }
+  return out;
+}
+
+/** MCP wrappers nest the real payload under `arguments`; direct tools
+ *  carry it at the top level. */
+function mcpArgs(input: Record<string, unknown>): Record<string, unknown> {
+  const nested = input.arguments;
+  return nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? (nested as Record<string, unknown>)
+    : input;
+}
+
+function payloadPreview(input: Record<string, unknown>): string {
+  const args = mcpArgs(input);
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(args)) {
+    if (value == null || value === '') continue;
+    if (typeof value === 'string') {
+      const text = clipPayloadText(value);
+      lines.push(text.includes('\n') || text.length > 100 ? `${key}:\n${text}` : `${key}: ${text}`);
+    } else {
+      lines.push(`${key}: ${JSON.stringify(value, null, 2)}`);
+    }
+  }
+  return lines.length ? lines.join('\n\n') : JSON.stringify(input, null, 2);
+}

@@ -21,7 +21,16 @@ import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
 import { EmptyChatGreeting, EmptyChatSuggestion } from './agent/AgentEmptyState';
 import { resolveAssistantLink } from './agent/assistantLinkTarget';
-import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
+import { MessageList, flattenFileMentions, type QueuedTurnPreview } from './agent/AgentMessages';
+
+/** Runtimes title sessions from the first message's RAW text, so a chat
+ * opened with an @-mention would name its tab a bare relative path.
+ * Flatten mentions to file names and collapse whitespace before the tab
+ * ever sees it. */
+function tabTitleFromSession(raw: string): string {
+  const flat = flattenFileMentions(raw).replace(/\s+/g, ' ').trim();
+  return flat.length > 60 ? flat.slice(0, 60).trimEnd() + '…' : flat;
+}
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
 import {
@@ -97,7 +106,6 @@ export function AgentView({
   const attachmentPreviewUrlsRef = useRef(new Set<string>());
   const uploadCountRef = useRef(0);
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [editableUserMessageIds, setEditableUserMessageIds] = useState<Set<string>>(() => new Set());
   const [turnActive, setTurnActive] = useState(false);
   const turnActiveRef = useRef(false);
   const queuedPromptsRef = useRef<QueuedPrompt[]>([]);
@@ -369,7 +377,6 @@ export function AgentView({
   function reconnect() {
     releaseAllAttachmentPreviews();
     setBlocks([]);
-    setEditableUserMessageIds(new Set());
     setFatal(null);
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
@@ -418,7 +425,6 @@ export function AgentView({
     pickedScopeRef.current = nextPick;
     releaseAllAttachmentPreviews();
     setBlocks(hist);
-    setEditableUserMessageIds(new Set());
     setFatal(null);
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
@@ -479,8 +485,8 @@ export function AgentView({
       case 'skills': setSkills(ev.skills); setSkillState(ev.state); break;
       case 'session-title':
         if (isDefaultChatTitle(titleRef.current)) {
-          const t = ev.title.trim();
-          if (t) dispatch({ type: 'CHAT_TAB_RENAME', id: idRef.current, title: t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : t });
+          const t = tabTitleFromSession(ev.title);
+          if (t) dispatch({ type: 'CHAT_TAB_RENAME', id: idRef.current, title: t });
         }
         break;
       case 'turn-start':
@@ -880,14 +886,6 @@ export function AgentView({
   }
 
   function stop() {
-    const lastUser = [...blocks].reverse().find((b) => b.kind === 'user');
-    if (lastUser) {
-      setEditableUserMessageIds((prev) => {
-        const next = new Set(prev);
-        next.add(lastUser.id);
-        return next;
-      });
-    }
     wsRef.current?.send(JSON.stringify({ t: 'interrupt' }));
   }
 
@@ -946,9 +944,9 @@ export function AgentView({
     try {
       const nameScope = connectedScopeRef.current ?? newChatScope(folderPathRef.current);
       const sessions = await api.listSessions(agent, scopeRequestParams(nameScope));
-      const t = sessions.find((x) => x.id === sid)?.title?.trim();
+      const t = tabTitleFromSession(sessions.find((x) => x.id === sid)?.title ?? '');
       if (t && !isDefaultChatTitle(t)) {
-        dispatch({ type: 'CHAT_TAB_RENAME', id: tabId, title: t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : t });
+        dispatch({ type: 'CHAT_TAB_RENAME', id: tabId, title: t });
       }
     } catch { /* leave the placeholder if the lookup fails */ }
   }
@@ -1126,7 +1124,6 @@ export function AgentView({
             phase={phase}
             fatal={fatal}
             agentShortName={meta.shortName}
-            editableUserMessageIds={editableUserMessageIds}
             onPermission={replyPermission}
             onSteerQueued={steerQueuedPrompt}
             onCopyUserMessage={copyUserMessage}

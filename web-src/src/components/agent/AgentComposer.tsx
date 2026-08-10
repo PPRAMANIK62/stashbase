@@ -451,7 +451,10 @@ export function AgentComposer({
     // styles/chat.css center it to the readable transcript width. In hero
     // mode the empty-state column (656px = 640px content + own padding)
     // replaces that hook so the composer centers mid-panel.
-    <div className={cn('relative p-2', hero ? 'mx-auto w-[min(656px,100%)]' : 'agent-composer')}>
+    // px-3 matches the transcript's 12px insets so the composer card and
+    // the turn cards above share one column edge (the wrapper's
+    // chat-primary width budgets for it — see `.agent-composer`).
+    <div className={cn('relative', hero ? 'mx-auto w-[min(656px,100%)] p-2' : 'agent-composer p-2 px-3')}>
       {mention && (choices.length > 0 || mention.kind === 'skill') && (
         <div className="agent-mention">
           <div className="agent-mention-head">
@@ -587,7 +590,11 @@ export function AgentComposer({
         />
         {/* Action bar under the input. The negative side margins bleed the
           * top rule past the box padding so it spans edge to edge. */}
-        <div className="-mx-2 flex items-center gap-1 border-t border-border px-2 pt-1.5">
+        {/* No divider above the controls: the composer reads as ONE input
+          * surface (Cursor/ChatGPT register) — spacing and the controls'
+          * muted styling carry the separation, and a mid-card hairline
+          * would double up with the card's own border. */}
+        <div className="flex items-center gap-1 pt-0.5">
           <Button
             className={iconGhostButtonClass}
             aria-label={uploading ? 'Uploading files' : 'Upload local files'}

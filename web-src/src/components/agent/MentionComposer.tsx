@@ -359,11 +359,19 @@ export function MentionComposer({
             // Scaled like every other chrome text (text-base = 13px at
             // scale 1) — a raw px here was the one input that ignored the
             // UI-scale setting.
-            '&': { minHeight: '44px', maxHeight: '144px', font: 'inherit', fontSize: 'calc(13px * var(--ui-scale))' },
+            // Resting-small, grow-on-input: one comfortable line at rest
+            // (the docked composer must not steal transcript rows while
+            // empty), auto-growing to ~9 lines while composing. The hero
+            // empty-state override ([&_.cm-editor]:min-h-16) still wins
+            // for the one screen where a tall invitation is the point.
+            '&': { minHeight: '28px', maxHeight: '192px', font: 'inherit', fontSize: 'calc(13px * var(--ui-scale))' },
             '&.cm-focused': { outline: 'none' },
             '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.5' },
-            '.cm-content': { minHeight: '38px', padding: '8px 2px 0', caretColor: 'var(--fg)' },
-            '.cm-placeholder': { color: 'var(--muted)' },
+            '.cm-content': { minHeight: '20px', padding: '8px 2px 0', caretColor: 'var(--fg)' },
+            // Tertiary, not secondary: at --muted the placeholder reads
+            // as typed text and outweighs the (smaller) control labels.
+            // Derived via alpha so both themes dim proportionally.
+            '.cm-placeholder': { color: 'color-mix(in srgb, var(--muted) 65%, transparent)' },
           }),
           EditorView.contentAttributes.of({ 'aria-label': 'Message agent' }),
         ],

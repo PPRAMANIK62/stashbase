@@ -277,7 +277,11 @@ Community contributions can land as useful first iterations, but the long-term d
   again. Restore a responsively collapsed chat when the last document closes
   or the window becomes wide, unless the user has since changed visibility.
 - Prefer small, familiar agent-chat affordances over a bespoke workbench UI.
-- Treat user-action states as first-class. Permission approvals, retry actions, and stopped-turn editing must remain visible and directly actionable.
+- Treat user-action states as first-class. Permission approvals, retry actions, and user-message editing must remain visible and directly actionable. Every user message offers copy and edit-and-resend; the edited text sends as a NEW prompt — agent sessions cannot rewind, so this is resend-from-history, never a fork.
+- User-turn file references always render as compact chips, never raw
+  relative paths in prose. Three channels feed the chip pass: `@`-prefixed
+  mentions, bare multi-segment paths, and exact occurrences of the turn's
+  attachment paths (which cover spaces and CJK adjacency verbatim).
 - Treat terminal turn failures as persistent transcript state. Reset the
   renderer-owned explanation guard on `turn-start`, prefer a live runtime
   error, and add at most one generic fallback for an otherwise unexplained

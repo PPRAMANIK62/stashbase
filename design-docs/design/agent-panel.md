@@ -157,6 +157,22 @@ client of StashBase context, not a separate AI workspace.
 - Respect explicit visibility choices. Automatically open Chat once per folder
   entry, but do not reopen it after the user hides or closes it in that folder.
 - Do not hide permission cards or recovery actions inside collapsed activity.
+  Permission and tool payloads render human-readable: MCP `arguments` are
+  hoisted, empty scaffolding fields are dropped, and string values print
+  verbatim (real newlines, clipped to a screenful) — never a JSON-escaped
+  dump of a whole document.
+- While the agent is actively thinking or running a tool, that meta label
+  carries a soft text shimmer (reduced motion: static muted label). The
+  generic "is working…" tail renders only when no visible block already
+  narrates the moment — never beside a live tool summary, live thinking,
+  or a pending permission card (where the agent is waiting on the user).
+  File mutations — native File change and MCP write/edit alike — always
+  surface as openable artifact cards; chat tab titles flatten mention
+  paths to file names. Each
+  assistant reply block reveals a corner ⋯ menu on hover — Copy Message
+  today, room for more actions later. Every user message reveals in-card
+  copy and edit actions on hover; editing resends the edited text as a
+  new prompt (sessions cannot rewind, so no forking).
 - Streaming must not steal reading position from a user inspecting earlier
   transcript content.
 - Presentation changes must not create a separate agent, context, permission,
