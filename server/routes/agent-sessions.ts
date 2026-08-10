@@ -30,6 +30,15 @@ export function mount(app: express.Express): void {
       sendError(res, err);
     }
   });
+  app.get('/api/agents/:agent/sessions/:id/replay', async (req, res) => {
+    try {
+      const history = historyFor(req.params.agent);
+      if (!history.replay) return res.status(404).json({ error: 'replay metadata unavailable' });
+      res.json(await history.replay(req.params.id, getCurrentFolder()));
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
   app.patch('/api/agents/:agent/sessions/:id', async (req, res) => {
     const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
     if (!title) return res.status(400).json({ error: 'title required' });

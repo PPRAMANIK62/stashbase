@@ -19,20 +19,22 @@ const SHARED_PANEL_CAPABILITIES = {
   history: true,
   modes: true,
   effort: true,
+  models: true,
+  skills: true,
 } as const;
 
 export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
   {
     id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
     capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: false, titleHint: false },
-    attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access),
+    attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model),
     stop: killActiveAgent,
     history: claudeHistoryActions(),
   },
   {
     id: 'codex', label: 'Codex', vendor: 'OpenAI',
     capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: true, titleHint: true },
-    attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access),
+    attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model),
     stop: killActiveCodex,
     history: codexHistoryActions(),
   },

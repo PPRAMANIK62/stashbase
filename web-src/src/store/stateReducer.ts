@@ -68,6 +68,7 @@ export function reducer(s: State, a: Action): State {
         folders: a.folders,
         folder: a.folder,
         folderPath,
+        unsupportedFiles: a.unsupportedFiles,
         ...(folderChanged
           ? {
               activeSidebarView: 'files' as const,
@@ -82,6 +83,7 @@ export function reducer(s: State, a: Action): State {
               // filters are per-folder session state too.
               searchScope: null,
               searchTypes: [],
+              unsupportedModalOpen: false,
             }
           : {}),
       };
@@ -129,6 +131,7 @@ export function reducer(s: State, a: Action): State {
           saveStatus: { text: '', cls: '' },
           pendingAnchor: null,
           pendingHighlight: null,
+          pdfPage: undefined,
           // Only touch `preview` when explicitly asked — in-place anchor
           // nav reuses the same tab and must keep its existing
           // preview/pinned status.
@@ -144,10 +147,14 @@ export function reducer(s: State, a: Action): State {
       const tab = getActiveTab(s);
       if (!tab?.file) return s;
       const file = { ...tab.file, ...a.patch };
+      const pdfSourceChanged = tab.file.format === 'pdf'
+        && a.patch.version !== undefined
+        && a.patch.version !== tab.file.version;
       const renamed = a.patch.name && s.selectedPath === tab.file.name;
       return {
         ...patchActiveTab(s, {
           file,
+          ...(pdfSourceChanged ? { pdfPage: undefined } : {}),
         }),
         selectedPath: renamed ? a.patch.name! : s.selectedPath,
       };
@@ -401,6 +408,8 @@ export function reducer(s: State, a: Action): State {
       return { ...s, selectedPath: a.path };
     case 'PENDING_SEMANTIC_NAMES':
       return { ...s, pendingSemanticNames: a.names };
+    case 'SEMANTIC_INDEXING_STATE':
+      return { ...s, semanticIndexing: a.state };
     case 'PENDING_CONVERSIONS':
       return { ...s, pendingConversions: a.paths };
     case 'BLOCKED_CONVERSIONS':
@@ -464,6 +473,11 @@ export function reducer(s: State, a: Action): State {
         ...s,
         tabs: s.tabs.map((t) => (t.id === a.id ? { ...t, preview: false } : t)),
       };
+    case 'TAB_PDF_PAGE':
+      return {
+        ...s,
+        tabs: s.tabs.map((t) => (t.id === a.id ? { ...t, pdfPage: a.page } : t)),
+      };
     case 'TABS_REORDER': {
       const fromIdx = s.tabs.findIndex((t) => t.id === a.id);
       if (fromIdx < 0) return s;
@@ -499,5 +513,7 @@ export function reducer(s: State, a: Action): State {
       return { ...s, find: { ...s.find, open: false, current: 0, total: 0 } };
     case 'FIND_SET':
       return { ...s, find: { ...s.find, ...a.patch } };
+    case 'UNSUPPORTED_MODAL':
+      return { ...s, unsupportedModalOpen: a.open };
   }
 }

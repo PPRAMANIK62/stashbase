@@ -41,6 +41,7 @@ import {
   CHAT_MAX_WIDTH,
   CHAT_MIN_WIDTH,
   isSplitterKey,
+  makeChatTab,
   resizeChatByKeyboard,
   resizeSidebarByKeyboard,
   SIDEBAR_COLLAPSE_AT,
@@ -52,8 +53,17 @@ import { getWindowId } from './api';
 import { api } from './api';
 import { applyAppearance, subscribeToAppearance } from './appearance';
 import { isTrustedPreviewSource } from './lib/previewMessages';
+import { readPreferredAgent } from './agentPreference';
+import {
+  COMPACT_WORKSPACE_QUERY,
+  resolveWorkspaceLayout,
+  shouldAutoCollapseChat,
+} from './workspaceLayout';
 
 const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane').then((mod) => ({ default: mod.ChatPane })));
+const LazyUnsupportedFilesModalGate = lazyWithRetry(() =>
+  import('./components/UnsupportedFilesModal').then((mod) => ({ default: mod.UnsupportedFilesModalGate })),
+);
 
 /**
  * Top-level shell. Wraps everything in <AppProvider> (the single
@@ -77,11 +87,25 @@ export function App() {
 
 function AppBody() {
   const veilHot = useGlobalDragDrop();
-  const { state, actions } = useApp();
+  const { state, actions, dispatch } = useApp();
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [clipboardOffer, setClipboardOffer] = useState<ClipboardOffer | null>(null);
   const [pendingClipboardOffer, setPendingClipboardOffer] = useState<ClipboardOffer | null>(null);
   const initialFolderPending = useRef(new URLSearchParams(window.location.search).has('folder'));
+  const compactWorkspace = useCompactWorkspace();
+  const hasDocument = state.tabs.length > 0;
+  const workspaceLayout = resolveWorkspaceLayout({
+    chatOpen: state.chatOpen,
+    hasDocument,
+    compact: compactWorkspace,
+  });
+  const defaultChatFolderRef = useRef('');
+  const responsiveChatCollapsedRef = useRef(false);
+  const previousWorkspaceRef = useRef({
+    folderPath: '',
+    hasDocument: false,
+    compact: compactWorkspace,
+  });
   // Mount the chat panel lazily on first open and then NEVER
   // unmount it — top-bar agent selectors only hide the column via CSS,
   // the underlying agent WebSocket sessions stay alive. Killing them
@@ -106,6 +130,59 @@ function AppBody() {
   useEffect(() => {
     if (state.chatOpen) setChatMounted(true);
   }, [state.chatOpen]);
+  useEffect(() => {
+    if (!state.folderPath || state.welcomeVisible) {
+      defaultChatFolderRef.current = '';
+      return;
+    }
+    if (defaultChatFolderRef.current === state.folderPath) return;
+    defaultChatFolderRef.current = state.folderPath;
+    const agent = readPreferredAgent();
+    dispatch({
+      type: 'CHAT_AGENT_OPEN',
+      agent,
+      tab: makeChatTab(agent, state.chatTabs),
+    });
+  }, [dispatch, state.chatTabs, state.folderPath, state.welcomeVisible]);
+  useEffect(() => {
+    const previous = previousWorkspaceRef.current;
+    const folderChanged = previous.folderPath !== state.folderPath;
+    previousWorkspaceRef.current = {
+      folderPath: state.folderPath,
+      hasDocument,
+      compact: compactWorkspace,
+    };
+
+    if (folderChanged) {
+      responsiveChatCollapsedRef.current = false;
+      return;
+    }
+    if (shouldAutoCollapseChat({
+      chatOpen: state.chatOpen,
+      hasDocument,
+      compact: compactWorkspace,
+      previousHasDocument: previous.hasDocument,
+      previousCompact: previous.compact,
+    })) {
+      responsiveChatCollapsedRef.current = true;
+      dispatch({ type: 'CHAT_TOGGLE' });
+      return;
+    }
+    if (responsiveChatCollapsedRef.current && state.chatOpen) {
+      // The user explicitly reopened Chat while the document is still
+      // active, so future document changes must not fight that choice.
+      responsiveChatCollapsedRef.current = false;
+      return;
+    }
+    if (
+      responsiveChatCollapsedRef.current
+      && !state.chatOpen
+      && (!hasDocument || !compactWorkspace)
+    ) {
+      responsiveChatCollapsedRef.current = false;
+      dispatch({ type: 'CHAT_TOGGLE' });
+    }
+  }, [compactWorkspace, dispatch, hasDocument, state.chatOpen, state.folderPath]);
   useEffect(() => {
     document.title = state.folder ? `${state.folder} — StashBase` : 'StashBase';
   }, [state.folder]);
@@ -251,6 +328,7 @@ function AppBody() {
           'app'
           + (state.sidebarCollapsed ? ' sidebar-collapsed' : '')
           + (state.chatOpen ? ' chat-open' : '')
+          + (workspaceLayout === 'chat-primary' ? ' chat-primary' : '')
         }
         style={{
           '--chat-width': `${state.chatWidth}px`,
@@ -260,9 +338,9 @@ function AppBody() {
         <DocumentOutlineProvider>
           <Sidebar />
           {!state.welcomeVisible && <SidebarSplitter />}
-          <MainPane />
+          <MainPane workspaceHidden={workspaceLayout === 'chat-primary'} />
         </DocumentOutlineProvider>
-        {chatMounted && state.chatOpen && <ChatSplitter />}
+        {chatMounted && workspaceLayout === 'split' && <ChatSplitter />}
         {chatMounted && (
           <LazyLoadBoundary
             className="chat-pane-shell"
@@ -299,12 +377,37 @@ function AppBody() {
         />
       )}
       <CascadePromptModal />
+      <Suspense fallback={null}>
+        <LazyUnsupportedFilesModalGate />
+      </Suspense>
       <AlertConfirmModal />
       <Toasts />
       {!state.welcomeVisible && <EmbedderRequireKeyGate />}
       <SettingsPortal />
     </>
   );
+}
+
+function useCompactWorkspace() {
+  const [compact, setCompact] = useState(() =>
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia(COMPACT_WORKSPACE_QUERY).matches
+      : window.innerWidth <= 960);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      const onResize = () => setCompact(window.innerWidth <= 960);
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }
+    const query = window.matchMedia(COMPACT_WORKSPACE_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setCompact(event.matches);
+    setCompact(query.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  return compact;
 }
 
 function HomeChromeButton({ onClick }: { onClick: () => void }) {

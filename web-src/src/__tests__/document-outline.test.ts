@@ -7,8 +7,8 @@ import { DocumentOutline } from '../components/DocumentOutline';
 test('outline entries are keyboard buttons with active and full-label accessibility state', () => {
   const markup = renderToStaticMarkup(createElement(DocumentOutline, {
     headings: [
-      { id: 'overview', level: 1, text: 'Overview' },
-      { id: 'section', level: 3, text: '' },
+      { id: 'overview', level: 1, text: 'Overview', position: 0 },
+      { id: 'section', level: 3, text: '', position: 1 },
     ],
     activeId: 'overview',
     onSelect: () => {},

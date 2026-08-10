@@ -6,10 +6,20 @@ import {
 } from '../../icons';
 import { useApp } from '../../store/AppContext';
 import { ImageLightbox } from '../ImageLightbox';
+import {
+  Menu as SharedMenu,
+  MenuItem as SharedMenuItem,
+  MenuPopup as SharedMenuPopup,
+  MenuPortal as SharedMenuPortal,
+  MenuPositioner as SharedMenuPositioner,
+  MenuTrigger as SharedMenuTrigger,
+} from '../ui/menu';
 import { baseName } from './attachments';
+import { changedEffortSelection, effortLabel, effortMenuState, effortOptions } from './effortMenuState';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
-import type { Attachment, EffortLevel, PermMode } from './types';
+import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from './types';
+import { modelMenuLabel } from './modelState';
 
 const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon }[] = [
   { id: 'default', label: 'Ask', desc: 'Ask before edits or higher-risk actions', Icon: HandIcon },
@@ -17,11 +27,6 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'plan', label: 'Plan', desc: 'Explore and propose a plan before changing files', Icon: ClipboardListIcon },
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
-
-const EFFORTS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
-const EFFORT_LABEL: Record<EffortLevel, string> = {
-  low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-High', max: 'Max',
-};
 
 function AccessMenu({
   mode, open, disabled, onOpenChange, onPick,
@@ -70,34 +75,40 @@ function AccessMenu({
   );
 }
 
-function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLevel) => void }) {
-  const cur = EFFORTS.indexOf(effort);
+function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
   return (
     <div className="agent-effort">
       <DumbbellIcon className="agent-effort-icon" />
       <span className="agent-effort-label">
-        Effort <span className="agent-effort-level">({EFFORT_LABEL[effort]})</span>
+        Effort <span className="agent-effort-level">({effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'})</span>
       </span>
       <ListBox
         className="agent-effort-track"
         aria-label="Effort"
         selectionMode="single"
-        selectedKeys={[effort]}
-        onAction={(key) => onSet(key as EffortLevel)}
+        selectedKeys={[effort ?? '__default__']}
+        onSelectionChange={(keys) => {
+          const next = changedEffortSelection(keys, effort, efforts);
+          if (next !== null) onSet(next);
+        }}
       >
-        {EFFORTS.map((lv, i) => (
+        <ListBoxItem id="__default__" className={({ isSelected }) => 'agent-effort-choice' + (isSelected ? ' cur' : '')} textValue="Default">
+          Default
+        </ListBoxItem>
+        {efforts.map((lv) => (
           <ListBoxItem
             key={lv}
             id={lv}
             className={({ isSelected }) =>
-              'agent-effort-notch'
-              + (i <= cur ? ' on' : '')
+              'agent-effort-choice'
               + (isSelected ? ' cur' : '')
               + (lv === 'max' ? ' max' : '')
             }
-            aria-label={EFFORT_LABEL[lv]}
-            textValue={EFFORT_LABEL[lv]}
-          />
+            aria-label={effortLabel(lv)}
+            textValue={effortLabel(lv)}
+          >
+            {effortLabel(lv)}
+          </ListBoxItem>
         ))}
       </ListBox>
     </div>
@@ -105,38 +116,77 @@ function EffortBar({ effort, onSet }: { effort: EffortLevel; onSet: (l: EffortLe
 }
 
 function EffortMenu({
-  effort, open, disabled, locked, onOpenChange, onSetEffort,
+  effort, efforts, inherited, open, disabled, locked, onOpenChange, onSetEffort,
 }: {
-  effort: EffortLevel;
+  effort?: EffortLevel;
+  efforts: EffortLevel[];
+  inherited: boolean;
   open: boolean;
   disabled: boolean;
   locked: boolean;
   onOpenChange: (open: boolean) => void;
-  onSetEffort: (level: EffortLevel) => void;
+  onSetEffort: (level?: EffortLevel) => void;
 }) {
-  const unavailable = disabled || locked;
+  const state = effortMenuState({ open, disabled, locked });
   return (
-    <MenuTrigger isOpen={open && !unavailable} onOpenChange={onOpenChange}>
+    <MenuTrigger isOpen={state.isOpen} onOpenChange={onOpenChange}>
       <Button
         className={'agent-mode-btn agent-effort-btn' + (locked ? ' is-locked' : '')}
-        isDisabled={unavailable}
+        isDisabled={state.triggerDisabled}
       >
         <DumbbellIcon className="agent-mode-icon" />
-        {EFFORT_LABEL[effort]}
+        {effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'}
         <ChevronDownIcon className="agent-mode-chevron" />
       </Button>
       <Popover className="agent-mode-menu effort-only" placement="top end">
         <div>
-          <EffortBar effort={effort} onSet={onSetEffort} />
+          <EffortBar effort={effort} efforts={efforts} inherited={inherited} onSet={onSetEffort} />
         </div>
       </Popover>
     </MenuTrigger>
   );
 }
 
+function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resumedSession, onSetModel }: {
+  selectedModel?: string;
+  activeModel?: string;
+  models: AgentModel[];
+  locked: boolean;
+  disabled: boolean;
+  resumedSession: boolean;
+  onSetModel: (model?: string) => void;
+}) {
+  const defaultSelected = !selectedModel;
+  return (
+    <SharedMenu>
+      <SharedMenuTrigger className={'agent-mode-btn agent-model-btn' + (locked ? ' is-locked' : '')} disabled={disabled || locked}>
+        {modelMenuLabel(models, selectedModel, activeModel, resumedSession)}
+        <ChevronDownIcon className="agent-mode-chevron" />
+      </SharedMenuTrigger>
+      <SharedMenuPortal>
+        <SharedMenuPositioner side="top" align="end" sideOffset={6} collisionPadding={8}>
+          <SharedMenuPopup className="agent-mode-menu agent-model-menu" aria-label="Model">
+            <div className="agent-mode-menu-head"><span>Model</span></div>
+            <SharedMenuItem label="Default" className={'agent-mode-opt' + (defaultSelected ? ' active' : '')} onClick={() => onSetModel(undefined)}>
+            <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">Default</span><span className="agent-mode-opt-desc">Use this runtime’s configured model</span></span>
+            {defaultSelected && <CheckIcon className="agent-mode-opt-check" />}
+            </SharedMenuItem>
+            {models.map((entry) => (
+              <SharedMenuItem key={entry.id} label={entry.label} className={'agent-mode-opt' + (selectedModel === entry.id ? ' active' : '')} onClick={() => onSetModel(entry.id)}>
+              <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">{entry.label}</span>{entry.description && <span className="agent-mode-opt-desc">{entry.description}</span>}</span>
+              {selectedModel === entry.id && <CheckIcon className="agent-mode-opt-check" />}
+              </SharedMenuItem>
+            ))}
+          </SharedMenuPopup>
+        </SharedMenuPositioner>
+      </SharedMenuPortal>
+    </SharedMenu>
+  );
+}
+
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortLocked, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortInherited, effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -144,19 +194,32 @@ export function AgentComposer({
   active: boolean;
   mode: PermMode;
   onSetMode: (mode: PermMode) => void;
-  effort: EffortLevel;
-  onSetEffort: (level: EffortLevel) => void;
+  effort?: EffortLevel;
+  effortInherited: boolean;
+  onSetEffort: (level?: EffortLevel) => void;
   effortLocked: boolean;
+  supportedEfforts?: string[];
+  selectedModel?: string;
+  activeModel?: string;
+  models: AgentModel[];
+  modelLocked: boolean;
+  modelNotice: string | null;
+  resumedSession: boolean;
+  onSetModel: (model?: string) => void;
+  skills: AgentSkill[];
+  skillState: 'available' | 'empty' | 'failed';
+  onRefreshSkills: () => void;
   attachments: Attachment[];
   uploading: boolean;
   agentShortName: string;
   showModeMenu: boolean;
   showEffortMenu: boolean;
+  showModelMenu: boolean;
   onPickFiles: (files: File[]) => void;
   onPasteImages: (files: File[]) => void;
   onFocusChange: (focused: boolean) => void;
   onRemoveAttachment: (path: string) => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, skill?: string) => void;
   onStop: () => void;
 }) {
   const [text, setText] = useState('');
@@ -168,8 +231,9 @@ export function AgentComposer({
   const [modeOpen, setModeOpen] = useState(false);
   const [effortOpen, setEffortOpen] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<AgentSkill>();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const activeMentionRef = useRef<HTMLDivElement>(null);
+  const mentionListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (active) composerRef.current?.focus(); }, [active]);
 
@@ -183,15 +247,30 @@ export function AgentComposer({
   }
 
   const suggestions = useMemo(() => {
-    if (!mention) return [];
+    if (!mention || mention.kind !== 'mention') return [];
     return rankMentionSuggestions(state.files, state.folders, mention.q);
   }, [mention, state.files, state.folders]);
 
-  const activeSuggestionIndex = Math.min(activeMentionIndex, Math.max(suggestions.length - 1, 0));
+  const skillSuggestions = useMemo(() => mention?.kind === 'skill'
+    ? skills.filter((skill) => skill.label.toLowerCase().includes(mention.q.toLowerCase()) || (skill.description ?? '').toLowerCase().includes(mention.q.toLowerCase()))
+    : [], [mention, skills]);
+  const choices = mention?.kind === 'skill' ? skillSuggestions : suggestions;
+
+  const activeSuggestionIndex = Math.min(activeMentionIndex, Math.max(choices.length - 1, 0));
+  const compatibleEfforts = effortOptions(supportedEfforts);
 
   useEffect(() => {
-    activeMentionRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [activeSuggestionIndex]);
+    const frame = requestAnimationFrame(() => {
+      const list = mentionListRef.current;
+      const active = list?.querySelector<HTMLElement>('.agent-mention-item.active');
+      if (!list || !active) return;
+      // `offsetTop` is relative to the positioned popup, not necessarily this
+      // scroll container. Let the browser find the containing scrollport so a
+      // selected row never lands partly above or below the visible list.
+      active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSuggestionIndex, choices.length]);
 
   const placeholder = phase === 'connecting'
     ? 'Connecting…'
@@ -202,49 +281,51 @@ export function AgentComposer({
         : `Message ${agentShortName}…`;
 
   function pickMention(path: string) {
-    if (!mention) return;
+    if (!mention || mention.kind !== 'mention') return;
     composerRef.current?.insertMention(path, mention);
     setMention(null);
   }
-
   function submit(t: string) {
     const trimmed = t.trim();
-    if ((!trimmed && attachments.length === 0) || disabled || uploading) return false;
-    onSend(trimmed);
+    if ((!trimmed && attachments.length === 0 && !selectedSkill) || disabled || uploading) return false;
+    onSend(trimmed, selectedSkill?.id);
+    setSelectedSkill(undefined);
     setMention(null);
     return true;
   }
 
   function moveMention(direction: 1 | -1) {
-    if (!suggestions.length) return;
-    setActiveMentionIndex((index) => (index + direction + suggestions.length) % suggestions.length);
+    if (!choices.length) return;
+    setActiveMentionIndex((index) => (index + direction + choices.length) % choices.length);
   }
 
   return (
     <div className="agent-composer">
-      {mention && suggestions.length > 0 && (
+      {mention && (choices.length > 0 || mention.kind === 'skill') && (
         <div className="agent-mention">
           <div className="agent-mention-head">
-            <span>Files and folders</span>
-            <span>↑↓ navigate · Enter select · Esc dismiss</span>
+            <span>{mention.kind === 'skill' ? 'Available skills' : 'Files and folders'}</span>
+            <span>{choices.length ? '↑↓ navigate · Enter select · Esc dismiss' : 'Esc dismiss'}</span>
           </div>
-          <VisuallyHidden>
+          {choices.length > 0 && <VisuallyHidden>
             <div role="status">
-              {`${baseName(suggestions[activeSuggestionIndex].path)}, ${activeSuggestionIndex + 1} of ${suggestions.length}`}
+              {`${mention.kind === 'skill' ? (skillSuggestions[activeSuggestionIndex]?.label ?? '') : baseName(suggestions[activeSuggestionIndex].path)}, ${activeSuggestionIndex + 1} of ${choices.length}`}
             </div>
-          </VisuallyHidden>
-          <ListBox
+          </VisuallyHidden>}
+          {choices.length > 0 ? <ListBox
+            ref={mentionListRef}
             id={mentionListboxId}
             className="agent-mention-list"
-            aria-label="Matching library files and folders"
+            aria-label={mention.kind === 'skill' ? 'Matching available skills' : 'Matching library files and folders'}
             selectionMode="single"
-            selectedKeys={[suggestions[activeSuggestionIndex].path]}
-            onAction={(key) => pickMention(String(key))}
+            selectedKeys={[mention.kind === 'skill' ? skillSuggestions[activeSuggestionIndex]?.id ?? '' : suggestions[activeSuggestionIndex].path]}
+            onAction={(key) => { if (mention.kind === 'skill') { const skill = skills.find((item) => item.id === String(key)); if (skill) { setSelectedSkill(skill); composerRef.current?.insertSkill(skill.label, mention); setMention(null); } } else pickMention(String(key)); }}
           >
-            {suggestions.map((suggestion, index) => (
+            {mention.kind === 'skill' ? skillSuggestions.map((skill, index) => (
+              <ListBoxItem key={skill.id} id={skill.id} className={({ isSelected }) => 'agent-mention-item' + (isSelected ? ' active' : '')} textValue={skill.label}><FileGenericIcon className="agent-mention-icon" /><span className="agent-mention-text"><span className="agent-mention-name">{skill.label}</span>{skill.description && <span className="agent-mention-path">{skill.description}</span>}</span></ListBoxItem>
+            )) : suggestions.map((suggestion, index) => (
               <ListBoxItem
                 key={suggestion.path}
-                ref={index === activeSuggestionIndex ? activeMentionRef : null}
                 id={suggestion.path}
                 className={({ isSelected }) => 'agent-mention-item' + (isSelected ? ' active' : '')}
                 textValue={suggestion.path}
@@ -258,7 +339,11 @@ export function AgentComposer({
                 </span>
               </ListBoxItem>
             ))}
-          </ListBox>
+          </ListBox> : (
+            <div className="agent-mention-empty" role="status">
+              {skillState === 'failed' ? <><span>Could not load skills.</span><Button className="agent-mention-retry" onPress={onRefreshSkills}>Retry</Button></> : <span>No skills are available for this folder.</span>}
+            </div>
+          )}
         </div>
       )}
       <div className="agent-composer-box">
@@ -307,12 +392,15 @@ export function AgentComposer({
             setActiveMentionIndex(0);
           }}
           onMentionNavigate={moveMention}
-          onMentionAccept={() => {
-            if (!suggestions.length) return false;
+            onMentionAccept={() => {
+            if (!mention) return false;
+            if (!choices.length) return mention.kind === 'skill';
+            if (mention.kind === 'skill') { const skill = skillSuggestions[activeSuggestionIndex]; if (!skill) return false; setSelectedSkill(skill); composerRef.current?.insertSkill(skill.label, mention); setMention(null); return true; }
             pickMention(suggestions[activeSuggestionIndex].path);
             return true;
           }}
-          onMentionDismiss={() => setMention(null)}
+            onMentionDismiss={() => setMention(null)}
+          onSkillMarkerRemoved={() => setSelectedSkill(undefined)}
           onShiftTab={() => {
             if (!showModeMenu || disabled) return false;
             cycleMode();
@@ -321,8 +409,8 @@ export function AgentComposer({
           onSubmit={submit}
           onPasteImages={onPasteImages}
           onFocusChange={onFocusChange}
-          mentionOpen={Boolean(mention && suggestions.length)}
-          mentionListboxId={mention && suggestions.length ? mentionListboxId : undefined}
+          mentionOpen={Boolean(mention && (choices.length > 0 || mention.kind === 'skill'))}
+          mentionListboxId={mention && choices.length ? mentionListboxId : undefined}
         />
         <input
           ref={fileInputRef}
@@ -344,6 +432,7 @@ export function AgentComposer({
             <PlusIcon />
           </Button>
           <span className="agent-bar-spacer" />
+          {showModelMenu && <ModelMenu selectedModel={selectedModel} activeModel={activeModel} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
           {showModeMenu && (
             <AccessMenu
               mode={mode}
@@ -356,11 +445,13 @@ export function AgentComposer({
           {showEffortMenu && (
             <EffortMenu
               effort={effort}
+              inherited={effortInherited}
               open={effortOpen}
               disabled={disabled}
               locked={effortLocked}
+              efforts={compatibleEfforts}
               onOpenChange={(open) => { setEffortOpen(open); if (open) setModeOpen(false); }}
-              onSetEffort={(level) => { onSetEffort(level); setEffortOpen(false); }}
+              onSetEffort={onSetEffort}
             />
           )}
           {turnActive ? (
@@ -371,13 +462,14 @@ export function AgentComposer({
             <Button
               className="agent-send"
               aria-label="Send message"
-              isDisabled={disabled || uploading || (!text.trim() && attachments.length === 0)}
+              isDisabled={disabled || uploading || (!text.trim() && attachments.length === 0 && !selectedSkill)}
               onPress={() => composerRef.current?.submit()}
             >
               <ArrowUpIcon />
             </Button>
           )}
         </div>
+        {modelNotice && <div className="agent-model-notice" role="status">{modelNotice}</div>}
       </div>
       {previewAttachment?.previewUrl && (
         <ImageLightbox

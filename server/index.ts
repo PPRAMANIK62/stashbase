@@ -24,6 +24,7 @@ import { WebSocketServer } from 'ws';
 import {
   attachAgentRuntime,
   isAgentAccessMode,
+  parseAgentEffort,
   registerAgentAdapter,
   stopAgentRuntime,
   type AgentAccessMode,
@@ -65,6 +66,7 @@ import { blake3File } from './file-hash.ts';
 import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
+import { mount as mountOnboardingRoutes } from './routes/onboarding.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from './agent-adapters.ts';
 
 const log = logger('server');
@@ -275,6 +277,7 @@ if (!DEV_VITE) {
 // before a window has an open folder, so mount them before the gate.
 mountWindowContextRoutes(app);
 mountLibraryRoutes(app);
+mountOnboardingRoutes(app);
 
 // Route-prefix gate: every API path under these roots needs an open
 // folder. Centralises the NO_FOLDER 412 response so individual handlers
@@ -415,7 +418,16 @@ function agentIdOf(req: import('node:http').IncomingMessage): string {
 }
 
 function connectionOptionsOf(req: import('node:http').IncomingMessage): AgentConnectionOptions {
-  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req) };
+  return { windowId: windowIdOf(req), effort: effortOf(req), resume: resumeOf(req), access: accessOf(req), model: modelOf(req) };
+}
+
+/** Model ids are opaque native identifiers. Keep only a small URL safety bound;
+ * each adapter validates membership in its freshly discovered catalog. */
+function modelOf(req: import('node:http').IncomingMessage): string | undefined {
+  try {
+    const value = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`).searchParams.get('model')?.trim();
+    return value && value.length <= 200 ? value : undefined;
+  } catch { return undefined; }
 }
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {
@@ -433,8 +445,7 @@ function windowIdOf(req: import('node:http').IncomingMessage): string {
 function effortOf(req: import('node:http').IncomingMessage): string | undefined {
   try {
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
-    const e = u.searchParams.get('effort');
-    return ['low', 'medium', 'high', 'xhigh', 'max'].includes(e ?? '') ? e! : undefined;
+    return parseAgentEffort(u.searchParams.get('effort'));
   } catch {
     return undefined;
   }

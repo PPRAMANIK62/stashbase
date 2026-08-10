@@ -7,7 +7,7 @@
  * search, Agent text reads, and semantic indexing under the original `.docx`
  * path.
  */
-import { closeSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import fs, { closeSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -15,6 +15,7 @@ import { Worker } from 'node:worker_threads';
 import { isDocxFile } from './format.ts';
 import { derivedDir, derivedHtmlFor } from './derived-store.ts';
 import {
+  derivedIsFresh,
   discoverNewSources,
   indexFreshDerived,
   maybeConvert,
@@ -23,6 +24,7 @@ import {
 } from './conversion.ts';
 import { logger } from './log.ts';
 import { hasNoExtractableText } from './indexable.ts';
+import { validatePreparedDocxText } from './prepared-validation.ts';
 import { docxSanitizePolicy } from '../shared/html-sanitization.ts';
 
 const log = logger('docx');
@@ -70,6 +72,25 @@ const DOCX_WORKER_SOURCE = [
 
 export function derivedHtmlPathForDocx(docxAbsPath: string): string {
   return derivedHtmlFor(docxAbsPath);
+}
+
+export function currentDerivedTextPathForDocx(sourceAbs: string, known?: { sourceMtimeMs: number; derivedMtimeMs: number }): string | null {
+  return derivedIsFresh(DOCX_SPEC, sourceAbs, known) ? derivedHtmlPathForDocx(sourceAbs) : null;
+}
+
+export async function currentDerivedTextPathForDocxAsync(
+  sourceAbs: string,
+  known: { sourceMtimeMs: number; derivedMtimeMs: number },
+): Promise<string | null> {
+  if (known.derivedMtimeMs < known.sourceMtimeMs) return null;
+  const htmlPath = derivedHtmlPathForDocx(sourceAbs);
+  try {
+    const html = await fs.promises.readFile(htmlPath);
+    if (!html.subarray(Math.max(0, html.length - 2048)).toString('utf8').includes(DOCX_COMPLETE_MARKER)) return null;
+    return await validatePreparedDocxText(html) ? htmlPath : null;
+  } catch {
+    return null;
+  }
 }
 
 function cleanupDerivedDocx(docxAbsPath: string): void {

@@ -5,13 +5,24 @@ import {
   type JsonRpcId,
 } from './codex-protocol.ts';
 
+export const CODEX_RPC_REQUEST_TIMEOUT_MS = 30000;
+
+export class CodexRpcRequestTimeoutError extends Error {
+  constructor(readonly method: string) {
+    super(`Codex app-server request timed out: ${method}`);
+    this.name = 'CodexRpcRequestTimeoutError';
+  }
+}
+
 interface PendingRpc {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  timer?: NodeJS.Timeout;
+  timer?: ReturnType<typeof setTimeout>;
 }
 export interface CodexRpcPeerOptions {
   requestTimeoutMs?: number;
+  scheduleTimeout?: (callback: () => void, timeoutMs: number) => ReturnType<typeof setTimeout>;
+  cancelTimeout?: (timer: ReturnType<typeof setTimeout>) => void;
   onRequest?: (message: { id: JsonRpcId; method: string; params: JsonObject }) => void;
   onNotification?: (method: string, params: JsonObject) => void;
 }
@@ -34,9 +45,11 @@ export class CodexRpcPeer {
       const pending: PendingRpc = { resolve, reject };
       const timeoutMs = this.options.requestTimeoutMs ?? 0;
       if (timeoutMs > 0) {
-        pending.timer = setTimeout(() => {
+        const scheduleTimeout = this.options.scheduleTimeout ?? setTimeout;
+        pending.timer = scheduleTimeout(() => {
+          pending.timer = undefined;
           this.pending.delete(id);
-          reject(new Error(`Codex app-server request timed out: ${method}`));
+          reject(new CodexRpcRequestTimeoutError(method));
         }, timeoutMs);
         pending.timer.unref?.();
       }
@@ -45,7 +58,7 @@ export class CodexRpcPeer {
         this.writeLine(JSON.stringify({ id, method, params }));
       } catch (err: unknown) {
         this.pending.delete(id);
-        if (pending.timer) clearTimeout(pending.timer);
+        this.clearPendingTimer(pending);
         reject(errorFromUnknown(err));
       }
     });
@@ -93,7 +106,7 @@ export class CodexRpcPeer {
     if (this.closed) return;
     this.closed = true;
     for (const [, pending] of this.pending) {
-      if (pending.timer) clearTimeout(pending.timer);
+      this.clearPendingTimer(pending);
       pending.reject(error);
     }
     this.pending.clear();
@@ -108,8 +121,15 @@ export class CodexRpcPeer {
     const pending = this.pending.get(id);
     if (!pending) return;
     this.pending.delete(id);
-    if (pending.timer) clearTimeout(pending.timer);
+    this.clearPendingTimer(pending);
     if ('error' in message) pending.reject(rpcError(message.error));
     else pending.resolve(message.result);
+  }
+
+  private clearPendingTimer(pending: PendingRpc): void {
+    if (!pending.timer) return;
+    const cancelTimeout = this.options.cancelTimeout ?? clearTimeout;
+    cancelTimeout(pending.timer);
+    pending.timer = undefined;
   }
 }

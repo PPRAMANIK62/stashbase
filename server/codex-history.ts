@@ -15,7 +15,7 @@ import {
   toolStartFromItem,
   type JsonObject,
 } from './codex-protocol.ts';
-import { CodexRpcPeer } from './codex-rpc-transport.ts';
+import { CodexRpcPeer, CODEX_RPC_REQUEST_TIMEOUT_MS } from './codex-rpc-transport.ts';
 import { historyImageAttachment, restoreHistoryImageAttachments, type RestoredImageAttachment } from './agent-history-attachments.ts';
 
 const log = logger('codex-history');
@@ -111,7 +111,7 @@ class CodexHistoryAppServer {
       if (!this.proc.stdin.writable) throw new Error('Codex app-server is not running.');
       this.proc.stdin.write(`${line}\n`);
     }, {
-      requestTimeoutMs: 30000,
+      requestTimeoutMs: CODEX_RPC_REQUEST_TIMEOUT_MS,
       onRequest: ({ id, method }) => {
         try {
           this.rpc.reject(id, `Unsupported Codex history request: ${method}`, -32601);

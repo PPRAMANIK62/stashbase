@@ -23,7 +23,11 @@ import { AgentComposer } from './agent/AgentComposer';
 import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
-import type { Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
+import { agentConnectionUrl } from './agent/connectionUrl';
+import { closeAgentSocketIntentionally, terminalAgentState } from './agent/connectionLifecycle';
+import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
+import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
+import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
 
 let blockSeq = 0;
 const nextId = () => `b${++blockSeq}`;
@@ -36,6 +40,7 @@ interface QueuedPrompt {
   text: string;
   attachments: Attachment[];
   titleHint?: string;
+  skill?: string;
   status: 'waiting' | 'steering' | 'steered';
 }
 
@@ -43,6 +48,7 @@ interface PromptToSend {
   text: string;
   attachments: Attachment[];
   titleHint?: string;
+  skill?: string;
   appendBlock: boolean;
   clearAttachments?: boolean;
 }
@@ -90,16 +96,26 @@ export function AgentView({
   // failed (see `fatal`). `nonce` bumps to force a reconnect.
   const [phase, setPhase] = useState<'connecting' | 'live' | 'closed'>('connecting');
   const [fatal, setFatal] = useState<string | null>(null);
+  const fatalRef = useRef<string | null>(null);
+  fatalRef.current = fatal;
+  const [fatalRecoveryLabel, setFatalRecoveryLabel] = useState<'Retry' | 'Reconnect'>('Retry');
   const [nonce, setNonce] = useState(0);
   // Permission mode for this session — drives the composer's Modes
   // dropdown. Switching it sends `set-mode` so the agent applies it live.
   const [mode, setMode] = useState<PermMode>('default');
   const modeRef = useRef<PermMode>('default');
-  // Thinking effort — fixed per session (no live SDK setter), so it rides
-  // the connect URL. `effortRef` lets the connect effect read the latest
-  // value without resubscribing on every change.
-  const [effort, setEffort] = useState<EffortLevel>('high');
-  const effortRef = useRef<EffortLevel>('high');
+  // Thinking effort is opt-in. Undefined preserves the native runtime
+  // default; an explicit choice rides the connect URL for a new session.
+  const [effort, setEffort] = useState<EffortLevel | undefined>(undefined);
+  const effortRef = useRef<EffortLevel | undefined>(undefined);
+  const [restoredClaudeSession, setRestoredClaudeSession] = useState(false);
+  const [effortInherited, setEffortInherited] = useState(false);
+  // User intent and runtime telemetry must stay separate: an active model
+  // reached through Default must never become an explicit override later.
+  const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
+  const [skills, setSkills] = useState<AgentSkill[]>([]);
+  const [skillState, setSkillState] = useState<'available' | 'empty' | 'failed'>('empty');
+  const modelControlRef = useRef(modelControl);
   // The live session's SDK id (from the `session-id` event) — lets the
   // History dropdown mark the current session active. `resumeIdRef` holds
   // a session id to resume on the next connect; it rides the connect URL
@@ -115,10 +131,12 @@ export function AgentView({
   const [historyOpen, setHistoryOpen] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
+  const exitReceivedRef = useRef(false);
   const toolNamesRef = useRef<Map<string, string>>(new Map());
   // Which streaming block kind is currently "open" (so consecutive text
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
+  const turnErrorTrackerRef = useRef(new TurnErrorTracker());
   const knownFilePaths = useMemo(() => new Set(state.files.map((f) => f.name)), [state.files]);
 
   useEffect(() => {
@@ -171,11 +189,40 @@ export function AgentView({
     setTurnActive(active);
   }
 
+  function finishRendererSession({
+    ready,
+    exitReceived,
+    message,
+  }: {
+    ready: boolean;
+    exitReceived: boolean;
+    message?: string;
+  }) {
+    const input = {
+      ready,
+      exitReceived,
+      agentShortName: meta.shortName,
+      message,
+      currentFatal: fatalRef.current,
+    };
+    const terminal = terminalAgentState({ ...input, blocks: [] });
+    queuedPromptsRef.current = [];
+    openKind.current = null;
+    toolNamesRef.current.clear();
+    setBlocks((currentBlocks) => terminalAgentState({ ...input, blocks: currentBlocks }).blocks);
+    setQueuedTurns(terminal.queuedTurns);
+    setTurnBusy(terminal.turnActive);
+    setFatal(terminal.fatal);
+    setFatalRecoveryLabel(terminal.recoveryLabel);
+    setPhase(terminal.phase);
+  }
+
   useEffect(() => {
     if (!runtime) {
       readyRef.current = false;
       setPhase('connecting');
       setFatal(null);
+      setFatalRecoveryLabel('Retry');
       return;
     }
     // Discovery is authoritative once it has returned. Do not open a socket
@@ -185,20 +232,22 @@ export function AgentView({
       readyRef.current = false;
       setPhase('closed');
       setFatal(null);
+      setFatalRecoveryLabel('Retry');
       return;
     }
     readyRef.current = false;
+    exitReceivedRef.current = false;
     // Consume-and-clear the resume id: it belongs to this one connection,
     // so a later reconnect (Retry / effort change) starts fresh instead of
     // re-resuming.
     const resume = resumeIdRef.current;
     resumeIdRef.current = null;
     const endpoint = runtime?.endpoint ?? '/ws/agent';
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${endpoint}`
-      + `?windowId=${encodeURIComponent(getWindowId())}&effort=${effortRef.current}`
-      + `&access=${modeRef.current}`
-      + `&agent=${encodeURIComponent(agent)}`
-      + (resume ? `&resume=${encodeURIComponent(resume)}` : '');
+    const wsUrl = agentConnectionUrl({
+      protocol: location.protocol, host: location.host, endpoint,
+      windowId: getWindowId(), effort: effortRef.current, access: modeRef.current,
+      agent, model: modelControlRef.current.selectedModel, resume,
+    });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -208,25 +257,19 @@ export function AgentView({
       handleEvent(ev);
     };
     ws.onclose = () => {
-      queuedPromptsRef.current = [];
-      setQueuedTurns([]);
-      setTurnBusy(false);
-      // Closing before the session was ever ready is a startup failure,
-      // not a normal end — surface it (with a Retry) rather than a quiet
-      // "session ended".
-      if (!readyRef.current) {
-        setFatal((f) => f ?? `Connection closed before ${meta.shortName} started.`);
-        refreshRuntimes();
-      }
-      setPhase('closed');
+      const wasReady = readyRef.current;
+      const sawExit = exitReceivedRef.current;
+      // A protocol exit already owns the terminal transition (and any fatal
+      // cause). The server closes the socket immediately afterward, before
+      // React may have committed the fatal state, so terminalizing again here
+      // could erase the message with a stale fatalRef.
+      if (sawExit) return;
+      finishRendererSession({ ready: wasReady, exitReceived: sawExit });
+      if (!wasReady) refreshRuntimes();
     };
 
     return () => {
-      // Detach onclose so the reconnect path's teardown doesn't clobber
-      // the fresh 'connecting' state with a stale 'closed'.
-      ws.onclose = null;
-      try { ws.send(JSON.stringify({ t: 'close' })); } catch { /* gone */ }
-      ws.close();
+      closeAgentSocketIntentionally(ws);
     };
   }, [nonce, runtime?.endpoint, runtimeUnavailable, agent, meta.shortName]);
 
@@ -237,13 +280,37 @@ export function AgentView({
     setBlocks([]);
     setEditableUserMessageIds(new Set());
     setFatal(null);
+    setFatalRecoveryLabel('Retry');
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
     setCurrentSessionId(null);
     sessionIdRef.current = null;
+    setRestoredClaudeSession(false);
+    setEffortInherited(false);
     toolNamesRef.current.clear();
     openKind.current = null;
+    setModelControl((current) => {
+      const next = { ...current, activeModel: undefined, resumedSession: false };
+      modelControlRef.current = next;
+      return next;
+    });
+    setPhase('connecting');
+    setNonce((n) => n + 1);
+  }
+
+  /** A fatal runtime reconnect keeps the transcript available for context and
+   * diagnosis. The dead native session cannot be resumed implicitly, but the
+   * visible conversation must not disappear as the replacement connects. */
+  function reconnectAfterFatal() {
+    setFatal(null);
+    setFatalRecoveryLabel('Retry');
+    queuedPromptsRef.current = [];
+    setQueuedTurns([]);
+    setTurnBusy(false);
+    toolNamesRef.current.clear();
+    openKind.current = null;
+    resumeIdRef.current = sessionIdRef.current;
     setPhase('connecting');
     setNonce((n) => n + 1);
   }
@@ -268,7 +335,13 @@ export function AgentView({
     setHistoryOpen(false);
     let hist: Block[] = [];
     try {
-      hist = (await api.getSessionMessages(id, agent)) as Block[];
+      const replay = await api.getSessionReplay(id, agent);
+      hist = replay.messages as Block[];
+      const inheritedEffort = agent === 'claude' ? replay.effort ?? undefined : undefined;
+      setEffort(inheritedEffort);
+      effortRef.current = inheritedEffort;
+      setRestoredClaudeSession(agent === 'claude');
+      setEffortInherited(agent === 'claude' && replay.effort === null);
     } catch {
       actions.toast('Could not load that session.', { level: 'error' });
       return;
@@ -277,6 +350,7 @@ export function AgentView({
     setBlocks(hist);
     setEditableUserMessageIds(new Set());
     setFatal(null);
+    setFatalRecoveryLabel('Retry');
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
@@ -285,6 +359,13 @@ export function AgentView({
     toolNamesRef.current.clear();
     openKind.current = null;
     resumeIdRef.current = id;
+    // The previous tab may have been configured for another model. Clear it
+    // before reconnecting so the locked resumed chat cannot mislabel itself.
+    const resumedModelControl: ModelControlState = {
+      models: [], notice: 'This resumed session retains the model chosen by its native runtime.', resumedSession: true,
+    };
+    modelControlRef.current = resumedModelControl;
+    setModelControl(resumedModelControl);
     // Name the tab from the resumed session right away — otherwise a tab
     // opened to a past session stays "Untitled" until the user sends a
     // new prompt (the `turn-end` path that usually renames never fires on
@@ -313,6 +394,14 @@ export function AgentView({
         setCurrentSessionId(ev.id);
         sessionIdRef.current = ev.id;
         break;
+      case 'models':
+        setModelControl((current) => {
+          const next = applyModelEvent(current, ev);
+          modelControlRef.current = next;
+          return next;
+        });
+        break;
+      case 'skills': setSkills(ev.skills); setSkillState(ev.state); break;
       case 'session-title':
         if (isDefaultChatTitle(titleRef.current)) {
           const t = ev.title.trim();
@@ -321,6 +410,7 @@ export function AgentView({
         break;
       case 'turn-start':
         openKind.current = null;
+        turnErrorTrackerRef.current.start();
         setTurnBusy(true);
         break;
       case 'text':
@@ -349,14 +439,12 @@ export function AgentView({
           const toolName = toolNamesRef.current.get(ev.id);
           if (shouldRefreshAfterTool(toolName)) {
             const toolFolder = folderPathRef.current;
-            const createdFile = fileInCurrentFolderFromToolResult(toolName, ev.content, toolFolder);
             void (async () => {
               await api.sync(toolFolder).catch(() => { /* turn-end / next poll will surface it */ });
               if (folderPathRef.current !== toolFolder) return;
               await actions.loadFiles();
               if (folderPathRef.current !== toolFolder) return;
               void actions.refreshIndexState();
-              if (createdFile) await actions.selectFile(createdFile);
             })().catch((err) => {
               actions.toast(`Could not refresh files: ${errorText(err)}`, { level: 'error' });
             });
@@ -383,7 +471,9 @@ export function AgentView({
           setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not steer Codex: ${ev.message}` }]);
         }
         break;
-      case 'turn-end':
+      case 'turn-end': {
+        const terminal = turnErrorTrackerRef.current.finish(ev.isError);
+        if (terminal.duplicate) break;
         openKind.current = null;
         // A completed turn cannot retain an in-flight tool. Codex normally
         // emits `item/completed` for every tool, but an omitted or unmatched
@@ -409,8 +499,13 @@ export function AgentView({
               if (folderPathRef.current === turnFolder) void actions.refreshIndexState();
             });
         }
-        runNextQueuedPrompt();
+        recordFailureBeforeContinuing(
+          terminal,
+          (message) => setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: message }]),
+          runNextQueuedPrompt,
+        );
         break;
+      }
       case 'error':
         openKind.current = null;
         // Runtime bridges record terminal failures in the shared catalog.
@@ -424,17 +519,18 @@ export function AgentView({
           queuedPromptsRef.current = [];
           setQueuedTurns([]);
           setTurnBusy(false);
+          setFatalRecoveryLabel('Retry');
           setFatal(ev.message);
           setPhase('closed');
         } else {
+          turnErrorTrackerRef.current.explain();
           setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: ev.message }]);
         }
         break;
       case 'exit':
-        queuedPromptsRef.current = [];
-        setQueuedTurns([]);
-        setTurnBusy(false);
-        setPhase('closed');
+        exitReceivedRef.current = true;
+        finishRendererSession({ ready: readyRef.current, exitReceived: true, message: ev.message });
+        if (ev.message) refreshRuntimes();
         break;
     }
   }
@@ -458,7 +554,7 @@ export function AgentView({
       text: p.text,
       attachments: p.attachments.length ? p.attachments : undefined,
       status: p.status,
-      canSteer: capabilities?.steering === true,
+      canSteer: capabilities?.steering === true && !p.skill,
     }));
   }
 
@@ -467,17 +563,22 @@ export function AgentView({
     setQueuedTurns(queuePreview());
   }
 
-  function send(text: string) {
+  function send(text: string, skill?: string) {
     const atts = attachments;
     const titleHint = capabilities?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
     if (turnActiveRef.current) {
       const id = nextId();
-      queuedPromptsRef.current.push({ id, text, attachments: atts, titleHint, status: 'waiting' });
+      queuedPromptsRef.current.push({ id, text, attachments: atts, titleHint, skill, status: 'waiting' });
       setQueuedTurns(queuePreview());
       setAttachments([]);
       return;
     }
-    void sendPromptNow({ text, attachments: atts, titleHint, appendBlock: true, clearAttachments: true });
+    void sendPromptNow({ text, attachments: atts, titleHint, skill, appendBlock: true, clearAttachments: true });
+  }
+
+  function refreshSkills() {
+    if (phase !== 'live') return;
+    wsRef.current?.send(JSON.stringify({ t: 'refresh-skills' }));
   }
 
   function runNextQueuedPrompt() {
@@ -517,6 +618,7 @@ export function AgentView({
     text,
     attachments: atts,
     titleHint,
+    skill,
     appendBlock,
     clearAttachments = false,
   }: PromptToSend) {
@@ -541,6 +643,7 @@ export function AgentView({
         t: 'prompt',
         text: wire,
         ...(titleHint ? { titleHint } : {}),
+        ...(skill ? { skill } : {}),
       }));
       if (clearAttachments) clearComposerAttachments();
     } catch (err) {
@@ -677,14 +780,31 @@ export function AgentView({
     wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: m }));
   }
 
-  /** Change thinking effort. The SDK fixes effort at session construction
-   *  (no live setter), so we apply it by reconnecting — but only when the
-   *  chat is still empty, so we never discard a real conversation. With
-   *  history present it takes effect on the next new chat. */
-  function changeEffort(level: EffortLevel) {
-    if (blocks.length > 0 || turnActive) return;
+  /** Change thinking effort. Restored idle transcripts reconnect to the same
+   * native session; their visible history is retained. */
+  function changeEffort(level: EffortLevel | undefined) {
+    if (turnActive || (blocks.length > 0 && !restoredClaudeSession)) return;
     setEffort(level);
     effortRef.current = level;
+    setEffortInherited(false);
+    if (blocks.length > 0 && sessionIdRef.current) {
+      resumeIdRef.current = sessionIdRef.current;
+      setPhase('connecting');
+      setNonce((n) => n + 1);
+    } else {
+      reconnect();
+    }
+  }
+
+  /** Changing model starts a new native session. A resumed or populated
+   * transcript is immutable here, so it can never silently switch models. */
+  function changeModel(next: string | undefined) {
+    if (blocks.length > 0 || turnActive) return;
+    setModelControl((current) => {
+      const updated = { ...current, selectedModel: next, activeModel: undefined, notice: null, resumedSession: false };
+      modelControlRef.current = updated;
+      return updated;
+    });
     reconnect();
   }
 
@@ -720,7 +840,10 @@ export function AgentView({
     reconnect();
   }
 
-  const effortLocked = blocks.length > 0 || turnActive;
+  const effortLocked = turnActive || (blocks.length > 0 && !restoredClaudeSession);
+  const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
+  const effectiveModel = modelControl.activeModel ?? modelControl.selectedModel;
+  const supportedEfforts = modelControl.models.find((entry) => entry.id === effectiveModel)?.supportedEfforts;
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
     wsRef.current?.send(JSON.stringify({ t: 'permission-reply', id: permId, allow }));
@@ -820,6 +943,7 @@ export function AgentView({
           turnActive={turnActive}
           phase={phase}
           fatal={fatal}
+          fatalRecoveryLabel={fatalRecoveryLabel}
           agentName={meta.name}
           agentShortName={meta.shortName}
           Icon={meta.Icon}
@@ -828,7 +952,7 @@ export function AgentView({
           onSteerQueued={steerQueuedPrompt}
           onCopyUserMessage={copyUserMessage}
           onResendUserMessage={send}
-          onRetry={reconnect}
+          onRetry={reconnectAfterFatal}
           onOpenArtifact={(path) => {
             const folder = folderPathRef.current;
             const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
@@ -851,10 +975,23 @@ export function AgentView({
         mode={mode}
         onSetMode={changeMode}
         effort={effort}
+        effortInherited={effortInherited}
         onSetEffort={changeEffort}
         effortLocked={effortLocked}
+        selectedModel={modelControl.selectedModel}
+        activeModel={modelControl.activeModel}
+        models={modelControl.models}
+        modelLocked={modelLocked}
+        modelNotice={modelControl.notice}
+        resumedSession={modelControl.resumedSession}
+        supportedEfforts={supportedEfforts}
+        onSetModel={changeModel}
         showModeMenu={capabilities?.modes === true}
         showEffortMenu={capabilities?.effort === true}
+        showModelMenu={modelMenuVisible(capabilities?.models === true, modelControl.models)}
+        skills={skills}
+        skillState={skillState}
+        onRefreshSkills={refreshSkills}
         agentShortName={meta.shortName}
         attachments={attachments}
         uploading={uploading}
@@ -944,20 +1081,6 @@ function shouldRefreshAfterTool(name: string | undefined): boolean {
   if (!name) return false;
   if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name)) return true;
   return /^mcp__/.test(name) && /(write|delete|rename|update|set_|create|move)/i.test(name);
-}
-
-function fileInCurrentFolderFromToolResult(toolName: string | undefined, content: string, folder: string): string | null {
-  if (!toolName || !/write_file$/i.test(toolName) || !folder) return null;
-  try {
-    const parsed = JSON.parse(content) as { path?: unknown; ok?: unknown };
-    if (parsed.ok !== true || typeof parsed.path !== 'string') return null;
-    const prefix = `${folder}/`;
-    if (!parsed.path.startsWith(prefix)) return null;
-    const rel = parsed.path.slice(prefix.length);
-    return isSafeFolderRelativePath(rel) ? rel : null;
-  } catch {
-    return null;
-  }
 }
 
 function isSafeFolderRelativePath(path: string): boolean {

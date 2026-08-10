@@ -17,8 +17,12 @@ to migrate them into a StashBase-specific storage model.
   Ctrl+Shift+W as an alternative. Cmd/Ctrl+W remains the active-tab command.
 - Users can create, rename, move, and delete files or folders through explicit
   file operations.
+- A folder opens into a chat-first workspace with the Files sidebar still
+  visible. Selecting or creating a document reveals the source pane and docks
+  the same conversation beside it.
 - The main pane opens the source file the user selected; generated artifacts
   stay hidden.
+- PDF tabs retain their active reading position (page number) across tab switches during a session. Reusing a preview tab for a different file resets the stored page position.
 - Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
   strip's `+` button — distinct from Cmd/Ctrl+N, which creates a note file.
 - Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active
@@ -38,10 +42,15 @@ to migrate them into a StashBase-specific storage model.
 - Search results and agent file links return users to those source files.
 - Root-level `AGENTS.md` and optional `CLAUDE.md` bridge files are visible,
   editable user files. StashBase only creates missing defaults.
+- Opening a folder starts changed-content indexing checks in the background.
+  When the pending semantic workload is unusually large, a persistent,
+  non-blocking notice lets the user start it or leave it paused for that folder.
 
 ## Experience Contract
 
 - Opening a folder should feel like navigation, not a long preparation task.
+- Deferring semantic indexing must not block browsing, editing, preparation, or
+  keyword search, and the decision must remain recoverable after restart.
 - Opening or closing one window must not switch or close another window's
   folder context.
 - Window lifecycle shortcuts must not be interpreted as document-tab commands.
@@ -63,9 +72,13 @@ to migrate them into a StashBase-specific storage model.
 - Sidebar and Agent-panel widths work with pointer input and with
   Arrow/Home/End keys on macOS, Windows, and Linux; reduced-motion users do
   not receive layout movement animation.
+- Closing the last document lets an open Chat reclaim the main area. Hiding
+  Chat is explicit and leaves a lightweight document/chat launcher instead of
+  immediately reopening it.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
   or project-management surface. It groups the file tree and the active
   Markdown document outline into independently collapsible navigation sections.
+- StashBase displays only supported document and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a persistent callout banner in the Files panel.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
 - Command Palette exposes only safe, context-available actions the app already

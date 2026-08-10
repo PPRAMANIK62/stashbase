@@ -23,6 +23,7 @@ import { logger } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import type { FilesystemPathModule } from './filesystem-path.ts';
+import { getSemanticIndexingDecision } from './state-db.ts';
 import type {
   EmbedderRuntimeConfig,
   Indexer,
@@ -32,6 +33,21 @@ import type {
 } from './indexer.ts';
 
 const log = logger('index');
+
+export function pausedWriteDisposition(
+  indexedHash: string | null | undefined,
+  nextHash: string,
+): 'index' | 'retain' | 'invalidate' {
+  if (indexedHash === undefined) return 'index';
+  return indexedHash === nextHash ? 'retain' : 'invalidate';
+}
+
+export function excludePausedPendingHits<T extends { fileName: string }>(
+  hits: T[],
+  pending: ReadonlySet<string>,
+): T[] {
+  return hits.filter((hit) => !pending.has(filesystemPath.identity(hit.fileName)));
+}
 
 // The daemon keys its single global collection by **absolute POSIX path**
 // and binds absolute folder roots. Under the Folder model every caller
@@ -117,6 +133,15 @@ export class MfsIndexer implements Indexer {
   private legacySources: Map<string, string> | null = null;
   private legacySourceGeneration = -1;
 
+  private async pausedIndexedHash(sourcePath: string): Promise<string | null | undefined> {
+    for (const folder of getDaemon().knownBindings().keys()) {
+      if (!filesystemPath.contains(folder, sourcePath) || !getSemanticIndexingDecision(folder)) continue;
+      const indexed = await this.listFiles(folder);
+      return indexed[normalizeDaemonPath(sourcePath)] ?? null;
+    }
+    return undefined;
+  }
+
   async bindFolder(folder: string, cfg: EmbedderRuntimeConfig): Promise<void> {
     const daemon = getDaemon();
     const source = normalizeDaemonPath(folder);
@@ -167,6 +192,13 @@ export class MfsIndexer implements Indexer {
       return 0;
     }
     const { text, ext, fileHash } = prepareForIndex(filePath, content);
+    const pausedHash = await this.pausedIndexedHash(filePath);
+    const pausedDisposition = pausedWriteDisposition(pausedHash, fileHash);
+    if (pausedDisposition !== 'index') {
+      if (pausedDisposition === 'retain') return 1;
+      await getDaemon().call('delete', { path: normalizeDaemonPath(filePath) });
+      return 0;
+    }
     // Covers truly empty files AND files whose extractable text is empty
     // (bundler-format HTML that is one giant <script>, whitespace-only
     // notes) — embedding either would store 0 chunks, so skip the
@@ -196,6 +228,13 @@ export class MfsIndexer implements Indexer {
   }
 
   async upsertConvertedFile(sourceAbs: string, derivedContent: string, sourceHash: string, derivedExt = '.md'): Promise<number> {
+    const pausedHash = await this.pausedIndexedHash(sourceAbs);
+    const pausedDisposition = pausedWriteDisposition(pausedHash, sourceHash);
+    if (pausedDisposition !== 'index') {
+      if (pausedDisposition === 'retain') return 1;
+      await getDaemon().call('delete', { path: normalizeDaemonPath(sourceAbs) });
+      return 0;
+    }
     // Convertible sources: the searchable text is stored in AppData, but
     // indexed UNDER the source's own path so folder-scoped search finds it
     // and daemon source-file hash diff matches. HTML-derived DOCX content is
@@ -322,7 +361,7 @@ export class MfsIndexer implements Indexer {
     if (pathPrefix) args.path_prefix = normalizeDaemonPath(pathPrefix);
     if (extensions && extensions.length > 0) args.extensions = extensions;
     const res = await getDaemon().call<{ hits: DaemonHit[] }>('search', args);
-    return res.hits.map((h) => ({
+    const hits = res.hits.map((h) => ({
       fileName: normalizeDaemonPath(h.path),
       chunkIndex: h.chunk_index,
       content: h.chunk_text,
@@ -336,6 +375,14 @@ export class MfsIndexer implements Indexer {
       endLine: h.end_line,
       score: h.score,
     }));
+    const pending = new Set<string>();
+    const candidateFolders = folder ? [folder] : [...getDaemon().knownBindings().keys()];
+    for (const candidate of candidateFolders) {
+      if (!getSemanticIndexingDecision(candidate)) continue;
+      const status = await this.status(candidate);
+      for (const source of status.pending) pending.add(filesystemPath.identity(source));
+    }
+    return pending.size > 0 ? excludePausedPendingHits(hits, pending) : hits;
   }
 
   async status(folder?: string): Promise<IndexStatus> {

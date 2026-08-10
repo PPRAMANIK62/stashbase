@@ -5,6 +5,7 @@ import {
   attachAgentRuntime,
   clearAgentRuntimeFailure,
   discoverAgentRuntimes,
+  parseAgentEffort,
   registerAgentAdapter,
   reportAgentRuntimeFailure,
   runtimeDescriptorFor,
@@ -14,7 +15,7 @@ import {
 import { smokeNativeAgentCli } from '../agent-native-smoke.ts';
 
 const REQUIRED_SHARED_CAPABILITIES = [
-  'connection', 'prompts', 'interrupt', 'transcript', 'approvals', 'history', 'modes', 'effort',
+  'connection', 'prompts', 'interrupt', 'transcript', 'approvals', 'history', 'modes', 'effort', 'models',
 ] as const;
 
 test('Claude and Codex declare every Shared Agent Contract panel behavior', () => {
@@ -40,6 +41,15 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.equal(capabilities.codex!.titleHint, true);
 });
 
+test('Agent effort identifiers stay runtime-owned while the URL boundary remains bounded', () => {
+  assert.equal(parseAgentEffort('ultra'), 'ultra');
+  assert.equal(parseAgentEffort('provider_native-level'), 'provider_native-level');
+  assert.equal(parseAgentEffort(''), undefined);
+  assert.equal(parseAgentEffort(' ultra '), undefined);
+  assert.equal(parseAgentEffort('x'.repeat(65)), undefined);
+  assert.equal(parseAgentEffort('high\n'), undefined);
+});
+
 test('Shared Agent Contract retains lifecycle, streaming, approval, session, and queue event vocabulary', () => {
   const clientEvents: AgentClientEvent[] = [
     { t: 'prompt', text: 'first', titleHint: 'Title' }, { t: 'steer', id: 'queued', text: 'follow-up' },
@@ -48,15 +58,17 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
   ];
   const events: AgentServerEvent[] = [
     { t: 'ready' }, { t: 'session-id', id: 'session' }, { t: 'session-title', title: 'Title' },
+    { t: 'models', models: [{ id: 'native-model', label: 'Native model' }], activeModel: 'native-model' },
     { t: 'turn-start' }, { t: 'text', delta: 'text' }, { t: 'thinking', delta: 'thinking' },
     { t: 'tool', id: 'tool', name: 'Read', input: {} }, { t: 'tool-delta', id: 'tool', delta: 'input' },
     { t: 'tool-result', id: 'tool', content: 'done', isError: false },
     { t: 'permission', id: 'approval', toolUseId: 'tool', name: 'Write', title: null, input: {} },
     { t: 'steer-result', id: 'queued', ok: true }, { t: 'turn-end', isError: false },
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
+    { t: 'exit', message: 'runtime stopped unexpectedly' },
   ];
   assert.equal(clientEvents.length, 6);
-  assert.equal(events.length, 14);
+  assert.equal(events.length, 16);
 });
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {

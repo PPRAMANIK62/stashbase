@@ -18,6 +18,19 @@ export function isAgentAccessMode(value: unknown): value is AgentAccessMode {
   return typeof value === 'string' && (AGENT_ACCESS_MODES as readonly string[]).includes(value);
 }
 
+/** Effort identifiers are runtime-owned opaque strings. Keep the URL boundary
+ * bounded and free of control characters without narrowing future runtimes to
+ * a StashBase-maintained enum. */
+export function parseAgentEffort(value: unknown): string | undefined {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= 64
+    && value === value.trim()
+    && !/[\u0000-\u001f\u007f]/.test(value)
+    ? value
+    : undefined;
+}
+
 export interface AgentCapabilities {
   connection: true;
   prompts: true;
@@ -27,6 +40,9 @@ export interface AgentCapabilities {
   history: true;
   modes: boolean;
   effort: boolean;
+  /** The runtime can enumerate and select its own session models. */
+  models: boolean;
+  skills: boolean;
   steering: boolean;
   titleHint: boolean;
 }
@@ -36,12 +52,24 @@ export interface AgentConnectionOptions {
   effort?: string;
   resume?: string;
   access?: AgentAccessMode;
+  /** Undefined deliberately means "use the runtime's configured default". */
+  model?: string;
 }
+
+/** A model is always advertised by the native runtime, never a StashBase list. */
+export interface AgentModel {
+  id: string;
+  label: string;
+  description?: string;
+  supportedEfforts?: string[];
+}
+export interface AgentSkill { id: string; label: string; description?: string; argumentHint?: string }
 
 /** The stable panel wire protocol. Adapters may translate native events,
  * but they must only emit this transcript and lifecycle vocabulary. */
 export type AgentClientEvent =
-  | { t: 'prompt'; text: string; titleHint?: string }
+  | { t: 'prompt'; text: string; titleHint?: string; skill?: string }
+  | { t: 'refresh-skills' }
   | { t: 'steer'; id: string; text: string }
   | { t: 'permission-reply'; id: string; allow: boolean; always?: boolean }
   | { t: 'interrupt' }
@@ -52,6 +80,8 @@ export type AgentServerEvent =
   | { t: 'ready' }
   | { t: 'session-id'; id: string }
   | { t: 'session-title'; title: string }
+  | { t: 'models'; models: AgentModel[]; activeModel?: string; fallback?: string }
+  | { t: 'skills'; skills: AgentSkill[]; state: 'available' | 'empty' | 'failed'; error?: string }
   | { t: 'turn-start' }
   | { t: 'text'; delta: string }
   | { t: 'thinking'; delta: string }
@@ -62,11 +92,14 @@ export type AgentServerEvent =
   | { t: 'steer-result'; id: string; ok: boolean; message?: string }
   | { t: 'turn-end'; isError: boolean }
   | { t: 'error'; message: string }
-  | { t: 'exit' };
+  | { t: 'exit'; message?: string };
 
 export interface AgentHistoryActions {
   list(folder: string | null): Promise<unknown[]>;
   messages(id: string, folder: string | null): Promise<unknown[]>;
+  /** Protocol-v2 replay metadata. Optional keeps third-party/older adapters
+   * compatible with the established messages-only history contract. */
+  replay?(id: string, folder: string | null): Promise<unknown>;
   rename(id: string, title: string, folder: string | null): Promise<unknown>;
   remove(id: string, folder: string | null): Promise<void>;
 }

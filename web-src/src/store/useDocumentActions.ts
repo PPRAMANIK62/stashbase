@@ -338,6 +338,10 @@ export function useDocumentActions(
     editor.current = handle;
   }, [editor]);
 
+  const updateTabPdfPage = useCallback((tabId: string, page: number) => {
+    dispatch({ type: 'TAB_PDF_PAGE', id: tabId, page });
+  }, [dispatch]);
+
   return {
     activateTab,
     closeActiveTab,
@@ -353,5 +357,9 @@ export function useDocumentActions(
     selectFile,
     selectFileWithHighlight,
     toggleEditMode,
+    updateTabPdfPage,
+    setUnsupportedModalOpen: (open: boolean) => {
+      dispatch({ type: 'UNSUPPORTED_MODAL', open });
+    },
   };
 }

@@ -73,7 +73,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   currentRef.current = { folderPath: state.folderPath, name };
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(activeTab?.pdfPage ?? 1);
   const [scale, setScale] = useState(1);
   const [autoFit, setAutoFit] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +151,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     setError(null);
     setDoc(null);
     setNumPages(0);
-    setCurrentPage(1);
+    setCurrentPage(activeTab?.pdfPage ?? 1);
     setPageMetrics(null);
     setScale(1);
     setAutoFit(true);
@@ -195,12 +195,44 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     };
   }, [fileUrl, actions]);
 
+  const initialScrollDone = useRef(false);
+  useEffect(() => {
+    initialScrollDone.current = false;
+  }, [fileUrl]);
+
+  useEffect(() => {
+    if (!doc || !pageMetrics || numPages <= 0 || initialScrollDone.current) return;
+    const root = containerRef.current;
+    if (!root || root.clientWidth <= 0) return;
+
+    // Wait for the auto-fit scale to settle before performing the initial scroll jump
+    if (autoFit && Math.abs(scale - fitScale()) > 0.001) return;
+
+    const targetPage = activeTab?.pdfPage ?? 1;
+    if (targetPage > 1 && targetPage <= numPages) {
+      const frame = requestAnimationFrame(() => {
+        scrollToPage(targetPage, 'auto');
+        initialScrollDone.current = true;
+      });
+      return () => cancelAnimationFrame(frame);
+    } else {
+      initialScrollDone.current = true;
+    }
+  }, [doc, pageMetrics, numPages, activeTab?.pdfPage, scale, autoFit]);
+
+  useEffect(() => {
+    if (activeTab && activeTab.file?.format === 'pdf' && activeTab.pdfPage !== currentPage) {
+      actions.updateTabPdfPage(activeTab.id, currentPage);
+    }
+  }, [currentPage, activeTab?.id, activeTab?.file?.format, activeTab?.pdfPage, actions]);
+
   useEffect(() => {
     const root = containerRef.current;
     if (!root || numPages <= 0) return;
     let frame = 0;
     const updateCurrentPage = () => {
       frame = 0;
+      if (!initialScrollDone.current) return;
       const rootRect = root.getBoundingClientRect();
       const markerY = rootRect.top + Math.min(root.clientHeight * 0.35, 160);
       let bestPage = 1;
@@ -688,6 +720,10 @@ function PdfPage({
         if ((err as { name?: string })?.name === 'RenderingCancelledException') return;
         console.error(`[pdf] page ${pageIndex + 1} render failed:`, err);
       });
+    }).catch((err: unknown) => {
+      if (!cancelled) {
+        console.error(`[pdf] page ${pageIndex + 1} load failed:`, err);
+      }
     });
     return () => {
       cancelled = true;

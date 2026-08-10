@@ -7,10 +7,11 @@
  */
 import { useEffect, useRef } from 'react';
 import { api, type Agent, type AgentsResponse } from '../api';
-import { AGENTS, type AgentMeta } from '../agentCatalog';
+import { AGENTS, type AgentKind, type AgentMeta } from '../agentCatalog';
 import { useApp } from '../store/AppContext';
 import { makeChatTab } from '../store/state';
 import { DeferredTooltipButton } from './DeferredTooltipButton';
+import { rememberPreferredAgent } from '../agentPreference';
 
 export function ChatLaunchButtons() {
   const { state, dispatch } = useApp();
@@ -28,7 +29,8 @@ export function ChatLaunchButtons() {
 
   const activeTab = state.chatTabs.find((t) => t.id === state.activeChatTabId);
 
-  function toggleAgent(agentId: string) {
+  function toggleAgent(agentId: AgentKind) {
+    rememberPreferredAgent(agentId);
     const hasOpenTab = state.chatTabs.some((tab) => tab.agent === agentId);
     dispatch({
       type: 'CHAT_AGENT_TOGGLE',

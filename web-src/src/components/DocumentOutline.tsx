@@ -9,7 +9,7 @@ export function DocumentOutline({
 }: {
   headings: DocumentHeading[];
   activeId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (heading: DocumentHeading) => void;
 }) {
   const listRef = React.useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = React.useState<Set<string>>(() => new Set());
@@ -49,7 +49,7 @@ export function DocumentOutline({
             else next.add(heading.id);
             return next;
           })}><ChevronDownIcon /></button> : <span className="document-outline-disclosure-spacer" aria-hidden="true" />}
-          <button type="button" className="outline-tree-entry" title={label} aria-label={`Heading level ${heading.level}: ${label}`} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading.id)}><span className="label">{label}</span></button>
+          <button type="button" className="outline-tree-entry" title={label} aria-label={`Heading level ${heading.level}: ${label}`} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading)}><span className="label">{label}</span></button>
         </div>;
       })}
     </div>

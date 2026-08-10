@@ -60,6 +60,9 @@ user-visible source file.
   editing, and keyword retrieval remain available.
 - Incomplete, stale, or partial derived output is never current truth.
 - Reconcile and reindex bring external file changes back into the library.
+- Reconcile estimates new or changed semantic work before embedding. Large
+  workloads pause per folder for an explicit decision without delaying folder
+  navigation, preparation, editing, or keyword retrieval.
 
 ## Liveness And Recovery
 

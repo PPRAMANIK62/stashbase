@@ -12,7 +12,9 @@ directory or a replacement for issues and source code.
    product model or access to user data.
 3. Read [Architecture](architecture.md) for ownership, lifecycle, and trust
    boundaries.
-4. Choose a product area below and use its contribution map to orient your
+4. Skim [Use Cases](use-cases.md) for the end-to-end journeys the product
+   areas combine into.
+5. Choose a product area below and use its contribution map to orient your
    work. Then inspect the current code and open issues for implementation
    details and active coordination.
 

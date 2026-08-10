@@ -2,7 +2,6 @@ import { useCallback, type MutableRefObject } from 'react';
 import { api, ApiError } from '../api';
 import { rebindFolderIfStillInLibrary } from '../folderPath';
 import {
-  filterGuiSemanticHits,
   shallowEqualConversionProgress,
   shallowEqualIndexWarning,
   shallowEqualNumberRecord,
@@ -206,6 +205,7 @@ export function useSearchActions(
         lastTreeVersion.current >= 0 && newTreeVersion !== lastTreeVersion.current;
       lastTreeVersion.current = newTreeVersion;
       dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: newPending });
+      dispatch({ type: 'SEMANTIC_INDEXING_STATE', state: s.semanticIndexing ?? null });
       if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
       if (blockedChanged) dispatch({ type: 'BLOCKED_CONVERSIONS', paths: newBlocked });
       const incomingProgress = s.conversionProgress ?? {};
@@ -424,7 +424,9 @@ export function useSearchActions(
           types: opts?.types ?? s.searchTypes,
         });
         if (isStaleSearch()) return;
-        dispatch({ type: 'SEARCH_HITS', hits: filterGuiSemanticHits(hits) });
+        // Keep every fetched candidate; the panel shows the strongest
+        // slice first and reveals the rest through progressive disclosure.
+        dispatch({ type: 'SEARCH_HITS', hits });
       }
     } catch (err) {
       if (isStaleSearch()) return;
@@ -473,7 +475,15 @@ export function useSearchActions(
     }
   }, []);
 
+  const decideSemanticIndexing = useCallback(async (decision: 'start' | 'defer') => {
+    const folderAtStart = stateRef.current.folderPath;
+    if (!folderAtStart) return;
+    await api.semanticIndexingDecision(decision, folderAtStart);
+    await refreshIndexState(folderAtStart);
+  }, [refreshIndexState]);
+
   return {
+    decideSemanticIndexing,
     dismissIndexWarning,
     markVisibleFilesPendingForSearch,
     refreshIndexState,

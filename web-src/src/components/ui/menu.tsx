@@ -7,6 +7,10 @@ function Menu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="menu" {...props} />
 }
 
+function MenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
+  return <MenuPrimitive.Trigger data-slot="menu-trigger" {...props} />
+}
+
 function MenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="menu-portal" {...props} />
 }
@@ -59,6 +63,7 @@ function MenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {
 
 export {
   Menu,
+  MenuTrigger,
   MenuItem,
   MenuPopup,
   MenuPortal,

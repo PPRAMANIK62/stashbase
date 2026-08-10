@@ -21,6 +21,7 @@ import {
 import { getTranscriptionPreferences } from './app-config.ts';
 import { isAudioFile } from './format.ts';
 import {
+  derivedIsFresh,
   discoverNewSources,
   getScheduledConversion,
   indexFreshDerived,
@@ -38,6 +39,7 @@ import { isPendingOrFailed, markCancelled } from './conversion-status.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { isCloudPlaceholderName, isIndexExcludedDirName } from './indexable.ts';
 import { blake3File } from './file-hash.ts';
+import { validatePreparedAudioTranscript } from './prepared-validation.ts';
 import {
   getTranscriptionProvider,
   type TranscriptionModelRef,
@@ -375,6 +377,19 @@ export function configuredTranscriptionBlock(): ConfiguredTranscriptionBlock | n
 
 export function derivedTranscriptPathForAudio(sourceAbs: string): string {
   return derivedTranscriptFor(sourceAbs);
+}
+
+export function currentDerivedTextPathForAudio(sourceAbs: string, known?: { sourceMtimeMs: number; derivedMtimeMs: number }): string | null {
+  return derivedIsFresh(AUDIO_FRESHNESS_POLICY, sourceAbs, known) ? derivedNoteFor(sourceAbs) : null;
+}
+
+export async function currentDerivedTextPathForAudioAsync(
+  sourceAbs: string,
+  known: { sourceMtimeMs: number; derivedMtimeMs: number },
+): Promise<string | null> {
+  if (known.derivedMtimeMs < known.sourceMtimeMs) return null;
+  return await readCurrentAudioTranscriptAsync(sourceAbs, derivedNoteFor(sourceAbs))
+    ? derivedNoteFor(sourceAbs) : null;
 }
 
 export function readAudioTranscript(sourceAbs: string): AudioTranscript | null {
@@ -732,14 +747,12 @@ async function readCurrentAudioTranscriptAsync(sourceAbs: string, notePath: stri
     };
     const note = await fs.promises.stat(notePath);
     if (note.mtimeMs < source.mtimeMs || !(await fileTailContains(notePath, AUDIO_COMPLETE_MARKER))) return null;
-    const raw = await fs.promises.readFile(derivedTranscriptFor(sourceAbs), 'utf8');
-    // Parsing can still be CPU work for very long transcripts; yield between
-    // files so one first-time scan cannot monopolise the server turn.
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    const transcript = parseAudioTranscript(JSON.parse(raw));
-    return sameAudioSourceIdentity(transcript.source, source) && nonEmptyString(transcript.source.contentHash)
-      ? transcript
-      : null;
+    const raw = await fs.promises.readFile(derivedTranscriptFor(sourceAbs));
+    const transcriptSource = await validatePreparedAudioTranscript(raw);
+    if (!sameAudioSourceIdentity(transcriptSource, source) || !nonEmptyString(transcriptSource.contentHash)) return null;
+    // Callers of the asynchronous freshness guard only need validity and
+    // source binding. Keep the large segment array inside the worker.
+    return { source: transcriptSource } as AudioTranscript;
   } catch {
     return null;
   }

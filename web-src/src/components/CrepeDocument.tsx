@@ -23,7 +23,8 @@ import { applyChunkHighlight } from './previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '../milkdown/paths';
 import { splitLeadingYamlFrontmatter } from '../milkdown/frontmatter';
 import { resolveLocalImageUrl } from '../milkdown/imageUrls';
-import { activeHeadingId, extractDocumentHeadings, headingSlug, outlineScrollTop, type DocumentHeading } from '../milkdown/headings';
+import { activeHeadingId, extractDocumentHeadings, headingSlug, type DocumentHeading, type ProseMirrorDocument } from '../milkdown/headings';
+import { documentScroller, headingElementAtPosition, scrollOutlineToHeading, type HeadingNodeView } from '../milkdown/outlineNavigation';
 import { useDocumentOutline } from './DocumentOutlineContext';
 
 /**
@@ -50,6 +51,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   const suppressChangeRef = useRef(false);
   const refreshHeadingsRef = useRef<() => void>(() => {});
   const frontmatterRef = useRef(splitLeadingYamlFrontmatter(content).source);
+  const headingSnapshotRef = useRef<HeadingSnapshot | null>(null);
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [activeHeading, setActiveHeading] = useState<string | null>(null);
   nameRef.current = name;
@@ -60,6 +62,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    headingSnapshotRef.current = null;
     let disposed = false;
     const editor = new CrepeBuilder({ root: host, defaultValue: splitLeadingYamlFrontmatter(contentRef.current).body })
       .addFeature(placeholder, { text: 'Start writing… or type /', mode: 'block' })
@@ -84,7 +87,10 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       .addFeature(codeMirror, { languages, copyText: 'Copy code' })
       .addFeature(latex);
 
-    const updateHeadings = () => setHeadings(extractDocumentHeadings(editor.editor.action((ctx) => ctx.get(editorViewCtx).state.doc)));
+    const updateHeadings = () => {
+      const view = currentEditorView(editor);
+      setHeadings(headingsForView(view, headingSnapshotRef));
+    };
     refreshHeadingsRef.current = updateHeadings;
     editor.setReadonly(readOnlyRef.current);
     editor.on((listener) => listener.markdownUpdated((_ctx, markdown, previous) => {
@@ -172,8 +178,13 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     const scroller = documentScroller(host);
     const updateActive = () => {
       const threshold = scroller.getBoundingClientRect().top + 16;
-      const positions = Array.from(host.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')).map((heading, index) => ({ id: heading.id || headings[index]?.id || '', top: heading.getBoundingClientRect().top }));
-      setActiveHeading(activeHeadingId(headings, positions, threshold));
+      const view = currentEditorView(editorRef.current);
+      const currentHeadings = headingsForView(view, headingSnapshotRef);
+      const positions = currentHeadings.flatMap((heading) => {
+        const element = headingElementAtPosition(view, heading.position);
+        return element ? [{ id: heading.id, top: element.getBoundingClientRect().top }] : [];
+      });
+      setActiveHeading(activeHeadingId(currentHeadings, positions, threshold));
     };
     scroller.addEventListener('scroll', updateActive, { passive: true });
     updateActive();
@@ -184,7 +195,12 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     publishOutline({
       headings,
       activeId: activeHeading,
-      onSelect: (id) => scrollOutlineToHeading(hostRef.current, id),
+      onSelect: (heading) => scrollOutlineToHeading(
+        hostRef.current,
+        heading,
+        currentEditorView(editorRef.current),
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      ),
     });
   }, [activeHeading, headings, publishOutline]);
 
@@ -329,19 +345,17 @@ function applyHeadingIds(host: HTMLElement, entries?: DocumentHeading[]) {
   });
 }
 
-function scrollOutlineToHeading(host: HTMLElement | null, id: string) {
-  const heading = host?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
-  if (!host || !heading) return;
-  const scroller = documentScroller(host);
-  const top = outlineScrollTop(
-    scroller.getBoundingClientRect().top,
-    scroller.scrollTop,
-    heading.getBoundingClientRect().top,
-  );
-  scroller.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+function currentEditorView(editor: CrepeBuilder | null): HeadingNodeView | null {
+  return editor?.editor.action((ctx) => ctx.get(editorViewCtx)) ?? null;
 }
 
-/** Milkdown owns the visible document scrollbar; the shell only hosts it. */
-function documentScroller(host: HTMLElement) {
-  return host.querySelector<HTMLElement>('.milkdown') ?? host;
+type HeadingSnapshot = { doc: ProseMirrorDocument; headings: DocumentHeading[] };
+
+function headingsForView(view: HeadingNodeView | null, cache: { current: HeadingSnapshot | null }): DocumentHeading[] {
+  if (!view) return [];
+  const current = cache.current;
+  if (current?.doc === view.state.doc) return current.headings;
+  const headings = extractDocumentHeadings(view.state.doc);
+  cache.current = { doc: view.state.doc, headings };
+  return headings;
 }

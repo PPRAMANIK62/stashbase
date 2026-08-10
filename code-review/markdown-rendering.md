@@ -54,10 +54,15 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 - Document outlines read heading nodes from the retained ProseMirror document.
   Keep live extraction and active-section tracking outside transaction-time DOM
   decoration; outline IDs must share the anchor slug allocation. Outline
-  selection from the Files sidebar scrolls Milkdown's actual document scroller
-  directly rather than using a generic ancestor-scrolling call. The sidebar
-  consumes transient outline state; it must not parse or retain a second
-  document model.
+  selection re-resolves the retained heading node against the current
+  ProseMirror document position rather than trusting a stale absolute position
+  or mutable rendered DOM ID. Node object identity is a candidate, not a unique
+  document key: one immutable node may occur at multiple positions, so repeated
+  identity matches must be disambiguated with the current outline entry before
+  navigation calls the live view. Selection then scrolls Milkdown's actual
+  document scroller directly instead of using a generic ancestor-scrolling
+  call. The sidebar consumes transient outline state; it must not parse or
+  retain a second document model.
   Collapsing an entry filters only its deeper following heading entries and
   never mutates the retained document.
 - Relative images resolve below the opened note's `/asset/` base. Image upload

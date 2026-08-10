@@ -19,6 +19,7 @@ import type {
   PdfStatusEntry,
   SearchHit,
   SessionBlock,
+  SessionReplay,
   SessionInfo,
   SyncResult,
   TranscriptionModelId,
@@ -27,9 +28,11 @@ import type {
   AudioTranscriptState,
   AudioPreviewStatus,
   UploadResult,
+  OnboardingPreferences,
 } from './apiTypes';
 import type { SearchTypeCategory } from '../../shared/search-types.ts';
 import {
+  ApiError,
   encodePath,
   getWindowId,
   getJson,
@@ -73,6 +76,10 @@ export const api = {
   // Files / folders listing --------------------------------------
   listFiles: () => getJson<FilesPayload>('/api/files'),
   statFile: (name: string) => head('/api/files/' + encodePath(name)),
+
+  getOnboarding: () => getJson<OnboardingPreferences>('/api/onboarding'),
+  putOnboarding: (patch: Partial<OnboardingPreferences>) =>
+    send<OnboardingPreferences>('PUT', '/api/onboarding', patch),
 
   // CRUD ---------------------------------------------------------
   createNote: (content: string, dir: string) =>
@@ -181,6 +188,8 @@ export const api = {
     getJson<IndexStatus>(folder ? `/api/index-status?folder=${encodeURIComponent(folder)}` : '/api/index-status'),
   dismissIndexWarning: (folder?: string) =>
     send<{ ok: boolean }>('POST', '/api/index-warning/dismiss', { folder }),
+  semanticIndexingDecision: (decision: 'start' | 'defer', folder?: string) =>
+    send<{ ok: boolean }>('POST', '/api/semantic-indexing/decision', { decision, folder }),
 
   /** Full per-file preparation status, library-wide, keyed by absolute
    *  source path. */
@@ -287,6 +296,19 @@ export const api = {
   /** A session's transcript as renderable blocks (for resume replay). */
   getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude') =>
     getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages'),
+  /** Prefer protocol-v2 metadata, but tolerate a protocol-v1 server retained
+   * across an application restart/update. */
+  getSessionReplay: async (id: string, agent: 'claude' | 'codex' = 'claude'): Promise<SessionReplay> => {
+    const base = agentSessionBase(agent) + '/' + encodeURIComponent(id);
+    try {
+      const replay = await getJson<SessionReplay>(base + '/replay');
+      if (replay?.protocol === 2 && Array.isArray(replay.messages)) return replay;
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 404) throw err;
+      // Protocol-v1 server: fall through to the stable endpoint.
+    }
+    return { protocol: 2, messages: await getJson<SessionBlock[]>(base + '/messages'), effort: null };
+  },
   renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude') =>
     send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id), { title }),
   deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude') =>

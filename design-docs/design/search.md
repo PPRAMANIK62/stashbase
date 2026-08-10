@@ -11,8 +11,20 @@ as the result identity.
 - In-app search starts from the current folder and can narrow its scope.
 - Results identify the source file, path, and useful evidence such as a snippet
   or page/timestamp hint.
+- Semantic results show the strongest matches first, up to a relevance-knee
+  count, and reveal the remaining fetched candidates through progressive
+  disclosure without another request. The summary reports the visible and
+  available counts (for example, "Showing 8 of 30 ranked candidates"), and
+  each hit carries a per-hit relative match-strength indicator. The indicator
+  is relative to the fetched result set, not an absolute score, because hybrid
+  scores have no absolute meaning.
 - Prepared PDF, image, DOCX, and media transcript text can be evidence, but
   opening a result returns to the original source file.
+- Search distinguishes disabled, preparing, partially ready, paused, failed,
+  and ready semantic states. A paused folder keeps a persistent Start indexing
+  action while keyword search remains usable.
+- A sync failure is diagnostic and does not replace an awaiting or paused
+  decision; its recovery action remains visible alongside failure guidance.
 - MCP offers orientation, search with the same file-type categories as the
   app, read, reindex, and bounded file operations to authorized Agent clients.
 
@@ -24,6 +36,10 @@ as the result identity.
 - Scope and access restrictions apply equally to app and MCP retrieval.
 - Readiness should be understandable: missing results may be caused by
   preparation, indexing, scope, or search mode.
+- Known-stale vectors are removed before a large changed-content workload is
+  paused; still-current indexed files may continue to provide partial results.
+- Embedding credentials need access only to the configured embedding model;
+  provider model-list access is not required.
 - MCP is context infrastructure, not unrestricted host-filesystem access.
 
 ## Contribution Map

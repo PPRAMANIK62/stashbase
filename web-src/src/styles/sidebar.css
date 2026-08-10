@@ -1333,6 +1333,47 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      min-width: 0;
+    }
+
+    /* Relative match-strength bar, right-aligned in the hit meta row. */
+    .search-hit-relevance {
+      flex: 0 0 44px;
+      height: 4px;
+      margin-left: 8px;
+      border-radius: 2px;
+      background: var(--active);
+      overflow: hidden;
+    }
+
+    .search-hit-relevance-fill {
+      display: block;
+      height: 100%;
+      border-radius: 2px;
+      background: var(--accent);
+    }
+
+    /* Semantic top-N summary, matching the keyword summary treatment. */
+    .search-summary {
+      font-size: calc(11px * var(--ui-scale));
+      color: var(--muted);
+      padding: 2px 10px 6px;
+    }
+
+    .search-show-more {
+      width: calc(100% - 12px);
+      margin: 2px 6px 4px;
+      padding: 6px;
+      font-size: calc(12px * var(--ui-scale));
+      color: var(--accent);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .search-show-more:hover {
+      background: var(--hover);
     }
 
     /* Keyword (ripgrep) results — VS-Code-style: a per-file header with a
@@ -1414,12 +1455,44 @@
       padding: 0 1px;
       border-radius: 2px;
     }
-    .keyword-truncated {
-      color: var(--muted);
-      font-size: calc(11px * var(--ui-scale));
-      padding: 2px 10px 2px 16px;
-      cursor: default;
-    }
     .keyword-truncated:hover {
       background: transparent;
     }
+
+    .unsupported-files-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 4px 12px 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      font-size: calc(11.5px * var(--ui-scale));
+      line-height: 1.4;
+      color: var(--muted);
+    }
+    .unsupported-files-banner-title {
+      font-weight: 600;
+      color: var(--fg);
+      margin-bottom: 2px;
+    }
+    .unsupported-files-banner-copy {
+      flex: 1;
+      min-width: 0;
+    }
+    .unsupported-files-details-btn {
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+      text-decoration: underline;
+      display: inline;
+      margin-left: 2px;
+    }
+    .unsupported-files-details-btn:hover {
+      text-decoration: none;
+    }
+

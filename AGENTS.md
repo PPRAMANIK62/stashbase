@@ -27,10 +27,9 @@ design docs.
 Keep them in **English** — these files are committed, so do not introduce
 Chinese prose into them.
 
-User-visible **use-case** flows are NOT maintained here. They live in a
-separate, manually-run process (`update-use-cases.md`, gitignored) and are
-**out of scope for the automatic doc-update loop** — never touch them as a
-side effect of a code change.
+User-visible **use-case** journeys live in `design-docs/use-cases.md` and
+follow the same rule as the rest of `design-docs/`: when a shipping journey
+changes, update the affected use case in the same change.
 
 ## The design-document structure
 

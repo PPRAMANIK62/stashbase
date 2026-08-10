@@ -8,6 +8,19 @@
     .app.sidebar-collapsed.chat-open {
       grid-template-columns: 44px 1fr 6px var(--chat-width, 480px);
     }
+    /* With no document, Chat is the workspace instead of a narrow side
+     * panel. The document pane remains mounted so switching back preserves
+     * editor state, but its track and splitter disappear. Compact windows
+     * reuse this shape when the user explicitly brings Chat over a document. */
+    .app.chat-primary {
+      grid-template-columns: calc(44px + var(--sidebar-width, 280px)) 0 0 minmax(0, 1fr);
+    }
+    .app.sidebar-collapsed.chat-primary {
+      grid-template-columns: 44px 0 0 minmax(0, 1fr);
+    }
+    .app.chat-primary .main {
+      visibility: hidden;
+    }
 
     /* Match the sidebar's drag handle (globals.css `.sidebar-splitter`):
      * a 6px transparent hit area whose only visible cue is a crisp 2px
@@ -404,6 +417,21 @@
       flex-direction: column;
       gap: 10px;
       scrollbar-width: thin;
+    }
+    /* Full-width Chat should gain working room without turning prose into
+     * viewport-wide lines. Keep the scroll container full-width and center
+     * its content through responsive padding so wheel/trackpad input works
+     * anywhere over the transcript. */
+    .app.chat-primary .agent-messages {
+      padding-right: max(12px, calc((100% - 920px) / 2));
+      padding-left: max(12px, calc((100% - 920px) / 2));
+    }
+    .app.chat-primary .agent-head,
+    .app.chat-primary .agent-composer {
+      width: min(920px, 100%);
+      margin-right: auto;
+      margin-left: auto;
+      box-sizing: border-box;
     }
     .agent-messages > :first-child { margin-top: 12px; }
     .agent-jump-latest {
@@ -1134,6 +1162,16 @@
       vertical-align: baseline;
       white-space: nowrap;
     }
+    .agent-skill-mention {
+      display: inline-block;
+      padding: 0 4px;
+      border-radius: 4px;
+      background: var(--active);
+      color: var(--fg);
+      line-height: inherit;
+      vertical-align: baseline;
+      white-space: nowrap;
+    }
     /* Action bar under the textarea: + … mode / send.
      * A full-width rule separates it from the input — the negative side
      * margins bleed past the box's 8px padding so the line spans edge to
@@ -1188,8 +1226,24 @@
     .agent-mode-chevron { width: 12px; height: 12px; flex-shrink: 0; opacity: 0.75; margin-left: -1px; }
     .agent-mode-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
     .agent-mode-btn:disabled { cursor: default; }
+    /* Model and effort change the next native session, so distinguish them
+     * from the surrounding utility actions using theme tokens only. */
+    .agent-effort-btn,
+    .agent-model-btn {
+      min-height: 28px;
+      border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+      background: color-mix(in srgb, var(--accent) 8%, var(--card));
+      color: var(--fg);
+    }
     .agent-effort-btn { min-width: 0; }
+    .agent-effort-btn:hover:not(:disabled),
+    .agent-model-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 14%, var(--card));
+    }
     .agent-effort-btn.is-locked { opacity: 0.58; cursor: default; }
+    .agent-model-btn { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+    .agent-model-btn.is-locked { opacity: 0.58; cursor: default; }
 
     /* "Modes" dropdown — opens upward from the mode button. */
     .agent-mode-menu {
@@ -1197,15 +1251,16 @@
       width: 320px;
       max-width: calc(100vw - 24px);
       padding: 6px;
-      background: var(--pane);
+      background: var(--card);
       border: 1px solid var(--border);
       border-radius: 10px;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+      box-shadow: var(--shadow-elevation);
     }
     .agent-mode-menu.effort-only {
       width: 300px;
       padding: 6px 8px;
     }
+    .agent-mode-menu.agent-model-menu { width: 340px; max-height: min(360px, 55vh); overflow: auto; }
     .agent-mode-menu-head {
       display: flex;
       flex-direction: column;
@@ -1241,52 +1296,57 @@
       color: var(--fg);
     }
     .agent-mode-opt:hover { background: var(--hover); }
-    .agent-mode-opt.active { background: var(--active); }
+    .agent-mode-opt.active {
+      background: color-mix(in srgb, var(--accent) 12%, var(--card));
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
     .agent-mode-opt-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; color: var(--muted); }
     .agent-mode-opt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
     .agent-mode-opt-title { font-size: calc(13px * var(--ui-scale)); font-weight: 500; }
     .agent-mode-opt-desc { font-size: calc(11.5px * var(--ui-scale)); line-height: 1.4; color: var(--muted); }
     .agent-mode-opt-check { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+    .agent-model-notice { padding: 6px 0 0; color: var(--muted); font-size: calc(11.5px * var(--ui-scale)); line-height: 1.35; }
 
-    /* Effort footer — icon + label on the left, a 5-notch slider on the
-     * right. Separated from the mode list by a hairline. */
+    /* Effort footer — icon + label on the left and explicit, touch-friendly
+     * choices on the right. Do not make valid effort choices tiny dots. */
     .agent-effort {
       display: flex;
       align-items: center;
       gap: 8px;
       margin-top: 4px;
-      padding: 10px 8px 4px;
+      padding: 8px;
       border-top: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent) 4%, var(--card));
     }
     .agent-effort-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
     .agent-effort-label { flex: 1; font-size: calc(12.5px * var(--ui-scale)); color: var(--fg); }
     .agent-effort-level { color: var(--muted); }
-    .agent-effort-track { display: flex; align-items: center; gap: 7px; padding: 4px 2px; }
-    .agent-effort-notch {
-      width: 8px;
-      height: 8px;
-      padding: 0;
-      border: 0;
-      border-radius: 50%;
-      background: var(--border);
+    .agent-effort-track { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; padding: 2px 0; }
+    .agent-effort-choice {
+      min-height: 30px;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: calc(11px * var(--ui-scale));
       cursor: pointer;
       flex-shrink: 0;
-      transition: background .12s;
+      transition: background .12s, border-color .12s, color .12s;
     }
-    .agent-effort-notch.on { background: var(--accent); }
-    .agent-effort-notch.max.on { background: #a855f7; }
-    /* The current level is a larger knob with a ring, like a slider handle. */
-    .agent-effort-notch.cur {
-      width: 14px;
-      height: 14px;
-      background: var(--bg);
-      border: 2px solid var(--accent);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    .agent-effort-choice:hover { border-color: var(--stroke-strong); background: var(--hover); color: var(--fg); }
+    .agent-effort-choice.cur {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 16%, var(--card));
+      color: var(--fg);
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
     }
-    .agent-effort-notch.max.cur { border-color: #a855f7; }
     .agent-mode-menu.effort-only .agent-effort {
       margin-top: 0;
-      padding: 4px 0;
+      padding: 8px;
       border-top: 0;
     }
     /* Neutral send button — subtle surface + border, not a filled accent
@@ -1326,7 +1386,14 @@
       padding: 4px;
       z-index: 30;
     }
-    .agent-mention-list { max-height: 210px; overflow-y: auto; }
+    /* The header and list must fit in the same 220px popup.  Giving the list
+       its own 210px maximum used to create a hidden lower portion: keyboard
+       navigation scrolled a row into the list's viewport, but not the popup's
+       visible viewport. */
+    .agent-mention-list { max-height: 182px; overflow-y: auto; scroll-padding-block: 4px; }
+    .agent-mention-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
+    .agent-mention-retry { border: 0; border-radius: 4px; background: var(--active); color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
+    .agent-mention-retry:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
     .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10.5px * var(--ui-scale)); }
     .agent-mention-head > span:first-child { color: var(--fg); font-weight: 600; }
     .agent-mention-item {
@@ -1346,4 +1413,4 @@
     .agent-mention-icon { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--muted); }
     .agent-mention-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
     .agent-mention-name { font-size: calc(12.5px * var(--ui-scale)); color: var(--fg); }
-    .agent-mention-path { font-size: calc(11px * var(--ui-scale)); color: var(--muted); }
+    .agent-mention-path { font-size: calc(11px * var(--ui-scale)); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
