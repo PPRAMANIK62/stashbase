@@ -175,7 +175,7 @@ Protocol, in order:
    workflow requires `HOMEBREW_TAP_TOKEN` with push access to
    `liliu-z/homebrew-stashbase`.
 6. **Verify when Actions finish** (or when asked): `gh release view
-   v<version>` — DMG/zip, deb, and Windows exe/zip assets attached, tap commit
+   v<version>` — DMG/zip, deb/AppImage, and Windows exe/zip assets attached, tap commit
    landed.
    Release notes are auto-generated and state: macOS arm64 (Apple Silicon)
    only, unsigned — first launch is blocked by Gatekeeper; run the bundled

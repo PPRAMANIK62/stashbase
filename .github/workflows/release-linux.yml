@@ -22,7 +22,7 @@ jobs:
     with:
       tag: ${{ github.event_name == 'workflow_dispatch' && (startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag)) || github.event.release.tag_name }}
 
-  linux-deb:
+  linux-packages:
     needs: release-ci-gate
     # This runner defines the oldest supported native ABI. The sidecar build
     # also rejects symbols newer than toolchain.json's declared baseline.
@@ -63,7 +63,7 @@ jobs:
       - name: Build Linux transcription sidecar
         run: pnpm build:transcription-sidecar
 
-      - name: Build Debian package
+      - name: Build Linux packages
         env:
           GH_TOKEN: ${{ github.token }}
           STASHBASE_REQUIRE_EXTRACT: '1'
@@ -75,7 +75,7 @@ jobs:
           STASHBASE_REQUIRE_EXTRACT: '1'
         run: node scripts/smoke-packaged-server.mjs --require-extract --require-transcription
 
-      - name: Upload Debian package to release
+      - name: Upload Linux packages to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$RELEASE_TAG" release.nosync/*.deb --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$RELEASE_TAG" release.nosync/*.deb release.nosync/*.AppImage --repo "$GITHUB_REPOSITORY" --clobber

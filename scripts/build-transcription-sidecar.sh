@@ -219,6 +219,10 @@ mkdir -p "$FFMPEG_BUILD"
 
 FFMPEG_EXTRA_LDFLAGS="-L$PREFIX/lib"
 FFMPEG_EXTRA_CFLAGS="-I$PREFIX/include"
+FFMPEG_ASSEMBLY_ARGS=()
+if ! command -v nasm >/dev/null 2>&1; then
+  FFMPEG_ASSEMBLY_ARGS+=(--disable-x86asm)
+fi
 if [[ "$HOST_PLATFORM" == "win32" ]]; then
   FFMPEG_EXTRA_LDFLAGS="$FFMPEG_EXTRA_LDFLAGS -static"
 elif [[ "$HOST_PLATFORM" == "darwin" ]]; then
@@ -240,6 +244,7 @@ fi
     --disable-autodetect \
     --disable-gpl \
     --disable-nonfree \
+    "${FFMPEG_ASSEMBLY_ARGS[@]}" \
     --disable-ffplay \
     --enable-libopus \
     --disable-everything \

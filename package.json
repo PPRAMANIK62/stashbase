@@ -191,7 +191,8 @@
     "linux": {
       "category": "Office",
       "target": [
-        "deb"
+        "deb",
+        "AppImage"
       ],
       "icon": "build/icons"
     },
@@ -201,12 +202,12 @@
         "libnss3",
         "libatk1.0-0",
         "libatk-bridge2.0-0",
-        "libgdk-pixbuf2.0-0",
+        "libgdk-pixbuf-2.0-0 | libgdk-pixbuf2.0-0",
         "libgtk-3-0",
         "libx11-xcb1",
         "libxcb-dri3-0",
         "libxtst6",
-        "libasound2"
+        "libasound2 | libasound2t64"
       ]
     }
   },

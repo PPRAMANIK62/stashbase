@@ -69,6 +69,8 @@ sudo apt install ./StashBase-*-linux-amd64.deb
 
 Run the same command with a newer package to update. To remove StashBase, run `sudo apt remove stashbase`.
 
+For a portable build, download `StashBase-*-linux-*.AppImage`, make it executable with `chmod +x`, and run it directly.
+
 ### First Launch
 
 When you open StashBase for the first time:
@@ -253,6 +255,14 @@ areas without duplicating the source tree:
 
 For contributors and developers building locally, and for platforms without a prebuilt installer.
 
+### Linux prerequisites (Ubuntu / Debian)
+
+Install Node.js 22.12+, pnpm, Python 3.10+, and the native build tools used by the packaged sidecars:
+
+```bash
+sudo apt install build-essential binutils cmake curl git nasm pkg-config python3 python3-venv xz-utils
+```
+
 ```bash
 git clone https://github.com/liliu-z/stashbase
 cd stashbase
@@ -269,7 +279,7 @@ pnpm dev
 # Build a distributable app for your platform
 pnpm dist        # macOS
 pnpm dist:win    # Windows
-pnpm dist:linux  # Linux
+pnpm dist:linux  # Linux (.deb and .AppImage)
 
 # Optional: include the local PDF/OCR extractor sidecar
 pnpm build:python-extract-sidecar
