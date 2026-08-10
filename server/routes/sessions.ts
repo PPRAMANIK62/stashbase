@@ -35,6 +35,11 @@ import { getCurrentFolder } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
 import { agentAdapter, type AgentHistoryActions } from '../agent-contract.ts';
+import {
+  agentSessionFolderOverride,
+  clearAgentSessionFolderOverride,
+  historyRowInFolder,
+} from '../agent-session-folders.ts';
 import { restoreHistoryImageAttachments, type RestoredImageAttachment } from '../agent-history-attachments.ts';
 
 /** Trimmed session row sent to the client. */
@@ -112,7 +117,10 @@ export function mount(app: express.Express): void {
 }
 
 /** Claude's compatibility adapter delegates the panel's history actions to
- * the SDK store without exposing those SDK details to routes or renderer. */
+ * the SDK store without exposing those SDK details to routes or renderer.
+ * A persisted session→folder override (create_project rebinding a library
+ * chat) wins over the native cwd: the overridden session lists under its
+ * project folder and no longer under the library's reserved cwd. */
 interface ClaudeHistoryDependencies {
   getMessages: typeof getSessionMessages;
   readNativeTranscript: typeof readClaudeNativeTranscript;
@@ -127,7 +135,7 @@ export function claudeHistoryActions(overrides: Partial<ClaudeHistoryDependencie
     async list(folder) {
       const sessions = await listSessions();
       return sessions.map(toRow)
-        .filter((row) => !folder || sessionInfoMatchesFolder(row, folder))
+        .filter((row) => !folder || claudeSessionInFolder(row.id, row, folder))
         .sort((a, b) => b.lastModified - a.lastModified);
     },
     async messages(id, folder) {
@@ -148,16 +156,25 @@ export function claudeHistoryActions(overrides: Partial<ClaudeHistoryDependencie
       };
     },
     async rename(id, title, folder) {
-      if (!(await sessionBelongsToFolder(id, folder))) throw new SessionNotFoundError();
+      if (!(await belongsToFolder(id, folder))) throw new SessionNotFoundError();
       await renameSession(id, title);
       const info = await getSessionInfo(id);
       return info ? toRow(info) : { id, title, lastModified: 0 };
     },
     async remove(id, folder) {
-      if (!(await sessionBelongsToFolder(id, folder))) throw new SessionNotFoundError();
+      if (!(await belongsToFolder(id, folder))) throw new SessionNotFoundError();
       await deleteSession(id);
+      clearAgentSessionFolderOverride('claude', id);
     },
   };
+}
+
+function claudeSessionInFolder(id: string, info: { cwd?: unknown }, folder: string): boolean {
+  return historyRowInFolder(
+    agentSessionFolderOverride('claude', id),
+    sessionInfoMatchesFolder(info, folder),
+    folder,
+  );
 }
 
 type NativeTranscriptEntry = {
@@ -225,7 +242,7 @@ async function sessionBelongsToFolder(id: string, folder: string | null): Promis
   // all sessions; keep direct actions global before a folder is open.
   if (!folder) return true;
   const info = await getSessionInfo(id);
-  return sessionInfoMatchesFolder(info, folder);
+  return claudeSessionInFolder(id, info ?? {}, folder);
 }
 
 export function sessionInfoMatchesFolder(info: { cwd?: unknown } | null | undefined, folder: string): boolean {

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '../store/AppContext';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 
 /**
  * Chrome-style in-document find bar. Floats over the top-right of the
@@ -17,6 +19,12 @@ import { useApp } from '../store/AppContext';
  *   - Cmd+G / S-Cmd+G  → next/prev. Handled in Hotkeys.tsx so it
  *                        also works from editor / sidebar focus.
  */
+
+/** Aa / Word latch buttons — ghost until pressed, then the accent state
+ *  ladder (thin accent stroke + tinted fill) driven off aria-pressed. */
+const FIND_TOGGLE_CLASS =
+  'px-1.5 font-semibold tracking-wide text-muted-foreground aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent';
+
 export function FindBar() {
   const { state, actions, dispatch } = useApp();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -52,10 +60,21 @@ export function FindBar() {
   }
 
   return (
-    <div className="find-bar" role="search" aria-label="Find in document">
-      <input
+    <div
+      /* Sits at the top of the document area, just below the back/forward
+       * + breadcrumb + edit-toggle chrome row (which itself sits at
+       * `top: 44px`). Right-aligned to mirror Chrome's placement and so
+       * it doesn't fight the centered breadcrumb. */
+      className="absolute top-[78px] right-3.5 z-10 flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-1 shadow-elevation"
+      role="search"
+      aria-label="Find in document"
+    >
+      <Input
         ref={inputRef}
-        className={'find-input' + (noMatch ? ' no-match' : '')}
+        className={
+          'h-6 w-45 rounded-sm px-1.5 text-sm' +
+          (noMatch ? ' border-destructive text-destructive' : '')
+        }
         type="text"
         placeholder="Find"
         value={query}
@@ -70,68 +89,74 @@ export function FindBar() {
           }
         }}
       />
-      <span className="find-count">
+      <span className="min-w-9.5 px-1 text-right text-xs text-muted-foreground tabular-nums">
         {hasQuery ? (total === 0 ? '0/0' : `${current || '?'}/${total}`) : ''}
       </span>
-      <button
-        type="button"
-        className={'find-toggle' + (caseSensitive ? ' on' : '')}
+      <Button
+        variant="ghost"
+        size="xs"
+        className={FIND_TOGGLE_CLASS}
         title="Match case"
         aria-pressed={caseSensitive}
         onClick={() => actions.toggleFindCaseSensitive()}
       >
         Aa
-      </button>
-      <button
-        type="button"
-        className={'find-toggle' + (wholeWord ? ' on' : '')}
+      </Button>
+      <Button
+        variant="ghost"
+        size="xs"
+        className={FIND_TOGGLE_CLASS}
         title="Whole word"
         aria-pressed={wholeWord}
         onClick={() => actions.toggleFindWholeWord()}
       >
         Word
-      </button>
-      <button
-        type="button"
-        className="find-all-files"
+      </Button>
+      <Button
+        variant="ghost"
+        size="xs"
+        className="px-1.5 font-normal whitespace-nowrap text-muted-foreground"
         title="Search all files"
         disabled={!hasQuery}
         onClick={searchAllFiles}
       >
         All files
-      </button>
-      <button
-        type="button"
-        className="find-step"
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        className="text-muted-foreground"
         title="Previous (Shift+Enter)"
         disabled={total === 0}
         onClick={() => actions.findPrev()}
       >
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <svg className="size-3.5" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M3 10l5-5 5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </button>
-      <button
-        type="button"
-        className="find-step"
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        className="text-muted-foreground"
         title="Next (Enter)"
         disabled={total === 0}
         onClick={() => actions.findNext()}
       >
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <svg className="size-3.5" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </button>
-      <button
-        type="button"
-        className="find-close"
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        className="text-muted-foreground"
         title="Close (Esc)"
         onClick={() => actions.closeFind()}
       >
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <svg className="size-3.5" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-      </button>
+      </Button>
     </div>
   );
 }

@@ -71,11 +71,14 @@ export function RenameInput({
   }
 
   return (
-    <span className="rename-wrap" onClick={(e) => e.stopPropagation()}>
+    <span
+      className="flex min-w-0 flex-1 items-center rounded-sm border border-accent bg-card text-base"
+      onClick={(e) => e.stopPropagation()}
+    >
       <input
         ref={ref}
         type="text"
-        className="rename-input"
+        className="min-w-0 flex-1 border-0 bg-transparent py-0.5 pr-0 pl-1.5 text-left text-inherit [font:inherit] outline-none"
         defaultValue={initialBasename}
         onKeyDown={(e) => {
           // Ignore Enter while an IME composition is active — Chinese /
@@ -87,7 +90,7 @@ export function RenameInput({
         }}
         onBlur={commit}
       />
-      {ext && <span className="rename-ext">{ext}</span>}
+      {ext && <span className="py-0.5 pr-1.5 whitespace-nowrap text-muted-foreground select-none">{ext}</span>}
     </span>
   );
 }

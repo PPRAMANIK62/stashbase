@@ -1,10 +1,15 @@
-import React, { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FileMeta, KeywordHitFile, KeywordMatch, SearchHit } from '../api';
 import { useApp } from '../store/AppContext';
 import { openSettings } from './SettingsModal';
 import { guiSemanticVisibleCount } from '../store/appContextHelpers';
 import { relevanceRatios } from '../lib/searchRelevance';
+import { searchSnippetText } from '../lib/searchSnippet';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { StatusMessage } from './ui/status';
 import type { SearchTypeCategory } from '../../../shared/search-types.ts';
+import { SemanticIndexingNotice } from './SemanticIndexingNotice';
 
 /**
  * The "search" sidebar view — owns the search input, the mode toggle
@@ -21,16 +26,31 @@ import type { SearchTypeCategory } from '../../../shared/search-types.ts';
  * the query to get the tree back — they just click the Files icon in
  * the activity bar.
  */
+
+/** Latch buttons (Aa / Word, file-type chips) — quiet until pressed,
+ *  then the accent state ladder (thin accent stroke + tinted fill)
+ *  driven off aria-pressed, matching the FindBar toggles. */
+const MODE_TOGGLE_CLASS =
+  'h-5 min-w-5.5 rounded-sm px-1 text-xs font-normal text-muted-foreground aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent';
+
+const TYPE_CHIP_CLASS =
+  'h-5 rounded-xl px-1.75 text-xs font-normal text-muted-foreground aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent';
+
+/** Result-list paddings shared by the semantic and keyword lists. */
+const HIT_LIST_CLASS = 'px-1.5 py-1';
+const HIT_SUMMARY_CLASS = 'px-2.5 pt-0.5 pb-1.5 text-xs text-muted-foreground';
+
 export function SearchPanel() {
   const { state } = useApp();
   const query = state.filterQuery.trim();
   return (
-    <div className="search-panel" id="sidebar-panel-search" role="tabpanel">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-search" role="tabpanel">
       <SearchBox />
       <SearchFilters />
       <SemanticIndexingNotice />
       <SearchStatusBanner />
-      <div className="search-panel-body">
+      {/* Results scroll vertically; the input above stays pinned. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
         {state.searchMode === 'semantic' && state.embedderHasKey === false ? (
           <SearchResults query={query} />
         ) : query ? (
@@ -45,63 +65,6 @@ export function SearchPanel() {
   );
 }
 
-export function SemanticIndexingNotice() {
-  const { state, actions } = useApp();
-  const workload = state.semanticIndexing;
-  if (!workload || !['awaiting-decision', 'paused', 'partial-paused'].includes(workload.state)) return null;
-  const awaiting = workload.state === 'awaiting-decision';
-  const count = workload.sourceCount ?? state.pendingSemanticNames.size;
-  return <SemanticIndexingNoticeView
-    awaiting={awaiting}
-    count={count}
-    estimatedBytes={workload.estimatedBytes}
-    failureMessage={state.indexWarning?.message}
-    onStart={() => { void actions.decideSemanticIndexing('start'); }}
-    onDefer={() => { void actions.decideSemanticIndexing('defer'); }}
-  />;
-}
-
-export function SemanticIndexingNoticeView({
-  awaiting,
-  count,
-  estimatedBytes,
-  failureMessage,
-  onStart,
-  onDefer,
-}: {
-  awaiting: boolean;
-  count: number;
-  estimatedBytes?: number;
-  failureMessage?: string;
-  onStart: () => void;
-  onDefer: () => void;
-}) {
-  const size = estimatedBytes
-    ? ` · about ${(estimatedBytes / (1024 * 1024)).toFixed(estimatedBytes >= 10 * 1024 * 1024 ? 0 : 1)} MiB`
-    : '';
-  return (
-    <div className="search-status-banner warning" role="status" aria-live="polite">
-      <div className="search-status-copy">
-        <div className="search-status-title">{awaiting ? 'Large semantic indexing workload' : 'Semantic indexing paused'}</div>
-        <div className="search-status-detail">
-          About {count.toLocaleString()} file{count === 1 ? '' : 's'} waiting{size}. Indexing may take a while and use embedding-provider quota. Keyword search remains available.
-        </div>
-        {failureMessage && (
-          <div className="search-status-detail" role="alert">
-            Search also needs attention: {failureMessage}
-          </div>
-        )}
-      </div>
-      <div className="search-status-actions">
-        <button type="button" onClick={onStart}>
-          {awaiting ? 'Index now' : 'Start indexing'}
-        </button>
-        {awaiting && <button type="button" onClick={onDefer}>Not now</button>}
-      </div>
-    </div>
-  );
-}
-
 const SEARCH_TYPE_CHIPS: Array<{ type: SearchTypeCategory; label: string; title: string }> = [
   { type: 'notes', label: 'Notes', title: 'Markdown and HTML' },
   { type: 'pdf', label: 'PDF', title: 'PDF documents' },
@@ -111,7 +74,9 @@ const SEARCH_TYPE_CHIPS: Array<{ type: SearchTypeCategory; label: string; title:
 ];
 
 /** Subfolder scope + file-type chips. Both narrow the NEXT search in
- *  either mode and compose; no selection = whole folder, every type. */
+ *  either mode and compose; no selection = whole folder, every type.
+ *  The chips are independent multi-toggles (any subset may be active),
+ *  so they are latch chips, not a segmented control. */
 function SearchFilters() {
   const { state, actions, dispatch } = useApp();
   const scopes = subfolderScopes(state.files);
@@ -135,10 +100,10 @@ function SearchFilters() {
   }
 
   return (
-    <div className="search-filters">
+    <div className="flex flex-wrap items-center gap-1 px-3 pb-2">
       {(scopes.length > 0 || staleScope) && (
         <select
-          className="search-scope"
+          className="h-5 max-w-full rounded-sm border border-input bg-background px-1 text-xs text-muted-foreground outline-none focus:border-accent"
           value={state.searchScope ?? ''}
           onChange={(e) => setScope(e.target.value || null)}
           aria-label="Search scope"
@@ -149,18 +114,19 @@ function SearchFilters() {
           {scopes.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
         </select>
       )}
-      <div className="search-type-chips" role="group" aria-label="File types">
+      <div className="flex min-w-0 flex-wrap items-center gap-0.5" role="group" aria-label="File types">
         {SEARCH_TYPE_CHIPS.map(({ type, label, title }) => (
-          <button
+          <Button
             key={type}
-            type="button"
-            className={'search-type-chip' + (state.searchTypes.includes(type) ? ' active' : '')}
+            variant="ghost"
+            size="xs"
+            className={TYPE_CHIP_CLASS}
             aria-pressed={state.searchTypes.includes(type)}
             title={title}
             onClick={() => toggleType(type)}
           >
             {label}
-          </button>
+          </Button>
         ))}
       </div>
     </div>
@@ -179,6 +145,25 @@ function subfolderScopes(files: FileMeta[]): string[] {
     }
   }
   return [...dirs].sort((a, b) => a.localeCompare(b));
+}
+
+/** One readiness/problem banner: title + detail copy on the left,
+ *  optional compact actions on the right, on the status token ramp. */
+function SearchBanner({ tone, title, detail, actions }: {
+  tone: 'warning' | 'info';
+  title: ReactNode;
+  detail: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <StatusMessage tone={tone} className="mx-3 mb-2 flex items-start justify-between gap-2.5 px-2.25 py-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="font-semibold">{title}</div>
+        <div className="leading-snug opacity-90">{detail}</div>
+      </div>
+      {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
+    </StatusMessage>
+  );
 }
 
 function SearchStatusBanner() {
@@ -208,52 +193,49 @@ function SearchStatusBanner() {
 
   if (isSemantic && state.indexWarning) {
     return (
-      <div className="search-status-banner warning">
-        <div className="search-status-copy">
-          <div className="search-status-title">Search needs attention</div>
-          <div className="search-status-detail">
-            Search may be incomplete: {state.indexWarning.message}
-          </div>
-        </div>
-        <div className="search-status-actions">
-          <button type="button" onClick={() => { void actions.runSync(); }}>Retry</button>
-          <button type="button" onClick={() => { void actions.dismissIndexWarning(); }}>Dismiss</button>
-        </div>
-      </div>
+      <SearchBanner
+        tone="warning"
+        title="Search needs attention"
+        detail={<>Search may be incomplete: {state.indexWarning.message}</>}
+        actions={
+          <>
+            <Button variant="outline" size="xs" onClick={() => { void actions.runSync(); }}>Retry</Button>
+            <Button variant="outline" size="xs" onClick={() => { void actions.dismissIndexWarning(); }}>Dismiss</Button>
+          </>
+        }
+      />
     );
   }
 
   if (failureCount > 0) {
     return (
-      <div className="search-status-banner warning">
-        <div className="search-status-copy">
-          <div className="search-status-title">
-            {failedCount > 0 ? 'Some files could not be prepared for search.' : 'Some file preparation was cancelled.'}
-          </div>
-          <div className="search-status-detail">
+      <SearchBanner
+        tone="warning"
+        title={failedCount > 0 ? 'Some files could not be prepared for search.' : 'Some file preparation was cancelled.'}
+        detail={
+          <>
             {[
               failedCount > 0 ? `${failedCount} failed` : '',
               cancelledCount > 0 ? `${cancelledCount} cancelled` : '',
             ].filter(Boolean).join(' · ')}. Open a file to retry it.
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
     );
   }
 
   if (blockedCount > 0) {
     return (
-      <div className="search-status-banner warning">
-        <div className="search-status-copy">
-          <div className="search-status-title">Transcription setup required</div>
-          <div className="search-status-detail">
+      <SearchBanner
+        tone="warning"
+        title="Transcription setup required"
+        detail={
+          <>
             {readyCount} file{readyCount === 1 ? ' is' : 's are'} ready to search. {blockedCount} media file{blockedCount === 1 ? '' : 's'} need transcription setup.
-          </div>
-        </div>
-        <div className="search-status-actions">
-          <button type="button" onClick={() => openSettings('transcription')}>Open Settings</button>
-        </div>
-      </div>
+          </>
+        }
+        actions={<Button variant="outline" size="xs" onClick={() => openSettings('transcription')}>Open Settings</Button>}
+      />
     );
   }
 
@@ -265,16 +247,11 @@ function SearchStatusBanner() {
       ? `${pendingCount} ${pendingCount === 1 ? 'is' : 'are'} still being prepared.`
       : `${pendingCount} ${pendingCount === 1 ? 'is' : 'are'} still being converted.`;
     return (
-      <div className="search-status-banner pending">
-        <div className="search-status-copy">
-          <div className="search-status-title">
-            {isSemantic ? 'Making files searchable' : 'Preparing text for keyword search'}
-          </div>
-          <div className="search-status-detail">
-            {readyLabel} {pendingLabel}
-          </div>
-        </div>
-      </div>
+      <SearchBanner
+        tone="info"
+        title={isSemantic ? 'Making files searchable' : 'Preparing text for keyword search'}
+        detail={<>{readyLabel} {pendingLabel}</>}
+      />
     );
   }
 
@@ -357,49 +334,57 @@ function SearchBox() {
   const semanticDisabled = state.embedderHasKey === false;
 
   return (
-    <div className="side-search">
+    // The activity bar already carries the magnifier icon for the view
+    // itself, so the input has no leading glyph. Mode toggles (≈/= flip,
+    // plus Aa / Word when keyword) overlay the right end of the input
+    // row, which is why the input reserves right padding.
+    <div className="relative px-3 pt-2.5 pb-2">
       {/* `type="text"` (not `search`) on purpose — we don't want the
        *  native cancel-X glyph crowding the toggle row on the right,
        *  and we don't want the native Esc-clears-input behaviour
        *  either; clearing happens by deleting characters or by
        *  flipping back to Files via the activity bar. */}
-      <input
+      <Input
         ref={inputRef}
         type="text"
         placeholder="Search…"
         autoComplete="off"
         spellCheck={false}
+        className="pr-28"
         value={state.filterQuery}
         onChange={(e) => onChange(e.target.value)}
       />
-      <div className="side-search-mode" role="group" aria-label="Search mode">
+      <div className="absolute top-1/2 right-4 flex -translate-y-1/2 items-center gap-0.5" role="group" aria-label="Search mode">
         {isKeyword && (
           <>
-            <button
-              type="button"
-              className={'side-search-mode-btn' + (state.caseStrict ? ' active' : '')}
+            <Button
+              variant="ghost"
+              size="xs"
+              className={MODE_TOGGLE_CLASS}
               onClick={toggleCaseStrict}
               aria-label="Match case"
               aria-pressed={state.caseStrict}
               title="Match Case"
             >
               Aa
-            </button>
-            <button
-              type="button"
-              className={'side-search-mode-btn word-toggle' + (state.wholeWord ? ' active' : '')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              className={MODE_TOGGLE_CLASS + ' min-w-8.5'}
               onClick={toggleWholeWord}
               aria-label="Match whole word"
               aria-pressed={state.wholeWord}
               title="Whole word"
             >
               Word
-            </button>
+            </Button>
           </>
         )}
-        <button
-          type="button"
-          className="side-search-mode-btn side-search-mode-flip"
+        <Button
+          variant="ghost"
+          size="xs"
+          className="h-5 min-w-5.5 rounded-sm px-1 text-base font-semibold text-muted-foreground"
           onClick={flipMode}
           aria-label={isKeyword ? 'Switch to semantic search' : 'Switch to keyword search'}
           title={
@@ -409,7 +394,7 @@ function SearchBox() {
           }
         >
           {isKeyword ? '=' : '≈'}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -436,7 +421,7 @@ function SearchResults({ query }: { query: string }) {
         </div>
       );
     }
-    return <div className="empty-list search-failed">Search failed: {state.searchError}</div>;
+    return <div className="empty-list">Search failed: {state.searchError}</div>;
   }
   if (state.searchMode === 'keyword') {
     return <KeywordSearchResults query={query} />;
@@ -469,25 +454,24 @@ function SemanticSearchResults({ hits }: { hits: SearchHit[] }) {
   const remaining = hits.length - shown;
 
   return (
-    <div className="search-hits">
-      <div className="search-summary">
-        {hits.length === 1
-          ? '1 ranked candidate'
-          : remaining > 0
-            ? `Showing ${shown} of ${hits.length} ranked candidates`
-            : `${hits.length} ranked candidates`}
+    <div className={HIT_LIST_CLASS}>
+      <div className={HIT_SUMMARY_CLASS}>
+        {remaining > 0
+          ? `${shown} of ${hits.length} results`
+          : `${hits.length} result${hits.length === 1 ? '' : 's'}`}
       </div>
       {hits.slice(0, shown).map((hit, i) => (
         <SearchHitRow key={`${hit.fileName}#${hit.chunkIndex}#${i}`} hit={hit} relevance={ratios[i]} />
       ))}
       {remaining > 0 && (
-        <button
-          type="button"
-          className="search-show-more"
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-0.5 mb-1 w-full font-normal text-accent"
           onClick={() => setVisible((current) => current + SEMANTIC_SHOW_MORE_STEP)}
         >
           Show {Math.min(remaining, SEMANTIC_SHOW_MORE_STEP)} more
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -503,8 +487,8 @@ function KeywordSearchResults({ query }: { query: string }) {
     return <div className="empty-list">No matches</div>;
   }
   return (
-    <div className="search-hits keyword-hits">
-      <div className="keyword-summary">
+    <div className={HIT_LIST_CLASS}>
+      <div className={HIT_SUMMARY_CLASS}>
         {result.totalMatches} match{result.totalMatches === 1 ? '' : 'es'} in {result.files.length} file{result.files.length === 1 ? '' : 's'}
         {result.truncated && ' (truncated)'}
       </div>
@@ -520,9 +504,9 @@ function KeywordFileGroup({ file, query }: { file: KeywordHitFile; query: string
   const basename = file.path.split('/').pop() ?? file.path;
   const hiddenCount = file.totalMatches - file.matches.length;
   return (
-    <div className="keyword-file-group">
+    <div className="mb-1.5">
       <div
-        className="keyword-file-header"
+        className="flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 hover:bg-muted"
         title={file.path}
         onClick={() => {
           void actions.selectFileWithHighlight(file.path, {
@@ -535,14 +519,14 @@ function KeywordFileGroup({ file, query }: { file: KeywordHitFile; query: string
           });
         }}
       >
-        <span className="keyword-file-name">{basename}</span>
-        <span className="keyword-file-count">{file.totalMatches}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{basename}</span>
+        <span className="min-w-4 shrink-0 rounded-lg bg-muted px-1.25 text-center text-2xs leading-4 text-muted-foreground">{file.totalMatches}</span>
       </div>
       {file.matches.map((m, i) => (
         <KeywordMatchRow key={`${file.path}#${m.line}#${i}`} file={file} match={m} query={query} />
       ))}
       {hiddenCount > 0 && (
-        <div className="keyword-match-row keyword-truncated">+ {hiddenCount} more in this file</div>
+        <div className="cursor-default py-0.5 pr-2.5 pl-4 text-xs text-muted-foreground">+ {hiddenCount} more in this file</div>
       )}
     </div>
   );
@@ -552,7 +536,7 @@ function KeywordMatchRow({ file, match, query }: { file: KeywordHitFile; match: 
   const { actions } = useApp();
   return (
     <div
-      className="keyword-match-row"
+      className="flex cursor-pointer items-baseline gap-2 rounded-sm py-0.5 pr-2.5 pl-4 text-sm leading-normal hover:bg-muted"
       onClick={() => {
         void actions.selectFileWithHighlight(file.path, {
           startLine: match.line,
@@ -565,8 +549,10 @@ function KeywordMatchRow({ file, match, query }: { file: KeywordHitFile; match: 
       }}
       title={`Line ${match.line}`}
     >
-      <span className="keyword-line-num">{match.line}</span>
-      <span className="keyword-line-text">{highlightRanges(match.text, match.ranges)}</span>
+      <span className="min-w-6.5 shrink-0 text-right text-muted-foreground tabular-nums select-none">{match.line}</span>
+      <span className="min-w-0 flex-1 truncate text-foreground [&_mark]:rounded-xs [&_mark]:bg-accent-amber/30 [&_mark]:px-px [&_mark]:text-inherit">
+        {highlightRanges(match.text, match.ranges)}
+      </span>
     </div>
   );
 }
@@ -596,11 +582,17 @@ function SearchHitRow({ hit, relevance }: { hit: SearchHit; relevance?: number }
   const fileBasename = hit.fileName.split('/').pop() ?? hit.fileName;
   // No term highlighting on semantic snippets: a semantic hit isn't a
   // literal substring match, so marking the query words is misleading —
-  // only keyword search (real ranges) highlights. Plain, truncated text.
-  const snippet = hit.content.length > 240 ? hit.content.slice(0, 240) + '…' : hit.content;
+  // only keyword search (real ranges) highlights. Plain, truncated text,
+  // with any leading YAML frontmatter stripped for DISPLAY only —
+  // `hit.content` stays raw because it anchors click-through navigation.
+  const snippetSource = searchSnippetText(hit.content);
+  const snippet = snippetSource.length > 240 ? snippetSource.slice(0, 240) + '…' : snippetSource;
+  const relevanceLabel = relevance != null
+    ? `Relative match strength: ${Math.round(relevance * 100)}%`
+    : undefined;
   return (
     <div
-      className="search-hit"
+      className="mb-1 cursor-pointer rounded-md border border-transparent px-2.5 py-2 hover:border-border hover:bg-muted"
       onClick={() => {
         void actions.selectFileWithHighlight(hit.fileName, {
           startLine: hit.startLine,
@@ -611,13 +603,18 @@ function SearchHitRow({ hit, relevance }: { hit: SearchHit; relevance?: number }
       }}
       title={hit.fileName}
     >
-      {hit.heading && <div className="search-hit-heading">{hit.heading}</div>}
-      <div className="search-hit-snippet">{snippet}</div>
-      <div className="search-hit-meta">
-        <span className="search-hit-file">{fileBasename}</span>
+      {hit.heading && <div className="mb-1 truncate text-xs font-medium tracking-wide text-muted-foreground">{hit.heading}</div>}
+      <div className="line-clamp-3 text-sm text-foreground">{snippet}</div>
+      <div className="mt-1.5 flex items-baseline justify-between text-xs text-muted-foreground">
+        <span className="min-w-0 truncate">{fileBasename}</span>
         {relevance != null && (
-          <span className="search-hit-relevance" title="Relative match strength" aria-hidden="true">
-            <span className="search-hit-relevance-fill" style={{ width: `${Math.round(relevance * 100)}%` }} />
+          <span
+            className="ml-2 h-1 w-11 shrink-0 overflow-hidden rounded-xs bg-accent/15"
+            role="img"
+            aria-label={relevanceLabel}
+            title={relevanceLabel}
+          >
+            <span className="block h-full rounded-xs bg-accent" style={{ width: `${Math.round(relevance * 100)}%` }} />
           </span>
         )}
       </div>

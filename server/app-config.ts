@@ -8,6 +8,7 @@
  * routes that only need a key shouldn't import the whole window-context machinery.
  */
 import fs from 'node:fs';
+import childProcess from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
@@ -23,6 +24,8 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 export interface RecentFolder {
   path: string;
   openedAt: string;
+  /** User-starred in the Welcome library list. Absent = not a favorite. */
+  favorite?: boolean;
   description?: string;
   descriptionSource?: 'user' | 'ai';
   descriptionUpdatedAt?: string;
@@ -172,15 +175,65 @@ export function writeAppConfig(cfg: AppConfigFile): void {
   }
 }
 
-export function writeAppConfigStrict(cfg: AppConfigFile): void {
-  fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
-  if (process.platform !== 'win32') {
-    try { fs.chmodSync(CONFIG_DIR, 0o700); } catch { /* best effort on special filesystems */ }
+function isConfigAccessError(err: unknown): err is NodeJS.ErrnoException {
+  const code = (err as NodeJS.ErrnoException)?.code;
+  return code === 'EACCES' || code === 'EPERM';
+}
+
+function ownedRegularPath(target: string, uid: number): boolean {
+  try {
+    const stat = fs.lstatSync(target);
+    return !stat.isSymbolicLink() && (stat.isDirectory() || stat.isFile()) && stat.uid === uid;
+  } catch {
+    return false;
   }
+}
+
+/** macOS ACLs can deny creation even when the POSIX mode is 0700. Repair only
+ * the two StashBase-owned paths, only when they are real paths owned by this
+ * process's user; never follow a symlink or touch another account's files. */
+function repairOwnedMacConfigAcl(): boolean {
+  if (process.platform !== 'darwin' || typeof process.getuid !== 'function') return false;
+  const uid = process.getuid();
+  if (!ownedRegularPath(CONFIG_DIR, uid)) return false;
+  const targets = [CONFIG_DIR];
+  if (ownedRegularPath(CONFIG_FILE, uid)) targets.push(CONFIG_FILE);
+  for (const target of targets) {
+    const result = childProcess.spawnSync('/bin/chmod', ['-N', target], { stdio: 'ignore' });
+    if (result.status !== 0) return false;
+  }
+  try {
+    fs.chmodSync(CONFIG_DIR, 0o700);
+    if (targets.includes(CONFIG_FILE)) fs.chmodSync(CONFIG_FILE, 0o600);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function configAccessError(cause: unknown): Error {
+  let message = 'StashBase cannot save settings in ~/.stashbase. Check that your account has write access to this folder, then try again.';
+  if (process.platform !== 'win32' && typeof process.getuid === 'function') {
+    try {
+      const owner = fs.lstatSync(CONFIG_DIR);
+      if (owner.uid !== process.getuid()) {
+        message = 'StashBase cannot save settings because ~/.stashbase belongs to another account. Quit StashBase, then repair its ownership in Terminal with: sudo chown -R "$(id -un)":"$(id -gn)" ~/.stashbase';
+      }
+    } catch {
+      // Keep the general access diagnostic when ownership cannot be inspected.
+    }
+  }
+  const err = new Error(message, { cause }) as Error & { code: string; status: number };
+  err.code = 'CONFIG_NOT_WRITABLE';
+  err.status = 500;
+  return err;
+}
+
+function writeSerializedConfig(serialized: string): void {
   const tmp = `${CONFIG_FILE}.${process.pid}.${Date.now()}.tmp`;
   try {
     // 0600 — config may carry API keys; keep it owner-only.
-    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+    fs.writeFileSync(tmp, serialized, { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmp, CONFIG_FILE);
     if (process.platform !== 'win32') {
       try { fs.chmodSync(CONFIG_FILE, 0o600); } catch { /* best effort on special filesystems */ }
@@ -188,6 +241,34 @@ export function writeAppConfigStrict(cfg: AppConfigFile): void {
   } catch (err) {
     try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
     throw err;
+  }
+}
+
+export function writeAppConfigStrict(cfg: AppConfigFile): void {
+  try {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  } catch (err) {
+    if (isConfigAccessError(err)) throw configAccessError(err);
+    throw err;
+  }
+  if (process.platform !== 'win32') {
+    try { fs.chmodSync(CONFIG_DIR, 0o700); } catch { /* best effort on special filesystems */ }
+  }
+  const serialized = JSON.stringify(cfg, null, 2) + '\n';
+  try {
+    writeSerializedConfig(serialized);
+  } catch (err) {
+    if (!isConfigAccessError(err)) throw err;
+    if (repairOwnedMacConfigAcl()) {
+      try {
+        writeSerializedConfig(serialized);
+        return;
+      } catch (retryErr) {
+        if (!isConfigAccessError(retryErr)) throw retryErr;
+        throw configAccessError(retryErr);
+      }
+    }
+    throw configAccessError(err);
   }
 }
 

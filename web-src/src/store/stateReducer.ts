@@ -22,24 +22,14 @@ import {
 
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
-    case 'WELCOME_HIDE':
-      return { ...s, welcomeVisible: false, welcomeError: null };
-    case 'WELCOME_SHOW':
-      return {
-        ...s,
-        welcomeVisible: true,
-        recent: a.recent,
-        homeDir: a.homeDir ?? s.homeDir,
-        welcomeError: a.error ?? null,
-      };
+    case 'BOOTED':
+      return s.booted ? s : { ...s, booted: true };
     case 'RECENT_LOADED':
       return {
         ...s,
         recent: a.recent,
         homeDir: a.homeDir ?? s.homeDir,
       };
-    case 'WELCOME_ERROR':
-      return { ...s, welcomeError: a.error };
     case 'LIBRARY_FOLDER_STATUS':
       return s.libraryFolderStatuses[a.path] === a.status
         ? s
@@ -305,29 +295,6 @@ export function reducer(s: State, a: Action): State {
       return { ...s, chatWidth: clampChatWidth(a.width) };
     case 'AGENTS_LOADED':
       return { ...s, agents: a.agents };
-    case 'CHAT_AGENT_TOGGLE': {
-      const activeTab = s.chatTabs.find((tab) => tab.id === s.activeChatTabId);
-      if (s.chatOpen && activeTab?.agent === a.agent) {
-        return { ...s, chatOpen: false };
-      }
-      const existingTab = mostRecentChatTab(s, a.agent);
-      if (existingTab) {
-        return {
-          ...s,
-          chatOpen: true,
-          activeChatTabId: existingTab.id,
-          chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, existingTab),
-        };
-      }
-      if (!a.tab) return s;
-      return {
-        ...s,
-        chatOpen: true,
-        chatTabs: [...s.chatTabs, a.tab],
-        activeChatTabId: a.tab.id,
-        chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, a.tab),
-      };
-    }
     case 'CHAT_AGENT_OPEN': {
       const existingTab = mostRecentChatTab(s, a.agent);
       if (existingTab) {
@@ -373,8 +340,9 @@ export function reducer(s: State, a: Action): State {
         chatTabRecencyByAgent: nextActiveTab
           ? rememberChatTab(forgetChatTab(s.chatTabRecencyByAgent, closedTab), nextActiveTab)
           : forgetChatTab(s.chatTabRecencyByAgent, closedTab),
-        // Closing the last chat window folds the panel — the launchers
-        // are the only way back in, and an empty panel is just dead folder.
+        // Closing the last chat window folds the panel — the sidebar's
+        // New Chat button is the way back in, and an empty panel is just
+        // dead folder.
         chatOpen: nextTabs.length === 0 ? false : s.chatOpen,
       };
     }
@@ -393,13 +361,54 @@ export function reducer(s: State, a: Action): State {
         ...s,
         chatTabs: s.chatTabs.map((t) => (t.id === a.id ? { ...t, title: a.title } : t)),
       };
+    case 'CHAT_TAB_SET_BLANK':
+      return {
+        ...s,
+        chatTabs: s.chatTabs.map((t) => (t.id === a.id ? { ...t, blank: a.blank } : t)),
+      };
+    case 'CHAT_TAB_SET_AGENT': {
+      const tab = s.chatTabs.find((t) => t.id === a.id);
+      // Blank tabs only: a tab with content, a draft, attachments, or a
+      // resumed session is user work and must never switch agent in place.
+      // (`undefined` blank means the tab's AgentView hasn't reported yet —
+      // fresh tabs start blank, so treat it as blank.)
+      if (!tab || tab.blank === false || tab.agent === a.agent) return s;
+      // Re-number the placeholder title for the new agent so "New Chat N"
+      // stays consistent with makeChatTab's per-agent numbering. A
+      // non-placeholder title is preserved (should not occur on a blank tab).
+      const sameAgentOthers = s.chatTabs.filter((t) => t.id !== a.id && t.agent === a.agent);
+      const title = /^New Chat( \d+)?$/.test(tab.title.trim())
+        ? (sameAgentOthers.length === 0 ? 'New Chat' : `New Chat ${sameAgentOthers.length + 1}`)
+        : tab.title;
+      const next = { ...tab, agent: a.agent, title };
+      return {
+        ...s,
+        chatTabs: s.chatTabs.map((t) => (t.id === a.id ? next : t)),
+        // Move the tab's recency entry from the old agent's list to the
+        // new agent's, so per-agent most-recent lookups stay coherent.
+        chatTabRecencyByAgent: rememberChatTab(forgetChatTab(s.chatTabRecencyByAgent, tab), next),
+      };
+    }
+    case 'CHAT_TAB_SET_SCOPE':
+      return {
+        ...s,
+        chatTabs: s.chatTabs.map((t) => (t.id === a.id ? { ...t, boundFolder: a.folder } : t)),
+      };
+    case 'CHAT_RESUME_REQUEST':
+      // A fresh request replaces an unconsumed one — the sidebar ensures a
+      // suitable tab in the same interaction, so at most one is in flight.
+      return { ...s, pendingResume: a.resume };
+    case 'CHAT_RESUME_CONSUMED':
+      return s.pendingResume ? { ...s, pendingResume: null } : s;
     case 'CHAT_TABS_RESET':
-      // Wipes ALL tabs — called on folder switch (the server kills every
-      // agent session in that flow; the frontend drops its tab list too
-      // or we'd render panels bound to the old folder). Fold the panel too,
-      // mirroring CHAT_TAB_CLOSE: an empty panel is dead folder and the
-      // launchers are the only way back in.
-      return { ...s, chatTabs: [], activeChatTabId: null, chatTabRecencyByAgent: {}, chatOpen: false };
+      // Wipes ALL tabs — called when the window LOSES its folder context
+      // (library removal / another window closing the folder; the server
+      // ends this window's agent sessions in those flows). A plain folder
+      // switch never dispatches this: sessions are folder-bound and tabs
+      // survive the switch. Fold the panel too, mirroring CHAT_TAB_CLOSE:
+      // an empty panel is dead folder and the sidebar's New Chat button
+      // is the way back in.
+      return { ...s, chatTabs: [], activeChatTabId: null, chatTabRecencyByAgent: {}, pendingResume: null, chatOpen: false };
     case 'ACTIVE_FOLDER':
       // Semantically "make this folder the user's current target" —
       // also moves the visual focus there.

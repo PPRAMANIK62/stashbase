@@ -129,7 +129,7 @@ function PopupLoadingStatus({
         tabIndex={-1}
         className={cn(
           statusVariants({ tone: "info" }),
-          "absolute bg-card text-xs text-muted shadow-elevation outline-none"
+          "absolute bg-card text-xs text-muted-foreground shadow-elevation outline-none"
         )}
         style={{ left, top }}
         onPointerDown={(event) => event.stopPropagation()}

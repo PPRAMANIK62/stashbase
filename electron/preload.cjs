@@ -10,6 +10,7 @@ const { windowIdFromArgv } = require('./multi-window.cjs');
 const windowId = windowIdFromArgv(process.argv);
 const contextReleaseHandlers = new Set();
 const folderRemovedHandlers = new Set();
+const libraryFolderAddedHandlers = new Set();
 
 ipcRenderer.on('window:prepare-context-release', async (_event, payload) => {
   if (!payload || typeof payload.requestId !== 'string') return;
@@ -32,6 +33,11 @@ ipcRenderer.on('window:folder-removed', (_event, folder) => {
   for (const handler of folderRemovedHandlers) handler(folder);
 });
 
+ipcRenderer.on('window:library-folder-added', (_event, folder) => {
+  if (typeof folder !== 'string') return;
+  for (const handler of libraryFolderAddedHandlers) handler(folder);
+});
+
 // Mark the document as running under Electron so CSS can reserve room
 // for the traffic-light buttons, opt into the drag region, etc. Done
 // pre-DOMContentLoaded by toggling a class once the body exists.
@@ -39,9 +45,9 @@ window.addEventListener('DOMContentLoaded', () => {
   document.body.classList.add('is-electron', `platform-${process.platform}`);
 });
 
-// macOS green-button fullscreen hides the traffic lights, so the chrome
-// strip drops its left inset (the `is-fullscreen` body class). Own this in
-// the preload, not a renderer React effect: the listener is registered at
+// macOS green-button fullscreen hides the traffic lights, so the sidebar
+// drops its top drag-zone clearance (the `is-fullscreen` body class). Own
+// this in the preload, not a renderer React effect: the listener is registered at
 // preload top-level — before the page loads — so the initial state push
 // (main sends it on did-finish-load) is caught even when the window STARTS
 // in fullscreen. A React effect can attach its listener after that push has
@@ -83,6 +89,14 @@ contextBridge.exposeInMainWorld('electron', {
   onFolderRemoved: (handler) => {
     folderRemovedHandlers.add(handler);
     return () => folderRemovedHandlers.delete(handler);
+  },
+  /** A folder joined the library without any window opening it (Agent
+   * create_project). Every window's sidebar shows the membership list, so
+   * all of them refresh it. */
+  notifyLibraryFolderAdded: (folder) => ipcRenderer.invoke('window:notifyLibraryFolderAdded', folder),
+  onLibraryFolderAdded: (handler) => {
+    libraryFolderAddedHandlers.add(handler);
+    return () => libraryFolderAddedHandlers.delete(handler);
   },
   /** Subscribe to "an image is on the clipboard, offer to import it"
    *  pushes fired when a main window regains focus. The renderer shows a

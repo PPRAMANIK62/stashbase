@@ -62,6 +62,10 @@ export const api = {
   /** Absolute path of the default folder home. New Folder opens the native
    *  picker here, but users can still open any folder on disk. */
   getFolderHome: () => getJson<{ path: string }>('/api/folder-home'),
+  /** Star / unstar a library folder. Metadata only — never touches the
+   *  folder on disk. */
+  setFolderFavorite: (path: string, favorite: boolean) =>
+    send<Record<string, never>>('POST', '/api/folders/favorite', { path, favorite }),
   /** Remove a folder from the library ("Your Folders"): forgets it
    *  (unbind + clear index + drop from membership) WITHOUT touching the
    *  folder on disk. */
@@ -74,7 +78,12 @@ export const api = {
     send<Record<string, never>>('PUT', '/api/file-order', { parentPath, names }),
 
   // Files / folders listing --------------------------------------
-  listFiles: () => getJson<FilesPayload>('/api/files'),
+  // `folder` (optional) lists an explicit library-member folder instead of
+  // the window's current one — used by cross-folder chat tabs for mention
+  // and attachment scoping.
+  listFiles: (folder?: string) => getJson<FilesPayload>(
+    folder ? `/api/files?folder=${encodeURIComponent(folder)}` : '/api/files',
+  ),
   statFile: (name: string) => head('/api/files/' + encodePath(name)),
 
   getOnboarding: () => getJson<OnboardingPreferences>('/api/onboarding'),
@@ -290,33 +299,50 @@ export const api = {
     send<{ hasKey: false; provider: EmbedderProvider; model: string }>('DELETE', '/api/embedder/key'),
 
   // Agent sessions (chat-panel History dropdown) ----------------
-  /** All local agent sessions for the current folder, newest first. */
-  listSessions: (agent: 'claude' | 'codex' = 'claude') =>
-    getJson<SessionInfo[]>(agentSessionBase(agent)),
+  /** Local agent sessions for the given scope (a library folder, or the
+   *  reserved library scope; defaults to the window's current folder),
+   *  newest first. */
+  listSessions: (agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+    getJson<SessionInfo[]>(agentSessionBase(agent) + sessionScopeQuery(scope)),
   /** A session's transcript as renderable blocks (for resume replay). */
-  getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude') =>
-    getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages'),
+  getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+    getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages' + sessionScopeQuery(scope)),
   /** Prefer protocol-v2 metadata, but tolerate a protocol-v1 server retained
    * across an application restart/update. */
-  getSessionReplay: async (id: string, agent: 'claude' | 'codex' = 'claude'): Promise<SessionReplay> => {
+  getSessionReplay: async (id: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams): Promise<SessionReplay> => {
     const base = agentSessionBase(agent) + '/' + encodeURIComponent(id);
+    const query = sessionScopeQuery(scope);
     try {
-      const replay = await getJson<SessionReplay>(base + '/replay');
+      const replay = await getJson<SessionReplay>(base + '/replay' + query);
       if (replay?.protocol === 2 && Array.isArray(replay.messages)) return replay;
     } catch (err) {
       if (!(err instanceof ApiError) || err.status !== 404) throw err;
       // Protocol-v1 server: fall through to the stable endpoint.
     }
-    return { protocol: 2, messages: await getJson<SessionBlock[]>(base + '/messages'), effort: null };
+    return { protocol: 2, messages: await getJson<SessionBlock[]>(base + '/messages' + query), effort: null };
   },
-  renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude') =>
-    send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id), { title }),
-  deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude') =>
-    send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id)),
+  renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+    send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id) + sessionScopeQuery(scope), { title }),
+  deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+    send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id) + sessionScopeQuery(scope)),
 };
 
 function agentSessionBase(agent: 'claude' | 'codex'): string {
   return `/api/agents/${encodeURIComponent(agent)}/sessions`;
+}
+
+/** Explicit session scope for history routes: a library folder, or the
+ *  library-wide scope. Absent → the server falls back to the window's
+ *  current folder (else the library). */
+export interface SessionScopeParams {
+  folder?: string;
+  scope?: 'library';
+}
+
+function sessionScopeQuery(params?: SessionScopeParams): string {
+  if (params?.folder) return `?folder=${encodeURIComponent(params.folder)}`;
+  if (params?.scope) return `?scope=${encodeURIComponent(params.scope)}`;
+  return '';
 }
 
 /** Asset URL for HTML files (used by the preview iframe so relative

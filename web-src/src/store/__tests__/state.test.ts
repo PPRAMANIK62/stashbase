@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   initialState,
+  makeChatTab,
   reducer,
   type ChatTab,
   type State,
@@ -220,7 +221,7 @@ test('folder path remap updates files, tabs, expansion, focus, and manual order 
   });
 });
 
-test('chat tab recency survives toggles and is cleaned as tabs close', () => {
+test('chat tab recency survives panel toggles and is cleaned as tabs close', () => {
   const first: ChatTab = { id: 'chat-a', agent: 'codex', title: 'A' };
   const second: ChatTab = { id: 'chat-b', agent: 'codex', title: 'B' };
   let state = freshState({
@@ -232,9 +233,11 @@ test('chat tab recency survives toggles and is cleaned as tabs close', () => {
 
   state = reducer(state, { type: 'CHAT_TAB_ACTIVATE', id: first.id });
   assert.deepEqual(state.chatTabRecencyByAgent.codex, [second.id, first.id]);
-  state = reducer(state, { type: 'CHAT_AGENT_TOGGLE', agent: 'codex' });
+  state = reducer(state, { type: 'CHAT_TOGGLE' });
   assert.equal(state.chatOpen, false);
-  state = reducer(state, { type: 'CHAT_AGENT_TOGGLE', agent: 'codex' });
+  // CHAT_AGENT_OPEN (folder open / MainPane's Start chat) reveals the
+  // agent's most recent tab and reopens the hidden panel.
+  state = reducer(state, { type: 'CHAT_AGENT_OPEN', agent: 'codex' });
   assert.equal(state.chatOpen, true);
   assert.equal(state.activeChatTabId, first.id);
 
@@ -245,6 +248,89 @@ test('chat tab recency survives toggles and is cleaned as tabs close', () => {
   assert.equal(state.activeChatTabId, null);
   assert.equal(state.chatOpen, false);
   assert.deepEqual(state.chatTabRecencyByAgent, {});
+});
+
+test('CHAT_TAB_SET_AGENT switches only blank tabs and migrates recency', () => {
+  const blank: ChatTab = { id: 'chat-a', agent: 'codex', title: 'New Chat', blank: true };
+  const started: ChatTab = { id: 'chat-b', agent: 'codex', title: 'Refactor plan', blank: false };
+  let state = freshState({
+    chatTabs: [blank, started],
+    activeChatTabId: blank.id,
+    chatTabRecencyByAgent: { codex: [started.id, blank.id] },
+  });
+
+  // Blank tab: agent switches in place and its recency entry moves to
+  // the new agent's list.
+  state = reducer(state, { type: 'CHAT_TAB_SET_AGENT', id: blank.id, agent: 'claude' });
+  assert.equal(state.chatTabs[0].agent, 'claude');
+  assert.equal(state.chatTabs[0].title, 'New Chat');
+  assert.deepEqual(state.chatTabRecencyByAgent.codex, [started.id]);
+  assert.deepEqual(state.chatTabRecencyByAgent.claude, [blank.id]);
+
+  // Guard: a tab with content (blank === false) never switches agent.
+  const before = state;
+  state = reducer(state, { type: 'CHAT_TAB_SET_AGENT', id: started.id, agent: 'claude' });
+  assert.equal(state, before);
+  assert.equal(state.chatTabs[1].agent, 'codex');
+
+  // Same agent and unknown ids are no-ops.
+  assert.equal(reducer(state, { type: 'CHAT_TAB_SET_AGENT', id: blank.id, agent: 'claude' }), state);
+  assert.equal(reducer(state, { type: 'CHAT_TAB_SET_AGENT', id: 'missing', agent: 'claude' }), state);
+});
+
+test('CHAT_TAB_SET_AGENT renumbers the placeholder title for the new agent', () => {
+  const claudeTab: ChatTab = { id: 'chat-a', agent: 'claude', title: 'New Chat', blank: false };
+  const blank: ChatTab = { id: 'chat-b', agent: 'codex', title: 'New Chat', blank: true };
+  let state = freshState({ chatTabs: [claudeTab, blank], activeChatTabId: blank.id });
+  state = reducer(state, { type: 'CHAT_TAB_SET_AGENT', id: blank.id, agent: 'claude' });
+  // A second claude tab picks up the "New Chat 2" numbering, matching
+  // makeChatTab's per-agent placeholder scheme.
+  assert.equal(state.chatTabs[1].agent, 'claude');
+  assert.equal(state.chatTabs[1].title, 'New Chat 2');
+});
+
+test('new chat tabs start blank and AgentView updates keep the flag current', () => {
+  const tab = makeChatTab('codex', []);
+  assert.equal(tab.blank, true);
+  let state = freshState({ chatTabs: [tab], activeChatTabId: tab.id });
+  state = reducer(state, { type: 'CHAT_TAB_SET_BLANK', id: tab.id, blank: false });
+  assert.equal(state.chatTabs[0].blank, false);
+  state = reducer(state, { type: 'CHAT_TAB_SET_BLANK', id: tab.id, blank: true });
+  assert.equal(state.chatTabs[0].blank, true);
+});
+
+test('pendingResume channel: request replaces, consume clears, folder-context loss clears', () => {
+  const tab = makeChatTab('claude', []);
+  let state = freshState({ chatTabs: [tab], activeChatTabId: tab.id });
+  assert.equal(state.pendingResume, null);
+
+  state = reducer(state, {
+    type: 'CHAT_RESUME_REQUEST',
+    resume: { agent: 'claude', sessionId: 's1', folder: '/lib/notes' },
+  });
+  assert.deepEqual(state.pendingResume, { agent: 'claude', sessionId: 's1', folder: '/lib/notes' });
+
+  // A newer request replaces an unconsumed one (`folder: null` = the
+  // library scope, matching the boundFolder convention).
+  state = reducer(state, {
+    type: 'CHAT_RESUME_REQUEST',
+    resume: { agent: 'codex', sessionId: 's2', folder: null },
+  });
+  assert.deepEqual(state.pendingResume, { agent: 'codex', sessionId: 's2', folder: null });
+
+  // Consuming clears it; a second consume is a no-op (same state object).
+  state = reducer(state, { type: 'CHAT_RESUME_CONSUMED' });
+  assert.equal(state.pendingResume, null);
+  assert.equal(reducer(state, { type: 'CHAT_RESUME_CONSUMED' }), state);
+
+  // Losing the window's folder context clears an in-flight request too —
+  // the sessions it pointed at were just torn down.
+  state = reducer(state, {
+    type: 'CHAT_RESUME_REQUEST',
+    resume: { agent: 'claude', sessionId: 's3', folder: null },
+  });
+  state = reducer(state, { type: 'CHAT_TABS_RESET' });
+  assert.equal(state.pendingResume, null);
 });
 
 test('loading a different folder clears stale search state', () => {

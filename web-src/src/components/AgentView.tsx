@@ -11,19 +11,45 @@
  * See design-docs/architecture.md §8 for the shared library path.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse } from '../api';
+import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse, type FileMeta, type FolderMeta } from '../api';
 import { AGENT_META, type AgentKind } from '../agentCatalog';
 import { FILE_MIME } from '../dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
 import { useApp } from '../store/AppContext';
-import { makeChatTab } from '../store/state';
-import { NewChatIcon } from '../icons';
 import { Button } from 'react-aria-components';
+import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
-import { AgentHistoryMenu } from './agent/AgentHistoryMenu';
-import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
+import { EmptyChatGreeting, EmptyChatSuggestion } from './agent/AgentEmptyState';
+import { resolveAssistantLink } from './agent/assistantLinkTarget';
+import { MessageList, flattenFileMentions, type QueuedTurnPreview } from './agent/AgentMessages';
+
+/** Runtimes title sessions from the first message's RAW text, so a chat
+ * opened with an @-mention would name its tab a bare relative path.
+ * Flatten mentions to file names and collapse whitespace before the tab
+ * ever sees it. */
+function tabTitleFromSession(raw: string): string {
+  const flat = flattenFileMentions(raw).replace(/\s+/g, ' ').trim();
+  return flat.length > 60 ? flat.slice(0, 60).trimEnd() + '…' : flat;
+}
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
 import { agentConnectionUrl } from './agent/connectionUrl';
+import {
+  chatScopePill,
+  chatScopesEqual,
+  folderMenuEntries,
+  folderMenuLocked,
+  folderScope,
+  isBlankChatTab,
+  LIBRARY_SCOPE,
+  mentionListingPlan,
+  newChatScope,
+  nextSessionScope,
+  scopeChangedScope,
+  scopeRequestParams,
+  windowFolderSwitchPlan,
+  type ChatScope,
+} from './agent/folderState';
+import { shouldConsumePendingResume } from './agent/sessionHistory';
 import { closeAgentSocketIntentionally, terminalAgentState } from './agent/connectionLifecycle';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
@@ -56,7 +82,7 @@ interface PromptToSend {
 /** A chat tab still wearing its auto-generated placeholder name, so we
  *  know it's safe to overwrite with the session's derived title. */
 function isDefaultChatTitle(t: string): boolean {
-  return /^Untitled( \d+)?$/.test(t.trim());
+  return /^New Chat( \d+)?$/.test(t.trim());
 }
 
 export function AgentView({
@@ -81,7 +107,6 @@ export function AgentView({
   const attachmentPreviewUrlsRef = useRef(new Set<string>());
   const uploadCountRef = useRef(0);
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [editableUserMessageIds, setEditableUserMessageIds] = useState<Set<string>>(() => new Set());
   const [turnActive, setTurnActive] = useState(false);
   const turnActiveRef = useRef(false);
   const queuedPromptsRef = useRef<QueuedPrompt[]>([]);
@@ -113,14 +138,27 @@ export function AgentView({
   // User intent and runtime telemetry must stay separate: an active model
   // reached through Default must never become an explicit override later.
   const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
+  // Session scope (Cursor-style picker: a library folder, or "Library").
+  // `pickedScope` is the user's explicit choice for the NEXT session;
+  // undefined follows the window default (current folder, else library).
+  // `connectedScope` is the binding the live session actually connected
+  // with — captured per connect and never rebound.
+  const [pickedScope, setPickedScope] = useState<ChatScope | undefined>(undefined);
+  const pickedScopeRef = useRef<ChatScope | undefined>(undefined);
+  const [connectedScope, setConnectedScope] = useState<ChatScope | null>(null);
+  const connectedScopeRef = useRef<ChatScope | null>(null);
+  // Unsent draft text lifted from the composer: a draft freezes the tab's
+  // scope on a window-folder switch and keeps the tab from counting as a
+  // reusable blank welcome tab.
+  const [hasDraftText, setHasDraftText] = useState(false);
+  const draftTextRef = useRef(false);
+  const recentRef = useRef(state.recent);
+  recentRef.current = state.recent;
   const [skills, setSkills] = useState<AgentSkill[]>([]);
   const [skillState, setSkillState] = useState<'available' | 'empty' | 'failed'>('empty');
   const modelControlRef = useRef(modelControl);
-  // The live session's SDK id (from the `session-id` event) — lets the
-  // History dropdown mark the current session active. `resumeIdRef` holds
-  // a session id to resume on the next connect; it rides the connect URL
-  // (like effort) and is consumed-and-cleared there.
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  // `resumeIdRef` holds a session id to resume on the next connect; it
+  // rides the connect URL (like effort) and is consumed-and-cleared there.
   const resumeIdRef = useRef<string | null>(null);
   // Refs mirror the live session id + this tab's id/title so the WS
   // message handler (bound once per connection) reads current values
@@ -128,7 +166,9 @@ export function AgentView({
   const sessionIdRef = useRef<string | null>(null);
   const idRef = useRef(id); idRef.current = id;
   const titleRef = useRef(title); titleRef.current = title;
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // Empty-state starter suggestion → composer draft. Prefill only; the
+  // nonce lets the same template be re-applied after the user edits it.
+  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   const exitReceivedRef = useRef(false);
@@ -137,7 +177,69 @@ export function AgentView({
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
   const turnErrorTrackerRef = useRef(new TurnErrorTracker());
-  const knownFilePaths = useMemo(() => new Set(state.files.map((f) => f.name)), [state.files]);
+  // Scope-specific file listing: `@` mentions, folder-file attachment
+  // validation, and context resolution run against the session's bound
+  // folder, not the window's current one. Library-wide chats have no
+  // single folder listing, so mentions are disabled there.
+  const listingPlan = connectedScope
+    ? mentionListingPlan(connectedScope, state.folderPath)
+    : { kind: 'window' as const };
+  const listingRoot = listingPlan.kind === 'folder' ? listingPlan.root : null;
+  const mentionsDisabled = listingPlan.kind === 'disabled';
+  const [sessionListing, setSessionListing] = useState<{ files: FileMeta[]; folders: FolderMeta[] } | null>(null);
+  const [sessionListingNonce, setSessionListingNonce] = useState(0);
+  useEffect(() => {
+    if (!listingRoot) {
+      setSessionListing(null);
+      return;
+    }
+    let cancelled = false;
+    void api.listFiles(listingRoot)
+      .then((payload) => {
+        if (!cancelled) setSessionListing({ files: payload.files, folders: payload.folders });
+      })
+      .catch(() => {
+        // Keep whatever listing we had; the next turn/tool refresh retries.
+      });
+    return () => { cancelled = true; };
+  }, [listingRoot, sessionListingNonce]);
+  const mentionFiles = mentionsDisabled ? [] : listingRoot ? sessionListing?.files ?? [] : state.files;
+  const mentionFolders = mentionsDisabled ? [] : listingRoot ? sessionListing?.folders ?? [] : state.folders;
+  const knownFilePaths = useMemo(() => new Set(mentionFiles.map((f) => f.name)), [mentionFiles]);
+  // An unbound tab that is still empty and draft-free follows the window's
+  // folder: a sidebar switch reconnects its next (empty) session to the
+  // new window default. A tab holding an unsent draft freezes its scope
+  // (the draft keeps the binding the user saw). Bound tabs — content,
+  // queued prompts, an explicit pick, or a resume — keep their session
+  // and transcript untouched.
+  const blocksLengthRef = useRef(0);
+  blocksLengthRef.current = blocks.length;
+  const queuedCountRef = useRef(0);
+  queuedCountRef.current = queuedTurns.length;
+  const attachmentsCountRef = useRef(0);
+  attachmentsCountRef.current = attachments.length;
+  useEffect(() => {
+    const plan = windowFolderSwitchPlan({
+      connectedScope: connectedScopeRef.current,
+      picked: pickedScopeRef.current,
+      resumedSession: modelControlRef.current.resumedSession,
+      hasContent: blocksLengthRef.current > 0 || queuedCountRef.current > 0,
+      turnActive: turnActiveRef.current,
+      hasDraft: draftTextRef.current || attachmentsCountRef.current > 0,
+      windowFolder: state.folderPath,
+    });
+    if (plan === 'freeze') {
+      // Promote the connected scope to an explicit pick so a draft can
+      // never be silently rebound by this or a later window switch.
+      const frozen = connectedScopeRef.current ?? undefined;
+      pickedScopeRef.current = frozen;
+      setPickedScope(frozen);
+      return;
+    }
+    if (plan !== 'follow') return;
+    reconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follow-mode only reacts to window-folder changes
+  }, [state.folderPath]);
 
   useEffect(() => {
     // Fast Refresh runs an effect cleanup before reapplying it while keeping
@@ -166,6 +268,16 @@ export function AgentView({
     bridge?.setAgentComposerFocused?.(focused);
   }
 
+  /** Tell every OTHER window's sidebar the library gained a member (the
+   *  owning window refreshes through its own openFolder). Desktop-only; the
+   *  browser dev shell has one window and needs no broadcast. */
+  function notifyLibraryFolderAdded(path: string) {
+    const bridge = (window as {
+      electron?: { notifyLibraryFolderAdded?: (folder: string) => Promise<boolean> };
+    }).electron;
+    void bridge?.notifyLibraryFolderAdded?.(path);
+  }
+
   function pasteImages(files: File[]) {
     const bridge = (window as {
       electron?: { markCurrentClipboardImageHandled?: () => void };
@@ -177,7 +289,7 @@ export function AgentView({
     void uploadFiles(files);
   }
 
-  // A launcher can be clicked before the chrome's initial discovery request
+  // A chat can be opened before the app's initial discovery request
   // settles. Keep that tab out of the WebSocket path until its runtime has a
   // descriptor, so a missing CLI never briefly becomes a generic failure.
   useEffect(() => {
@@ -242,11 +354,30 @@ export function AgentView({
     // re-resuming.
     const resume = resumeIdRef.current;
     resumeIdRef.current = null;
+    // Bind this session's scope explicitly: the user's pick, else the
+    // window's current folder, else the whole library. Recorded here so a
+    // later window-folder switch can never rebind a started conversation.
+    const sessionScope = nextSessionScope(
+      pickedScopeRef.current,
+      folderPathRef.current,
+      recentRef.current.map((entry) => entry.path),
+    );
+    connectedScopeRef.current = sessionScope;
+    setConnectedScope(sessionScope);
+    // Mirror the binding into the tab model: the window-folder switch
+    // logic skips spawning a welcome tab when the active chat already
+    // targets the new folder.
+    dispatch({
+      type: 'CHAT_TAB_SET_SCOPE',
+      id: idRef.current,
+      folder: sessionScope.kind === 'folder' ? sessionScope.path : null,
+    });
     const endpoint = runtime?.endpoint ?? '/ws/agent';
     const wsUrl = agentConnectionUrl({
       protocol: location.protocol, host: location.host, endpoint,
       windowId: getWindowId(), effort: effortRef.current, access: modeRef.current,
       agent, model: modelControlRef.current.selectedModel, resume,
+      ...scopeRequestParams(sessionScope),
     });
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -278,13 +409,11 @@ export function AgentView({
   function reconnect() {
     releaseAllAttachmentPreviews();
     setBlocks([]);
-    setEditableUserMessageIds(new Set());
     setFatal(null);
     setFatalRecoveryLabel('Retry');
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
-    setCurrentSessionId(null);
     sessionIdRef.current = null;
     setRestoredClaudeSession(false);
     setEffortInherited(false);
@@ -327,15 +456,17 @@ export function AgentView({
     }
   }
 
-  /** Open a past session from the History dropdown: paint its transcript,
-   *  then reconnect with `resume` so the SDK appends to it and the user can
-   *  keep chatting. Unlike `reconnect`, blocks are pre-populated (not
-   *  cleared) with the replayed history. */
-  async function resumeSession(id: string) {
-    setHistoryOpen(false);
+  /** Open a past session from the sidebar's History menu: paint its
+   *  transcript, then reconnect with `resume` so the SDK appends to it and
+   *  the user can keep chatting. Unlike `reconnect`, blocks are
+   *  pre-populated (not cleared) with the replayed history. `scope` is the
+   *  scope the History menu was scoped to; the tab's binding pins to it so
+   *  the reconnect below carries the same scope — a resumed session always
+   *  keeps its own scope. */
+  async function resumeSession(id: string, scope: ChatScope) {
     let hist: Block[] = [];
     try {
-      const replay = await api.getSessionReplay(id, agent);
+      const replay = await api.getSessionReplay(id, agent, scopeRequestParams(scope));
       hist = replay.messages as Block[];
       const inheritedEffort = agent === 'claude' ? replay.effort ?? undefined : undefined;
       setEffort(inheritedEffort);
@@ -346,30 +477,33 @@ export function AgentView({
       actions.toast('Could not load that session.', { level: 'error' });
       return;
     }
+    const nextPick = chatScopesEqual(scope, newChatScope(folderPathRef.current)) ? undefined : scope;
+    setPickedScope(nextPick);
+    pickedScopeRef.current = nextPick;
     releaseAllAttachmentPreviews();
     setBlocks(hist);
-    setEditableUserMessageIds(new Set());
     setFatal(null);
     setFatalRecoveryLabel('Retry');
     queuedPromptsRef.current = [];
     setQueuedTurns([]);
     setTurnBusy(false);
-    setCurrentSessionId(id);
     sessionIdRef.current = id;
     toolNamesRef.current.clear();
     openKind.current = null;
     resumeIdRef.current = id;
     // The previous tab may have been configured for another model. Clear it
     // before reconnecting so the locked resumed chat cannot mislabel itself.
+    // No notice line: the locked model pill (and its tooltip) already says
+    // the session keeps its own model — notices are for failures only.
     const resumedModelControl: ModelControlState = {
-      models: [], notice: 'This resumed session retains the model chosen by its native runtime.', resumedSession: true,
+      models: [], notice: null, resumedSession: true,
     };
     modelControlRef.current = resumedModelControl;
     setModelControl(resumedModelControl);
     // Name the tab from the resumed session right away — otherwise a tab
-    // opened to a past session stays "Untitled" until the user sends a
-    // new prompt (the `turn-end` path that usually renames never fires on
-    // a pure load). Safe: `maybeNameTab` only overwrites a placeholder.
+    // opened to a past session keeps its "New Chat" placeholder until the
+    // user sends a prompt (the `turn-end` path that usually renames never
+    // fires on a pure load). Safe: `maybeNameTab` only overwrites a placeholder.
     void maybeNameTab();
     setPhase('connecting');
     setNonce((n) => n + 1);
@@ -383,15 +517,20 @@ export function AgentView({
         refreshRuntimes();
         // Starting a built-in agent can create root-level instruction files
         // (`AGENTS.md`, and for Claude the `CLAUDE.md` bridge). Refresh the
-        // tree immediately instead of waiting for the next index-status poll.
-        void actions.loadFiles(folderPathRef.current || undefined);
+        // tree immediately instead of waiting for the next index-status poll;
+        // a cross-folder session refreshes its own folder's listing too.
+        // (Library-wide sessions write no instruction files and have no
+        // folder listing of their own.)
+        if (folderPathRef.current) void actions.loadFiles(folderPathRef.current);
+        if (connectedScopeRef.current?.kind === 'folder' && connectedScopeRef.current.path !== folderPathRef.current) {
+          setSessionListingNonce((n) => n + 1);
+        }
         // A fresh session always starts at permissionMode 'default'; if the
         // user had picked a non-default mode, re-apply it so a reconnect
         // (Retry / effort change) doesn't silently reset it.
         if (mode !== 'default') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode }));
         break;
       case 'session-id':
-        setCurrentSessionId(ev.id);
         sessionIdRef.current = ev.id;
         break;
       case 'models':
@@ -404,8 +543,8 @@ export function AgentView({
       case 'skills': setSkills(ev.skills); setSkillState(ev.state); break;
       case 'session-title':
         if (isDefaultChatTitle(titleRef.current)) {
-          const t = ev.title.trim();
-          if (t) dispatch({ type: 'CHAT_TAB_RENAME', id: idRef.current, title: t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : t });
+          const t = tabTitleFromSession(ev.title);
+          if (t) dispatch({ type: 'CHAT_TAB_RENAME', id: idRef.current, title: t });
         }
         break;
       case 'turn-start':
@@ -438,10 +577,21 @@ export function AgentView({
         if (!ev.isError) {
           const toolName = toolNamesRef.current.get(ev.id);
           if (shouldRefreshAfterTool(toolName)) {
-            const toolFolder = folderPathRef.current;
+            // Reconcile the folder the session is bound to; the window tree
+            // reload below is skipped when the tab works cross-folder. A
+            // library-wide session has no bound folder — reconcile the
+            // window's current folder so the visible tree stays fresh.
+            const boundScope = connectedScopeRef.current;
+            const toolFolder = boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current;
             void (async () => {
+              if (!toolFolder) return; // library chat in a no-folder window: nothing visible to reconcile
               await api.sync(toolFolder).catch(() => { /* turn-end / next poll will surface it */ });
-              if (folderPathRef.current !== toolFolder) return;
+              if (folderPathRef.current !== toolFolder) {
+                // Cross-folder tab: refresh the session-folder listing so
+                // mentions and attachment validation see the new files.
+                setSessionListingNonce((n) => n + 1);
+                return;
+              }
               await actions.loadFiles();
               if (folderPathRef.current !== toolFolder) return;
               void actions.refreshIndexState();
@@ -471,6 +621,28 @@ export function AgentView({
           setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not steer Codex: ${ev.message}` }]);
         }
         break;
+      case 'scope-changed': {
+        // The server migrated this session's binding (create_project from a
+        // library-scoped chat): flip the pill/header to the project and have
+        // THIS window — the one owning the chat — select it in the sidebar,
+        // exactly as if the user had clicked the new library entry. Other
+        // windows only receive the membership update.
+        const next = scopeChangedScope(ev.scope);
+        if (!next || next.kind !== 'folder') break;
+        connectedScopeRef.current = next;
+        setConnectedScope(next);
+        // Update the tab-model binding BEFORE opening the folder, so the
+        // switch effect sees the active tab already bound to the project
+        // and does not activate a welcome tab over this conversation.
+        dispatch({ type: 'CHAT_TAB_SET_SCOPE', id: idRef.current, folder: next.path });
+        notifyLibraryFolderAdded(next.path);
+        if (folderPathRef.current !== next.path) {
+          void actions.openFolder(next.path).catch((err) => {
+            actions.toast(`Could not open the new project: ${errorText(err)}`, { level: 'error' });
+          });
+        }
+        break;
+      }
       case 'turn-end': {
         const terminal = turnErrorTrackerRef.current.finish(ev.isError);
         if (terminal.duplicate) break;
@@ -485,19 +657,23 @@ export function AgentView({
         toolNamesRef.current.clear();
         // Name the tab from the session's derived title (first prompt /
         // SDK summary) once the first turn lands — keeps it in sync with
-        // the History list instead of staying "Untitled".
+        // the History list instead of staying "New Chat".
         void maybeNameTab();
         // The agent may have written files via shell during the turn —
         // reconcile now (deterministic, replaces fs.watch). MCP writes
         // already index on their own path; this catches `Bash`/editor
         // writes the moment the turn finishes.
         {
-          const turnFolder = folderPathRef.current;
-          void api.sync(turnFolder || undefined)
-            .catch(() => { /* next status poll surfaces it */ })
-            .finally(() => {
-              if (folderPathRef.current === turnFolder) void actions.refreshIndexState();
-            });
+          const boundScope = connectedScopeRef.current;
+          const turnFolder = boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current;
+          if (turnFolder) {
+            void api.sync(turnFolder)
+              .catch(() => { /* next status poll surfaces it */ })
+              .finally(() => {
+                if (folderPathRef.current === turnFolder) void actions.refreshIndexState();
+                else setSessionListingNonce((n) => n + 1);
+              });
+          }
         }
         recordFailureBeforeContinuing(
           terminal,
@@ -511,7 +687,7 @@ export function AgentView({
         // Runtime bridges record terminal failures in the shared catalog.
         // Refresh for both startup and active-session errors: regular turn
         // errors leave the descriptor unchanged, while an app-server exit
-        // immediately changes the launcher from available to failed.
+        // immediately flips the runtime's descriptor from available to failed.
         refreshRuntimes();
         // An error before the session is ready is fatal (e.g. no folder
         // open / not authenticated); mid-session it's just a notice.
@@ -663,8 +839,14 @@ export function AgentView({
 
   async function resolveFolderContext(path: string): Promise<AgentContextFile | null> {
     if (!knownFilePaths.has(path)) return null;
+    // Resolve against the session's bound folder — a cross-folder tab must
+    // not look the file up under the window's current folder. (A library
+    // chat never reaches here: its folder-file listing is empty.)
+    const boundScope = connectedScopeRef.current;
+    const contextFolder = boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current;
+    if (!contextFolder) return null;
     try {
-      return await api.agentContextFile(folderPathRef.current, path);
+      return await api.agentContextFile(contextFolder, path);
     } catch {
       return null;
     }
@@ -734,12 +916,12 @@ export function AgentView({
     }
   }
 
-  /** Add chips for files already in the folder (dragged from the sidebar);
-   *  no upload needed — just reference their existing path. */
+  /** Add chips for files already in the session's folder (dragged from the
+   *  sidebar); no upload needed — just reference their existing path. */
   function addFolderFiles(paths: string[]) {
     const clean = paths.filter((p) => p && knownFilePaths.has(p));
     const skipped = paths.filter((p) => p && !knownFilePaths.has(p)).length;
-    if (skipped) actions.toast('Only files from the current folder can be attached.', { level: 'warning' });
+    if (skipped) actions.toast("Only files from this chat's folder can be attached.", { level: 'warning' });
     const add = clean.map((p) => ({ path: p, name: baseName(p) }));
     if (add.length) setAttachments((a) => mergeAttachments(a, add));
   }
@@ -762,14 +944,6 @@ export function AgentView({
   }
 
   function stop() {
-    const lastUser = [...blocks].reverse().find((b) => b.kind === 'user');
-    if (lastUser) {
-      setEditableUserMessageIds((prev) => {
-        const next = new Set(prev);
-        next.add(lastUser.id);
-        return next;
-      });
-    }
     wsRef.current?.send(JSON.stringify({ t: 'interrupt' }));
   }
 
@@ -796,6 +970,19 @@ export function AgentView({
     }
   }
 
+  /** Pick the session scope (a library folder, or the whole library) for
+   * this tab's NEXT session. Like a model change it reconnects, and it is
+   * refused once the conversation has content — a live session is never
+   * rebound to another scope. Picking the window default returns the tab
+   * to follow-the-window. */
+  function changeScope(next: ChatScope) {
+    if (blocks.length > 0 || turnActive || modelControl.resumedSession) return;
+    const pick = chatScopesEqual(next, newChatScope(folderPathRef.current)) ? undefined : next;
+    setPickedScope(pick);
+    pickedScopeRef.current = pick;
+    reconnect();
+  }
+
   /** Changing model starts a new native session. A resumed or populated
    * transcript is immutable here, so it can never silently switch models. */
   function changeModel(next: string | undefined) {
@@ -810,7 +997,7 @@ export function AgentView({
 
   /** Rename this tab from the session's server-derived title once the
    *  first turn lands. Only fires while the tab still wears its
-   *  "Untitled" placeholder, so a user-set name (or a later turn) never
+   *  "New Chat" placeholder, so a user-set name (or a later turn) never
    *  clobbers it. Uses the same source as the History list, so the two
    *  stay consistent. */
   async function maybeNameTab() {
@@ -818,32 +1005,73 @@ export function AgentView({
     const sid = sessionIdRef.current;
     if (!tabId || !sid || !isDefaultChatTitle(titleRef.current)) return;
     try {
-      const sessions = await api.listSessions(agent);
-      const t = sessions.find((x) => x.id === sid)?.title?.trim();
+      const nameScope = connectedScopeRef.current ?? newChatScope(folderPathRef.current);
+      const sessions = await api.listSessions(agent, scopeRequestParams(nameScope));
+      const t = tabTitleFromSession(sessions.find((x) => x.id === sid)?.title ?? '');
       if (t && !isDefaultChatTitle(t)) {
-        dispatch({ type: 'CHAT_TAB_RENAME', id: tabId, title: t.length > 60 ? t.slice(0, 60).trimEnd() + '…' : t });
+        dispatch({ type: 'CHAT_TAB_RENAME', id: tabId, title: t });
       }
     } catch { /* leave the placeholder if the lookup fails */ }
   }
 
-  /** Spawn a fresh chat tab for the same agent from the in-panel `+`. */
-  function newChat() {
-    dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
-  }
-
-  /** Deleting the session currently shown in this tab leaves the tab open as
-   * a fresh chat. Its old history title must not leak into that new session. */
-  function resetAfterActiveSessionDeleted() {
-    const otherAgentTabs = state.chatTabs.filter((tab) => tab.agent === agent && tab.id !== id);
-    const freshTitle = otherAgentTabs.length === 0 ? 'Untitled' : `Untitled ${otherAgentTabs.length + 1}`;
-    dispatch({ type: 'CHAT_TAB_RENAME', id, title: freshTitle });
-    reconnect();
-  }
-
   const effortLocked = turnActive || (blocks.length > 0 && !restoredClaudeSession);
   const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
+  // Session-scope pill state. The shown scope is the live binding once
+  // connected, else the scope the next session would bind (picked scope or
+  // the window default, so unbound tabs follow the sidebar).
+  const memberPaths = useMemo(() => state.recent.map((entry) => entry.path), [state.recent]);
+  const folderEntries = useMemo(
+    () => folderMenuEntries(state.recent, state.folderPath),
+    [state.recent, state.folderPath],
+  );
+  const folderLocked = folderMenuLocked(blocks.length > 0, turnActive, modelControl.resumedSession);
+  const sessionScope = chatScopePill({
+    connectedScope,
+    picked: pickedScope,
+    windowFolder: state.folderPath,
+    memberPaths,
+  });
+  // Cross-scope tabs stay legible: "in <folder>" for another folder's
+  // chat, "in Library" for a library chat while the window shows a folder.
   const effectiveModel = modelControl.activeModel ?? modelControl.selectedModel;
   const supportedEfforts = modelControl.models.find((entry) => entry.id === effectiveModel)?.supportedEfforts;
+  // Report blankness to the tab model: a COMPLETELY blank tab (no
+  // transcript, no active turn, not resumed, no picked scope, no draft
+  // text, no attachments) is the reusable welcome tab for New Chat and
+  // window-folder switches.
+  const storedBlank = state.chatTabs.find((tab) => tab.id === id)?.blank ?? true;
+  const blankNow = isBlankChatTab({
+    hasContent: blocks.length > 0 || queuedTurns.length > 0,
+    turnActive,
+    resumedSession: modelControl.resumedSession,
+    picked: pickedScope,
+    hasDraftText,
+    attachmentCount: attachments.length,
+  });
+  useEffect(() => {
+    if (storedBlank !== blankNow) dispatch({ type: 'CHAT_TAB_SET_BLANK', id, blank: blankNow });
+  }, [blankNow, storedBlank, dispatch, id]);
+
+  // Sidebar History handoff: the sidebar recorded a pending resume and
+  // ensured a suitable tab is active; the ACTIVE, still-blank tab running
+  // the request's agent takes it. Consume-and-clear BEFORE resuming so the
+  // request can never double-fire, and never hijack a non-blank tab.
+  const pendingResume = state.pendingResume;
+  useEffect(() => {
+    if (!pendingResume) return;
+    if (!shouldConsumePendingResume({ active, tabAgent: agent, requestAgent: pendingResume.agent, blank: blankNow })) return;
+    dispatch({ type: 'CHAT_RESUME_CONSUMED' });
+    void resumeSession(
+      pendingResume.sessionId,
+      pendingResume.folder === null ? LIBRARY_SCOPE : folderScope(pendingResume.folder),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- consume once per request/activation; the guards read latest values
+  }, [pendingResume, active]);
+
+  function handleDraftChange(hasText: boolean) {
+    draftTextRef.current = hasText;
+    setHasDraftText((prev) => (prev === hasText ? prev : hasText));
+  }
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
     wsRef.current?.send(JSON.stringify({ t: 'permission-reply', id: permId, allow }));
@@ -888,37 +1116,37 @@ export function AgentView({
     }
   }
 
+  // Empty chat (no turns yet, session usable) renders the hero layout:
+  // greeting + centered composer + starter templates. Any transcript
+  // content, a queued prompt, or a closed/failed session falls back to the
+  // standard transcript-over-bottom-composer layout. The composer keeps its
+  // `key` so the same mounted instance moves between the two layouts.
+  const emptyChat = blocks.length === 0 && queuedTurns.length === 0 && phase !== 'closed' && !fatal;
+
   return (
+    // `agent-view` stays as a routing hook: useGlobalDragDrop uses
+    // `closest('.agent-view')` to keep panel drops out of folder import.
     <div
-      className="agent-view"
+      // Documents are paper (base); chat sits on the CANVAS role — a cool
+      // near-white between paper and chrome, identical in BOTH layouts,
+      // floating its white cards (user turns, composer, code blocks). The
+      // surface never changes with layout, so opening a document only
+      // resizes the panel — no mode jump.
+      className="agent-view relative flex min-h-0 flex-1 flex-col bg-canvas"
       onDragOver={onPanelDragOver}
       onDragLeave={onPanelDragLeave}
       onDrop={onPanelDrop}
     >
       {dragOver && (
-        <div className="agent-drop-overlay">
-          <div className="agent-drop-card">Drop files to add as context</div>
+        // pointer-events-none so the overlay never steals the drop or
+        // flickers dragenter/leave; the panel's own handlers take the drop.
+        <div className="pointer-events-none absolute inset-1.5 z-20 grid place-items-center rounded-xl border-2 border-dashed border-accent/55 bg-accent/7 backdrop-blur-[1.5px]">
+          <div className="rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground shadow-elevation">Drop files to add as context</div>
         </div>
       )}
-      <div className="agent-head">
-        <span className="agent-head-title">{title}</span>
-        <div className="agent-head-actions">
-          {capabilities?.history && (
-            <AgentHistoryMenu
-              open={historyOpen}
-              currentSessionId={currentSessionId}
-              agent={agent}
-              onToggle={() => setHistoryOpen((o) => !o)}
-              onClose={() => setHistoryOpen(false)}
-              onResume={resumeSession}
-              onActiveDeleted={resetAfterActiveSessionDeleted}
-            />
-          )}
-          <Button className="agent-head-btn" aria-label={`New ${meta.name} chat`} onPress={newChat}>
-            <NewChatIcon />
-          </Button>
-        </div>
-      </div>
+      {/* No pane header: the chat tab already names the conversation and
+        * the composer's scope pill carries the binding — repeating either
+        * here was pure noise. */}
       {!runtime ? (
         <AgentRuntimeChecking name={meta.name} onRefresh={() => void refreshRuntimes()} />
       ) : runtimeUnavailable ? (
@@ -937,37 +1165,67 @@ export function AgentView({
           onRefresh={() => void refreshRuntimes()}
         />
       ) : <>
-        <MessageList
-          blocks={blocks}
-          queuedTurns={queuedTurns}
-          turnActive={turnActive}
-          phase={phase}
-          fatal={fatal}
-          fatalRecoveryLabel={fatalRecoveryLabel}
-          agentName={meta.name}
-          agentShortName={meta.shortName}
-          Icon={meta.Icon}
-          editableUserMessageIds={editableUserMessageIds}
-          onPermission={replyPermission}
-          onSteerQueued={steerQueuedPrompt}
-          onCopyUserMessage={copyUserMessage}
-          onResendUserMessage={send}
-          onRetry={reconnectAfterFatal}
-          onOpenArtifact={(path) => {
-            const folder = folderPathRef.current;
-            const rel = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
-            if (isSafeFolderRelativePath(rel)) void actions.selectFile(rel);
-          }}
-        />
+        {emptyChat ? (
+          // Empty chat: the composer is the hero. The greeting bottoms out
+          // this flex-[3] band and the rotating suggestion bottoms out the
+          // flex-[4] band below the composer, so the input rests just above
+          // the vertical center (Cursor-style) at every panel height.
+          <div key="empty-above" className="flex min-h-0 flex-[3] flex-col justify-end overflow-hidden px-2">
+            <div className="mx-auto w-[min(640px,100%)]">
+              <EmptyChatGreeting
+                agentShortName={meta.shortName}
+                connecting={phase === 'connecting'}
+              />
+            </div>
+          </div>
+        ) : (
+          <MessageList
+            key="messages"
+            blocks={blocks}
+            queuedTurns={queuedTurns}
+            turnActive={turnActive}
+            phase={phase}
+            fatal={fatal}
+            fatalRecoveryLabel={fatalRecoveryLabel}
+            agentShortName={meta.shortName}
+            onPermission={replyPermission}
+            onSteerQueued={steerQueuedPrompt}
+            onCopyUserMessage={copyUserMessage}
+            onResendUserMessage={send}
+            onRetry={reconnectAfterFatal}
+            onOpenArtifact={(path) => {
+              const action = resolveAssistantLink(path, {
+                scopeFolder: connectedScopeRef.current?.kind === 'folder' ? connectedScopeRef.current.path : null,
+                windowFolder: folderPathRef.current || null,
+                members: state.recent.map((entry) => entry.path),
+              });
+              if (!action) return;
+              if (action.kind === 'open-folder') {
+                void actions.openFolder(action.path);
+                return;
+              }
+              if (!isSafeFolderRelativePath(action.rel)) return;
+              if (action.folder === folderPathRef.current) {
+                void actions.selectFile(action.rel);
+                return;
+              }
+              // The file lives in another member folder: switch the browse
+              // location first, then select it there.
+              void actions.openFolder(action.folder).then(() => actions.selectFile(action.rel));
+            }}
+          />
+        )}
         {phase === 'closed' && (
         !fatal && (
-          <div className="agent-ended">
+          <div className="flex items-center justify-between gap-2.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
             <span>Session ended.</span>
-            <Button className="agent-btn" onPress={reconnect}>Reconnect</Button>
+            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={reconnect}>Reconnect</Button>
           </div>
         )
       )}
       <AgentComposer
+        key="composer"
+        hero={emptyChat}
         phase={phase}
         disabled={phase !== 'live'}
         turnActive={turnActive}
@@ -986,13 +1244,22 @@ export function AgentView({
         resumedSession={modelControl.resumedSession}
         supportedEfforts={supportedEfforts}
         onSetModel={changeModel}
+        sessionScope={sessionScope}
+        folderEntries={folderEntries}
+        folderLocked={folderLocked}
+        folderHomeDir={state.homeDir}
+        onSetScope={changeScope}
+        onDraftChange={handleDraftChange}
         showModeMenu={capabilities?.modes === true}
         showEffortMenu={capabilities?.effort === true}
         showModelMenu={modelMenuVisible(capabilities?.models === true, modelControl.models)}
+        mentionFiles={mentionFiles}
+        mentionFolders={mentionFolders}
         skills={skills}
         skillState={skillState}
         onRefreshSkills={refreshSkills}
         agentShortName={meta.shortName}
+        prefill={prefill}
         attachments={attachments}
         uploading={uploading}
         onPickFiles={uploadFiles}
@@ -1002,10 +1269,29 @@ export function AgentView({
         onSend={send}
         onStop={stop}
       />
+      {emptyChat && (
+        <div key="empty-below" className="scrollbar-quiet flex min-h-0 flex-[4] flex-col overflow-y-auto px-2">
+          {/* mt-auto pins the suggestion toward the pane's bottom edge when
+            * there is room, turning the leftover space into deliberate
+            * composition; on short panels it simply sits below the composer. */}
+          <div className="mt-auto shrink-0">
+            <EmptyChatSuggestion
+              onPrefill={(text) => setPrefill({ text, nonce: Date.now() })}
+              libraryScoped={sessionScope.kind === 'library'}
+            />
+          </div>
+        </div>
+      )}
       </>}
     </div>
   );
 }
+
+const runtimeCardWrapClass = 'grid min-h-45 flex-1 place-items-center px-3 py-6';
+const runtimeCardClass = 'w-[min(440px,100%)] rounded-xl border border-border bg-pane p-4 text-foreground';
+const runtimeCardTitleClass = 'm-0 text-lg font-bold';
+const runtimeCardCopyClass = 'mt-1.75 mb-3 text-sm leading-normal text-muted-foreground';
+const runtimeCardActionsClass = 'mt-3 flex justify-end gap-2';
 
 function AgentRuntimeSetup({
   runtime,
@@ -1021,14 +1307,14 @@ function AgentRuntimeSetup({
   const name = runtime?.label ?? fallbackName;
   const installHint = runtime?.installHint ?? '';
   return (
-    <div className="agent-runtime-setup" role="status">
-      <div className="agent-runtime-setup-card">
-        <h2>{name} is not installed</h2>
-        <p>Install its CLI to start a built-in chat.</p>
-        <code>{installHint}</code>
-        <div className="agent-runtime-setup-actions">
-          <Button className="agent-btn primary" onPress={onCopy}>Copy command</Button>
-          <Button className="agent-btn" onPress={onRefresh}>Refresh status</Button>
+    <div className={runtimeCardWrapClass} role="status">
+      <div className={runtimeCardClass}>
+        <h2 className={runtimeCardTitleClass}>{name} is not installed</h2>
+        <p className={runtimeCardCopyClass}>Install its CLI to start a built-in chat.</p>
+        <code className="block overflow-x-auto rounded-md border border-border bg-background p-2 font-mono text-sm whitespace-nowrap">{installHint}</code>
+        <div className={runtimeCardActionsClass}>
+          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onCopy}>Copy command</Button>
+          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Refresh status</Button>
         </div>
       </div>
     </div>
@@ -1037,12 +1323,12 @@ function AgentRuntimeSetup({
 
 function AgentRuntimeChecking({ name, onRefresh }: { name: string; onRefresh: () => void }) {
   return (
-    <div className="agent-runtime-setup" role="status">
-      <div className="agent-runtime-setup-card">
-        <h2>Checking {name}</h2>
-        <p>Checking whether its local CLI is installed.</p>
-        <div className="agent-runtime-setup-actions">
-          <Button className="agent-btn" onPress={onRefresh}>Refresh status</Button>
+    <div className={runtimeCardWrapClass} role="status">
+      <div className={runtimeCardClass}>
+        <h2 className={runtimeCardTitleClass}>Checking {name}</h2>
+        <p className={runtimeCardCopyClass}>Checking whether its local CLI is installed.</p>
+        <div className={runtimeCardActionsClass}>
+          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Refresh status</Button>
         </div>
       </div>
     </div>

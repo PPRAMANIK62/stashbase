@@ -23,6 +23,8 @@ Current contracts:
   boundary, navigation, and renderer safety.
 - [Agent Panel](agent-panel.md) — built-in Claude/Codex panel review
   constraints.
+- [Renderer Styling](renderer-styling.md) — token layer, Tailwind mapping,
+  primitives, and the CSS exemption inventory.
 
 Keep these files English-only and current when a code change modifies the
 contract they describe. Prefer automated tests for precise regressions; use

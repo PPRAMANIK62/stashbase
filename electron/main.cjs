@@ -654,8 +654,9 @@ async function createWindow(initialFolder) {
     minWidth: 720,
     minHeight: 480,
     // Initial OS-level title; the renderer adds the current folder once it
-    // opens so Mission Control/task switchers can distinguish windows. The
-    // visible in-window title is still drawn by the custom HTML chrome.
+    // opens so Mission Control/task switchers can distinguish windows.
+    // There is no in-window titlebar strip — document.title is the only
+    // place the folder identity is spelled out.
     title: 'StashBase',
     backgroundColor: '#fafafa',
     titleBarStyle: 'hiddenInset',
@@ -727,11 +728,11 @@ async function createWindow(initialFolder) {
     void openHttpExternal(url, 'navigation URL');
   });
 
-  // macOS fullscreen hides the traffic lights, so the chrome strip
-  // shouldn't reserve room for them. Push state to the renderer so CSS
-  // can flip a body class. Send the initial state once the renderer is
-  // up in case the window started fullscreen (rare but possible via
-  // `Restore Window` on relaunch).
+  // macOS fullscreen hides the traffic lights, so the sidebar shouldn't
+  // reserve its top drag-zone clearance for them. Push state to the
+  // renderer so CSS can flip a body class. Send the initial state once
+  // the renderer is up in case the window started fullscreen (rare but
+  // possible via `Restore Window` on relaunch).
   function pushFullscreen() {
     if (win.isDestroyed()) return;
     win.webContents.send('fullscreen-change', win.isFullScreen());
@@ -745,9 +746,9 @@ async function createWindow(initialFolder) {
 
   // Swallow ⌘R / Ctrl+R from the keyboard. Electron's default View
   // menu binds it to "Reload", which does a full renderer re-mount —
-  // dropping all tab / nav / search state on the floor. The intentional
-  // "back to Welcome" path is the Home icon in the chrome strip
-  // (`actions.goHome()`), which resets tabs cleanly without re-mounting.
+  // dropping all tab / nav / search state on the floor. Folder switching
+  // happens through the sidebar's library list, which swaps the window's
+  // folder cleanly without re-mounting.
   // The View → Reload menu item is left in place as an escape hatch
   // (mouse click); only the keyboard chord is gone.
   win.webContents.on('before-input-event', (event, input) => {
@@ -892,6 +893,21 @@ ipcMain.handle('window:notifyFolderRemoved', (event, folder) => {
   for (const win of mainWindows) {
     if (isLiveMainWindow(win)) {
       win.webContents.send('window:folder-removed', folder.trim());
+    }
+  }
+  return true;
+});
+
+// A folder joined the library without any window opening it (Agent
+// create_project). Broadcast so every window's sidebar refreshes its
+// membership list; only the notifying (chat-owning) window navigates.
+ipcMain.handle('window:notifyLibraryFolderAdded', (event, folder) => {
+  if (typeof folder !== 'string' || !folder.trim()) return false;
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return false;
+  for (const win of mainWindows) {
+    if (isLiveMainWindow(win) && win !== senderWindow) {
+      win.webContents.send('window:library-folder-added', folder.trim());
     }
   }
   return true;

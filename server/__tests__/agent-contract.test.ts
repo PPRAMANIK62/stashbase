@@ -5,9 +5,13 @@ import {
   attachAgentRuntime,
   clearAgentRuntimeFailure,
   discoverAgentRuntimes,
+  disposeSessionsBoundToFolder,
   parseAgentEffort,
   registerAgentAdapter,
   reportAgentRuntimeFailure,
+  resolveAgentSessionFolder,
+  resolveAgentSessionScope,
+  resolveSessionBinding,
   runtimeDescriptorFor,
   type AgentClientEvent,
   type AgentServerEvent,
@@ -26,6 +30,7 @@ test('Claude and Codex declare every Shared Agent Contract panel behavior', () =
     }
     assert.equal(typeof adapter.attach, 'function');
     assert.equal(typeof adapter.stop, 'function');
+    assert.equal(typeof adapter.stopFolder, 'function');
     assert.equal(typeof adapter.history.list, 'function');
     assert.equal(typeof adapter.history.messages, 'function');
     assert.equal(typeof adapter.history.rename, 'function');
@@ -63,12 +68,15 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'tool', id: 'tool', name: 'Read', input: {} }, { t: 'tool-delta', id: 'tool', delta: 'input' },
     { t: 'tool-result', id: 'tool', content: 'done', isError: false },
     { t: 'permission', id: 'approval', toolUseId: 'tool', name: 'Write', title: null, input: {} },
-    { t: 'steer-result', id: 'queued', ok: true }, { t: 'turn-end', isError: false },
+    { t: 'steer-result', id: 'queued', ok: true },
+    // create_project rebinding a library-scoped chat to the new project.
+    { t: 'scope-changed', scope: { kind: 'folder', path: '/Users/me/Documents/StashBase/Project' } },
+    { t: 'turn-end', isError: false },
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
     { t: 'exit', message: 'runtime stopped unexpectedly' },
   ];
   assert.equal(clientEvents.length, 6);
-  assert.equal(events.length, 16);
+  assert.equal(events.length, 17);
 });
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {
@@ -101,6 +109,127 @@ test('capability discovery publishes the registered adapter catalog', () => {
     assert.equal(runtime.endpoint, '/ws/agent');
     assert.deepEqual(runtime.capabilities, adapter.capabilities);
   }
+});
+
+test('an explicit session folder is accepted only when it is a registered library folder', () => {
+  const members = ['/Users/me/Documents/StashBase/Notes', '/Users/me/Projects/Research'];
+
+  // Explicit member folder → accepted with the stored member spelling.
+  const accepted = resolveAgentSessionFolder('/Users/me/Projects/Research', members);
+  assert.deepEqual(accepted, { ok: true, folder: '/Users/me/Projects/Research' });
+
+  // Absent/empty → fall back to the window's current folder (no explicit binding).
+  assert.deepEqual(resolveAgentSessionFolder(undefined, members), { ok: true });
+  assert.deepEqual(resolveAgentSessionFolder(null, members), { ok: true });
+  assert.deepEqual(resolveAgentSessionFolder('   ', members), { ok: true });
+
+  // Anything outside membership is rejected — never bound to an agent session.
+  assert.equal(resolveAgentSessionFolder('/etc', members).ok, false);
+  assert.equal(resolveAgentSessionFolder('/Users/me/Projects/Research/nested', members).ok, false);
+  assert.equal(resolveAgentSessionFolder('relative/path', members).ok, false);
+  assert.equal(resolveAgentSessionFolder(['/Users/me/Projects/Research'], members).ok, false);
+  assert.equal(resolveAgentSessionFolder('/anything', []).ok, false);
+});
+
+test('an explicit session scope is scope=library, a member folder, or nothing', () => {
+  const members = ['/Users/me/Documents/StashBase/Notes', '/Users/me/Projects/Research'];
+
+  // scope=library → accepted as the library-wide scope.
+  assert.deepEqual(resolveAgentSessionScope('library', undefined, members), { ok: true, scope: { kind: 'library' } });
+  // Explicit member folder → folder scope with the stored member spelling.
+  assert.deepEqual(
+    resolveAgentSessionScope(undefined, '/Users/me/Projects/Research', members),
+    { ok: true, scope: { kind: 'folder', path: '/Users/me/Projects/Research' } },
+  );
+  // Both absent/empty → no explicit scope: the window's current folder
+  // applies when one exists, else the library fallback.
+  assert.deepEqual(resolveAgentSessionScope(undefined, undefined, members), { ok: true });
+  assert.deepEqual(resolveAgentSessionScope('', '  ', members), { ok: true });
+
+  // Invalid folders are still rejected exactly as before.
+  assert.equal(resolveAgentSessionScope(undefined, '/etc', members).ok, false);
+  assert.equal(resolveAgentSessionScope(undefined, 'relative/path', members).ok, false);
+  // Unknown scope values and contradictory scope+folder are rejected.
+  assert.equal(resolveAgentSessionScope('global', undefined, members).ok, false);
+  assert.equal(resolveAgentSessionScope(['library'], undefined, members).ok, false);
+  assert.equal(resolveAgentSessionScope('library', '/Users/me/Projects/Research', members).ok, false);
+});
+
+test('session binding: library scope binds the folder home and is not folder-bound', () => {
+  const home = '/Users/me/Documents/StashBase';
+
+  // Explicit library scope → cwd is the reserved library cwd (the folder
+  // home) even while the window has a current folder.
+  assert.deepEqual(
+    resolveSessionBinding({ scope: 'library', currentFolder: '/Users/me/Projects/Research', folderHome: home }),
+    { cwd: home, libraryScoped: true },
+  );
+  // Explicit folder → that member root.
+  assert.deepEqual(
+    resolveSessionBinding({ folder: '/tmp/scratch', currentFolder: '/Users/me/Projects/Research', folderHome: home }),
+    { cwd: '/tmp/scratch', libraryScoped: false },
+  );
+  // Absent scope → the window's current folder when one exists…
+  assert.deepEqual(
+    resolveSessionBinding({ currentFolder: '/Users/me/Projects/Research', folderHome: home }),
+    { cwd: '/Users/me/Projects/Research', libraryScoped: false },
+  );
+  // …else the library fallback (no more "No folder open." dead end).
+  assert.deepEqual(
+    resolveSessionBinding({ currentFolder: null, folderHome: home }),
+    { cwd: home, libraryScoped: true },
+  );
+});
+
+test('folder removal never tears down library-scoped sessions', () => {
+  const librarySession = {
+    disposed: false,
+    // A library-scoped session reports no bound folder even though its
+    // cwd is the folder home.
+    boundFolder: (): string | null => null,
+    dispose() { librarySession.disposed = true; },
+  };
+  const folderSession = {
+    disposed: false,
+    boundFolder: () => '/Users/me/Projects/Research',
+    dispose() { folderSession.disposed = true; },
+  };
+  const sessions = new Set([librarySession, folderSession]);
+
+  disposeSessionsBoundToFolder(sessions, '/Users/me/Projects/Research');
+  assert.equal(folderSession.disposed, true);
+  assert.equal(librarySession.disposed, false);
+
+  // Even removing a member folder that happens to equal the folder home
+  // cannot match a library session: its boundFolder() is null.
+  disposeSessionsBoundToFolder(sessions, '/Users/me/Documents/StashBase');
+  assert.equal(librarySession.disposed, false);
+  assert.deepEqual([...sessions], [librarySession]);
+});
+
+test('folder-bound teardown ends only the sessions bound to the removed folder', () => {
+  const makeSession = (bound: string | null) => {
+    const session = {
+      disposed: false,
+      boundFolder: () => bound,
+      dispose() { session.disposed = true; },
+    };
+    return session;
+  };
+  const removedA = makeSession('/Users/me/Projects/Research');
+  // Equivalent spelling still matches — comparison is filesystem identity.
+  const removedB = makeSession('/Users/me/Projects/Research/');
+  const otherFolder = makeSession('/Users/me/Documents/StashBase/Notes');
+  const unstarted = makeSession(null);
+  const sessions = new Set([removedA, removedB, otherFolder, unstarted]);
+
+  disposeSessionsBoundToFolder(sessions, '/Users/me/Projects/Research');
+
+  assert.equal(removedA.disposed, true);
+  assert.equal(removedB.disposed, true);
+  assert.equal(otherFolder.disposed, false);
+  assert.equal(unstarted.disposed, false);
+  assert.deepEqual([...sessions], [otherFolder, unstarted]);
 });
 
 test('unsupported runtime connections return a contract error and close cleanly', () => {

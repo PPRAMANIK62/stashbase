@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { lazyWithRetry } from './ErrorBoundary';
 import { PopupLoadingStatus } from './ui/status';
 
@@ -7,6 +7,8 @@ export type MenuItem =
   | {
       separator?: false;
       label: string;
+      /** Optional leading glyph (a 16px icon element). */
+      icon?: ReactNode;
       detail?: string;
       shortcut?: string;
       danger?: boolean;

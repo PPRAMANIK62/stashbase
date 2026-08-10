@@ -39,7 +39,9 @@ user-visible source file.
 - In-app search defaults to that current folder. MCP can search the library and
   narrow to an authorized folder, path prefix, or source file-type category.
 - MCP file operations are deliberately bounded to authorized library folders;
-  they are never a general filesystem interface.
+  they are never a general filesystem interface. The one membership-changing
+  tool, `create_project`, only creates and registers a new folder under the
+  default folder home or inside an already-authorized location.
 - One local runtime owns indexing state. Other processes communicate through
   its supported boundary rather than maintaining competing copies of the index.
 - Closing a window releases only that window's UI and folder context. Shared

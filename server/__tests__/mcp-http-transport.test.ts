@@ -31,6 +31,9 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   let token = 'a'.repeat(64);
   let searchInput: Record<string, unknown> | undefined;
   let stdioSearchBody: Record<string, unknown> | undefined;
+  let createProjectInput: Record<string, unknown> | undefined;
+  let stdioCreateProjectBody: Record<string, unknown> | undefined;
+  let stdioCreateProjectAttribution: string | undefined;
   const app = express();
   app.use(express.json());
   app.get('/api/library/info', (_req, res) => {
@@ -39,6 +42,11 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   app.post('/api/library/search', (req, res) => {
     stdioSearchBody = req.body as Record<string, unknown>;
     res.json({ hits: [] });
+  });
+  app.post('/api/library/create-project', (req, res) => {
+    stdioCreateProjectBody = req.body as Record<string, unknown>;
+    stdioCreateProjectAttribution = req.header('x-stashbase-agent-session-id') ?? undefined;
+    res.json({ path: '/tmp/Project', name: 'Project', registered: true, rebound: true, note: 'ok' });
   });
 
   const server = app.listen(0, '127.0.0.1');
@@ -62,6 +70,10 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
           truncated: false,
         };
       } },
+      createProject: async (input) => {
+        createProjectInput = input as unknown as Record<string, unknown>;
+        return { path: '/tmp/Project', name: 'Project', registered: true, rebound: false, note: 'ok' };
+      },
     }),
   });
 
@@ -75,12 +87,14 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
 
     const listed = await post(base, listRequest, token);
     assert.equal(listed.status, 200);
-    assert.equal(listed.body.result.tools.length, 9);
+    assert.equal(listed.body.result.tools.length, 10);
     const searchTool = listed.body.result.tools.find((tool: any) => tool.name === 'search_library');
     assert.deepEqual(
       searchTool.inputSchema.properties.types.items.enum,
       ['notes', 'pdf', 'image', 'docx', 'audio'],
     );
+    const createProjectTool = listed.body.result.tools.find((tool: any) => tool.name === 'create_project');
+    assert.deepEqual(createProjectTool.inputSchema.required, ['name']);
 
     const called = await post(base, callRequest, token);
     assert.equal(called.status, 200);
@@ -114,6 +128,23 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(invalidSearch.body.result.isError, true);
     assert.match(invalidSearch.body.result.content[0].text, /unknown search type/i);
 
+    // create_project reaches the operations seam with the model-controlled
+    // arguments only — the HTTP MCP transport has no session attribution, so
+    // no `agentSessionId` may appear (external callers never rebind a chat).
+    const created = await post(base, {
+      jsonrpc: '2.0',
+      id: 6,
+      method: 'tools/call',
+      params: {
+        name: 'create_project',
+        arguments: { name: 'Project', location: '/tmp' },
+      },
+    }, token);
+    assert.equal(created.status, 200);
+    assert.equal(JSON.parse(created.body.result.content[0].text).registered, true);
+    assert.deepEqual(createProjectInput, { name: 'Project', location: '/tmp' });
+    assert.equal('agentSessionId' in (createProjectInput ?? {}), false);
+
     const stdio = await runStdio(address.port);
     assert.equal(stdio.initialized.result.serverInfo.name, 'stashbase');
     assert.deepEqual(stdio.listed.result.tools, listed.body.result.tools);
@@ -123,6 +154,12 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       JSON.parse(stdio.searched.result.content[0].text).types,
       ['image'],
     );
+    // The stdio host forwards its spawn-time session identity as the
+    // attribution header — this is how a built-in panel session's
+    // create_project call finds the live session to rebind.
+    assert.equal(JSON.parse(stdio.createdProject.result.content[0].text).rebound, true);
+    assert.deepEqual(stdioCreateProjectBody, { name: 'StdioProject' });
+    assert.equal(stdioCreateProjectAttribution, 'session-attr-42');
 
     token = 'b'.repeat(64);
     assert.equal((await post(base, initRequest, 'a'.repeat(64))).status, 401);
@@ -206,11 +243,15 @@ async function runStdio(port: number): Promise<{
   listed: any;
   called: any;
   searched: any;
+  createdProject: any;
 }> {
   const { spawn } = await import('node:child_process');
   const entry = fileURLToPath(new URL('../../mcp/server.ts', import.meta.url));
   const child = spawn(process.execPath, ['--import', 'tsx', entry, '--port', String(port)], {
     stdio: ['pipe', 'pipe', 'pipe'],
+    // A built-in panel session spawns the MCP host with its attribution id;
+    // the host must forward it as the request header, never as a tool arg.
+    env: { ...process.env, STASHBASE_AGENT_SESSION_ID: 'session-attr-42' },
   });
   let stdout = '';
   let stderr = '';
@@ -229,14 +270,24 @@ async function runStdio(port: number): Promise<{
       arguments: { query: 'diagram', types: ['image'] },
     },
   })}\n`);
+  child.stdin.write(`${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 5,
+    method: 'tools/call',
+    params: {
+      name: 'create_project',
+      arguments: { name: 'StdioProject' },
+    },
+  })}\n`);
 
   try {
-    const lines = await waitForJsonLines(() => stdout, 4);
+    const lines = await waitForJsonLines(() => stdout, 5);
     return {
       initialized: lines[0],
       listed: lines[1],
       called: lines[2],
       searched: lines[3],
+      createdProject: lines[4],
     };
   } catch (err) {
     throw new Error(`${err instanceof Error ? err.message : String(err)}\nstderr: ${stderr}`);

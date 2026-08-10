@@ -1,5 +1,6 @@
 import { useApp } from '../store/AppContext';
 import { ModalShell } from './ModalShell';
+import { Button } from './ui/button';
 
 /**
  * VSCode-style confirmation when a rename or move would update
@@ -36,23 +37,22 @@ export function CascadePromptModal() {
       }
       onCancel={() => actions.resolveCascadePrompt('cancel')}
     >
-      <div className="modal-actions">
-        <button
+      <div className="mt-3.5 flex justify-end gap-2">
+        <Button
           type="button"
-          className="modal-btn"
+          variant="outline"
           onClick={() => actions.resolveCascadePrompt('cancel')}
-        >Cancel</button>
-        <button
+        >Cancel</Button>
+        <Button
           type="button"
-          className="modal-btn"
+          variant="outline"
           onClick={() => actions.resolveCascadePrompt('skip')}
-        >Don't update</button>
-        <button
+        >Don't update</Button>
+        <Button
           type="button"
-          className="modal-btn primary"
           autoFocus
           onClick={() => actions.resolveCascadePrompt('update')}
-        >Update</button>
+        >Update</Button>
       </div>
     </ModalShell>
   );

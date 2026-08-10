@@ -3,12 +3,12 @@ import test from 'node:test';
 import * as React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { AgentView } from '../components/AgentView';
-import { AgentHistoryMenu } from '../components/agent/AgentHistoryMenu';
 import { AgentComposer } from '../components/agent/AgentComposer';
 import { MessageList } from '../components/agent/AgentMessages';
 import { AGENT_META } from '../agentCatalog';
 import { AppContext, type AppActions } from '../store/AppContext';
-import { initialState, type State } from '../store/state';
+import { initialState, type Action, type State } from '../store/state';
+import { reducer } from '../store/stateReducer';
 
 class HistoryWebSocket {
   static OPEN = 1;
@@ -71,7 +71,7 @@ test('restored Claude effort and native identity survive an idle effort reconnec
   Object.defineProperty(globalThis, 'cancelAnimationFrame', { configurable: true, value: () => {} });
   globalThis.fetch = (async (input: string | URL | Request) => {
     const url = String(input);
-    assert.match(url, /\/sessions\/native-[12]\/replay$/);
+    assert.match(url, /\/sessions\/native-[12]\/replay(?:\?|$)/);
     return new Response(JSON.stringify({
       protocol: 2,
       messages: [
@@ -84,13 +84,20 @@ test('restored Claude effort and native identity survive an idle effort reconnec
   (globalThis as { React?: typeof React }).React = React;
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+  let dispatchFromTest!: React.Dispatch<Action>;
+  function Harness() {
+    const [appState, dispatch] = React.useReducer(reducer, undefined, state);
+    dispatchFromTest = dispatch;
+    return React.createElement(
+      AppContext.Provider,
+      { value: { state: appState, dispatch, actions } },
+      React.createElement(AgentView, { active: true, id: 'tab-1', title: 'New Chat', agent: 'claude' }),
+    );
+  }
+
   let renderer!: ReactTestRenderer;
   await act(async () => {
-    renderer = create(React.createElement(
-      AppContext.Provider,
-      { value: { state: state(), dispatch: () => {}, actions } },
-      React.createElement(AgentView, { active: true, id: 'tab-1', title: 'Untitled', agent: 'claude' }),
-    ));
+    renderer = create(React.createElement(Harness));
   });
   t.after(() => {
     act(() => renderer.unmount());
@@ -101,7 +108,9 @@ test('restored Claude effort and native identity survive an idle effort reconnec
     }
   });
 
-  await act(async () => { await renderer.root.findByType(AgentHistoryMenu).props.onResume('native-1'); });
+  await act(async () => {
+    dispatchFromTest({ type: 'CHAT_RESUME_REQUEST', resume: { agent: 'claude', sessionId: 'native-1', folder: '/workspace' } });
+  });
   assert.equal(HistoryWebSocket.instances.length, 2);
   let resumed = new URL(HistoryWebSocket.instances[1]!.url);
   assert.equal(resumed.searchParams.get('resume'), 'native-1');
@@ -118,7 +127,14 @@ test('restored Claude effort and native identity survive an idle effort reconnec
   assert.equal(resumed.searchParams.get('effort'), 'high');
   assert.equal(renderer.root.findByType(MessageList).props.blocks.length, 2);
 
-  await act(async () => { await renderer.root.findByType(AgentHistoryMenu).props.onResume('native-2'); });
+  // Sidebar History never hijacks a populated tab; it activates a fresh
+  // blank tab for another session. Recreate that blank-tab boundary before
+  // exercising the second native transcript.
+  await act(async () => { renderer.unmount(); });
+  await act(async () => { renderer = create(React.createElement(Harness)); });
+  await act(async () => {
+    dispatchFromTest({ type: 'CHAT_RESUME_REQUEST', resume: { agent: 'claude', sessionId: 'native-2', folder: '/workspace' } });
+  });
   const inherited = renderer.root.findByType(AgentComposer).props;
   assert.equal(inherited.effort, undefined);
   assert.equal(inherited.effortInherited, true);

@@ -32,38 +32,38 @@ export default function ManagedSettingsDialog({
       }}
     >
       <DialogContent
-        className="modal-card settings-card !max-w-[94vw] !gap-0"
+        className="flex h-[min(78vh,640px)] w-[min(760px,94vw)] !max-w-[94vw] flex-col !gap-0 overflow-hidden border border-border bg-background p-0 shadow-elevation"
         showCloseButton={false}
       >
-        <div className="settings-header">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <DialogTitle>Settings</DialogTitle>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="settings-close"
+            className="text-muted-foreground"
             aria-label="Close settings"
             onClick={onClose}
           >
             <XIcon aria-hidden="true" />
           </Button>
         </div>
-        <div className="settings-body">
-          <nav className="settings-nav" role="tablist" aria-orientation="vertical">
+        <div className="grid min-h-0 flex-1 grid-cols-[180px_1fr]">
+          <nav className="flex flex-col gap-0.5 border-r border-border bg-pane px-2 py-3" role="tablist" aria-orientation="vertical">
             {SECTIONS.map((section) => (
               <button
                 key={section.id}
                 type="button"
                 role="tab"
                 aria-selected={section.id === current}
-                className={'settings-nav-item' + (section.id === current ? ' current' : '')}
+                className="cursor-pointer rounded-md border-0 bg-transparent px-3 py-1.75 text-left text-base text-foreground transition-colors duration-fast hover:bg-muted aria-selected:bg-accent/10 aria-selected:font-semibold aria-selected:text-accent aria-selected:hover:bg-accent/10"
                 onClick={() => setCurrent(section.id)}
               >
                 {section.label}
               </button>
             ))}
           </nav>
-          <div className="settings-content" role="tabpanel">
+          <div className="min-w-0 overflow-y-auto px-6 py-5" role="tabpanel">
             {active.render()}
           </div>
         </div>

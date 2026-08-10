@@ -70,7 +70,7 @@ export interface FolderMeta {
 
 export interface FolderState {
   current: { path: string; name: string } | null;
-  recent: { path: string; openedAt: string }[];
+  recent: { path: string; openedAt: string; favorite?: boolean }[];
   homeDir?: string;
 }
 

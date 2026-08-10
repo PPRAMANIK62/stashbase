@@ -36,27 +36,26 @@ export default function ManagedAlertConfirmModal({
       }}
     >
       <AlertDialogContent
-        className="modal-card !z-[10001] !max-w-[90vw] !gap-0"
+        className="w-[min(420px,90vw)] !z-[10001] !max-w-[90vw] !gap-0 border border-border bg-background px-6 pt-5.5 pb-5 shadow-elevation"
         overlayClassName="top !z-[10000]"
       >
         <AlertDialogHeader>
-          <AlertDialogTitle className="modal-title">
+          <AlertDialogTitle>
             {isConfirm ? 'Confirm action' : 'Notice'}
           </AlertDialogTitle>
-          <AlertDialogDescription className="modal-hint">
+          <AlertDialogDescription className="my-0 text-base leading-normal">
             {request.message}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="modal-actions">
+        <AlertDialogFooter className="mt-3.5 flex-row justify-end gap-2">
           {isConfirm && (
-            <AlertDialogCancel className="modal-btn" onClick={() => {
+            <AlertDialogCancel onClick={() => {
               resultRef.current = false;
             }}>
               Cancel
             </AlertDialogCancel>
           )}
           <AlertDialogAction
-            className="modal-btn primary"
             autoFocus
             onClick={() => {
               resultRef.current = true;

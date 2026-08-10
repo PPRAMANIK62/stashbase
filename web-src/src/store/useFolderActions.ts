@@ -3,6 +3,7 @@ import { api, type FolderState } from '../api';
 import { folderRefsEqual, isAbsoluteFolderRef } from '../folderPath';
 import { createFolderMutationQueue } from '../folderTransition';
 import type { EditorHandle } from './actionTypes';
+import { folderScopedResetActions, type FolderResetReason } from './folderScopedReset';
 import type { Action, LibraryFolderStatus, State } from './state';
 import type { ToastOptions } from './useFeedbackActions';
 
@@ -78,7 +79,6 @@ export function commitOpenedFolderNavigation(
     folder: expected.name,
     folderPath: expected.path,
   });
-  dispatch({ type: 'WELCOME_HIDE' });
 }
 
 function libraryStatusFromActiveFolder(state: State): LibraryFolderStatus {
@@ -118,7 +118,7 @@ export function useFolderActions(
   } = dependencies;
   const folderMutations = useRef(createFolderMutationQueue()).current;
 
-  const resetFolderScopedState = useCallback(() => {
+  const resetFolderScopedState = useCallback((reason: FolderResetReason) => {
     const previous = state.current;
     if (previous.folderPath) {
       dispatch({
@@ -134,21 +134,10 @@ export function useFolderActions(
     importIndexGrace.current.clear();
     keyBackfillGrace.current.clear();
     folderContextPath.current = '';
-    dispatch({ type: 'TABS_RESET' });
-    dispatch({ type: 'CHAT_TABS_RESET' });
-    dispatch({ type: 'SIDEBAR_VIEW', view: 'files' });
-    dispatch({ type: 'FILTER', q: '' });
-    dispatch({ type: 'SEARCH_CLEAR' });
-    dispatch({ type: 'ACTIVE_FOLDER', path: '' });
-    dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
-    dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
-    dispatch({ type: 'BLOCKED_CONVERSIONS', paths: [] });
-    dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
-    dispatch({ type: 'CONVERSION_SCHEDULER_STATE', revision: 0, versions: {} });
-    dispatch({ type: 'INDEX_WARNING', warning: null });
-    dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
-    dispatch({ type: 'SYNC_RUNNING', running: false });
-    dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
+    // Chat tabs survive a folder SWITCH (agent sessions are folder-bound
+    // server-side); they reset only when the window loses its folder
+    // context — see folderScopedReset.ts.
+    for (const action of folderScopedResetActions(reason)) dispatch(action);
   }, [
     dispatch,
     folderContextPath,
@@ -166,7 +155,7 @@ export function useFolderActions(
     generation: number,
   ) => {
     if (generation !== openGeneration.current) return false;
-    resetFolderScopedState();
+    resetFolderScopedState('switch');
     dispatch({ type: 'COLLAPSE_ALL_FOLDERS' });
     commitOpenedFolderNavigation(dispatch, folderContextPath, expected);
     return true;
@@ -271,58 +260,30 @@ export function useFolderActions(
     });
   }, [editor, flushSave, folderMutations, performFolderOpen]);
 
-  const goHome = useCallback(async () => {
-    if (editor.current && !(await flushSave())) return false;
-    openGeneration.current += 1;
-    resetFolderScopedState();
-    dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
-    dispatch({
-      type: 'WELCOME_SHOW',
-      recent: state.current.recent,
-      homeDir: state.current.homeDir,
-    });
-    try {
-      await folderMutations.run(() => api.closeFolder());
-    } catch (err: unknown) {
-      toast(
-        'Could not close the current folder: ' + (err instanceof Error ? err.message : String(err)),
-        { level: 'error' },
-      );
-      return false;
-    }
-    try {
-      const result = await api.getFolder();
-      dispatch({
-        type: 'WELCOME_SHOW',
-        recent: result.recent ?? [],
-        homeDir: result.homeDir,
-      });
-    } catch {
-      // Keep the last known library list.
-    }
-    return true;
-  }, [
-    dispatch,
-    editor,
-    flushSave,
-    folderMutations,
-    openGeneration,
-    resetFolderScopedState,
-    state,
-    toast,
-  ]);
-
   const prepareForFolderRemoval = useCallback((removedPath: string) => {
     if (!state.current.folderPath || !folderRefsEqual(state.current.folderPath, removedPath)) return;
     openGeneration.current += 1;
-    resetFolderScopedState();
+    resetFolderScopedState('folder-lost');
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
     dispatch({
-      type: 'WELCOME_SHOW',
+      type: 'RECENT_LOADED',
       recent: state.current.recent.filter((entry) => !folderRefsEqual(entry.path, removedPath)),
       homeDir: state.current.homeDir,
     });
   }, [dispatch, openGeneration, resetFolderScopedState, state]);
+
+  /** A folder joined the library without this window opening it (Agent
+   * create_project in another window, or this one — refreshing twice is
+   * harmless). Membership is sidebar-visible in every window, so refresh
+   * the recents list; nothing else about this window changes. */
+  const handleLibraryFolderAdded = useCallback((_addedPath: string) => {
+    void api.getFolder().then((result) => dispatch({
+      type: 'RECENT_LOADED',
+      recent: result.recent ?? [],
+      homeDir: result.homeDir,
+    }))
+    .catch(() => { /* The next membership refresh will surface it. */ });
+  }, [dispatch]);
 
   const handleFolderRemoved = useCallback((removedPath: string) => {
     const affected = Boolean(
@@ -330,20 +291,20 @@ export function useFolderActions(
       && folderRefsEqual(state.current.folderPath, removedPath),
     );
     if (affected) prepareForFolderRemoval(removedPath);
-    if (affected || state.current.welcomeVisible) {
-      void api.getFolder().then((result) => dispatch({
-        type: 'WELCOME_SHOW',
-        recent: result.recent ?? [],
-        homeDir: result.homeDir,
-      }))
-      .catch(() => { /* Keep the optimistic membership removal. */ });
-    }
+    // Every window's sidebar shows the library list, so all of them
+    // refresh membership after a removal — not just the affected one.
+    void api.getFolder().then((result) => dispatch({
+      type: 'RECENT_LOADED',
+      recent: result.recent ?? [],
+      homeDir: result.homeDir,
+    }))
+    .catch(() => { /* Keep the optimistic membership removal. */ });
   }, [dispatch, prepareForFolderRemoval, state]);
 
   const bootstrap = useCallback(async () => {
     try {
       const result = await api.getFolder();
-      dispatch({ type: 'WELCOME_SHOW', recent: result.recent ?? [], homeDir: result.homeDir });
+      dispatch({ type: 'RECENT_LOADED', recent: result.recent ?? [], homeDir: result.homeDir });
       const initialFolder = new URLSearchParams(window.location.search).get('folder');
       if (initialFolder) {
         window.history.replaceState(null, '', window.location.pathname);
@@ -354,14 +315,16 @@ export function useFolderActions(
             await openFolderByName(initialFolder);
           }
         } catch (err: unknown) {
-          dispatch({
-            type: 'WELCOME_SHOW',
-            recent: result.recent ?? [],
-            homeDir: result.homeDir,
-            error: `Could not open "${initialFolder}": ${err instanceof Error ? err.message : String(err)}`,
-          });
+          // Stay on the no-folder workspace: the user asked for a
+          // specific folder, so don't silently substitute another one.
+          toast(
+            `Could not open "${initialFolder}": ${err instanceof Error ? err.message : String(err)}`,
+            { level: 'error' },
+          );
         }
-      } else if (result.current) {
+        return;
+      }
+      if (result.current) {
         const generation = ++openGeneration.current;
         await finishOpenFolder(result.current, generation);
         const restoredFolderPath = result.current.path;
@@ -373,9 +336,15 @@ export function useFolderActions(
             .catch(() => { /* Surfaced by the next status poll. */ })
             .finally(() => { void refreshIndexState(); });
         }
+        return;
       }
+      // No window-bound folder: stay unselected. The boot default is the
+      // library-scoped New Chat workspace — browsing a folder is an
+      // explicit sidebar click, never an implicit restore.
     } catch {
-      dispatch({ type: 'WELCOME_SHOW', recent: [], error: 'Server unreachable' });
+      toast('Server unreachable', { level: 'error' });
+    } finally {
+      dispatch({ type: 'BOOTED' });
     }
   }, [
     dispatch,
@@ -385,12 +354,13 @@ export function useFolderActions(
     openGeneration,
     refreshIndexState,
     state,
+    toast,
   ]);
 
   return {
     bootstrap,
-    goHome,
     handleFolderRemoved,
+    handleLibraryFolderAdded,
     openFolder,
     openFolderByName,
     prepareForFolderRemoval,

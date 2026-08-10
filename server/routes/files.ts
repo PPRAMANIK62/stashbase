@@ -14,7 +14,8 @@ import {
   sanitizeFilename,
 } from '../files.ts';
 import { detectViewerFormat, isNoteName } from '../format.ts';
-import { getCurrentFolderLabel } from '../folder.ts';
+import { exactMemberFolderRoot, getCurrentFolderLabel, runWithFolderRoot } from '../folder.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import { sendError, revealInOsFileManager } from '../http.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { saveFileContent, upsertSavedFile } from '../file-save.ts';
@@ -51,8 +52,32 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
 
 export function mount(app: express.Express): void {
   // ----- list -----
-  app.get('/api/files', (_req, res) => {
+  // Optional `?folder=` lists an explicit library-member folder instead of
+  // the window's current one. Powers cross-folder chat tabs (`@` mentions and
+  // attachment validation run against the session's bound folder). Membership
+  // is validated — an arbitrary filesystem path is rejected.
+  app.get('/api/files', (req, res) => {
     try {
+      const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+      if (rawFolder) {
+        const member = filesystemPath.isAbsolute(rawFolder)
+          ? exactMemberFolderRoot(rawFolder)
+          : null;
+        if (!member) {
+          return res.status(400).json({ error: 'folder is not a registered library folder' });
+        }
+        void runWithFolderRoot(member, () => ({
+          folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
+          files: listFilesAndFolders(),
+        }))
+          .then((result) => res.json({
+            folder: result.folder,
+            files: result.files.files,
+            folders: result.files.folders,
+          }))
+          .catch((err: unknown) => sendError(res, err));
+        return;
+      }
       const listing = listFilesAndFolders();
       res.json({
         folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),

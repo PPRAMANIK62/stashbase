@@ -12,6 +12,13 @@ const expectedEntries = [
   'src/components/PdfPreview.tsx',
   'src/components/DocxPreview.tsx',
   'src/components/AudioPreview.tsx',
+  'src/components/SearchPanel.tsx',
+  'src/components/QuickOpenDialog.tsx',
+  'src/components/ContextMenu.tsx',
+  'src/components/DocumentOutline.tsx',
+  'src/components/SemanticIndexingNotice.tsx',
+  'src/components/UnsupportedFilesCallout.tsx',
+  'src/components/embedder/RequireApiKeyModal.tsx',
 ];
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));

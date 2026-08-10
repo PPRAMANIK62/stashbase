@@ -91,16 +91,23 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
   }
 
   return (
-    <div className="image-lightbox quick-open-blocking" role="dialog" aria-modal="true" aria-label="Image preview">
+    /* The dark scrim is a deliberate overlay color, independent of the
+     * app theme — the lightbox always reads as a dark stage. The
+     * `quick-open-blocking` marker keeps Quick Open from opening on top. */
+    <div className="quick-open-blocking fixed inset-0 z-90 flex flex-col bg-[rgba(18,18,20,0.92)] text-white" role="dialog" aria-modal="true" aria-label="Image preview">
       <div
         ref={stageRef}
-        className={'image-lightbox-stage' + (scale > 1 ? ' pannable' : '')}
+        className={
+          'grid min-h-0 flex-1 touch-none place-items-center overflow-hidden' +
+          (scale > 1 ? ' cursor-grab active:cursor-grabbing' : ' cursor-zoom-in')
+        }
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
         <img
+          className="max-h-[calc(100vh-108px)] max-w-[calc(100vw-64px)] origin-center object-contain shadow-[0_16px_60px_rgba(var(--shadow-color),0.35)] transition-transform duration-[80ms] ease-out select-none"
           src={src}
           alt={alt}
           draggable={false}
@@ -109,20 +116,20 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
           }}
         />
       </div>
-      <div className="image-lightbox-actions">
-        <button type="button" className="image-lightbox-floating-btn" aria-label="Download image" title="Download" onClick={download}>
+      <div className="absolute top-4 right-4 z-1 flex gap-2">
+        <button type="button" className={FLOATING_BTN_CLASS} aria-label="Download image" title="Download" onClick={download}>
           <LightboxIcon kind="download" />
         </button>
-        <button type="button" className="image-lightbox-floating-btn" aria-label="Close image preview" title="Close" onClick={onClose}>
+        <button type="button" className={FLOATING_BTN_CLASS} aria-label="Close image preview" title="Close" onClick={onClose}>
           <LightboxIcon kind="close" />
         </button>
       </div>
-      <div className="image-lightbox-zoom-controls">
-        <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => zoomBy(1 / 1.2)}>
+      <div className="absolute bottom-5 left-1/2 z-1 flex -translate-x-1/2 items-center gap-1 rounded-full bg-[rgba(31,32,42,0.96)] p-1 shadow-elevation">
+        <button type="button" className={FLOATING_BTN_CLASS} aria-label="Zoom out" title="Zoom out" onClick={() => zoomBy(1 / 1.2)}>
           <ZoomGlyph />
         </button>
-        <span className="image-lightbox-scale">{Math.round(scale * 100)}%</span>
-        <button type="button" aria-label="Zoom in" title="Zoom in" onClick={() => zoomBy(1.2)}>
+        <span className="min-w-[66px] text-center text-base text-white/80 tabular-nums">{Math.round(scale * 100)}%</span>
+        <button type="button" className={FLOATING_BTN_CLASS} aria-label="Zoom in" title="Zoom in" onClick={() => zoomBy(1.2)}>
           <ZoomGlyph plus />
         </button>
       </div>
@@ -130,16 +137,32 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
   );
 }
 
+/** 38px circular white-on-dark control — always styled for the dark
+ *  stage, never the app theme. Stays `no-drag` so the frameless-window
+ *  drag region can't swallow clicks near the top edge. */
+const FLOATING_BTN_CLASS =
+  'grid size-9.5 cursor-pointer place-items-center rounded-full border-0 bg-white/10 p-0 text-white [font-family:inherit] hover:bg-white/15 [-webkit-app-region:no-drag]';
+
 function LightboxIcon({ kind }: { kind: 'download' | 'close' }) {
+  const common = {
+    className: 'size-[15px]',
+    viewBox: '0 0 16 16',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.5,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
   if (kind === 'download') return (
-    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.25v7.5m0 0 2.7-2.7M8 9.75 5.3 7.05M3 10.75v2h10v-2" /></svg>
+    <svg {...common}><path d="M8 2.25v7.5m0 0 2.7-2.7M8 9.75 5.3 7.05M3 10.75v2h10v-2" /></svg>
   );
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 3.5 9 9m0-9-9 9" /></svg>;
+  return <svg {...common}><path d="m3.5 3.5 9 9m0-9-9 9" /></svg>;
 }
 
 function ZoomGlyph({ plus = false }: { plus?: boolean }) {
   return (
-    <svg className="image-lightbox-zoom-glyph" viewBox="0 0 16 16" aria-hidden="true">
+    <svg className="size-4.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true">
       <path d="M3.5 8h9" />
       {plus && <path d="M8 3.5v9" />}
     </svg>

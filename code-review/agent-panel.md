@@ -10,6 +10,187 @@ The built-in Agent panel is one folder-scoped chat surface. It should feel like
 a focused chat when no document is open and a VS Code-style side panel when a
 document is active, not a separate AI workspace.
 
+A session's scope is an explicit choice, not an inherited ambient, and it is
+typed: `{ kind: 'library' } | { kind: 'folder'; path }` — a missing choice
+is a DEFAULT (the window's current folder when one exists, else the
+library), never a third scope. The composer's leftmost pill is a
+Cursor-style scope picker: a "Library" entry above a separator, then the
+library membership (the same source as the sidebar list, favorites pinned).
+It defaults to the window's current folder, and an unbound tab follows the
+window when that default changes. Once the conversation has content, runs a
+turn, or was resumed, the pill stays visible but locked — the user can never
+rebind a live session to another scope (the single server-driven exception
+is the `create_project` migration of a library-scoped chat, below), and its
+pane header marks a binding that
+differs from the window default with a muted note: "in <basename>" for a
+cross-folder chat, "in Library" for a library chat while the window has a
+current folder. The library scope is always called "Library" in UI copy —
+never "Global".
+
+Server-side, the WS connect URL and every session-history route accept an
+optional explicit scope — `folder=<abs>` (membership-validated) or
+`scope=library`; anything else, including combining the two, is rejected
+with an error/400 (`resolveAgentSessionScope`). Absence falls back to the
+window's current folder when one exists, else the library
+(`resolveSessionBinding`). A library-scoped session runs with cwd = the
+folder home (`getFolderHome()`) — the reserved library cwd. Both runtimes'
+native history stores key sessions by cwd, so library-scoped history
+persists under that reserved cwd, never under any member folder, and lists
+via the sessions routes with `scope=library`. Library-scoped sessions do
+not write `AGENTS.md`/`CLAUDE.md` bridge files (those belong to member
+folders), and their preamble states that the whole library is in scope with
+`search_library` as the retrieval path. Caveat: if the user adds the folder
+home itself as a library folder, that folder's history and the library
+history coincide (same cwd).
+
+Claude session start pre-accepts the CLI's folder-trust gate for the
+session cwd (`ensureClaudeFolderTrust` → `hasTrustDialogAccepted` in
+`~/.claude.json`): a headless SDK session cannot show the trust dialog and
+hangs at "working" otherwise, and Claude Code exposes no trust flag or env
+override. Library membership is the user's explicit trust act, so this is
+consent propagation, not a permission bypass — the write is a conservative
+merge (one project's flag only; malformed config left untouched) and a
+failure must never block the session.
+
+Chat history lives on the SIDEBAR's scope headers, not in the chat pane:
+the active folder's header row and the Library section header each carry a
+History menu for THEIR scope (the Library header keeps history reachable
+in a no-folder window). One menu merges BOTH agents' session lists for the
+scope — fetched in parallel, newest first, each row tagged with its agent
+so rename/delete route through that runtime (`mergeAgentSessions`); one
+agent's listing failing must not blank the other's, it surfaces as a quiet
+inline note instead. Resume is a store handoff: the sidebar records
+`pendingResume` (`CHAT_RESUME_REQUEST` — `{ agent, sessionId, folder }`,
+`folder: null` meaning the library scope, the `boundFolder` convention)
+and ensures a suitable tab via the New Chat blank-tab reuse plan
+(`newChatPlan`, switching a blank tab's agent in place when needed,
+opening the panel when hidden). The ACTIVE, still-blank tab running the
+request's agent consumes it (`shouldConsumePendingResume`) — dispatching
+`CHAT_RESUME_CONSUMED` BEFORE resuming so a request can never double-fire
+— and reconnects with `resume` plus the request's scope params; a
+non-blank tab is never hijacked, and `CHAT_TABS_RESET` clears an in-flight
+request (its sessions were just torn down). The popover component
+lazy-loads at the clock's interaction boundary so react-aria stays out of
+the budget-enforced initial renderer chunk.
+
+`create_project` is the one sanctioned scope migration. Each live panel
+session carries a private attribution id (`STASHBASE_AGENT_SESSION_ID` in
+its spawn env, forwarded by the stdio MCP host as the
+`x-stashbase-agent-session-id` header — request identity only, exactly like
+`STASHBASE_WINDOW_ID`, and never read from tool arguments). Installed MCP
+host binaries may predate that header; the window-fallback attribution
+covers them: when the session header is absent, the call attributes to the
+request window's ONE session with a turn in flight (a tool call always
+happens inside its caller's turn), and any ambiguity — zero or several
+turn-active sessions — attributes to nobody rather than guessing. Some
+hosts (Codex) sanitize the env entirely, dropping both ids; the final
+tier attributes to the app-wide SINGLE turn-active session under the same
+ambiguity guard. The tool
+creates the directory (folder home by default; an explicit `location` must
+be inside the folder home or a member folder), registers it into library
+membership without touching any window's current folder, and then applies
+the rebind rule via the live-session registry: only a LIBRARY-scoped
+calling session migrates — its `boundFolder()` flips to the project (so
+folder removal now tears it down), the session emits `scope-changed` on its
+WS, and the renderer updates `connectedScope` (pill/header) and has the
+OWNING window `openFolder` the project; other windows only refresh the
+membership list (Electron `window:library-folder-added` broadcast). A
+folder-bound session is NEVER rebound — the tool result says the chat
+stays bound — and unattributed callers (external MCP clients) only
+create + register. Because both runtimes' native history stores are
+cwd-keyed and the rebound session keeps running with the reserved library
+cwd, a persisted session→folder override
+(AppData `agent-session-folders.json`, written BEFORE the scope-changed
+event) is consulted by every history surface: the library listing excludes
+overridden sessions, the project listing includes them (Codex merges them
+in from the library-cwd listing), direct history actions accept an
+overridden session only for its override folder, Claude resume validation
+accepts the override folder, and deleting the session clears its override.
+
+Because every session is scope-pinned, a window-folder switch is NOT a
+teardown trigger: chat tabs and their running sessions survive the switch,
+transcripts (including queued prompts and failed-turn notices) untouched.
+Bound tabs keep their binding and the cross-scope header note. What happens
+to each tab on a switch is a three-way plan (`windowFolderSwitchPlan`):
+
+- **follow** — a COMPLETELY BLANK tab (no transcript, no queued prompt, no
+  active turn, no explicit pick, not resumed, no draft text, no
+  attachments) follows the window by reconnecting its next session to the
+  new window default.
+- **freeze** — a tab that would follow but holds unsent draft text or
+  attachments instead promotes its connected scope to an explicit pick:
+  the draft keeps the scope the user saw, and neither this nor a later
+  switch (or reconnect) can silently rebind it. The composer lifts draft
+  presence into the tab model for this (and for the blank flag below).
+- **keep** — everything else keeps its binding untouched.
+
+The blank definition above is THE blank-tab rule (`isBlankChatTab`), and
+each tab's AgentView mirrors it into `ChatTab.blank` (and its connected
+binding into `ChatTab.boundFolder`). The window-folder switch goes
+through `switchWelcomeTabPlan`: when the ACTIVE tab is already bound to
+the new folder (create_project auto-select, or switching back to a chat's
+own folder) NO welcome tab is spawned — that conversation is the working
+entry; otherwise reuse a blank tab (preferring the preferred agent's),
+else create a new tab and make it active. On a folder switch this must
+not change panel visibility; only the no-tabs folder-open path opens the
+panel with its one fresh tab.
+
+Chat creation has ONE entry point: the sidebar's New Chat split button.
+Its main area creates with the app-wide preferred agent
+(`readPreferredAgent`); its chevron menu ("Choose agent for new chat")
+creates with an explicit agent AND updates that preference
+(`rememberPreferredAgent` — clicking a chat tab also updates it).
+Creation goes through `newChatPlan`: reuse the one COMPLETELY blank tab
+regardless of its agent — when the agent differs, switch the blank tab's
+agent in place via `CHAT_TAB_SET_AGENT` (the reducer refuses any tab
+with `blank === false`, renumbers the placeholder title, and migrates
+the tab's per-agent recency entry) — else create a fresh tab. New Chat
+opens the panel when hidden (the existing `CHAT_TOGGLE` path). The
+AgentView mount is keyed by tab id AND agent, so an in-place agent
+switch unmounts the old agent's idle connection (WS teardown on unmount)
+and connects the new agent on a fresh mount; blank tabs carry only
+placeholder titles, so the session-title rename path stays correct.
+There are no other creation surfaces: the tab-strip corner launchers and
+the pane header's `+` are gone — the pane header is title-only (chat
+history lives on the sidebar's scope headers, above), and switching
+between open chats belongs to the chat tab strip
+(each tab carries its agent's glyph). The agent registry priming
+(`api.listAgents` → `AGENTS_LOADED`) lives in an always-mounted App
+effect; each AgentView still refreshes the catalog after every
+connection outcome.
+
+Session teardown happens only on: native window close/retire (`onClose` →
+`stopAgentRuntime` per window — this includes library-scoped sessions),
+library folder removal (`stopAgentRuntimeForFolder` ends every session
+BOUND to the removed folder across all windows, plus the window-close path
+for windows currently showing it — library-scoped sessions report no bound
+folder and MUST survive any folder removal), and the app-quit cleanup
+ladder. The renderer mirrors this: a folder switch keeps `chatTabs` (see
+`folderScopedResetActions('switch')`), while losing the window's folder
+context (removal, another window closing it) still resets them. The chat
+panel renders without a window folder too — a no-folder window can hold
+library-scoped chats (the acceptance behavior: with no folder selected the
+user can still ask across the whole library, and switching folders yields
+a fresh working entry point without losing or silently rebinding any
+existing work).
+
+Cross-folder tabs stay scoped to their session folder end to end: `@`
+mention ranking and folder-file attachment validation use the session
+folder's listing (`GET /api/files?folder=` — membership-validated).
+Library-scoped tabs have no single folder listing, so `@` mentions and
+sidebar-file attachments are disabled there (retrieval goes through
+`search_library`; transient OS-file attachments still work),
+`agent-context-file` resolution passes the session folder (the route is
+folder-explicit: it takes an absolute member path and validates membership),
+and turn-end/tool reconcile syncs the session's folder without reloading the
+window's tree. The built-in agent's MCP file tools are absolute-path based;
+`STASHBASE_WINDOW_ID` in the session env is request identity only, not a
+path-resolution channel. A non-absolute MCP path is a legacy compatibility
+ref resolved under the default folder home — never against the window's
+current folder — so a window-folder switch cannot misroute a bound
+session's MCP file operations; the bound folder reaches native tools through
+the session cwd and the system-prompt preamble.
+
 The panel may make agent work easier to scan, but it should stay quiet:
 
 - low chrome
@@ -43,6 +224,34 @@ essential opacity feedback remains available. Foundation primitives that are onl
 after an interaction may load at that interaction boundary, preserving the
 enforced initial-renderer budget without making the feature unavailable.
 
+The agent panel's chrome — tab strip, pane header, transcript container,
+tool-activity cards, composer, attachment chips, history menu, and error
+banners — is styled with Tailwind utilities and the shared
+Button/StatusMessage/Menu/Input primitives. `styles/chat.css` keeps only what
+utilities must not own: the `.app` grid tracks and chat splitter, the
+chat-primary centring rules keyed on the `agent-head` / `agent-messages` /
+`agent-composer` hook classes (keep those class names on the utility-styled
+elements), the sticky user-turn header system, `.agent-prose` content
+typography plus the One-Dark tool/diff palette, the `@`-mention popup
+(`.agent-mention-item.active` is a keyboard-navigation querySelector hook),
+and the CodeMirror-owned composer input DOM. `.agent-view` stays a class-name
+routing hook for the global drag-drop handler. Composer pill triggers are
+labelled controls with a leading icon and an accessible name: the scope
+pill ("Session folder" / "Session scope: Library"; when locked it appends
+"— set for this conversation"), the model pill ("Model: Default" when
+default so adjacent Defaults cannot be confused), and the mode pill
+("Permission mode: …"), whose panel stacks the permission-mode list with
+the effort bar at the bottom. Sections render only when the runtime
+supports them; a locked model pill or effort bar stays visible but inert.
+An empty chat centers the composer as the hero layout: the
+composer swaps its `agent-composer` width hook for the hero column while
+empty, and keeps a stable React `key` so the same mounted instance (draft,
+CodeMirror state) moves between the hero and bottom layouts. The empty-state
+rotating suggestion only prefills the composer draft through the CodeMirror
+handle — it must never send — and its rotation pauses while hovered or
+focused so the press target cannot swap under the pointer. The connecting spinner is a keyframe
+animation the global reduced-motion policy stops.
+
 Community contributions can land as useful first iterations, but the long-term design should continue to be simplified toward this side-panel model when needed.
 
 ## Design Rules
@@ -59,17 +268,25 @@ Community contributions can land as useful first iterations, but the long-term d
   surface. Hidden primary surfaces are inert so zero-width content cannot keep
   keyboard focus.
 - Opening a folder creates one fresh chat tab for the app-wide preferred
-  Agent. The preference defaults to Codex, changes only through explicit Agent
-  selection, and is recoverable when local UI storage is unavailable. Runtime
-  availability remains authoritative: never silently fall back from an
-  unavailable preferred Agent.
+  Agent — but only when the window has no chat tabs. Existing tabs (and their
+  folder-bound sessions) survive folder switches, so a switch never spawns an
+  extra tab or forces the panel open. The preference defaults to Codex,
+  changes only through explicit Agent selection, and is recoverable when
+  local UI storage is unavailable. Runtime availability remains
+  authoritative: never silently fall back from an unavailable preferred
+  Agent.
 - Keep the first compact-window document transition document-first. The
-  responsive auto-collapse may be undone by an explicit Chat launcher action;
+  responsive auto-collapse may be undone by an explicit chat-reveal action
+  (the sidebar's New Chat, or the empty pane's Start chat);
   once the user does that, layout effects must not immediately close Chat
   again. Restore a responsively collapsed chat when the last document closes
   or the window becomes wide, unless the user has since changed visibility.
 - Prefer small, familiar agent-chat affordances over a bespoke workbench UI.
-- Treat user-action states as first-class. Permission approvals, retry actions, and stopped-turn editing must remain visible and directly actionable.
+- Treat user-action states as first-class. Permission approvals, retry actions, and user-message editing must remain visible and directly actionable. Every user message offers copy and edit-and-resend; the edited text sends as a NEW prompt — agent sessions cannot rewind, so this is resend-from-history, never a fork.
+- User-turn file references always render as compact chips, never raw
+  relative paths in prose. Three channels feed the chip pass: `@`-prefixed
+  mentions, bare multi-segment paths, and exact occurrences of the turn's
+  attachment paths (which cover spaces and CJK adjacency verbatim).
 - Treat terminal turn failures as persistent transcript state. Reset the
   renderer-owned explanation guard on `turn-start`, prefer a live runtime
   error, and add at most one generic fallback for an otherwise unexplained
@@ -103,7 +320,10 @@ Community contributions can land as useful first iterations, but the long-term d
   action opens a document and causes Chat to dock.
 - Streaming should not steal the user's scroll position. If the user has scrolled away from the bottom, show a clear jump-to-latest affordance.
 - The current document is never implicit agent context. Users attach files by drag/drop, file picker, `@` mention, or a composer-focused image paste. Image paste must reuse transient attachments, preserve accompanying text, and suppress the competing clipboard library-import offer.
-- The top-bar Claude and Codex icons select or toggle existing chats. Creating a new chat belongs to the in-panel `+`.
+- The sidebar's New Chat split button owns chat creation and agent selection
+  (its chevron menu also updates the default agent); chat tabs own switching
+  between open chats. The pane header carries only the History menu — no
+  corner launchers, no in-panel `+`.
 - Model catalogs and identifiers belong to their native runtime: use Claude's
   SDK discovery and Codex app-server `model/list`, never a shared hard-coded
   list. `undefined` means Default and must not change global CLI settings.
@@ -137,7 +357,8 @@ Community contributions can land as useful first iterations, but the long-term d
 
 The accepted baseline includes:
 
-- per-agent chat tab selection and toggle behavior
+- chat-tab switching with per-agent most-recent selection (`CHAT_AGENT_OPEN`
+  reveals an agent's most recent tab)
 - keyboard navigation for `@` file and folder mentions. Ranking normalizes
   Unicode accents and ignores case, punctuation, whitespace, and path
   separators; basename matches precede path-only matches, ties use a

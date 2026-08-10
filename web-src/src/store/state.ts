@@ -55,9 +55,33 @@ export interface ChatTab {
   id: string;
   /** Agent id the tab runs (`claude` / `codex` / …). */
   agent: string;
-  /** Display name in the tab strip. Default: `"Untitled"` (plus a
+  /** Display name in the tab strip. Default: `"New Chat"` (plus a
    *  `" N"` suffix on duplicates). */
   title: string;
+  /** True while the tab is COMPLETELY blank: no transcript, no active
+   *  turn, not resumed, no picked scope override, no draft text, and no
+   *  attachments. Maintained by the tab's AgentView; a blank tab is the
+   *  reusable welcome tab for New Chat and window-folder switches. */
+  blank?: boolean;
+  /** The folder the tab's CONNECTED session is bound to (`null` =
+   *  library scope, undefined = not connected yet). Maintained by the
+   *  tab's AgentView; lets the window-folder switch skip spawning a
+   *  welcome tab when the active chat already targets the new folder
+   *  (the create_project auto-select case). */
+  boundFolder?: string | null;
+}
+
+/** A session-resume request raised by the sidebar's History menus. The
+ *  sidebar records it here, ensures a suitable chat tab is active, and
+ *  the target tab's AgentView consumes it (CHAT_RESUME_CONSUMED) by
+ *  resuming the session within `folder`'s scope. `folder` uses the
+ *  `boundFolder` convention: an absolute member-folder path, or `null`
+ *  for the library scope. */
+export interface PendingChatResume {
+  /** Agent that owns the session (`claude` / `codex`). */
+  agent: string;
+  sessionId: string;
+  folder: string | null;
 }
 
 export interface OpenFile {
@@ -154,8 +178,11 @@ export interface ModalRequest {
 }
 
 export interface State {
-  welcomeVisible: boolean;
-  welcomeError: string | null;
+  /** True once `bootstrap` has settled (initial library load plus any
+   *  auto-open attempt). Lets the shell distinguish "still booting" from
+   *  "booted with no folder" — e.g. before releasing a pending
+   *  window-folder registration back to Electron. */
+  booted: boolean;
 
   /** Human-facing active folder label. Use `folderPath` for API scope /
    *  identity; this value is for titles, sidebar headings, and empty-state
@@ -164,14 +191,15 @@ export interface State {
   /** Absolute POSIX path of the active folder. This is the stable identity
    *  for search, sync, conversion retry, uploads, and agent context. */
   folderPath: string;
-  recent: { path: string; openedAt: string }[];
-  /** OS home directory — used by the Welcome screen to render
-   *  `~/foo` instead of the full `/Users/<name>/foo`. */
+  /** Library membership, recents-ordered — feeds the sidebar library list. */
+  recent: { path: string; openedAt: string; favorite?: boolean }[];
+  /** OS home directory — used to render `~/foo` instead of the full
+   *  `/Users/<name>/foo` wherever an absolute path shows up in copy. */
   homeDir: string;
   /** Library-level search-readiness state keyed by absolute folder path. Unlike
    *  active-folder `pendingSemanticNames` / `pendingConversions`, this survives leaving an
-   *  active folder so Welcome can surface failures without showing
-   *  background preparation as a browsing status. */
+   *  active folder so the sidebar library list can surface failures without
+   *  showing background preparation as a browsing status. */
   libraryFolderStatuses: Record<string, LibraryFolderStatus>;
 
   files: FileMeta[];
@@ -232,6 +260,10 @@ export interface State {
   /** Per-agent tab activation history, oldest first. The last id is the
    *  tab that an agent icon selects when reopening that agent. */
   chatTabRecencyByAgent: Record<string, string[]>;
+  /** Un-consumed sidebar History resume request, if any. See
+   *  `PendingChatResume`; a new request replaces an unconsumed one, and
+   *  losing the window's folder context (CHAT_TABS_RESET) clears it. */
+  pendingResume: PendingChatResume | null;
 
   /** User-visible paths whose semantic-search content is still being
    *  embedded/indexed. Keyword search ignores this state and can search
@@ -341,8 +373,7 @@ export interface State {
 }
 
 export const initialState: State = {
-  welcomeVisible: true,
-  welcomeError: null,
+  booted: false,
   folder: '',
   folderPath: '',
   recent: [],
@@ -369,6 +400,7 @@ export const initialState: State = {
   chatTabs: [],
   activeChatTabId: null,
   chatTabRecencyByAgent: {},
+  pendingResume: null,
   pendingSemanticNames: new Set(),
   semanticIndexing: null,
   pendingConversions: [],
@@ -400,10 +432,8 @@ export const initialState: State = {
 };
 
 export type Action =
-  | { type: 'WELCOME_HIDE' }
-  | { type: 'WELCOME_SHOW'; recent: State['recent']; homeDir?: string; error?: string | null }
+  | { type: 'BOOTED' }
   | { type: 'RECENT_LOADED'; recent: State['recent']; homeDir?: string }
-  | { type: 'WELCOME_ERROR'; error: string }
   | { type: 'LIBRARY_FOLDER_STATUS'; path: string; status: LibraryFolderStatus }
   | { type: 'LIBRARY_FOLDER_STATUS_REMOVE'; path: string }
   | { type: 'FOLDER_CONTEXT'; folder: string; folderPath: string }
@@ -444,15 +474,28 @@ export type Action =
   | { type: 'CHAT_TOGGLE' }
   | { type: 'CHAT_WIDTH'; width: number }
   | { type: 'AGENTS_LOADED'; agents: State['agents'] }
-  /** Select or toggle an agent from a chrome icon. `tab` is supplied only
-   *  when that agent has no open tabs. */
-  | { type: 'CHAT_AGENT_TOGGLE'; agent: string; tab?: ChatTab }
-  /** Reveal an Agent Panel session without toggling an already-visible panel. */
+  /** Reveal an agent's most recent Agent Panel session (opening the panel
+   *  when hidden) without toggling an already-visible panel. `tab` is
+   *  supplied only when that agent has no open tabs. */
   | { type: 'CHAT_AGENT_OPEN'; agent: string; tab?: ChatTab }
   | { type: 'CHAT_TAB_NEW'; tab: ChatTab }
   | { type: 'CHAT_TAB_CLOSE'; id: string }
   | { type: 'CHAT_TAB_ACTIVATE'; id: string }
   | { type: 'CHAT_TAB_RENAME'; id: string; title: string }
+  /** AgentView reports whether its tab is completely blank (reusable as a
+   *  welcome tab). See `ChatTab.blank`. */
+  | { type: 'CHAT_TAB_SET_BLANK'; id: string; blank: boolean }
+  /** Switch a COMPLETELY BLANK tab's agent in place (the New Chat split
+   *  button reusing a blank tab of the other agent). The reducer refuses
+   *  the switch for any tab with `blank === false` — user work is never
+   *  handed to another agent. */
+  | { type: 'CHAT_TAB_SET_AGENT'; id: string; agent: string }
+  | { type: 'CHAT_TAB_SET_SCOPE'; id: string; folder: string | null }
+  /** Sidebar History picked a session: record the resume request for the
+   *  target tab's AgentView to consume. Replaces any unconsumed request. */
+  | { type: 'CHAT_RESUME_REQUEST'; resume: PendingChatResume }
+  /** The target AgentView took ownership of the pending resume. */
+  | { type: 'CHAT_RESUME_CONSUMED' }
   | { type: 'CHAT_TABS_RESET' }
   | { type: 'ACTIVE_FOLDER'; path: string }
   /** Move the sidebar's single focus to `path`. Pure visual highlight

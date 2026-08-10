@@ -1,10 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, ListBox, ListBoxItem, Menu, MenuItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
+import { Button, ListBox, ListBoxItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
   ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
-  FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
+  FileGenericIcon, FolderIcon, HandIcon, LibraryIcon, PlusIcon, StopIcon,
 } from '../../icons';
-import { useApp } from '../../store/AppContext';
+import { cn } from '../../lib/utils';
+import type { FileMeta, FolderMeta } from '../../api';
 import { ImageLightbox } from '../ImageLightbox';
 import {
   Menu as SharedMenu,
@@ -15,9 +16,23 @@ import {
   MenuTrigger as SharedMenuTrigger,
 } from '../ui/menu';
 import { baseName } from './attachments';
-import { changedEffortSelection, effortLabel, effortMenuState, effortOptions } from './effortMenuState';
+import { changedEffortSelection, effortLabel, effortOptions } from './effortMenuState';
+import {
+  folderDisplayName,
+  folderScope,
+  LIBRARY_SCOPE,
+  scopeDisplayName,
+  scopePillAriaLabel,
+  shortenFolderPath,
+  type ChatScope,
+  type LibraryFolderOption,
+} from './folderState';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
+import {
+  attachChipClass, attachIconClass, attachImageChipClass, attachImagePreviewClass,
+  attachImageRemoveClass, attachNameClass, attachRemoveClass, iconGhostButtonClass,
+} from './panelStyles';
 import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from './types';
 import { modelMenuLabel } from './modelState';
 
@@ -28,48 +43,173 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
 
-function AccessMenu({
-  mode, open, disabled, onOpenChange, onPick,
-}: {
-  mode: PermMode;
-  open: boolean;
+/* Composer-bar pills. Triggers are text-only (label + chevron) with a
+ * control-naming title/aria-label so adjacent "Default" values stay
+ * distinguishable. All pills share one quiet treatment — the session
+ * settings live behind a single trigger, so no pill needs emphasis. */
+const pillClass =
+  'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
+const pillLockedClass = 'cursor-default opacity-60';
+const pillChevronClass = '-ml-px size-3 shrink-0 opacity-75';
+
+/* Upward menus anchored to the pills. */
+const menuPopupClass =
+  'z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-card p-1.5 shadow-elevation';
+const menuHeadClass = 'flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm';
+const optClass =
+  'flex w-full cursor-pointer items-start gap-2.5 rounded-md border-0 bg-transparent p-2 text-left text-foreground hover:bg-muted data-focused:bg-muted data-highlighted:bg-muted';
+const optActiveClass =
+  'bg-accent/12 shadow-[inset_2px_0_0_var(--accent)] hover:bg-accent/12 data-focused:bg-accent/12 data-highlighted:bg-accent/12';
+const optIconClass = 'mt-px size-4.5 shrink-0 text-muted-foreground';
+const optTextClass = 'flex min-w-0 flex-1 flex-col gap-0.5';
+const optTitleClass = 'text-base font-medium';
+const optDescClass = 'text-xs leading-snug text-muted-foreground';
+const optCheckClass = 'mt-0.5 size-4 shrink-0 text-accent';
+const settingsDividerClass = 'mx-1 my-1.5 h-px bg-border';
+
+/* Explicit, touch-friendly effort choices — never tiny slider dots. */
+const effortChoiceClass =
+  'min-h-7.5 shrink-0 cursor-pointer rounded-md border border-border bg-transparent px-2 py-1 text-xs text-muted-foreground transition-colors duration-fast hover:bg-muted hover:text-foreground';
+const effortChoiceCurClass =
+  'border-accent bg-accent/15 font-semibold text-foreground hover:bg-accent/15 hover:text-foreground';
+
+/* Neutral send button — accent only on hover-when-ready (VSCode-style). */
+const sendClass =
+  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border p-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4.5';
+const sendReadyClass =
+  'border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:cursor-default disabled:opacity-40';
+const sendStopClass = 'border-destructive bg-destructive text-primary-foreground';
+
+/** Model pill — stays its own control so the current model is always
+ * visible on the bar. Locked once the session has content. */
+function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resumedSession, onSetModel }: {
+  selectedModel?: string;
+  activeModel?: string;
+  models: AgentModel[];
+  locked: boolean;
   disabled: boolean;
-  onOpenChange: (open: boolean) => void;
-  onPick: (m: PermMode) => void;
+  resumedSession: boolean;
+  onSetModel: (model?: string) => void;
 }) {
-  const active = MODES.find((m) => m.id === mode) ?? MODES[0];
-  const ActiveIcon = active.Icon;
+  const [open, setOpen] = useState(false);
+  const defaultSelected = !selectedModel;
+  const label = modelMenuLabel(models, selectedModel, activeModel, resumedSession);
+  const pick = (model?: string) => { onSetModel(model); setOpen(false); };
   return (
-    <MenuTrigger isOpen={open} onOpenChange={onOpenChange}>
-      <Button className="agent-mode-btn" isDisabled={disabled}>
-        <ActiveIcon className="agent-mode-icon" />
-        {active.label}
-        <ChevronDownIcon className="agent-mode-chevron" />
+    <MenuTrigger isOpen={open} onOpenChange={setOpen}>
+      <Button
+        className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
+        isDisabled={disabled || locked}
+        aria-label={`Model: ${label}${locked ? ' — fixed for this conversation' : ''}`}
+        // RAC forwards global DOM attributes (title) at runtime but its
+        // ButtonProps type omits them; the spread keeps the tooltip typed.
+        {...{ title: locked ? `Model — ${label} (fixed for this conversation)` : `Model — ${label}` }}
+      >
+        {/* Text-only trigger (Cursor-style): the leading glyphs made the
+          * bar read heavy; the label carries the meaning. */}
+        <span className="truncate">{label === 'Default' ? 'Model: Default' : label}</span>
+        <ChevronDownIcon className={pillChevronClass} />
       </Button>
-      <Popover className="agent-mode-menu" placement="top end">
-        <div className="agent-mode-menu-head">
-          <span>Access</span>
-        </div>
-        <Menu aria-label="Access level" selectionMode="single" selectedKeys={[mode]} onAction={(key) => onPick(key as PermMode)}>
-          {MODES.map((m) => {
-            const Icon = m.Icon;
-            return (
-              <MenuItem
+      <Popover className={cn(menuPopupClass, 'max-h-[min(360px,55vh)] overflow-auto')} placement="top end">
+        <div className={menuHeadClass}><span className="font-semibold text-foreground">Model</span></div>
+        <button
+          type="button"
+          className={cn(optClass, defaultSelected && optActiveClass)}
+          onClick={() => pick(undefined)}
+        >
+          <span className={optTextClass}>
+            <span className={optTitleClass}>Default</span>
+            <span className={optDescClass}>Use this runtime’s configured model</span>
+          </span>
+          {defaultSelected && <CheckIcon className={optCheckClass} />}
+        </button>
+        {models.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            className={cn(optClass, selectedModel === entry.id && optActiveClass)}
+            onClick={() => pick(entry.id)}
+          >
+            <span className={optTextClass}>
+              <span className={optTitleClass}>{entry.label}</span>
+              {entry.description && <span className={optDescClass}>{entry.description}</span>}
+            </span>
+            {selectedModel === entry.id && <CheckIcon className={optCheckClass} />}
+          </button>
+        ))}
+      </Popover>
+    </MenuTrigger>
+  );
+}
+
+/** Mode pill — the permission-mode list with the effort bar at the bottom
+ * of the same panel (the Claude Code treatment): mode stays visible on the
+ * bar, effort lives one click away and echoes on the trigger only when
+ * non-default ("Ask · High"). If the runtime has no mode control the pill
+ * degrades to an effort-only trigger. */
+function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, effortInherited, efforts, effortLocked, disabled, onSetEffort }: {
+  showMode: boolean;
+  mode: PermMode;
+  onSetMode: (m: PermMode) => void;
+  showEffort: boolean;
+  effort?: EffortLevel;
+  effortInherited: boolean;
+  efforts: EffortLevel[];
+  effortLocked: boolean;
+  disabled: boolean;
+  onSetEffort: (level?: EffortLevel) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const active = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const effortName = effort ? effortLabel(effort) : effortInherited ? 'Inherited' : 'Default';
+  const effortSuffix = showEffort && (effort || effortInherited) ? ` · ${effortName}` : '';
+  const label = showMode
+    ? `${active.label}${effortSuffix}`
+    : `Effort: ${effortName}`;
+  return (
+    <MenuTrigger isOpen={open} onOpenChange={setOpen}>
+      <Button
+        className={pillClass}
+        isDisabled={disabled}
+        aria-label={showMode
+          ? `Permission mode: ${active.label} — ${active.desc}${showEffort && effort ? `; reasoning effort ${effortLabel(effort)}` : ''}`
+          : `Reasoning effort: ${effortName}`}
+      >
+        {label}
+        <ChevronDownIcon className={pillChevronClass} />
+      </Button>
+      <Popover className={menuPopupClass} placement="top end">
+        {showMode && (
+          <div>
+            <div className={menuHeadClass}><span className="font-semibold text-foreground">Mode</span></div>
+            {MODES.map((m) => (
+              <button
                 key={m.id}
-                id={m.id}
-                className={({ isSelected }) => 'agent-mode-opt' + (isSelected ? ' active' : '')}
-                textValue={m.label}
+                type="button"
+                className={cn(optClass, m.id === mode && optActiveClass)}
+                onClick={() => { onSetMode(m.id); setOpen(false); }}
               >
-                <Icon className="agent-mode-opt-icon" />
-                <span className="agent-mode-opt-text">
-                  <span className="agent-mode-opt-title">{m.label}</span>
-                  <span className="agent-mode-opt-desc">{m.desc}</span>
+                <m.Icon className={optIconClass} />
+                <span className={optTextClass}>
+                  <span className={optTitleClass}>{m.label}</span>
+                  <span className={optDescClass}>{m.desc}</span>
                 </span>
-                {m.id === mode && <CheckIcon className="agent-mode-opt-check" />}
-              </MenuItem>
-            );
-          })}
-        </Menu>
+                {m.id === mode && <CheckIcon className={optCheckClass} />}
+              </button>
+            ))}
+          </div>
+        )}
+        {showEffort && (
+          <div>
+            {showMode && <div className={settingsDividerClass} />}
+            <div
+              className={effortLocked ? 'pointer-events-none opacity-60' : undefined}
+              title={effortLocked ? 'Effort is fixed for this session' : undefined}
+            >
+              <EffortBar effort={effort} efforts={efforts} inherited={effortInherited} onSet={onSetEffort} />
+            </div>
+          </div>
+        )}
       </Popover>
     </MenuTrigger>
   );
@@ -77,13 +217,13 @@ function AccessMenu({
 
 function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
   return (
-    <div className="agent-effort">
-      <DumbbellIcon className="agent-effort-icon" />
-      <span className="agent-effort-label">
-        Effort <span className="agent-effort-level">({effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'})</span>
+    <div className="flex items-center gap-2 rounded-lg bg-accent/4 p-2">
+      <DumbbellIcon className="size-4 shrink-0 text-muted-foreground" />
+      <span className="flex-1 text-sm text-foreground">
+        Effort <span className="text-muted-foreground">({effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'})</span>
       </span>
       <ListBox
-        className="agent-effort-track"
+        className="flex flex-wrap items-center justify-end gap-1 py-0.5"
         aria-label="Effort"
         selectionMode="single"
         selectedKeys={[effort ?? '__default__']}
@@ -92,18 +232,18 @@ function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel
           if (next !== null) onSet(next);
         }}
       >
-        <ListBoxItem id="__default__" className={({ isSelected }) => 'agent-effort-choice' + (isSelected ? ' cur' : '')} textValue="Default">
+        <ListBoxItem
+          id="__default__"
+          className={({ isSelected }) => cn(effortChoiceClass, isSelected && effortChoiceCurClass)}
+          textValue="Default"
+        >
           Default
         </ListBoxItem>
         {efforts.map((lv) => (
           <ListBoxItem
             key={lv}
             id={lv}
-            className={({ isSelected }) =>
-              'agent-effort-choice'
-              + (isSelected ? ' cur' : '')
-              + (lv === 'max' ? ' max' : '')
-            }
+            className={({ isSelected }) => cn(effortChoiceClass, isSelected && effortChoiceCurClass)}
             aria-label={effortLabel(lv)}
             textValue={effortLabel(lv)}
           >
@@ -115,68 +255,58 @@ function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel
   );
 }
 
-function EffortMenu({
-  effort, efforts, inherited, open, disabled, locked, onOpenChange, onSetEffort,
-}: {
-  effort?: EffortLevel;
-  efforts: EffortLevel[];
-  inherited: boolean;
-  open: boolean;
-  disabled: boolean;
-  locked: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSetEffort: (level?: EffortLevel) => void;
-}) {
-  const state = effortMenuState({ open, disabled, locked });
-  return (
-    <MenuTrigger isOpen={state.isOpen} onOpenChange={onOpenChange}>
-      <Button
-        className={'agent-mode-btn agent-effort-btn' + (locked ? ' is-locked' : '')}
-        isDisabled={state.triggerDisabled}
-      >
-        <DumbbellIcon className="agent-mode-icon" />
-        {effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'}
-        <ChevronDownIcon className="agent-mode-chevron" />
-      </Button>
-      <Popover className="agent-mode-menu effort-only" placement="top end">
-        <div>
-          <EffortBar effort={effort} efforts={efforts} inherited={inherited} onSet={onSetEffort} />
-        </div>
-      </Popover>
-    </MenuTrigger>
-  );
-}
-
-function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resumedSession, onSetModel }: {
-  selectedModel?: string;
-  activeModel?: string;
-  models: AgentModel[];
+/** Cursor-style session-scope picker. A new session binds the picked
+ * scope — a library folder, or "Library" for a library-wide chat
+ * (default: the window's current folder, else Library); once the chat has
+ * content the pill stays visible but locked — a conversation never
+ * rebinds. Same shared Base UI menu adapter as the model pill. */
+function ScopeMenu({ scope, entries, homeDir, locked, disabled, onSetScope }: {
+  scope: ChatScope;
+  entries: LibraryFolderOption[];
+  homeDir: string;
   locked: boolean;
   disabled: boolean;
-  resumedSession: boolean;
-  onSetModel: (model?: string) => void;
+  onSetScope: (scope: ChatScope) => void;
 }) {
-  const defaultSelected = !selectedModel;
+  const name = scopeDisplayName(scope);
+  const label = scopePillAriaLabel(scope, locked);
+  const isLibrary = scope.kind === 'library';
   return (
     <SharedMenu>
-      <SharedMenuTrigger className={'agent-mode-btn agent-model-btn' + (locked ? ' is-locked' : '')} disabled={disabled || locked}>
-        {modelMenuLabel(models, selectedModel, activeModel, resumedSession)}
-        <ChevronDownIcon className="agent-mode-chevron" />
+      <SharedMenuTrigger
+        className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
+        disabled={disabled || locked}
+        aria-label={label}
+        title={isLibrary
+          ? 'Session scope — the whole library'
+          : `Session folder — ${shortenFolderPath(scope.path, homeDir)}`}
+      >
+        {/* No leading glyph on the trigger: the scope NAME is the content
+          * (often carrying the user's own emoji), and a folder icon next
+          * to it reads as a double mark. The menu's rows keep icons. */}
+        <span className="truncate">{name}</span>
+        <ChevronDownIcon className={pillChevronClass} />
       </SharedMenuTrigger>
       <SharedMenuPortal>
-        <SharedMenuPositioner side="top" align="end" sideOffset={6} collisionPadding={8}>
-          <SharedMenuPopup className="agent-mode-menu agent-model-menu" aria-label="Model">
-            <div className="agent-mode-menu-head"><span>Model</span></div>
-            <SharedMenuItem label="Default" className={'agent-mode-opt' + (defaultSelected ? ' active' : '')} onClick={() => onSetModel(undefined)}>
-            <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">Default</span><span className="agent-mode-opt-desc">Use this runtime’s configured model</span></span>
-            {defaultSelected && <CheckIcon className="agent-mode-opt-check" />}
+        <SharedMenuPositioner side="top" align="start" sideOffset={6} collisionPadding={8}>
+          <SharedMenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label="Session scope">
+            <div className={menuHeadClass}><span className="font-semibold text-foreground">Session scope</span></div>
+            <SharedMenuItem label="Library" className={cn(optClass, isLibrary && optActiveClass)} onClick={() => onSetScope(LIBRARY_SCOPE)}>
+            <LibraryIcon className={optIconClass} />
+            <span className={optTextClass}><span className={optTitleClass}>Library</span><span className={optDescClass}>Chat across your whole library</span></span>
+            {isLibrary && <CheckIcon className={optCheckClass} />}
             </SharedMenuItem>
-            {models.map((entry) => (
-              <SharedMenuItem key={entry.id} label={entry.label} className={'agent-mode-opt' + (selectedModel === entry.id ? ' active' : '')} onClick={() => onSetModel(entry.id)}>
-              <span className="agent-mode-opt-text"><span className="agent-mode-opt-title">{entry.label}</span>{entry.description && <span className="agent-mode-opt-desc">{entry.description}</span>}</span>
-              {selectedModel === entry.id && <CheckIcon className="agent-mode-opt-check" />}
-              </SharedMenuItem>
-            ))}
+            {entries.length > 0 && <div className="mx-2 my-1 border-t border-border" role="separator" />}
+            {entries.map((entry) => {
+              const active = scope.kind === 'folder' && scope.path === entry.path;
+              return (
+                <SharedMenuItem key={entry.path} label={folderDisplayName(entry.path)} className={cn(optClass, active && optActiveClass)} onClick={() => onSetScope(folderScope(entry.path))}>
+                <FolderIcon className={optIconClass} />
+                <span className={optTextClass}><span className={optTitleClass}>{folderDisplayName(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
+                {active && <CheckIcon className={optCheckClass} />}
+                </SharedMenuItem>
+              );
+            })}
           </SharedMenuPopup>
         </SharedMenuPositioner>
       </SharedMenuPortal>
@@ -186,7 +316,7 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
 
 export function AgentComposer({
   phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortInherited, effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  effortInherited, effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionScope, folderEntries, folderLocked, folderHomeDir, onSetScope, onDraftChange, mentionFiles, mentionFolders, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -206,6 +336,21 @@ export function AgentComposer({
   modelNotice: string | null;
   resumedSession: boolean;
   onSetModel: (model?: string) => void;
+  /** The scope this tab's session is (or will be) bound to. */
+  sessionScope: ChatScope;
+  folderEntries: LibraryFolderOption[];
+  folderLocked: boolean;
+  folderHomeDir: string;
+  onSetScope: (scope: ChatScope) => void;
+  /** Reports whether the composer holds unsent draft text, so the tab
+   * model can freeze a drafted tab's scope and exclude it from blank-tab
+   * reuse. */
+  onDraftChange?: (hasText: boolean) => void;
+  /** File/folder listing that feeds `@` mention ranking. For a tab bound to
+   * another library folder this is the SESSION folder's listing, not the
+   * window's; empty for a library-wide chat (mentions disabled there). */
+  mentionFiles: FileMeta[];
+  mentionFolders: FolderMeta[];
   skills: AgentSkill[];
   skillState: 'available' | 'empty' | 'failed';
   onRefreshSkills: () => void;
@@ -215,6 +360,12 @@ export function AgentComposer({
   showModeMenu: boolean;
   showEffortMenu: boolean;
   showModelMenu: boolean;
+  /** Empty-state starter template. Prefills the draft only — never sends. */
+  prefill?: { text: string; nonce: number } | null;
+  /** Empty-chat layout: AgentView centers the composer mid-panel, so the
+   * root sizes itself to the hero column instead of the `agent-composer`
+   * chat-primary width hook. Same mounted instance in both layouts. */
+  hero?: boolean;
   onPickFiles: (files: File[]) => void;
   onPasteImages: (files: File[]) => void;
   onFocusChange: (focused: boolean) => void;
@@ -225,11 +376,8 @@ export function AgentComposer({
   const [text, setText] = useState('');
   const composerRef = useRef<MentionComposerHandle>(null);
   const mentionListboxId = useId();
-  const { state } = useApp();
   const [mention, setMention] = useState<MentionQuery>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
-  const [modeOpen, setModeOpen] = useState(false);
-  const [effortOpen, setEffortOpen] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill>();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -237,9 +385,11 @@ export function AgentComposer({
 
   useEffect(() => { if (active) composerRef.current?.focus(); }, [active]);
 
+  // Starter-suggestion prefill: replace the draft and keep focus in the
+  // editor so typing continues naturally. Sending stays a user action.
   useEffect(() => {
-    if (effortLocked) setEffortOpen(false);
-  }, [effortLocked]);
+    if (prefill) composerRef.current?.setText(prefill.text);
+  }, [prefill]);
 
   function cycleMode() {
     const i = MODES.findIndex((m) => m.id === mode);
@@ -248,8 +398,8 @@ export function AgentComposer({
 
   const suggestions = useMemo(() => {
     if (!mention || mention.kind !== 'mention') return [];
-    return rankMentionSuggestions(state.files, state.folders, mention.q);
-  }, [mention, state.files, state.folders]);
+    return rankMentionSuggestions(mentionFiles, mentionFolders, mention.q);
+  }, [mention, mentionFiles, mentionFolders]);
 
   const skillSuggestions = useMemo(() => mention?.kind === 'skill'
     ? skills.filter((skill) => skill.label.toLowerCase().includes(mention.q.toLowerCase()) || (skill.description ?? '').toLowerCase().includes(mention.q.toLowerCase()))
@@ -300,7 +450,14 @@ export function AgentComposer({
   }
 
   return (
-    <div className="agent-composer">
+    // `agent-composer` is a layout hook: the chat-primary grid rules in
+    // styles/chat.css center it to the readable transcript width. In hero
+    // mode the empty-state column (656px = 640px content + own padding)
+    // replaces that hook so the composer centers mid-panel.
+    // px-3 matches the transcript's 12px insets so the composer card and
+    // the turn cards above share one column edge (the wrapper's
+    // chat-primary width budgets for it — see `.agent-composer`).
+    <div className={cn('relative', hero ? 'mx-auto w-[min(656px,100%)] p-2' : 'agent-composer p-2 px-3')}>
       {mention && (choices.length > 0 || mention.kind === 'skill') && (
         <div className="agent-mention">
           <div className="agent-mention-head">
@@ -346,21 +503,28 @@ export function AgentComposer({
           )}
         </div>
       )}
-      <div className="agent-composer-box">
+      <div className={cn(
+        'flex flex-col gap-1.5 rounded-xl border border-border bg-background px-2 pt-2 pb-1.5 focus-within:border-accent',
+        // Hero (empty-state) presentation: the composer is the visual
+        // anchor of an otherwise bare pane, so it earns a taller resting
+        // input and the one sanctioned non-overlay shadow. Docked mode
+        // stays flat and compact beside a document.
+        hero && 'shadow-raised [&_.cm-editor]:min-h-16',
+      )}>
         {(attachments.length > 0 || uploading) && (
-          <div className="agent-attachments">
+          <div className="flex flex-wrap items-center gap-1">
             {attachments.map((a) => a.previewUrl ? (
-              <span key={a.path} className="agent-attach-image-chip">
+              <span key={a.path} className={attachImageChipClass}>
                 <button
                   type="button"
-                  className="agent-attach-image-preview"
+                  className={attachImagePreviewClass}
                   aria-label={`Preview ${a.name}`}
                   onClick={() => setPreviewAttachment(a)}
                 >
                   <img src={a.previewUrl} alt="" />
                 </button>
                 <Button
-                  className="agent-attach-x"
+                  className={attachImageRemoveClass}
                   aria-label={`Remove ${a.name}`}
                   onPress={() => {
                     if (previewAttachment?.path === a.path) setPreviewAttachment(null);
@@ -373,20 +537,25 @@ export function AgentComposer({
                 </Button>
               </span>
             ) : (
-              <span key={a.path} className="agent-attach-chip" title={a.path}>
-                <FileGenericIcon className="agent-attach-icon" />
-                <span className="agent-attach-name">{a.name}</span>
-                <Button className="agent-attach-x" aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>
+              <span key={a.path} className={attachChipClass} title={a.path}>
+                <FileGenericIcon className={attachIconClass} />
+                <span className={attachNameClass}>{a.name}</span>
+                <Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>
               </span>
             ))}
-            {uploading && <span className="agent-attach-loading">Uploading…</span>}
+            {uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
           </div>
         )}
         <MentionComposer
           ref={composerRef}
           placeholder={placeholder}
           disabled={disabled}
-          onChange={setText}
+          onChange={(next) => {
+            setText(next);
+            // Lift draft presence to the tab model: unsent text freezes the
+            // tab's scope and disqualifies it from blank-tab reuse.
+            onDraftChange?.(Boolean(next.trim()));
+          }}
           onMentionChange={(next) => {
             setMention(next);
             setActiveMentionIndex(0);
@@ -422,45 +591,64 @@ export function AgentComposer({
             e.target.value = '';
           }}
         />
-        <div className="agent-composer-bar">
+        {/* Action bar under the input. The negative side margins bleed the
+          * top rule past the box padding so it spans edge to edge. */}
+        {/* No divider above the controls: the composer reads as ONE input
+          * surface (Cursor/ChatGPT register) — spacing and the controls'
+          * muted styling carry the separation, and a mid-card hairline
+          * would double up with the card's own border. */}
+        <div className="flex items-center gap-1 pt-0.5">
           <Button
-            className="agent-bar-btn"
+            className={iconGhostButtonClass}
             aria-label={uploading ? 'Uploading files' : 'Upload local files'}
             isDisabled={uploading}
             onPress={() => fileInputRef.current?.click()}
           >
             <PlusIcon />
           </Button>
-          <span className="agent-bar-spacer" />
-          {showModelMenu && <ModelMenu selectedModel={selectedModel} activeModel={activeModel} models={models} locked={modelLocked} disabled={disabled} resumedSession={resumedSession} onSetModel={onSetModel} />}
-          {showModeMenu && (
-            <AccessMenu
-              mode={mode}
-              open={modeOpen}
+          {/* Scope reads left (with the attach control); the run settings
+            * — model, mode — group right next to send. */}
+          <ScopeMenu
+            scope={sessionScope}
+            entries={folderEntries}
+            homeDir={folderHomeDir}
+            locked={folderLocked}
+            disabled={disabled}
+            onSetScope={onSetScope}
+          />
+          <span className="flex-1" />
+          {showModelMenu && (
+            <ModelMenu
+              selectedModel={selectedModel}
+              activeModel={activeModel}
+              models={models}
+              locked={modelLocked}
               disabled={disabled}
-              onOpenChange={(open) => { setModeOpen(open); if (open) setEffortOpen(false); }}
-              onPick={(m) => { onSetMode(m); setModeOpen(false); }}
+              resumedSession={resumedSession}
+              onSetModel={onSetModel}
             />
           )}
-          {showEffortMenu && (
-            <EffortMenu
+          {(showModeMenu || showEffortMenu) && (
+            <ModeMenu
+              showMode={showModeMenu}
+              mode={mode}
+              onSetMode={onSetMode}
+              showEffort={showEffortMenu}
               effort={effort}
-              inherited={effortInherited}
-              open={effortOpen}
-              disabled={disabled}
-              locked={effortLocked}
+              effortInherited={effortInherited}
               efforts={compatibleEfforts}
-              onOpenChange={(open) => { setEffortOpen(open); if (open) setModeOpen(false); }}
+              effortLocked={effortLocked}
+              disabled={disabled}
               onSetEffort={onSetEffort}
             />
           )}
           {turnActive ? (
-            <Button className="agent-send stop" aria-label="Stop agent" onPress={onStop}>
+            <Button className={cn(sendClass, sendStopClass)} aria-label="Stop agent" onPress={onStop}>
               <StopIcon />
             </Button>
           ) : (
             <Button
-              className="agent-send"
+              className={cn(sendClass, sendReadyClass)}
               aria-label="Send message"
               isDisabled={disabled || uploading || (!text.trim() && attachments.length === 0 && !selectedSkill)}
               onPress={() => composerRef.current?.submit()}
@@ -469,7 +657,7 @@ export function AgentComposer({
             </Button>
           )}
         </div>
-        {modelNotice && <div className="agent-model-notice" role="status">{modelNotice}</div>}
+        {modelNotice && <div className="pt-1.5 text-xs leading-snug text-muted-foreground" role="status">{modelNotice}</div>}
       </div>
       {previewAttachment?.previewUrl && (
         <ImageLightbox

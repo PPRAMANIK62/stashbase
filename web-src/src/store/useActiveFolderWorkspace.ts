@@ -16,6 +16,7 @@ import { useSearchActions } from './useSearchActions';
 interface ElectronLifecycleBridge {
   onPrepareContextRelease?: (handler: (reason: string) => Promise<boolean>) => (() => void);
   onFolderRemoved?: (handler: (folder: string) => void) => (() => void);
+  onLibraryFolderAdded?: (handler: (folder: string) => void) => (() => void);
 }
 
 type Dispatch = (action: Action) => void;
@@ -32,7 +33,6 @@ export interface ActiveFolderWorkspace {
     name: string,
     opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticPendingOnOpen?: boolean },
   ) => Promise<void>;
-  goHome: () => Promise<boolean>;
   loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
   markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
@@ -181,6 +181,11 @@ export function useActiveFolderWorkspace(
   }, [folders.handleFolderRemoved]);
 
   useEffect(() => {
+    const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
+    return bridge?.onLibraryFolderAdded?.(folders.handleLibraryFolderAdded);
+  }, [folders.handleLibraryFolderAdded]);
+
+  useEffect(() => {
     void folders.bootstrap();
     void search.refreshIndexState();
     return () => {
@@ -245,8 +250,8 @@ export function useActiveFolderWorkspace(
     setFolderOrder,
   }), [
     folders.bootstrap,
-    folders.goHome,
     folders.handleFolderRemoved,
+    folders.handleLibraryFolderAdded,
     folders.openFolder,
     folders.openFolderByName,
     folders.prepareForFolderRemoval,

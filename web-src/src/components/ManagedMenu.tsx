@@ -63,15 +63,22 @@ export default function ManagedMenu({
                     onClick={item.onSelect}
                   >
                     <span className="flex min-w-0 flex-col gap-0.5">
-                      <span className="whitespace-nowrap">{item.label}</span>
+                      <span className="flex items-center gap-2 whitespace-nowrap">
+                        {item.icon && (
+                          <span className="shrink-0 [&_svg]:block [&_svg]:size-4" aria-hidden="true">
+                            {item.icon}
+                          </span>
+                        )}
+                        <span>{item.label}</span>
+                      </span>
                       {item.detail && (
-                        <span className="text-[calc(11px*var(--ui-scale))] text-muted">
+                        <span className={`text-xs text-muted-foreground ${item.icon ? 'pl-6' : ''}`}>
                           {item.detail}
                         </span>
                       )}
                     </span>
                     {item.shortcut && (
-                      <span className="shrink-0 text-[calc(11px*var(--ui-scale))] tracking-[0.04em] text-muted">
+                      <span className="shrink-0 text-xs tracking-[0.04em] text-muted-foreground">
                         {item.shortcut}
                       </span>
                     )}

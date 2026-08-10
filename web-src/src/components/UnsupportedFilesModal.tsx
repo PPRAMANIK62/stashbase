@@ -105,7 +105,7 @@ export function UnsupportedFilesModalGate() {
   const total = sourceCode + other;
 
   useEffect(() => {
-    if (total === 0 || state.welcomeVisible) return;
+    if (total === 0) return;
     let mounted = true;
     api.getOnboarding().then((prefs) => {
       if (!mounted) return;
@@ -116,9 +116,9 @@ export function UnsupportedFilesModalGate() {
       }
     }).catch(() => {});
     return () => { mounted = false; };
-  }, [dispatch, state.welcomeVisible, state.folderPath, state.folder, total, sourceCode, other]);
+  }, [dispatch, state.folderPath, state.folder, total, sourceCode, other]);
 
-  if (!state.unsupportedModalOpen || total === 0 || state.welcomeVisible) return null;
+  if (!state.unsupportedModalOpen || total === 0) return null;
 
   async function handleClose() {
     dispatch({ type: 'UNSUPPORTED_MODAL', open: false });

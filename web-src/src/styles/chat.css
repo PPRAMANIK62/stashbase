@@ -1,3 +1,25 @@
+    /* ===================================================================
+     * Chat panel CSS — Tailwind-migrated surface.
+     *
+     * The agent tab strip, pane header, transcript/tool-card chrome,
+     * composer, attachment chips, history menu, and error banners style
+     * themselves with utility classes and shared ui/ primitives (see
+     * components/ChatPane.tsx, AgentView.tsx, components/agent/*). This
+     * file keeps only what utilities can't or shouldn't own:
+     *
+     *   - the .app grid tracks and splitter that App.tsx drives
+     *   - the layout-independent 920px reading-column rules keyed on the
+     *     layout hook classes `agent-head` / `agent-messages` /
+     *     `agent-composer`
+     *   - the sticky user-turn header system (IntersectionObserver `stuck`
+     *     contract)
+     *   - .agent-prose content typography and the One-Dark code palette
+     *     (diff rows, tool status colors) — content, not chrome
+     *   - the @-mention popup (`.agent-mention-item.active` is a keyboard
+     *     -navigation querySelector hook)
+     *   - CodeMirror-owned composer DOM (.agent-input, mention widgets)
+     * =================================================================== */
+
     /* Chat panel docked on the right. `--chat-width` normally reflects
      * `state.chatWidth`; during a drag the splitter updates it directly
      * so the heavy panes do not re-render until the final width persists.
@@ -23,25 +45,29 @@
     }
 
     /* Match the sidebar's drag handle (globals.css `.sidebar-splitter`):
-     * a 6px transparent hit area whose only visible cue is a crisp 2px
-     * line drawn by `::after` on hover/active — not a fat colored band. */
+     * a 6px hit area whose only visible cue is a crisp line drawn by
+     * `::after` — not a fat colored band. The strip is painted CANVAS so
+     * it reads as part of the chat panel; left transparent it exposed a
+     * 6px slice of the white body between the sunken tab strip and the
+     * canvas panel. */
     .chat-splitter {
       grid-column: 3;
       grid-row: 1;
       position: relative;
       cursor: col-resize;
-      background: transparent;
+      background: var(--canvas);
     }
     /* This line is the panel's only left divider: a 1px `--border` seam at
      * rest (the panel itself has no border-left), brightening to a 2px accent
-     * on hover/active. Pinned flush to the panel edge (right: 0) so there's
+     * on hover/active. Pinned to the strip's LEFT edge — the true main|chat
+     * boundary now that the strip belongs to the panel side — so there's
      * a single line, not a splitter line + a separate panel border. */
     .chat-splitter::after {
       content: '';
       position: absolute;
       top: 0;
       bottom: 0;
-      right: 0;
+      left: 0;
       width: 1px;
       background: var(--border);
       transition: background .12s, width .12s;
@@ -54,517 +80,42 @@
     }
 
     /* Outer container — fills the 4th grid track. Holds the chat-tab
-     * strip + a body that overlays one agent panel per tab. */
+     * strip + a body that overlays one agent panel per tab. Shared with
+     * App.tsx (grid placement + the lazy-chunk fallback aside), so it
+     * stays a named class. */
     .chat-pane-shell {
       grid-column: 4;
       grid-row: 1;
       min-width: 0;
       overflow: hidden;
-      background: var(--pane);
+      /* Canvas, not pane: the shell (chat tab row included) shares the
+       * chat surface so the panel reads as one sheet distinct from both
+       * the sidebar chrome and the document paper. */
+      background: var(--canvas);
       display: flex;
       flex-direction: column;
     }
 
-    /* Cursor-style tab strip at the top of the chat panel. Scrolls
-     * horizontally when many tabs are open. New tabs come from the
-     * chrome-row agent launchers, so the strip is tabs-only. */
-    .chat-tabs {
-      display: flex;
-      align-items: stretch;
-      gap: 4px;
-      padding: 6px 6px 4px 6px;
-      min-height: 32px;
-    }
-    .chat-tabs-list {
-      display: flex;
-      flex: 1;
-      gap: 2px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      scrollbar-width: thin;
-    }
-    .chat-tabs-list::-webkit-scrollbar { height: 4px; }
-    .chat-tabs-list::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 2px;
-    }
-
-    .chat-tab {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 6px 4px 10px;
-      max-width: 180px;
-      min-width: 0;
-      font-size: calc(12px * var(--ui-scale));
-      color: var(--muted);
-      border-radius: 6px 6px 0 0;
-      cursor: pointer;
-      border: 1px solid transparent;
-      border-bottom: 0;
-      background: transparent;
-      user-select: none;
-      white-space: nowrap;
-    }
-    .chat-tab:hover {
-      background: var(--hover);
-      color: var(--fg);
-    }
-    .chat-tab.active {
-      background: var(--bg);
-      color: var(--fg);
-      border-color: var(--border);
-      font-weight: 500;
-      padding-bottom: 5px;
-    }
-    .chat-tab-icon {
-      width: 13px;
-      height: 13px;
-      flex-shrink: 0;
-    }
-    .chat-tab-label {
-      /* min-width:0 lets this flex child shrink below its content width
-       * so text-overflow:ellipsis actually renders (flex defaults to
-       * min-width:auto, which clips without the ellipsis). */
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .chat-tab-close {
-      width: 18px;
-      height: 18px;
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      font-size: calc(14px * var(--ui-scale));
-      line-height: 1;
-      border-radius: 4px;
-      cursor: pointer;
-      flex-shrink: 0;
-      /* Hidden by default — only surfaces on tab hover or for the
-       * active tab. Avoids visual clutter when many tabs are open. */
-      opacity: 0;
-    }
-    .chat-tab:hover .chat-tab-close,
-    .chat-tab.active .chat-tab-close {
-      opacity: 1;
-    }
-    .chat-tab-close:hover {
-      background: var(--hover);
-      color: var(--fg);
-    }
-
-    /* Body — relative anchor for the absolutely-positioned tab panes
-     * below. Inactive panes stay mounted (preserving each session's
-     * state) but render off-screen via `visibility: hidden`. */
-    .chat-tabs-body {
-      position: relative;
-      flex: 1;
-      min-height: 0;
-    }
-    .chat-tab-pane {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      visibility: hidden;
-      pointer-events: none;
-    }
-    .chat-tab-pane.active {
-      visibility: visible;
-      pointer-events: auto;
-    }
-
-    /* `.chat-pane` is the inside of one tab body (not the grid
-     * container); `.status` is the empty-state "no active chat" notice. */
-    .chat-pane {
-      flex: 1;
-      min-height: 0;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-    .chat-pane.status {
-      padding: 16px 18px;
-      color: var(--muted);
-      font-size: calc(12px * var(--ui-scale));
-    }
-
-    /* Chrome-row chat launchers — one brand-icon button per agent
-     * (Claude, Codex), VSCode-style. Each inherits `.icon-btn`; `.active`
-     * tints it when its agent's chat is the one currently showing.
-     * Spawning / agent selection logic lives in ChatLaunchButtons. */
-    .chat-launchers {
-      display: flex;
-      align-items: center;
-      gap: 2px;
-    }
-    .icon-btn.chat-launch.active {
-      background: rgba(var(--accent-rgb), 0.08);
-    }
-
-
-
-    /* ===================================================================
-     * Structured agent panel (AgentView) — VSCode-style chat surface.
-     * See design-docs/architecture.md §8.
-     * =================================================================== */
-    .agent-view {
-      position: relative;
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      background: var(--pane);
-    }
-    /* Drag-files-here overlay — shown while a file drag hovers the panel.
-     * `pointer-events: none` so it never steals the drop or flickers the
-     * dragenter/leave tracking; the panel's own handlers take the drop. */
-    .agent-drop-overlay {
-      position: absolute;
-      inset: 6px;
-      z-index: 20;
-      display: grid;
-      place-items: center;
-      pointer-events: none;
-      border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--accent) 7%, transparent);
-      backdrop-filter: blur(1.5px);
-      -webkit-backdrop-filter: blur(1.5px);
-    }
-    .agent-drop-card {
-      padding: 8px 14px;
-      border-radius: 8px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
-      font-size: calc(12.5px * var(--ui-scale));
-      font-weight: 500;
-      color: var(--fg);
-    }
-    /* Header row — session title + history / new-chat actions */
-    .agent-head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 8px 6px 12px;
-    }
-    .agent-head-title {
-      flex: 1;
-      min-width: 0;
-      font-size: calc(12.5px * var(--ui-scale));
-      color: var(--muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .agent-head-actions { display: flex; gap: 2px; flex-shrink: 0; }
-    .agent-head-btn {
-      width: 26px;
-      height: 26px;
-      border: 0;
-      padding: 0; /* see .agent-bar-btn — kill UA button padding so the icon centres */
-      background: transparent;
-      color: var(--muted);
-      border-radius: 6px;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-    }
-    .agent-head-btn svg { width: 16px; height: 16px; }
-    .agent-head-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
-    .agent-head-btn:disabled { opacity: 0.4; cursor: default; }
-
-    /* History dropdown — anchored to the head button, opening downward
-     * (mirrors .agent-mode-menu, which opens upward from the composer). */
-    .agent-history-menu {
-      z-index: 20;
-      width: 320px;
-      max-width: calc(100vw - 24px);
-      padding: 6px;
-      background: var(--pane);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
-    }
-    .agent-history-search { padding: 2px 2px 6px; }
-    .agent-history-search input {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 6px 9px;
-      font-size: calc(13px * var(--ui-scale));
-      color: var(--fg);
-      background: var(--hover);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      outline: none;
-    }
-    .agent-history-search input::placeholder { color: var(--muted); }
-    .agent-history-list { max-height: 320px; overflow-y: auto; }
-    .agent-history-empty { padding: 14px 8px; text-align: center; color: var(--muted); font-size: calc(12.5px * var(--ui-scale)); }
-    /* Row = the open button (fills width) + hover-revealed actions. */
-    .agent-history-row {
-      position: relative;
-      display: flex;
-      align-items: center;
-      border-radius: 7px;
-    }
-    .agent-history-row:hover { background: var(--hover); }
-    .agent-history-row.active { background: var(--active); }
-    .agent-history-open {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-      padding: 7px 9px;
-      border: 0;
-      background: transparent;
-      cursor: pointer;
-      text-align: left;
-      color: var(--fg);
-    }
-    .agent-history-title {
-      flex: 1;
-      min-width: 0;
-      font-size: calc(13px * var(--ui-scale));
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .agent-history-time { flex-shrink: 0; font-size: calc(11.5px * var(--ui-scale)); color: var(--muted); }
-    .agent-history-rename {
-      flex: 1;
-      min-width: 0;
-      margin: 4px 6px;
-      padding: 4px 7px;
-      font-size: calc(13px * var(--ui-scale));
-      color: var(--fg);
-      background: var(--bg);
-      border: 1px solid var(--accent, var(--border));
-      border-radius: 6px;
-      outline: none;
-    }
-    /* Time and actions share the one right-hand slot: time shows at rest,
-     * hover swaps it for edit/delete (toggling `display` so neither
-     * reserves the other's folder — time stays flush-right at rest). */
-    .agent-history-row-actions {
-      display: none;
-      gap: 1px;
-      flex-shrink: 0;
-      padding-right: 5px;
-    }
-    .agent-history-row:hover .agent-history-time { display: none; }
-    .agent-history-row:hover .agent-history-row-actions { display: flex; }
-    .agent-history-row:focus-within .agent-history-time { display: none; }
-    .agent-history-row:focus-within .agent-history-row-actions { display: flex; }
-    .agent-history-act {
-      width: 24px;
-      height: 24px;
-      border: 0;
-      padding: 0;
-      background: transparent;
-      color: var(--muted);
-      border-radius: 5px;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-    }
-    .agent-history-act svg { width: 15px; height: 15px; }
-    .agent-history-act:hover { background: var(--border); color: var(--fg); }
-    .agent-history-confirm-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 40;
-      display: grid;
-      place-items: center;
-      padding: 16px;
-      background: rgba(0, 0, 0, 0.36);
-    }
-    .agent-history-confirm {
-      width: min(360px, 100%);
-      padding: 16px;
-      background: var(--pane);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-      color: var(--fg);
-    }
-    .agent-history-confirm h2 { margin: 0; font-size: calc(14px * var(--ui-scale)); }
-    .agent-history-confirm p { margin: 8px 0 0; color: var(--muted); font-size: calc(12.5px * var(--ui-scale)); line-height: 1.45; }
-    .agent-history-confirm-error { margin-top: 8px; color: #c0392b; font-size: calc(12px * var(--ui-scale)); }
-    .agent-history-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-    .agent-history-confirm-actions button {
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 5px 9px;
-      background: var(--bg);
-      color: var(--fg);
-      cursor: pointer;
-    }
-    .agent-history-confirm-actions button.danger { border-color: #e45649; background: #e45649; color: #fff; }
-
+    /* One 920px reading column in EVERY layout — chat-primary and the
+     * docked side panel alike. A wide panel must not turn prose into
+     * panel-wide lines; a narrow one degrades to the plain 12px insets
+     * (the max() floor). Keep the scroll container itself full-width and
+     * center content through responsive padding so wheel/trackpad input
+     * works anywhere over the transcript. `agent-messages` /
+     * `agent-composer` remain layout hook classes on the utility-styled
+     * elements for exactly these rules. */
     .agent-messages {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      /* No top padding: sticky turn headers pin to the very top with no
-       * gap for reply content to peek through. First child gets the top
-       * breathing room instead (scrolls away). */
-      padding: 0 12px 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      scrollbar-width: thin;
-    }
-    /* Full-width Chat should gain working room without turning prose into
-     * viewport-wide lines. Keep the scroll container full-width and center
-     * its content through responsive padding so wheel/trackpad input works
-     * anywhere over the transcript. */
-    .app.chat-primary .agent-messages {
       padding-right: max(12px, calc((100% - 920px) / 2));
       padding-left: max(12px, calc((100% - 920px) / 2));
     }
-    .app.chat-primary .agent-head,
-    .app.chat-primary .agent-composer {
-      width: min(920px, 100%);
+    .agent-composer {
+      /* 944 = the transcript's 920px content column + this wrapper's own
+       * 12px horizontal padding — the composer CARD, not the wrapper,
+       * must line up with the turn cards. Change one, change both. */
+      width: min(944px, 100%);
       margin-right: auto;
       margin-left: auto;
       box-sizing: border-box;
-    }
-    .agent-messages > :first-child { margin-top: 12px; }
-    .agent-jump-latest {
-      position: sticky;
-      bottom: 8px;
-      /* Must sit above a pinned user-turn header (`z-index: 2`), otherwise
-       * its upper half is hidden and cannot be clicked while scrolling. */
-      z-index: 3;
-      align-self: center;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 5px 10px;
-      background: var(--pane);
-      color: var(--fg);
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
-      font: inherit;
-      font-size: calc(12px * var(--ui-scale));
-      cursor: pointer;
-    }
-
-    /* Empty-state hero */
-    .agent-hero {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 22px;
-      padding: 24px;
-      text-align: center;
-    }
-    .agent-hero-wordmark {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      color: var(--fg);
-    }
-    .agent-hero-mark { width: 22px; height: 22px; }
-    .agent-hero-name {
-      font-family: Georgia, 'Times New Roman', ui-serif, serif;
-      font-size: calc(21px * var(--ui-scale));
-      letter-spacing: 0.01em;
-    }
-    .agent-hero-sprite {
-      width: 64px;
-      height: 50px;
-      image-rendering: pixelated;
-    }
-    .agent-empty,
-    .agent-ended {
-      color: var(--muted);
-      font-size: calc(12.5px * var(--ui-scale));
-      padding: 8px 2px;
-      line-height: 1.5;
-    }
-    .agent-ended {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      border-top: 1px solid var(--border);
-      padding: 8px 12px;
-    }
-    .agent-fatal-state {
-      flex: 1;
-      display: grid;
-      place-items: center;
-      min-height: 180px;
-      padding: 24px 8px;
-    }
-    .agent-runtime-setup {
-      flex: 1;
-      display: grid;
-      place-items: center;
-      min-height: 180px;
-      padding: 24px 12px;
-    }
-    .agent-runtime-setup-card {
-      width: min(440px, 100%);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--pane);
-      padding: 16px;
-      color: var(--fg);
-    }
-    .agent-runtime-setup-card h2 { margin: 0; font-size: calc(14px * var(--ui-scale)); }
-    .agent-runtime-setup-card p { margin: 7px 0 12px; color: var(--muted); font-size: calc(12.5px * var(--ui-scale)); line-height: 1.5; }
-    .agent-runtime-setup-card code {
-      display: block;
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
-      padding: 8px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(12px * var(--ui-scale));
-      white-space: nowrap;
-    }
-    .agent-runtime-setup-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-    .agent-fatal-card,
-    .agent-fatal-inline {
-      border: 1px solid rgba(220, 38, 38, 0.22);
-      background: rgba(220, 38, 38, 0.055);
-      border-radius: 10px;
-      color: var(--fg);
-    }
-    .agent-fatal-card {
-      width: min(440px, 100%);
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 9px;
-    }
-    .agent-fatal-inline {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 12px;
-    }
-    .agent-fatal-title {
-      font-size: calc(13px * var(--ui-scale));
-      font-weight: 650;
-    }
-    .agent-fatal-detail {
-      color: var(--muted);
-      font-size: calc(12.5px * var(--ui-scale));
-      line-height: 1.5;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 140px;
-      overflow: auto;
     }
 
     /* A turn = one user message (sticky header) + its reply blocks. */
@@ -600,7 +151,7 @@
       z-index: 2;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 11px;
+      border-radius: 10px;
       padding: 9px 12px;
       font-size: calc(13px * var(--ui-scale));
       line-height: 1.5;
@@ -615,14 +166,17 @@
      * line (VSCode sticky-scroll style). The negative spread keeps the
      * shadow at the bottom edge only; kept small per "阴影不用太大". */
     .agent-turn-head.stuck {
-      box-shadow: 0 7px 8px -6px rgba(15, 23, 42, 0.13);
+      box-shadow: 0 7px 8px -6px rgba(var(--shadow-color), 0.13);
     }
     .agent-turn-head.static {
       position: relative;
       top: auto;
     }
-    .agent-turn-head.has-actions {
-      margin-bottom: 20px;
+    /* Turns breathe apart while a turn's own pieces stay close — the
+     * between-turn distance (on top of the list's 10px gap) is what makes
+     * each exchange read as one unit. */
+    .agent-turn + .agent-turn {
+      margin-top: 14px;
     }
     .agent-turn-head.queued {
       color: var(--muted);
@@ -648,40 +202,56 @@
     .agent-turn-ellipsis {
       color: var(--muted);
     }
+    /* Meta-sized (12px) like every other transcript meta row, and a
+     * neutral hover — expanding a message is not an accent moment. */
     .agent-turn-expand {
       display: flex;
       align-items: center;
       gap: 4px;
       width: max-content;
-      margin-top: 10px;
+      margin-top: 6px;
       border: 0;
       background: transparent;
       color: var(--muted);
-      font-size: calc(13px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
       font-weight: 400;
       padding: 0;
       cursor: pointer;
     }
     .agent-turn-expand:hover {
-      color: var(--accent);
+      color: var(--fg);
     }
     .agent-turn-expand-icon {
-      width: 13px;
-      height: 13px;
+      /* 12px — the app-wide disclosure-chevron size (tree rows, section
+       * headers, tool cards); no odd one out. */
+      width: 12px;
+      height: 12px;
       transition: transform .12s ease;
     }
     .agent-turn-expand-icon.open {
       transform: rotate(180deg);
     }
+    /* In-card hover actions (Cursor register): a small cluster pinned to
+     * the card's top-right corner, invisible until the card is hovered or
+     * focused — no floating icons orphaned outside the card. The card
+     * backing keeps message text from showing through the cluster. */
     .agent-turn-user-actions {
       position: absolute;
-      right: 10px;
-      top: calc(100% + 8px);
+      top: 5px;
+      right: 5px;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 2px;
+      padding: 1px;
+      border-radius: var(--radius-ui);
+      background: var(--card);
       color: var(--muted);
-      opacity: 0.78;
+      opacity: 0;
+      transition: opacity var(--motion-fast) var(--motion-ease);
+    }
+    .agent-turn-head:hover .agent-turn-user-actions,
+    .agent-turn-head:focus-within .agent-turn-user-actions {
+      opacity: 1;
     }
     .agent-turn-user-actions button {
       width: 22px;
@@ -690,7 +260,7 @@
       place-items: center;
       padding: 0;
       border: 0;
-      border-radius: 5px;
+      border-radius: var(--radius-ui);
       background: transparent;
       color: inherit;
       cursor: pointer;
@@ -723,16 +293,6 @@
       line-height: inherit;
       white-space: pre-wrap;
     }
-    .agent-turn-edit-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-    }
-    .agent-turn-edit-actions .agent-btn {
-      font-size: calc(13px * var(--ui-scale));
-      padding: 6px 14px;
-      border-radius: 8px;
-    }
     .agent-turn-actions {
       display: inline-flex;
       align-items: center;
@@ -740,12 +300,14 @@
       flex-shrink: 0;
       padding-top: 1px;
     }
+    /* 12px — the one meta size shared by thinking, tool activity, status,
+     * and expand controls; the 1px-different tiers read as sloppiness. */
     .agent-turn-waiting {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       color: var(--muted);
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(12px * var(--ui-scale));
     }
     .agent-turn-steer {
       border: 0;
@@ -759,9 +321,8 @@
     .agent-turn-steer:hover {
       color: var(--accent);
     }
-    /* Assistant messages */
-    .agent-msg { display: flex; }
-    .agent-msg.assistant { display: block; }
+
+    /* Assistant message content typography — reading content, not chrome. */
     .agent-prose {
       font-size: calc(13px * var(--ui-scale));
       line-height: 1.6;
@@ -770,7 +331,7 @@
     }
     .agent-prose > :first-child { margin-top: 0; }
     .agent-prose > :last-child { margin-bottom: 0; }
-    .agent-prose p { margin: 0.4em 0; }
+    .agent-prose p { margin: 0.5em 0; }
     .agent-prose pre {
       background: var(--bg);
       border: 1px solid var(--border);
@@ -787,15 +348,35 @@
     .agent-prose :not(pre) > code {
       background: var(--hover);
       padding: 1px 5px;
-      border-radius: 3px;
+      border-radius: 4px;
     }
     .agent-prose ul, .agent-prose ol { padding-left: 1.4em; margin: 0.4em 0; }
     .agent-prose a { color: var(--accent); }
 
-    /* Thinking block */
+    /* Working shimmer (Cursor register): a soft light band sweeps through
+     * a meta label while the agent is actively thinking or running.
+     * background-clip:text needs no extra elements, and children that
+     * paint their own background (the accent Dot) are unaffected. The
+     * global reduced-motion rule zeroes the keyframe, leaving a static
+     * muted label. */
+    .agent-shimmer {
+      background: linear-gradient(90deg, var(--muted) 40%, var(--fg) 50%, var(--muted) 60%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: agent-shimmer 2s linear infinite;
+    }
+    @keyframes agent-shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+
+    /* Thinking block. The head is a plain meta row (no bar — closed
+     * thinking should cost no chrome); only the opened body carries the
+     * quote bar that marks it as sidetracked prose. */
     .agent-thinking {
-      border-left: 2px solid var(--border);
-      padding-left: 8px;
+      min-width: 0;
     }
     .agent-thinking-head {
       display: flex;
@@ -820,149 +401,22 @@
       color: var(--muted);
       line-height: 1.55;
       white-space: pre-wrap;
-      padding: 4px 0 6px;
-    }
-
-    /* Tool cards */
-    .agent-tool {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-      background: var(--bg);
-    }
-    .agent-tool.status-awaiting { border-color: var(--accent); }
-    .agent-tool-head {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      width: 100%;
-      border: 0;
-      background: transparent;
-      cursor: pointer;
-      padding: 7px 10px;
-      font-size: calc(12.5px * var(--ui-scale));
-      text-align: left;
-    }
-    .agent-tool-chev {
-      width: 12px;
-      height: 12px;
-      flex-shrink: 0;
-      color: var(--muted);
-    }
-    .agent-tool-name { font-weight: 600; color: var(--fg); flex-shrink: 0; }
-    .agent-tool-summary {
-      color: var(--muted);
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
-    }
-    .agent-tool-status {
-      flex-shrink: 0;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: calc(11px * var(--ui-scale));
-      color: var(--muted);
-    }
-    .agent-tool-status.s-done { color: #50a14f; }
-    .agent-tool-status.s-error { color: #e45649; }
-    .agent-tool-status.s-denied { color: #e45649; }
-    .agent-tool-status.s-awaiting { color: var(--accent); }
-    .agent-tool-body { padding: 0 10px 10px; }
-    .agent-tool-input,
-    .agent-tool-result,
-    .agent-bash {
-      margin: 6px 0 0;
-      background: var(--pane);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 7px 9px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
-      line-height: 1.45;
-      overflow-x: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 280px;
-      overflow-y: auto;
-    }
-    .agent-tool-result.err { color: #e45649; }
-    .agent-activity {
       border-left: 2px solid var(--border);
-      background: color-mix(in srgb, var(--pane) 72%, transparent);
+      /* margin lines the bar up under the head's 12px chevron centre. */
+      margin-left: 5px;
+      padding: 4px 0 6px 10px;
     }
-    .agent-activity.active { border-left-color: var(--accent); }
-    .agent-activity.attention { border-left-color: #e45649; }
-    .agent-activity-head {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      width: 100%;
-      padding: 7px 9px;
-      border: 0;
-      background: transparent;
-      color: var(--fg);
-      cursor: pointer;
-      font: inherit;
-      font-size: calc(12px * var(--ui-scale));
-      text-align: left;
-    }
-    .agent-activity-head > span:last-child { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .agent-activity-chev { width: 13px; height: 13px; color: var(--muted); transform: rotate(-90deg); }
-    .agent-activity-chev.open { transform: none; }
-    .agent-activity-body { display: grid; gap: 6px; padding: 0 8px 8px; }
-    .agent-artifacts { display: grid; gap: 4px; padding: 0 10px 9px; }
-    .agent-artifact {
-      display: grid;
-      grid-template-columns: 15px minmax(0, 1fr) auto auto;
-      align-items: center;
-      gap: 7px;
-      padding: 6px 7px;
-      border: 1px solid var(--border);
-      background: var(--pane);
-      font-size: calc(11.5px * var(--ui-scale));
-    }
-    .agent-artifact-icon { width: 14px; height: 14px; color: var(--accent); }
-    .agent-artifact-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
-    .agent-artifact-kind { color: var(--muted); text-transform: capitalize; }
-    .agent-artifact button { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: calc(11.5px * var(--ui-scale)); cursor: pointer; }
 
-    /* Permission prompt (inside an awaiting tool card) */
-    .agent-perm { padding: 0 10px 10px; }
-    .agent-perm-title {
-      font-size: calc(12.5px * var(--ui-scale));
-      color: var(--fg);
-      margin-bottom: 7px;
-    }
-    .agent-perm-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 9px;
-    }
-    .agent-btn {
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--fg);
-      font: inherit;
-      font-size: calc(12.5px * var(--ui-scale));
-      padding: 5px 14px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .agent-btn:hover { background: var(--hover); }
-    .agent-btn.primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
-    .agent-btn.primary:hover { filter: brightness(1.05); }
+    /* Tool STATUS is UI state, so it speaks the app's semantic status
+     * tokens. The One-Dark palette below (diff tints/gutters) stays
+     * literal on purpose — diffs are CONTENT, rendered in the editor's
+     * own color world, not the chrome's. */
+    .agent-tool-status.s-done { color: var(--status-success); }
+    .agent-tool-status.s-error,
+    .agent-tool-status.s-denied { color: var(--status-danger); }
+    .agent-tool-result.err { color: var(--status-danger); }
 
-    /* Inline diff */
+    /* Inline diff (also One-Dark add/del tints) */
     .agent-diff {
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -974,12 +428,12 @@
       border-bottom: 1px solid var(--border);
       padding: 4px 9px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       color: var(--muted);
     }
     .agent-diff-body {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: calc(11.5px * var(--ui-scale));
+      font-size: calc(11px * var(--ui-scale));
       line-height: 1.5;
       overflow-x: auto;
       max-height: 320px;
@@ -999,153 +453,8 @@
     .agent-diff-row.del .agent-diff-gutter { color: #e45649; }
     .agent-diff-text { flex: 1; padding-right: 8px; }
 
-    /* Error notice */
-    .agent-error {
-      background: rgba(228, 86, 73, 0.1);
-      border: 1px solid rgba(228, 86, 73, 0.3);
-      color: #c0392b;
-      border-radius: 6px;
-      padding: 8px 11px;
-      font-size: calc(12.5px * var(--ui-scale));
-      line-height: 1.5;
-      white-space: pre-wrap;
-    }
-
-    /* Working indicator */
-    .agent-working {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      color: var(--muted);
-      font-size: calc(12px * var(--ui-scale));
-      padding: 2px;
-    }
-    .agent-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-    }
-
-    /* Composer */
-    .agent-composer {
-      position: relative;
-      padding: 8px;
-      background: var(--pane);
-    }
-    .agent-composer-box {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 8px 8px 6px;
-    }
-    .agent-composer-box:focus-within { border-color: var(--accent); }
-
-    /* Attachment chips row (VSCode-style) above the textarea */
-    .agent-attachments {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 5px;
-    }
-    .agent-attach-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      max-width: 260px;
-      padding: 3px 4px 3px 7px;
-      background: var(--hover);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: calc(11.5px * var(--ui-scale));
-      color: var(--fg);
-    }
-    .agent-attach-image-chip {
-      position: relative;
-      width: 64px;
-      height: 64px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      background: var(--hover);
-      box-shadow: 0 1px 2px color-mix(in srgb, #000 28%, transparent);
-    }
-    .agent-attach-image-preview {
-      display: block;
-      width: 100%;
-      height: 100%;
-      padding: 0;
-      border: 0;
-      background: transparent;
-      cursor: zoom-in;
-    }
-    .agent-attach-image-preview img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .agent-attach-image-static {
-      display: block;
-      padding: 0;
-      cursor: zoom-in;
-    }
-    .agent-attach-image-static img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .agent-attach-image-chip .agent-attach-x {
-      position: absolute;
-      top: 4px;
-      right: 4px;
-      width: 16px;
-      height: 16px;
-      padding: 0;
-      color: var(--fg);
-      background: color-mix(in srgb, var(--bg) 76%, transparent);
-      border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-      border-radius: 50%;
-    }
-    .agent-attach-image-chip .agent-attach-x svg {
-      display: block;
-      width: 9px;
-      height: 9px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.7;
-      stroke-linecap: round;
-    }
-    .agent-attach-icon { width: 13px; height: 13px; flex-shrink: 0; color: var(--muted); }
-    .agent-attach-text { display: flex; min-width: 0; flex-direction: column; }
-    .agent-attach-name {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .agent-attach-path { overflow: hidden; color: var(--muted); font-size: calc(10.5px * var(--ui-scale)); text-overflow: ellipsis; white-space: nowrap; }
-    .agent-attach-dims { color: var(--muted); flex-shrink: 0; }
-    .agent-attach-x {
-      display: grid;
-      place-items: center;
-      width: 16px;
-      height: 16px;
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      font-size: calc(14px * var(--ui-scale));
-      line-height: 1;
-      border-radius: 4px;
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-    .agent-attach-x:hover { background: var(--border); color: var(--fg); }
-    .agent-attach-loading { font-size: calc(11.5px * var(--ui-scale)); color: var(--muted); }
-
+    /* Composer text input — CodeMirror owns this DOM (mention widgets are
+     * created in MentionComposer's WidgetType), so it keeps CSS classes. */
     .agent-input {
       border: 0;
       background: transparent;
@@ -1172,205 +481,9 @@
       vertical-align: baseline;
       white-space: nowrap;
     }
-    /* Action bar under the textarea: + … mode / send.
-     * A full-width rule separates it from the input — the negative side
-     * margins bleed past the box's 8px padding so the line spans edge to
-     * edge, then the matching padding restores the content inset. */
-    .agent-composer-bar {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      margin: 0 -8px;
-      padding: 6px 8px 0;
-      border-top: 1px solid var(--border);
-    }
-    .agent-bar-spacer { flex: 1; }
-    .agent-bar-btn {
-      width: 26px;
-      height: 26px;
-      border: 0;
-      /* padding:0 is load-bearing: a <button>'s UA default padding (1px 6px)
-       * shrinks the grid content box below the icon width, and the overflow
-       * aligns right instead of centring — the glyph then sits ~1-2px right of
-       * centre. Zeroing padding lets `place-items: center` actually centre. */
-      padding: 0;
-      border-radius: 6px;
-      background: transparent;
-      /* Match the header action buttons (.agent-head-btn): muted at rest,
-       * solid --fg on hover. Keeps +, /, and "new chat" one visual set. */
-      color: var(--muted);
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-      font-size: calc(15px * var(--ui-scale));
-      line-height: 1;
-    }
-    .agent-bar-btn svg { width: 16px; height: 16px; }
-    .agent-bar-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
-    .agent-bar-btn:disabled { opacity: 0.5; cursor: default; }
-    .agent-mode-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      font: inherit;
-      font-size: calc(11.5px * var(--ui-scale));
-      padding: 3px 6px;
-      border-radius: 6px;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .agent-mode-icon { width: 14px; height: 14px; flex-shrink: 0; }
-    .agent-mode-chevron { width: 12px; height: 12px; flex-shrink: 0; opacity: 0.75; margin-left: -1px; }
-    .agent-mode-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
-    .agent-mode-btn:disabled { cursor: default; }
-    /* Model and effort change the next native session, so distinguish them
-     * from the surrounding utility actions using theme tokens only. */
-    .agent-effort-btn,
-    .agent-model-btn {
-      min-height: 28px;
-      border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-      background: color-mix(in srgb, var(--accent) 8%, var(--card));
-      color: var(--fg);
-    }
-    .agent-effort-btn { min-width: 0; }
-    .agent-effort-btn:hover:not(:disabled),
-    .agent-model-btn:hover:not(:disabled) {
-      border-color: var(--accent);
-      background: color-mix(in srgb, var(--accent) 14%, var(--card));
-    }
-    .agent-effort-btn.is-locked { opacity: 0.58; cursor: default; }
-    .agent-model-btn { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
-    .agent-model-btn.is-locked { opacity: 0.58; cursor: default; }
 
-    /* "Modes" dropdown — opens upward from the mode button. */
-    .agent-mode-menu {
-      z-index: 20;
-      width: 320px;
-      max-width: calc(100vw - 24px);
-      padding: 6px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      box-shadow: var(--shadow-elevation);
-    }
-    .agent-mode-menu.effort-only {
-      width: 300px;
-      padding: 6px 8px;
-    }
-    .agent-mode-menu.agent-model-menu { width: 340px; max-height: min(360px, 55vh); overflow: auto; }
-    .agent-mode-menu-head {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 2px;
-      padding: 4px 8px 8px;
-      color: var(--muted);
-      font-size: calc(12px * var(--ui-scale));
-    }
-    .agent-mode-menu-head > span:first-child {
-      color: var(--fg);
-      font-weight: 600;
-    }
-    .agent-mode-menu-head > span + span {
-      font-size: calc(11.5px * var(--ui-scale));
-      line-height: 1.35;
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .agent-mode-opt {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      width: 100%;
-      padding: 8px;
-      border: 0;
-      border-radius: 8px;
-      background: transparent;
-      text-align: left;
-      cursor: pointer;
-      color: var(--fg);
-    }
-    .agent-mode-opt:hover { background: var(--hover); }
-    .agent-mode-opt.active {
-      background: color-mix(in srgb, var(--accent) 12%, var(--card));
-      box-shadow: inset 2px 0 0 var(--accent);
-    }
-    .agent-mode-opt-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; color: var(--muted); }
-    .agent-mode-opt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-    .agent-mode-opt-title { font-size: calc(13px * var(--ui-scale)); font-weight: 500; }
-    .agent-mode-opt-desc { font-size: calc(11.5px * var(--ui-scale)); line-height: 1.4; color: var(--muted); }
-    .agent-mode-opt-check { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; color: var(--accent); }
-    .agent-model-notice { padding: 6px 0 0; color: var(--muted); font-size: calc(11.5px * var(--ui-scale)); line-height: 1.35; }
-
-    /* Effort footer — icon + label on the left and explicit, touch-friendly
-     * choices on the right. Do not make valid effort choices tiny dots. */
-    .agent-effort {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 4px;
-      padding: 8px;
-      border-top: 1px solid var(--border);
-      border-radius: 8px;
-      background: color-mix(in srgb, var(--accent) 4%, var(--card));
-    }
-    .agent-effort-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
-    .agent-effort-label { flex: 1; font-size: calc(12.5px * var(--ui-scale)); color: var(--fg); }
-    .agent-effort-level { color: var(--muted); }
-    .agent-effort-track { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; padding: 2px 0; }
-    .agent-effort-choice {
-      min-height: 30px;
-      padding: 4px 8px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: transparent;
-      color: var(--muted);
-      font: inherit;
-      font-size: calc(11px * var(--ui-scale));
-      cursor: pointer;
-      flex-shrink: 0;
-      transition: background .12s, border-color .12s, color .12s;
-    }
-    .agent-effort-choice:hover { border-color: var(--stroke-strong); background: var(--hover); color: var(--fg); }
-    .agent-effort-choice.cur {
-      border-color: var(--accent);
-      background: color-mix(in srgb, var(--accent) 16%, var(--card));
-      color: var(--fg);
-      font-weight: 600;
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
-    }
-    .agent-mode-menu.effort-only .agent-effort {
-      margin-top: 0;
-      padding: 8px;
-      border-top: 0;
-    }
-    /* Neutral send button — subtle surface + border, not a filled accent
-     * (matches the VSCode composer). Goes accent only on hover-when-ready. */
-    .agent-send {
-      flex-shrink: 0;
-      width: 28px;
-      height: 28px;
-      border: 1px solid var(--border);
-      padding: 0; /* see .agent-bar-btn — kill UA button padding so the arrow centres */
-      border-radius: 8px;
-      background: var(--active);
-      color: var(--fg);
-      font-size: calc(15px * var(--ui-scale));
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-    }
-    .agent-send svg { width: 18px; height: 18px; }
-    .agent-send:not(:disabled):hover { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .agent-send:disabled { opacity: 0.4; cursor: default; }
-    .agent-send.stop { background: #e45649; border-color: #e45649; color: #fff; }
-
-    /* @-mention popup */
+    /* @-mention popup. `.agent-mention-item.active` doubles as the
+     * keyboard-navigation querySelector hook in AgentComposer. */
     .agent-mention {
       position: absolute;
       left: 8px;
@@ -1381,8 +494,10 @@
       box-sizing: border-box;
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      /* 10px matches the composer/session-history popovers — one radius
+       * for every floating menu surface. */
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(var(--shadow-color), 0.12);
       padding: 4px;
       z-index: 30;
     }
@@ -1393,24 +508,35 @@
     .agent-mention-list { max-height: 182px; overflow-y: auto; scroll-padding-block: 4px; }
     .agent-mention-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
     .agent-mention-retry { border: 0; border-radius: 4px; background: var(--active); color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
-    .agent-mention-retry:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-    .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10.5px * var(--ui-scale)); }
+    .agent-mention-retry:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10px * var(--ui-scale)); }
     .agent-mention-head > span:first-child { color: var(--fg); font-weight: 600; }
     .agent-mention-item {
       display: flex;
       align-items: flex-start;
-      gap: 7px;
+      gap: 6px;
       width: 100%;
       border: 0;
       background: transparent;
       text-align: left;
       padding: 5px 8px;
-      border-radius: 5px;
+      /* Selectable list rows share --radius-ui with tree rows and menu
+       * items. */
+      border-radius: var(--radius-ui);
       cursor: pointer;
     }
     .agent-mention-item:hover,
     .agent-mention-item.active { background: var(--hover); }
     .agent-mention-icon { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--muted); }
     .agent-mention-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
-    .agent-mention-name { font-size: calc(12.5px * var(--ui-scale)); color: var(--fg); }
+    .agent-mention-name { font-size: calc(12px * var(--ui-scale)); color: var(--fg); }
     .agent-mention-path { font-size: calc(11px * var(--ui-scale)); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Empty-chat rotating hint: the incoming line rises from below while the
+     * outgoing one drifts upward as it fades (AgentEmptyState remounts the
+     * span per hint and sets durations inline from HINT_FADE_MS). The global
+     * reduced-motion rule zeroes this keyframe and excludes `translate` from
+     * transition-property, so the swap degrades to a plain crossfade. */
+    @keyframes chat-hint-rise {
+      from { opacity: 0; translate: 0 8px; }
+    }

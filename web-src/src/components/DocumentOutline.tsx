@@ -34,22 +34,25 @@ export function DocumentOutline({
     () => new Map(headings.map((heading, index) => [heading.id, index])),
     [headings],
   );
-  return <nav id="document-outline" className="document-outline" aria-label="Document outline">
-    <div ref={listRef} className="document-outline-list">
-      {headings.length === 0 ? <p className="document-outline-empty">No headings</p> : visibleHeadings.map((heading) => {
+  /* Rows reuse the exempted `.tree-row` family (`chev`, `label`, `active`,
+   * `collapsed`) so the outline stays visually locked to the file tree;
+   * only the outline-specific layout is expressed as utilities here. */
+  return <nav id="document-outline" className="flex min-h-0 flex-1 overflow-hidden" aria-label="Document outline">
+    <div ref={listRef} className="scrollbar-quiet flex-1 overflow-auto px-1.5 pb-2">
+      {headings.length === 0 ? <p className="mx-3 my-2 text-sm text-muted-foreground">No headings</p> : visibleHeadings.map((heading) => {
         const label = heading.text || `Untitled section ${++emptyCount}`;
         const index = headingIndexes.get(heading.id) ?? 0;
         const depth = depths[index] ?? 0;
         const hasChildren = outlineHasChildren(headings, index);
         const isCollapsed = collapsed.has(heading.id);
-        return <div key={heading.id} className={'tree-row outline-tree-row' + (activeId === heading.id ? ' active' : '') + (isCollapsed ? ' collapsed' : '')} style={{ paddingLeft: Math.min(depth, 4) * 14 + 4 } as React.CSSProperties}>
-          {hasChildren ? <button type="button" className="chev document-outline-disclosure" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${label}`} aria-expanded={!isCollapsed} onClick={() => setCollapsed((previous) => {
+        return <div key={heading.id} className={'tree-row' + (activeId === heading.id ? ' active' : '') + (isCollapsed ? ' collapsed' : '')} style={{ paddingLeft: Math.min(depth, 4) * 14 + 4 } as React.CSSProperties}>
+          {hasChildren ? <button type="button" className="chev cursor-pointer border-0 bg-transparent p-0" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${label}`} aria-expanded={!isCollapsed} onClick={() => setCollapsed((previous) => {
             const next = new Set(previous);
             if (isCollapsed) next.delete(heading.id);
             else next.add(heading.id);
             return next;
-          })}><ChevronDownIcon /></button> : <span className="document-outline-disclosure-spacer" aria-hidden="true" />}
-          <button type="button" className="outline-tree-entry" title={label} aria-label={`Heading level ${heading.level}: ${label}`} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading)}><span className="label">{label}</span></button>
+          })}><ChevronDownIcon /></button> : <span className="size-4 flex-none" aria-hidden="true" />}
+          <button type="button" className="flex min-w-0 flex-1 cursor-pointer items-center border-0 bg-transparent p-0 text-left [font:inherit] text-inherit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" title={label} aria-label={`Heading level ${heading.level}: ${label}`} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading)}><span className="label">{label}</span></button>
         </div>;
       })}
     </div>

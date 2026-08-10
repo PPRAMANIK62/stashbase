@@ -22,9 +22,19 @@
   --color-background: var(--bg);
   --color-foreground: var(--fg);
   --color-pane: var(--pane);
+  /* Chat workbench canvas — between base (paper) and pane (chrome). */
+  --color-canvas: var(--canvas);
   --color-card: var(--card);
-  --color-muted: var(--muted);
+  /* shadcn semantics: `muted` is a subtle SURFACE, `muted-foreground` is
+   * subdued text. The app's legacy `--muted` variable is the text role. */
+  --color-muted: var(--hover);
+  --color-muted-foreground: var(--muted);
+  /* Selection surface — the accent-tinted "this row is active/chosen"
+   * role (tree selection, open-menu anchor rows). Distinct from `muted`,
+   * which is transient hover. */
+  --color-active: var(--active);
   --color-border: var(--border);
+  --color-input: var(--border);
   --color-accent: var(--accent);
   --color-primary: var(--accent);
   --color-primary-foreground: var(--text-on-accent);
@@ -40,14 +50,69 @@
   --color-status-success: var(--status-success);
   --color-status-warning: var(--status-warning);
   --color-status-danger: var(--status-danger);
+  --color-accent-amber: var(--accent-amber);
   --spacing-density: var(--density-gap);
   --spacing-control: var(--density-control);
   --radius-ui: var(--radius-ui);
   --radius-control: var(--radius-control);
+  /* Corner scale — the ONLY radii the renderer uses. Overrides Tailwind's
+   * rem-based defaults so `rounded-sm/md/lg/xl` land on the app scale:
+   * 4 (controls) / 6 (buttons, inputs) / 8 (cards) / 10 (overlay panels). */
+  --radius-xs: 2px;
+  --radius-sm: var(--radius-control);
+  --radius-md: var(--radius-ui);
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 10px;
   --shadow-elevation: var(--shadow-elevation);
-  --duration-fast: var(--motion-fast);
-  --duration-standard: var(--motion-standard);
+  --shadow-low: 0 1px 2px rgba(var(--shadow-color), 0.05);
+  /* Raised-card presence without overlay drama — the hero composer's one
+   * sanctioned non-overlay shadow (see design-docs/visual-style.md). */
+  --shadow-raised: 0 1px 2px rgba(var(--shadow-color), 0.06), 0 4px 16px rgba(var(--shadow-color), 0.08);
+  /* UI type scale — the ONLY chrome font sizes, overriding Tailwind's
+   * rem-based defaults so every text-* utility scales with the user's
+   * interface-size preference. Desktop-density mapping (smaller than web
+   * conventions on purpose): 2xs=10 xs=11 sm=12 base=13 lg=14 xl=16 2xl=20
+   * 3xl=24 4xl=30 (4xl is display-only — warmth-budget brand moments).
+   * Content typography (Markdown reading view, Crepe editor) is separate
+   * and follows --reading-font-size. */
+  --text-2xs: calc(10px * var(--ui-scale));
+  --text-2xs--line-height: 1.35;
+  --text-xs: calc(11px * var(--ui-scale));
+  --text-xs--line-height: 1.35;
+  --text-sm: calc(12px * var(--ui-scale));
+  --text-sm--line-height: 1.4;
+  --text-base: calc(13px * var(--ui-scale));
+  --text-base--line-height: 1.45;
+  --text-lg: calc(14px * var(--ui-scale));
+  --text-lg--line-height: 1.45;
+  --text-xl: calc(16px * var(--ui-scale));
+  --text-xl--line-height: 1.35;
+  --text-2xl: calc(20px * var(--ui-scale));
+  --text-2xl--line-height: 1.25;
+  --text-3xl: calc(24px * var(--ui-scale));
+  --text-3xl--line-height: 1.15;
+  --text-4xl: calc(30px * var(--ui-scale));
+  --text-4xl--line-height: 1.1;
+  --transition-duration-fast: var(--motion-fast);
+  --transition-duration-standard: var(--motion-standard);
   --ease-ui: var(--motion-ease);
+}
+
+/* The app's theme is driven by `data-theme` on <html> (see globals.css),
+ * with 'system'/absent falling back to the OS preference. Tailwind's
+ * default `dark:` variant only checks the media query, which would fight
+ * a forced light theme — redefine it to mirror the app mechanism. */
+@custom-variant dark {
+  :root[data-theme='dark'] & {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) &,
+    :root[data-theme='system'] & {
+      @slot;
+    }
+  }
 }
 
 @import 'tailwindcss/utilities.css' layer(utilities);

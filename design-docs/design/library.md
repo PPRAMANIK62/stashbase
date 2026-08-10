@@ -7,6 +7,69 @@ to migrate them into a StashBase-specific storage model.
 ## Current
 
 - Users can add, create, open, and remove local folders from the library.
+- The app has no landing page: a window boots straight into the workspace
+  with no folder selected, showing the chat panel on one blank
+  library-scoped chat (the New Chat default). Browsing a folder is always
+  an explicit sidebar click; only an explicit open request (such as Open
+  in New Window) or a same-window reload restores a folder. An empty
+  library shows a small zero-folder block in the sidebar with the app
+  mark, one line of guidance, and an Add Folder action.
+- The sidebar folder list refreshes itself while visible (a lightweight
+  membership poll), so a project created by an agent in another window or
+  by an external MCP client appears without any user action.
+- A full-width New Chat split button sits at the top of the sidebar,
+  above the Library section — the app's one chat-creation entry point.
+  Its main area starts a chat with the last-selected Agent; a subtle
+  chevron at the row's right edge offers New Claude Code Chat / New
+  Codex Chat, and picking one also makes that Agent the new default. The
+  chat is scoped to the window's current folder, or to the whole library
+  when no folder is current, and a completely blank chat is reused
+  (switching its Agent in place when needed) instead of stacking empty
+  tabs. New Chat also reopens a hidden chat panel.
+- The sidebar splits folder navigation into two zones separated by a
+  hairline and a surface shift. When a folder is open, an active zone under
+  the New Chat button shows that folder's header row (explorer toolbar
+  with a chat-history action for that folder's sessions, drop target,
+  ⋯ menu) with its file tree beneath, on the base surface.
+  Below it, the Library section lists every other member folder as a single
+  compact row on the pane surface — favorites (all of them) pinned first,
+  then the rest in recents order. While a folder is active the list caps at
+  a fixed height (about five rows, with a half-row peek hinting at the
+  overflow) and scrolls internally; with no folder open the Library is the
+  panel's main content and fills the available space. Clicking a row
+  switches this window's folder in place: the clicked folder moves up into
+  the active zone and the previous one drops back into the list. Switching
+  resets the folder-scoped document tabs and search state, but keeps the
+  window's chat tabs and their running Agent sessions — each chat is pinned
+  to its own scope (a library folder, or the whole library) — and surfaces
+  a welcome chat for the new folder without disturbing any started chat or
+  unsent draft. Visible library rows show a subtle warning dot when files
+  in that folder could not be prepared for search.
+- A `+` button in the Library header offers Open Folder… (any folder on
+  disk, indexed in place) and New Folder… (created under the default
+  StashBase location) through the native picker; a folder row's actions
+  menu offers favorite toggling, Open in New Window, and Remove from
+  Library. The current folder's header row keeps only its high-frequency
+  actions visible on hover — new note, chat history, and the ⋯ menu; that
+  menu additionally carries the folder's maintenance actions (New
+  Folder…, Sync Folder, Collapse/Expand All) above the shared entries.
+  Users can star folders as Favorites; favorites are library
+  metadata stored with the membership list, and starring never touches
+  the folder on disk. New Folder creates a plain directory with no chat
+  association.
+- Beside that `+`, the Library header carries a chat-history action for
+  library-wide sessions — so past library chats stay reachable even with
+  no folder selected. The active folder's header carries the same action
+  for that folder's sessions; both list each Agent's chats together and
+  reopen a picked session in the chat panel (see
+  [Agent Panel](agent-panel.md)).
+- The built-in Agent can also add a project: `create_project` (an MCP tool)
+  creates a folder — under the default StashBase location unless the user
+  names a valid location inside the folder home or a library folder — and
+  registers it into the library, so it appears in every window's sidebar
+  list immediately. Only the window owning the calling chat switches its
+  browse location to the new project; and only a library-scoped chat moves
+  its own binding there (see [Agent Panel](agent-panel.md)).
 - Each window centres on one current folder, with its own file tree, document
   tabs, search state, and Agent panel.
 - Users can open multiple windows from the application menu or a folder action
@@ -22,6 +85,11 @@ to migrate them into a StashBase-specific storage model.
   the same conversation beside it.
 - The main pane opens the source file the user selected; generated artifacts
   stay hidden.
+- Dot-prefixed directories (`.claude`, `.git`, `.obsidian`, …) are tool
+  internals, not knowledge: the file tree, search, and the index skip them.
+  Agent-contract files (`AGENTS.md`, `CLAUDE.md`) are ordinary visible
+  Markdown, and agents can still read and write dot-directory config
+  directly.
 - PDF tabs retain their active reading position (page number) across tab switches during a session. Reusing a preview tab for a different file resets the stored page position.
 - Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
   strip's `+` button — distinct from Cmd/Ctrl+N, which creates a note file.
@@ -62,7 +130,8 @@ to migrate them into a StashBase-specific storage model.
   StashBase-owned state.
 - Removing a library folder removes derived state, never the user's folder.
 - Removing a folder that is open elsewhere saves those windows and returns
-  them to the library view instead of leaving stale editable state behind.
+  them to the no-folder workspace (the sidebar library list) instead of
+  leaving stale editable state behind.
 - Destructive file operations require clear confirmation.
 - Blocking dialogs and menus keep keyboard focus inside the active surface,
   dismiss only the topmost eligible surface with Escape, and return focus to
@@ -73,11 +142,14 @@ to migrate them into a StashBase-specific storage model.
   Arrow/Home/End keys on macOS, Windows, and Linux; reduced-motion users do
   not receive layout movement animation.
 - Closing the last document lets an open Chat reclaim the main area. Hiding
-  Chat is explicit and leaves a lightweight document/chat launcher instead of
-  immediately reopening it.
+  Chat is explicit and stays hidden; the sidebar's New Chat button is the
+  way back in.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
-  or project-management surface. It groups the file tree and the active
-  Markdown document outline into independently collapsible navigation sections.
+  or project-management surface. It stacks the active folder zone (current
+  folder header and file tree), then the active Markdown document outline,
+  with the Library folder list anchored at the bottom — the outline belongs
+  to the working context above the global list. The Library and outline
+  sections stay independently collapsible.
 - StashBase displays only supported document and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a persistent callout banner in the Files panel.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.

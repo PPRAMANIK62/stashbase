@@ -18,7 +18,7 @@ async function invoke(app: express.Express, path: string, params: Record<string,
       status(code: number) { status = code; return this; },
       json(body: unknown) { resolve({ status, body }); return this; },
     };
-    Promise.resolve(layer.route.stack[0].handle({ params, body: {} }, res, reject)).catch(reject);
+    Promise.resolve(layer.route.stack[0].handle({ params, query: {}, body: {} }, res, reject)).catch(reject);
   });
 }
 
@@ -42,6 +42,7 @@ test('shared replay adds metadata without changing shared or legacy messages res
     },
     attach: (_ws: WebSocket) => {},
     stop: () => {},
+    stopFolder: () => {},
     history,
   });
 
@@ -70,6 +71,7 @@ test('shared replay reports unavailable metadata without weakening messages comp
     },
     attach: (_ws: WebSocket) => {},
     stop: () => {},
+    stopFolder: () => {},
     history: {
       list: async () => [],
       messages: async () => messages,

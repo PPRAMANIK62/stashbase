@@ -34,13 +34,13 @@ export default function ClipboardImportDialog({
     <Dialog open onOpenChange={(open) => {
       if (!open && isTopmost) onCancel();
     }}>
-      <DialogContent className="modal-card !w-[min(420px,90vw)] !max-w-[90vw] !gap-0 !p-[22px_24px_20px]" showCloseButton={false}>
-        <DialogTitle className="modal-title">{title}</DialogTitle>
-        {description && <DialogDescription className="modal-hint">{description}</DialogDescription>}
+      <DialogContent className="!w-[min(420px,90vw)] !max-w-[90vw] !gap-0 border border-border bg-background !p-[22px_24px_20px] shadow-elevation" showCloseButton={false}>
+        <DialogTitle>{title}</DialogTitle>
+        {description && <DialogDescription className="mt-0 mb-3.5 text-base leading-normal">{description}</DialogDescription>}
         {children}
-        <div className="modal-actions">
-          <Button type="button" variant="outline" className="modal-btn" onClick={onCancel}>Dismiss</Button>
-          <Button type="button" className="modal-btn primary" autoFocus onClick={onAdd}>Add</Button>
+        <div className="mt-3.5 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel}>Dismiss</Button>
+          <Button type="button" autoFocus onClick={onAdd}>Add</Button>
         </div>
       </DialogContent>
     </Dialog>

@@ -32,7 +32,7 @@ export {
   type DerivedArtifacts,
 } from './active-file-operations.ts';
 export {
-  HIDDEN_DOT_DIRS,
+  HIDDEN_DOT_FILES,
   listFiles,
   listFilesAndFolders,
   listFolders,

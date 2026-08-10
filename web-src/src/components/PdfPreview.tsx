@@ -31,6 +31,8 @@ import {
 // Polyfill the main-thread scope too — render() calls getOrInsertComputed
 // synchronously before it ever talks to the worker.
 import '../lib/pdfPolyfill';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 
 // One shared worker for the viewer, owned by US (a PDFWorker we construct)
 // rather than handed to pdfjs via `GlobalWorkerOptions.workerPort`. The
@@ -478,9 +480,12 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   }
 
   return (
-    <div className="pdf-preview" ref={containerRef}>
-      {error && <div className="pdf-error">Failed to open PDF: {error}</div>}
-      {!error && !doc && <div className="pdf-loading">Loading PDF…</div>}
+    /* Light surface keeps continuity with the rest of the app — the white
+     * PDF page + shadow gives enough "paper on a desk" contrast without a
+     * heavy dark backdrop. pt-11 clears the breadcrumb / chrome row. */
+    <div className="relative flex h-full w-full flex-col items-center overflow-auto bg-pane pt-11" ref={containerRef}>
+      {error && <div className="p-4 text-base text-status-danger">Failed to open PDF: {error}</div>}
+      {!error && !doc && <div className="p-4 text-base text-muted-foreground">Loading PDF…</div>}
       <PdfChromePortal
         scale={scale}
         currentPage={currentPage}
@@ -503,7 +508,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
         }}
         onJumpToPage={scrollToPage}
       />
-      <div className="pdf-pages">
+      <div className="flex w-full flex-col items-center gap-2.5 pt-3.5 pb-10">
         {doc && Array.from({ length: numPages }, (_, i) => (
           <PdfPage
             key={`p-${i}`}
@@ -577,13 +582,21 @@ function PdfChromePortal({
   }
 
   const chrome = (
-    <div className="pdf-chrome">
-      <div className={'pdf-search-status' + (status ? ` ${status.kind}` : '')} role={status ? 'status' : undefined}>
+    <div className="pointer-events-auto flex w-full items-center justify-between gap-1.5 text-sm text-foreground">
+      {/* Transparent when idle so the slot keeps its layout without
+        * painting anything; the working / error states color it in. */}
+      <div
+        className={
+          'mr-4 min-w-0 flex-1 truncate text-sm leading-tight' +
+          (status ? (status.kind === 'error' ? ' text-status-danger' : ' text-muted-foreground') : ' text-transparent')
+        }
+        role={status ? 'status' : undefined}
+      >
         {status?.text ?? ''}
         {status?.kind === 'error' && onRetry && (
           <button
             type="button"
-            className="pdf-search-retry"
+            className="ml-2.5 cursor-pointer border-0 bg-transparent p-0 [font:inherit] text-inherit underline underline-offset-2 disabled:cursor-progress disabled:opacity-60"
             disabled={retryDisabled}
             onClick={() => { void onRetry(); }}
           >
@@ -591,17 +604,18 @@ function PdfChromePortal({
           </button>
         )}
       </div>
-      <div className="pdf-zoom-controls">
-        <button type="button" className="icon-btn" title="Zoom out" onClick={onZoomOut}>−</button>
-        <span className="pdf-zoom">{Math.round(scale * 100)}%</span>
-        <button type="button" className="icon-btn" title="Zoom in" onClick={onZoomIn}>+</button>
-        <button type="button" className="pdf-fit-btn" title="Fit to width" onClick={onFit}>Fit</button>
+      <div className="flex flex-none items-center gap-1.5">
+        <Button variant="ghost" size="icon-xs" className="text-lg font-normal" title="Zoom out" onClick={onZoomOut}>−</Button>
+        <span className="min-w-9.5 text-center tabular-nums">{Math.round(scale * 100)}%</span>
+        <Button variant="ghost" size="icon-xs" className="text-lg font-normal" title="Zoom in" onClick={onZoomIn}>+</Button>
+        <Button variant="ghost" size="xs" className="px-2 font-normal" title="Fit to width" onClick={onFit}>Fit</Button>
         {numPages > 0 && (
           editingPage ? (
-            <span className="pdf-pagejump">
+            <span className="ml-1.5 inline-flex items-center gap-1 text-muted-foreground tabular-nums">
               <span>Page</span>
-              <input
+              <Input
                 autoFocus
+                className="h-5.5 w-9.5 rounded-sm px-0 text-center"
                 value={pageInput}
                 inputMode="numeric"
                 aria-label="PDF page number"
@@ -618,9 +632,10 @@ function PdfChromePortal({
               <span>/ {numPages}</span>
             </span>
           ) : (
-            <button
-              type="button"
-              className="pdf-pageinfo"
+            <Button
+              variant="ghost"
+              size="xs"
+              className="ml-1.5 px-1.5 font-normal text-muted-foreground tabular-nums hover:text-foreground"
               title="Jump to page"
               onClick={() => {
                 setPageInput(String(currentPage));
@@ -628,7 +643,7 @@ function PdfChromePortal({
               }}
             >
               Page {currentPage} / {numPages}
-            </button>
+            </Button>
           )
         )}
       </div>
@@ -738,21 +753,30 @@ function PdfPage({
   return (
     <div
       ref={rootRef}
-      className="pdf-page-wrap"
+      className="relative bg-white shadow-low"
       data-page={pageIndex + 1}
       style={{
         minHeight: reservedHeight,
         width: reservedWidth ? `${reservedWidth}px` : undefined,
       }}
     >
-      {visible ? <canvas ref={canvasRef} className="pdf-page-canvas" /> : (
-        <div className="pdf-page-placeholder">Page {pageIndex + 1}</div>
+      {visible ? <canvas ref={canvasRef} className="block" /> : (
+        <div className="flex min-h-[800px] w-[600px] items-center justify-center text-sm text-muted-foreground">Page {pageIndex + 1}</div>
       )}
-      <div className={'pdf-page-number' + (isCurrent ? ' current' : '')} aria-hidden="true">
+      {/* Margin page number — pinned just left of the page edge, on the
+        * pane. Painted over neither theme surface exactly, so it keeps
+        * the legacy fixed ink instead of a theme token. */}
+      <div
+        className={
+          'pointer-events-none absolute top-2 -left-11 box-border min-w-8.5 rounded-sm px-1.25 py-0.5 text-right text-xs select-none tabular-nums' +
+          (isCurrent ? ' bg-accent/10 text-accent' : ' text-black/40')
+        }
+        aria-hidden="true"
+      >
         p. {pageIndex + 1}
       </div>
       {visible && renderedSize && highlight && (
-        <div className="pdf-page-highlight-layer" aria-hidden="true">
+        <div className="pointer-events-none absolute inset-0 z-2" aria-hidden="true">
           {highlight.rects.map((rect, i) => (
             <div
               key={i}

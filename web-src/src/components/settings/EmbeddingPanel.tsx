@@ -10,6 +10,8 @@ import { api, errorMessage, type EmbedderProvider, type EmbedderState } from '..
 import { useApp } from '../../store/AppContext';
 import { KeyModal } from '../embedder/KeyModal';
 import { RemoveKeyModal } from '../embedder/RemoveKeyModal';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string; costHint: string }> = {
   openai: {
@@ -121,30 +123,28 @@ export function EmbeddingPanel() {
 
   if (loadError) {
     return (
-      <div className="settings-panel">
-        <div className="settings-section">
-          <div className="settings-error">Couldn’t load embedder settings: {loadError}</div>
-          <div className="settings-actions-row">
-            <button type="button" className="settings-secondary-btn" onClick={retryLoad}>Retry</button>
-          </div>
+      <div>
+        <div className="text-sm text-destructive">Couldn’t load embedder settings: {loadError}</div>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={retryLoad}>Retry</Button>
         </div>
       </div>
     );
   }
-  if (!state) return <div className="settings-panel-loading">Loading…</div>;
+  if (!state) return <div className="py-3 text-base text-muted-foreground">Loading…</div>;
   const selected = PROVIDERS[selectedProvider];
   const activeProviderSelected = state.provider === selectedProvider;
   const hasSelectedProviderKey = state.hasKey && activeProviderSelected;
 
   return (
     <>
-      <div className="settings-panel">
-        <div className="settings-section">
-          <div className="settings-section-title">Embedding</div>
-          <div className="settings-section-hint">
+      <div>
+        <div>
+          <div className="mb-1 text-base font-semibold">Embedding</div>
+          <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
             Used for semantic search. The model stays fixed so the local index remains compatible.
           </div>
-          <div className="embedding-provider-row" role="radiogroup" aria-label="Embedding provider">
+          <div className="mt-0.5 mb-2 inline-flex max-w-full items-center overflow-hidden rounded-md border border-border bg-card" role="radiogroup" aria-label="Embedding provider">
             {PROVIDER_ORDER.map((provider) => {
               const option = PROVIDERS[provider];
               const selectedOption = provider === selectedProvider;
@@ -152,7 +152,12 @@ export function EmbeddingPanel() {
                 <button
                   key={provider}
                   type="button"
-                  className={`embedding-provider-option${selectedOption ? ' selected' : ''}`}
+                  className={
+                    'inline-flex min-h-[30px] cursor-pointer items-center gap-1.5 border-0 border-l border-border '
+                    + 'px-2.5 text-sm whitespace-nowrap text-foreground transition-colors duration-fast first:border-l-0 '
+                    + 'enabled:hover:bg-muted disabled:cursor-default disabled:opacity-60 '
+                    + (selectedOption ? 'bg-accent/8 font-semibold' : 'bg-transparent')
+                  }
                   role="radio"
                   aria-checked={selectedOption}
                   disabled={addBusy}
@@ -162,43 +167,44 @@ export function EmbeddingPanel() {
                     setAddError(null);
                   }}
                 >
-                  <span className="embedding-provider-name">{option.label}</span>
+                  <span className="font-medium">{option.label}</span>
                 </button>
               );
             })}
           </div>
-          <div className="settings-section-hint embedding-provider-meta">
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
             {state.hasKey && <span>Current: {PROVIDERS[state.provider].label}</span>}
             <span>Model: <code>{selected.model}</code></span>
             <span>{selected.costHint}</span>
           </div>
           {hasSelectedProviderKey ? (
-            <div className="embedding-key-row">
-              <div className="embedding-key-status">Key configured</div>
-              <div className="settings-actions-row">
-                <button
-                  type="button"
-                  className="settings-secondary-btn"
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-0 text-sm leading-8 text-muted-foreground">Key configured</div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setKeyEditOpen(true)}
-                >Change key…</button>
-                <button
-                  type="button"
-                  className="settings-secondary-btn danger"
+                >Change key…</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-destructive/30 text-destructive hover:border-destructive/45 hover:bg-destructive/5 hover:text-destructive dark:border-destructive/40 dark:bg-transparent dark:hover:bg-destructive/15"
                   onClick={() => setKeyRemoveOpen(true)}
-                >Remove key…</button>
+                >Remove key…</Button>
               </div>
             </div>
           ) : (
             <>
               {state.hasKey && !activeProviderSelected && (
-                <div className="settings-section-hint">
+                <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
                   Save a {selected.label} key to switch from {PROVIDERS[state.provider].label}.
                 </div>
               )}
-              <div className="settings-field-row">
-                <input
+              <div className="flex min-w-0 items-center gap-2">
+                <Input
                   type="password"
-                  className="settings-text-input"
+                  className="flex-1 font-mono text-sm"
                   placeholder={selected.placeholder}
                   autoComplete="off"
                   spellCheck={false}
@@ -207,17 +213,16 @@ export function EmbeddingPanel() {
                   onChange={(e) => { setAddKey(e.target.value); setAddError(null); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addKeySubmit(); } }}
                 />
-                <button
-                  type="button"
-                  className="settings-primary-btn"
+                <Button
+                  size="sm"
                   onClick={() => { void addKeySubmit(); }}
                   disabled={addBusy || !addKey.trim()}
-                >{addBusy ? 'Validating…' : 'Add key'}</button>
+                >{addBusy ? 'Validating…' : 'Add key'}</Button>
               </div>
-              {addError && <div className="settings-error">{addError}</div>}
+              {addError && <div className="mt-1.5 text-sm text-destructive">{addError}</div>}
             </>
           )}
-          <div className="settings-section-hint settings-hint-foot">
+          <div className="mt-3.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
             Stored locally in <code>~/.stashbase/config.json</code>. Used only for embeddings, never chat.
           </div>
         </div>

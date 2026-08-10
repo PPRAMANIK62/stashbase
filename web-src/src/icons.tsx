@@ -2,6 +2,11 @@
  * All SVG icons used in the UI. Sized via parent CSS so each component
  * stays a pure shape — no width/height props. Stroke colour follows
  * `currentColor` so the parent's `color` rule wins.
+ *
+ * One stroke weight: every 24-viewBox line icon uses strokeWidth 2 — no
+ * per-icon optical tuning, so mixed weights never sit in one cluster.
+ * Brand/logo marks (Claude, Codex, CubeLogo) are filled or token-drawn
+ * and exempt.
  */
 
 import * as React from 'react';
@@ -48,9 +53,21 @@ export function HistoryIcon({ className }: IconProps) {
  *  so grid centring lands it dead-centre. */
 export function ArrowUpIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.8} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <line x1="12" y1="20" x2="12" y2="4.5" />
       <polyline points="7 9.5 12 4.5 17 9.5" />
+    </svg>
+  );
+}
+
+/** ↖ insert — a suggestion fills the composer above (the Google search
+ *  -suggestion idiom: "put this in the input"). Deliberately distinct
+ *  from ArrowUpIcon, which means send. */
+export function ArrowInsertIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <polyline points="7 17 7 7 17 7" />
+      <line x1="7" y1="7" x2="17" y2="17" />
     </svg>
   );
 }
@@ -70,18 +87,6 @@ export function PlusIcon({ className }: IconProps) {
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
-
-/** Chat bubble with a plus — "new chat" (Lucide `message-square-plus`),
- *  matching the VSCode chat panel's new-conversation glyph. */
-export function NewChatIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <line x1="9" y1="10" x2="15" y2="10" />
-      <line x1="12" y1="7" x2="12" y2="13" />
     </svg>
   );
 }
@@ -146,7 +151,7 @@ export function BoltIcon({ className }: IconProps) {
 
 export function NewFileIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
       <line x1="12" y1="11" x2="12" y2="17" />
@@ -157,7 +162,7 @@ export function NewFileIcon({ className }: IconProps) {
 
 export function NewFolderIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
       <line x1="12" y1="11" x2="12" y2="17" />
       <line x1="9" y1="14" x2="15" y2="14" />
@@ -165,9 +170,21 @@ export function NewFolderIcon({ className }: IconProps) {
   );
 }
 
+/** Leaning book spines (Lucide `library`) — the Library section glyph. */
+export function LibraryIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="m16 6 4 14" />
+      <path d="M12 6v14" />
+      <path d="M8 8v12" />
+      <path d="M4 4v16" />
+    </svg>
+  );
+}
+
 export function FolderIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
   );
@@ -175,7 +192,7 @@ export function FolderIcon({ className }: IconProps) {
 
 export function SyncIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
       <polyline points="21 3 21 8 16 8" />
     </svg>
@@ -187,7 +204,7 @@ export function SyncIcon({ className }: IconProps) {
  *  when some folders are still open; clicking collapses them. */
 export function CollapseAllIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <polyline points="8 4 12 9 16 4" />
       <polyline points="8 20 12 15 16 20" />
     </svg>
@@ -199,7 +216,7 @@ export function CollapseAllIcon({ className }: IconProps) {
  *  everything is already folded; clicking expands all. */
 export function ExpandAllIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <polyline points="8 9 12 4 16 9" />
       <polyline points="8 15 12 20 16 15" />
     </svg>
@@ -208,7 +225,7 @@ export function ExpandAllIcon({ className }: IconProps) {
 
 export function FileGenericIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.5} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
     </svg>
@@ -224,7 +241,7 @@ export function FilesViewIcon({ className }: IconProps) {
   // Lucide `file-text` — same document frame as `NewFileIcon` so the
   // two read as a family; three text rows say "file listing".
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
       <line x1="8" y1="13" x2="16" y2="13" />
@@ -236,7 +253,7 @@ export function FilesViewIcon({ className }: IconProps) {
 
 export function EditIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.8} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
@@ -246,22 +263,11 @@ export function EditIcon({ className }: IconProps) {
 /** Trash can (Lucide `trash-2`) — delete a session in the History dropdown. */
 export function TrashIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.8} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       <line x1="10" y1="11" x2="10" y2="17" />
       <line x1="14" y1="11" x2="14" y2="17" />
-    </svg>
-  );
-}
-
-/** Library collection — Lucide `archive`. */
-export function LibraryIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <rect width="20" height="5" x="2" y="3" rx="1" />
-      <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
-      <path d="M10 12h4" />
     </svg>
   );
 }
@@ -294,7 +300,7 @@ export function PreviewIcon({ className }: IconProps) {
   // was drawn with two geometric half-pages that read as "two
   // trapezoids", not a book; this shape is unambiguous.
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.7} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <path d="M3 5 C7 4 9 4 12 6 C15 4 17 4 21 5 V19 C17 18 15 18 12 20 C9 18 7 18 3 19 Z" />
       <path d="M12 6 V20" />
     </svg>
@@ -303,8 +309,26 @@ export function PreviewIcon({ className }: IconProps) {
 
 export function CheckIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2.2} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+export function ExternalLinkIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </svg>
+  );
+}
+
+export function StarIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="m12 2.6 2.94 5.95 6.57.96-4.76 4.63 1.13 6.55L12 17.6l-5.88 3.09 1.13-6.55-4.76-4.63 6.57-.96L12 2.6z" />
     </svg>
   );
 }
@@ -327,34 +351,6 @@ export function BotIcon({ className }: IconProps) {
 
 /* Agent rules-books are tagged with the logo of the agent contract they
  * represent: AGENTS.md → neutral bot, Claude.md / CLAUDE.md → Claude. */
-
-/** StashBase mark — the app's own cube logo (`build/icon.svg`, minus
- *  the rounded background plate that would render as a white square at
- *  16px). Kept available for compact branded UI marks. */
-export function StashBaseIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="31 25 450 450" fill="none">
-      <g stroke="#6b7280" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M92 158 L92 342" />
-        <path d="M92 342 L256 436" />
-      </g>
-      <g stroke="#6b7280" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M338 111 L256 64 L92 158" />
-        <path d="M92 158 L256 252 L420 158" />
-        <path d="M420 158 L420 342" />
-        <path d="M420 342 L256 436" />
-        <path d="M256 436 L256 342" />
-      </g>
-      <g className="s-cyan" stroke="#0891b2" strokeWidth={32} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M338 111 L256 64 L92 158" />
-        <path d="M92 158 L256 252 L420 158" />
-        <path d="M420 158 L420 342" />
-        <path d="M420 342 L256 436" />
-        <path d="M256 436 L256 342" />
-      </g>
-    </svg>
-  );
-}
 
 /** Claude mark (Simple Icons, CC0) in the Claude brand coral. File
  *  glyph for Claude.md / CLAUDE.md, the Claude Code rules file. */
@@ -392,7 +388,7 @@ export function CopyIcon({ className }: IconProps) {
 
 export function SettingsIcon({ className }: IconProps) {
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.6} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z" />
     </svg>
@@ -401,13 +397,15 @@ export function SettingsIcon({ className }: IconProps) {
 
 
 export function CubeLogoIcon({ className }: IconProps) {
+  // Token-driven so the mark keeps its weight and hue in both themes;
+  // hidden back edges stay a step lighter than the lit front edges.
   return (
     <svg className={className} viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <g stroke="#6b7280" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round">
+      <g stroke="var(--stroke-strong)" strokeWidth={18} strokeLinecap="round" strokeLinejoin="round">
         <path d="M92 158 L92 342" />
         <path d="M92 342 L256 436" />
       </g>
-      <g stroke="#0891b2" strokeWidth={20} strokeLinecap="round" strokeLinejoin="round">
+      <g stroke="var(--accent)" strokeWidth={23} strokeLinecap="round" strokeLinejoin="round">
         <path d="M92 158 L256 64 L338 111" />
         <path d="M92 158 L256 252 L420 158" />
         <path d="M420 158 L420 342" />
@@ -418,14 +416,3 @@ export function CubeLogoIcon({ className }: IconProps) {
   );
 }
 
-/** House — chrome-strip button that returns to the Welcome screen
- *  (`actions.goHome()`). The clean way to switch folders without
- *  losing tab/nav state to a full page reload. */
-export function HomeIcon({ className }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
-      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <path d="M9 22V12h6v10" />
-    </svg>
-  );
-}

@@ -142,7 +142,7 @@ test('Codex publishes its native model catalog before ready and forwards a selec
   t.after(() => { runWithWindowId('model-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess();
-  const session = new CodexSession(ws as unknown as WebSocket, 'model-window', undefined, undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'model-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -172,7 +172,7 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
 
   const staleWs = new FakeWebSocket();
   const staleNative = catalogProcess();
-  const stale = new CodexSession(staleWs as unknown as WebSocket, 'stale-window', undefined, undefined, undefined, 'withdrawn-model', undefined, () => staleNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const stale = new CodexSession(staleWs as unknown as WebSocket, 'stale-window', undefined, undefined, undefined, 'withdrawn-model', undefined, undefined, undefined, () => staleNative.proc as unknown as ChildProcessWithoutNullStreams);
   stale.begin();
   await settle();
   const staleModels = staleWs.sent.map((item) => JSON.parse(item) as { t: string; fallback?: string }).find((event) => event.t === 'models');
@@ -184,7 +184,7 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
 
   const resumeWs = new FakeWebSocket();
   const resumeNative = catalogProcess();
-  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', undefined, 'thread-old', undefined, 'native-model', undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', undefined, 'thread-old', undefined, 'native-model', undefined, undefined, undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
   resumed.begin();
   await settle();
   const resumedModels = resumeWs.sent.map((item) => JSON.parse(item) as { t: string; activeModel?: string }).filter((event) => event.t === 'models').at(-1);
@@ -202,7 +202,7 @@ test('Codex reports the native Default model after starting a new thread', async
   t.after(() => { runWithWindowId('default-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { threadModel: 'runtime-default' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'default-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'default-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -224,7 +224,7 @@ test('Codex invokes an enabled selected skill and never publishes disabled skill
       { name: 'disabled-skill', path: '/skills/disabled-skill/SKILL.md', enabled: false },
     ],
   });
-  const session = new CodexSession(ws as unknown as WebSocket, 'skills-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -249,7 +249,7 @@ test('Codex reports an empty or failed skill catalog without blocking the sessio
   t.after(() => { runWithWindowId('empty-skills-window', () => clearCurrentFolder()); runWithWindowId('failed-skills-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
 
   const emptyWs = new FakeWebSocket();
-  const empty = new CodexSession(emptyWs as unknown as WebSocket, 'empty-skills-window', undefined, undefined, undefined, undefined, undefined, () => catalogProcess().proc as unknown as ChildProcessWithoutNullStreams);
+  const empty = new CodexSession(emptyWs as unknown as WebSocket, 'empty-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => catalogProcess().proc as unknown as ChildProcessWithoutNullStreams);
   empty.begin();
   await settle();
   assert.equal(emptyWs.sent.map((item) => JSON.parse(item) as { t: string; state?: string }).find((event) => event.t === 'skills')?.state, 'empty');
@@ -258,7 +258,7 @@ test('Codex reports an empty or failed skill catalog without blocking the sessio
 
   const failedWs = new FakeWebSocket();
   const failedNative = catalogProcess(undefined, { skillsListError: 'skills unavailable' });
-  const failed = new CodexSession(failedWs as unknown as WebSocket, 'failed-skills-window', undefined, undefined, undefined, undefined, undefined, () => failedNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const failed = new CodexSession(failedWs as unknown as WebSocket, 'failed-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => failedNative.proc as unknown as ChildProcessWithoutNullStreams);
   failed.begin();
   await settle();
   assert.equal(failedWs.sent.map((item) => JSON.parse(item) as { t: string; state?: string }).find((event) => event.t === 'skills')?.state, 'failed');
@@ -272,7 +272,7 @@ test('Codex forwards a runtime-native effort identifier without remapping it', a
   t.after(() => { runWithWindowId('native-effort-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess([{ id: 'native-model', displayName: 'Native model', supportedReasoningEfforts: [{ reasoningEffort: 'ultra' }] }]);
-  const session = new CodexSession(ws as unknown as WebSocket, 'native-effort-window', 'ultra', undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'native-effort-window', 'ultra', undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -288,7 +288,7 @@ test('Codex retries a rejected selected model with Default and publishes recover
   t.after(() => { runWithWindowId('reject-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { selectedTurnError: 'model unavailable' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -311,7 +311,7 @@ test('Codex does not misclassify an unrelated turn failure as a model fallback',
   t.after(() => { runWithWindowId('turn-error-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { selectedTurnError: 'sandbox service unavailable' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'turn-error-window', undefined, undefined, undefined, 'native-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'turn-error-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -333,7 +333,7 @@ test('Codex combines every catalog page and preserves advertised effort options'
     [{ id: 'early-model', displayName: 'Early' }],
     [{ id: 'late-model', displayName: 'Late', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'xhigh' }] }],
   ] });
-  const session = new CodexSession(ws as unknown as WebSocket, 'pages-window', undefined, undefined, undefined, 'late-model', undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'pages-window', undefined, undefined, undefined, 'late-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   const modelsEvent = ws.sent.map((item) => JSON.parse(item) as { t: string; models?: Array<{ id: string; supportedEfforts?: string[] }>; activeModel?: string }).find((event) => event.t === 'models');
@@ -384,6 +384,8 @@ test('stale Codex process events and stdout cannot affect a replacement generati
     undefined,
     undefined,
     undefined,
+    undefined,
+    undefined,
     () => processes.shift() as unknown as ChildProcessWithoutNullStreams,
   );
   const runtime = session as unknown as {
@@ -427,7 +429,7 @@ test('Codex app-server exit after ready fatally ends an idle session once', asyn
   });
   const ws = new FakeWebSocket();
   const native = catalogProcess();
-  const session = new CodexSession(ws as unknown as WebSocket, 'idle-exit-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'idle-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -451,7 +453,7 @@ test('Codex app-server exit during startup retains its fatal cause on exit', asy
   const ws = new FakeWebSocket();
   const native = new FakeCodexProcess();
   native.stdin.once('data', () => native.emit('close', 23, null));
-  const session = new CodexSession(ws as unknown as WebSocket, 'startup-exit-window', undefined, undefined, undefined, undefined, undefined, () => native as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'startup-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -473,7 +475,7 @@ test('Codex app-server exit while working emits no duplicate failed turn', async
   });
   const ws = new FakeWebSocket();
   const native = catalogProcess();
-  const session = new CodexSession(ws as unknown as WebSocket, 'busy-exit-window', undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'busy-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -636,7 +638,7 @@ test('Codex Session handles startup timeout by reaching fatal error path', async
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'startup-timeout-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => proc as unknown as ChildProcessWithoutNullStreams,
     30,
   );
@@ -674,7 +676,7 @@ test('Codex Session handles turn/start timeout by sending error and clearing bus
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'turn-timeout-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => proc as unknown as ChildProcessWithoutNullStreams,
     30,
   );
@@ -736,7 +738,7 @@ test('Codex Session fences a timed-out turn/start generation before accepting an
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'turn-timeout-fence-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => processes.shift() as unknown as ChildProcessWithoutNullStreams,
     30,
   );
@@ -791,7 +793,7 @@ test('Codex Session handles steer timeout without ending an active turn', async 
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'steer-timeout-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => proc as unknown as ChildProcessWithoutNullStreams,
     30,
   );
@@ -833,7 +835,7 @@ test('Codex Session failed turn completed with message preserves it', async (t) 
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'err-preserve-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -869,7 +871,7 @@ test('Codex Session failed turn completed without message uses fallback', async 
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'err-fallback-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -905,7 +907,7 @@ test('Codex Session failed turn completed with a blank message uses fallback', a
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'err-blank-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -941,7 +943,7 @@ test('Codex Session error with willRetry: true stays active through successful c
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'willretry-true-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -985,7 +987,7 @@ test('Codex Session terminal errors settle only their matching active turn once'
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'willretry-false-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1055,7 +1057,7 @@ test('Codex Session user interruption stays non-error across terminal notificati
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'cancel-window',
-    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();

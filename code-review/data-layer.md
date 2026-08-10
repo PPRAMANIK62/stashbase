@@ -14,9 +14,9 @@ This is not a second architecture document. `architecture.md` explains where mod
 |-|-|-|
 | Open a folder | A previous run was interrupted; derived state may be missing, stale, or partial. Recursive listing or status calls may also be slow for large folders. | Reconcile must rediscover missing or incomplete work, but navigation must not wait for recursive listing or status snapshots before entering the folder view. |
 | Open a folder with no `AGENTS.md` | The folder becomes an Agent workspace without a stable local instruction entry. | Create a short root-level `AGENTS.md` if missing. Use create-only writes; never overwrite an existing file. The file is user-owned source content, not app-owned state. |
-| Land on Welcome | The user may not open any specific folder, but previous library work may still be incomplete. | Welcome triggers folder-explicit reconcile in the background with a cooldown when idle; status polling alone is not recovery. |
-| Go Home / close the active folder | Conversion may still be running, while the UI leaves the folder view. | In-flight work is process-owned. The renderer returns to Welcome immediately; server-side folder close runs in the background and must not block navigation. Welcome may keep a display snapshot, but it is not data truth. |
-| Open a library folder from Welcome | Folder opening can fail or hang at the transport/action boundary before the folder view appears. | The Welcome opening overlay is only a UI guard: it does not block library clicks, follows the latest click, clears when the latest open action settles, and has a 20s watchdog so it cannot permanently cover the app. |
+| Boot or browse with other library folders idle | The user may not open a specific folder, but previous library work may still be incomplete. | The sidebar library list triggers folder-explicit reconcile for non-current folders in the background with a cooldown while visible and idle; status polling alone is not recovery. |
+| Lose the active folder (removal, another window closing it) | Conversion may still be running, while the UI leaves the folder view. | In-flight work is process-owned. The renderer returns to the no-folder workspace immediately; server-side folder close runs in the background and must not block navigation. The library list may keep a display snapshot, but it is not data truth. |
+| Switch to a folder from the sidebar library list | Folder opening can fail or hang at the transport/action boundary before the folder view appears. | The opening row state is only a UI guard: it follows the latest click, clears when the latest open action settles, and has a 20s watchdog so a hung open cannot leave the row stuck; the failure surfaces as a toast. |
 | Reopen a folder | Old derived text may exist from a partial or legacy conversion. | Completion must be verified, not inferred from file existence alone. |
 | Change a convertible source while its lane is busy | A stale final derived artifact can remain readable during the queue wait. | A newly queued task invalidates final output synchronously; PDF resume batches remain scratch, never completion truth. |
 | Import or copy in a large PDF | Some PDF batches may finish before the app exits or the extractor is killed. | Batch scratch can be reused, but the final PDF note is complete only with the completion marker. |
@@ -176,7 +176,8 @@ Reconcile is the operation that catches the system up with disk reality.
 It runs on:
 
 - server boot, after all member folders are bound into the daemon
-- Welcome loading the library list, with a per-folder cooldown
+- the sidebar library list, for non-current folders while visible, with a
+  per-folder cooldown
 - opening or switching a folder
 - manual Sync
 - MCP `reindex`
@@ -228,6 +229,9 @@ User files belong to the user. Library removal removes only app-owned state.
 Removing a folder from the library:
 
 - removes it from `~/.stashbase/config.json` `recentFolders`
+- ends every built-in Agent session bound to that folder, in every window —
+  folder-bound sessions survive window folder switches, so removal cannot
+  rely on window teardown alone
 - cancels queued/running conversions under that folder path
 - clears semantic index rows under that folder path
 - deletes AppData-derived text/assets for sources under that folder
@@ -236,7 +240,7 @@ Removing a folder from the library:
 - unbinds the folder from the daemon
 - never deletes the folder on disk
 
-Library removal returns after membership and UI-visible app state are cleared. Conversion cancellation, derived cleanup, index-row deletion, daemon unbind, and runtime-state cleanup continue as background app-owned cleanup so the Welcome screen does not wait on long-running PDF work.
+Library removal returns after membership and UI-visible app state are cleared. Conversion cancellation, derived cleanup, index-row deletion, daemon unbind, and runtime-state cleanup continue as background app-owned cleanup so the library UI does not wait on long-running PDF work.
 
 Deleting a folder from inside an opened folder is a separate filesystem operation. It deletes the user folder on disk after confirmation, then removes derived artifacts, preparation rows, file-order state, and index rows for that subtree.
 
@@ -264,6 +268,8 @@ Renames and moves retain absolute source spelling and use comparison identity fo
 | Agent rules files | User filesystem (`AGENTS.md`, `CLAUDE.md`) | Yes | Are they created only when missing, never overwritten, and treated as ordinary visible Markdown source files? |
 | Library membership | `~/.stashbase/config.json` `recentFolders` | Yes | Does this represent searchable membership, not just MRU? |
 | Folder descriptions | `~/.stashbase/config.json` | Yes | Are they treated as orientation metadata, not indexed source content? |
+| Folder favorites | `~/.stashbase/config.json` (flag on membership records) | Yes | Is starring pure library metadata — never touching the folder on disk, its index, or membership itself? |
+| Agent session→folder overrides | AppData `agent-session-folders.json` | Yes | Does an overridden library session list only under its project folder (never both), and is the mapping cleared when that session is deleted? Losing the file must lose only the mapping — native stores remain transcript truth. |
 | Transcription model/language preferences | `~/.stashbase/config.json` | Yes | Do preference changes leave complete transcripts intact and avoid treating a missing model as a failure? |
 | Downloaded speech models | AppData `models/whisper` | Rebuildable | Are downloads explicit, atomic, size/checksum verified, and managed only through Settings? |
 | Derived text/assets | AppData | Rebuildable | Can stale or partial artifacts be mistaken for completion? |
@@ -430,8 +436,9 @@ When reviewing code that touches conversion, indexing, sync, search, folder memb
 - Removing a folder from the library deletes app-owned state but never deletes user files.
 - Deleting a folder in the active file tree is a real filesystem delete and must clean app-owned state for the deleted subtree.
 - `AGENTS.md` and `CLAUDE.md` are not hidden config or derived state. They are ordinary root-level Markdown files and create-only writes must not overwrite user edits.
+- Dot-prefixed directories are excluded from listing, keyword search, and the index by `isHiddenDirName` — directory segments only, so dot-FILE semantics (derived notes) are untouched. Keep it separate from `isIndexExcludedDirName`: that predicate also gates writable paths, and writes into `.claude` (agent config) must stay allowed.
 - UI status snapshots do not become data truth.
-- Background preparation is quiet by default. Welcome library rows and affected file rows show failure markers only; in-folder headers do not show preparation badges. The Search view is where pending/failed preparation is summarized because that is where incomplete readiness affects the user.
+- Background preparation is quiet by default. Collapsed library rows and affected file rows show failure markers only; in-folder headers do not show preparation badges. The Search view is where pending/failed preparation is summarized because that is where incomplete readiness affects the user.
 
 ---
 
@@ -441,31 +448,31 @@ These are not historical release notes. They are recurring classes of bugs that 
 
 ## 9.1 Navigation Blocked By Preparation
 
-Opening a folder, going Home, or clicking another library folder must feel like navigation, not like indexing.
+Opening a folder or clicking another library folder in the sidebar must feel like navigation, not like indexing.
 
 Representative failure:
 
 - A large PDF or scanned PDF is being prepared.
-- A user clicks Home or another library folder.
-- The UI waits for a folder-close request, recursive file listing, index status, or Welcome reconcile before visually moving.
+- A user clicks another library folder.
+- The UI waits for a folder-close request, recursive file listing, index status, or library reconcile before visually moving.
 - The app appears frozen even though the background work is merely slow.
 
 Current contract:
 
-- Opening a folder establishes renderer folder identity and hides Welcome before `/api/files`, file order, or `/api/index-status` finish.
+- Opening a folder establishes renderer folder identity and expands the new root before `/api/files`, file order, or `/api/index-status` finish.
 - Every index-status response is bound to the folder-open generation that
-  started it. A response from before a newer Open, New, Home, removal, or
+  started it. A response from before a newer Open, New, removal, or
   window-context transition cannot advance that generation or reset the newer
   renderer state.
 - Active-folder polling issues no request while the renderer has no active
-  folder or another folder transition is in progress. Welcome owns explicit
-  per-library-folder status polling, including while the user remains on the
-  library screen.
-- Folder-switch side effects such as index sync and Agent-session cleanup are scheduled after the open-folder response, so they cannot turn navigation into a failed request.
+  folder or another folder transition is in progress. The sidebar library
+  list owns explicit status polling for the non-current library folders
+  while it is visible.
+- Folder-switch side effects such as index sync are scheduled after the open-folder response, so they cannot turn navigation into a failed request. A folder switch does not tear down Agent sessions — they are folder-bound and end only on window close, library folder removal, or app quit (see [agent-panel.md](agent-panel.md)).
 - Folder-sync queue cleanup consumes rejected promises; an indexer or daemon startup failure records an index warning but must not exit the Node server.
-- Going Home resets renderer folder state and shows Welcome before the server-side close request returns.
-- Welcome status polling and reconcile are deferred while a folder open is in progress.
-- The Welcome opening overlay is visual only: it must not intercept clicks, follows the latest folder click, and has a watchdog fallback.
+- Losing the active folder (removal, or another window closing it) resets renderer folder state to the no-folder workspace without waiting on server-side cleanup.
+- Library status polling and reconcile are deferred while a folder open is in progress.
+- The library row opening state is visual only: it follows the latest folder click and has a watchdog fallback so a hung open cannot leave the row stuck.
 
 ## 9.2 Search Readiness Leaking Into Browsing
 
@@ -482,7 +489,7 @@ Current contract:
 - Browsing surfaces stay quiet while preparation is pending.
 - The in-folder header shows no preparation or failure badge.
 - A durable failure is marked on the affected file row, where the user can locate it.
-- Welcome can show a lightweight folder-level failure marker because it does not expose file rows.
+- A collapsed library root can show a lightweight folder-level failure marker because it does not expose file rows; the expanded (current) root leaves readiness to the in-folder surfaces.
 - Search is the place that explains how many files are ready and how many are still being prepared.
 
 ## 9.3 Background Conversion Starving Interactive Work
@@ -491,7 +498,7 @@ Conversion order is a liveness concern, not a correctness source of truth.
 
 Representative failure:
 
-- Welcome or startup queues conversions from several library folders.
+- Startup or the sidebar library reconcile queues conversions from several library folders.
 - A user opens a DOCX while scanned-PDF OCR or a long audio transcription is running, or opens a folder whose searchable text is behind unopened-folder work.
 - One global FIFO/slot makes DOCX search/Agent preparation wait on OCR or lets old background work occupy every next slot.
 
@@ -513,7 +520,7 @@ Status exists to explain the system, not to define data correctness.
 
 Representative failure:
 
-- Welcome or the sidebar shows an old readiness snapshot.
+- The sidebar library list shows an old readiness snapshot.
 - A retry, reprocess, file delete, or folder switch changes the real state.
 - The UI treats the old snapshot as authoritative and keeps showing stale readiness.
 

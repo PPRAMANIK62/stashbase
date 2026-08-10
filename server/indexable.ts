@@ -41,6 +41,16 @@ export function isIndexExcludedDirName(name: string): boolean {
   return INDEX_EXCLUDED_DIRS.has(name);
 }
 
+/** Dot-prefixed DIRECTORIES are tool/config internals (.claude, .git,
+ *  .obsidian), never knowledge: the sidebar listing and the index skip
+ *  them wholesale. Directory segments only — dot FILES keep their own
+ *  semantics (derived notes are dot-files). Deliberately separate from
+ *  isIndexExcludedDirName: that predicate also gates writable paths,
+ *  and writes into .claude (agent config) must stay allowed. */
+export function isHiddenDirName(name: string): boolean {
+  return name.startsWith('.');
+}
+
 export function isCloudPlaceholderName(name: string): boolean {
   return name.toLowerCase().endsWith('.icloud');
 }
@@ -53,10 +63,13 @@ export function pathHasCloudPlaceholder(relPath: string): boolean {
 }
 
 function dipsIntoIndexExcludedDir(relPath: string): boolean {
-  return relPath
-    .replace(/\\/g, '/')
-    .split('/')
-    .some((seg) => INDEX_EXCLUDED_DIRS.has(seg) || isGeneratedPdfBatchCacheDir(seg));
+  const segments = relPath.replace(/\\/g, '/').split('/');
+  return segments.some((seg, i) =>
+    INDEX_EXCLUDED_DIRS.has(seg)
+    || isGeneratedPdfBatchCacheDir(seg)
+    // Hidden-dir rule applies to directory segments only — the basename
+    // may be a dot-file (derived note) with its own handling.
+    || (i < segments.length - 1 && isHiddenDirName(seg)));
 }
 
 function isGeneratedPdfBatchCacheDir(seg: string): boolean {

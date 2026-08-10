@@ -4,7 +4,7 @@ import { LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION } from '../shared/file-form
 import { decodeEntities } from './html.ts';
 import { onSwitch } from './folder.ts';
 import { detectFormat, detectViewerFormat, isDerivedNoteName, type FileFormat, type ViewerFormat } from './format.ts';
-import { isCloudPlaceholderName, isIndexExcludedDirName, shouldIndexFilePath } from './indexable.ts';
+import { isCloudPlaceholderName, isHiddenDirName, isIndexExcludedDirName, shouldIndexFilePath } from './indexable.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { folderRoot, resolveSafe } from './file-paths.ts';
 
@@ -135,7 +135,7 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
   const acceptedEntries: fs.Dirent[] = [];
   for (const e of entries) {
     if (isCloudPlaceholderName(e.name)) continue;
-    if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
+    if (e.isDirectory() && isHiddenDirName(e.name)) continue;
     if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
     if (e.isFile() && e.name.startsWith('.')) {
       if (isDerivedScratchName(e.name)) continue;
@@ -297,16 +297,10 @@ export function listIndexableTextFilesUnder(relPrefix: string): Array<{ name: st
   return out;
 }
 
-/** Dot-prefixed dir / file names we always hide from the sidebar. */
-export const HIDDEN_DOT_DIRS = new Set<string>([
-  '.stashbase',
-  '.git',
+/** Junk dot-FILES hidden from the sidebar. Dot DIRECTORIES (.claude,
+ *  .git, .stashbase, …) are hidden wholesale by `isHiddenDirName`. */
+export const HIDDEN_DOT_FILES = new Set<string>([
   '.DS_Store',
-  '.Trashes',
-  '.Spotlight-V100',
-  '.fseventsd',
-  '.AppleDouble',
-  '.TemporaryItems',
 ]);
 
 function walk(
@@ -329,7 +323,8 @@ function walk(
   }
   for (const e of entries) {
     if (isCloudPlaceholderName(e.name)) continue;
-    if (e.name.startsWith('.') && HIDDEN_DOT_DIRS.has(e.name)) continue;
+    if (e.isDirectory() && isHiddenDirName(e.name)) continue;
+    if (e.isFile() && HIDDEN_DOT_FILES.has(e.name)) continue;
     if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
     if (e.isFile() && e.name.startsWith('.')) {
       if (isDerivedScratchName(e.name)) continue;

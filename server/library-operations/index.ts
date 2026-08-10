@@ -20,6 +20,7 @@ import {
   writeLibraryFile,
 } from '../library-file-mutations.ts';
 import { getLibraryInfo, type LibraryInfo } from '../library-info.ts';
+import { createProjectFolder } from '../agent-projects.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer, syncFolderNow } from '../state.ts';
 import { createRetrieval, semanticHitsFromEvidence, type Retrieval } from '../retrieval/index.ts';
@@ -42,6 +43,11 @@ export interface LibraryOperations {
     types?: readonly SearchTypeCategory[];
   }): Promise<{ hits: SearchHit[] }>;
   reindex(input?: { folder?: string }): Promise<unknown>;
+  /** Create a new project folder and register it into the library.
+   * `agentSessionId` is request attribution (header-derived, never a tool
+   * argument): a live library-scoped calling session is rebound to the new
+   * project; folder-bound and unattributed callers only create + register. */
+  createProject(input: { name: unknown; location?: unknown; agentSessionId?: string; windowId?: string }): Promise<unknown>;
   listDirectory(path?: unknown): Promise<unknown>;
   read(path: unknown): Promise<unknown>;
   write(input: { path: unknown; content: unknown; baseVersion?: string }): Promise<unknown>;
@@ -56,6 +62,7 @@ export interface LibraryOperationsDependencies {
   reindexFolder: (folder: string) => Promise<SyncResult>;
   indexStatus: (folderRoot?: string) => Promise<IndexStatus>;
   memberFolderRoots: () => string[];
+  createProject: typeof createProjectFolder;
   listDirectory: typeof listLibraryDirectory;
   read: typeof readLibraryFile;
   write: typeof writeLibraryFile;
@@ -70,6 +77,7 @@ const productionDependencies: LibraryOperationsDependencies = {
   reindexFolder: (folder) => syncFolderNow(folder, { reason: 'mcp reindex' }),
   indexStatus: (folderRoot) => indexer.status(folderRoot),
   memberFolderRoots,
+  createProject: createProjectFolder,
   listDirectory: listLibraryDirectory,
   read: readLibraryFile,
   write: writeLibraryFile,
@@ -126,6 +134,8 @@ export function createLibraryOperations(
       }
       return { folders, ...status };
     },
+
+    createProject: (input) => asLibraryOperation(() => deps.createProject(input)),
 
     listDirectory: (path) => asLibraryOperation(() => deps.listDirectory(path)),
     read: (path) => asLibraryOperation(() => deps.read(path)),

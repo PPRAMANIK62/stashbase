@@ -14,6 +14,8 @@ import { openSettings } from './SettingsModal';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '../../../shared/transcription.ts';
 import { useAudioFallbackController } from './audio/useAudioFallbackController.ts';
 import { useAudioTranscriptController } from './audio/useAudioTranscriptController.ts';
+import { Button } from './ui/button';
+import { StatusMessage } from './ui/status';
 
 export function AudioPreview({ name }: { name: string }) {
   const { state, activeTab, actions } = useApp();
@@ -72,12 +74,13 @@ export function AudioPreview({ name }: { name: string }) {
   const transcript = transcription.state?.status === 'ready' ? transcription.state.transcript : null;
 
   return (
-    <div className="audio-preview">
-      <div className="audio-player-card">
-        <div className="audio-player-title">{name.split('/').pop()}</div>
+    <div className="grid h-full w-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-pane">
+      <div className="border-b border-border bg-card px-6 pt-5 pb-4">
+        <div className="mb-2.5 truncate font-semibold">{name.split('/').pop()}</div>
         <audio
           key={`${state.folderPath}:${fallback.playbackSrc}`}
           ref={audioRef}
+          className="block w-[min(760px,100%)]"
           controls
           preload="metadata"
           src={fallback.playbackSrc}
@@ -90,85 +93,98 @@ export function AudioPreview({ name }: { name: string }) {
           onError={fallback.markUnplayable}
         />
         {fallback.preparing && (
-          <div className="audio-player-hint">
+          <div className={HINT_CLASS}>
             <span>{fallbackProgressCopy}</span>
             {fallback.progress?.status === 'converting' && fallback.progress.totalMs > 0 && (
               <progress
-                className="audio-preview-progress"
+                className="h-1.5 w-[min(180px,28vw)] accent-accent"
                 max={100}
                 value={fallback.progress.percent}
                 aria-label="Compatible audio preview progress"
               />
             )}
-            <button type="button" onClick={fallback.cancel}>Cancel</button>
+            <Button variant="outline" size="xs" onClick={fallback.cancel}>Cancel</Button>
           </div>
         )}
         {fallback.usingFallback && !fallback.preparing && !fallback.error && (
-          <div className="audio-player-hint">Using a browser-compatible local preview.</div>
+          <div className={HINT_CLASS}>Using a browser-compatible local preview.</div>
         )}
         {fallback.error && (
-          <div className="audio-player-hint error">
+          <div className={`${HINT_CLASS} text-destructive`}>
             <span>{fallback.error}</span>
-            <button type="button" onClick={() => { void fallback.prepare(); }}>Retry</button>
+            <Button variant="outline" size="xs" onClick={() => { void fallback.prepare(); }}>Retry</Button>
           </div>
         )}
       </div>
 
-      <div className="audio-transcript-pane">
-        <div className="audio-transcript-header">
+      <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden px-6 pt-4.5 pb-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <strong>Transcript</strong>
             {transcript && (
-              <span className="audio-transcript-meta">
+              <span className="ml-2.5 text-xs text-muted-foreground">
                 {transcript.language} · {transcript.provider.model} · {formatTimestamp(transcript.source.durationMs)}
               </span>
             )}
           </div>
           {(transcription.state?.status === 'ready' || transcription.state?.status === 'failed' || transcription.state?.status === 'cancelled') && (
-            <div className="audio-retry-controls">
-              <select value={transcription.retryLanguage} onChange={(event) => transcription.setRetryLanguage(event.target.value)} disabled={transcription.retryBusy}>
+            <div className="flex items-center gap-1.5">
+              <select
+                className="h-7 rounded-md border border-input bg-card px-2 text-base text-foreground"
+                value={transcription.retryLanguage}
+                onChange={(event) => transcription.setRetryLanguage(event.target.value)}
+                disabled={transcription.retryBusy}
+              >
                 <option value="">Use Settings default</option>
                 {TRANSCRIPTION_LANGUAGE_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
               </select>
-              <button type="button" disabled={transcription.retryBusy} onClick={() => { void transcription.reprocess(); }}>
+              <Button variant="outline" size="sm" disabled={transcription.retryBusy} onClick={() => { void transcription.reprocess(); }}>
                 {transcription.retryBusy ? 'Starting…' : 'Reprocess'}
-              </button>
+              </Button>
             </div>
           )}
           {transcription.state?.status === 'pending' && (
-            <button type="button" disabled={transcription.cancelBusy} onClick={() => { void transcription.cancel(); }}>
+            <Button variant="outline" size="sm" disabled={transcription.cancelBusy} onClick={() => { void transcription.cancel(); }}>
               {transcription.cancelBusy ? 'Cancelling…' : 'Cancel'}
-            </button>
+            </Button>
           )}
         </div>
 
-        {transcription.error && <div className="audio-transcript-state error">{transcription.error}</div>}
+        {transcription.error && (
+          <StatusMessage tone="error" className={TRANSCRIPT_STATE_CLASS}>{transcription.error}</StatusMessage>
+        )}
         {!transcription.error && statusCopy && (
-          <div
-            className={'audio-transcript-state' + (transcription.state?.status === 'failed' ? ' error' : '')}
+          <StatusMessage
+            tone={transcription.state?.status === 'failed' ? 'error' : 'info'}
             role="status"
             aria-live="polite"
+            className={TRANSCRIPT_STATE_CLASS}
           >
             <span>{statusCopy}</span>
             {transcription.state?.status === 'blocked' && (
-              <button type="button" onClick={() => openSettings('transcription')}>Open Settings</button>
+              <Button variant="outline" size="sm" onClick={() => openSettings('transcription')}>Open Settings</Button>
             )}
-          </div>
+          </StatusMessage>
         )}
         {transcript && transcript.segments.length === 0 && (
-          <div className="audio-transcript-empty">No speech was detected.</div>
+          <div className="row-start-3 p-6 text-muted-foreground">No speech was detected.</div>
         )}
         {transcript && transcript.segments.length > 0 && (
-          <div className="audio-segments">
+          <div className="row-start-3 grid min-h-0 content-start gap-0.5 overflow-auto">
             {transcript.segments.map((segment) => (
               <button
                 key={segment.id}
                 type="button"
-                className={'audio-segment' + (positionMs >= segment.startMs && positionMs < segment.endMs ? ' current' : '')}
+                className={
+                  'grid w-full cursor-pointer grid-cols-[68px_minmax(0,1fr)] gap-3 rounded-md border-0 px-2.5 py-2 text-left [font:inherit] text-foreground' +
+                  (positionMs >= segment.startMs && positionMs < segment.endMs
+                    ? ' bg-accent/10'
+                    : ' bg-transparent hover:bg-muted')
+                }
                 onClick={() => seek(segment.startMs)}
               >
-                <span className="audio-segment-time">{formatTimestamp(segment.startMs)}</span>
-                <span className="audio-segment-text">{segment.text}</span>
+                <span className="text-sm text-accent tabular-nums">{formatTimestamp(segment.startMs)}</span>
+                <span className="leading-[1.55]">{segment.text}</span>
               </button>
             ))}
           </div>
@@ -177,6 +193,9 @@ export function AudioPreview({ name }: { name: string }) {
     </div>
   );
 }
+
+const HINT_CLASS = 'mt-1.5 flex items-center gap-2 text-xs text-muted-foreground';
+const TRANSCRIPT_STATE_CLASS = 'flex items-center justify-between gap-3 px-3 py-2.5';
 
 function formatTimestamp(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));

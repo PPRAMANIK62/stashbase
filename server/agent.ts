@@ -3,8 +3,11 @@
  * xterm, this bridges the **Claude Agent SDK** to a WebSocket as a
  * stream of structured panel events (text / thinking / tool calls /
  * permission prompts), so the renderer can paint a VSCode-style chat
- * panel instead of a terminal. One session per chat tab; switching
- * folders tears every session down (the SDK's cwd is then stale).
+ * panel instead of a terminal. One session per chat tab. Every session
+ * is pinned to an explicit scope at connect time — a member folder (its
+ * cwd) or the whole library (cwd = the folder home) — so a window-folder
+ * switch leaves it running; teardown happens on window close, library
+ * folder removal (folder-bound sessions only), and app quit.
  *
  * Auth: the SDK reads the same credential store the user's `claude`
  * login populated (Keychain / `~/.claude`), so a Pro/Max subscription
@@ -49,13 +52,19 @@ import {
   type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk';
 import { logger, errorMessage } from './log.ts';
-import { getCurrentFolder, memberRootForAbs, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, getFolderHome, memberRootForAbs, runWithWindowId } from './folder.ts';
 import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
-import { ensureClaudeBridgeFile } from './agent-rules.ts';
+import { ensureClaudeBridgeFile, ensureClaudeFolderTrust } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
-import { isAgentAccessMode, reportAgentRuntimeFailure, type AgentAccessMode } from './agent-contract.ts';
+import { disposeSessionsBoundToFolder, isAgentAccessMode, reportAgentRuntimeFailure, resolveSessionBinding, type AgentAccessMode } from './agent-contract.ts';
 import type { AgentClientEvent, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
+import {
+  registerAttributedAgentSession,
+  unregisterAttributedAgentSession,
+  type AttributedAgentSession,
+} from './agent-session-registry.ts';
+import { agentSessionFolderOverride } from './agent-session-folders.ts';
 import { detectViewerFormat } from './format.ts';
 import { isAgentReadableDerivedTextReady } from './library-file-reader.ts';
 
@@ -247,7 +256,7 @@ interface Pending {
 }
 
 /** One live Agent-SDK session bridged to one WebSocket. */
-export class AgentSession {
+export class AgentSession implements AttributedAgentSession {
   private input = new Pushable<SDKUserMessage>();
   private q: Query | null = null;
   private pending = new Map<string, Pending>();
@@ -260,6 +269,16 @@ export class AgentSession {
   /** The SDK session_id, captured from the init message. Sent to the
    *  client so the history dropdown can mark this session active. */
   private sessionId: string | null = null;
+  /** The folder this session is bound to, captured at start. */
+  private cwd: string | null = null;
+  /** True for a library-wide session: cwd is the folder home and the
+   *  session is NOT bound to any member folder — member-folder removal
+   *  never tears it down (window close / app quit still do). */
+  private libraryScoped = false;
+  /** Member folder this LIBRARY session was migrated to by `create_project`.
+   *  The native cwd stays the folder home (the SDK session keeps running);
+   *  the binding, teardown scope, and history override follow this. */
+  private rebound: string | null = null;
   private models: AgentModel[] = [];
   private skills = new Set<string>();
   private pumpTask: Promise<void> | null = null;
@@ -276,14 +295,62 @@ export class AgentSession {
     private queryFactory: typeof query = query,
     private resolveBinary: () => string | null = resolveClaudeBinary,
     private resumeBelongsToFolder: typeof resumeMatchesCwd = resumeMatchesCwd,
+    /** Explicit, membership-validated session folder. Undefined with no
+     *  library scope follows the window's current folder at connect time
+     *  (legacy clients), else the library. */
+    private folder?: string,
+    /** Explicit library-wide scope (`scope=library` on the connect URL). */
+    private scope?: 'library',
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
+    registerAttributedAgentSession(this.attributionId, this);
     ws.on('message', (raw) => this.onMessage(String(raw)));
     ws.on('close', () => this.dispose());
     ws.on('error', () => this.dispose());
   }
 
   readonly windowId: string;
+  readonly agentId = 'claude' as const;
+  /** Private per-session attribution id. Rides the session env
+   *  (`STASHBASE_AGENT_SESSION_ID`) → stdio MCP host → request header, so
+   *  host-side MCP tools can find the live calling session. */
+  readonly attributionId = randomUUID();
+
+  /** The member folder this session is (or will be) bound to. `cwd` is the
+   *  authoritative binding once the session started; before that, the
+   *  explicit connect-time folder is the best answer. A library-scoped
+   *  session is bound to no member folder and reports null — unless
+   *  `create_project` rebound it to the new project. */
+  boundFolder(): string | null {
+    if (this.rebound) return this.rebound;
+    if (this.libraryScoped || this.scope === 'library') return null;
+    return this.cwd ?? this.folder ?? null;
+  }
+
+  turnInFlight(): boolean {
+    return this.turnActive;
+  }
+
+  isLibraryScoped(): boolean {
+    return !this.rebound && (this.libraryScoped || this.scope === 'library');
+  }
+
+  nativeSessionId(): string | null {
+    return this.sessionId;
+  }
+
+  /** Migrate this LIBRARY-scoped session's binding to a member folder
+   *  (create_project). The native SDK session keeps running with its
+   *  original cwd; only the StashBase-side binding moves, and the renderer
+   *  is told so the pill and the owning window's sidebar can follow. A
+   *  folder-bound chat is never rebound. */
+  rebindToFolder(folderAbs: string): boolean {
+    if (this.closed || !this.isLibraryScoped()) return false;
+    this.rebound = folderAbs;
+    this.send({ t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
+    return true;
+  }
+
   get isClosed(): boolean { return this.closed; }
   retirement(): Promise<void> {
     return this.retirementTask ?? Promise.resolve();
@@ -295,11 +362,18 @@ export class AgentSession {
 
   private async start(beforeNativeStart?: () => Promise<boolean>): Promise<void> {
     if (this.closed) return;
-    const cwd = getCurrentFolder();
-    if (!cwd) {
-      this.finish('No folder open.');
-      return;
-    }
+    // An explicit folder pins the session; an explicit library scope (or
+    // no folder anywhere) binds the folder home as the reserved library
+    // cwd — either way the binding never changes later.
+    const binding = resolveSessionBinding({
+      scope: this.scope,
+      folder: this.folder,
+      currentFolder: getCurrentFolder(),
+      folderHome: getFolderHome(),
+    });
+    const cwd = binding.cwd;
+    this.libraryScoped = binding.libraryScoped;
+    this.cwd = cwd;
     if (this.closed) return;
     if (this.resume && !(await this.resumeBelongsToFolder(this.resume, cwd))) {
       if (this.closed) return;
@@ -315,10 +389,16 @@ export class AgentSession {
         return;
       }
       if (!mayStart || this.closed) return;
-      const activeFolder = getCurrentFolder();
-      if (!activeFolder || !filesystemPath.equal(activeFolder, cwd)) {
-        this.finish('The folder changed before the session started.');
-        return;
+      // Legacy clients inherit the window folder at connect time, so a
+      // folder switch during ownership handoff invalidates that start.
+      // Explicit folder/library scopes are pinned independently of later
+      // window navigation and must survive it.
+      if (!this.folder && this.scope !== 'library') {
+        const activeFolder = getCurrentFolder();
+        if (!activeFolder || !filesystemPath.equal(activeFolder, cwd)) {
+          this.finish('The folder changed before the session started.');
+          return;
+        }
       }
     }
     const claudeCodeExecutable = this.resolveBinary();
@@ -326,7 +406,13 @@ export class AgentSession {
       this.finish(missingClaudeMessage());
       return;
     }
-    if (ensureClaudeBridgeFile(cwd)) noteTreeChanged();
+    // Instruction bridge files belong to member folders; a library-wide
+    // session must not write them into the folder home container.
+    if (!this.libraryScoped && ensureClaudeBridgeFile(cwd)) noteTreeChanged();
+    // Pre-accept Claude's folder-trust gate for the session cwd (library
+    // sessions run in the folder home — same gate). Without this a NEW
+    // folder's headless session hangs at "working" with no visible prompt.
+    ensureClaudeFolderTrust(cwd);
     try {
       this.q = this.queryFactory({
         prompt: this.input,
@@ -343,7 +429,7 @@ export class AgentSession {
           // `instructions` field + an optional library_info call). Inject that
           // deterministically as a system-prompt append. See
           // agent-preamble.ts and architecture.md §8.4.
-          systemPrompt: { type: 'preset', preset: 'claude_code', append: buildStashbasePreamble(cwd) },
+          systemPrompt: { type: 'preset', preset: 'claude_code', append: buildStashbasePreamble(cwd, this.libraryScoped ? 'library' : 'folder') },
           // Resuming a past session loads its conversation history so the
           // user can continue it. The transcript itself is rendered from
           // getSessionMessages on the client; `resume` only primes the SDK
@@ -368,6 +454,9 @@ export class AgentSession {
             ...agentCliEnv({}, [commandDir(claudeCodeExecutable)]),
             // Route this session's MCP tools back to this window's host.
             STASHBASE_WINDOW_ID: this.windowId,
+            // Session identity for host-side MCP tools (create_project):
+            // request attribution only, never a path-resolution channel.
+            STASHBASE_AGENT_SESSION_ID: this.attributionId,
           } as NodeJS.ProcessEnv,
           spawnClaudeCodeProcess,
           canUseTool: (name, input, opts) => this.onPermission(name, input, opts),
@@ -577,7 +666,9 @@ export class AgentSession {
     input: Record<string, unknown>,
     opts: { signal: AbortSignal; suggestions?: PermissionUpdate[]; toolUseID: string; title?: string },
   ): Promise<PermissionResult> {
-    const cwd = getCurrentFolder();
+    // Use the session's bound folder, not the window's possibly-different
+    // current folder — the redirect must reflect the cwd the agent runs in.
+    const cwd = this.cwd ?? getCurrentFolder();
     if (cwd) {
       const redirect = nativeDerivedReadRedirect(name, input, cwd, this.nativeDerivedReadRedirected);
       if (redirect) return Promise.resolve(redirect);
@@ -706,6 +797,7 @@ export class AgentSession {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    unregisterAttributedAgentSession(this.attributionId);
     // Closing input prevents another prompt from entering this query. The
     // retirement task then waits beyond interrupt acknowledgement until the
     // SDK iterator/query has actually finished its process cleanup.
@@ -736,6 +828,16 @@ export class AgentSession {
 }
 
 export async function resumeMatchesCwd(sessionId: string, cwd: string): Promise<boolean> {
+  // A library session migrated to a project by create_project keeps its
+  // native cwd (the folder home) while its history lists under the project
+  // (the persisted override). Resuming it from that project's History must
+  // therefore accept the override folder as a match.
+  try {
+    const override = agentSessionFolderOverride('claude', sessionId);
+    if (override && filesystemPath.equal(override, cwd)) return true;
+  } catch {
+    // Fall through to the native cwd check.
+  }
   try {
     const info = await getSessionInfo(sessionId);
     return sessionInfoMatchesCwd(info, cwd);
@@ -767,8 +869,8 @@ function stringifyToolResult(content: unknown): string {
   return content == null ? '' : JSON.stringify(content);
 }
 
-/** Live agent sessions — one per structured chat tab. Folder switch tears
- *  them all down (the SDK cwd is then meaningless). */
+/** Live agent sessions — one per structured chat tab. Each is pinned to a
+ *  member folder; a window-folder switch leaves them running. */
 const sessions = new Set<AgentSession>();
 
 /** Serializes ownership of one persisted Claude transcript. After folder
@@ -839,6 +941,8 @@ export function attachAgentWebSocket(
   resume?: string,
   access?: AgentAccessMode,
   model?: string,
+  folder?: string,
+  scope?: 'library',
 ): void {
   const session = new AgentSession(
     ws,
@@ -851,6 +955,11 @@ export function attachAgentWebSocket(
       sessions.delete(s);
       void retirement.finally(() => nativeOwnership.release(s));
     },
+    undefined,
+    undefined,
+    undefined,
+    folder,
+    scope,
   );
   sessions.add(session);
   if (resume) session.begin(() => nativeOwnership.acquire(resume, session));
@@ -858,7 +967,8 @@ export function attachAgentWebSocket(
 }
 
 /** Kill every live agent session (optionally for one window). Called on
- *  folder switch / close — the session's cwd no longer makes sense. */
+ *  window close / retire and app shutdown — never on a folder switch;
+ *  sessions are folder-bound and survive the window moving elsewhere. */
 export function killActiveAgent(windowId?: string): void {
   for (const session of [...sessions]) {
     if (!windowId || session.windowId === windowId) {
@@ -866,6 +976,13 @@ export function killActiveAgent(windowId?: string): void {
       sessions.delete(session);
     }
   }
+}
+
+/** Kill the live agent sessions bound to one member folder, across all
+ *  windows. Library folder removal calls this so a removed folder cannot
+ *  keep running sessions. */
+export function killAgentSessionsForFolder(folderAbs: string): void {
+  disposeSessionsBoundToFolder(sessions, folderAbs);
 }
 
 function normalizeAgentWindowId(windowId: string | null | undefined): string {

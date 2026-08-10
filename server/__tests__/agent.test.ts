@@ -16,9 +16,21 @@ import {
   claudeSkillPrompt,
   selectClaudeModel,
 } from '../agent.ts';
+import { buildStashbasePreamble } from '../agent-preamble.ts';
 import { clearAgentRuntimeFailure } from '../agent-contract.ts';
 import { clearCurrentFolder, runWithWindowId, setCurrentFolder } from '../folder.ts';
 import { claudeTranscriptEffort } from '../routes/sessions.ts';
+
+test('the preamble orients folder sessions to their folder and library sessions to the whole library', () => {
+  const folder = buildStashbasePreamble('/Users/me/Projects/Research');
+  assert.match(folder, /Current folder: \*\*Research\*\*/);
+
+  const library = buildStashbasePreamble('/Users/me/Documents/StashBase', 'library');
+  assert.match(library, /library-wide/);
+  assert.match(library, /whole library is in scope/);
+  assert.match(library, /search_library/);
+  assert.doesNotMatch(library, /Current folder:/);
+});
 
 class FakeAgentWebSocket extends EventEmitter {
   readyState = 1;
@@ -418,6 +430,40 @@ test('Claude publishes single-slash skill labels and sends the selected native c
   });
   assert.equal(claudeSkillPrompt('prepare the release', 'release-notes'), '/release-notes prepare the release');
   assert.deepEqual(claudeSkillCatalogEvent([]), { t: 'skills', state: 'empty', skills: [] });
+});
+
+test('folder-trust pre-acceptance merges into ~/.claude.json without clobbering', async () => {
+  const { ensureClaudeFolderTrust } = await import('../agent-rules.ts');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-trust-'));
+  const file = path.join(dir, 'claude.json');
+
+  ensureClaudeFolderTrust('/Users/me/Notes', file);
+  let config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(config.projects['/Users/me/Notes'].hasTrustDialogAccepted, true);
+
+  fs.writeFileSync(file, JSON.stringify({
+    numStartups: 7,
+    projects: {
+      '/Users/me/Notes': { history: ['x'], hasTrustDialogAccepted: false },
+      '/elsewhere': { hasTrustDialogAccepted: false },
+    },
+  }));
+  ensureClaudeFolderTrust('/Users/me/Notes', file);
+  config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(config.numStartups, 7);
+  assert.deepEqual(config.projects['/Users/me/Notes'].history, ['x']);
+  assert.equal(config.projects['/Users/me/Notes'].hasTrustDialogAccepted, true);
+  assert.equal(config.projects['/elsewhere'].hasTrustDialogAccepted, false);
+
+  const before = fs.readFileSync(file, 'utf8');
+  ensureClaudeFolderTrust('/Users/me/Notes', file);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+
+  fs.writeFileSync(file, '{not json');
+  ensureClaudeFolderTrust('/Users/me/Notes', file);
+  assert.equal(fs.readFileSync(file, 'utf8'), '{not json');
+
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('Claude unexpected iterator EOF after ready emits one useful fatal exit', async (t) => {

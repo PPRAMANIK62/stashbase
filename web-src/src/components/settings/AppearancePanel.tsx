@@ -7,6 +7,7 @@ import {
   type AppearanceTheme,
 } from '../../api';
 import { applyAppearance, publishAppearance, subscribeToAppearance } from '../../appearance';
+import { SegmentedControl, SegmentedControlItem } from '../ui/segmented-control';
 
 const THEMES: Array<{ value: AppearanceTheme; label: string; hint: string }> = [
   { value: 'system', label: 'System', hint: 'Follow your operating system.' },
@@ -26,31 +27,39 @@ function PresetGroup<T extends string>({
   choices,
   onChange,
   disabled,
+  hint,
 }: {
   label: string;
   value: T;
   choices: Array<{ value: T; label: string; hint?: string }>;
   onChange: (value: T) => void;
   disabled: boolean;
+  hint?: string;
 }) {
   return (
-    <div className="appearance-group">
-      <div className="settings-section-title">{label}</div>
-      <div className="appearance-options" aria-label={label}>
+    <div className="mt-5.5">
+      <div className="mb-1.5 text-base font-semibold">{label}</div>
+      <SegmentedControl
+        aria-label={label}
+        disabled={disabled}
+        value={[value]}
+        onValueChange={(next) => {
+          const choice = next[0] as T | undefined;
+          if (choice && choice !== value) onChange(choice);
+        }}
+      >
         {choices.map((choice) => (
-          <button
+          <SegmentedControlItem
             key={choice.value}
-            type="button"
-            className={`appearance-option${choice.value === value ? ' selected' : ''}`}
-            aria-pressed={choice.value === value}
-            disabled={disabled}
-            onClick={() => onChange(choice.value)}
+            value={choice.value}
+            className="min-w-18"
+            title={choice.hint}
           >
-            <span>{choice.label}</span>
-            {choice.hint && <small>{choice.hint}</small>}
-          </button>
+            {choice.label}
+          </SegmentedControlItem>
         ))}
-      </div>
+      </SegmentedControl>
+      {hint && <div className="mt-1.5 text-sm leading-normal text-muted-foreground">{hint}</div>}
     </div>
   );
 }
@@ -116,23 +125,19 @@ export function AppearancePanel() {
 
   if (!preferences) {
     return error
-      ? <div className="settings-error">Couldn’t load appearance: {error}</div>
-      : <div className="settings-panel-loading">Loading…</div>;
+      ? <div className="text-sm text-destructive">Couldn’t load appearance: {error}</div>
+      : <div className="py-3 text-base text-muted-foreground">Loading…</div>;
   }
   return (
-    <div className="settings-panel appearance-panel">
-      <div className="settings-section">
-        <div className="settings-section-title">Appearance</div>
-        <div className="settings-section-hint">
-          Choose a clear, durable presentation preset. Changes apply immediately and are saved for every window.
-        </div>
-        <PresetGroup label="Theme" value={preferences.theme} choices={THEMES} disabled={saving} onChange={(theme) => { void change({ theme }); }} />
-        <PresetGroup label="Interface size" value={preferences.uiScale} choices={SCALES} disabled={saving} onChange={(uiScale) => { void change({ uiScale }); }} />
-        <div className="settings-section-hint">Scales app controls and chrome without changing document text.</div>
-        <PresetGroup label="Reading text size" value={preferences.readingTextSize} choices={SCALES} disabled={saving} onChange={(readingTextSize) => { void change({ readingTextSize }); }} />
-        <div className="settings-section-hint">Changes Markdown reading and editing text without affecting the interface.</div>
-        {error && <div className="settings-error">Couldn’t save appearance: {error}</div>}
+    <div>
+      <div className="mb-1 text-base font-semibold">Appearance</div>
+      <div className="text-sm leading-normal text-muted-foreground">
+        Choose a clear, durable presentation preset. Changes apply immediately and are saved for every window.
       </div>
+      <PresetGroup label="Theme" value={preferences.theme} choices={THEMES} disabled={saving} onChange={(theme) => { void change({ theme }); }} />
+      <PresetGroup label="Interface size" value={preferences.uiScale} choices={SCALES} disabled={saving} onChange={(uiScale) => { void change({ uiScale }); }} hint="Scales app controls and chrome without changing document text." />
+      <PresetGroup label="Reading text size" value={preferences.readingTextSize} choices={SCALES} disabled={saving} onChange={(readingTextSize) => { void change({ readingTextSize }); }} hint="Changes Markdown reading and editing text without affecting the interface." />
+      {error && <div className="mt-2.5 text-sm text-destructive">Couldn’t save appearance: {error}</div>}
     </div>
   );
 }

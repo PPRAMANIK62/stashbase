@@ -17,7 +17,7 @@ test('outline entries are keyboard buttons with active and full-label accessibil
   assert.match(markup, /<button[^>]*aria-label="Heading level 1: Overview"[^>]*aria-current="location"/);
   assert.match(markup, /<button[^>]*aria-label="Heading level 3: Untitled section 1"/);
   assert.doesNotMatch(markup, />H1</);
-  assert.match(markup, /class="tree-row outline-tree-row active" style="padding-left:4px"/);
+  assert.match(markup, /class="tree-row active" style="padding-left:4px"/);
 });
 
 test('outline has a quiet empty state', () => {

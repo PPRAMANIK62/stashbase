@@ -95,6 +95,8 @@ export function TabStrip() {
   }
 
   return (
+    /* Layout metrics live in .tab-strip / .tab-strip-inner CSS —
+     * electron/tab-strip-layout-smoke.cjs consumes mainpane.css raw. */
     <div className="tab-strip">
       <div
         className="tab-strip-inner"

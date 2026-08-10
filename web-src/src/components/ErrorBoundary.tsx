@@ -80,12 +80,12 @@ export class LazyLoadBoundary extends Component<LazyLoadBoundaryProps, LazyLoadB
     return (
       <StatusMessage
         tone="error"
-        className={`${this.props.className} lazy-load-error`}
+        className={`${this.props.className} flex min-h-18 items-center justify-center gap-2.5`}
       >
         <span>Could not open {this.props.label}.</span>
         <button
           type="button"
-          className="rounded-md border border-border bg-background px-2.5 py-1 text-sm hover:bg-[var(--hover)]"
+          className="rounded-md border border-border bg-background px-2.5 py-1 text-sm hover:bg-muted"
           onClick={() => window.location.reload()}
         >
           Reload
@@ -153,7 +153,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </pre>
           <div className="flex justify-end gap-2">
             <button type="button" className="rounded-md bg-primary px-2.5 py-1.5 text-sm font-medium text-primary-foreground" onClick={this.reset}>Reload</button>
-            <button type="button" className="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-medium hover:bg-[var(--hover)]" onClick={() => void this.copyDetails()}>Copy details</button>
+            <button type="button" className="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-medium hover:bg-muted" onClick={() => void this.copyDetails()}>Copy details</button>
           </div>
         </StatusMessage>
       </div>

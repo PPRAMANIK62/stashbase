@@ -13,6 +13,8 @@ import {
   requireLibraryStatusFolder,
 } from '../library-file-access.ts';
 import { agentContextFile } from '../library-file-reader.ts';
+import { currentWindowId } from '../folder.ts';
+import { AGENT_SESSION_ID_HEADER } from '../agent-session-registry.ts';
 import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
 import {
   parseSearchTypes,
@@ -107,6 +109,27 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
     try {
       const folder = req.body?.folder ?? req.query.folder;
       res.json(await operations.reindex({ folder: typeof folder === 'string' ? folder : undefined }));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Create a new project folder and register it into the library. Powers
+  // MCP's `create_project`. Session attribution rides the request header
+  // (set by the stdio MCP host from its spawn environment) — a live
+  // library-scoped panel session is rebound to the new project; external
+  // callers only create + register.
+  app.post('/api/library/create-project', async (req, res) => {
+    try {
+      const attribution = req.header(AGENT_SESSION_ID_HEADER)?.trim();
+      res.json(await operations.createProject({
+        name: req.body?.name,
+        location: req.body?.location,
+        ...(attribution ? { agentSessionId: attribution } : {}),
+        // Fallback identity for MCP hosts that don't forward the session
+        // header (stale installed binaries): the request's window id.
+        windowId: currentWindowId(),
+      }));
     } catch (err: unknown) {
       sendError(res, err);
     }

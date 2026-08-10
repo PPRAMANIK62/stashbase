@@ -5,12 +5,15 @@
  * lifecycle, JSON-RPC correlation, and renderer event normalization.
  */
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
 import type { WebSocket } from 'ws';
 import { buildStashbasePreamble } from './agent-preamble.ts';
 import {
+  disposeSessionsBoundToFolder,
   isAgentAccessMode,
   reportAgentRuntimeFailure,
+  resolveSessionBinding,
   type AgentAccessMode,
   type AgentModel,
   type AgentSkill,
@@ -42,7 +45,12 @@ import {
   CodexRpcRequestTimeoutError,
   CODEX_RPC_REQUEST_TIMEOUT_MS,
 } from './codex-rpc-transport.ts';
-import { getCurrentFolder, runWithWindowId } from './folder.ts';
+import {
+  registerAttributedAgentSession,
+  unregisterAttributedAgentSession,
+  type AttributedAgentSession,
+} from './agent-session-registry.ts';
+import { getCurrentFolder, getFolderHome, runWithWindowId } from './folder.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
 import { errorMessage, logger } from './log.ts';
 import { noteTreeChanged } from './watcher.ts';
@@ -61,7 +69,7 @@ class CodexTurnCancelledError extends Error {
   }
 }
 
-export class CodexSession {
+export class CodexSession implements AttributedAgentSession {
   private closed = false;
   private ready = false;
   private appServerReady = false;
@@ -85,11 +93,65 @@ export class CodexSession {
    * model the runtime reports for a resumed/default session. */
   private selectedModel: string | undefined;
   private activeModel: string | undefined;
+  /** The catalog's `isDefault` entry — what a NEW thread will run when no
+   * explicit model is selected. Surfaced as the session identity so the
+   * renderer can show a concrete model name instead of "Default". */
+  private catalogDefaultModel: string | undefined;
   private models: AgentModel[] = [];
   private skills = new Map<string, { name: string; path: string }>();
   private skillSequence = 0;
 
   readonly windowId: string;
+  readonly agentId = 'codex' as const;
+  /** Private per-session attribution id. Rides the app-server env
+   * (`STASHBASE_AGENT_SESSION_ID`) → stdio MCP host → request header, so
+   * host-side MCP tools can find the live calling session. */
+  readonly attributionId = randomUUID();
+
+  /** True for a library-wide session: cwd is the folder home and the
+   * session is NOT bound to any member folder — member-folder removal
+   * never tears it down (window close / app quit still do). */
+  private libraryScoped = false;
+
+  /** Member folder this LIBRARY session was migrated to by `create_project`.
+   * The native thread keeps its cwd (the folder home); the binding,
+   * teardown scope, and history override follow this. */
+  private rebound: string | null = null;
+
+  /** The member folder this session is (or will be) bound to. `cwd` is the
+   * authoritative binding once the session started; before that, the explicit
+   * connect-time folder is the best answer. A library-scoped session is
+   * bound to no member folder and reports null — unless `create_project`
+   * rebound it to the new project. */
+  boundFolder(): string | null {
+    if (this.rebound) return this.rebound;
+    if (this.libraryScoped || this.scope === 'library') return null;
+    return this.cwd ?? this.folder ?? null;
+  }
+
+  turnInFlight(): boolean {
+    return this.busy;
+  }
+
+  isLibraryScoped(): boolean {
+    return !this.rebound && (this.libraryScoped || this.scope === 'library');
+  }
+
+  nativeSessionId(): string | null {
+    return this.threadId;
+  }
+
+  /** Migrate this LIBRARY-scoped session's binding to a member folder
+   * (create_project). The native thread keeps running with its original
+   * cwd; only the StashBase-side binding moves, and the renderer is told so
+   * the pill and the owning window's sidebar can follow. A folder-bound
+   * chat is never rebound. */
+  rebindToFolder(folderAbs: string): boolean {
+    if (this.closed || !this.isLibraryScoped()) return false;
+    this.rebound = folderAbs;
+    this.send({ t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
+    return true;
+  }
 
   constructor(
     private ws: WebSocket,
@@ -98,12 +160,19 @@ export class CodexSession {
     resume?: string,
     private accessMode?: AgentAccessMode,
     private model?: string,
+    /** Explicit, membership-validated session folder. Undefined with no
+     *  library scope follows the window's current folder at connect time
+     *  (legacy clients), else the library. */
+    private folder?: string,
+    /** Explicit library-wide scope (`scope=library` on the connect URL). */
+    private scope?: 'library',
     private onDispose?: (session: CodexSession) => void,
     private spawnProcess: typeof spawnCodexAppServerProcess = spawnCodexAppServerProcess,
     private requestTimeoutMs: number = CODEX_RPC_REQUEST_TIMEOUT_MS,
   ) {
     this.windowId = normalizeWindowId(windowId);
     this.resumeThreadId = typeof resume === 'string' && resume.trim() ? resume.trim() : null;
+    registerAttributedAgentSession(this.attributionId, this);
     ws.on('message', (raw) => this.onMessage(String(raw)));
     ws.on('close', () => this.dispose());
     ws.on('error', () => this.dispose());
@@ -115,12 +184,20 @@ export class CodexSession {
 
   private async start(): Promise<void> {
     if (this.closed) return;
-    const cwd = getCurrentFolder();
-    if (!cwd) {
-      this.finish('No folder open.');
-      return;
-    }
-    if (ensureAgentsFile(cwd)) noteTreeChanged();
+    // An explicit folder pins the session; an explicit library scope (or
+    // no folder anywhere) binds the folder home as the reserved library
+    // cwd — either way the binding never changes later.
+    const binding = resolveSessionBinding({
+      scope: this.scope,
+      folder: this.folder,
+      currentFolder: getCurrentFolder(),
+      folderHome: getFolderHome(),
+    });
+    const cwd = binding.cwd;
+    this.libraryScoped = binding.libraryScoped;
+    // Instruction files belong to member folders; a library-wide session
+    // must not write them into the folder home container.
+    if (!this.libraryScoped && ensureAgentsFile(cwd)) noteTreeChanged();
     this.cwd = cwd;
     // Model choice belongs to the first turn, so publish the native catalog
     // before the renderer enables its composer. Otherwise a fresh Codex chat
@@ -160,7 +237,12 @@ export class CodexSession {
   }
 
   private spawnAppServer(cwd: string): void {
-    const proc = this.spawnProcess(cwd, { STASHBASE_WINDOW_ID: this.windowId });
+    const proc = this.spawnProcess(cwd, {
+      STASHBASE_WINDOW_ID: this.windowId,
+      // Session identity for host-side MCP tools (create_project): request
+      // attribution only, never a path-resolution channel.
+      STASHBASE_AGENT_SESSION_ID: this.attributionId,
+    });
     this.proc = proc;
     const rpc = new CodexRpcPeer((line) => {
       if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
@@ -375,7 +457,16 @@ export class CodexSession {
       return undefined;
     }
     const selected = this.model && this.models.some((entry) => entry.id === this.model) ? this.model : undefined;
-    this.send({ t: 'models', models: this.models, ...(this.model && !selected ? { fallback: 'That model is no longer available; using the runtime default.' } : {}) });
+    // With no explicit selection the new thread will run the catalog's
+    // default — report that concrete identity up front; the thread-start
+    // metadata later confirms (or corrects) it.
+    if (!selected && this.catalogDefaultModel) this.activeModel = this.catalogDefaultModel;
+    this.send({
+      t: 'models',
+      models: this.models,
+      ...(this.activeModel ? { activeModel: this.activeModel } : {}),
+      ...(this.model && !selected ? { fallback: 'That model is no longer available; using the runtime default.' } : {}),
+    });
     this.selectedModel = selected;
     this.modelResolved = true;
     return selected;
@@ -397,6 +488,7 @@ export class CodexSession {
         if (model && !seenModels.has(model.id)) {
           seenModels.add(model.id);
           models.push(model);
+          if ((entry as JsonObject).isDefault === true) this.catalogDefaultModel ??= model.id;
         }
       }
       const nextCursor = stringValue(result.nextCursor);
@@ -440,7 +532,7 @@ export class CodexSession {
       approvalPolicy: access.approvalPolicy,
       approvalsReviewer: access.approvalsReviewer,
       sandbox: access.sandbox,
-      developerInstructions: buildStashbasePreamble(this.cwd),
+      developerInstructions: buildStashbasePreamble(this.cwd, this.libraryScoped ? 'library' : 'folder'),
     };
     const result = await this.request(
       this.resumeThreadId ? 'thread/resume' : 'thread/start',
@@ -817,6 +909,7 @@ export class CodexSession {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    unregisterAttributedAgentSession(this.attributionId);
     this.onDispose?.(this);
     for (const [, pending] of this.pendingApprovals) {
       this.respond(pending.requestId, { decision: 'cancel' });
@@ -963,12 +1056,15 @@ function titleFromPrompt(prompt: string): string {
 
 const sessions = new Set<CodexSession>();
 
-export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string): void {
-  const session = new CodexSession(ws, windowId, effort, resume, access, model, (s) => sessions.delete(s));
+export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string, scope?: 'library'): void {
+  const session = new CodexSession(ws, windowId, effort, resume, access, model, folder, scope, (s) => sessions.delete(s));
   sessions.add(session);
   session.begin();
 }
 
+/** Kill live Codex sessions (optionally for one window). Called on window
+ * close / retire and app shutdown — never on a folder switch; sessions are
+ * folder-bound and survive the window moving elsewhere. */
 export function killActiveCodex(windowId?: string): void {
   for (const session of [...sessions]) {
     if (!windowId || session.windowId === windowId) {
@@ -976,6 +1072,13 @@ export function killActiveCodex(windowId?: string): void {
       sessions.delete(session);
     }
   }
+}
+
+/** Kill the live Codex sessions bound to one member folder, across all
+ * windows. Library folder removal calls this so a removed folder cannot keep
+ * running sessions. */
+export function killCodexSessionsForFolder(folderAbs: string): void {
+  disposeSessionsBoundToFolder(sessions, folderAbs);
 }
 
 function normalizeWindowId(windowId: string | null | undefined): string {

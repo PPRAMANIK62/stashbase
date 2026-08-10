@@ -7,6 +7,9 @@ import {
 } from '../../api';
 import { useApp } from '../../store/AppContext';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '../../../../shared/transcription.ts';
+import { Button } from '../ui/button';
+
+const SELECT_CLASS = 'h-7 min-w-45 self-start rounded-md border border-input bg-background px-2 text-base text-foreground';
 
 export function TranscriptionPanel() {
   const { actions } = useApp();
@@ -111,12 +114,12 @@ export function TranscriptionPanel() {
     }
   }
 
-  if (!settings && !error) return <div className="settings-panel-loading">Loading…</div>;
+  if (!settings && !error) return <div className="py-3 text-base text-muted-foreground">Loading…</div>;
   if (!settings) {
     return (
-      <div className="settings-panel">
-        <div className="settings-error">Couldn’t load transcription settings: {error}</div>
-        <button type="button" className="settings-secondary-btn" onClick={() => setNonce((value) => value + 1)}>Retry</button>
+      <div className="flex flex-col items-start gap-2.5">
+        <div className="text-sm text-destructive">Couldn’t load transcription settings: {error}</div>
+        <Button variant="outline" size="sm" onClick={() => setNonce((value) => value + 1)}>Retry</Button>
       </div>
     );
   }
@@ -125,15 +128,15 @@ export function TranscriptionPanel() {
     ?? settings.providers[0];
 
   return (
-    <div className="settings-panel">
-      <div className="settings-section">
-        <div className="settings-section-title">Transcription provider and model</div>
-        <div className="settings-section-hint">
+    <div className="flex flex-col gap-2.5">
+      <div>
+        <div className="mb-1 text-base font-semibold">Transcription provider and model</div>
+        <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
           {selectedProvider?.description ?? 'Choose the provider and model used for audio transcription.'}
         </div>
         {settings.providers.length > 1 && (
           <select
-            className="settings-select"
+            className={SELECT_CLASS}
             value={selectedProvider?.id ?? ''}
             onChange={(event) => {
               const provider = settings.providers.find((candidate) => candidate.id === event.target.value);
@@ -145,7 +148,7 @@ export function TranscriptionPanel() {
           </select>
         )}
         {selectedProvider?.runtimeError && (
-          <div className="settings-error">Transcription runtime unavailable: {selectedProvider.runtimeError}</div>
+          <div className="text-sm text-destructive">Transcription runtime unavailable: {selectedProvider.runtimeError}</div>
         )}
         <div className="transcription-model-list">
           {(selectedProvider?.models ?? []).map((model) => {
@@ -174,55 +177,54 @@ export function TranscriptionPanel() {
                 </label>
                 <div className="transcription-model-action">
                   {model.management === 'provider' ? (
-                    <span className="settings-section-hint">{model.available ? 'Available' : 'Unavailable'}</span>
+                    <span className="text-sm text-muted-foreground">{model.available ? 'Available' : 'Unavailable'}</span>
                   ) : downloading ? (
                     <>
                       <span className="transcription-download-progress" title={`${progress.toFixed(0)}%`}>
                         <span style={{ width: `${progress}%` }} />
                       </span>
-                      <button type="button" className="settings-secondary-btn" disabled={busyModel === model.id} onClick={() => { void remove(model.id as TranscriptionModelId, false); }}>
+                      <Button variant="outline" size="sm" disabled={busyModel === model.id} onClick={() => { void remove(model.id as TranscriptionModelId, false); }}>
                         Cancel
-                      </button>
+                      </Button>
                     </>
                   ) : verifying ? (
-                    <span className="settings-section-hint">Verifying…</span>
+                    <span className="text-sm text-muted-foreground">Verifying…</span>
                   ) : model.available ? (
-                    <button type="button" className="settings-secondary-btn" disabled={busyModel === model.id} onClick={() => { void remove(model.id as TranscriptionModelId); }}>
+                    <Button variant="outline" size="sm" disabled={busyModel === model.id} onClick={() => { void remove(model.id as TranscriptionModelId); }}>
                       Remove
-                    </button>
+                    </Button>
                   ) : (
-                    <button
-                      type="button"
-                      className="settings-primary-btn"
+                    <Button
+                      size="sm"
                       disabled={busyModel === model.id || !!selectedProvider?.runtimeError}
                       title={selectedProvider?.runtimeError ? 'Install or repair the local transcription runtime first.' : undefined}
                       onClick={() => { void download(model.id as TranscriptionModelId); }}
                     >
                       {operation.status === 'failed' ? 'Retry download' : 'Download'}
-                    </button>
+                    </Button>
                   )}
                 </div>
-                {operation.status === 'failed' && <div className="settings-error transcription-model-error">{operation.error}</div>}
+                {operation.status === 'failed' && <div className="transcription-model-error text-sm text-destructive">{operation.error}</div>}
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className="settings-section">
-        <div className="settings-section-title">Preferred language</div>
-        <div className="settings-section-hint">
+      <div className="mt-5.5 border-t border-border pt-4.5">
+        <div className="mb-1 text-base font-semibold">Preferred language</div>
+        <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
           Auto-detect evaluates every long-recording chunk independently. A different language can be chosen for an individual Reprocess attempt.
         </div>
         <select
-          className="settings-select"
+          className={SELECT_CLASS}
           value={settings.language}
           onChange={(event) => { void chooseLanguage(event.target.value); }}
         >
           {TRANSCRIPTION_LANGUAGE_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
         </select>
       </div>
-      {error && <div className="settings-error">{error}</div>}
+      {error && <div className="text-sm text-destructive">{error}</div>}
     </div>
   );
 }
