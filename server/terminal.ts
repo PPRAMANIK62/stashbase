@@ -51,7 +51,7 @@ export const CLIS: Record<string, CliDef> = {
     // switchable in-app via the `/theme` slash command.
     launchArgs: [],
     install: ['install', '-g', '@anthropic-ai/claude-code'],
-    installHint: 'npm install -g @anthropic-ai/claude-code && claude login',
+    installHint: 'npm install -g @anthropic-ai/claude-code',
   },
   codex: {
     id: 'codex',
@@ -63,7 +63,7 @@ export const CLIS: Record<string, CliDef> = {
     // a flag here if/when one appears.
     launchArgs: [],
     install: ['install', '-g', '@openai/codex'],
-    installHint: 'npm install -g @openai/codex && codex login',
+    installHint: 'npm install -g @openai/codex',
   },
 };
 

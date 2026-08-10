@@ -73,8 +73,8 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {
   const expectedInstallHints = {
-    claude: 'npm install -g @anthropic-ai/claude-code && claude login',
-    codex: 'npm install -g @openai/codex && codex login',
+    claude: 'npm install -g @anthropic-ai/claude-code',
+    codex: 'npm install -g @openai/codex',
   } as const;
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
     assert.equal(runtimeDescriptorFor(adapter, `/native/${adapter.id}`).state, 'available');

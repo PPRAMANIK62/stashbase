@@ -1024,7 +1024,7 @@ function AgentRuntimeSetup({
     <div className="agent-runtime-setup" role="status">
       <div className="agent-runtime-setup-card">
         <h2>{name} is not installed</h2>
-        <p>Install its CLI and log in to start a built-in chat.</p>
+        <p>Install its CLI to start a built-in chat.</p>
         <code>{installHint}</code>
         <div className="agent-runtime-setup-actions">
           <Button className="agent-btn primary" onPress={onCopy}>Copy command</Button>
