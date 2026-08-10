@@ -76,10 +76,11 @@ client of StashBase context, not a separate AI workspace.
 - A new chat's empty state makes the composer the hero: it centers in the
   panel, and a single muted usage suggestion sits toward the pane's
   bottom edge, rotating through scope-appropriate "Ask me to …" lines on
-  a quiet timer that pauses while the suggestion is hovered or focused. No wordmark or tagline
-  above it — the tab's Agent glyph and the composer's "Message <Agent>…"
-  placeholder already carry the runtime identity, and the scope pill
-  carries the scope. The hero composer carries a slightly taller input
+  a quiet timer that pauses while the suggestion is hovered or focused.
+  A single short title above the composer — "Your knowledge is here." —
+  names the space; no wordmark or agent branding beyond that: the tab's
+  Agent glyph and the composer's "Message <Agent>…" placeholder carry
+  the runtime identity, and the scope pill carries the scope. The hero composer carries a slightly taller input
   and the one sanctioned raised shadow. Pressing the suggestion only
   prefills its full prompt into the composer draft for the user to edit;
   sending stays an explicit user action. Once the chat has content — or the session ends or fails —

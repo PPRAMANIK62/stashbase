@@ -99,7 +99,8 @@ them:
 - Every empty state names one deliberate anchor. The hero element — usually
   the composer — carries visible weight, and leftover space below it is
   closed by a single bottom-anchored muted suggestion line. Whitespace must
-  read as intended, never as missing content; no wordmark or tagline does
+  read as intended, never as missing content; the hero may carry one
+  short title naming its promise, but wordmarks or taglines never do
   this work.
 - Hero groups sit on the pane's optical center; a block that drifts low
   reads as unfinished.

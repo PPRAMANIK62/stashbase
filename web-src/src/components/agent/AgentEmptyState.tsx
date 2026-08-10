@@ -1,7 +1,8 @@
 /**
  * Empty-chat hero pieces. While a chat has no turns, AgentView centers the
- * composer in the panel: a connecting status (when applicable) sits above
- * it and a single rotating, clickable usage suggestion sits below it.
+ * composer in the panel: a title (plus a connecting status when
+ * applicable) sits above it and a single rotating, clickable usage
+ * suggestion sits toward the pane's bottom edge below it.
  * Pressing the suggestion only prefills the composer draft with that
  * suggestion's full prompt — sending always stays an explicit user action.
  * Copy follows the chat's scope: a folder-bound chat talks about "this
@@ -126,24 +127,31 @@ export function EmptyChatSuggestion({ onPrefill, libraryScoped }: {
   );
 }
 
-/** Status slot above the centered composer. No wordmark or tagline — the
- * tab icon and the composer's "Message <Agent>…" placeholder already carry
- * the runtime identity, and the scope pill carries the scope. Only the
- * connecting status renders here. */
+/** Title + status slot above the centered composer. The title names the
+ * space's promise; runtime identity still lives in the tab icon and the
+ * composer's "Message <Agent>…" placeholder, and the scope pill carries
+ * the scope — no wordmark or agent branding here. While a session
+ * connects, a spinner row shows between the title and the composer. */
 export function EmptyChatGreeting({ agentShortName, connecting }: {
   agentShortName: string;
   connecting: boolean;
 }) {
-  if (!connecting) return null;
   return (
-    <p className="m-0 flex items-center justify-center gap-2 pb-4 text-sm text-muted-foreground" role="status">
-      {/* The global reduced-motion policy zeroes this keyframe animation,
-        * leaving a static arc while the text still conveys the state. */}
-      <span
-        className="size-3 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent"
-        aria-hidden="true"
-      />
-      Connecting to {agentShortName}…
-    </p>
+    <>
+      <h2 className="m-0 pb-6 text-center text-2xl font-semibold text-foreground">
+        Your knowledge is here.
+      </h2>
+      {connecting && (
+        <p className="m-0 flex items-center justify-center gap-2 pb-4 text-sm text-muted-foreground" role="status">
+          {/* The global reduced-motion policy zeroes this keyframe animation,
+            * leaving a static arc while the text still conveys the state. */}
+          <span
+            className="size-3 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent"
+            aria-hidden="true"
+          />
+          Connecting to {agentShortName}…
+        </p>
+      )}
+    </>
   );
 }
