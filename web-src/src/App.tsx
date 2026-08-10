@@ -17,10 +17,9 @@ interface ElectronBridge {
 }
 import { Sidebar } from './components/Sidebar';
 import { MainPane } from './components/MainPane';
-import { ContextMenu, DropVeil } from './components/Overlays';
+import { DropVeil } from './components/Overlays';
 import { EmbedderRequireKeyGate } from './components/EmbedderRequireKeyGate';
 import { Hotkeys } from './components/Hotkeys';
-import { ImageLightbox } from './components/ImageLightbox';
 import { ClipboardImportModal, type ClipboardOffer } from './components/ClipboardImportModal';
 import { CascadePromptModal } from './components/CascadePromptModal';
 import { AlertConfirmModal } from './components/AlertConfirmModal';
@@ -60,6 +59,10 @@ import {
 const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane').then((mod) => ({ default: mod.ChatPane })));
 const LazyUnsupportedFilesModalGate = lazyWithRetry(() =>
   import('./components/UnsupportedFilesModal').then((mod) => ({ default: mod.UnsupportedFilesModalGate })),
+);
+const LazyContextMenu = lazyWithRetry(() => import('./components/ContextMenu'));
+const LazyImageLightbox = lazyWithRetry(() =>
+  import('./components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
 );
 
 /**
@@ -384,16 +387,34 @@ function AppBody() {
         )}
       </div>
       <DropVeil hot={veilHot} />
-      <ContextMenu />
+      {state.ctxMenu && (
+        <LazyLoadBoundary
+          className="fixed z-1200 rounded-md bg-popover p-2 text-sm text-popover-foreground shadow-elevation"
+          label="context menu"
+          resetKey={`${state.ctxMenu.kind}:${state.ctxMenu.target}`}
+        >
+          <Suspense fallback={null}>
+            <LazyContextMenu />
+          </Suspense>
+        </LazyLoadBoundary>
+      )}
       <Hotkeys />
       <QuickOpen />
       <EditorHistoryNavigator />
       {previewImage && (
-        <ImageLightbox
-          src={previewImage.src}
-          alt={previewImage.alt}
-          onClose={() => setPreviewImage(null)}
-        />
+        <LazyLoadBoundary
+          className="quick-open-blocking fixed inset-0 z-90 bg-[rgba(18,18,20,0.92)] text-white"
+          label="image preview"
+          resetKey={previewImage.src}
+        >
+          <Suspense fallback={<div className="quick-open-blocking fixed inset-0 z-90 grid place-items-center bg-[rgba(18,18,20,0.92)] text-sm text-white/80">Opening image…</div>}>
+            <LazyImageLightbox
+              src={previewImage.src}
+              alt={previewImage.alt}
+              onClose={() => setPreviewImage(null)}
+            />
+          </Suspense>
+        </LazyLoadBoundary>
       )}
       {clipboardOffer && state.folder && (
         <ClipboardImportModal

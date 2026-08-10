@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { SemanticIndexingNoticeView } from '../components/SearchPanel';
+import { SemanticIndexingNoticeView } from '../components/SemanticIndexingNotice';
 import { api, ApiError } from '../api';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

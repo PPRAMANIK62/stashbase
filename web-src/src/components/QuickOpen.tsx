@@ -1,106 +1,53 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '../commandPalette';
-import { rankQuickOpen } from '../quickOpen';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSettingsBlocking } from '../hooks/useSettingsBlocking';
-import { openSettings } from './SettingsModal';
 import { useApp } from '../store/AppContext';
-import {
-  PICKER_EMPTY_ROW_CLASS,
-  PICKER_LABEL_CLASS,
-  PICKER_RESULTS_CLASS,
-  PICKER_ROW_CLASS,
-  PICKER_ROW_DETAIL_CLASS,
-  PICKER_VEIL_CLASS,
-  pickerPanelClass,
-} from './pickerChrome';
+import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
+import { PICKER_VEIL_CLASS } from './pickerChrome';
 
-/** Quick Open calls the sidebar's document-selection action, preserving its
- * save guards, folder-generation checks, and preview-tab replacement. */
+const QuickOpenDialog = lazyWithRetry(() => import('./QuickOpenDialog'));
+
+interface QuickOpenRequest {
+  commandsOnly: boolean;
+  id: number;
+}
+
+/** Event ownership stays eager so the first shortcut cannot race the dynamic
+ *  import. Ranking, command definitions, and picker rendering load only when
+ *  Quick Open or the Command Palette is requested. */
 export function QuickOpen() {
-  const { state, actions, activeTab } = useApp();
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
+  const { state } = useApp();
   const settingsBlocking = useSettingsBlocking();
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [request, setRequest] = useState<QuickOpenRequest | null>(null);
+  const nextRequestId = useRef(0);
   const restoreRef = useRef<HTMLElement | null>(null);
   const blocked = Boolean(settingsBlocking || state.modal || state.cascadePrompt || state.ctxMenu || state.renaming);
-  const paths = useMemo(() => state.files.map((file) => file.name), [state.files]);
-  const recentPaths = state.recentFilePaths;
-  const [recentCommandIds, setRecentCommandIds] = useState<string[]>([]);
-  const route = routeQuickAccess(query);
-  const commandContext = {
-    hasFolder: Boolean(state.folder),
-    hasActiveTab: Boolean(state.activeTabId),
-    activeFileIsMarkdown: activeTab?.file?.format === 'md',
-  };
-  const fileItems = useMemo(
-    () => rankQuickOpen(paths, route.provider === 'files' ? route.query : '', recentPaths),
-    [paths, recentPaths, route.provider, route.query],
-  );
-  const commands = useMemo(
-    () => rankCommandPalette(commandDefinitions.filter((command) => command.available(commandContext)), route.query, recentCommandIds),
-    [commandContext.activeFileIsMarkdown, commandContext.hasActiveTab, commandContext.hasFolder, recentCommandIds, route.query],
-  );
-  const itemCount = route.provider === 'files' ? fileItems.length : route.provider === 'commands' ? commands.length : 0;
-  const close = () => { setOpen(false); setQuery(''); setActive(0); requestAnimationFrame(() => restoreRef.current?.focus()); };
-  const accept = (path: string) => { close(); void actions.selectFile(path); };
-  const runCommand = (id: string) => {
-    setRecentCommandIds((recent) => [id, ...recent.filter((candidate) => candidate !== id)]);
-    close();
-    switch (id) {
-      case 'document.new-note': void actions.newNote(); break;
-      case 'document.save': void actions.flushSave(); break;
-      case 'document.close-editor': void actions.closeActiveTab(); break;
-      case 'document.toggle-editing': void actions.toggleEditMode(); break;
-      case 'document.find': actions.openFind(); break;
-      case 'search.focus': actions.focusSearch(); break;
-      case 'agent.show-claude': actions.openAgent('claude'); break;
-      case 'agent.show-codex': actions.openAgent('codex'); break;
-      case 'settings.open': openSettings(); break;
-    }
-  };
 
   useEffect(() => {
     const onOpen = (event: Event) => {
       // Some blocking UI (notably Agent permission cards) owns local state
       // outside this reducer. Every blocking surface uses the shared modal
       // veil, so this final topmost check keeps the shortcut from escaping it.
-      const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
-      const commandsOnly = mode === 'commands';
+      const commandsOnly = (event as CustomEvent<{ mode?: string }>).detail?.mode === 'commands';
       if (blocked || document.querySelector('.modal-veil, .quick-open-blocking') || (!commandsOnly && !state.folder)) return;
       restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setQuery(commandsOnly ? '>' : ''); setActive(0); setOpen(true);
+      nextRequestId.current += 1;
+      setRequest({ commandsOnly, id: nextRequestId.current });
     };
     window.addEventListener('stashbase-open-quick-open', onOpen);
     return () => window.removeEventListener('stashbase-open-quick-open', onOpen);
   }, [blocked, state.folder]);
-  useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
-  useEffect(() => { if (active >= itemCount) setActive(Math.max(0, itemCount - 1)); }, [active, itemCount]);
-  if (!open) return null;
-  // `quick-open-veil` stays as a topmost-surface marker class — the
-  // Editor History navigator's blocked check queries it.
-  return <div className={`quick-open-veil ${PICKER_VEIL_CLASS}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-    <div className={pickerPanelClass('wide')} role="dialog" aria-label={route.provider === 'commands' ? 'Command Palette' : 'Quick Open'}>
-      <input ref={inputRef} className="w-full border-0 border-b border-solid border-border bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-muted-foreground" role="combobox" aria-autocomplete="list" aria-controls="quick-open-results" aria-expanded="true" aria-activedescendant={itemCount ? `quick-open-${active}` : undefined} placeholder={route.provider === 'commands' ? 'Type a command' : 'Search files by name or path'} value={query}
-        onChange={(event) => { setQuery(event.target.value); setActive(0); }}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
-          else if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index) => Math.min(index + 1, itemCount - 1)); }
-          else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)); }
-          else if (event.key === 'Home') { event.preventDefault(); setActive(0); }
-          else if (event.key === 'End') { event.preventDefault(); setActive(Math.max(0, itemCount - 1)); }
-          else if (event.key === 'Enter' && route.provider === 'files' && fileItems[active]) { event.preventDefault(); accept(fileItems[active].path); }
-          else if (event.key === 'Enter' && route.provider === 'commands' && commands[active]) { event.preventDefault(); runCommand(commands[active].id); }
-        }} />
-      <div className={PICKER_LABEL_CLASS}>{route.provider === 'files' ? (route.query.trim() ? 'Files' : 'Recent editors') : route.provider === 'commands' ? 'Commands' : 'Quick Access'}</div>
-      <ul id="quick-open-results" className={PICKER_RESULTS_CLASS} role="listbox" aria-label="Quick Open results">
-        {route.provider === 'files' && fileItems.map((item, index) => <li key={item.path} id={`quick-open-${index}`} role="option" aria-selected={index === active} className={PICKER_ROW_CLASS} onMouseMove={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); accept(item.path); }}><span>{item.basename}</span><small className={PICKER_ROW_DETAIL_CLASS}>{item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Active Library'}</small></li>)}
-        {route.provider === 'files' && fileItems.length === 0 && <li className={PICKER_EMPTY_ROW_CLASS} role="option" aria-disabled="true">{route.query.trim() ? 'No matching source files' : 'No recently used editors'}</li>}
-        {route.provider === 'commands' && commands.map((command, index) => <li key={command.id} id={`quick-open-${index}`} role="option" aria-selected={index === active} className={PICKER_ROW_CLASS} onMouseMove={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); runCommand(command.id); }}><span>{command.label}</span><small className={PICKER_ROW_DETAIL_CLASS}>{command.shortcut ?? command.category}</small></li>)}
-        {route.provider === 'commands' && commands.length === 0 && <li className={PICKER_EMPTY_ROW_CLASS} role="option" aria-disabled="true">No matching available commands</li>}
-      </ul>
-      {route.provider === 'help' && <div className="px-2.5 py-3.5 leading-normal text-muted-foreground [&_kbd]:[font-family:inherit] [&_kbd]:font-semibold [&_kbd]:text-foreground" role="note">Type a file name to open a source file, or <kbd>&gt;</kbd> to run a command. Cmd/Ctrl+Shift+P and F1 open commands directly.</div>}
-    </div>
-  </div>;
+
+  if (!request) return null;
+  const close = () => {
+    setRequest(null);
+    requestAnimationFrame(() => restoreRef.current?.focus());
+  };
+  const loadingClass = `${PICKER_VEIL_CLASS} quick-open-blocking text-sm text-muted-foreground`;
+  return (
+    <LazyLoadBoundary className={loadingClass} label="Quick Open" resetKey={String(request.id)}>
+      <Suspense fallback={<div className={loadingClass}>Opening Quick Open…</div>}>
+        <QuickOpenDialog key={request.id} commandsOnly={request.commandsOnly} onClose={close} />
+      </Suspense>
+    </LazyLoadBoundary>
+  );
 }

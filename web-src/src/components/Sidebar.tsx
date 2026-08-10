@@ -23,13 +23,11 @@ import { readPreferredAgent, rememberPreferredAgent } from '../agentPreference';
 import { folderRefsEqual } from '../folderPath';
 import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
-import { DocumentOutline } from './DocumentOutline';
 import { useDocumentOutline } from './DocumentOutlineContext';
-import { lazyWithRetry } from './ErrorBoundary';
+import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { libraryListPlan } from './libraryListPlan';
 import { Menu, type MenuItem } from './Menu';
 import { ModalShell } from './ModalShell';
-import { SearchPanel, SemanticIndexingNotice } from './SearchPanel';
 import { Button } from './ui/button';
 import { PopupLoadingStatus } from './ui/status';
 import { api, errorMessage, type IndexStatus } from '../api';
@@ -56,6 +54,16 @@ const OPEN_FOLDER_WATCHDOG_MS = 20_000;
  *  out of the initial renderer bundle. */
 const SessionHistoryPopover = lazyWithRetry(() =>
   import('./agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
+
+/** Search is interaction-only, so keep its result rendering and filter
+ *  dependencies out of the initial browsing shell. */
+const SearchPanel = lazyWithRetry(() =>
+  import('./SearchPanel').then((mod) => ({ default: mod.SearchPanel })));
+const DocumentOutline = lazyWithRetry(() =>
+  import('./DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
+const SemanticIndexingNotice = lazyWithRetry(() =>
+  import('./SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNotice })));
+const UnsupportedFilesCallout = lazyWithRetry(() => import('./UnsupportedFilesCallout'));
 
 /** Shorten an absolute path for display: `/Users/foo/Notes` → `~/Notes`
  *  when it lives under the user's home dir. Falls through unchanged
@@ -119,7 +127,17 @@ export function Sidebar() {
         * it owns the vertical stack (header / list). `sidebar-panel`
         * carries the titlebar clearance (globals.css). */}
       <div className="sidebar-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {state.activeSidebarView === 'search' ? <SearchPanel /> : <FilesPanel />}
+        {state.activeSidebarView === 'search' ? (
+          <LazyLoadBoundary
+            className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
+            label="search"
+            resetKey={state.activeSidebarView}
+          >
+            <Suspense fallback={<div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">Opening search…</div>}>
+              <SearchPanel />
+            </Suspense>
+          </LazyLoadBoundary>
+        ) : <FilesPanel />}
       </div>
     </aside>
   );
@@ -176,7 +194,15 @@ function FilesPanel() {
               </button>
             </div>
             <div id="sidebar-outline-section" className={outlineExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
-              <DocumentOutline headings={outline.headings} activeId={outline.activeId} onSelect={outline.onSelect} />
+              <LazyLoadBoundary
+                className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
+                label="document outline"
+                resetKey={activeTab?.id ?? 'none'}
+              >
+                <Suspense fallback={<div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">Opening outline…</div>}>
+                  <DocumentOutline headings={outline.headings} activeId={outline.activeId} onSelect={outline.onSelect} />
+                </Suspense>
+              </LazyLoadBoundary>
             </div>
           </section>
         )}
@@ -478,6 +504,13 @@ function AddFolderMenuButton() {
  *  bottom-most global section. */
 function LibrarySections({ children }: { children?: React.ReactNode }) {
   const { state, actions, dispatch } = useApp();
+  const semanticNoticeVisible = Boolean(
+    state.semanticIndexing
+    && ['awaiting-decision', 'paused', 'partial-paused'].includes(state.semanticIndexing.state),
+  );
+  const unsupportedFilesVisible = Boolean(
+    (state.unsupportedFiles?.sourceCode ?? 0) + (state.unsupportedFiles?.other ?? 0),
+  );
   // Library defaults COLLAPSED while a folder is active (it anchors to
   // the sidebar bottom, out of the way) and expanded when the window has
   // no folder (it IS the main content then). A presence transition
@@ -743,8 +776,16 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
             * folder's prior open/closed state. */}
           {!state.folderCollapsed && (
             <div className="scrollbar-quiet min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
-              <SemanticIndexingNotice />
-              <UnsupportedFilesCallout />
+              {semanticNoticeVisible && (
+                <Suspense fallback={null}>
+                  <SemanticIndexingNotice />
+                </Suspense>
+              )}
+              {unsupportedFilesVisible && (
+                <Suspense fallback={null}>
+                  <UnsupportedFilesCallout />
+                </Suspense>
+              )}
               <FileTree />
             </div>
           )}
@@ -1140,47 +1181,5 @@ function NewNoteButton() {
       title={'New note in ' + target}
       onClick={() => void actions.newNote()}
     ><NewFileIcon /></Button>
-  );
-}
-
-function formatExtensions(otherExtensions: Array<{ extension: string; count: number }>): string {
-  const list = otherExtensions.map((entry) => entry.extension);
-  const visible = list.slice(0, 3);
-  const remaining = list.length - visible.length;
-  return visible.join(', ') + (remaining > 0
-    ? ` and ${remaining} more format${remaining === 1 ? '' : 's'}`
-    : '');
-}
-
-/** Keep the main branch's unsupported-file disclosure in the redesigned
- * explorer without restoring its legacy CSS surface. */
-function UnsupportedFilesCallout() {
-  const { state, dispatch } = useApp();
-  const { sourceCode = 0, other = 0, otherExtensions = [] } = state.unsupportedFiles || {};
-  if (sourceCode + other === 0) return null;
-
-  const title = sourceCode > 0 && other > 0
-    ? 'Some files are hidden'
-    : sourceCode > 0
-      ? 'Source code is hidden'
-      : 'Some file formats are hidden';
-  const detail = sourceCode > 0 && other > 0
-    ? `${sourceCode} source-code files · ${other} other unsupported files`
-    : sourceCode > 0
-      ? `${sourceCode} source-code and project files are not shown or indexed.`
-      : `${other} unsupported files (${formatExtensions(otherExtensions)}) are not shown or indexed.`;
-
-  return (
-    <div className="mx-1.5 mb-2 rounded-lg border border-border bg-muted/45 px-2.5 py-2 text-xs leading-snug text-muted-foreground">
-      <div className="font-semibold text-foreground">{title}</div>
-      <div className="mt-0.5">
-        {detail}{' '}
-        <button
-          type="button"
-          className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent underline underline-offset-2"
-          onClick={() => dispatch({ type: 'UNSUPPORTED_MODAL', open: true })}
-        >Details</button>
-      </div>
-    </div>
   );
 }

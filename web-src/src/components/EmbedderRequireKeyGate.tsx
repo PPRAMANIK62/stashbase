@@ -8,16 +8,23 @@
  *   • Save key — validates + persists, daemon hot-swap.
  *   • Later — dismiss; re-pops on next folder open.
  */
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { api, type EmbedderState } from '../api';
 import { useApp } from '../store/AppContext';
-import { RequireApiKeyModal } from './embedder/RequireApiKeyModal';
+import { lazyWithRetry } from './ErrorBoundary';
+import { useOverlayLayer } from './OverlayStack';
+import { ModalLoadingStatus } from './ui/status';
+
+const RequireApiKeyModal = lazyWithRetry(() =>
+  import('./embedder/RequireApiKeyModal').then((mod) => ({ default: mod.RequireApiKeyModal })),
+);
 
 export function EmbedderRequireKeyGate() {
   const { state: appState, dispatch, actions } = useApp();
   const folder = appState.folder;
   const [state, setState] = useState<EmbedderState | null>(null);
   const [open, setOpen] = useState(false);
+  const layer = useOverlayLayer(open);
 
   useEffect(() => {
     if (!folder) { setState(null); setOpen(false); return; }
@@ -36,17 +43,20 @@ export function EmbedderRequireKeyGate() {
   if (!open || !state || state.hasKey) return null;
 
   return (
-    <RequireApiKeyModal
-      initialProvider={state.provider}
-      onSaved={(provider, model, backfillStarted, warning) => {
-        setState((s) => (s ? { ...s, provider, model, hasKey: true } : s));
-        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-        setOpen(false);
-        if (warning) actions.toast(`Embedding key saved, but validation could not reach the provider: ${warning}`, { level: 'warning' });
-        if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
-        void actions.refreshIndexState();
-      }}
-      onLater={() => setOpen(false)}
-    />
+    <Suspense fallback={<ModalLoadingStatus label="Opening embedding setup…" isTopmost={layer.isTopmost} onCancel={() => setOpen(false)} />}>
+      <RequireApiKeyModal
+        initialProvider={state.provider}
+        isTopmost={layer.isTopmost}
+        onSaved={(provider, model, backfillStarted, warning) => {
+          setState((s) => (s ? { ...s, provider, model, hasKey: true } : s));
+          dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
+          setOpen(false);
+          if (warning) actions.toast(`Embedding key saved, but validation could not reach the provider: ${warning}`, { level: 'warning' });
+          if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
+          void actions.refreshIndexState();
+        }}
+        onLater={() => setOpen(false)}
+      />
+    </Suspense>
   );
 }

@@ -10,7 +10,7 @@
  */
 import { useRef, useState } from 'react';
 import { api, ApiError, errorMessage, type EmbedderProvider } from '../../api';
-import { ModalShell } from '../ModalShell';
+import ManagedModalShell from '../ManagedModalShell';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { StatusMessage } from '../ui/status';
@@ -32,10 +32,12 @@ const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
 
 export function RequireApiKeyModal({
   initialProvider = 'openai',
+  isTopmost,
   onSaved,
   onLater,
 }: {
   initialProvider?: EmbedderProvider;
+  isTopmost: boolean;
   onSaved: (provider: EmbedderProvider, model: string, backfillStarted?: boolean, warning?: string) => void;
   onLater: () => void;
 }) {
@@ -64,11 +66,12 @@ export function RequireApiKeyModal({
   }
 
   return (
-    <ModalShell
+    <ManagedModalShell
       title="Add embedding key"
       description="Semantic search uses embeddings. Choose a provider, then paste the API key. Keyword search and editing work without it."
       initialFocus={inputRef}
       onCancel={busy ? () => { /* swallow */ } : onLater}
+      isTopmost={isTopmost}
     >
       <div className="mb-2 inline-flex max-w-full items-center overflow-hidden rounded-md border border-border bg-background" role="radiogroup" aria-label="Embedding provider">
         {PROVIDER_ORDER.map((optionProvider) => {
@@ -134,6 +137,6 @@ export function RequireApiKeyModal({
           disabled={busy}
         >{busy ? 'Validating…' : 'Save key'}</Button>
       </div>
-    </ModalShell>
+    </ManagedModalShell>
   );
 }
