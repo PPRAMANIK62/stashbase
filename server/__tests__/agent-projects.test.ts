@@ -17,6 +17,7 @@ process.env.STASHBASE_LOCAL_DATA_ROOT = path.join(scratch, 'app-data');
 
 const { createProjectFolder, resolveCreateProjectTarget } = await import('../agent-projects.ts');
 type CreateProjectDeps = import('../agent-projects.ts').CreateProjectDeps;
+const { filesystemPath } = await import('../filesystem-path.ts');
 const {
   createProjectRebindPlan,
   registerAttributedAgentSession,
@@ -38,6 +39,10 @@ const HOME = path.join(scratch, 'folder-home');
 const MEMBER = path.join(scratch, 'members', 'Research');
 fs.mkdirSync(HOME, { recursive: true });
 fs.mkdirSync(MEMBER, { recursive: true });
+
+/** create_project returns the filesystem seam's source spelling, which uses
+ * forward slashes on Windows rather than Node's platform-native separator. */
+const projectPath = (name: string, parent = HOME) => filesystemPath.join(parent, name);
 
 interface DepsLog {
   registered: string[];
@@ -110,14 +115,14 @@ test('create_project validates the name as one cross-platform-safe segment', () 
 test('create_project defaults to the folder home and accepts only owned locations', () => {
   const scope = { folderHome: HOME, memberRoots: [MEMBER] };
   const defaulted = resolveCreateProjectTarget('Proj', undefined, scope);
-  assert.deepEqual(defaulted, { ok: true, parent: HOME, target: path.join(HOME, 'Proj'), name: 'Proj' });
+  assert.deepEqual(defaulted, { ok: true, parent: HOME, target: projectPath('Proj'), name: 'Proj' });
 
   // The folder home itself, inside it, a member root, and inside a member
   // root are all valid explicit locations.
   for (const location of [HOME, path.join(HOME, 'nested'), MEMBER, path.join(MEMBER, 'sub')]) {
     const resolved = resolveCreateProjectTarget('Proj', location, scope);
     assert.equal(resolved.ok, true, `location ${location} must be accepted`);
-    if (resolved.ok) assert.equal(resolved.target, path.join(location, 'Proj'));
+    if (resolved.ok) assert.equal(resolved.target, projectPath('Proj', location));
   }
 
   // Arbitrary host paths and relative paths never become registered folders.
@@ -129,7 +134,7 @@ test('create_project defaults to the folder home and accepts only owned location
 test('create_project creates, seeds AGENTS.md, registers, and reports no rebind without attribution', async () => {
   const { deps, log } = fakeDeps(null);
   const result = await createProjectFolder({ name: 'Unattributed' }, deps);
-  const target = path.join(HOME, 'Unattributed');
+  const target = projectPath('Unattributed');
   assert.equal(result.path, target);
   assert.equal(result.registered, true);
   assert.equal(result.rebound, false);
@@ -150,8 +155,8 @@ test('a library-scoped calling chat is rebound, with the history override persis
   log.events = events;
   const result = await createProjectFolder({ name: 'Rebound', agentSessionId: 'attr-1' }, deps);
   assert.equal(result.rebound, true);
-  assert.equal(session.reboundTo, path.join(HOME, 'Rebound'));
-  assert.deepEqual(log.overrides, [{ agent: 'claude', id: 'native-session-1', folder: path.join(HOME, 'Rebound') }]);
+  assert.equal(session.reboundTo, projectPath('Rebound'));
+  assert.deepEqual(log.overrides, [{ agent: 'claude', id: 'native-session-1', folder: projectPath('Rebound') }]);
   // Override before rebind: the renderer reacts to scope-changed by loading
   // the project's history, which must already contain this session.
   assert.deepEqual(events, ['override', 'rebind']);
@@ -167,7 +172,7 @@ test('a folder-bound calling chat is NEVER rebound — create + register only', 
   assert.match(result.note, /Research/);
   assert.equal(session.reboundTo, null);
   assert.deepEqual(log.overrides, []);
-  assert.deepEqual(log.registered, [path.join(HOME, 'KeepBound')]);
+  assert.deepEqual(log.registered, [projectPath('KeepBound')]);
 });
 
 test('a rebind race with session teardown rolls the override back', async () => {
@@ -235,7 +240,7 @@ test('the attribution registry maps ids to live sessions and forgets them on unr
 });
 
 test('session→folder overrides persist, read back, and clear', () => {
-  const project = path.join(HOME, 'OverrideProj');
+  const project = projectPath('OverrideProj');
   setAgentSessionFolderOverride('claude', 'sess-a', project);
   setAgentSessionFolderOverride('codex', 'thread-b', project);
   assert.equal(agentSessionFolderOverride('claude', 'sess-a'), project);
@@ -258,7 +263,7 @@ test('session→folder overrides persist, read back, and clear', () => {
 
 test('history listings: overridden sessions leave the library and join their project', () => {
   const library = HOME; // the reserved library cwd
-  const project = path.join(HOME, 'HistoryProj');
+  const project = projectPath('HistoryProj');
   const overrides = { 'moved-1': project };
   const libraryRows = [{ id: 'moved-1' }, { id: 'stays-1' }];
 
@@ -283,8 +288,8 @@ test('window fallback attributes the one turn-active session when the header is 
   const { deps, log } = fakeDeps(null, session);
   const result = await createProjectFolder({ name: 'StaleHost', windowId: 'w-test' }, deps);
   assert.equal(result.rebound, true);
-  assert.equal(session.reboundTo, path.join(HOME, 'StaleHost'));
-  assert.deepEqual(log.overrides, [{ agent: 'claude', id: 'native-session-9', folder: path.join(HOME, 'StaleHost') }]);
+  assert.equal(session.reboundTo, projectPath('StaleHost'));
+  assert.deepEqual(log.overrides, [{ agent: 'claude', id: 'native-session-9', folder: projectPath('StaleHost') }]);
 });
 
 test('window fallback never rebinds a folder-bound session', async () => {
@@ -301,7 +306,7 @@ test('no attribution and no window candidate creates + registers only', async ()
   const result = await createProjectFolder({ name: 'NoCaller', windowId: 'w-test' }, deps);
   assert.equal(result.rebound, false);
   assert.match(result.note, /No calling chat session/);
-  assert.deepEqual(log.registered, [path.join(HOME, 'NoCaller')]);
+  assert.deepEqual(log.registered, [projectPath('NoCaller')]);
 });
 
 test('global turn-active fallback attributes when no identity survived the spawn chain', async () => {
@@ -309,6 +314,6 @@ test('global turn-active fallback attributes when no identity survived the spawn
   const { deps, log } = fakeDeps(null, null, session);
   const result = await createProjectFolder({ name: 'EnvStripped' }, deps);
   assert.equal(result.rebound, true);
-  assert.equal(session.reboundTo, path.join(HOME, 'EnvStripped'));
-  assert.deepEqual(log.overrides, [{ agent: 'claude', id: 'native-session-11', folder: path.join(HOME, 'EnvStripped') }]);
+  assert.equal(session.reboundTo, projectPath('EnvStripped'));
+  assert.deepEqual(log.overrides, [{ agent: 'claude', id: 'native-session-11', folder: projectPath('EnvStripped') }]);
 });
