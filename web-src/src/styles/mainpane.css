@@ -254,6 +254,7 @@
       overflow-x: auto;
       overflow-y: visible;
       scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
       min-width: 0;
     }
     .tab {

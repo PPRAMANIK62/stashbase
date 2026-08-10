@@ -76,7 +76,7 @@ export function MessageList({
     // No top padding — sticky turn headers pin flush to the top; the first
     // child carries the breathing room instead (it scrolls away).
     <div
-      className="agent-messages flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-0 pb-2 [scrollbar-width:thin] [&>*:first-child]:mt-3"
+      className="agent-messages scrollbar-quiet flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-0 pb-2 [&>*:first-child]:mt-3"
       ref={ref}
       onScroll={onScroll}
     >

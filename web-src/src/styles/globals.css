@@ -67,6 +67,10 @@
       --status-danger: var(--danger);
       --hover: var(--surface-hover);
       --active: var(--surface-selected);
+      /* Quiet thumb for chrome scrollers (.scrollbar-quiet, mainpane
+       * .tabs). Derived from --fg at usage time, so the dark theme's
+       * --fg override re-resolves it — no dark redefinition needed. */
+      --scrollbar-thumb: color-mix(in srgb, var(--fg) 25%, transparent);
       --ui-font-size: calc(14px * var(--ui-scale));
       --ui-scale: 1;
       --reading-font-size: 14px;
@@ -187,6 +191,18 @@
     :where(button, input, select, textarea, [tabindex]):focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 2px;
+    }
+
+    /* One treatment for panel-chrome scrollers (sidebar tree/Library,
+     * outline, agent transcript, tab strips, toasts): thin, with a quiet
+     * translucent thumb — Chromium's styled-scrollbar default thumb is a
+     * solid mid-gray that reads too dark on the light panes. Never set
+     * scrollbar-color on :root: it inherits, and any styled value opts a
+     * scroller out of the native overlay treatment — the document editor
+     * keeps native scrollbars on purpose. */
+    .scrollbar-quiet {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
     }
 
     @media (prefers-reduced-motion: reduce) {

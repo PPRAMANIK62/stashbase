@@ -141,7 +141,7 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
       className={cn(
-        "fixed right-4 bottom-4 z-[9000] flex max-h-[min(60vh,480px)] w-[min(360px,calc(100vw-32px))] flex-col gap-2 overflow-y-auto p-0.5 outline-none [scrollbar-width:thin]",
+        "scrollbar-quiet fixed right-4 bottom-4 z-[9000] flex max-h-[min(60vh,480px)] w-[min(360px,calc(100vw-32px))] flex-col gap-2 overflow-y-auto p-0.5 outline-none",
         className
       )}
       {...props}

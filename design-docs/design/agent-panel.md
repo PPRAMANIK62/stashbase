@@ -74,15 +74,15 @@ client of StashBase context, not a separate AI workspace.
   plainly labeled and easy to select; they are never represented only by
   decorative slider marks.
 - A new chat's empty state makes the composer the hero: it centers in the
-  panel with a row of use-case starter chips (icon plus a short title,
-  capsule-shaped) below it. No wordmark or tagline above it — the
-  tab's Agent glyph and the composer's "Message <Agent>…" placeholder
-  already carry the runtime identity, and the scope pill carries the
-  scope. The hero composer carries a slightly taller input and the one
-  sanctioned raised shadow, and a single muted capability hint sits at
-  the pane's bottom edge so the empty state reads composed. Choosing a
-  chip only prefills the composer draft; sending stays an explicit user
-  action. Once the chat has content — or the session ends or fails —
+  panel, and a single muted usage suggestion sits toward the pane's
+  bottom edge, rotating through scope-appropriate "Ask me to …" lines on
+  a quiet timer that pauses while the suggestion is hovered or focused. No wordmark or tagline
+  above it — the tab's Agent glyph and the composer's "Message <Agent>…"
+  placeholder already carry the runtime identity, and the scope pill
+  carries the scope. The hero composer carries a slightly taller input
+  and the one sanctioned raised shadow. Pressing the suggestion only
+  prefills its full prompt into the composer draft for the user to edit;
+  sending stays an explicit user action. Once the chat has content — or the session ends or fails —
   the composer returns to the bottom of the transcript (flat, compact
   presentation). While a session connects, a small spinner with muted
   text shows above the composer.

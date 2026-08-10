@@ -55,6 +55,18 @@ export function ArrowUpIcon({ className }: IconProps) {
   );
 }
 
+/** ↖ insert — a suggestion fills the composer above (the Google search
+ *  -suggestion idiom: "put this in the input"). Deliberately distinct
+ *  from ArrowUpIcon, which means send. */
+export function ArrowInsertIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <polyline points="7 17 7 7 17 7" />
+      <line x1="7" y1="7" x2="17" y2="17" />
+    </svg>
+  );
+}
+
 /** Filled square — stop a streaming Agent turn. */
 export function StopIcon({ className }: IconProps) {
   return (

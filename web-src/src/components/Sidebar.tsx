@@ -739,7 +739,7 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
             * state untouched, so re-expanding restores every inner
             * folder's prior open/closed state. */}
           {!state.folderCollapsed && (
-            <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+            <div className="scrollbar-quiet min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
               <FileTree />
             </div>
           )}
@@ -791,7 +791,7 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
              * scroll affordance (macOS scrollbars stay hidden until the
              * user scrolls); shorter memberships size to content. With no
              * folder the Library IS the panel content, so no cap. */
-            <div className={(activePath ? 'max-h-[154px] ' : '') + 'min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5 pb-2'}>
+            <div className={(activePath ? 'max-h-[154px] ' : '') + 'scrollbar-quiet min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5 pb-2'}>
               {plan.visible.map((entry) => {
                 const name = basenameOfPath(entry.path);
                 const opening = openingFolder?.path === entry.path;
@@ -833,7 +833,13 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                       )}
                     </button>
                     <span
-                      className={`flex items-center ${
+                      /* gap-1, not the headers' gap-0.5: the ⋯ here is
+                       * icon-xs (24px) vs the header's icon-sm + (28px), and
+                       * the rows sit 2px further from the panel edge
+                       * (px-1.5 + pr-1 vs the header's pr-2). 24+4 = 28+2-2,
+                       * so the row's clock lands on the header's clock
+                       * column — change any of those sizes, re-derive. */
+                      className={`flex items-center gap-1 ${
                         menuOpen || historyOpenPath === entry.path ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
                       }`}
                     >

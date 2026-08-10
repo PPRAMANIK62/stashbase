@@ -69,7 +69,7 @@ export function ChatPane() {
         * open; new tabs come from the sidebar's New Chat button, so it is
         * tabs-only. */}
       <div className="flex min-h-8 items-stretch gap-1 px-1.5 pt-1.5 pb-1">
-        <div className="flex flex-1 gap-0.5 overflow-x-auto overflow-y-hidden [scrollbar-width:thin]">
+        <div className="scrollbar-quiet flex flex-1 gap-0.5 overflow-x-auto overflow-y-hidden">
           {tabs.map((tab) => (
             <div
               key={tab.id}

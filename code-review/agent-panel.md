@@ -246,9 +246,10 @@ supports them; a locked model pill or effort bar stays visible but inert.
 An empty chat centers the composer as the hero layout: the
 composer swaps its `agent-composer` width hook for the hero column while
 empty, and keeps a stable React `key` so the same mounted instance (draft,
-CodeMirror state) moves between the hero and bottom layouts. Empty-state
-starter templates only prefill the composer draft through the CodeMirror
-handle — they must never send. The connecting spinner is a keyframe
+CodeMirror state) moves between the hero and bottom layouts. The empty-state
+rotating suggestion only prefills the composer draft through the CodeMirror
+handle — it must never send — and its rotation pauses while hovered or
+focused so the press target cannot swap under the pointer. The connecting spinner is a keyframe
 animation the global reduced-motion policy stops.
 
 Community contributions can land as useful first iterations, but the long-term design should continue to be simplified toward this side-panel model when needed.

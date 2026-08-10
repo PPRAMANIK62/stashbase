@@ -84,9 +84,9 @@ them:
   do not relax it for visual trends.
 - Radii stay small and consistent (a control radius and a slightly larger
   UI-surface radius). No pill buttons, no large-radius cards. The one
-  sanctioned capsule is the empty-chat starter chip: a transient,
-  content-level suggestion may render as a bordered pill; persistent
-  chrome controls never do.
+  sanctioned capsule is the transient floating affordance (the
+  transcript's jump-to-latest pill); persistent chrome controls never
+  render as pills.
 - List hover and selection render as an inset rounded pill — a small-radius
   row surface inset from the panel edges — never a full-bleed band or an
   accent edge bar.
@@ -98,13 +98,14 @@ them:
   edge to edge.
 - Every empty state names one deliberate anchor. The hero element — usually
   the composer — carries visible weight, and leftover space below it is
-  closed by a single bottom-anchored muted capability hint. Whitespace must
+  closed by a single bottom-anchored muted suggestion line. Whitespace must
   read as intended, never as missing content; no wordmark or tagline does
   this work.
 - Hero groups sit on the pane's optical center; a block that drifts low
   reads as unfinished.
-- Siblings share one grid line: the hero, its starter chips, and any hint
-  align to the same content edge.
+- Siblings share one grid line: elements stacked in a hero column align
+  to the same content edge; the bottom-anchored suggestion line centers
+  on the pane's axis instead.
 
 ## Motion
 

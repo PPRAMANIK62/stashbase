@@ -19,7 +19,7 @@ import { useApp } from '../store/AppContext';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
-import { EmptyChatGreeting, EmptyChatHint, StarterTemplates } from './agent/AgentEmptyState';
+import { EmptyChatGreeting, EmptyChatSuggestion } from './agent/AgentEmptyState';
 import { resolveAssistantLink } from './agent/assistantLinkTarget';
 import { MessageList, type QueuedTurnPreview } from './agent/AgentMessages';
 import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
@@ -1106,9 +1106,9 @@ export function AgentView({
       ) : <>
         {emptyChat ? (
           // Empty chat: the composer is the hero. The greeting bottoms out
-          // this flex-[3] band and the templates top the flex-[4] band below
-          // the composer, so the input rests just above the vertical center
-          // (Cursor-style) at every panel height.
+          // this flex-[3] band and the rotating suggestion bottoms out the
+          // flex-[4] band below the composer, so the input rests just above
+          // the vertical center (Cursor-style) at every panel height.
           <div key="empty-above" className="flex min-h-0 flex-[3] flex-col justify-end overflow-hidden px-2">
             <div className="mx-auto w-[min(640px,100%)]">
               <EmptyChatGreeting
@@ -1208,18 +1208,15 @@ export function AgentView({
         onStop={stop}
       />
       {emptyChat && (
-        <div key="empty-below" className="flex min-h-0 flex-[4] flex-col overflow-y-auto px-2 [scrollbar-width:thin]">
-          <div className="mx-auto w-[min(640px,100%)] shrink-0">
-            <StarterTemplates
+        <div key="empty-below" className="scrollbar-quiet flex min-h-0 flex-[4] flex-col overflow-y-auto px-2">
+          {/* mt-auto pins the suggestion toward the pane's bottom edge when
+            * there is room, turning the leftover space into deliberate
+            * composition; on short panels it simply sits below the composer. */}
+          <div className="mt-auto shrink-0">
+            <EmptyChatSuggestion
               onPrefill={(text) => setPrefill({ text, nonce: Date.now() })}
               libraryScoped={sessionScope.kind === 'library'}
             />
-          </div>
-          {/* mt-auto pins the hint to the pane's bottom edge when there is
-            * room, turning the leftover space into deliberate composition;
-            * on short panels it simply stacks below the starters. */}
-          <div className="mt-auto shrink-0">
-            <EmptyChatHint libraryScoped={sessionScope.kind === 'library'} />
           </div>
         </div>
       )}

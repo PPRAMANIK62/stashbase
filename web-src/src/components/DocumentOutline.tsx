@@ -38,7 +38,7 @@ export function DocumentOutline({
    * `collapsed`) so the outline stays visually locked to the file tree;
    * only the outline-specific layout is expressed as utilities here. */
   return <nav id="document-outline" className="flex min-h-0 flex-1 overflow-hidden" aria-label="Document outline">
-    <div ref={listRef} className="flex-1 overflow-auto px-1.5 pb-2 [scrollbar-width:thin]">
+    <div ref={listRef} className="scrollbar-quiet flex-1 overflow-auto px-1.5 pb-2">
       {headings.length === 0 ? <p className="mx-3 my-2 text-sm text-muted-foreground">No headings</p> : visibleHeadings.map((heading) => {
         const label = heading.text || `Untitled section ${++emptyCount}`;
         const index = headingIndexes.get(heading.id) ?? 0;
