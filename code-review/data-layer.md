@@ -417,6 +417,7 @@ When reviewing code that touches conversion, indexing, sync, search, folder memb
 - Removing a folder from the library deletes app-owned state but never deletes user files.
 - Deleting a folder in the active file tree is a real filesystem delete and must clean app-owned state for the deleted subtree.
 - `AGENTS.md` and `CLAUDE.md` are not hidden config or derived state. They are ordinary root-level Markdown files and create-only writes must not overwrite user edits.
+- Dot-prefixed directories are excluded from listing, keyword search, and the index by `isHiddenDirName` — directory segments only, so dot-FILE semantics (derived notes) are untouched. Keep it separate from `isIndexExcludedDirName`: that predicate also gates writable paths, and writes into `.claude` (agent config) must stay allowed.
 - UI status snapshots do not become data truth.
 - Background preparation is quiet by default. Collapsed library rows and affected file rows show failure markers only; in-folder headers do not show preparation badges. The Search view is where pending/failed preparation is summarized because that is where incomplete readiness affects the user.
 

@@ -85,6 +85,11 @@ to migrate them into a StashBase-specific storage model.
   the same conversation beside it.
 - The main pane opens the source file the user selected; generated artifacts
   stay hidden.
+- Dot-prefixed directories (`.claude`, `.git`, `.obsidian`, …) are tool
+  internals, not knowledge: the file tree, search, and the index skip them.
+  Agent-contract files (`AGENTS.md`, `CLAUDE.md`) are ordinary visible
+  Markdown, and agents can still read and write dot-directory config
+  directly.
 - Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
   strip's `+` button — distinct from Cmd/Ctrl+N, which creates a note file.
 - Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active
