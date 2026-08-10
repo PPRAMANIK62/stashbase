@@ -89,6 +89,9 @@ async function run() {
   fs.writeFileSync(path.join(folder, 'beta.md'), largeNote('Beta', 'BETA_UNIQUE'), 'utf8');
   fs.writeFileSync(path.join(folder, 'preview-one.md'), '# Preview one\n\nFirst preview identity.', 'utf8');
   fs.writeFileSync(path.join(folder, 'preview-two.md'), '# Preview two\n\nReplacement preview identity.', 'utf8');
+  for (let index = 1; index <= 6; index += 1) {
+    fs.writeFileSync(path.join(folder, `retained-${index}.md`), `# Retained ${index}`, 'utf8');
+  }
 
   const win = await waitFor(
     () => BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed()),
@@ -142,6 +145,16 @@ async function run() {
         document.querySelector('.crepe-surface[data-document-name="beta.md"] .ProseMirror');
     })()
   `);
+
+  fs.writeFileSync(path.join(folder, 'alpha.md'), '# Alpha externally refreshed\n\nALPHA_FRESH_ON_ACTIVATION', 'utf8');
+  await clickTab(win, 'alpha.md');
+  await waitForActiveReady(win, 'alpha.md');
+  await waitFor(
+    () => win.webContents.executeJavaScript("document.querySelector('.markdown-tab-layer:not([hidden]) .ProseMirror')?.textContent.includes('ALPHA_FRESH_ON_ACTIVATION')"),
+    'inactive Markdown editor did not refresh after activation',
+  );
+  await clickTab(win, 'beta.md');
+  await waitForActiveReady(win, 'beta.md');
 
   for (let iteration = 0; iteration < 4; iteration += 1) {
     for (const name of ['alpha.md', 'beta.md']) {
@@ -256,9 +269,28 @@ async function run() {
     'closing another tab destroyed the retained alpha editor',
   );
 
+  for (let index = 1; index <= 6; index += 1) {
+    await clickFile(win, `retained-${index}.md`, 'dblclick');
+    await waitForActiveReady(win, `retained-${index}.md`);
+  }
+  assert.equal(
+    await win.webContents.executeJavaScript("document.querySelectorAll('.crepe-surface').length"),
+    5,
+    'retained Markdown editor cache exceeded its MRU bound',
+  );
+  await clickTab(win, 'retained-1.md');
+  await waitForActiveReady(win, 'retained-1.md');
+  assert.equal(
+    await win.webContents.executeJavaScript("document.querySelectorAll('.crepe-surface').length"),
+    5,
+    'reopening an evicted Markdown tab did not preserve the MRU bound',
+  );
+
   await win.webContents.executeJavaScript('window.__stashbaseMarkdownSmoke.observer.disconnect()');
   clearTimeout(deadline);
   console.log('real Markdown tab lifecycle smoke passed');
+  win.close();
+  await waitFor(() => win.isDestroyed(), 'Markdown lifecycle window did not close');
   app.quit();
 }
 

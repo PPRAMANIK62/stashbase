@@ -19,6 +19,7 @@ const LazyCrepeDocument = lazyWithRetry(() => import('./CrepeDocument').then((mo
 const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
 const LazyDocxPreview = lazyWithRetry(() => import('./DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
 const LazyAudioPreview = lazyWithRetry(() => import('./AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
+const RETAINED_MARKDOWN_EDITOR_LIMIT = 5;
 
 /**
  * Right rail. Layout from top to bottom:
@@ -44,7 +45,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   // have no top chrome, so they skip the band and fill from just under
   // the tab strip.
   const chromeBand = hasTabs && cur?.format !== 'html' && cur?.format !== 'image';
-  const markdownTabs = state.tabs.filter((tab) => tab.file?.format === 'md');
+  const retainedMarkdownTabIds = new Set(
+    state.editorHistory
+      .filter((id) => state.tabs.some((tab) => tab.id === id && tab.file?.format === 'md'))
+      .slice(0, RETAINED_MARKDOWN_EDITOR_LIMIT),
+  );
+  const markdownTabs = state.tabs.filter((tab) => retainedMarkdownTabIds.has(tab.id));
 
   return (
     <main

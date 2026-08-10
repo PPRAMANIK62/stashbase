@@ -144,26 +144,16 @@ export function useActiveFolderWorkspace(
     { flushSave: documents.flushSave, loadFiles, loadFileOrder, markVisibleFilesPendingForSearch: search.markVisibleFilesPendingForSearch, refreshIndexState: search.refreshIndexState, toast }, dispatch,
   );
 
-  // An inactive binary tab can miss a watcher refresh while another tab is
-  // visible. Re-stat it whenever it becomes active so previews never reuse
-  // source bytes from before an external replacement.
+  // An inactive tab can miss a watcher refresh while another tab is visible.
+  // Revalidate it whenever it becomes active so retained Markdown editors and
+  // binary previews never reuse source data from before an external change.
   const activeTab = getActiveTab(renderedState);
-  const activeBinaryName = activeTab?.file && ['pdf', 'image', 'docx', 'audio'].includes(activeTab.file.format)
-    ? activeTab.file.name
-    : null;
-  const activeBinaryTabId = activeBinaryName ? activeTab?.id ?? null : null;
+  const activeFileName = activeTab?.file?.name ?? null;
+  const activeFileTabId = activeFileName ? activeTab?.id ?? null : null;
   useEffect(() => {
-    if (!activeBinaryName || !activeBinaryTabId) return;
-    const folderPathAtStart = renderedState.folderPath;
-    void api.statFile(activeBinaryName).then((stat) => {
-      if (state.current.folderPath !== folderPathAtStart) return;
-      const latest = getActiveTab(state.current);
-      if (latest?.id !== activeBinaryTabId || latest.file?.name !== activeBinaryName) return;
-      if (latest.file.version !== stat.version) dispatch({ type: 'FILE_PATCH', patch: { version: stat.version } });
-    }).catch(() => {
-      // The tree refresh owns deletion and error presentation.
-    });
-  }, [activeBinaryName, activeBinaryTabId, dispatch, renderedState.folderPath, state]);
+    if (!activeFileName || !activeFileTabId) return;
+    void refreshActiveTabFromDisk();
+  }, [activeFileName, activeFileTabId, refreshActiveTabFromDisk]);
 
   useEffect(() => {
     const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;

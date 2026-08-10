@@ -22,6 +22,7 @@ import { makeIframeFindController } from './findIframe';
 import { applyChunkHighlight } from './previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '../milkdown/paths';
 import { splitLeadingYamlFrontmatter } from '../milkdown/frontmatter';
+import { destroyCrepeIfCreated } from '../milkdown/crepeLifecycle';
 import { resolveLocalImageUrl } from '../milkdown/imageUrls';
 import { activeHeadingId, extractDocumentHeadings, headingSlug, type DocumentHeading, type ProseMirrorDocument } from '../milkdown/headings';
 import { documentScroller, headingElementAtPosition, scrollOutlineToHeading, type HeadingNodeView } from '../milkdown/outlineNavigation';
@@ -103,8 +104,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       .addFeature(latex);
     const destroyEditor = () => {
       if (destroyed) return;
-      destroyed = true;
-      void editor.destroy();
+      destroyed = destroyCrepeIfCreated(editor);
     };
 
     const updateHeadings = () => {
@@ -137,7 +137,6 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       console.error('[markdown] failed to create Crepe editor:', error);
       actions.toast('Could not open the Markdown editor.', { level: 'error' });
       setCreationState('failed');
-      destroyEditor();
     });
 
     return () => {
