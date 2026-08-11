@@ -2,31 +2,19 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, ListBox, ListBoxItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
   ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
-  FileGenericIcon, FolderIcon, HandIcon, LibraryIcon, PlusIcon, StopIcon,
+  FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
 } from '../../icons';
 import { cn } from '../../lib/utils';
 import type { FileMeta, FolderMeta } from '../../api';
 import { ImageLightbox } from '../ImageLightbox';
-import {
-  Menu as SharedMenu,
-  MenuItem as SharedMenuItem,
-  MenuPopup as SharedMenuPopup,
-  MenuPortal as SharedMenuPortal,
-  MenuPositioner as SharedMenuPositioner,
-  MenuTrigger as SharedMenuTrigger,
-} from '../ui/menu';
 import { baseName } from './attachments';
 import { changedEffortSelection, effortLabel, effortOptions } from './effortMenuState';
 import {
-  folderDisplayName,
-  folderScope,
-  LIBRARY_SCOPE,
-  scopeDisplayName,
   scopePillAriaLabel,
-  shortenFolderPath,
   type ChatScope,
   type LibraryFolderOption,
 } from './folderState';
+import { ScopeMenu } from '../ScopeMenu';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import {
@@ -240,65 +228,6 @@ function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel
         ))}
       </ListBox>
     </div>
-  );
-}
-
-/** Cursor-style session-scope picker. A new session binds the picked
- * scope — a library folder, or "Library" for a library-wide chat
- * (default: the window's current folder, else Library); once the chat has
- * content the pill stays visible but locked — a conversation never
- * rebinds. Same shared Base UI menu adapter as the model pill. */
-function ScopeMenu({ scope, entries, homeDir, locked, disabled, onSetScope }: {
-  scope: ChatScope;
-  entries: LibraryFolderOption[];
-  homeDir: string;
-  locked: boolean;
-  disabled: boolean;
-  onSetScope: (scope: ChatScope) => void;
-}) {
-  const name = scopeDisplayName(scope);
-  const label = scopePillAriaLabel(scope, locked);
-  const isLibrary = scope.kind === 'library';
-  return (
-    <SharedMenu>
-      <SharedMenuTrigger
-        className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
-        disabled={disabled || locked}
-        aria-label={label}
-        title={isLibrary
-          ? 'Session scope — the whole library'
-          : `Session folder — ${shortenFolderPath(scope.path, homeDir)}`}
-      >
-        {/* No leading glyph on the trigger: the scope NAME is the content
-          * (often carrying the user's own emoji), and a folder icon next
-          * to it reads as a double mark. The menu's rows keep icons. */}
-        <span className="truncate">{name}</span>
-        <ChevronDownIcon className={pillChevronClass} />
-      </SharedMenuTrigger>
-      <SharedMenuPortal>
-        <SharedMenuPositioner side="top" align="start" sideOffset={6} collisionPadding={8}>
-          <SharedMenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label="Session scope">
-            <div className={menuHeadClass}><span className="font-semibold text-foreground">Session scope</span></div>
-            <SharedMenuItem label="Library" className={cn(optClass, isLibrary && optActiveClass)} onClick={() => onSetScope(LIBRARY_SCOPE)}>
-            <LibraryIcon className={optIconClass} />
-            <span className={optTextClass}><span className={optTitleClass}>Library</span><span className={optDescClass}>Chat across your whole library</span></span>
-            {isLibrary && <CheckIcon className={optCheckClass} />}
-            </SharedMenuItem>
-            {entries.length > 0 && <div className={menuSectionClass}>Folders</div>}
-            {entries.map((entry) => {
-              const active = scope.kind === 'folder' && scope.path === entry.path;
-              return (
-                <SharedMenuItem key={entry.path} label={folderDisplayName(entry.path)} className={cn(optClass, active && optActiveClass)} onClick={() => onSetScope(folderScope(entry.path))}>
-                <FolderIcon className={optIconClass} />
-                <span className={optTextClass}><span className={optTitleClass}>{folderDisplayName(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
-                {active && <CheckIcon className={optCheckClass} />}
-                </SharedMenuItem>
-              );
-            })}
-          </SharedMenuPopup>
-        </SharedMenuPositioner>
-      </SharedMenuPortal>
-    </SharedMenu>
   );
 }
 
@@ -600,6 +529,9 @@ export function AgentComposer({
             scope={sessionScope}
             entries={folderEntries}
             homeDir={folderHomeDir}
+            heading="Session scope"
+            libraryDetail="Chat across your whole library"
+            ariaLabel={scopePillAriaLabel(sessionScope, folderLocked)}
             locked={folderLocked}
             disabled={disabled}
             onSetScope={onSetScope}

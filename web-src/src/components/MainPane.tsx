@@ -211,7 +211,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           <Button
             variant="ghost"
             size="icon-sm"
-            className="text-muted-foreground [&_svg:not([class*='size-'])]:size-5.5"
+            className="text-muted-foreground [&_svg:not([class*='size-'])]:size-3.5"
             title={editMode ? 'Switch to Reading View' : 'Switch to Live Editing'}
             aria-label={editMode ? 'Switch to Reading View' : 'Switch to Live Editing'}
             onClick={() => { void actions.toggleEditMode(); }}

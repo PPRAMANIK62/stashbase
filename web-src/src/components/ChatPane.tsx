@@ -67,8 +67,9 @@ export function ChatPane() {
     >
       {/* Cursor-style tab strip. Scrolls horizontally when many tabs are
         * open; new tabs come from the sidebar's New Chat button, so it is
-        * tabs-only. */}
-      <div className="flex min-h-8 items-stretch gap-1 px-1.5 pt-1.5 pb-1">
+        * tabs-only. pr-10 reserves the window's top-right corner for the
+        * shell's floating chat toggle (TitlebarControls). */}
+      <div className="flex min-h-8 items-stretch gap-1 pt-1.5 pb-1 pr-10 pl-1.5">
         <div className="scrollbar-quiet flex flex-1 gap-0.5 overflow-x-auto overflow-y-hidden">
           {tabs.map((tab) => (
             <div

@@ -7,7 +7,6 @@ import {
   resetLibrarySearchMemory,
   resolveSemanticHits,
   splitLibraryPath,
-  subfolderScopes,
   writeLibrarySearchMemory,
 } from '../librarySearch.ts';
 import type { LibraryKeywordFile, SearchHit } from '../api.ts';
@@ -81,15 +80,6 @@ test('library search memory persists patches until reset', () => {
   assert.deepEqual(readLibrarySearchMemory().scope, { kind: 'library' });
   resetLibrarySearchMemory();
   assert.equal(readLibrarySearchMemory().query, '');
-});
-
-test('subfolderScopes lists every directory containing a visible file', () => {
-  const scopes = subfolderScopes([
-    { name: 'a/b/x.md', format: 'md', heading: '', snippet: '' },
-    { name: 'a/y.md', format: 'md', heading: '', snippet: '' },
-    { name: 'z.md', format: 'md', heading: '', snippet: '' },
-  ]);
-  assert.deepEqual(scopes, ['a', 'a/b']);
 });
 
 test('folderBasename strips separators', () => {

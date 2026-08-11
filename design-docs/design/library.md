@@ -33,10 +33,14 @@ to migrate them into a StashBase-specific storage model.
   ⋯ menu) with its file tree beneath, on the base surface.
   Below it, the Library section lists every other member folder as a single
   compact row on the pane surface — favorites (all of them) pinned first,
-  then the rest in recents order. While a folder is active the list caps at
-  a fixed height (about five rows, with a half-row peek hinting at the
-  overflow) and scrolls internally; with no folder open the Library is the
-  panel's main content and fills the available space. Clicking a row
+  then the rest in recents order. The Library section's position is fixed:
+  it always anchors to the sidebar bottom (above the Settings row), so
+  opening a folder never makes it jump. Only its default fold state
+  changes — expanded in a window with no folder (it is the main content
+  then, uncapped), collapsed once a folder becomes active. While a folder
+  is active the expanded list caps at a fixed height (about five rows,
+  with a half-row peek hinting at the overflow) and scrolls internally.
+  Clicking a row
   switches this window's folder in place: the clicked folder moves up into
   the active zone and the previous one drops back into the list. Switching
   resets the folder-scoped document tabs, but keeps the search popup's
@@ -149,14 +153,23 @@ to migrate them into a StashBase-specific storage model.
   Arrow/Home/End keys on macOS, Windows, and Linux; reduced-motion users do
   not receive layout movement animation.
 - Closing the last document lets an open Chat reclaim the main area. Hiding
-  Chat is explicit and stays hidden; the sidebar's New Chat button is the
-  way back in.
+  Chat is explicit and stays hidden; the titlebar's chat toggle (top-right,
+  mirroring the sidebar toggle) or the sidebar's New Chat button is the way
+  back in.
 - The Files sidebar is a calm orientation tool, not a separate knowledge graph
-  or project-management surface. It stacks the active folder zone (current
-  folder header and file tree), then the active Markdown document outline,
-  with the Library folder list anchored at the bottom — the outline belongs
-  to the working context above the global list. The Library and outline
-  sections stay independently collapsible. There is no activity rail: the
+  or project-management surface. The active folder zone (current folder
+  header and file tree) fills all the room the bottom group leaves; that
+  group holds the document outline, then the Library folder list, then the
+  Settings row. The outline section belongs to an open document: it appears
+  whenever one is open in a folder — whatever its format, so switching tabs
+  never shifts the sections below — and states plainly when the document has
+  no headings or cannot have an outline. An expanded outline holds a fixed
+  height for the same reason, and defaults to expanded whenever a newly
+  opened document has headings. A bare workspace, or a window with no
+  folder, drops the outline entirely and leaves the Library to hold the eye.
+  The Library and outline sections stay independently collapsible, each an
+  internal scroller under a compact section header. There is no activity
+  rail: the
   sidebar toggle and Search live as shell controls in the titlebar band at
   the window's top-left (they stay put when the sidebar is collapsed, so
   the toggle is always the way back in), and Settings is a quiet row at

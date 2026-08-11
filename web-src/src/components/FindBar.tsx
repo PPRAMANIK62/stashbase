@@ -48,18 +48,18 @@ export function FindBar() {
   const hasQuery = query.length > 0;
   const noMatch = hasQuery && total === 0;
 
-  /** Escalate find-in-document to the search popup, carrying the query and
-   *  exact-mode options over. Folder scope: "all files" here means the files
-   *  around this document, not the whole library. */
+  /** Escalate find-in-document to the search popup, carrying the query
+   *  over. This bar's Aa / Word latches stay behind: the popup has no such
+   *  controls, so sending them would leave it matching by rules the user
+   *  can neither see nor undo there. Folder scope: "all files" here means
+   *  the files around this document, not the whole library. */
   function searchAllFiles() {
     const q = query.trim();
     if (!q) return;
     openLibrarySearch({
       query: q,
       mode: 'keyword',
-      caseStrict: caseSensitive,
-      wholeWord,
-      scope: { kind: 'folder', subfolder: null },
+      scope: state.folderPath ? { kind: 'folder', path: state.folderPath } : { kind: 'library' },
     });
   }
 

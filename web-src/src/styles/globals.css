@@ -309,19 +309,38 @@
     }
 
     /* Shell-level controls in the titlebar band. Absolute over the
-     * `.app` grid (NOT inside the sidebar column) so collapsing the
-     * sidebar leaves them in place — the toggle is always the way back
-     * in. z-index above the sidebar drag zone (6) so they stay
-     * clickable on macOS. */
-    .titlebar-controls {
+     * `.app` grid (NOT inside the panel columns) so collapsing either
+     * panel leaves its toggle in place — always the way back in.
+     * z-index above the sidebar drag zone (6) so they stay clickable on
+     * macOS. Left cluster: sidebar toggle + search; right cluster: the
+     * mirrored chat-panel toggle. */
+    .titlebar-controls,
+    .titlebar-controls-right {
       position: absolute;
       top: 0;
-      left: var(--titlebar-controls-left);
       height: var(--titlebar-clearance);
       display: flex;
       align-items: center;
       gap: 2px;
       z-index: 7;
+    }
+
+    .titlebar-controls {
+      left: var(--titlebar-controls-left);
+    }
+
+    /* No traffic lights on the right on any platform — a plain corner
+     * inset mirrors the left cluster's fullscreen position. */
+    .titlebar-controls-right {
+      right: 8px;
+    }
+
+    /* Chat closed: the right control floats over the MAIN pane's
+     * top-right — reserve the document tab strip's tail so tabs don't
+     * slide underneath it. (Chat open: the chat pane's own tab row
+     * carries the matching reserve — see ChatPane.tsx.) */
+    .app:not(.chat-open) .tab-strip {
+      padding-right: 44px;
     }
 
     .sidebar-panel {

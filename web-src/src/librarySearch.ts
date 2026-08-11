@@ -8,17 +8,16 @@
  * branch wipe folder-scoped fields on every switch. Module-scope memory is
  * the same deliberate choice as the command palette's recent-command list.
  */
-import type { FileMeta, LibraryKeywordFile, LibraryKeywordSearchResult, SearchHit } from './api';
+import type { LibraryKeywordFile, LibraryKeywordSearchResult, SearchHit } from './api';
+import type { ChatScope } from './components/agent/folderState';
 
 export type LibrarySearchMode = 'semantic' | 'keyword';
 
-/** The whole library, or the window's active folder (optionally narrowed to
- *  one of its subfolders). Folder scope always means the folder that is
- *  active when the search runs, so a remembered folder scope re-targets
- *  naturally after a cross-folder open. */
-export type LibrarySearchScope =
-  | { kind: 'library' }
-  | { kind: 'folder'; subfolder: string | null };
+/** The whole library, or one library folder by absolute path — the SAME
+ *  model the chat composer binds a session to, so both surfaces share one
+ *  scope picker (`ScopeMenu`) and one mental model. A folder scope names
+ *  its folder outright, so it survives a window folder switch unchanged. */
+export type LibrarySearchScope = ChatScope;
 
 export interface LibrarySemanticHit extends SearchHit {
   /** Absolute member folder root the hit lives in. */
@@ -36,24 +35,18 @@ export interface LibrarySearchResults {
 export interface LibrarySearchMemory extends LibrarySearchResults {
   query: string;
   mode: LibrarySearchMode;
-  caseStrict: boolean;
-  wholeWord: boolean;
   scope: LibrarySearchScope;
 }
 
 export interface LibrarySearchPrefill {
   query?: string;
   mode?: LibrarySearchMode;
-  caseStrict?: boolean;
-  wholeWord?: boolean;
   scope?: LibrarySearchScope;
 }
 
 const defaultMemory: LibrarySearchMemory = {
   query: '',
   mode: 'semantic',
-  caseStrict: false,
-  wholeWord: false,
   scope: { kind: 'library' },
   semanticHits: null,
   keywordResult: null,
@@ -84,8 +77,6 @@ export function applyLibrarySearchPrefill(
       ? { query: prefill.query, semanticHits: null, keywordResult: null, error: null }
       : {}),
     ...(prefill.mode !== undefined ? { mode: prefill.mode } : {}),
-    ...(prefill.caseStrict !== undefined ? { caseStrict: prefill.caseStrict } : {}),
-    ...(prefill.wholeWord !== undefined ? { wholeWord: prefill.wholeWord } : {}),
     ...(prefill.scope !== undefined ? { scope: prefill.scope } : {}),
   };
 }
@@ -167,29 +158,3 @@ export function folderBasename(path: string): string {
   return segments[segments.length - 1] || normalized;
 }
 
-/** Every directory that contains a visible file, folder-relative, sorted so
- *  children always follow their parent (segment-wise compare — a plain
- *  localeCompare would let "docs old" split "docs" from "docs/api" and break
- *  the scope menu's hierarchy-by-indentation). Derived from the live file
- *  list so the options always reflect the current tree. */
-export function subfolderScopes(files: readonly FileMeta[]): string[] {
-  const dirs = new Set<string>();
-  for (const file of files) {
-    const parts = file.name.split('/');
-    for (let i = 1; i < parts.length; i++) {
-      dirs.add(parts.slice(0, i).join('/'));
-    }
-  }
-  return [...dirs].sort(comparePathSegments);
-}
-
-function comparePathSegments(a: string, b: string): number {
-  const left = a.split('/');
-  const right = b.split('/');
-  const shared = Math.min(left.length, right.length);
-  for (let i = 0; i < shared; i++) {
-    const cmp = left[i].localeCompare(right[i]);
-    if (cmp !== 0) return cmp;
-  }
-  return left.length - right.length;
-}

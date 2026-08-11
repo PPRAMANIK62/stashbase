@@ -5,7 +5,13 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputRoot = path.join(repoRoot, 'web', 'dist-app');
 const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
-const initialJsBudgetBytes = 400 * 1024;
+/* Guardrail against a heavy module slipping into the always-loaded shell,
+ * not a freeze on shell features. Raised 400 → 416 KiB when the activity
+ * rail became the titlebar controls + a sidebar Settings row: that work is
+ * eager chrome by definition, and it landed with under 1 KiB of headroom
+ * left. Raise it only for shell UI that must load with the window —
+ * anything a user can open on demand belongs in a dynamic entry above. */
+const initialJsBudgetBytes = 416 * 1024;
 const expectedEntries = [
   'src/components/ChatPane.tsx',
   'src/components/CrepeDocument.tsx',

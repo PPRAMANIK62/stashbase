@@ -171,6 +171,18 @@ export function NewFolderIcon({ className }: IconProps) {
 }
 
 /** Leaning book spines (Lucide `library`) — the Library section glyph. */
+/** Lucide `text` — staggered heading lines; the Document Outline
+ *  section-header glyph. */
+export function OutlineIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M17 6.1H3" />
+      <path d="M21 12.1H3" />
+      <path d="M15.1 18H3" />
+    </svg>
+  );
+}
+
 export function LibraryIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
@@ -183,8 +195,12 @@ export function LibraryIcon({ className }: IconProps) {
 }
 
 export function FolderIcon({ className }: IconProps) {
+  // strokeWidth 1.5, not the icon set's usual 2: a wide, hollow,
+  // detail-free outline repeated down the Library list and tree stacks
+  // its stroke mass — at 2 a column of folders reads heavier/larger
+  // than the same-size detailed file glyphs beside it.
   return (
-    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={1.5} {...stroke}>
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
   );
@@ -258,6 +274,31 @@ export function PanelLeftIcon({ className }: IconProps) {
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
       <rect width="18" height="18" x="3" y="3" rx="2" />
       <path d="M9 3v18" />
+    </svg>
+  );
+}
+
+/** Report Bug entry in the sidebar's bottom row. A pared-back bug —
+ *  body, antennae, three leg pairs — because Lucide's eleven-path
+ *  original renders as mush at the 14px icon size and costs the initial
+ *  renderer chunk far more than it reads. */
+export function BugIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <path d="M12 20a6 6 0 0 1-6-6v-3a6 6 0 0 1 12 0v3a6 6 0 0 1-6 6Z" />
+      <path d="M12 20V8M8.5 3.5 10 6M15.5 3.5 14 6" />
+      <path d="M6 10H3M6 15H3M18 10h3M18 15h3" />
+    </svg>
+  );
+}
+
+/** Lucide `panel-right` — the chat-panel toggle mirroring PanelLeftIcon
+ *  on the titlebar's right side. */
+export function PanelRightIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M15 3v18" />
     </svg>
   );
 }

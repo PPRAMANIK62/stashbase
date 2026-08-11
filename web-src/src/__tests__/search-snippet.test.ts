@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { searchSnippetText } from '../lib/searchSnippet.ts';
+import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet.ts';
 
 test('strips a leading YAML frontmatter block so the snippet starts at content', () => {
   const chunk = [
@@ -58,4 +58,20 @@ test('leaves an unterminated fence alone', () => {
 test('falls back to the original content when the chunk is only frontmatter', () => {
   const onlyMeta = '---\ntitle: Doc\nstatus: draft\n---\n';
   assert.equal(searchSnippetText(onlyMeta), onlyMeta);
+});
+
+test('plainSnippetText flattens Markdown to reading text', () => {
+  assert.equal(plainSnippetText('## 资料来源\n* [Athletics Canada](../reference/LTAD_EN.pdf)，重点参考'),
+    '资料来源 Athletics Canada，重点参考');
+  assert.equal(plainSnippetText('**Step 4**'), 'Step 4');
+  assert.equal(plainSnippetText('a `code` and _em_ and **bold**'), 'a code and em and bold');
+});
+
+test('plainSnippetText drops the PDF converter page markers', () => {
+  // Written into the indexed text by the converter — they surfaced
+  // verbatim at the head of every PDF snippet.
+  assert.equal(
+    plainSnippetText('<!-- stashbase-pdf-pages: 69-72 --> <!-- stashbase-pdf-page: 69 --> fluid that moves'),
+    'fluid that moves',
+  );
 });

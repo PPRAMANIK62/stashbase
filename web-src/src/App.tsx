@@ -111,8 +111,9 @@ function AppBody() {
   // unmount it — hiding the panel only collapses the column via CSS,
   // the underlying agent WebSocket sessions stay alive. Killing them
   // on every collapse would lose Claude Code's chat history and any
-  // in-flight agent run. The sidebar's New Chat split button is how the
-  // user starts a fresh session (and reopens the hidden panel).
+  // in-flight agent run. The titlebar's chat toggle shows/hides the
+  // panel; the sidebar's New Chat split button starts a fresh session
+  // (and also reopens the hidden panel).
   const [chatMounted, setChatMounted] = useState(state.chatOpen);
   // Prime the agent registry once per window (always-mounted home: the
   // chat surfaces are lazy/conditional). Each AgentView refreshes the

@@ -651,7 +651,7 @@ function NewFolderInput({ parentPath, depth }: { parentPath: string; depth: numb
 // 6px "PDF"/"MD" label did not. Each SVG keeps its native viewBox and
 // hard-coded brand fill, so the `.format-*` CSS colour rules no longer
 // apply to them (they targeted `currentColor`).
-function FileTypeIcon({ format }: { format: 'md' | 'html' | 'pdf' | 'image' | 'docx' | 'audio' }) {
+export function FileTypeIcon({ format }: { format: 'md' | 'html' | 'pdf' | 'image' | 'docx' | 'audio' }) {
   if (format === 'image') {
     return (
       <svg viewBox="0 0 16 16">

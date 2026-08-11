@@ -10,9 +10,11 @@ as the result identity.
 - Semantic retrieval supports meaning-based discovery when configured.
 - In-app search is a popup (⌘⇧F / Ctrl+Shift+F, the titlebar Search
   control, or the Command Palette) in the app's palette chrome, searching
-  the whole library by default. A scope pill can narrow the next search to the active
-  folder or one of its subfolders; with no folder open, search still answers
-  library-wide.
+  the whole library by default. A scope pill narrows the next search to any
+  one library folder — the same picker, folder list, and rows the chat
+  composer binds a session with, so "which folder" is one control learned
+  once. A folder scope names its folder outright and therefore survives a
+  window folder switch.
 - The popup remembers its query, mode, toggles, scope, and results across
   close and reopen — and across the folder switch its own result-opens
   cause. Reopening silently refreshes the remembered results against
@@ -23,28 +25,35 @@ as the result identity.
   tab in the same window, with a banner naming its folder and offering to
   open that folder in a new window. Only the no-folder workspace binds the
   picked folder on open — there is no context to preserve there.
+- Scope and mode sit on the query row itself, right-aligned — they qualify
+  the query being typed, and a separate settings band under the field spent
+  a whole row on two short controls. The placeholder names the live scope
+  ("Search in library" / "Search in <folder>"). No result tally: the list
+  already shows what came back, and a count that changes on every keystroke
+  is movement beside the caret.
 - The search mode is one state-showing toggle: lit "≈ Similar" (the
   default) searches by meaning, quiet "= Exact" matches literal text, with
-  exact-mode sub-options (Aa / Word) beside it. The label always names the
-  current state; the ≈/= mnemonics never stand alone. The scope pill closes
-  the same row as the chat composer's quiet scope pill — one "pick a
-  scope" trigger across the app — showing "All folders", the active
-  folder's name, or the picked subfolder's name. Its menu is a compact
-  indented subfolder list (hierarchy by indentation, full path in the
-  tooltip), not the composer menu's icon-and-description rows.
+  exact-mode sub-options (Aa / Word) joining beside it. The label always
+  names the current state; the ≈/= mnemonics never stand alone.
 - Results from outside the active folder carry a quiet folder label;
   in-document find escalates to the popup ("All files") carrying its query
   and exact-mode options, scoped to the current folder.
-- Results identify the source file, path, and useful evidence such as a snippet
-  or page/timestamp hint. In-app snippets start at the file's content: a
-  leading YAML frontmatter block never renders in the result list.
-- Semantic results show the strongest matches first, up to a relevance-knee
-  count, and reveal the remaining fetched candidates through progressive
-  disclosure without another request. The summary reports the visible and
-  available counts (for example, "8 of 30 results"), and each hit carries a
-  per-hit relative match-strength indicator. The indicator is relative to the
-  fetched result set, not an absolute score, because hybrid scores have no
-  absolute meaning.
+- Results collect under the folder they live in, a quiet band naming each
+  group (shown only when the library spans folders). Grouping never resorts
+  by folder: a group sits where its strongest hit would have, and hits keep
+  rank order inside it. A row then leads with what it is — file glyph, file
+  name, and its in-file location as muted context — over a two-line snippet
+  of evidence. In-app snippets are reading text: a leading YAML frontmatter
+  block never renders, and Markdown syntax is flattened away (link text
+  survives, link targets do not).
+- Semantic results are listed strongest first, all of them, with no
+  disclosure control: the fetch candidate count is the only limit, and the
+  summary reports one number. Rank order is the only strength signal —
+  hybrid scores carry no absolute meaning, so a per-hit gauge would invite
+  comparisons it cannot support.
+- The popup holds a fixed height and scrolls its results internally. Results
+  arrive and change count while the user types, and a panel that resizes
+  under the pointer makes the list impossible to aim at.
 - Prepared PDF, image, DOCX, and media transcript text can be evidence, but
   opening a result returns to the original source file.
 - Search distinguishes disabled, preparing, partially ready, paused, failed,

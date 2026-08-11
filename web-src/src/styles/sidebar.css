@@ -165,15 +165,20 @@
 
     /* Flex-center the glyph so it sits on the row's vertical midline.
      * Without this the span is inline and the SVG rides the text
-     * baseline (looks high). */
+     * baseline (looks high). The SLOT stays 16px (the sidebar's gutter
+     * and indent grid); the glyph inside runs the app-wide 14px icon
+     * size, centred. */
     .tree-row .icon {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
       flex-shrink: 0;
     }
     .tree-row .icon svg {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       flex-shrink: 0;
       color: var(--muted);
     }

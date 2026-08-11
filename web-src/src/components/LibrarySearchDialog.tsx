@@ -3,9 +3,7 @@ import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '.
 import type { PendingHighlight } from '../store/state';
 import { useApp } from '../store/AppContext';
 import { openSettings } from './SettingsModal';
-import { guiSemanticVisibleCount } from '../store/appContextHelpers';
-import { relevanceRatios } from '../lib/searchRelevance';
-import { searchSnippetText } from '../lib/searchSnippet';
+import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet';
 import { folderRefsEqual } from '../folderPath';
 import {
   applyLibrarySearchPrefill,
@@ -13,32 +11,41 @@ import {
   orderKeywordFiles,
   readLibrarySearchMemory,
   resolveSemanticHits,
-  subfolderScopes,
   writeLibrarySearchMemory,
   type LibrarySearchMode,
   type LibrarySearchPrefill,
   type LibrarySearchScope,
   type LibrarySemanticHit,
 } from '../librarySearch';
-import { Button } from './ui/button';
 import {
   Menu, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuTrigger,
 } from './ui/menu';
+import { Button } from './ui/button';
+import { SegmentedControl, SegmentedControlItem } from './ui/segmented-control';
 import { StatusMessage } from './ui/status';
 import { CheckIcon, ChevronDownIcon } from '../icons';
 import { cn } from '../lib/utils';
 import {
   menuSectionClass, optActiveClass, pillChevronClass, pillClass,
 } from './agent/panelStyles';
+import { folderMenuEntries } from './agent/folderState';
+import { ScopeMenu } from './ScopeMenu';
+import { FileTypeIcon } from './FileTree';
+import {
+  AUDIO_SOURCE_EXTENSIONS, DOCX_EXTENSIONS, HTML_NOTE_EXTENSIONS,
+  IMAGE_SOURCE_EXTENSIONS, PDF_EXTENSIONS,
+} from '../../../shared/file-formats.ts';
 import { SemanticIndexingNotice } from './SemanticIndexingNotice';
 import { PICKER_VEIL_CLASS, pickerPanelClass } from './pickerChrome';
 
 /**
  * The library search popup — the app's one search surface. A palette-style
  * modal (Quick Open chrome) over the WHOLE library by default, narrowable to
- * the active folder or one of its subfolders. Query, mode, toggles, scope,
- * and results live in module memory (`librarySearch.ts`), never in the
- * reducer, so the popup survives close/reopen and folder switches.
+ * any one library folder through the shared `ScopeMenu` — the same picker,
+ * folder list, and rows the chat composer binds a session with. Query, mode,
+ * toggles, scope, and results live in module memory (`librarySearch.ts`),
+ * never in the reducer, so the popup survives close/reopen and folder
+ * switches.
  *
  * Opening a result NEVER switches the window's folder: a hit in the active
  * folder opens normally; a hit in another member folder opens as an
@@ -48,24 +55,23 @@ import { PICKER_VEIL_CLASS, pickerPanelClass } from './pickerChrome';
  * no context to preserve there.
  */
 
-/** Latch buttons (the ≈ Similar mode toggle, Aa / Word) — quiet until
- *  pressed, then the accent state ladder driven off aria-pressed. */
-const MODE_TOGGLE_CLASS =
-  'h-5 min-w-5.5 rounded-sm px-1 text-xs font-normal text-muted-foreground aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent';
-
 const HIT_LIST_CLASS = 'px-1.5 py-1';
-const HIT_SUMMARY_CLASS = 'px-2.5 pt-0.5 pb-1.5 text-xs text-muted-foreground';
+
+/** Search-mode segments: the primitive's chunky pressed treatment (bold +
+ *  raised shadow) turned down to a quiet swap of surface and colour. */
+const SEARCH_MODE_SEGMENT_CLASS =
+  'px-2 py-0.5 text-xs font-normal data-pressed:font-normal data-pressed:shadow-none';
 
 /** Sentinel kept out of user-facing copy: rendering special-cases the
  *  missing-embedding-key state instead of showing a raw error line. */
 const EMBEDDER_KEY_ERROR = 'embedder-key-required';
 
+/** Also the display cap: every fetched hit is listed, strongest first,
+ *  so this bounds the list itself rather than an initial slice. */
 const SEMANTIC_SEARCH_CANDIDATES = 30;
-const SEMANTIC_SHOW_MORE_STEP = 8;
 
 type ResultEntry =
-  | { kind: 'semantic'; hit: LibrarySemanticHit; relevance?: number }
-  | { kind: 'more' }
+  | { kind: 'semantic'; hit: LibrarySemanticHit }
   | { kind: 'file'; file: LibraryKeywordFile }
   | { kind: 'match'; file: LibraryKeywordFile; match: KeywordMatch };
 
@@ -77,6 +83,33 @@ interface RowProps {
   onMouseDown: (event: ReactMouseEvent) => void;
 }
 
+/** Collect ranked results under their folder WITHOUT resorting them: a
+ *  folder's group lands where its first (strongest) member would have, and
+ *  members keep the order they arrived in. `index` is filled by the caller
+ *  as it pushes keyboard entries, so nav order always matches render
+ *  order. */
+function groupByFolder<T>(items: readonly T[], folderOf: (item: T) => string) {
+  const groups: { folder: string; rows: { item: T; index: number }[] }[] = [];
+  const byFolder = new Map<string, (typeof groups)[number]>();
+  for (const item of items) {
+    const folder = folderOf(item);
+    let group = byFolder.get(folder);
+    if (!group) {
+      group = { folder, rows: [] };
+      byFolder.set(folder, group);
+      groups.push(group);
+    }
+    group.rows.push({ item, index: -1 });
+  }
+  return groups;
+}
+
+/** Folder band above each group — the quiet section-strip treatment the
+ *  sidebar uses, so "this run of results lives here" reads as structure
+ *  rather than as another result. */
+const FOLDER_HEADER_CLASS =
+  'sticky top-0 z-1 -mx-1.5 bg-card/95 px-4 pt-2 pb-1 text-xs font-medium text-muted-foreground backdrop-blur-sm';
+
 export default function LibrarySearchDialog({ prefill, onClose }: {
   prefill?: LibrarySearchPrefill | null;
   onClose: () => void;
@@ -85,16 +118,12 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   const initial = useRef(applyLibrarySearchPrefill(readLibrarySearchMemory(), prefill)).current;
   const [query, setQuery] = useState(initial.query);
   const [mode, setMode] = useState<LibrarySearchMode>(initial.mode);
-  const [caseStrict, setCaseStrict] = useState(initial.caseStrict);
-  const [wholeWord, setWholeWord] = useState(initial.wholeWord);
   const [scope, setScope] = useState<LibrarySearchScope>(initial.scope);
   const [semanticHits, setSemanticHits] = useState(initial.semanticHits);
   const [keywordResult, setKeywordResult] = useState(initial.keywordResult);
   const [error, setError] = useState(initial.error);
   const [searching, setSearching] = useState(false);
   const [active, setActive] = useState(0);
-  const [visibleSemantic, setVisibleSemantic] = useState(() =>
-    initial.semanticHits ? guiSemanticVisibleCount(initial.semanticHits) : 0);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -114,8 +143,8 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   // Every state change lands in module memory so close/reopen — and any
   // folder switch while the popup is away — restore it exactly.
   useEffect(() => {
-    writeLibrarySearchMemory({ query, mode, caseStrict, wholeWord, scope, semanticHits, keywordResult, error });
-  }, [query, mode, caseStrict, wholeWord, scope, semanticHits, keywordResult, error]);
+    writeLibrarySearchMemory({ query, mode, scope, semanticHits, keywordResult, error });
+  }, [query, mode, scope, semanticHits, keywordResult, error]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -126,12 +155,7 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   interface RunOpts {
     query: string;
     mode: LibrarySearchMode;
-    caseStrict: boolean;
-    wholeWord: boolean;
     scope: LibrarySearchScope;
-    /** Background refresh: keep the user's Show-more disclosure instead of
-     *  collapsing back to the relevance knee. */
-    preserveDisclosure?: boolean;
   }
 
   const runSearch = useCallback(async (opts: RunOpts) => {
@@ -146,22 +170,15 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
     }
     setSearching(true);
     const stale = () => myGen !== generation.current;
-    // Folder scope means the folder active right now; with no folder open it
-    // gracefully widens to the library (the copy and pill say so).
-    const folderPath = folderPathRef.current;
-    const folderScope = opts.scope.kind === 'folder' && folderPath
-      ? {
-          folder: folderPath,
-          ...(opts.scope.subfolder ? { pathPrefix: `${folderPath}/${opts.scope.subfolder}` } : {}),
-        }
-      : {};
+    // A folder scope names its folder outright, so it needs no reference
+    // to the window's current folder and survives a switch untouched.
+    const folderScope = opts.scope.kind === 'folder' ? { folder: opts.scope.path } : {};
     try {
       if (opts.mode === 'keyword') {
-        const result = await api.libraryKeywordSearch(q, {
-          caseStrict: opts.caseStrict,
-          wholeWord: opts.wholeWord,
-          ...folderScope,
-        });
+        // Exact search is plain, case-insensitive substring matching:
+        // the popup offers no case/whole-word latches, so it must never
+        // send options the user cannot see or unset.
+        const result = await api.libraryKeywordSearch(q, folderScope);
         if (stale()) return;
         setKeywordResult(result);
         setSemanticHits(null);
@@ -180,9 +197,6 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
         if (stale()) return;
         const resolved = resolveSemanticHits(hits, folderRootsRef.current);
         setSemanticHits(resolved);
-        setVisibleSemantic((current) => opts.preserveDisclosure
-          ? Math.max(guiSemanticVisibleCount(resolved), Math.min(current, resolved.length))
-          : guiSemanticVisibleCount(resolved));
         setKeywordResult(null);
         setError(null);
       }
@@ -201,7 +215,7 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   // lands or a conversion finishes while the popup stays open. Old results
   // stay visible until the fresh response arrives, so this never flashes.
   useEffect(() => {
-    if (query.trim()) void runSearch({ query, mode, caseStrict, wholeWord, scope, preserveDisclosure: true });
+    if (query.trim()) void runSearch({ query, mode, scope });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.files, state.pendingConversions]);
 
@@ -219,36 +233,24 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
     setActive(0);
     cancelDebounce();
     if (!value.trim()) {
-      void runSearch({ query: '', mode, caseStrict, wholeWord, scope });
+      void runSearch({ query: '', mode, scope });
       return;
     }
     debounce.current = setTimeout(() => {
       debounce.current = null;
-      void runSearch({ query: value, mode, caseStrict, wholeWord, scope });
+      void runSearch({ query: value, mode, scope });
     }, 250);
   }
 
   function rerun(next: Partial<RunOpts>) {
     cancelDebounce();
-    if (query.trim()) void runSearch({ query, mode, caseStrict, wholeWord, scope, ...next });
+    if (query.trim()) void runSearch({ query, mode, scope, ...next });
   }
 
   function setSearchMode(next: LibrarySearchMode) {
     setMode(next);
     setActive(0);
     rerun({ mode: next });
-  }
-
-  function toggleCaseStrict() {
-    const next = !caseStrict;
-    setCaseStrict(next);
-    rerun({ caseStrict: next });
-  }
-
-  function toggleWholeWord() {
-    const next = !wholeWord;
-    setWholeWord(next);
-    rerun({ wholeWord: next });
   }
 
   function setSearchScope(next: LibrarySearchScope) {
@@ -258,10 +260,6 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   }
 
   const activeFolderPath = state.folderPath;
-  // A remembered folder scope with no folder open runs library-wide; every
-  // copy below keys off the EFFECTIVE scope so the UI never claims a folder
-  // narrowing that is not happening.
-  const effectiveFolderScope = scope.kind === 'folder' && Boolean(activeFolderPath);
   const librarySpansFolders = folderRootsRef.current.length > 1;
 
   // One flat entry list drives keyboard navigation, aria ids, and click
@@ -269,38 +267,47 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   const { entries, semanticView, keywordGroups } = useMemo(() => {
     const entries: ResultEntry[] = [];
     if (mode === 'semantic' && semanticHits) {
-      const ratios = relevanceRatios(semanticHits.map((hit) => hit.score));
-      const shown = Math.min(visibleSemantic, semanticHits.length);
-      const rows = semanticHits.slice(0, shown).map((hit, i) => {
-        entries.push({ kind: 'semantic', hit, relevance: ratios[i] });
-        return { hit, relevance: ratios[i], index: entries.length - 1 };
-      });
-      const remaining = semanticHits.length - shown;
-      let moreIndex: number | null = null;
-      if (remaining > 0) {
-        entries.push({ kind: 'more' });
-        moreIndex = entries.length - 1;
+      // Every fetched hit is listed — the fetch cap is the only limit, so
+      // the list needs no disclosure control — collected under its folder.
+      // Grouping keeps a folder's hits in ONE place instead of scattering
+      // them down the list, and relevance still drives both levels: a
+      // group sits where its strongest hit would have, and hits stay in
+      // rank order inside it.
+      const groups = groupByFolder(semanticHits, (hit) => hit.folder);
+      for (const group of groups) {
+        for (const row of group.rows) {
+          entries.push({ kind: 'semantic', hit: row.item });
+          row.index = entries.length - 1;
+        }
       }
       return {
         entries,
-        semanticView: { rows, remaining, moreIndex, shown, total: semanticHits.length },
+        semanticView: { groups, total: semanticHits.length },
         keywordGroups: [],
       };
     }
     if (mode === 'keyword' && keywordResult) {
-      const groups = orderKeywordFiles(keywordResult.files, activeFolderPath).map((file) => {
-        entries.push({ kind: 'file', file });
-        const fileIndex = entries.length - 1;
-        const matches = file.matches.map((match) => {
-          entries.push({ kind: 'match', file, match });
-          return { match, index: entries.length - 1 };
-        });
-        return { file, index: fileIndex, matches, hiddenCount: file.totalMatches - file.matches.length };
-      });
+      // Same folder grouping over the file groups: active-folder files
+      // lead (orderKeywordFiles), so their folder leads too.
+      const groups = groupByFolder(
+        orderKeywordFiles(keywordResult.files, activeFolderPath),
+        (file) => file.folder,
+      ).map((group) => ({
+        folder: group.folder,
+        files: group.rows.map(({ item: file }) => {
+          entries.push({ kind: 'file', file });
+          const fileIndex = entries.length - 1;
+          const matches = file.matches.map((match) => {
+            entries.push({ kind: 'match', file, match });
+            return { match, index: entries.length - 1 };
+          });
+          return { file, index: fileIndex, matches, hiddenCount: file.totalMatches - file.matches.length };
+        }),
+      }));
       return { entries, semanticView: null, keywordGroups: groups };
     }
     return { entries, semanticView: null, keywordGroups: [] };
-  }, [mode, semanticHits, keywordResult, visibleSemantic, activeFolderPath]);
+  }, [mode, semanticHits, keywordResult, activeFolderPath]);
 
   useEffect(() => {
     if (active >= entries.length) setActive(Math.max(0, entries.length - 1));
@@ -355,8 +362,6 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
       audioSeekText: match?.text,
       audioSeekMs: match?.audioTimestampMs,
       openFindBar: true,
-      findCaseStrict: caseStrict,
-      findWholeWord: wholeWord,
       pdfPage: match?.pdfPage,
     };
   }
@@ -377,9 +382,6 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
       case 'match':
         openTarget(entry.file.folder, entry.file.path, keywordHighlight(entry.match));
         break;
-      case 'more':
-        setVisibleSemantic((current) => current + SEMANTIC_SHOW_MORE_STEP);
-        break;
     }
   }
 
@@ -395,8 +397,10 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   });
 
   const isKeyword = mode === 'keyword';
-  const scopes = subfolderScopes(state.files);
   const trimmedQuery = query.trim();
+  // Same membership list, order, and "ensure the window folder" rule the
+  // composer's picker uses — the two menus must offer the same folders.
+  const folderEntries = folderMenuEntries(state.recent, state.folderPath);
 
   return (
     <div
@@ -413,66 +417,85 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
         }
       }}
     >
-      <div className={cn(pickerPanelClass('wide'), 'flex flex-col')} role="dialog" aria-modal="true" aria-label="Search library">
-        <input
-          ref={inputRef}
-          className="w-full border-0 border-b border-solid border-border bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-muted-foreground"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-controls="library-search-results"
-          aria-expanded="true"
-          aria-activedescendant={entries.length ? `library-search-${active}` : undefined}
-          placeholder="Search notes, PDFs, images, and media transcripts"
-          autoComplete="off"
-          spellCheck={false}
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index) => Math.min(index + 1, Math.max(0, entries.length - 1))); }
-            else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)); }
-            else if (event.key === 'Home' && !query) { event.preventDefault(); setActive(0); }
-            else if (event.key === 'End' && !query) { event.preventDefault(); setActive(Math.max(0, entries.length - 1)); }
-            else if (event.key === 'Enter' && entries[active]) { event.preventDefault(); activateEntry(entries[active]); }
-          }}
-        />
-        {/* Mode is ONE state-showing toggle: lit `≈ Similar` (default)
-          * searches by meaning, quiet `= Exact` matches literal text, with
-          * Aa / Word latches beside it in exact mode. The scope pill closes
-          * the row — All folders by default, narrowable to the active
-          * folder or one of its subfolders. */}
-        <div className="flex items-center gap-1 px-3 py-2">
-          <Button
-            variant="ghost"
-            size="xs"
-            className={MODE_TOGGLE_CLASS + ' px-1.5'}
-            aria-label="Search by similarity"
-            aria-pressed={!isKeyword}
-            title={isKeyword
-              ? 'Matching exact text — click to search by meaning'
-              : state.embedderHasKey === false
-                ? 'Matching by meaning — needs embedding setup'
-                : 'Matching by meaning — click to match exact text'}
-            onClick={() => setSearchMode(isKeyword ? 'semantic' : 'keyword')}
-          >
-            {isKeyword ? '= Exact' : '≈ Similar'}
-          </Button>
-          {isKeyword && (
-            <div className="flex items-center gap-0.5" role="group" aria-label="Keyword options">
-              <Button variant="ghost" size="xs" className={MODE_TOGGLE_CLASS} onClick={toggleCaseStrict} aria-label="Match case" aria-pressed={caseStrict} title="Match Case">
-                Aa
-              </Button>
-              <Button variant="ghost" size="xs" className={MODE_TOGGLE_CLASS + ' min-w-8.5'} onClick={toggleWholeWord} aria-label="Match whole word" aria-pressed={wholeWord} title="Whole word">
-                Word
-              </Button>
-            </div>
-          )}
-          <ScopePill
-            scope={scope}
-            folderName={state.folder}
-            hasFolder={Boolean(state.folderPath)}
-            scopes={scopes}
-            onPick={setSearchScope}
+      {/* FIXED height, not a content cap: results stream in and change
+        * count as the user types, and a panel that resizes under the
+        * pointer makes the list impossible to aim at. The list scrolls
+        * inside instead. */}
+      <div className={cn(pickerPanelClass('wide'), 'flex h-[min(480px,calc(100vh-64px))] flex-col')} role="dialog" aria-modal="true" aria-label="Search library">
+        {/* Query and the two search settings share ONE row: the settings
+          * belong to the query being typed, and a separate toolbar band
+          * under the field spent a whole row on two short controls. The
+          * result tally is gone with it — the list itself already shows
+          * how much came back, and a live count next to the caret is
+          * movement the eye must ignore on every keystroke. */}
+        <div className="flex items-center gap-1 border-b border-border pr-3">
+          <input
+            ref={inputRef}
+            /* Placeholder at 55% of muted: at this 20px size a full-strength
+               muted line reads as typed text and the empty popup looks
+               pre-filled. */
+            className="min-w-0 flex-1 border-0 bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-muted-foreground/55"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="library-search-results"
+            aria-expanded="true"
+            aria-activedescendant={entries.length ? `library-search-${active}` : undefined}
+            /* Names the live scope rather than listing formats: the old
+               "notes, PDFs, images, and media transcripts" taught coverage
+               once and then sat there as a long line the user re-read on
+               every open. */
+            placeholder={scope.kind === 'folder'
+              ? `Search in ${folderBasename(scope.path)}`
+              : 'Search in library'}
+            autoComplete="off"
+            spellCheck={false}
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index) => Math.min(index + 1, Math.max(0, entries.length - 1))); }
+              else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)); }
+              else if (event.key === 'Home' && !query) { event.preventDefault(); setActive(0); }
+              else if (event.key === 'End' && !query) { event.preventDefault(); setActive(Math.max(0, entries.length - 1)); }
+              else if (event.key === 'Enter' && entries[active]) { event.preventDefault(); activateEntry(entries[active]); }
+            }}
           />
+          {/* Where it looks, then how it matches. Mode is a two-segment
+            * control, not a single state-showing button: one button had
+            * to answer "is this label what I AM or what I'd BECOME?" in
+            * its copy, and no wording settles that. Both options visible,
+            * one pressed, question gone. */}
+          <ScopeMenu
+            scope={scope}
+            entries={folderEntries}
+            homeDir={state.homeDir ?? ''}
+            heading="Search scope"
+            libraryDetail="Search every folder in your library"
+            side="bottom"
+            ariaLabel="Search scope"
+            onSetScope={setSearchScope}
+          />
+          {/* Lighter than the Settings pickers this primitive was built
+            * for: no outer border, a quiet track, and the pressed segment
+            * keeps NORMAL weight — bold-on-white beside a 20px query line
+            * read as the loudest thing in the popup. Surface and colour
+            * carry the selection instead. */}
+          <SegmentedControl aria-label="Search mode" className="border-0 bg-muted/70 p-0.5" value={[mode]} onValueChange={(next) => {
+            const picked = next[0] as LibrarySearchMode | undefined;
+            if (picked && picked !== mode) setSearchMode(picked);
+          }}>
+            <SegmentedControlItem
+              value="semantic"
+              className={SEARCH_MODE_SEGMENT_CLASS}
+              title={state.embedderHasKey === false
+                ? 'Match by meaning — needs embedding setup'
+                : 'Match by meaning'}
+            >
+              Similar
+            </SegmentedControlItem>
+            <SegmentedControlItem value="keyword" className={SEARCH_MODE_SEGMENT_CLASS} title="Match exact text">
+              Exact
+            </SegmentedControlItem>
+          </SegmentedControl>
         </div>
         <SemanticIndexingNotice />
         <SearchStatusBanner semanticMode={!isKeyword} onNavigateAway={close} />
@@ -483,9 +506,11 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
               <div>Add a folder from the sidebar to make it searchable.</div>
             </div>
           ) : !trimmedQuery ? (
-            <p className="m-0 px-3.5 pt-1 pb-3 text-xs text-muted-foreground">
-              {effectiveFolderScope ? 'Searches the current folder.' : 'Searches every folder in your library.'}
-            </p>
+            /* Nothing typed, nothing to say: the placeholder and the scope
+             * pill on the row above already name where a search will look,
+             * and a third line repeating it was the only thing in an
+             * otherwise empty panel. */
+            null
           ) : error === EMBEDDER_KEY_ERROR || (error && error.startsWith('semantic search is disabled')) ? (
             <div className="empty-list">
               <div>Similarity search needs an embedding API key.</div>
@@ -500,47 +525,53 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
               <div className="empty-list">No matches</div>
             ) : (
               <div className={HIT_LIST_CLASS}>
-                <div className={HIT_SUMMARY_CLASS}>
-                  {keywordResult.totalMatches} match{keywordResult.totalMatches === 1 ? '' : 'es'} in {keywordResult.files.length} file{keywordResult.files.length === 1 ? '' : 's'}
-                  {keywordResult.truncated && ' (truncated)'}
-                </div>
-                {keywordGroups.map((group) => (
-                  <div className="mb-1.5" key={`${group.file.folder}::${group.file.path}`}>
-                    <div
-                      className={cn(
-                        'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 hover:bg-muted',
-                        group.index === active && 'bg-muted',
-                      )}
-                      title={`${group.file.folder}/${group.file.path}`}
-                      {...rowProps(group.index)}
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                        {group.file.path.split('/').pop() ?? group.file.path}
-                      </span>
-                      {librarySpansFolders && !folderRefsEqualSafe(group.file.folder, activeFolderPath) && (
-                        <span className="max-w-32 shrink-0 truncate text-xs text-muted-foreground">{folderBasename(group.file.folder)}</span>
-                      )}
-                      <span className="min-w-4 shrink-0 rounded-lg bg-muted px-1.25 text-center text-2xs leading-4 text-muted-foreground">{group.file.totalMatches}</span>
-                    </div>
-                    {group.matches.map(({ match, index }) => (
-                      <div
-                        key={`${match.line}#${index}`}
-                        className={cn(
-                          'flex cursor-pointer items-baseline gap-2 rounded-sm py-0.5 pr-2.5 pl-4 text-sm leading-normal hover:bg-muted',
-                          index === active && 'bg-muted',
+                {keywordGroups.map((folderGroup) => (
+                  <div key={folderGroup.folder}>
+                    {librarySpansFolders && (
+                      <div className={FOLDER_HEADER_CLASS}>{folderBasename(folderGroup.folder)}</div>
+                    )}
+                    {folderGroup.files.map((group) => (
+                      <div className="mb-1.5" key={`${group.file.folder}::${group.file.path}`}>
+                        <div
+                          className={cn(
+                            'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 hover:bg-muted',
+                            group.index === active && 'bg-muted',
+                          )}
+                          title={`${group.file.folder}/${group.file.path}`}
+                          {...rowProps(group.index)}
+                        >
+                          {/* Same identity line as the semantic rows —
+                            * the folder now lives in the band above, so
+                            * only the match count keeps the right edge. */}
+                          <span className="inline-flex size-4 flex-none items-center justify-center [&_svg]:size-3.5">
+                            <FileTypeIcon format={searchHitFormat(group.file.path)} />
+                          </span>
+                          <span className="min-w-0 truncate text-base font-medium text-foreground">
+                            {group.file.path.split('/').pop() ?? group.file.path}
+                          </span>
+                          <span className="ml-auto min-w-4 shrink-0 rounded-lg bg-muted px-1.25 text-center text-2xs leading-4 text-muted-foreground">{group.file.totalMatches}</span>
+                        </div>
+                        {group.matches.map(({ match, index }) => (
+                          <div
+                            key={`${match.line}#${index}`}
+                            className={cn(
+                              'flex cursor-pointer items-baseline gap-2 rounded-sm py-0.5 pr-2.5 pl-4 text-sm leading-normal hover:bg-muted',
+                              index === active && 'bg-muted',
+                            )}
+                            title={`Line ${match.line}`}
+                            {...rowProps(index)}
+                          >
+                            <span className="min-w-6.5 shrink-0 text-right text-muted-foreground tabular-nums select-none">{match.line}</span>
+                            <span className="min-w-0 flex-1 truncate text-foreground [&_mark]:rounded-xs [&_mark]:bg-accent-amber/30 [&_mark]:px-px [&_mark]:text-inherit">
+                              {highlightRanges(match.text, match.ranges)}
+                            </span>
+                          </div>
+                        ))}
+                        {group.hiddenCount > 0 && (
+                          <div className="cursor-default py-0.5 pr-2.5 pl-4 text-xs text-muted-foreground">+ {group.hiddenCount} more in this file</div>
                         )}
-                        title={`Line ${match.line}`}
-                        {...rowProps(index)}
-                      >
-                        <span className="min-w-6.5 shrink-0 text-right text-muted-foreground tabular-nums select-none">{match.line}</span>
-                        <span className="min-w-0 flex-1 truncate text-foreground [&_mark]:rounded-xs [&_mark]:bg-accent-amber/30 [&_mark]:px-px [&_mark]:text-inherit">
-                          {highlightRanges(match.text, match.ranges)}
-                        </span>
                       </div>
                     ))}
-                    {group.hiddenCount > 0 && (
-                      <div className="cursor-default py-0.5 pr-2.5 pl-4 text-xs text-muted-foreground">+ {group.hiddenCount} more in this file</div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -551,34 +582,21 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
             <div className="empty-list">No matches</div>
           ) : (
             <div className={HIT_LIST_CLASS}>
-              <div className={HIT_SUMMARY_CLASS}>
-                {semanticView.remaining > 0
-                  ? `${semanticView.shown} of ${semanticView.total} results`
-                  : `${semanticView.total} result${semanticView.total === 1 ? '' : 's'}`}
-              </div>
-              {semanticView.rows.map(({ hit, relevance, index }) => (
-                <SemanticHitRow
-                  key={`${hit.fileName}#${hit.chunkIndex}#${index}`}
-                  hit={hit}
-                  relevance={relevance}
-                  isActive={index === active}
-                  showFolder={librarySpansFolders && !folderRefsEqualSafe(hit.folder, activeFolderPath)}
-                  rowProps={rowProps(index)}
-                />
-              ))}
-              {semanticView.moreIndex != null && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    'mt-0.5 mb-1 w-full font-normal text-accent',
-                    semanticView.moreIndex === active && 'bg-muted',
+              {semanticView.groups.map((group) => (
+                <div key={group.folder}>
+                  {librarySpansFolders && (
+                    <div className={FOLDER_HEADER_CLASS}>{folderBasename(group.folder)}</div>
                   )}
-                  {...rowProps(semanticView.moreIndex)}
-                >
-                  Show {Math.min(semanticView.remaining, SEMANTIC_SHOW_MORE_STEP)} more
-                </Button>
-              )}
+                  {group.rows.map(({ item: hit, index }) => (
+                    <SemanticHitRow
+                      key={`${hit.fileName}#${hit.chunkIndex}#${index}`}
+                      hit={hit}
+                      isActive={index === active}
+                      rowProps={rowProps(index)}
+                    />
+                  ))}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -587,163 +605,66 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   );
 }
 
-function folderRefsEqualSafe(a: string, b: string): boolean {
-  return Boolean(a) && Boolean(b) && folderRefsEqual(a, b);
+/** The file-tree glyph for a hit, chosen from its extension — the search
+ *  list and the tree name the same file with the same mark. Anything the
+ *  viewer cannot classify falls back to the Markdown note glyph, which is
+ *  what the index overwhelmingly holds. */
+function searchHitFormat(name: string): 'md' | 'html' | 'pdf' | 'image' | 'docx' | 'audio' {
+  const ext = name.toLowerCase().split('.').pop() ?? '';
+  if (PDF_EXTENSIONS.includes(ext as never)) return 'pdf';
+  if (HTML_NOTE_EXTENSIONS.includes(ext as never)) return 'html';
+  if (IMAGE_SOURCE_EXTENSIONS.includes(ext as never)) return 'image';
+  if (DOCX_EXTENSIONS.includes(ext as never)) return 'docx';
+  if (AUDIO_SOURCE_EXTENSIONS.includes(ext as never)) return 'audio';
+  return 'md';
 }
 
-function SemanticHitRow({ hit, relevance, isActive, showFolder, rowProps }: {
+function SemanticHitRow({ hit, isActive, rowProps }: {
   hit: LibrarySemanticHit;
-  relevance?: number;
   isActive: boolean;
-  showFolder: boolean;
   rowProps: RowProps;
 }) {
   const fileBasename = hit.rel.split('/').pop() ?? hit.rel;
   // No term highlighting on semantic snippets: a semantic hit isn't a literal
-  // substring match, so marking the query words would mislead. Any leading
-  // YAML frontmatter is stripped for DISPLAY only — `hit.content` stays raw
-  // because it anchors click-through navigation.
-  const snippetSource = searchSnippetText(hit.content);
-  const snippet = snippetSource.length > 240 ? snippetSource.slice(0, 240) + '…' : snippetSource;
-  const relevanceLabel = relevance != null
-    ? `Relative match strength: ${Math.round(relevance * 100)}%`
-    : undefined;
+  // substring match, so marking the query words would mislead. Frontmatter
+  // and Markdown syntax are stripped for DISPLAY only — `hit.content` stays
+  // raw because it anchors click-through navigation.
+  const snippetSource = plainSnippetText(searchSnippetText(hit.content));
+  const snippet = snippetSource.length > 200 ? snippetSource.slice(0, 200) + '…' : snippetSource;
+  // The heading arrives as the source line, so a `**Step 4**` heading kept
+  // its asterisks — it needs the same flattening as the snippet.
+  const heading = hit.heading ? plainSnippetText(hit.heading) : '';
   return (
+    /* Identity first, evidence second. A row led by its snippet made every
+     * result a wall of same-weight prose with the file name buried at the
+     * bottom; leading with the file (strong) over a muted two-line snippet
+     * gives the list one scannable left column. Selection is the sidebar's
+     * quiet tinted pill — no border, which read as a stack of boxes. */
     <div
-      className={cn(
-        'mb-1 cursor-pointer rounded-md border border-transparent px-2.5 py-2 hover:border-border hover:bg-muted',
-        isActive && 'border-border bg-muted',
-      )}
+      className={cn('cursor-pointer rounded-md px-2.5 py-1.5 hover:bg-muted', isActive && 'bg-muted')}
       title={hit.fileName}
       {...rowProps}
     >
-      {hit.heading && <div className="mb-1 truncate text-xs font-medium tracking-wide text-muted-foreground">{hit.heading}</div>}
-      <div className="line-clamp-3 text-sm text-foreground">{snippet}</div>
-      <div className="mt-1.5 flex items-baseline justify-between text-xs text-muted-foreground">
-        <span className="min-w-0 truncate">
-          {fileBasename}
-          {showFolder && <span className="opacity-80"> · {folderBasename(hit.folder)}</span>}
+      {/* Identity line: the file, then where inside it the hit sits —
+        * pushed to the right edge, because "Page 53" / a section title is
+        * a locator, not part of the name. Trailing it keeps the file
+        * names flush left as one scannable column. The FOLDER is not
+        * repeated here: it heads the group this row sits in. */}
+      <div className="flex items-baseline gap-2">
+        <span className="inline-flex size-4 flex-none translate-y-0.5 items-center justify-center [&_svg]:size-3.5">
+          <FileTypeIcon format={searchHitFormat(fileBasename)} />
         </span>
-        {relevance != null && (
-          <span
-            className="ml-2 h-1 w-11 shrink-0 overflow-hidden rounded-xs bg-accent/15"
-            role="img"
-            aria-label={relevanceLabel}
-            title={relevanceLabel}
-          >
-            <span className="block h-full rounded-xs bg-accent" style={{ width: `${Math.round(relevance * 100)}%` }} />
-          </span>
+        <span className="min-w-0 truncate text-base font-medium text-foreground">{fileBasename}</span>
+        {heading && (
+          <span className="ml-auto max-w-[45%] flex-none truncate text-xs text-muted-foreground">{heading}</span>
         )}
       </div>
+      {/* No match-strength bar: hybrid scores carry no absolute meaning,
+        * so a per-hit gauge invited comparisons it could not support.
+        * Rank order alone communicates relative strength. */}
+      <div className="mt-0.5 line-clamp-2 pl-5.5 text-sm text-muted-foreground">{snippet}</div>
     </div>
   );
-}
-
-/** Scope pill — All folders (default) / the active folder / one of its
- *  subfolders. Hidden when no folder is open (nothing to narrow to). */
-function ScopePill({ scope, folderName, hasFolder, scopes, onPick }: {
-  scope: LibrarySearchScope;
-  folderName: string;
-  hasFolder: boolean;
-  scopes: string[];
-  onPick: (scope: LibrarySearchScope) => void;
-}) {
-  if (!hasFolder) return null;
-  const subfolder = scope.kind === 'folder' ? scope.subfolder : null;
-  const staleSubfolder = subfolder != null && !scopes.includes(subfolder);
-  const label = scope.kind === 'library'
-    ? 'All folders'
-    : subfolder
-      ? lastSegment(subfolder)
-      : folderName || 'This folder';
-  return (
-    <Menu>
-      <MenuTrigger
-        className={cn(pillClass, 'ml-auto min-w-0')}
-        aria-label="Search scope"
-        title={scope.kind === 'library'
-          ? 'Searching every folder — click to narrow'
-          : subfolder
-            ? `Search scope — ${subfolder}`
-            : `Searching ${folderName || 'this folder'}`}
-      >
-        <span className="truncate">{label}</span>
-        <ChevronDownIcon className={pillChevronClass} />
-      </MenuTrigger>
-      <MenuPortal>
-        <MenuPositioner side="bottom" align="end" sideOffset={4} collisionPadding={8}>
-          <MenuPopup className="max-h-[min(320px,50vh)] w-58 max-w-[calc(100vw-24px)] overflow-auto p-1 text-sm" aria-label="Search scope">
-            <ScopeRow
-              title="All folders"
-              tooltip="Search everything in your library"
-              active={scope.kind === 'library'}
-              onPick={() => onPick({ kind: 'library' })}
-            />
-            <ScopeRow
-              title={folderName || 'This folder'}
-              tooltip="Search the current folder"
-              active={scope.kind === 'folder' && subfolder == null}
-              onPick={() => onPick({ kind: 'folder', subfolder: null })}
-            />
-            {(scopes.length > 0 || staleSubfolder) && <div className={menuSectionClass}>Subfolders</div>}
-            {staleSubfolder && (
-              <ScopeRow
-                title={lastSegment(subfolder)}
-                tooltip={subfolder}
-                depth={scopeDepth(subfolder)}
-                active
-                onPick={() => onPick({ kind: 'folder', subfolder })}
-              />
-            )}
-            {scopes.map((candidate) => (
-              <ScopeRow
-                key={candidate}
-                title={lastSegment(candidate)}
-                tooltip={candidate}
-                depth={scopeDepth(candidate)}
-                active={subfolder === candidate}
-                onPick={() => onPick({ kind: 'folder', subfolder: candidate })}
-              />
-            ))}
-          </MenuPopup>
-        </MenuPositioner>
-      </MenuPortal>
-    </Menu>
-  );
-}
-
-/** One scope option — a single 28px line. Hierarchy is indentation (14px per
- *  level, no guides — document-tool idiom), the full path is the tooltip,
- *  and the active row is the neutral selected surface with a trailing accent
- *  check. */
-function ScopeRow({ title, tooltip, active, depth = 0, onPick }: {
-  title: string;
-  tooltip?: string;
-  active: boolean;
-  depth?: number;
-  onPick: () => void;
-}) {
-  return (
-    <MenuItem
-      onClick={onPick}
-      title={tooltip}
-      className={cn('h-7 gap-2 py-0', active && optActiveClass)}
-      style={depth > 0 ? { paddingLeft: `${8 + depth * 14}px` } : undefined}
-    >
-      <span className="min-w-0 flex-1 truncate">{title}</span>
-      {active && <CheckIcon className="size-3.5 shrink-0 text-accent" />}
-    </MenuItem>
-  );
-}
-
-function lastSegment(path: string): string {
-  const segments = path.split('/');
-  return segments[segments.length - 1] || path;
-}
-
-/** Nesting depth of a folder-relative scope path ("a/b/c" → 2). */
-function scopeDepth(scope: string): number {
-  return scope.split('/').length - 1;
 }
 
 /** One readiness/problem banner: title + detail copy on the left, optional
