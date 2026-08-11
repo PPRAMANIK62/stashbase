@@ -131,7 +131,9 @@ provides the character.
 - Reduced-motion preference.
 - The frameless macOS window (traffic-light inset, drag regions) alongside
   plain browser and non-macOS chrome.
-- A visible, non-layout-shifting focus ring on every interactive element.
+- A visible, non-layout-shifting focus ring on every interactive element —
+  one treatment app-wide: a translucent halo hugging the control, never an
+  opaque line detached from it.
 
 ## Contribution Guidance
 
