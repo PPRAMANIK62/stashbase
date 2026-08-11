@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNod
 import { Button } from 'react-aria-components';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
 import { AgentMarkdown } from './AgentMarkdown';
-import { ChevronDownIcon, CopyIcon, EditIcon, FileGenericIcon, MoreHorizontalIcon } from '../../icons';
+import { ChevronDownIcon, CodeIcon, CopyIcon, EditIcon, FileGenericIcon, FolderIcon, MoreHorizontalIcon, NewFileIcon, SearchIcon } from '../../icons';
 import { Menu, type MenuItem } from '../Menu';
 import { cn } from '../../lib/utils';
 import { ImageLightbox } from '../ImageLightbox';
@@ -11,7 +11,7 @@ import { StatusMessage } from '../ui/status';
 import {
   attachChipClass, attachIconClass, attachImageChipClass, attachImagePreviewClass, attachNameClass,
 } from './panelStyles';
-import type { Attachment, Block, ToolBlock, ToolStatus } from './types';
+import type { Attachment, Block, ToolBlock } from './types';
 
 const outlineSmClass = buttonVariants({ variant: 'outline', size: 'sm' });
 const primarySmClass = buttonVariants({ variant: 'default', size: 'sm' });
@@ -85,27 +85,34 @@ export function MessageList({
       {blocks.length === 0 && phase === 'closed' && fatal && (
         <FatalState fatal={fatal} agentShortName={agentShortName} recoveryLabel={fatalRecoveryLabel} onRetry={onRetry} />
       )}
-      {turns.map((turn) => (
-        <div className="agent-turn" key={turn.key}>
-          {turn.head && (
-            <UserTurnHead
-              block={turn.head}
-              scrollRef={ref}
-              sticky={queuedTurns.length === 0}
-              onCopy={onCopyUserMessage}
-              onSendEdit={onResendUserMessage}
+      {turns.map((turn, index) => {
+        // The last turn is the one still streaming while a turn is
+        // active; only a settled turn offers actions on its reply.
+        const settled = !(turnActive && index === turns.length - 1);
+        const replyText = settled ? turnReplyText(turn) : '';
+        return (
+          <div className="agent-turn" key={turn.key}>
+            {turn.head && (
+              <UserTurnHead
+                block={turn.head}
+                scrollRef={ref}
+                sticky={queuedTurns.length === 0}
+                onCopy={onCopyUserMessage}
+                onSendEdit={onResendUserMessage}
+              />
+            )}
+            <TurnBody
+              blocks={turn.body}
+              liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
+              onPermission={onPermission}
+              onCopyUserMessage={onCopyUserMessage}
+              onResendUserMessage={onResendUserMessage}
+              onOpenArtifact={onOpenArtifact}
             />
-          )}
-          <TurnBody
-            blocks={turn.body}
-            liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
-            onPermission={onPermission}
-            onCopyUserMessage={onCopyUserMessage}
-            onResendUserMessage={onResendUserMessage}
-            onOpenArtifact={onOpenArtifact}
-          />
-        </div>
-      ))}
+            {replyText && <TurnActions text={replyText} onCopy={onCopyUserMessage} />}
+          </div>
+        );
+      })}
       {queuedTurns.map((turn) => (
         <QueuedTurn
           key={turn.id}
@@ -605,7 +612,7 @@ function BlockView({ block, live, onPermission, onCopyUserMessage, onResendUserM
         onSendEdit={onResendUserMessage}
       />;
     case 'assistant':
-      return <AssistantBlock text={block.text} onCopy={onCopyUserMessage} onOpenArtifact={onOpenArtifact} />;
+      return <AssistantBlock text={block.text} onOpenArtifact={onOpenArtifact} />;
     case 'thinking':
       return <ThinkingView text={block.text} active={live} />;
     case 'error':
@@ -615,7 +622,9 @@ function BlockView({ block, live, onPermission, onCopyUserMessage, onResendUserM
         </StatusMessage>
       );
     case 'tool':
-      return <ToolCard block={block} onPermission={onPermission} />;
+      // A tool block only reaches BlockView while it is awaiting approval;
+      // completed/running tools are grouped into ToolActivityGroup.
+      return <PermissionCard block={block} onPermission={onPermission} />;
   }
 }
 
@@ -646,7 +655,7 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
         {active && <Dot />}
         <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap', failures ? 'text-status-danger' : 'text-muted-foreground', active && !failures && 'agent-shimmer')}>{summary}</span>
       </Button>
-      {open && <div className="grid gap-1.5 py-1 pr-1 pl-5">{tools.map((tool) => <ToolCard key={tool.id} block={tool} onPermission={onPermission} />)}</div>}
+      {open && <div className="grid gap-0.5 pb-0.5 pl-5">{tools.map((tool) => <ToolRow key={tool.id} block={tool} />)}</div>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
     </section>
   );
@@ -667,27 +676,41 @@ function ThinkingView({ text, active }: { text: string; active?: boolean }) {
   );
 }
 
-/** Assistant prose with a corner ⋯ actions menu (Copy for now, room for
- * fork/retry later). Hidden until the block is hovered or focused; the
- * canvas backing keeps it legible over the prose's last line. */
-function AssistantBlock({ text, onCopy, onOpenArtifact }: {
+/** Assistant prose. The actions menu is NOT here — it belongs to the
+ * whole reply (see `TurnActions`), not to each paragraph the stream
+ * happened to split off between tool calls. */
+function AssistantBlock({ text, onOpenArtifact }: {
+  text: string;
+  onOpenArtifact: (path: string) => void;
+}) {
+  return <div className="agent-prose"><AgentMarkdown markdown={text} onOpenArtifact={onOpenArtifact} /></div>;
+}
+
+/** One ⋯ menu per completed TURN, on its own line under the reply.
+ *
+ * Per-turn, not per-block: a single reply is delivered as several
+ * assistant blocks separated by tool calls, so a per-block menu stamped
+ * a button after every paragraph. And always visible rather than
+ * hover-revealed — at one quiet button per turn there is nothing to hide
+ * from, and a control that only exists under the pointer is a control
+ * most people never find. Absent while the turn is still streaming:
+ * there is no complete reply to act on yet. */
+function TurnActions({ text, onCopy }: {
   text: string;
   onCopy: (text: string) => void;
-  onOpenArtifact: (path: string) => void;
 }) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const items: MenuItem[] = [
-    { label: 'Copy Message', icon: <CopyIcon />, onSelect: () => onCopy(text) },
+    { label: 'Copy Reply', icon: <CopyIcon />, onSelect: () => onCopy(text) },
   ];
   return (
-    <div className="group/assistant relative">
-      <div className="agent-prose"><AgentMarkdown markdown={text} onOpenArtifact={onOpenArtifact} /></div>
+    <div className="flex justify-end">
       <Button
         className={cn(
-          'absolute right-0 -bottom-1 grid size-5.5 cursor-pointer place-items-center rounded-md border-0 bg-canvas p-0 text-muted-foreground opacity-0 transition-opacity duration-fast group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100 hover:bg-muted hover:text-foreground',
-          anchor && 'bg-active text-foreground opacity-100',
+          'grid size-5.5 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground',
+          anchor && 'bg-active text-foreground',
         )}
-        aria-label="Message actions"
+        aria-label="Reply actions"
         aria-haspopup="menu"
         aria-expanded={!!anchor}
         onPress={(e) => setAnchor((prev) => (prev ? null : (e.target as HTMLElement).getBoundingClientRect()))}
@@ -701,82 +724,110 @@ function AssistantBlock({ text, onCopy, onOpenArtifact }: {
   );
 }
 
-const STATUS_LABEL: Record<ToolStatus, string> = {
-  running: 'Running',
-  awaiting: 'Review',
-  done: 'Done',
-  error: 'Error',
-  denied: 'Denied',
-};
+/** The reply text a turn's actions act on: every assistant block in the
+ *  turn, in order — what the user sees as "the answer". */
+function turnReplyText(turn: Turn): string {
+  return turn.body
+    .filter((block): block is Extract<Block, { kind: 'assistant' }> => block.kind === 'assistant')
+    .map((block) => block.text)
+    .join('\n\n')
+    .trim();
+}
 
-function ToolCard({ block, onPermission }: { block: ToolBlock; onPermission: (t: string, p: string, a: boolean) => void }) {
+/** The leading type glyph on an activity row — Read, Ran, Searched,
+ * Wrote, Edited, Listed — so a row's kind reads before its text (Codex
+ * register). Muted, or danger on a failed step. */
+function ToolTypeIcon({ name, input, failed }: { name: string; input: Record<string, unknown>; failed?: boolean }) {
+  const cls = cn('size-3.5 shrink-0', failed ? 'text-status-danger' : 'text-muted-foreground');
+  if (name === 'Bash') {
+    const action = commandActions(input)[0];
+    if (action?.type === 'read') return <FileGenericIcon className={cls} />;
+    if (action?.type === 'listFiles') return <FolderIcon className={cls} />;
+    if (action?.type === 'search') return <SearchIcon className={cls} />;
+    return <CodeIcon className={cls} />;
+  }
+  if (/read_file$/i.test(name)) return <FileGenericIcon className={cls} />;
+  if (/write_file$/i.test(name)) return <NewFileIcon className={cls} />;
+  if (/edit_file$/i.test(name) || name === 'File change') return <EditIcon className={cls} />;
+  if (/list_directory$/i.test(name)) return <FolderIcon className={cls} />;
+  if (/search/i.test(name)) return <SearchIcon className={cls} />;
+  return <FileGenericIcon className={cls} />;
+}
+
+/** One tool inside an expanded activity group, Codex-style: a flat text
+ * row — a small type icon, the action verb, and its object (a file name
+ * underlined like a link, or a command / query in mono). No card, no
+ * status badge; a finished step needs no "Done". The row toggles its
+ * payload / result in place and reveals a chevron on hover. Failures tint
+ * the whole row danger. Permission asks never appear here — they render
+ * as their own card. */
+function ToolRow({ block }: { block: ToolBlock }) {
   const [open, setOpen] = useState(false);
-  const headRef = useRef<HTMLButtonElement>(null);
   const diff = useMemo(() => buildDiff(block.name, block.input), [block.name, block.input]);
-  const summary = toolSummary(block.name, block.input);
+  const { verb, target, mono } = toolRowParts(block.name, block.input);
+  const running = block.status === 'running';
+  const failed = block.status === 'error' || block.status === 'denied';
+  return (
+    <div className="group/row">
+      <Button
+        className={cn(
+          'flex w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left text-sm hover:bg-muted',
+          failed ? 'text-status-danger' : 'text-muted-foreground',
+        )}
+        onPress={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <ToolTypeIcon name={block.name} input={block.input} failed={failed} />
+        <span className={cn('shrink-0', running && 'agent-shimmer')}>{verb}</span>
+        {target && (
+          <span className={cn(
+            'min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap',
+            mono ? 'font-mono text-xs' : 'underline decoration-1 underline-offset-2',
+          )}>{target}</span>
+        )}
+        <ChevronDownIcon className={cn('ml-auto size-3 shrink-0 transition-opacity', open ? 'opacity-60' : 'opacity-0 group-hover/row:opacity-60', !open && '-rotate-90')} />
+      </Button>
+      {open && (
+        <div className="pb-1 pl-6">
+          {diff && <DiffView diff={diff} />}
+          {!diff && block.name === 'Bash' && <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>}
+          {!diff && block.name !== 'Bash' && <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>}
+          {block.result != null && block.result !== '' && (
+            <pre className={cn(toolPreClass, 'agent-tool-result', block.status === 'error' && 'err')}>{clip(block.result)}</pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The one tool surface that stays a card: an approval ask. It is
+ * actionable, so it must never hide inside collapsed activity. Quietest
+ * chrome — the ask is the title, the payload renders once, and the single
+ * primary button is the only emphasis. Approval stays an explicit click. */
+function PermissionCard({ block, onPermission }: { block: ToolBlock; onPermission: (t: string, p: string, a: boolean) => void }) {
+  const headRef = useRef<HTMLDivElement>(null);
+  const diff = useMemo(() => buildDiff(block.name, block.input), [block.name, block.input]);
   function replyPermission(allow: boolean) {
     onPermission(block.id, block.permId!, allow);
-    // The permission buttons disappear when the Agent updates this card.
-    // Return keyboard focus to the persistent card trigger instead of body.
+    // The buttons vanish once the Agent updates this block; keep keyboard
+    // focus on the card instead of dropping it to <body>.
     requestAnimationFrame(() => headRef.current?.focus());
   }
-
-  const awaiting = block.status === 'awaiting';
   return (
-    // The approval moment keeps the QUIETEST chrome (plain card, no accent
-    // outline): the ask lives in the title, the payload renders exactly
-    // once, and the single primary button is the only emphasis. Permission
-    // semantics are untouched — approval stays an explicit click.
     <div className="overflow-hidden rounded-lg border border-border bg-background">
-      <Button
-        ref={headRef}
-        className="flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-2.5 py-1.75 text-left text-sm"
-        onPress={() => setOpen((o) => !o)}
-      >
-        <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 font-semibold text-foreground">
-          {/* Pending approval is a QUESTION — never the past-tense activity
-            * title while nothing has run yet. */}
-          {awaiting ? (block.permTitle ?? askTitle(block.name)) : toolActivityTitle(block.name, block.input)}
-        </span>
-        {/* While awaiting, the body shows the full payload — repeating a
-          * truncated copy in the head is noise. Ditto the status word:
-          * the Allow/Reject row IS the status. */}
-        {summary && !awaiting && <span className="min-w-0 flex-1 overflow-hidden font-mono text-xs text-ellipsis whitespace-nowrap text-muted-foreground">{summary}</span>}
-        {!awaiting && (
-          <span className={cn('agent-tool-status inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground', `s-${block.status}`, block.status === 'running' && 'agent-shimmer')}>
-            {block.status === 'running' && <Dot />}
-            {STATUS_LABEL[block.status]}
-          </span>
-        )}
-      </Button>
-
-      {awaiting && block.permId && (
+      <div ref={headRef} tabIndex={-1} className="px-2.5 py-1.75 text-sm font-semibold text-foreground outline-none">
+        {block.permTitle ?? askTitle(block.name)}
+      </div>
+      {block.permId && (
         <div className="px-2.5 pb-2.5">
           {diff && <DiffView diff={diff} />}
-          {!diff && block.name === 'Bash' && (
-            <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>
-          )}
-          {!diff && block.name !== 'Bash' && (
-            <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>
-          )}
+          {!diff && block.name === 'Bash' && <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>}
+          {!diff && block.name !== 'Bash' && <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>}
           <div className="mt-2.25 flex justify-end gap-2">
             <Button className={ghostSmClass} onPress={() => replyPermission(false)}>Reject</Button>
             <Button className={primarySmClass} onPress={() => replyPermission(true)}>Allow</Button>
           </div>
-        </div>
-      )}
-
-      {open && block.status !== 'awaiting' && (
-        <div className="px-2.5 pb-2.5">
-          {diff && <DiffView diff={diff} />}
-          {!diff && block.name === 'Bash' && <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>}
-          {!diff && block.name !== 'Bash' && (
-            <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>
-          )}
-          {block.result != null && block.result !== '' && (
-            <pre className={cn(toolPreClass, 'agent-tool-result', block.status === 'error' && 'err')}>{clip(block.result)}</pre>
-          )}
         </div>
       )}
     </div>
@@ -874,6 +925,40 @@ function toolActivityTitle(name: string, input: Record<string, unknown>): string
   return name;
 }
 
+/** Codex-style parts for an activity row: an action verb and, when there
+ * is one, its object — a file name (rendered underlined, like a link) or
+ * a command / query (rendered mono). Parallel to toolActivityTitle, which
+ * stays concise for the collapsed group summary. */
+function toolRowParts(name: string, input: Record<string, unknown>): { verb: string; target?: string; mono?: boolean } {
+  if (name === 'Bash') {
+    const action = commandActions(input)[0];
+    if (action?.type === 'read' && typeof action.path === 'string') return { verb: 'Read', target: baseName(action.path) };
+    if (action?.type === 'listFiles') return { verb: 'Listed files' };
+    if (action?.type === 'search') return { verb: 'Searched files' };
+    return { verb: 'Ran', target: clipInline(String(input.command ?? ''), 120), mono: true };
+  }
+  if (/read_file$/i.test(name)) {
+    const path = mcpArgs(input).path ?? input.file_path;
+    return typeof path === 'string' ? { verb: 'Read', target: baseName(path) } : { verb: 'Read file' };
+  }
+  if (/write_file$/i.test(name)) {
+    const path = mcpArgs(input).path;
+    return typeof path === 'string' ? { verb: 'Wrote', target: baseName(path) } : { verb: 'Wrote file' };
+  }
+  if (/edit_file$/i.test(name)) {
+    const path = mcpArgs(input).path;
+    return typeof path === 'string' ? { verb: 'Edited', target: baseName(path) } : { verb: 'Edited file' };
+  }
+  if (/list_directory$/i.test(name)) return { verb: 'Listed files' };
+  if (/search/i.test(name)) {
+    const args = mcpArgs(input);
+    const q = args.query ?? args.pattern ?? input.query ?? input.pattern;
+    return typeof q === 'string' ? { verb: 'Searched', target: clipInline(q, 120), mono: true } : { verb: 'Searched' };
+  }
+  if (name === 'File change') return { verb: 'Changed files' };
+  return { verb: name };
+}
+
 function activitySummary(tools: ToolBlock[], active?: ToolBlock): string {
   if (active) return `${toolActivityTitle(active.name, active.input)}…`;
 
@@ -968,15 +1053,6 @@ function lineDiff(oldStr: string, newStr: string): DiffRow[] {
   return rows;
 }
 
-function toolSummary(name: string, input: Record<string, unknown>): string {
-  const f = input.file_path ?? input.path;
-  if (typeof f === 'string') return baseName(f);
-  if (name === 'Bash' && typeof input.command === 'string') return clipInline(input.command, 100);
-  if (typeof input.pattern === 'string') return input.pattern;
-  if (typeof input.query === 'string') return input.query;
-  if (typeof input.url === 'string') return input.url;
-  return '';
-}
 
 const baseName = (p: string) => p.split('/').pop() || p;
 const clipInline = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '…' : s);

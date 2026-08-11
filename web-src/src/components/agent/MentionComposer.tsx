@@ -359,19 +359,26 @@ export function MentionComposer({
             // Scaled like every other chrome text (text-base = 13px at
             // scale 1) — a raw px here was the one input that ignored the
             // UI-scale setting.
-            // Resting-small, grow-on-input: one comfortable line at rest
-            // (the docked composer must not steal transcript rows while
-            // empty), auto-growing to ~9 lines while composing. The hero
-            // empty-state override ([&_.cm-editor]:min-h-16) still wins
-            // for the one screen where a tall invitation is the point.
-            '&': { minHeight: '28px', maxHeight: '192px', font: 'inherit', fontSize: 'calc(13px * var(--ui-scale))' },
+            // Two lines of room at rest, auto-growing to ~9 while
+            // composing. One line made the field read as a single-line
+            // input — a box you drop a sentence into — when the thing it
+            // actually invites is a paragraph; the second line of empty
+            // space is what says "write as much as you want".
+            //
+            // Driven by a CSS VARIABLE, not by an outside rule: this
+            // theme is injected into <head> at runtime, so a stylesheet
+            // override of `.cm-editor` ties on specificity and loses on
+            // order — which is exactly how the hero's taller composer
+            // silently stopped applying. Callers raise the resting
+            // height by setting `--composer-min-h` on any ancestor.
+            '&': { minHeight: 'var(--composer-min-h, 48px)', maxHeight: '192px', font: 'inherit', fontSize: 'calc(13px * var(--ui-scale))' },
             '&.cm-focused': { outline: 'none' },
             '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.5' },
-            '.cm-content': { minHeight: '20px', padding: '8px 2px 0', caretColor: 'var(--fg)' },
+            '.cm-content': { minHeight: 'calc(var(--composer-min-h, 48px) - 8px)', padding: '8px 2px 0', caretColor: 'var(--fg)' },
             // Tertiary, not secondary: at --muted the placeholder reads
             // as typed text and outweighs the (smaller) control labels.
             // Derived via alpha so both themes dim proportionally.
-            '.cm-placeholder': { color: 'color-mix(in srgb, var(--muted) 65%, transparent)' },
+            '.cm-placeholder': { color: 'var(--text-placeholder)' },
           }),
           EditorView.contentAttributes.of({ 'aria-label': 'Message agent' }),
         ],

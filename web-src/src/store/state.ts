@@ -111,19 +111,16 @@ export interface CtxMenu {
  *  tab created by the `+` button — empty pane until the user clicks
  *  a sidebar entry to fill it.
  *
- *  `preview` mirrors VS Code's "preview tab" mode — a tab opened by
- *  single-click from the sidebar is preview, rendered italic, and the
- *  next single-click on a different file REPLACES its content
- *  ("kicks" the preview out) instead of spawning a new tab. Promoted
- *  to a regular pinned tab by: double-clicking the file in the tree,
- *  double-clicking the tab title, or entering edit mode. */
+ *  Every open is a persistent tab: a single sidebar click opens the
+ *  file in its own tab (or focuses it if already open). There is no
+ *  VS Code-style "preview tab" mode — the single/double-click split it
+ *  required cost more to learn than it saved. */
 export interface Tab {
   id: string;
   file: OpenFile | null;
   editMode: boolean;
   /** True only after the user changes the live editor buffer. */
   dirty: boolean;
-  preview: boolean;
   pendingAnchor: string | null;
   /** Set when a viewer should highlight a specific chunk on next
    *  render — typically after a click on a SearchHitRow. The viewer
@@ -403,13 +400,11 @@ export type Action =
   | { type: 'FILE_ORDER_SET'; parentPath: string; names: string[] }
   /** Load a file body into the active tab. `newTab: true` first pushes
    *  a fresh blank tab and switches to it, so the file lands in a new
-   *  tab instead of replacing the current one. `preview` overrides the
-   *  target tab's preview status: when creating a new tab it sets the
-   *  initial value; when replacing an active tab it can flip an
-   *  existing pinned tab back to preview (used by the blank-tab reuse
-   *  path) or vice versa. Omit to preserve the tab's existing flag —
-   *  back/forward and in-place anchor nav rely on that. */
-  | { type: 'FILE_OPEN'; body: FileBody; newTab?: boolean; preview?: boolean; libraryFolder?: string }
+   *  tab instead of replacing the current one — the normal open path,
+   *  since a sidebar click opens a persistent tab. Omitting `newTab`
+   *  replaces the active tab in place (blank-tab reuse, back/forward,
+   *  in-place anchor nav). */
+  | { type: 'FILE_OPEN'; body: FileBody; newTab?: boolean; libraryFolder?: string }
   | { type: 'FILE_PATCH'; patch: Partial<OpenFile> }
   | { type: 'DOCUMENT_DIRTY'; dirty: boolean }
   | { type: 'PRUNE_MISSING_FILE_TABS'; names: string[] }
@@ -479,10 +474,6 @@ export type Action =
   | { type: 'CASCADE_PROMPT'; prompt: CascadePrompt | null }
   | { type: 'MODAL_OPEN'; request: ModalRequest }
   | { type: 'MODAL_CLOSE' }
-  /** Promote a preview tab to a pinned one (sets `preview = false`).
-   *  Triggered by double-click on a sidebar file, double-click on the
-   *  tab title, or entering edit mode on the tab. */
-  | { type: 'PROMOTE_TAB'; id: string }
   | { type: 'TAB_PDF_PAGE'; id: string; page: number }
   /** Move tab `id` to immediately before tab `beforeId` (drag-reorder).
    *  `beforeId === null` appends to the end. No-op when the relative

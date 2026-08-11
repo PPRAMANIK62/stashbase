@@ -80,7 +80,7 @@ client of StashBase context, not a separate AI workspace.
   hovered or focused.
   A single short title above the composer — "Your knowledge is here." —
   names the space; no wordmark or agent branding beyond that: the tab's
-  Agent glyph and the composer's "Message <Agent>…" placeholder carry
+  Agent glyph and the composer's "Explore with <Agent>…" placeholder carry
   the runtime identity, and the scope pill carries the scope. The hero composer carries a slightly taller input
   and the one sanctioned raised shadow. Pressing the suggestion only
   prefills its full prompt into the composer draft for the user to edit;
@@ -130,6 +130,14 @@ client of StashBase context, not a separate AI workspace.
   native session identity.
 - The panel supports streaming responses, stop and retry paths, queued
   follow-ups, and inspectable tool activity.
+- Completed tool activity reads as narration, not construct (Codex register):
+  a quiet, collapsible list of flat rows — a small type glyph, the action
+  verb, and its object (a file name shown underlined like a link, a command
+  or query in mono) — with no per-step card, border, or status badge. A step
+  present in the finished transcript is by definition done, so it carries no
+  "Done" chip; failures tint their own row. The one tool surface that stays a
+  card is an approval ask: it is actionable and never hidden in collapsed
+  activity.
 - A failed turn leaves exactly one persistent inline explanation in the
   transcript, preferring the runtime's specific message when available. The
   failure remains attached to its turn before any queued follow-up continues.

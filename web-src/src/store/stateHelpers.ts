@@ -81,7 +81,6 @@ export function makeTab(): Tab {
     file: null,
     editMode: false,
     dirty: false,
-    preview: false,
     pendingAnchor: null,
     pendingHighlight: null,
     saveStatus: { text: '', cls: '' },

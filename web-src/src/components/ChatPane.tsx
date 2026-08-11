@@ -68,8 +68,14 @@ export function ChatPane() {
       {/* Cursor-style tab strip. Scrolls horizontally when many tabs are
         * open; new tabs come from the sidebar's New Chat button, so it is
         * tabs-only. pr-10 reserves the window's top-right corner for the
-        * shell's floating chat toggle (TitlebarControls). */}
-      <div className="flex min-h-8 items-stretch gap-1 pt-1.5 pb-1 pr-10 pl-1.5">
+        * shell's floating chat toggle (TitlebarControls).
+        *
+        * Geometry mirrors the document strip (`.tab-strip` in
+        * mainpane.css): 6px above, NOTHING below, tabs bottom-aligned.
+        * The two strips sit side by side across the window, so a 4px
+        * bottom pad here left the chat tabs floating above a line the
+        * document tabs sat on. Change one, change both. */}
+      <div className="chat-tab-row flex min-h-8 items-end gap-1 pt-1.5 pr-10 pl-2">
         <div className="scrollbar-quiet flex flex-1 gap-0.5 overflow-x-auto overflow-y-hidden">
           {tabs.map((tab) => (
             <div
@@ -77,8 +83,17 @@ export function ChatPane() {
               className={cn(
                 // text-base (13px) matches the document tabs in the main
                 // pane — the two tab strips are one role, one size.
-                'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-md border border-transparent border-b-0 py-1 pr-1.5 pl-2.5 text-base whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
-                tab.id === activeId && 'border-border bg-background pb-1.25 font-medium text-foreground hover:bg-background',
+                // text-sm (12px) + py-1.5 (6px) = the document tab's exact
+                // type size and vertical padding, so both strips' tabs
+                // stand the same height in the same voice.
+                'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-md border border-transparent border-b-0 py-1.5 pr-1.5 pl-2.5 text-sm whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
+                // bg-canvas, not bg-background: an active tab takes the
+                // colour of the surface it fronts, and this one fronts
+                // the chat canvas — `bg-background` is the document
+                // pane's paper white, which made the tab a bright chip
+                // floating on a panel it is supposed to open into. The
+                // border, weight, and text colour carry the selection.
+                tab.id === activeId && 'border-border bg-canvas font-medium text-foreground hover:bg-canvas',
               )}
               role="tab"
               aria-selected={tab.id === activeId}

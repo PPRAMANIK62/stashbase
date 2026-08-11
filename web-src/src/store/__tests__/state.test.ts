@@ -22,13 +22,12 @@ function freshState(overrides: Partial<State> = {}): State {
   };
 }
 
-function documentTab(id: string, name: string | null, preview = false): Tab {
+function documentTab(id: string, name: string | null): Tab {
   return {
     id,
     file: name ? { name, format: 'md', content: name } : null,
     editMode: false,
     dirty: false,
-    preview,
     pendingAnchor: null,
     pendingHighlight: null,
     saveStatus: { text: '', cls: '' },
@@ -39,11 +38,9 @@ test('document tab lifecycle reuses a blank tab and selects a neighbor on close'
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',
     body: { name: 'one.md', format: 'md', content: 'one' },
-    preview: true,
   });
   const firstId = state.activeTabId!;
   assert.equal(state.tabs.length, 1);
-  assert.equal(state.tabs[0].preview, true);
   assert.equal(state.selectedPath, 'one.md');
   assert.equal(state.tabs[0].editMode, true);
 
@@ -387,7 +384,6 @@ test('PDF page numbers are isolated per tab and reset when replacing a file', ()
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',
     body: { name: 'doc1.pdf', format: 'pdf', content: '' },
-    preview: true,
   });
   const tabId = state.activeTabId!;
   assert.equal(state.tabs[0].pdfPage, undefined);
@@ -396,7 +392,7 @@ test('PDF page numbers are isolated per tab and reset when replacing a file', ()
   state = reducer(state, { type: 'TAB_PDF_PAGE', id: tabId, page: 4 });
   assert.equal(state.tabs[0].pdfPage, 4);
 
-  // Open a new tab (not replacing preview)
+  // Open a new tab (not replacing the active tab)
   state = reducer(state, {
     type: 'FILE_OPEN',
     body: { name: 'doc2.pdf', format: 'pdf', content: '' },
@@ -413,12 +409,11 @@ test('PDF page numbers are isolated per tab and reset when replacing a file', ()
   state = reducer(state, { type: 'ACTIVATE_TAB', id: secondTabId });
   assert.equal(state.tabs.find((tab) => tab.id === secondTabId)?.pdfPage, 2);
 
-  // Reuse preview tab to open another file (doc3.pdf) -> should clear the pdfPage
+  // Replace the active tab's file (doc3.pdf) -> should clear the pdfPage
   state = reducer(state, { type: 'ACTIVATE_TAB', id: tabId });
   state = reducer(state, {
     type: 'FILE_OPEN',
     body: { name: 'doc3.pdf', format: 'pdf', content: '' },
-    preview: true,
   });
   assert.equal(state.tabs[0].pdfPage, undefined); // reset / not leaked from doc1.pdf
 });

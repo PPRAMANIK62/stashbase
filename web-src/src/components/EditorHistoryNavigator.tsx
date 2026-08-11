@@ -11,7 +11,6 @@ import {
   PICKER_LABEL_CLASS,
   PICKER_RESULTS_CLASS,
   PICKER_ROW_CLASS,
-  PICKER_ROW_DETAIL_CLASS,
   PICKER_VEIL_CLASS,
   pickerPanelClass,
 } from './pickerChrome';
@@ -267,7 +266,6 @@ export function EditorHistoryNavigator() {
               onMouseDown={(event) => { event.preventDefault(); commit(entry.id); }}
             >
               <span>{entry.label}</span>
-              {entry.preview && <small className={`${PICKER_ROW_DETAIL_CLASS} italic`}>preview</small>}
             </li>
           ))}
         </ul>

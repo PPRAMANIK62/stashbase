@@ -369,8 +369,11 @@ The accepted baseline includes:
 - adaptive chat-first layout with a centred readable transcript/composer width,
   side-panel width restoration, explicit-hide precedence, and a document-first
   compact-window transition
-- compact activity grouping for non-actionable tool calls, with inspectable
-  command/read/search labels rather than lifecycle-only summaries
+- compact activity grouping for non-actionable tool calls: each completed
+  step is a flat row (type glyph + verb + underlined file / mono command or
+  query), expandable to its payload/result, with no per-step card, border, or
+  status badge — inspectable command/read/search labels rather than
+  lifecycle-only summaries or "Done" chips
 - visible permission cards outside collapsed activity
 - lightweight file/artifact open affordances
 - jump-to-latest behavior for transcript scrolling
@@ -394,7 +397,7 @@ The accepted baseline includes:
   reconnect, while a closed picker cannot reopen until the session is ready. Leave
   trigger, Escape, and outside-interaction dismissal to the managed popup
   primitive. When a permission action removes its own controls, restore focus
-  to the persistent tool-card trigger.
+  to the permission card's persistent head.
 - Image-preview controls float over the image: Download and Close at the top
   right, and a bottom-centred zoom group. They need accessible names and hover
   titles; do not replace their semantic buttons with non-interactive artwork.

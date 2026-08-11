@@ -7,11 +7,9 @@ const TAB_MIME = 'application/x-stashbase-tab';
  * Tab strip at the top of the main pane — one chip per open tab plus a
  * `+` button. Left-click activates, `×` (or middle-click) closes, `+`
  * pushes an empty tab (Obsidian-style). The active tab gets a stronger
- * background; inactive tabs are muted; long names ellipsize.
- *
- * Preview tabs (single-click in the sidebar) render their label
- * italic. Double-clicking the tab title promotes it to pinned — same
- * convention as VS Code's preview tabs.
+ * background; inactive tabs are muted; long names ellipsize. Every tab
+ * is persistent — a sidebar click opens a lasting tab, so there is no
+ * italic "preview" state or double-click-to-keep promotion.
  *
  * Tabs are draggable: dropping one onto another inserts it before that
  * target (or appends when dropped on the trailing strip area). The
@@ -111,7 +109,6 @@ export function TabStrip() {
           const dropEdge = dropTarget?.id === t.id ? dropTarget.edge : null;
           const cls = 'tab'
             + (isActive ? ' active' : '')
-            + (t.preview ? ' preview' : '')
             + (isDragging ? ' dragging' : '')
             + (dropEdge === 'before' ? ' drop-before' : '')
             + (dropEdge === 'after' ? ' drop-after' : '');
@@ -120,17 +117,8 @@ export function TabStrip() {
               key={t.id}
               className={cls}
               draggable
-              title={
-                (t.file ? (t.file.folder ? `${t.file.folder}/${t.file.name}` : t.file.name) : 'Empty tab')
-                + (t.preview ? '  (preview — double-click to keep)' : '')
-              }
+              title={t.file ? (t.file.folder ? `${t.file.folder}/${t.file.name}` : t.file.name) : 'Empty tab'}
               onClick={() => { void actions.activateTab(t.id); }}
-              onDoubleClick={(e) => {
-                e.preventDefault();
-                // Double-click on a preview tab pins it. No-op on
-                // already-pinned tabs (the action layer guards too).
-                if (t.preview) dispatch({ type: 'PROMOTE_TAB', id: t.id });
-              }}
               onAuxClick={(e) => {
                 // Middle-click closes — matches browser tab behavior.
                 if (e.button === 1) {
