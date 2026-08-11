@@ -8,10 +8,17 @@ import {
   audioTimestampForTranscriptLine,
   hasWholeTokenBoundaries,
   normalizeRipgrepSubmatches,
+  normalizeRipgrepPath,
   resolveSpawnableRipgrepPath,
   runKeywordSearch,
   snippetForLine,
 } from './keyword-search.ts';
+
+test('ripgrep paths use one folder-relative identity on POSIX and Windows', () => {
+  assert.equal(normalizeRipgrepPath('./data.JSON'), 'data.JSON');
+  assert.equal(normalizeRipgrepPath('.\\data.JSON'), 'data.JSON');
+  assert.equal(normalizeRipgrepPath('nested\\data.JSON'), 'nested/data.JSON');
+});
 
 test('keyword search includes malformed case-variant JSON and applies data before limits', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-json-search-'));

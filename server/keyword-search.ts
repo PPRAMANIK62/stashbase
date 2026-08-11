@@ -107,7 +107,7 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
         const lineNum = evt.data?.line_number;
         const rawText = evt.data?.lines?.text;
         if (typeof dataPath !== 'string' || typeof lineNum !== 'number' || typeof rawText !== 'string') continue;
-        const relPath = dataPath.replace(/^\.\//, '').replace(/\\/g, '/');
+        const relPath = normalizeRipgrepPath(dataPath);
         const stripped = rawText.replace(/\r?\n$/, '');
         const subs = Array.isArray(evt.data?.submatches) ? evt.data.submatches : [];
         const matchRanges = normalizeRipgrepSubmatches(stripped, subs)
@@ -131,6 +131,13 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
       resolve({ files, totalMatches: total, truncated });
     });
   });
+}
+
+/** Ripgrep prefixes paths with the platform separator when the search root
+ * is `.`. Normalize separators first so both `./file` and `.\\file` lose the
+ * synthetic root prefix and retain one cross-platform source identity. */
+export function normalizeRipgrepPath(dataPath: string): string {
+  return dataPath.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
 export function resolveSpawnableRipgrepPath(candidate: string): string {
