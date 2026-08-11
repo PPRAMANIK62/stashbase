@@ -5,7 +5,7 @@ import { detectFormat, isDerivedNoteName } from './format.ts';
 import { fileVersion, readText, saveText } from './files.ts';
 import { contentSizeError } from './indexable.ts';
 import { errorMessage, logger } from './log.ts';
-import { preserveMarkdownSourceFormat } from './markdown-source-format.ts';
+import { preserveTextSourceFormat } from './markdown-source-format.ts';
 import { indexer } from './state.ts';
 import { noteTreeChanged } from './watcher.ts';
 
@@ -73,8 +73,8 @@ export async function saveFileContent(
     const currentVersion = fileVersion(name);
     if (currentVersion !== opts.baseVersion) {
       const currentContent = readText(name);
-      const serializedContent = format === 'md'
-        ? preserveMarkdownSourceFormat(currentContent ?? '', content)
+      const serializedContent = format === 'md' || format === 'json'
+        ? preserveTextSourceFormat(currentContent ?? '', content)
         : content;
       if (currentContent === serializedContent) {
         return { content: serializedContent, version: currentVersion ?? undefined };
@@ -85,12 +85,13 @@ export async function saveFileContent(
       throw err;
     }
   }
-  // CodeMirror stores its document with LF line separators. Markdown source
+  // CodeMirror stores its document with LF line separators. Editable raw text
   // still owns its byte-level presentation: retain a leading UTF-8 BOM and
   // serialize edits using the source's uniform (or dominant mixed) ending.
-  const previousContent = format === 'md' ? readText(name) : null;
-  const savedContent = format === 'md'
-    ? preserveMarkdownSourceFormat(previousContent ?? '', content)
+  const preservesSourceFormat = format === 'md' || format === 'json';
+  const previousContent = preservesSourceFormat ? readText(name) : null;
+  const savedContent = preservesSourceFormat
+    ? preserveTextSourceFormat(previousContent ?? '', content)
     : content;
   if (previousContent !== null && savedContent === previousContent) {
     return { content: savedContent, version: fileVersion(name) ?? undefined };

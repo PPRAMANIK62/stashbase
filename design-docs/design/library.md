@@ -92,6 +92,10 @@ to migrate them into a StashBase-specific storage model.
   the same conversation beside it.
 - The main pane opens the source file the user selected; generated artifacts
   stay hidden.
+- JSON files are visible structured-data sources. They open as raw,
+  syntax-highlighted text in a read-only view with an explicit edit action;
+  malformed JSON remains openable and editable, and saving preserves source
+  text instead of formatting or serializing it.
 - Dot-prefixed directories (`.claude`, `.git`, `.obsidian`, …) are tool
   internals, not knowledge: the file tree, search, and the index skip them.
   Agent-contract files (`AGENTS.md`, `CLAUDE.md`) are ordinary visible
@@ -178,7 +182,7 @@ to migrate them into a StashBase-specific storage model.
   the window's top-left (they stay put when the sidebar is collapsed, so
   the toggle is always the way back in), and Settings is a quiet row at
   the sidebar's bottom.
-- StashBase displays only supported document and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Dot-prefixed files (`.DS_Store`, tool configs) are invisible infrastructure: never listed and never counted as unsupported, and a folder holding only dot-files reads as physically empty. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a dismissable callout card in the Files panel — dismissal is per folder and persists, and the card returns when a new unsupported category appears.
+ - StashBase displays only supported document, structured-data, and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Dot-prefixed files (`.DS_Store`, tool configs) are invisible infrastructure: never listed and never counted as unsupported, and a folder holding only dot-files reads as physically empty. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a dismissable callout card in the Files panel — dismissal is per folder and persists, and the card returns when a new unsupported category appears.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
 - Command Palette exposes only safe, context-available actions the app already

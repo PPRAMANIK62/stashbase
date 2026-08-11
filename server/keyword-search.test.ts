@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { matchesSearchTypes, searchExtensionsForTypes } from './format.ts';
@@ -6,9 +8,33 @@ import {
   audioTimestampForTranscriptLine,
   hasWholeTokenBoundaries,
   normalizeRipgrepSubmatches,
+  normalizeRipgrepPath,
   resolveSpawnableRipgrepPath,
+  runKeywordSearch,
   snippetForLine,
 } from './keyword-search.ts';
+
+test('ripgrep paths use one folder-relative identity on POSIX and Windows', () => {
+  assert.equal(normalizeRipgrepPath('./data.JSON'), 'data.JSON');
+  assert.equal(normalizeRipgrepPath('.\\data.JSON'), 'data.JSON');
+  assert.equal(normalizeRipgrepPath('nested\\data.JSON'), 'nested/data.JSON');
+});
+
+test('keyword search includes malformed case-variant JSON and applies data before limits', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-json-search-'));
+  try {
+    fs.writeFileSync(path.join(root, 'note.md'), 'needle in note');
+    fs.writeFileSync(path.join(root, 'data.JSON'), '{"needle": broken');
+    const all = await runKeywordSearch('needle', root, { caseStrict: false, wholeWord: false });
+    assert.deepEqual(all.files.map((file) => file.path).sort(), ['data.JSON', 'note.md']);
+    const data = await runKeywordSearch('needle', root, { caseStrict: false, wholeWord: false, types: ['data'] });
+    assert.deepEqual(data.files.map((file) => file.path), ['data.JSON']);
+    const notes = await runKeywordSearch('needle', root, { caseStrict: false, wholeWord: false, types: ['notes'] });
+    assert.deepEqual(notes.files.map((file) => file.path), ['note.md']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('ripgrep byte offsets map to UTF-16 ranges for multibyte text', () => {
   const line = '前缀 alpha 结果';
@@ -57,6 +83,7 @@ test('packaged ripgrep path prefers app.asar.unpacked when present', () => {
 test('search type categories map to source extensions', () => {
   assert.deepEqual(searchExtensionsForTypes(['pdf']), ['.pdf']);
   assert.deepEqual(searchExtensionsForTypes(['notes']), ['.md', '.markdown', '.html', '.htm']);
+  assert.deepEqual(searchExtensionsForTypes(['data']), ['.json']);
   assert.deepEqual(searchExtensionsForTypes(['docx', 'docx']), ['.docx']);
   assert.deepEqual(
     searchExtensionsForTypes(['audio']),
@@ -66,7 +93,7 @@ test('search type categories map to source extensions', () => {
     ],
   );
   assert.equal(searchExtensionsForTypes([]), null);
-  assert.equal(searchExtensionsForTypes(['notes', 'pdf', 'image', 'docx', 'audio']), null);
+  assert.equal(searchExtensionsForTypes(['notes', 'data', 'pdf', 'image', 'docx', 'audio']), null);
 });
 
 test('type membership checks extensions case-insensitively', () => {
@@ -78,4 +105,6 @@ test('type membership checks extensions case-insensitively', () => {
   assert.equal(matchesSearchTypes('clip.MOV', ['audio']), true);
   assert.equal(matchesSearchTypes('meeting.m4a', ['docx']), false);
   assert.equal(matchesSearchTypes('note.md', []), true);
+  assert.equal(matchesSearchTypes('nested/Data.JSON', ['data']), true);
+  assert.equal(matchesSearchTypes('nested/Data.JSON', ['notes']), false);
 });

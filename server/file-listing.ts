@@ -53,6 +53,7 @@ interface PreviewCacheEntry {
   imported_at: string;
 }
 const previewCache = new Map<string, PreviewCacheEntry>();
+const TEXT_PREVIEW_BYTES = 4096;
 
 onSwitch(() => previewCache.clear());
 
@@ -203,7 +204,20 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
           entry = { heading: '', snippet: '', imported_at };
         } else {
           let content: string;
-          try { content = fs.readFileSync(full, 'utf8'); } catch { continue; }
+          try {
+            if (format === 'json') {
+              const fd = fs.openSync(full, 'r');
+              try {
+                const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, st.size));
+                const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+                content = buffer.subarray(0, bytesRead).toString('utf8');
+              } finally {
+                fs.closeSync(fd);
+              }
+            } else {
+              content = fs.readFileSync(full, 'utf8');
+            }
+          } catch { continue; }
           const { heading, snippet } = preview(content, format);
           const imported_at = st.mtime.toISOString();
           previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
@@ -362,7 +376,9 @@ function preview(
   content: string,
   format: FileFormat,
 ): { heading: string; snippet: string } {
-  return format === 'md' ? previewMarkdown(content) : previewHtml(content);
+  if (format === 'md') return previewMarkdown(content);
+  if (format === 'html') return previewHtml(content);
+  return { heading: '', snippet: content.replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim().slice(0, 80) };
 }
 
 function previewMarkdown(md: string): { heading: string; snippet: string } {

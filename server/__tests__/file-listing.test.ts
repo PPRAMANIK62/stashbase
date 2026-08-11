@@ -31,7 +31,9 @@ test('file-listing scan and classification', async () => {
     fs.writeFileSync(path.join(folderMixed, 'note3.md'), '# Markdown');
     fs.writeFileSync(path.join(folderMixed, 'data.csv'), '1,2,3');
     fs.writeFileSync(path.join(folderMixed, 'archive.zip'), '');
-    fs.writeFileSync(path.join(folderMixed, 'config.json'), '{}');
+    fs.writeFileSync(path.join(folderMixed, 'config.JSON'), '{ invalid json');
+    fs.mkdirSync(path.join(folderMixed, 'config.json_files'));
+    fs.writeFileSync(path.join(folderMixed, 'config.json_files', 'asset.md'), '# visible child');
 
     // 5. Excluded directory (should not traverse, count, or return)
     const folderExcluded = path.join(tempDir, 'node_modules');
@@ -70,6 +72,8 @@ test('file-listing scan and classification', async () => {
     assert.ok(fileNames.includes('note1.md'));
     assert.ok(fileNames.includes('docs/note2.html'));
     assert.ok(fileNames.includes('mixed/note3.md'));
+    assert.ok(fileNames.includes('mixed/config.JSON'));
+    assert.ok(fileNames.includes('mixed/config.json_files/asset.md'), 'JSON must not claim a note bundle');
     assert.ok(!fileNames.includes('src/main.ts'), 'unsupported files should not be in the files list');
     assert.ok(!fileNames.includes('.DS_Store'), 'dot-files should not be listed');
 
@@ -85,18 +89,15 @@ test('file-listing scan and classification', async () => {
 
     // 'mixed/data.csv' (.csv) -> other
     // 'mixed/archive.zip' (.zip) -> other
-    // 'mixed/config.json' (.json) -> other
-    // Total other = 3
-    assert.equal(result.unsupportedFiles.other, 3);
+    // JSON is supported directly, leaving only CSV and ZIP unsupported.
+    assert.equal(result.unsupportedFiles.other, 2);
 
     // Verify otherExtensions mapping and sorting
-    // Extensions: .csv (1), .zip (1), .json (1)
-    // Since counts are equal, they should be sorted alphabetically: .csv, .json, .zip
+    // Extensions: .csv (1), .zip (1)
     const exts = result.unsupportedFiles.otherExtensions;
-    assert.equal(exts.length, 3);
+    assert.equal(exts.length, 2);
     assert.deepEqual(exts[0], { extension: '.csv', count: 1 });
-    assert.deepEqual(exts[1], { extension: '.json', count: 1 });
-    assert.deepEqual(exts[2], { extension: '.zip', count: 1 });
+    assert.deepEqual(exts[1], { extension: '.zip', count: 1 });
 
   } finally {
     clearCurrentFolder();

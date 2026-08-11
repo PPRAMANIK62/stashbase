@@ -8,6 +8,7 @@ import {
   type State,
   type Tab,
 } from '../state.ts';
+import { folderScopedResetActions } from '../folderScopedReset.ts';
 
 function freshState(overrides: Partial<State> = {}): State {
   return {
@@ -71,6 +72,32 @@ test('Markdown opens in Live Editing while read-only formats remain out of edit 
     body: { name: 'page.html', format: 'html', content: '<p>Read only</p>' },
   });
   assert.equal(html.tabs[0].editMode, false);
+
+  const json = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'data.json', format: 'json', content: '{ invalid' },
+  });
+  assert.equal(json.tabs[0].editMode, false);
+});
+
+test('JSON persistent tabs, dirty retention, replacement, and folder isolation use the shared tab lifecycle', () => {
+  let state = reducer(freshState({ folderPath: '/one' }), {
+    type: 'FILE_OPEN', body: { name: 'one.json', format: 'json', content: '{ one' },
+  });
+  assert.equal(state.tabs[0].editMode, false);
+  state = reducer(state, { type: 'EDIT_MODE', on: true });
+  state = reducer(state, { type: 'DOCUMENT_DIRTY', dirty: true });
+  assert.equal(state.tabs[0].dirty, true);
+  state = reducer(state, { type: 'PRUNE_MISSING_FILE_TABS', names: [] });
+  assert.equal(state.tabs.length, 1, 'dirty JSON survives external deletion pruning');
+
+  state = reducer(state, { type: 'DOCUMENT_DIRTY', dirty: false });
+  state = reducer(state, { type: 'FILE_OPEN', body: { name: 'two.JSON', format: 'json', content: '{ two' } });
+  assert.equal(state.tabs[0].file?.name, 'two.JSON');
+  assert.equal(state.tabs[0].editMode, false);
+  for (const action of folderScopedResetActions('switch')) state = reducer(state, action);
+  state = reducer(state, { type: 'FOLDER_CONTEXT', folder: 'Two', folderPath: '/two' });
+  assert.equal(state.tabs.length, 0, 'folder switches cannot retain a JSON editor from another folder');
 });
 
 test('document activation maintains folder-local file recency separately from tab order', () => {
