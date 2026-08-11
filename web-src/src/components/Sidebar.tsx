@@ -165,8 +165,8 @@ function FilesPanel() {
   // expanded as soon as it actually HAS headings (they load async, so
   // the switch only marks the intent). A manual fold wins within the
   // current document — the same "transition resets the default" rule as
-  // the Library's folder-presence effect. Keyed by file identity, not
-  // tab id: preview-tab reuse swaps the file inside one tab.
+  // the Library's folder-presence effect. Keyed by file identity so an
+  // in-place navigation refreshes the outline for the replacement file.
   const documentKey = hasMarkdownDocument && activeTab?.file
     ? `${activeTab.file.folder ?? ''}:${activeTab.file.name}`
     : null;

@@ -17,7 +17,7 @@ import {
 let recentCommandIdsMemory: string[] = [];
 
 /** Quick Open calls the sidebar's document-selection action, preserving its
- * save guards, folder-generation checks, and preview-tab replacement. */
+ * save guards, folder-generation checks, and persistent-tab reuse. */
 export default function QuickOpenDialog({
   commandsOnly,
   onClose,

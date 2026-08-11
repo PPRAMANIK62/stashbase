@@ -70,11 +70,9 @@ export function resizeChatByKeyboard(width: number, key: SplitterKey): number {
   );
 }
 
-/** Build a fresh empty tab. The id is `crypto.randomUUID` because every
+/** Build a fresh persistent tab. The id is `crypto.randomUUID` because every
  *  browser shipping in 2024+ (and Electron's bundled Chromium) has it;
- *  Node ≥19 also exposes it. New tabs default to pinned (not preview)
- *  — the `+` button is an explicit "I want a permanent slot" action;
- *  preview tabs are only created by the sidebar-single-click path. */
+ *  Node ≥19 also exposes it. */
 export function makeTab(): Tab {
   return {
     id: crypto.randomUUID(),

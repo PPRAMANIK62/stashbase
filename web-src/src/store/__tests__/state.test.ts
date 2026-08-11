@@ -80,17 +80,13 @@ test('Markdown opens in Live Editing while read-only formats remain out of edit 
   assert.equal(json.tabs[0].editMode, false);
 });
 
-test('JSON preview, dirty retention, promotion, replacement, and folder isolation use the shared tab lifecycle', () => {
+test('JSON persistent tabs, dirty retention, replacement, and folder isolation use the shared tab lifecycle', () => {
   let state = reducer(freshState({ folderPath: '/one' }), {
-    type: 'FILE_OPEN', body: { name: 'one.json', format: 'json', content: '{ one' }, preview: true,
+    type: 'FILE_OPEN', body: { name: 'one.json', format: 'json', content: '{ one' },
   });
-  const jsonTab = state.activeTabId!;
-  assert.equal(state.tabs[0].preview, true);
   assert.equal(state.tabs[0].editMode, false);
-  state = reducer(state, { type: 'PROMOTE_TAB', id: jsonTab });
   state = reducer(state, { type: 'EDIT_MODE', on: true });
   state = reducer(state, { type: 'DOCUMENT_DIRTY', dirty: true });
-  assert.equal(state.tabs[0].preview, false);
   assert.equal(state.tabs[0].dirty, true);
   state = reducer(state, { type: 'PRUNE_MISSING_FILE_TABS', names: [] });
   assert.equal(state.tabs.length, 1, 'dirty JSON survives external deletion pruning');
