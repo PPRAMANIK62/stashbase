@@ -152,7 +152,6 @@ export function useDocumentActions(
     name: string,
     opts: {
       newTab?: boolean;
-      preview?: boolean;
       anchor?: string;
       expectedFolder?: string;
       /** Read from this explicit member folder instead of the window's own —
@@ -228,12 +227,15 @@ export function useDocumentActions(
       type: 'FILE_OPEN',
       body,
       newTab: newTabMode ? !noActiveTab : undefined,
-      preview: opts.preview,
       libraryFolder: opts.libraryFolder,
     });
     dispatch({ type: 'PENDING_SCROLL', anchor: opts.anchor ?? null });
   }, [dispatch, editor, flushSave, refreshIndexState, state]);
 
+  // A sidebar single-click opens the file in its own persistent tab.
+  // Already open → focus it; the active tab is a blank `+` tab → fill
+  // it in place; otherwise open a fresh tab. No preview/replace mode:
+  // one click, one lasting tab.
   const selectFile = useCallback(async (name: string) => {
     const expectedFolder = state.current.folderPath;
     if (editor.current && !(await flushSave())) return;
@@ -246,16 +248,10 @@ export function useDocumentActions(
     }
     const active = getActiveTab(currentState);
     if (active && !active.file) {
-      await loadFile(name, { preview: true, expectedFolder });
-      return;
-    }
-    const previewTab = currentState.tabs.find((tab) => tab.preview);
-    if (previewTab) {
-      if (currentState.activeTabId !== previewTab.id) dispatch({ type: 'ACTIVATE_TAB', id: previewTab.id });
       await loadFile(name, { expectedFolder });
       return;
     }
-    await loadFile(name, { newTab: true, preview: true, expectedFolder });
+    await loadFile(name, { newTab: true, expectedFolder });
   }, [dispatch, editor, flushSave, loadFile, state]);
 
   const armHighlight = useCallback((hit: PendingHighlight) => {
@@ -295,7 +291,6 @@ export function useDocumentActions(
     const existing = currentState.tabs.find((tab) => isFolderFileTab(tab, name));
     if (existing) {
       if (currentState.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
-      if (existing.preview) dispatch({ type: 'PROMOTE_TAB', id: existing.id });
       return;
     }
     await loadFile(name, { newTab: true, expectedFolder: targetFolder });
@@ -336,7 +331,6 @@ export function useDocumentActions(
     const existing = state.current.tabs.find((tab) => isFolderFileTab(tab, name));
     if (existing) {
       if (state.current.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
-      if (existing.preview) dispatch({ type: 'PROMOTE_TAB', id: existing.id });
       if (anchor) dispatch({ type: 'PENDING_SCROLL', anchor });
       return;
     }
@@ -369,17 +363,13 @@ export function useDocumentActions(
       if (state.current.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
       if (opts?.anchor) dispatch({ type: 'PENDING_SCROLL', anchor: opts.anchor });
     } else {
-      // Mirror selectFile's preview-tab semantics: fill a blank tab, reuse
-      // the preview tab, or open a fresh preview tab.
+      // Mirror selectFile: fill a blank tab in place, otherwise open a
+      // fresh persistent tab.
       const active = getActiveTab(state.current);
-      const previewTab = active && !active.file ? null : state.current.tabs.find((tab) => tab.preview);
       if (active && !active.file) {
-        await loadFile(name, { preview: true, libraryFolder: folder, anchor: opts?.anchor });
-      } else if (previewTab) {
-        if (state.current.activeTabId !== previewTab.id) dispatch({ type: 'ACTIVATE_TAB', id: previewTab.id });
         await loadFile(name, { libraryFolder: folder, anchor: opts?.anchor });
       } else {
-        await loadFile(name, { newTab: true, preview: true, libraryFolder: folder, anchor: opts?.anchor });
+        await loadFile(name, { newTab: true, libraryFolder: folder, anchor: opts?.anchor });
       }
     }
     const hit = opts?.hit;

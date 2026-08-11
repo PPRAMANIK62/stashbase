@@ -19,8 +19,10 @@ to migrate them into a StashBase-specific storage model.
   by an external MCP client appears without any user action.
 - A full-width New Chat split button sits at the top of the sidebar,
   above the Library section — the app's one chat-creation entry point.
-  Its main area starts a chat with the last-selected Agent; a subtle
-  chevron at the row's right edge offers New Claude Code Chat / New
+  It leads with a `+`, not an Agent mark: the row's job is starting a
+  chat, and which Agent that will be is named at the row's right edge,
+  beside the chevron that changes it. Its main area starts a chat with
+  the last-selected Agent; the chevron offers New Claude Code Chat / New
   Codex Chat, and picking one also makes that Agent the new default. The
   chat is scoped to the window's current folder, or to the whole library
   when no folder is current, and a completely blank chat is reused
@@ -35,12 +37,11 @@ to migrate them into a StashBase-specific storage model.
   compact row on the pane surface — favorites (all of them) pinned first,
   then the rest in recents order. The Library section's position is fixed:
   it always anchors to the sidebar bottom (above the Settings row), so
-  opening a folder never makes it jump. Only its default fold state
-  changes — expanded in a window with no folder (it is the main content
-  then, uncapped), collapsed once a folder becomes active. While a folder
-  is active the expanded list caps at a fixed height (about five rows,
-  with a half-row peek hinting at the overflow) and scrolls internally.
-  Clicking a row
+  opening a folder never makes it jump, and the expanded list keeps one
+  height whether or not a folder is open — about five rows, with a
+  half-row peek hinting at the overflow, scrolling internally past that.
+  Only its default fold state changes: expanded in a window with no
+  folder, collapsed once a folder becomes active. Clicking a row
   switches this window's folder in place: the clicked folder moves up into
   the active zone and the previous one drops back into the list. Switching
   resets the folder-scoped document tabs, but keeps the search popup's
@@ -100,13 +101,16 @@ to migrate them into a StashBase-specific storage model.
   Agent-contract files (`AGENTS.md`, `CLAUDE.md`) are ordinary visible
   Markdown, and agents can still read and write dot-directory config
   directly.
-- PDF tabs retain their active reading position (page number) across tab switches during a session. Reusing a preview tab for a different file resets the stored page position.
+- A sidebar click opens the file in its own persistent tab; an already-open
+  file is focused rather than reopened. There is no preview/pinned tab split —
+  one click always opens a lasting tab.
+- PDF tabs retain their active reading position (page number) across tab switches during a session. Opening a different file in a tab resets the stored page position.
 - Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
   strip's `+` button — distinct from Cmd/Ctrl+N, which creates a note file.
 - Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active
   folder. It starts with recently used editors, then ranks basename and
-  relative-path matches; accepting a result retains normal preview-tab and
-  unsaved-work protections. Typing `>` switches that same picker to safe app
+  relative-path matches; accepting a result retains normal unsaved-work
+  protections. Typing `>` switches that same picker to safe app
   commands; Cmd/Ctrl+Shift+P and F1 open that command mode directly.
 - Holding Ctrl and tapping Tab opens Editor History, a VS Code-style
   Alt-Tab switcher over open tabs ordered by most-recent use, independent of

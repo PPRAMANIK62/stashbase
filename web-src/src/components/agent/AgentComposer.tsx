@@ -49,9 +49,14 @@ const effortChoiceClass =
 const effortChoiceCurClass =
   'border-accent bg-accent/15 font-semibold text-foreground hover:bg-accent/15 hover:text-foreground';
 
-/* Neutral send button — accent only on hover-when-ready (VSCode-style). */
+/* Neutral send button — accent only on hover-when-ready (VSCode-style).
+ * Circular, not squircular: it is the terminal action on the bar, and a
+ * true circle is the one shape that reads as a button rather than as a
+ * smaller copy of the composer around it. `rounded-full` also opts out of
+ * the app-wide squircle (see globals.css), which is what keeps it a
+ * circle instead of a bulged superellipse. */
 const sendClass =
-  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border p-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4.5';
+  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-full border p-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4.5';
 const sendReadyClass =
   'border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:cursor-default disabled:opacity-40';
 const sendStopClass = 'border-destructive bg-destructive text-primary-foreground';
@@ -339,13 +344,16 @@ export function AgentComposer({
     return () => cancelAnimationFrame(frame);
   }, [activeSuggestionIndex, choices.length]);
 
+  // "Explore with", not "Message": the agent here is pointed at the
+  // user's own library, and the generic chat-app phrasing said nothing
+  // about that. Kept as one line so the wording is easy to revisit.
   const placeholder = phase === 'connecting'
     ? 'Connecting…'
     : phase === 'closed'
       ? 'Reconnect to continue…'
       : turnActive
         ? 'Ask for follow-up changes'
-        : `Message ${agentShortName}…`;
+        : `Explore with ${agentShortName}…`;
 
   function pickMention(path: string) {
     if (!mention || mention.kind !== 'mention') return;
@@ -421,12 +429,22 @@ export function AgentComposer({
         </div>
       )}
       <div className={cn(
-        'flex flex-col gap-1.5 rounded-xl border border-border bg-background px-2 pt-2 pb-1.5 focus-within:border-accent',
+        // No focus treatment on the CARD: the caret already says where
+        // typing goes, and an accent ring around a box this large was the
+        // loudest thing on screen for the app's most common state — the
+        // composer is focused nearly all the time.
+        // The hero corner — one step past every overlay in the app. The
+        // composer is the surface the eye rests on, and the extra radius
+        // is what makes it read as the anchor rather than another panel.
+        'flex flex-col gap-1.5 rounded-2xl border border-border bg-background px-2 pt-2 pb-1.5',
         // Hero (empty-state) presentation: the composer is the visual
         // anchor of an otherwise bare pane, so it earns a taller resting
         // input and the one sanctioned non-overlay shadow. Docked mode
         // stays flat and compact beside a document.
-        hero && 'shadow-raised [&_.cm-editor]:min-h-16',
+        // 56px ≈ two and a half lines: a shade taller than the docked
+        // composer's two, which is all the extra presence the empty
+        // pane's anchor needs. Four lines read as a form to fill in.
+        hero && 'shadow-raised [--composer-min-h:56px]',
       )}>
         {(attachments.length > 0 || uploading) && (
           <div className="flex flex-wrap items-center gap-1">

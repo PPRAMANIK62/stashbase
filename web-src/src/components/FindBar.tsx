@@ -76,7 +76,7 @@ export function FindBar() {
       <Input
         ref={inputRef}
         className={
-          'h-6 w-45 rounded-sm px-1.5 text-sm' +
+          'h-6 w-45 px-1.5 text-sm' +
           (noMatch ? ' border-destructive text-destructive' : '')
         }
         type="text"

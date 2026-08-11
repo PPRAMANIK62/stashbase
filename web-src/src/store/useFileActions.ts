@@ -431,9 +431,8 @@ export function useFileActions(
       const first = j.files?.find(
         (x) => !x.error && VIEWABLE_FILE_RE.test(x.file),
       );
-      // Pinned, not preview: a drop is a deliberate, committed gesture
-      // (the double-click analog), so the imported file should stay open
-      // rather than be a tentative tab the next sidebar click evicts.
+      // A drop is a deliberate gesture, so show what landed in its own
+      // tab (mirrors dropping a file into an editor).
       if (first) void openInNewTab(first.file, targetFolderPath);
       const failed = (j.files || []).filter((x) => x.error);
       if (failed.length) {

@@ -78,7 +78,7 @@ export default function QuickOpenDialog({
 
   return <div className={`quick-open-veil ${PICKER_VEIL_CLASS}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
     <div className={pickerPanelClass('wide')} role="dialog" aria-label={route.provider === 'commands' ? 'Command Palette' : 'Quick Open'}>
-      <input ref={inputRef} className="w-full border-0 border-b border-solid border-border bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-muted-foreground" role="combobox" aria-autocomplete="list" aria-controls="quick-open-results" aria-expanded="true" aria-activedescendant={itemCount ? `quick-open-${active}` : undefined} placeholder={route.provider === 'commands' ? 'Type a command' : 'Search files by name or path'} value={query}
+      <input ref={inputRef} className="w-full border-0 border-b border-solid border-border bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder" role="combobox" aria-autocomplete="list" aria-controls="quick-open-results" aria-expanded="true" aria-activedescendant={itemCount ? `quick-open-${active}` : undefined} placeholder={route.provider === 'commands' ? 'Type a command' : 'Search files by name or path'} value={query}
         onChange={(event) => { setQuery(event.target.value); setActive(0); }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }

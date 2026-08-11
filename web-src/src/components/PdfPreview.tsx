@@ -616,7 +616,7 @@ function PdfChromePortal({
               <span>Page</span>
               <Input
                 autoFocus
-                className="h-5.5 w-9.5 rounded-sm px-0 text-center"
+                className="h-5.5 w-9.5 px-0 text-center"
                 value={pageInput}
                 inputMode="numeric"
                 aria-label="PDF page number"

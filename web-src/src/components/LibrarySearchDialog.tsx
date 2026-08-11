@@ -434,7 +434,7 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
             /* Placeholder at 55% of muted: at this 20px size a full-strength
                muted line reads as typed text and the empty popup looks
                pre-filled. */
-            className="min-w-0 flex-1 border-0 bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-muted-foreground/55"
+            className="min-w-0 flex-1 border-0 bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder"
             role="combobox"
             aria-autocomplete="list"
             aria-controls="library-search-results"

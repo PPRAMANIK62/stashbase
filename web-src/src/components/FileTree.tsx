@@ -502,11 +502,12 @@ function FileRow({
       onDrop={onDrop}
       onClick={() => {
         if (renaming) return;
-        // Single-click → replace the active tab's file (or activate
-        // the existing tab that has this file already). The wasteful
-        // reload case (clicking the file open in THIS tab) is handled
-        // inside `selectFile` — it sees the file is already shown and
-        // just re-selects the row.
+        // Single-click → open the file in its own persistent tab (or
+        // focus the tab that already has it). The wasteful reload case
+        // (clicking the file open in THIS tab) is handled inside
+        // `selectFile` — it sees the file is already shown and just
+        // re-selects the row. There is no double-click open: one click
+        // always opens a lasting tab.
         const activeTab = state.activeTabId
           ? state.tabs.find((t) => t.id === state.activeTabId)
           : null;
@@ -517,11 +518,6 @@ function FileRow({
         } else {
           void actions.selectFile(path);
         }
-      }}
-      onDoubleClick={() => {
-        if (renaming) return;
-        // Double-click → open in a new tab (VS Code semantics).
-        void actions.openInNewTab(path);
       }}
       onContextMenu={onContextMenu}
     >

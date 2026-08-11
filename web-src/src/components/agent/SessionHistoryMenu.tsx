@@ -108,7 +108,7 @@ export function SessionHistoryMenu({
       triggerRef={triggerRef}
       isOpen
       onOpenChange={(next) => { if (!next) onClose(); }}
-      className="z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-pane p-1.5 shadow-elevation"
+      className="session-history-popover z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-pane p-1.5 shadow-elevation"
       placement="bottom end"
     >
       <Dialog aria-label={ariaLabel}>

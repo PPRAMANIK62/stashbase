@@ -8,13 +8,12 @@ import {
 } from '../editorHistory';
 import type { Tab } from '../store/state';
 
-function tab(id: string, name: string | null, preview = false): Tab {
+function tab(id: string, name: string | null): Tab {
   return {
     id,
     file: name ? { name, format: 'md', content: '' } : null,
     editMode: false,
     dirty: false,
-    preview,
     pendingAnchor: null,
     pendingHighlight: null,
     saveStatus: { text: '', cls: '' },
@@ -40,11 +39,11 @@ test('Editor History drops history entries whose tab already closed', () => {
   assert.deepEqual(entries.map((entry) => entry.id), ['a']);
 });
 
-test('Editor History labels a blank tab and flags preview tabs', () => {
-  const tabs = [tab('a', null), tab('b', 'b.md', true)];
+test('Editor History labels a blank tab', () => {
+  const tabs = [tab('a', null), tab('b', 'b.md')];
   const entries = orderEditorHistory(tabs, ['a', 'b']);
   assert.equal(entries[0].label, 'Untitled');
-  assert.equal(entries[1].preview, true);
+  assert.equal(entries[1].label, 'b.md');
 });
 
 test('the chord is the literal Control key, never Cmd/Meta', () => {

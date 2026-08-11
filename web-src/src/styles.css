@@ -29,6 +29,10 @@
    * subdued text. The app's legacy `--muted` variable is the text role. */
   --color-muted: var(--hover);
   --color-muted-foreground: var(--muted);
+  /* Placeholder text — one role for every empty field in the app, so
+   * `placeholder:text-placeholder` is the only way a hint gets its colour.
+   * Ranks below muted-foreground on purpose; see globals.css. */
+  --color-placeholder: var(--text-placeholder);
   /* Selection surface — the accent-tinted "this row is active/chosen"
    * role (tree selection, open-menu anchor rows). Distinct from `muted`,
    * which is transient hover. */
@@ -55,20 +59,38 @@
   --spacing-control: var(--density-control);
   --radius-ui: var(--radius-ui);
   --radius-control: var(--radius-control);
+  --radius-container: var(--radius-container);
   /* Corner scale — the ONLY radii the renderer uses. Overrides Tailwind's
-   * rem-based defaults so `rounded-sm/md/lg/xl` land on the app scale:
-   * 4 (controls) / 6 (buttons, inputs) / 8 (cards) / 10 (overlay panels). */
-  --radius-xs: 2px;
+   * rem-based defaults so the utilities land on the app's roles: 4 (inline
+   * runs) / 6 (sub-24px icon buttons) / 10 (items inside a box) / 20 (every
+   * box). Every step forwards a globals.css role rather than restating a
+   * literal, so legacy styles/*.css reaches the same roles through
+   * `var(--radius-container)` and friends.
+   *
+   * `lg`, `xl` and `2xl` deliberately collapse onto the one container
+   * role. Tailwind's ramp implies boxes should be graded by size; this app
+   * says they should not, and collapsing the steps is what makes that
+   * true no matter which of the three a component reached for. */
+  --radius-xs: var(--radius-xs);
   --radius-sm: var(--radius-control);
   --radius-md: var(--radius-ui);
-  --radius-lg: 8px;
-  --radius-xl: 10px;
-  --radius-2xl: 10px;
+  --radius-lg: var(--radius-container);
+  --radius-xl: var(--radius-container);
+  --radius-2xl: var(--radius-container);
   --shadow-elevation: var(--shadow-elevation);
   --shadow-low: 0 1px 2px rgba(var(--shadow-color), 0.05);
   /* Raised-card presence without overlay drama — the hero composer's one
-   * sanctioned non-overlay shadow (see design-docs/visual-style.md). */
-  --shadow-raised: 0 1px 2px rgba(var(--shadow-color), 0.06), 0 4px 16px rgba(var(--shadow-color), 0.08);
+   * sanctioned non-overlay shadow (see design-docs/visual-style.md).
+   *
+   * A single contact layer, and deliberately nothing wider. Calibrated
+   * live against six alternatives: every recipe with a broad pool read as
+   * grime rather than as height, because a falloff short enough to be
+   * seen at all is short enough for the eye to resolve as its own grey
+   * shape sitting under the card. The card already carries a 1px border
+   * and its own surface against the canvas, so separation is handled —
+   * all this layer owes is the hairline that keeps it off the ground.
+   * Widening it is a regression, not a refinement. */
+  --shadow-raised: 0 1px 3px rgba(var(--shadow-color), 0.06);
   /* UI type scale — the ONLY chrome font sizes, overriding Tailwind's
    * rem-based defaults so every text-* utility scales with the user's
    * interface-size preference. Desktop-density mapping (smaller than web
@@ -97,6 +119,14 @@
   --transition-duration-fast: var(--motion-fast);
   --transition-duration-standard: var(--motion-standard);
   --ease-ui: var(--motion-ease);
+  /* Three-voice font stacks (defined in globals.css :root) override
+   * Tailwind's rem-based defaults so `font-sans` / `font-serif` /
+   * `font-mono` utilities resolve to the app's own stacks — one mono
+   * voice everywhere instead of the utility default drifting from the
+   * hand-written CSS stacks. */
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
 }
 
 /* The app's theme is driven by `data-theme` on <html> (see globals.css),

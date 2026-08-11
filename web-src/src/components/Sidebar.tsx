@@ -265,8 +265,12 @@ function SettingsRow() {
       <button
         type="button"
         className={
+          /* Hover brightens the TEXT only — no filled row surface. This
+           * strip is app chrome pinned under the dock's section bands,
+           * not a list row, and a hover pill here read as a fourth
+           * selectable item in the stack. */
           'flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 '
-          + 'text-left text-base text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-3.5 [&_svg]:flex-none'
+          + 'text-left text-base text-muted-foreground hover:text-foreground [&_svg]:size-3.5 [&_svg]:flex-none'
         }
         onClick={() => openSettings()}
       >
@@ -319,8 +323,12 @@ function NewChatButton() {
     startChat(agent);
   }
 
+  /* Agent NAMES, not "New <Agent> Chat": the row itself says New Chat and
+   * now names its agent beside this chevron, so the menu is the picker
+   * that changes that name — repeating the whole action per item read as
+   * three ways to do the same thing. */
   const agentItems: MenuItem[] = AGENTS.map((agent) => ({
-    label: `New ${agent.launcherLabel} Chat`,
+    label: agent.launcherLabel,
     icon: <agent.Icon />,
     onSelect: () => pickAgent(agent.id),
   }));
@@ -343,13 +351,26 @@ function NewChatButton() {
           title={`Start a ${preferred.launcherLabel} chat in the current folder, or across the whole library`}
           onClick={() => startChat(readPreferredAgent())}
         >
-          {/* 16px slot around the 14px glyph — every row does this, so
-            * the label lands on the shared 38px gutter line. */}
+          {/* A PLUS, not the agent's mark: this row's job is "make a new
+            * chat", and leading with a vendor glyph made the action read
+            * as "Codex" with a label attached. Which agent it will use
+            * now rides beside the chevron, where the picker that changes
+            * it lives. 16px slot around the 14px glyph — every row does
+            * this, so the label lands on the shared 38px gutter line. */}
           <span className="inline-flex size-4 flex-none items-center justify-center">
-            <preferred.Icon className="size-3.5 text-muted-foreground" />
+            <PlusIcon className="size-3.5 text-muted-foreground" />
           </span>
           <span className="min-w-0 truncate">New Chat</span>
         </button>
+        {/* The agent this row will start, named next to its picker — the
+          * row would otherwise give no clue which of the two runs, and
+          * the menu is where it changes. */}
+        {/* No right margin: the chevron's own 20px box already holds the
+          * glyph 2px off the text, and any more read as two unrelated
+          * controls rather than one label-plus-picker. */}
+        <span className="shrink-0 truncate text-xs text-muted-foreground">
+          {preferred.launcherLabel}
+        </span>
         <button
           ref={chevronRef}
           type="button"
@@ -359,7 +380,10 @@ function NewChatButton() {
              * that already hovers to bg-muted, so its own states need
              * the one-step-darker surface to read. */
             + 'text-muted-foreground hover:bg-active hover:text-foreground focus-visible:opacity-100 '
-            + '[&_svg]:size-3.5 '
+            /* size-4, a step up from the sidebar's 14px glyphs: this
+             * chevron sits beside 11px text rather than 13px row text,
+             * so at 14px it read as a speck next to the word it opens. */
+            + '[&_svg]:size-4 '
             /* Always visible (muted): the arrow IS the discoverability of
              * the agent menu — hover-only would hide the affordance. */
             + (menuAnchor ? 'bg-active text-foreground' : '')
@@ -417,15 +441,11 @@ export function activateChatTabForAgent(
 function ScopeHistoryButton({
   scope,
   label,
-  small,
   onOpenChange,
 }: {
   scope: ChatScope;
   /** Accessible name + tooltip, e.g. "Chat history in Notes". */
   label: string;
-  /** icon-xs (24px) for the narrow tinted section-header strips, which
-   *  are shorter than the 28px default button. */
-  small?: boolean;
   /** Lets the owning header hold its hover-revealed cluster visible
    *  while the menu is open. */
   onOpenChange?: (open: boolean) => void;
@@ -455,16 +475,15 @@ function ScopeHistoryButton({
       <Button
         ref={buttonRef}
         variant="ghost"
-        size={small ? 'icon-xs' : 'icon-sm'}
+        size="icon-xs"
         className="text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
         title={label}
         aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpenReported(!open)}
-      >{/* Explicit size: this button renders at icon-sm AND icon-xs
-          (`small`), whose svg defaults differ (16/12) — the glyph must
-          stay the app-wide 14px in both. */}
+      >{/* Explicit size: icon-xs would otherwise render its own 12px
+          default, and every sidebar glyph is 14px. */}
         <HistoryIcon className="size-3.5" /></Button>
       {open && (
         <Suspense
@@ -930,7 +949,6 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
             <ScopeHistoryButton
               scope={LIBRARY_SCOPE}
               label="Library chat history"
-              small
               onOpenChange={setLibraryHistoryOpen}
             />
             <AddFolderMenuButton />
@@ -938,12 +956,14 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
         </div>
         <div id="sidebar-files-section" className={libraryExpanded ? 'flex min-h-0 flex-col overflow-hidden' : 'hidden'}>
           {showZeroState ? <ZeroFolderState /> : (
-            /* With a folder active the list is a fixed-height window: up
-             * to five 28px rows plus a half-row peek — the peek is the
-             * scroll affordance (macOS scrollbars stay hidden until the
-             * user scrolls); shorter memberships size to content. With no
-             * folder the Library IS the panel content, so no cap. */
-            <div className={(activePath ? 'max-h-[154px] ' : '') + 'scrollbar-quiet min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5'}>
+            /* One height in BOTH states: up to five 28px rows plus a
+             * half-row peek — the peek is the scroll affordance (macOS
+             * scrollbars stay hidden until the user scrolls); shorter
+             * memberships size to content. Letting the no-folder window
+             * grow the list instead made the same section change size
+             * when a folder opened, so the dock moved under the pointer
+             * exactly when the user was aiming at it. */
+            <div className="scrollbar-quiet max-h-[154px] min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5">
               {plan.visible.map((entry) => {
                 const name = basenameOfPath(entry.path);
                 const opening = openingFolder?.path === entry.path;
@@ -988,11 +1008,11 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                     </button>
                     <span
                       /* Same geometry as the Library header's cluster:
-                       * icon-sm buttons, gap-0.5, and an 8px effective
-                       * right inset (container px-1.5 + row pr-0.5 =
-                       * the header's pr-2) — so the clock and trailing
-                       * icons form two clean columns across header and
-                       * rows. Change one side, change both. */
+                       * icon-xs (24px) buttons, gap-0.5, and an 8px
+                       * effective right inset (container px-1.5 + row
+                       * pr-0.5 = the header's pr-2) — all three must
+                       * match or the clock lands in a different column
+                       * per row. Change one side, change both. */
                       className={`flex items-center gap-0.5 ${
                         menuOpen || historyOpenPath === entry.path ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
                       }`}
@@ -1126,7 +1146,7 @@ function RootMenuButton({
   return (
     <Button
       variant="ghost"
-      size="icon-sm"
+      size="icon-xs"
       className="shrink-0 text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
       aria-label={`More actions for ${name}`}
       aria-haspopup="menu"
@@ -1191,7 +1211,11 @@ function ActiveFolderHeader({
     <div
       id="sideHead"
       className={
-        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-1 pl-2 hover:bg-muted'
+        /* pr-0.5 (not pr-1): with the row's mx-1.5 that lands the action
+         * cluster on the same 8px right inset as the Library header and
+         * its rows, so every action icon in the sidebar shares one
+         * column. */
+        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-0.5 pl-2 hover:bg-muted'
         + (sideHeadDrop ? ' drop-target' : '')
       }
       onDragOver={onSideHeadDragOver}
@@ -1281,7 +1305,7 @@ function NewNoteButton() {
   return (
     <Button
       variant="ghost"
-      size="icon-sm"
+      size="icon-xs"
       className="text-muted-foreground"
       title={'New note in ' + target}
       onClick={() => void actions.newNote()}

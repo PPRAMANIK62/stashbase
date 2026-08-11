@@ -40,7 +40,30 @@ them:
   controls; serif for long-form reading content — editor titles and agent
   prose; monospace for paths, code, and data. Chrome informs, serif invites
   reading, mono signals precision. Apply the voices by role, not by surface
-  fashion.
+  fashion. Each voice is a single token (`--font-sans` / `--font-serif` /
+  `--font-mono`, wired into the Tailwind `font-*` utilities); a surface that
+  hand-writes its own stack is drift, not a fourth voice.
+
+## Type scale
+
+The chrome type scale is dense on purpose, so its steps carry roles rather
+than a size-for-every-integer sprawl. "What size is normal text" has exactly
+one answer — **body is 13 (`text-base`)**, and the `<body>` default matches it.
+
+- **11 (`text-xs`)** — meta and fine print: timestamps, paths, secondary
+  captions, section eyebrow labels.
+- **12 (`text-sm`)** — reserved for genuinely dense repeating rows (compact
+  list/table cells, chips), NOT a second body size. 12 and 13 differ by 1px;
+  using both as general body reads as sloppiness, so 12 stays out of prose.
+- **13 (`text-base`)** — the body: paragraphs, control and menu-item labels,
+  dialog content. The default.
+- **16 (`text-xl`)** — section and block titles.
+- Larger steps (20/24/30) are display-only — warmth-budget brand moments.
+
+Control weight can compensate for size: a `font-medium` button label may sit a
+step below an adjacent input's body size without reading as a mismatch — the
+weight, not the pixel count, carries the parity. Reading content (Markdown
+view, editor, agent prose) follows its own reading sizes, not this scale.
 
 ## Color
 
@@ -51,6 +74,14 @@ them:
 - Light and dark are equal citizens. Every color decision is made as a role
   (surface, text, stroke, accent) with a value per theme; a change that only
   looks right in one theme is not done.
+- Text ranks in three steps: primary for content, secondary for meta, and
+  placeholder — lighter than secondary — for the hint in an empty field. The
+  third step is not a nicety: at the secondary weight an empty field reads as
+  a filled one, which is the one thing a placeholder must never do.
+- A role is a color, never an opacity. Fading a role down per surface
+  (`muted-foreground/55` here, 65% there) is how one role quietly becomes
+  four, each unfixable without hunting every call site; if a use needs a
+  different weight, it needs a named role.
 
 ## Surfaces and Depth
 
@@ -70,26 +101,63 @@ them:
   else does. One standing exception: the empty-chat hero composer carries a
   minimal raised shadow (the `raised` shadow role) so the anchor of an
   otherwise bare pane has presence; docked composers stay flat.
+- A standing shadow is a hairline of contact, never a pool. On a surface
+  that already has a border, any falloff broad enough to be noticed is
+  broad enough to read as grime under the card rather than as height — the
+  failure looks like dirt, not like depth. Height is not the effect being
+  bought here; getting off the ground is.
 - Section titles live OUTSIDE their cards: hierarchy comes from type weight
   and spacing, never from a tinted header band inside the card.
 - List interaction states are neutral: a light cool-gray hover that persists
   while a row anchors an open menu. No colored row bands — accent washes at
   row width read dirty at any strength, so hue stays on button-level
-  elements.
+  elements. The single exception is drag feedback: a drop target wears an
+  accent tint and edge, because it must be unmistakable and it exists only
+  while a drag is in flight. It is the accent, not the amber — one drag
+  gesture speaks one colour, and amber never signals state.
 
 ## Density and Shape
 
-- Compact workbench density: small control heights, tight gaps, small radii.
-  Density is what makes the app feel like a tool rather than a landing page;
-  do not relax it for visual trends.
-- Radii stay small and consistent (a control radius and a slightly larger
-  UI-surface radius). No pill buttons, no large-radius cards. The one
-  sanctioned capsule is the transient floating affordance (the
-  transcript's jump-to-latest pill); persistent chrome controls never
-  render as pills.
-- List hover and selection render as an inset rounded pill — a small-radius
-  row surface inset from the panel edges — never a full-bleed band or an
-  accent edge bar.
+- Compact workbench density: small control heights and tight gaps. Density
+  is what makes the app feel like a tool rather than a landing page; do not
+  relax it for visual trends. Corners are the one axis that is generous —
+  spacing stays tight underneath them.
+- Corners are **continuous**, not merely rounded: a squircle, so curvature
+  eases into the straight edge instead of meeting it at a visible seam.
+  This is the larger half of the shape language — a large circular radius
+  reads as a web card, while a squircle at the same radius reads as native
+  desktop chrome.
+- Corners are assigned by **role, not by size**. Every box — the composer,
+  transcript cards, code blocks, text fields, cards, panels, menus,
+  popovers, dialogs — takes the same corner regardless of how big it is.
+  Smaller corners exist only for things that are not boxes: items that live
+  inside a box (rows, menu items, buttons) and runs of text inside a line
+  (code spans, mentions, search marks). Introducing a literal radius is the
+  same violation as introducing a literal colour.
+- Grading boxes by size is the specific mistake this replaced. A code block
+  rounder than the card holding it, a card squarer than the field below it —
+  each looks defensible in isolation and reads as carelessness on screen,
+  because a person seeing two boxes together expects one corner, not a
+  ranking. Size hierarchy is carried by scale, weight, and surface; never
+  by corner.
+- Short boxes clamp the container radius to half their height and come out
+  capsule-ended. That is the intended result, not a fallback: it is what
+  makes a search field and the composer read as one object family at two
+  sizes. A field is still a box, so it never drops to an item corner to
+  avoid this.
+- The send button is the counterweight: a true circle, the terminal action,
+  deliberately not a smaller echo of the box around it.
+- True circles and capsules (the send button, the transcript's
+  jump-to-latest pill, status dots) opt out of the squircle, because at
+  those radii a squircle is a bulged superellipse rather than the shape
+  being drawn. Buttons that are not circular never render as pills.
+- List hover and selection render as an inset rounded pill — a row surface
+  on the UI radius, inset from the panel edges — never a full-bleed band or
+  an accent edge bar.
+- Nested corners are derived, not guessed: an inner surface sits one step
+  tighter than the padding-inset parent it lives in (the segmented-control
+  thumb inside its track), so the two curves stay concentric when the ramp
+  changes.
 
 ## Composition
 
@@ -137,8 +205,9 @@ provides the character.
 
 ## Contribution Guidance
 
-- New styles consume semantic tokens; introducing a literal color, radius, or
-  duration into a component is a defect unless it defines a new role.
+- New styles consume semantic tokens; introducing a literal color, radius,
+  font stack, or duration into a component is a defect unless it defines a new
+  role.
 - When adding a component, match the density, stroke, and voice rules above
   before customizing anything.
 - Propose changes to this language (a new role, a revised palette) as a

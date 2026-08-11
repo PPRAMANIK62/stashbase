@@ -96,16 +96,16 @@ export function reducer(s: State, a: Action): State {
       // recents (Quick Open would resolve the rel name in the wrong folder).
       const outOfFolder = Boolean(a.libraryFolder);
       const liveEditing = file.format === 'md' && !outOfFolder;
-      // New-tab mode (double-click in tree, `+` then a click): create
-      // a fresh tab and load into it. Otherwise replace the active
-      // tab's file (VS Code single-click mode). If there's no active
-      // tab at all, an open click implicitly creates one.
+      // New-tab mode (the normal sidebar open, or `+` then a click):
+      // create a fresh tab and load into it. Without `newTab` the file
+      // replaces the active tab's file (blank-tab reuse, back/forward,
+      // anchor nav). If there's no active tab at all, an open click
+      // implicitly creates one.
       if (a.newTab || s.activeTabId == null || !getActiveTab(s)) {
         const tab = makeTab();
         tab.file = file;
         tab.editMode = liveEditing;
         tab.dirty = false;
-        tab.preview = a.preview ?? false;
         return {
           ...s,
           tabs: [...s.tabs, tab],
@@ -124,10 +124,6 @@ export function reducer(s: State, a: Action): State {
           pendingAnchor: null,
           pendingHighlight: null,
           pdfPage: undefined,
-          // Only touch `preview` when explicitly asked — in-place anchor
-          // nav reuses the same tab and must keep its existing
-          // preview/pinned status.
-          ...(a.preview != null ? { preview: a.preview } : {}),
         }),
         recentFilePaths: outOfFolder ? s.recentFilePaths : rememberRecentFile(s.recentFilePaths, file.name),
         // The branch above already returned unless `s.activeTabId` is set.
@@ -264,10 +260,6 @@ export function reducer(s: State, a: Action): State {
       return patchActiveTab(s, {
         editMode: a.on,
         saveStatus: a.on ? tab.saveStatus : { text: '', cls: '' },
-        // Entering edit mode promotes a preview tab — the user is
-        // committing to this file; the next sidebar single-click
-        // shouldn't kick their in-progress changes out of the tab.
-        ...(a.on && tab.preview ? { preview: false } : {}),
       });
     }
     case 'TOGGLE_FOLDER': {
@@ -454,11 +446,6 @@ export function reducer(s: State, a: Action): State {
       return { ...s, modal: a.request };
     case 'MODAL_CLOSE':
       return { ...s, modal: null };
-    case 'PROMOTE_TAB':
-      return {
-        ...s,
-        tabs: s.tabs.map((t) => (t.id === a.id ? { ...t, preview: false } : t)),
-      };
     case 'TAB_PDF_PAGE':
       return {
         ...s,

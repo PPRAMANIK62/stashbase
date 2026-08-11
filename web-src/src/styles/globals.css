@@ -25,6 +25,13 @@
       --surface-selected: #e0e5e9;
       --text-primary: #202427;
       --text-secondary: #68737a;
+      /* Placeholder text — its own role, deliberately lighter than
+       * secondary. A placeholder is a hint about what to type, not content:
+       * at the secondary weight an empty field reads as a filled one, which
+       * is the exact confusion it exists to avoid. Sits between secondary
+       * text and the strong stroke, so it stays legible while clearly
+       * ranking below every real string on screen. */
+      --text-placeholder: #8b969d;
       --text-on-accent: #ffffff;
       --stroke-subtle: #d9e0e3;
       --stroke-strong: #aeb9bf;
@@ -33,8 +40,27 @@
        * :focus-visible rule). */
       --focus-ring-rgb: 8, 145, 178;
       --shadow-color: 25, 34, 39;
-      --radius-ui: 6px;
-      --radius-control: 4px;
+      /* Corner scale, split by ROLE rather than by size. The earlier ramp
+       * graded boxes by how big they were — a code block rounder than a
+       * card, a card rounder than a popover — and the result read as
+       * sloppiness rather than as hierarchy, because a person sees two
+       * boxes side by side and expects the same corner on both.
+       *
+       * So there is exactly one corner for every BOX, no matter its size,
+       * and smaller corners only for things that are not boxes: items that
+       * live inside a box, and runs of text inside a line. Half of the
+       * "continuous corner" read comes from the squircle rule further
+       * down, not the radii — change one without the other and the shape
+       * goes flat. */
+      --radius-xs: 4px;      /* inline runs: code spans, mentions, marks */
+      --radius-control: 6px; /* sub-24px icon buttons */
+      --radius-ui: 10px;     /* items inside a box: rows, menu items, buttons */
+      /* Every bordered or filled BOX: the composer, transcript cards, code
+       * blocks, inputs, cards, panels, menus, popovers, dialogs. Short
+       * boxes clamp this to half their height and come out capsule-ended,
+       * which is correct — a search field and the composer then read as
+       * the same object family at two sizes. */
+      --radius-container: 20px;
       --density-gap: 4px;
       --density-control: 28px;
       --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.14);
@@ -54,9 +80,11 @@
       /* Raw RGB of --accent, for alpha ramps: rgba(var(--accent-rgb), .08)
        * etc. Change the accent → change both lines, nothing else. */
       --accent-rgb: 8, 145, 178;
-      /* Amber counterpoint — rare brand moments only (drag-into-folder
-       * tint), never state; state yellows are --status-warning. File-type
-       * icons carry their own Material brand fills (FileTree.tsx). */
+      /* Amber counterpoint — rare brand moments only, never state (state
+       * yellows are --status-warning; the drag-into-folder tint moved to
+       * the accent, where interactive states belong). Search-hit marks
+       * are the one repeated use. File-type icons carry their own
+       * Material brand fills (FileTree.tsx). */
       --accent-amber: #d9a000;
       --accent-amber-rgb: 217, 160, 0;
       /* Danger red — destructive actions, error text, failure banners.
@@ -81,9 +109,21 @@
        * .tabs). Derived from --fg at usage time, so the dark theme's
        * --fg override re-resolves it — no dark redefinition needed. */
       --scrollbar-thumb: color-mix(in srgb, var(--fg) 25%, transparent);
-      --ui-font-size: calc(14px * var(--ui-scale));
+      /* Body default = the primary chrome body size (13 = text-base), so
+       * unstyled text lands on the same size the type-scale roles call
+       * "body" instead of a phantom 14 that almost nothing else uses.
+       * (Type-scale roles: see design-docs/visual-style.md.) */
+      --ui-font-size: calc(13px * var(--ui-scale));
       --ui-scale: 1;
       --reading-font-size: 14px;
+      /* Three-voice typography, tokenized so every surface speaks ONE
+       * stack per voice (chrome sans, reading serif, data mono) instead of
+       * each component restating a slightly different literal. Wired into
+       * Tailwind's font-* utilities in styles.css @theme. Sans carries the
+       * CJK fallbacks; mono is the superset stack so no surface regresses. */
+      --font-sans: -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
+      --font-serif: ui-serif, Georgia, Cambria, "Songti SC", serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
     :root[data-ui-scale='small'] { --ui-scale: .9; }
@@ -103,6 +143,7 @@
       --surface-selected: #353f45;
       --text-primary: #edf2f3;
       --text-secondary: #aab5ba;
+      --text-placeholder: #87939a;
       --text-on-accent: #06191f;
       --stroke-subtle: #39444a;
       --stroke-strong: #64727a;
@@ -148,6 +189,7 @@
         --surface-selected: #353f45;
         --text-primary: #edf2f3;
         --text-secondary: #aab5ba;
+        --text-placeholder: #87939a;
         --text-on-accent: #06191f;
         --stroke-subtle: #39444a;
         --stroke-strong: #64727a;
@@ -186,6 +228,31 @@
       box-sizing: border-box;
     }
 
+    /* Continuous corners app-wide. The radii above set how MUCH a corner
+     * turns; `corner-shape: squircle` sets how it turns — a superellipse
+     * instead of a circular arc, which is the difference between "rounded
+     * rectangle" and the Apple-style corner. Chromium 139+ ships it (the
+     * renderer is on 142 via Electron 39); anywhere else the declaration
+     * is dropped and plain circular corners remain as the fallback.
+     *
+     * `corner-shape` does not inherit, so this has to be a universal
+     * selector rather than a rule on :root. */
+    *,
+    *::before,
+    *::after {
+      corner-shape: squircle;
+    }
+
+    /* Capsules and circles opt back out: at a 50%-or-larger radius a
+     * squircle is a fat superellipse, not the true capsule these
+     * affordances are drawing (the transcript's jump-to-latest pill,
+     * status dots, the lightbox toolbar). */
+    .rounded-full,
+    .transcription-download-progress,
+    .transcription-download-progress > span {
+      corner-shape: round;
+    }
+
     html,
     body {
       height: 100%;
@@ -193,7 +260,7 @@
     }
 
     body {
-      font: var(--ui-font-size)/1.55 -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
+      font: var(--ui-font-size)/1.55 var(--font-sans);
       color: var(--fg);
       background: var(--bg);
       overflow: hidden;
@@ -243,6 +310,19 @@
     .quick-open-veil input:focus-visible,
     .library-search-veil input:focus-visible {
       outline: none;
+    }
+
+    /* Session-history search is the same palette pattern — the popover panel
+     * is the focus affordance, so the field shouldn't wear a loud cyan halo
+     * the moment the menu auto-focuses it. Unlike the veils above, this input
+     * is the `Input` primitive, so suppress ALL three of its focus cues: the
+     * global outline, the focus-visible border-ring, and the ring-3 glow
+     * (a box-shadow that `outline: none` alone can't clear). Unlayered, so it
+     * beats the primitive's Tailwind utilities. */
+    .session-history-popover input:focus-visible {
+      outline: none;
+      border-color: var(--border);
+      box-shadow: none;
     }
 
     /* One treatment for panel-chrome scrollers (sidebar tree/Library,

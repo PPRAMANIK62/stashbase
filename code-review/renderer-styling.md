@@ -12,8 +12,14 @@ this file records the mechanics a change must respect.
    'system'/absent follows the OS preference.
 2. **Tailwind theme mapping** (`web-src/src/styles.css` `@theme inline`) —
    exposes those roles as utilities. Chrome type scale `text-2xs..4xl`
-   (10..30px, every step multiplied by `--ui-scale`), radius scale
-   `rounded-xs/sm/md/lg/xl` = 2/4/6/8/10px, `shadow-low`/`shadow-elevation`,
+   (10..30px, every step multiplied by `--ui-scale`), corner scale
+   `rounded-xs/sm/md/lg/xl` forwarding the globals roles
+   `--radius-xs/-control/-ui/-container` = 4/6/10/20px, assigned by role
+   rather than size — each step is a `var()` and never a literal, so
+   `styles/*.css` reaches the same roles; `rounded-lg`, `rounded-xl` and
+   `rounded-2xl` all collapse onto `-container` on purpose, so a component
+   reaching for any of the three lands on the one box corner —
+   `shadow-low`/`shadow-elevation`,
    `duration-fast`/`duration-standard` (via the `--transition-duration-*`
    namespace — the bare `--duration-*` namespace generates nothing),
    `ease-ui`, and the semantic colors. `muted` is the subtle SURFACE role;
@@ -29,12 +35,55 @@ this file records the mechanics a change must respect.
    utility-only (no preflight): UA margins on `<p>`/`<h*>` are not reset, so
    migrated markup zeroes them explicitly where it matters.
 
+## Corner shape
+
+Corners have two independent halves, and a change that moves one without
+the other flattens the shape language:
+
+- **How much** a corner turns — the role scale above.
+- **How** it turns — `corner-shape: squircle`, applied app-wide from a
+  universal selector in globals.css (the property does not inherit, so it
+  cannot live on `:root`). Chromium 139+ implements it; the renderer is on
+  142 via Electron 39, and non-supporting engines drop the declaration and
+  fall back to circular corners, so it needs no guard.
+
+Capsules and circles opt back out with `corner-shape: round` — at a radius
+of 50% or more a squircle is a bulged superellipse, not the capsule the
+affordance is drawing. The opt-out list (`.rounded-full`, the transcript
+progress capsule) lives beside the universal rule; extend it there rather
+than locally.
+
+## Assigning a corner
+
+The question is never "how big is this element" but "what kind of thing is
+it":
+
+- **A box** — has its own border or fill and holds content: `-container`.
+  Composer, transcript cards, code blocks (chrome and content alike), text
+  fields, cards, panels, menus, popovers, dialogs, framed images. Size does
+  not enter into it; short boxes clamp to capsule ends and that is correct.
+- **An item inside a box** — takes a hover or selected background: `-ui`.
+  Tree rows, menu items, mention rows, buttons, the segmented control.
+  Buttons are the trap here: at `-container` a 32px button becomes a
+  capsule, so `ui/button.tsx` must never reach for `rounded-lg` or wider
+  (the foundation test asserts this).
+- **A sub-24px icon button**: `-control`.
+- **An inline run of text**: `-xs`. Code spans, mentions, search marks, the
+  PDF hit overlay.
+
+Nested boxes derive their inner corner rather than picking one — an inner
+surface inside a padding-inset parent sits exactly that padding tighter
+(`calc(var(--radius-md) - 1px)` in the segmented control), so the two curves
+stay concentric when the scale moves.
+
 ## Enforcement
 
 `web-src/src/__tests__/renderer-foundation.test.ts` locks the mapping, the
-type/radius scales, and bans `text-[calc(` and `bg-[var(--hover)]` in
-components. Extend it when the contract grows; never weaken it to land a
-change.
+type and corner scales, the squircle rule, and bans `text-[calc(` and
+`bg-[var(--hover)]` in components. It also asserts that `styles/*.css`
+carries no literal `border-radius: <n>px` other than the one sanctioned
+999px capsule — a literal radius is the same violation as a literal colour.
+Extend it when the contract grows; never weaken it to land a change.
 
 ## CSS exemptions — the only rules allowed to stay in styles/*.css
 
