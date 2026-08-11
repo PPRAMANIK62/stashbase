@@ -268,13 +268,12 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Hybrid (vector + BM25) search, scoped to the current open folder.
-  // Cross-folder search lives behind the MCP `search_library` tool (different
-  // mental model: "AI searching all my notes" vs "I'm searching the library
-  // I'm currently editing"). Optional narrowing: `path_prefix` (folder-
-  // relative subfolder, resolved escape-safe) and `types` (file-type
-  // categories mapped to source extensions, applied daemon-side before
-  // the final top-k cut).
+  // Hybrid (vector + BM25) search, scoped to one folder (explicit `folder`
+  // or the window's current one). Library-wide search — the in-app popup
+  // and MCP `search_library` — lives on the ungated `/api/library/*` routes.
+  // Optional narrowing: `path_prefix` (folder-relative subfolder, resolved
+  // escape-safe) and `types` (file-type categories mapped to source
+  // extensions, applied daemon-side before the final top-k cut).
   app.post('/api/search', async (req, res) => {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';

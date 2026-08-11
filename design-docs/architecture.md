@@ -36,8 +36,9 @@ user-visible source file.
 - Each window works primarily in one current folder. Multiple windows may
   show different folders at the same time; those are independent UI scopes,
   not separate libraries or indexing runtimes.
-- In-app search defaults to that current folder. MCP can search the library and
-  narrow to an authorized folder, path prefix, or source file-type category.
+- In-app search and MCP retrieval both default to the whole library. Either can
+  narrow to an authorized folder or path prefix; source file-type categories
+  remain an agent-facing parameter.
 - MCP file operations are deliberately bounded to authorized library folders;
   they are never a general filesystem interface. The one membership-changing
   tool, `create_project`, only creates and registers a new folder under the

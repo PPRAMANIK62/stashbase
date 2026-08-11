@@ -424,11 +424,23 @@ document.addEventListener('click', function(e) {
           var currentWindowSlash = currentEncoded.indexOf('/', '__window/'.length);
           currentEncoded = currentWindowSlash >= 0 ? currentEncoded.slice(currentWindowSlash + 1) : '';
         }
+        // Optional __folder/<double-encoded-abs>/ scope token — an
+        // out-of-folder tab's document. Forward it so the parent keeps
+        // the navigation inside that member folder.
+        var currentFolder;
+        if (currentEncoded.indexOf('__folder/') === 0) {
+          var currentFolderSlash = currentEncoded.indexOf('/', '__folder/'.length);
+          if (currentFolderSlash >= 0) {
+            try { currentFolder = decodeURIComponent(decodeURIComponent(currentEncoded.slice('__folder/'.length, currentFolderSlash))); } catch (_) {}
+            currentEncoded = currentEncoded.slice(currentFolderSlash + 1);
+          }
+        }
         var currentDecoded = currentEncoded.split('/').map(decodeURIComponent).join('/');
         e.preventDefault();
         window.parent.postMessage({
           type: 'stashbase-nav',
           path: currentDecoded,
+          folder: currentFolder,
           anchor: hashOnly
         }, '*');
       }
@@ -446,6 +458,14 @@ document.addEventListener('click', function(e) {
         var windowSlash = encoded.indexOf('/', '__window/'.length);
         encoded = windowSlash >= 0 ? encoded.slice(windowSlash + 1) : '';
       }
+      var linkFolder;
+      if (encoded.indexOf('__folder/') === 0) {
+        var folderSlash = encoded.indexOf('/', '__folder/'.length);
+        if (folderSlash >= 0) {
+          try { linkFolder = decodeURIComponent(decodeURIComponent(encoded.slice('__folder/'.length, folderSlash))); } catch (_) {}
+          encoded = encoded.slice(folderSlash + 1);
+        }
+      }
       var decoded;
       try {
         decoded = encoded.split('/').map(decodeURIComponent).join('/');
@@ -456,6 +476,7 @@ document.addEventListener('click', function(e) {
         window.parent.postMessage({
           type: 'stashbase-nav',
           path: decoded,
+          folder: linkFolder,
           anchor: anchor || undefined
         }, '*');
         return;

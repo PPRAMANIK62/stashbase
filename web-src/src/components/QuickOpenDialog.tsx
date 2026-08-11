@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '../commandPalette';
 import { rankQuickOpen } from '../quickOpen';
 import { useApp } from '../store/AppContext';
+import { openLibrarySearch } from './LibrarySearch';
 import { openSettings } from './SettingsModal';
 import {
   PICKER_EMPTY_ROW_CLASS,
@@ -35,7 +36,8 @@ export default function QuickOpenDialog({
   const commandContext = {
     hasFolder: Boolean(state.folder),
     hasActiveTab: Boolean(state.activeTabId),
-    activeFileIsMarkdown: activeTab?.file?.format === 'md',
+    // Out-of-folder tabs are read-only — keep Toggle Editing off the palette.
+    activeFileIsMarkdown: activeTab?.file?.format === 'md' && !activeTab.file.folder,
   };
   const fileItems = useMemo(
     () => rankQuickOpen(paths, route.provider === 'files' ? route.query : '', recentPaths),
@@ -61,7 +63,10 @@ export default function QuickOpenDialog({
       case 'document.close-editor': void actions.closeActiveTab(); break;
       case 'document.toggle-editing': void actions.toggleEditMode(); break;
       case 'document.find': actions.openFind(); break;
-      case 'search.focus': actions.focusSearch(); break;
+      // rAF: the palette veil is still in the DOM this tick (React hasn't
+      // flushed the close yet) and the search opener refuses to stack on
+      // an open picker — defer one frame so the handoff isn't swallowed.
+      case 'search.open': requestAnimationFrame(() => openLibrarySearch()); break;
       case 'agent.show-claude': actions.openAgent('claude'); break;
       case 'agent.show-codex': actions.openAgent('codex'); break;
       case 'settings.open': openSettings(); break;

@@ -192,6 +192,16 @@
       outline-offset: 2px;
     }
 
+    /* Palette query inputs (Quick Open / library search): the modal panel is
+     * the focus affordance, and its overflow-hidden corners clip the ring to
+     * a stray thick bar under the input — suppress the ring here. (This rule
+     * is unlayered on purpose: the Tailwind `outline-0` utility loses to the
+     * unlayered ring rule above, so an unlayered override is required.) */
+    .quick-open-veil input:focus-visible,
+    .library-search-veil input:focus-visible {
+      outline: none;
+    }
+
     /* One treatment for panel-chrome scrollers (sidebar tree/Library,
      * outline, agent transcript, tab strips, toasts): thin, with a quiet
      * translucent thumb — Chromium's styled-scrollbar default thumb is a
@@ -237,67 +247,58 @@
 
     /* No dedicated titlebar, Cursor-style — in Electron with
      * `hiddenInset` the macOS traffic lights (inset at x:14, y:12)
-     * float over the sidebar column instead. The rail and panel each
-     * reserve a quiet 36px band at their top (--titlebar-clearance):
-     * no content, just the columns' own backgrounds showing through,
-     * and the `.sidebar-drag-zone` element overlaying it is the window
-     * drag region. (A real element, not ::before — Chromium ignores
-     * `-webkit-app-region` on pseudo-elements.) Browser and non-darwin
-     * windows have no traffic lights, so they get no drag zone; there,
-     * and in macOS fullscreen (lights hidden, `.is-fullscreen` body
-     * class driven by Electron IPC via the preload), the band shrinks
-     * to a 10px breather rather than collapsing to zero — content
-     * pressed against the window edge reads as a bug, not density. */
+     * float over the sidebar column instead. Every platform reserves
+     * the same 36px band at the window top (--titlebar-clearance): it
+     * hosts the shell's `.titlebar-controls` (sidebar toggle + search,
+     * TitlebarControls.tsx), and on macOS the `.sidebar-drag-zone`
+     * element overlaying it is the window drag region. (A real element,
+     * not ::before — Chromium ignores `-webkit-app-region` on
+     * pseudo-elements; the controls stay clickable via the global
+     * button no-drag rule.) One height everywhere keeps the layout
+     * identical across macOS windowed/fullscreen, Linux/Windows, and
+     * the browser — only the controls' left inset moves, clearing the
+     * lights when they are present. */
     .sidebar-drag-zone {
       display: none;
     }
 
-    /* The clearance lives INSIDE each column (rail pt / panel pt), never
-     * as padding on the .sidebar container — container padding would cut
-     * the rail's full-height border-r short of the window's top edge,
-     * which reads as a broken line whenever the window isn't maximized. */
+    /* The clearance lives INSIDE the panel (padding-top), never as
+     * padding on the .sidebar container — container padding would cut
+     * the sidebar's full-height border-r short of the window's top
+     * edge, which reads as a broken line whenever the window isn't
+     * maximized. */
     :root {
-      --titlebar-clearance: 10px;
-    }
-
-    body.is-electron.platform-darwin {
       --titlebar-clearance: 36px;
+      --titlebar-controls-left: 8px;
     }
 
+    /* Lights occupy ~x14–66; 88px leaves a clear group break so the
+     * controls read as their own cluster, not a fourth light. */
+    body.is-electron.platform-darwin {
+      --titlebar-controls-left: 88px;
+    }
+
+    /* Fullscreen hides the lights (`.is-fullscreen` body class driven
+     * by Electron IPC via the preload) — the controls slide back to the
+     * window corner. */
     body.is-electron.platform-darwin.is-fullscreen {
-      --titlebar-clearance: 10px;
+      --titlebar-controls-left: 8px;
     }
 
-    /* Rail top padding = clearance + the panel's own first-row offset
-     * (NewChatButton's pt-2), so the first rail icon centers on the New
-     * Chat row — the rail's rhythm mirrors the panel's (see
-     * ActivityBar.tsx). */
-    .activity-rail {
-      position: relative;
-      padding-top: calc(var(--titlebar-clearance) + 8px);
-    }
-
-    /* The rail↔panel divider is a gradient seam, not a border: it fades
-     * in from transparent across the titlebar clearance, so on macOS it
-     * never cuts through the traffic lights, yet below them it reads as
-     * a normal full hairline — no broken-off line in any window state. */
-    .activity-rail::after {
-      content: '';
+    /* Shell-level controls in the titlebar band. Absolute over the
+     * `.app` grid (NOT inside the sidebar column) so collapsing the
+     * sidebar leaves them in place — the toggle is always the way back
+     * in. z-index above the sidebar drag zone (6) so they stay
+     * clickable on macOS. */
+    .titlebar-controls {
       position: absolute;
       top: 0;
-      right: 0;
-      bottom: 0;
-      width: 1px;
-      /* Stay FULLY transparent through the light band (lights end ~y26
-       * inside the 36px clearance), then fade in over the next 16px —
-       * a half-alpha hairline passing between the lights would still
-       * read as a cut. */
-      background: linear-gradient(
-        to bottom,
-        transparent calc(var(--titlebar-clearance) - 6px),
-        var(--border) calc(var(--titlebar-clearance) + 10px)
-      );
-      pointer-events: none;
+      left: var(--titlebar-controls-left);
+      height: var(--titlebar-clearance);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      z-index: 7;
     }
 
     .sidebar-panel {
@@ -354,11 +355,11 @@
        * Closed chat panel collapses its track to 0 instead of structurally
        * adding/removing columns, so CSS can transition the width smoothly.
        *
-       * Sidebar column = 44px ActivityBar rail + the user-resizable panel
-       * (`--sidebar-width`, driven from `state.sidebarWidth`). When the
-       * panel is collapsed the column shrinks to the bare 44px rail — the
-       * rail itself never disappears (VSCode semantics). */
-      grid-template-columns: calc(44px + var(--sidebar-width, 280px)) 1fr 0 0;
+       * Sidebar column = the user-resizable panel (`--sidebar-width`,
+       * driven from `state.sidebarWidth`); there is no activity rail.
+       * Collapsing shrinks the column to zero — the titlebar controls
+       * (shell-level, outside this column) remain the way back in. */
+      grid-template-columns: var(--sidebar-width, 280px) 1fr 0 0;
       /* Explicit single-row track so .sidebar fills the height instead
        * of shrinking to its content — the file list grows into the full
        * column height and depends on the column being tall. */
@@ -374,17 +375,30 @@
       transition: none;
     }
 
-    /* Panel collapsed — only the 44px activity rail remains. Keep the
-     * sidebar mounted (preserves selection / scroll / search state);
-     * shrinking the column + sidebar's own overflow:hidden hides the
-     * panel without unmounting. */
+    /* Panel collapsed — the sidebar column shrinks to zero. Keep the
+     * sidebar mounted (preserves selection / scroll state); shrinking
+     * the column + the sidebar's own overflow:hidden hides the panel
+     * without unmounting. The border-r would otherwise survive as a
+     * 1px sliver at the window edge, so it goes too. */
     .app.sidebar-collapsed {
-      grid-template-columns: 44px 1fr 0 0;
+      grid-template-columns: 0 1fr 0 0;
+    }
+
+    .app.sidebar-collapsed .sidebar {
+      border-right: none;
+    }
+
+    /* Collapsed, the titlebar controls (and on macOS the traffic
+     * lights) float over the MAIN pane's top — indent the tab strip so
+     * tabs don't slide underneath them. Controls end at
+     * `--titlebar-controls-left` + two 28px buttons + gap. */
+    .app.sidebar-collapsed .tab-strip {
+      padding-left: calc(var(--titlebar-controls-left) + 66px);
     }
 
     /* Drag handle on the sidebar's right edge. Absolutely positioned at
-     * `left: calc(44px + var(--sidebar-width))` (set inline by React) so
-     * it tracks the panel's right border without consuming a grid track.
+     * `left: var(--sidebar-width)` (set inline by React) so it tracks
+     * the panel's right border without consuming a grid track.
      * The element is a wide-ish (6px) invisible hit area; the visible
      * cue is a thin 1px line drawn by `::after`, so hovering shows a
      * crisp seam highlight rather than a fat colored band. */

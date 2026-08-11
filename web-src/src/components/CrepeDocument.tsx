@@ -32,18 +32,22 @@ import { useDocumentOutline } from './DocumentOutlineContext';
  * authoring features, while StashBase keeps ownership of persistence, local
  * asset paths, navigation and the application-level find experience.
  */
-export function CrepeDocument({ tabId, name, content, readOnly, active }: {
+export function CrepeDocument({ tabId, name, content, readOnly, active, folder }: {
   tabId: string;
   name: string;
   content: string;
   readOnly: boolean;
   active: boolean;
+  /** Absolute member folder for an out-of-folder tab — image/link
+   *  resolution carries it so relative refs stay in the file's folder. */
+  folder?: string;
 }) {
   const { actions, activeTab } = useApp();
   const { publishOutline, clearOutline } = useDocumentOutline();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<CrepeBuilder | null>(null);
   const nameRef = useRef(name);
+  const folderRef = useRef(folder);
   const contentRef = useRef(content);
   const readOnlyRef = useRef(readOnly);
   const activeRef = useRef(active);
@@ -55,6 +59,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [activeHeading, setActiveHeading] = useState<string | null>(null);
   nameRef.current = name;
+  folderRef.current = folder;
   contentRef.current = content;
   readOnlyRef.current = readOnly;
   activeRef.current = active;
@@ -79,7 +84,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
         inlineUploadPlaceholderText: 'Upload image',
         blockUploadPlaceholderText: 'Upload image',
         blockCaptionPlaceholderText: 'Describe this image…',
-        proxyDomURL: (source) => resolveLocalImageUrl(source, assetBaseUrl(nameRef.current), window.location.origin),
+        proxyDomURL: (source) => resolveLocalImageUrl(source, assetBaseUrl(nameRef.current, folderRef.current), window.location.origin),
       })
       .addFeature(blockEdit)
       .addFeature(toolbar)
@@ -100,7 +105,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     editor.create().then(() => {
       if (disposed) return;
       editorRef.current = editor;
-      refreshDocumentDom(host, nameRef.current);
+      refreshDocumentDom(host, nameRef.current, folderRef.current);
       updateHeadings();
       if (!readOnlyRef.current && activeRef.current) {
         actions.registerEditor({
@@ -161,9 +166,9 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const frame = requestAnimationFrame(() => refreshDocumentDom(host, name));
+    const frame = requestAnimationFrame(() => refreshDocumentDom(host, name, folder));
     return () => cancelAnimationFrame(frame);
-  }, [content, name, readOnly]);
+  }, [content, name, folder, readOnly]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -244,11 +249,14 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       // Markdown links are untrusted input. Take ownership before routing the
       // explicitly allowed targets so ignored schemes never reach the browser.
       event.preventDefault();
-      const link = resolveMilkdownLink(anchor.getAttribute('href') ?? '', nameRef.current);
+      const link = resolveMilkdownLink(anchor.getAttribute('href') ?? '', nameRef.current, folderRef.current);
       if (link.kind === 'anchor') {
         host.querySelector<HTMLElement>(`#${CSS.escape(link.id)}`)?.scrollIntoView({ block: 'start' });
       } else if (link.kind === 'note') {
-        void actions.navigateTo(link.path, link.anchor);
+        // A link inside an out-of-folder document resolves within that same
+        // member folder — never against the window's active folder.
+        if (link.folder) void actions.openLibraryFile(link.folder, link.path, { anchor: link.anchor });
+        else void actions.navigateTo(link.path, link.anchor);
       } else if (link.kind === 'external') {
         window.postMessage({ type: 'stashbase-open-external', href: link.href }, window.location.origin);
       }
@@ -290,8 +298,8 @@ async function uploadLocalImage(file: File, noteName: string): Promise<string> {
   return portableImageMarkdownPath(relative);
 }
 
-function refreshDocumentDom(host: HTMLElement, name: string): void {
-  const base = new URL(assetBaseUrl(name), window.location.origin);
+function refreshDocumentDom(host: HTMLElement, name: string, folder?: string): void {
+  const base = new URL(assetBaseUrl(name, folder), window.location.origin);
   for (const element of host.querySelectorAll<HTMLImageElement>('img[src]')) {
     const raw = element.dataset.stashbaseSource ?? element.getAttribute('src');
     if (!raw || raw.startsWith('#')) continue;

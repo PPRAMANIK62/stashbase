@@ -15,6 +15,7 @@ import type {
   FolderState,
   IndexStatus,
   KeywordSearchResult,
+  LibraryKeywordSearchResult,
   McpHttpStatus,
   PdfStatusEntry,
   SearchHit,
@@ -30,7 +31,6 @@ import type {
   UploadResult,
   OnboardingPreferences,
 } from './apiTypes';
-import type { SearchTypeCategory } from '../../shared/search-types.ts';
 import {
   ApiError,
   encodePath,
@@ -84,7 +84,10 @@ export const api = {
   listFiles: (folder?: string) => getJson<FilesPayload>(
     folder ? `/api/files?folder=${encodeURIComponent(folder)}` : '/api/files',
   ),
-  statFile: (name: string) => head('/api/files/' + encodePath(name)),
+  // `folder` (optional, also on getFile below) reads from an explicit member
+  // folder — out-of-folder tabs view files without switching the window.
+  statFile: (name: string, opts?: { folder?: string }) =>
+    head('/api/files/' + encodePath(name) + folderQuery(opts?.folder)),
 
   getOnboarding: () => getJson<OnboardingPreferences>('/api/onboarding'),
   putOnboarding: (patch: Partial<OnboardingPreferences>) =>
@@ -126,7 +129,8 @@ export const api = {
     }),
 
   // File body ----------------------------------------------------
-  getFile: (name: string) => getJson<FileBody>('/api/files/' + encodePath(name)),
+  getFile: (name: string, opts?: { folder?: string }) =>
+    getJson<FileBody>('/api/files/' + encodePath(name) + folderQuery(opts?.folder)),
   putFile: (name: string, content: string, baseVersion?: string) =>
     send<{ content: string; indexWarning?: string; version?: string }>(
       'PUT',
@@ -173,15 +177,14 @@ export const api = {
     'POST',
     folder ? `/api/sync?folder=${encodeURIComponent(folder)}` : '/api/sync',
   ),
-  search: (query: string, top_k = 8, opts?: { folder?: string; pathPrefix?: string; types?: readonly SearchTypeCategory[] }) =>
+  search: (query: string, top_k = 8, opts?: { folder?: string; pathPrefix?: string }) =>
     send<{ hits: SearchHit[] }>('POST', '/api/search', {
       query,
       top_k,
       folder: opts?.folder,
       path_prefix: opts?.pathPrefix,
-      types: opts?.types?.length ? opts.types : undefined,
     }),
-  keywordSearch: (query: string, opts?: { caseStrict?: boolean; wholeWord?: boolean; folder?: string; pathPrefix?: string; types?: readonly SearchTypeCategory[] }) => {
+  keywordSearch: (query: string, opts?: { caseStrict?: boolean; wholeWord?: boolean; folder?: string; pathPrefix?: string }) => {
     const qs = new URLSearchParams({ q: query });
     if (opts?.caseStrict) qs.set('case_strict', '1');
     if (opts?.wholeWord) qs.set('whole_word', '1');
@@ -190,9 +193,27 @@ export const api = {
     // singleton and search the wrong folder's tree.
     if (opts?.folder) qs.set('folder', opts.folder);
     if (opts?.pathPrefix) qs.set('path_prefix', opts.pathPrefix);
-    if (opts?.types?.length) qs.set('types', opts.types.join(','));
     return getJson<KeywordSearchResult>(`/api/keyword-search?${qs.toString()}`);
   },
+  // Library-wide search (the in-app search popup). Both routes live outside
+  // the per-window folder gate, so they answer even before a folder is open.
+  // `fileName`s come back as absolute paths; `folder`/`path_prefix` narrow
+  // to one member folder (`path_prefix` is that folder's absolute subpath).
+  librarySearch: (query: string, top_k = 8, opts?: { folder?: string; pathPrefix?: string }) =>
+    send<{ hits: SearchHit[] }>('POST', '/api/library/search', {
+      query,
+      top_k,
+      ...(opts?.folder ? { folder: opts.folder } : {}),
+      ...(opts?.pathPrefix ? { path_prefix: opts.pathPrefix } : {}),
+    }),
+  libraryKeywordSearch: (query: string, opts?: { caseStrict?: boolean; wholeWord?: boolean; folder?: string; pathPrefix?: string }) =>
+    send<LibraryKeywordSearchResult>('POST', '/api/library/keyword-search', {
+      query,
+      case_strict: opts?.caseStrict === true,
+      whole_word: opts?.wholeWord === true,
+      ...(opts?.folder ? { folder: opts.folder } : {}),
+      ...(opts?.pathPrefix ? { path_prefix: opts.pathPrefix } : {}),
+    }),
   indexStatus: (folder?: string) =>
     getJson<IndexStatus>(folder ? `/api/index-status?folder=${encodeURIComponent(folder)}` : '/api/index-status'),
   dismissIndexWarning: (folder?: string) =>
@@ -224,19 +245,19 @@ export const api = {
     send<{ ok: boolean }>('POST', '/api/files/prepare', { path, folder: opts?.folder }),
   prepareAudio: (path: string, opts?: { folder?: string }) =>
     send<{ ok: boolean }>('POST', '/api/files/prepare', { path, folder: opts?.folder }),
-  prepareAudioPreview: async (path: string, opts: { signal?: AbortSignal } = {}) => {
+  prepareAudioPreview: async (path: string, opts: { signal?: AbortSignal; folder?: string } = {}) => {
     const r = await fetch('/api/audio/preview/prepare', {
       method: 'POST',
       headers: { ...requestHeaders(), 'content-type': 'application/json' },
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, ...(opts.folder ? { folder: opts.folder } : {}) }),
       signal: opts.signal,
     });
     return parseJsonOrThrow<{ ok: boolean }>(r);
   },
-  audioPreviewStatus: (path: string) =>
-    getJson<AudioPreviewStatus>(`/api/audio/preview/status?path=${encodeURIComponent(path)}`),
-  audioTranscript: (path: string) =>
-    getJson<AudioTranscriptState>(`/api/audio/transcript?path=${encodeURIComponent(path)}`),
+  audioPreviewStatus: (path: string, opts?: { folder?: string }) =>
+    getJson<AudioPreviewStatus>(`/api/audio/preview/status?path=${encodeURIComponent(path)}${opts?.folder ? `&folder=${encodeURIComponent(opts.folder)}` : ''}`),
+  audioTranscript: (path: string, opts?: { folder?: string }) =>
+    getJson<AudioTranscriptState>(`/api/audio/transcript?path=${encodeURIComponent(path)}${opts?.folder ? `&folder=${encodeURIComponent(opts.folder)}` : ''}`),
   transcriptionSettings: () =>
     getJson<TranscriptionSettings>('/api/transcription/settings'),
   appearance: () => getJson<AppearancePreferences>('/api/appearance'),
@@ -354,27 +375,27 @@ function sessionScopeQuery(params?: SessionScopeParams): string {
  *  browser can't add a custom header to `<img src>` or iframe loads.
  *  Without it, images would resolve against the default window's folder
  *  in a multi-window session. */
-export function assetUrl(name: string): string {
-  return assetWindowPrefix() + encodePath(name);
+export function assetUrl(name: string, folder?: string): string {
+  return assetScopePrefix('/asset/', folder) + encodePath(name);
 }
 
-export function versionedAssetUrl(name: string, version: string): string {
-  const url = assetUrl(name);
+export function versionedAssetUrl(name: string, version: string, folder?: string): string {
+  const url = assetUrl(name, folder);
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}v=${encodeURIComponent(version)}`;
 }
 
-export function derivedAssetUrl(name: string): string {
-  return assetWindowPrefix('/asset-derived/') + encodePath(name);
+export function derivedAssetUrl(name: string, folder?: string): string {
+  return assetScopePrefix('/asset-derived/', folder) + encodePath(name);
 }
 
-export function audioPreviewAssetUrl(name: string, version = ''): string {
-  const url = assetWindowPrefix('/asset-audio-preview/') + encodePath(name);
+export function audioPreviewAssetUrl(name: string, version = '', folder?: string): string {
+  const url = assetScopePrefix('/asset-audio-preview/', folder) + encodePath(name);
   return version ? `${url}?v=${encodeURIComponent(version)}` : url;
 }
 
-export function versionedDerivedAssetUrl(name: string, version: string): string {
-  const url = derivedAssetUrl(name);
+export function versionedDerivedAssetUrl(name: string, version: string, folder?: string): string {
+  const url = derivedAssetUrl(name, folder);
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}v=${encodeURIComponent(version)}`;
 }
@@ -387,13 +408,29 @@ export function versionedDerivedAssetUrl(name: string, version: string): string 
  *  `<base href="?windowId=…">` does not propagate that query to relative
  *  `<img>`, CSS, or font URLs. The server strips the reserved prefix
  *  before resolving the actual folder-relative asset path. */
-export function assetBaseUrl(name: string): string {
+export function assetBaseUrl(name: string, folder?: string): string {
   const parts = name.split('/');
   parts.pop();
   const dir = parts.join('/');
-  return assetWindowPrefix() + (dir ? encodePath(dir) + '/' : '');
+  return assetScopePrefix('/asset/', folder) + (dir ? encodePath(dir) + '/' : '');
+}
+
+/** `?folder=` suffix for the explicit-member-folder read variants of the
+ *  JSON file routes. */
+function folderQuery(folder?: string): string {
+  return folder ? `?folder=${encodeURIComponent(folder)}` : '';
 }
 
 function assetWindowPrefix(base = '/asset/'): string {
   return base + '__window/' + encodeURIComponent(getWindowId()) + '/';
+}
+
+/** `folder` (absolute member root) rides the PATH as a second reserved
+ *  token, for the same reason the window id does — `<base href>` and
+ *  relative sub-asset URLs only inherit path segments. Double-encoded so
+ *  the server's single route-level decode leaves the segment slash-free. */
+function assetScopePrefix(base: string, folder?: string): string {
+  const prefix = assetWindowPrefix(base);
+  if (!folder) return prefix;
+  return prefix + '__folder/' + encodeURIComponent(encodeURIComponent(folder)) + '/';
 }

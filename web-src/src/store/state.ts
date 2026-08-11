@@ -10,16 +10,13 @@ import type {
   FileBody,
   FileMeta,
   FolderMeta,
-  KeywordSearchResult,
   PreparationFailure,
   ConversionProgress,
   IndexWarning,
   IndexStatus,
-  SearchHit,
   Agent,
   UnsupportedFileSummary,
 } from '../api';
-import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 
 export {
   CHAT_MAX_WIDTH,
@@ -94,6 +91,12 @@ export interface OpenFile {
   /** Opaque server-side file version used to reject stale autosaves
    *  when another window or external editor changed the same file. */
   version?: string;
+  /** Absolute member-folder root when this file lives OUTSIDE the window's
+   *  active folder (an "out-of-folder" tab, opened from a library-wide
+   *  search hit). Such tabs are strictly read-only, never enter the tree's
+   *  selection / recents / pruning flows, and every fetch they cause must
+   *  carry this folder explicitly. Undefined for ordinary tabs. */
+  folder?: string;
 }
 
 export interface CtxMenu {
@@ -151,6 +154,10 @@ export interface PendingHighlight {
   /** Exact millisecond position supplied by an audio keyword hit. */
   audioSeekMs?: number;
   openFindBar?: boolean;
+  /** FindBar options for `openFindBar`, carried by the hit because the
+   *  search popup owns its exact-mode toggles outside the reducer. */
+  findCaseStrict?: boolean;
+  findWholeWord?: boolean;
   pdfPage?: number;
 }
 
@@ -286,48 +293,10 @@ export interface State {
 
   syncRunning: boolean;
 
-  /** Which sidebar view is active. `'files'` shows the file tree +
-   *  banners; `'search'` shows the search input + result list (input
-   *  visible only in this view). Not persisted — every launch starts on
-   *  `'files'`. */
-  activeSidebarView: 'files' | 'search';
-  /** Sidebar search input. Empty = blank search panel; non-empty =
-   *  run search in whichever mode `searchMode` selects. */
-  filterQuery: string;
-  /** `'semantic'` runs vector + BM25 hybrid via the daemon (`/api/search`).
-   *  `'keyword'` runs ripgrep against the active folder dir
-   *  (`/api/keyword-search`) — no daemon, no embeddings. The toggle
-   *  switches without clearing the input so the user can compare. */
-  searchMode: 'semantic' | 'keyword';
-  /** Only meaningful in keyword mode. `false` = ripgrep `--smart-case`
-   *  (case-insensitive unless the query has uppercase chars); `true` =
-   *  `--case-sensitive` regardless. Semantic search ignores case via
-   *  embeddings, so this knob is hidden when `searchMode === 'semantic'`. */
-  caseStrict: boolean;
-  /** Only meaningful in keyword mode. `true` = `--word-regexp` so
-   *  "agent" doesn't match "agents". Hidden in semantic mode. */
-  wholeWord: boolean;
-  /** Folder-relative subfolder the next search is scoped to; null =
-   *  whole folder. Reset when the active folder changes. */
-  searchScope: string | null;
-  /** File-type categories the next search includes; empty = every
-   *  category. Applies to both modes and composes with `searchScope`. */
-  searchTypes: SearchTypeCategory[];
-  /** `null` = not in search mode (query empty or cleared). `[]` = ran
-   *  and got nothing. Non-empty array = ranked hits from `/api/search`.
-   *  Populated only when `searchMode === 'semantic'`. */
-  searchHits: SearchHit[] | null;
-  /** Same null / empty / populated convention as `searchHits`, but for
-   *  the keyword path. Holds the file-grouped result so the sidebar can
-   *  render each file's matches as a collapsible group. */
-  keywordResult: KeywordSearchResult | null;
-  searching: boolean;
-  /** Non-null when the last search failed for a real reason (server /
-   *  daemon error, not just "no matches"). Kept separate so the panel
-   *  shows the error instead of a misleading empty "No matches". */
-  searchError: string | null;
   /** Global embedding key availability. `null` = not checked yet. Semantic
-   *  search is disabled when this is explicitly false. */
+   *  search is disabled when this is explicitly false. Search itself lives
+   *  in the library search popup, whose state deliberately stays outside
+   *  this reducer (see `librarySearch.ts`) so it survives folder switches. */
   embedderHasKey: boolean | null;
 
   /** Non-null when the active folder's background indexing failed.
@@ -409,17 +378,6 @@ export const initialState: State = {
   conversionRevision: 0,
   conversionVersions: {},
   syncRunning: false,
-  activeSidebarView: 'files',
-  filterQuery: '',
-  searchMode: 'semantic',
-  caseStrict: false,
-  wholeWord: false,
-  searchScope: null,
-  searchTypes: [],
-  searchHits: null,
-  keywordResult: null,
-  searching: false,
-  searchError: null,
   embedderHasKey: null,
   indexWarning: null,
   preparationFailures: [],
@@ -451,7 +409,7 @@ export type Action =
    *  existing pinned tab back to preview (used by the blank-tab reuse
    *  path) or vice versa. Omit to preserve the tab's existing flag —
    *  back/forward and in-place anchor nav rely on that. */
-  | { type: 'FILE_OPEN'; body: FileBody; newTab?: boolean; preview?: boolean }
+  | { type: 'FILE_OPEN'; body: FileBody; newTab?: boolean; preview?: boolean; libraryFolder?: string }
   | { type: 'FILE_PATCH'; patch: Partial<OpenFile> }
   | { type: 'DOCUMENT_DIRTY'; dirty: boolean }
   | { type: 'PRUNE_MISSING_FILE_TABS'; names: string[] }
@@ -509,19 +467,7 @@ export type Action =
   | { type: 'CONVERSION_SCHEDULER_STATE'; revision: number; versions: Record<string, number> }
   | { type: 'SAVE_STATUS'; status: SaveStatus }
   | { type: 'SYNC_RUNNING'; running: boolean }
-  | { type: 'FILTER'; q: string }
-  | { type: 'SEARCH_START' }
-  | { type: 'SEARCH_HITS'; hits: SearchHit[] }
-  | { type: 'SEARCH_KEYWORD'; result: KeywordSearchResult }
-  | { type: 'SEARCH_ERROR'; error: string }
-  | { type: 'SEARCH_CLEAR' }
-  | { type: 'SEARCH_MODE'; mode: 'semantic' | 'keyword' }
   | { type: 'EMBEDDER_KEY_STATE'; hasKey: boolean }
-  | { type: 'SIDEBAR_VIEW'; view: 'files' | 'search' }
-  | { type: 'SEARCH_CASE_STRICT'; strict: boolean }
-  | { type: 'SEARCH_WHOLE_WORD'; on: boolean }
-  | { type: 'SEARCH_SCOPE'; scope: string | null }
-  | { type: 'SEARCH_TYPES'; types: SearchTypeCategory[] }
   | { type: 'INDEX_WARNING'; warning: IndexWarning | null }
   | { type: 'PREPARATION_FAILURES'; failures: PreparationFailure[] }
   | { type: 'CTX_MENU'; menu: CtxMenu | null }

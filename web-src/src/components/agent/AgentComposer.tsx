@@ -32,6 +32,8 @@ import { rankMentionSuggestions } from './mentionRanking';
 import {
   attachChipClass, attachIconClass, attachImageChipClass, attachImagePreviewClass,
   attachImageRemoveClass, attachNameClass, attachRemoveClass, iconGhostButtonClass,
+  menuHeadClass, menuSectionClass, optActiveClass, optCheckClass, optClass, optDescClass,
+  optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
 } from './panelStyles';
 import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from './types';
 import { modelMenuLabel } from './modelState';
@@ -43,28 +45,14 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
 
-/* Composer-bar pills. Triggers are text-only (label + chevron) with a
+/* Composer-bar pills: the shared quiet pill trigger (panelStyles) with a
  * control-naming title/aria-label so adjacent "Default" values stay
- * distinguishable. All pills share one quiet treatment — the session
- * settings live behind a single trigger, so no pill needs emphasis. */
-const pillClass =
-  'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
-const pillLockedClass = 'cursor-default opacity-60';
-const pillChevronClass = '-ml-px size-3 shrink-0 opacity-75';
+ * distinguishable. The session settings live behind a single trigger, so
+ * no pill needs emphasis. */
 
 /* Upward menus anchored to the pills. */
 const menuPopupClass =
   'z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-card p-1.5 shadow-elevation';
-const menuHeadClass = 'flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm';
-const optClass =
-  'flex w-full cursor-pointer items-start gap-2.5 rounded-md border-0 bg-transparent p-2 text-left text-foreground hover:bg-muted data-focused:bg-muted data-highlighted:bg-muted';
-const optActiveClass =
-  'bg-accent/12 shadow-[inset_2px_0_0_var(--accent)] hover:bg-accent/12 data-focused:bg-accent/12 data-highlighted:bg-accent/12';
-const optIconClass = 'mt-px size-4.5 shrink-0 text-muted-foreground';
-const optTextClass = 'flex min-w-0 flex-1 flex-col gap-0.5';
-const optTitleClass = 'text-base font-medium';
-const optDescClass = 'text-xs leading-snug text-muted-foreground';
-const optCheckClass = 'mt-0.5 size-4 shrink-0 text-accent';
 const settingsDividerClass = 'mx-1 my-1.5 h-px bg-border';
 
 /* Explicit, touch-friendly effort choices — never tiny slider dots. */
@@ -296,7 +284,7 @@ function ScopeMenu({ scope, entries, homeDir, locked, disabled, onSetScope }: {
             <span className={optTextClass}><span className={optTitleClass}>Library</span><span className={optDescClass}>Chat across your whole library</span></span>
             {isLibrary && <CheckIcon className={optCheckClass} />}
             </SharedMenuItem>
-            {entries.length > 0 && <div className="mx-2 my-1 border-t border-border" role="separator" />}
+            {entries.length > 0 && <div className={menuSectionClass}>Folders</div>}
             {entries.map((entry) => {
               const active = scope.kind === 'folder' && scope.path === entry.path;
               return (

@@ -27,7 +27,6 @@ import {
   type PendingHighlight,
   type State,
 } from './state';
-import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 import type { AgentKind } from '../agentCatalog';
 import { rememberPreferredAgent } from '../agentPreference';
 import type { EditorHandle, FindController } from './actionTypes';
@@ -71,20 +70,6 @@ export interface AppActions {
   markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   runSync: () => Promise<void>;
-  /** Run a search. Pass `mode` to force a specific routing — useful
-   *  when the caller has just dispatched `SEARCH_MODE` and can't rely
-   *  on `stateRef` reflecting that yet (it updates after commit, not
-   *  in-line with the dispatch). Default reads from state. */
-  runSearch: (
-    query: string,
-    mode?: 'semantic' | 'keyword',
-    opts?: {
-      caseStrict?: boolean;
-      wholeWord?: boolean;
-      scope?: string | null;
-      types?: SearchTypeCategory[];
-    },
-  ) => Promise<void>;
   /** Clear the active folder's background-index warning. */
   dismissIndexWarning: () => Promise<void>;
   decideSemanticIndexing: (decision: 'start' | 'defer') => Promise<void>;
@@ -101,6 +86,10 @@ export interface AppActions {
    *  line-range overlay; PdfPreview uses `chunkText` to find the
    *  passage via pdfjs's find controller. */
   selectFileWithHighlight: (name: string, hit: PendingHighlight) => Promise<void>;
+  /** Open a search hit by (member folder, rel path). Same-folder targets go
+   *  through normal selection; anything else opens a read-only
+   *  out-of-folder tab WITHOUT switching the window's folder. */
+  openLibraryFile: (folder: string, name: string, opts?: { hit?: PendingHighlight; anchor?: string }) => Promise<void>;
   /** Open a file in a new tab (double-click in sidebar / drag-out
    *  semantics). Always creates a new tab even if the file is already
    *  open in another tab — VS Code does the same with the explicit
@@ -173,14 +162,6 @@ export interface AppActions {
   flushSave: () => Promise<boolean>;
 
   registerEditor: (h: EditorHandle | null) => void;
-  /** Sidebar SearchBox registers its input element on mount so
-   *  `focusSearch` can reach it without a DOM query. Same shape as
-   *  `registerEditor` — pass `null` on unmount. */
-  registerSearchInput: (el: HTMLInputElement | null) => void;
-  /** Focus + select the sidebar search input. Un-collapses the sidebar
-   *  first if hidden; flashes a brief glow so the user can tell where
-   *  focus landed. Used by the empty-tab landing and the `⌘⇧F` hotkey. */
-  focusSearch: () => void;
 
   /** A view registers its find driver on mount; `null` on unmount.
    *  Switching tabs / toggling edit mode replaces it. */
@@ -205,9 +186,6 @@ export const AppContext = createContext<{
 } | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  // Sidebar view (Files / Search) is deliberately NOT persisted: every
-  // launch lands on Files. The file tree is the canonical landing spot;
-  // Search is a task you actively enter, not a state worth restoring.
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -218,13 +196,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveInFlight = useRef<Promise<boolean> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<EditorHandle | null>(null);
-  // Race protection for `runSearch`: every call bumps this counter and
-  // remembers its own value; an older request's response is dropped
-  // when it returns after a newer one has been issued.
-  const searchGen = useRef(0);
-  // Same idea for manual sync: switching folders cancels the renderer
-  // ownership of the old sync so its `finally` can't clear a newer
-  // folder's spinner.
+  // Race protection for manual sync: switching folders cancels the
+  // renderer ownership of the old sync so its `finally` can't clear a
+  // newer folder's spinner.
   const syncGen = useRef(0);
   // Opening folders is multi-step (server bind → files/order load →
   // landing file). A newer open/home action invalidates older finishers.
@@ -266,11 +240,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     closeFind,
     findNext,
     findPrev,
-    focusSearch,
     openFind,
     primeFind,
     registerFindController,
-    registerSearchInput,
     setFindQuery,
     toggleFindCaseSensitive,
     toggleFindWholeWord,
@@ -349,6 +321,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (tab.dirty && !opts.force) return;
     const folderPathAtStart = stateRef.current.folderPath;
     const name = tab.file.name;
+    // Out-of-folder tabs re-read against their own folder — a bare rel
+    // fetch would resolve a same-named file in the ACTIVE folder.
+    const libraryFolder = tab.file.folder;
+    const readOpts = libraryFolder ? { folder: libraryFolder } : undefined;
+    const sameDocument = (file: { name: string; folder?: string } | null | undefined) =>
+      !!file && file.name === name && file.folder === libraryFolder;
     try {
       if (
         tab.file.format === 'pdf'
@@ -356,12 +334,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         || tab.file.format === 'docx'
         || tab.file.format === 'audio'
       ) {
-        const stat = await api.statFile(name);
+        const stat = await api.statFile(name, readOpts);
         if (stateRef.current.folderPath !== folderPathAtStart) return;
         const latestActive = getActiveTab(stateRef.current);
         const latestFile = latestActive?.file;
-        if (!latestFile || latestFile.name !== name || latestActive.dirty) return;
-        if (stat.version !== latestFile.version) {
+        if (!sameDocument(latestFile) || latestActive?.dirty) return;
+        if (stat.version !== latestFile!.version) {
           dispatch({ type: 'FILE_PATCH', patch: { version: stat.version } });
         }
         if (opts.force) {
@@ -369,28 +347,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      const body = await api.getFile(name);
+      const body = await api.getFile(name, readOpts);
       // The active tab may have been swapped (or the file renamed) in
       // the time it took to fetch — re-check before patching.
       if (stateRef.current.folderPath !== folderPathAtStart) return;
       const latestActive = getActiveTab(stateRef.current);
       const latestFile = latestActive?.file;
-      if (!latestFile || latestFile.name !== name) return;
+      if (!sameDocument(latestFile)) return;
       if (opts.force) {
         dispatch({
           type: 'FILE_OPEN',
           body: {
             name,
-            format: latestFile.format,
+            format: latestFile!.format,
             content: body.content,
             version: 'version' in body ? body.version : undefined,
           },
+          libraryFolder,
         });
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Reloaded from disk', cls: 'saved' } });
         return;
       }
       if (latestActive?.dirty) return;
-      if (body.content === latestFile.content) return;
+      if (body.content === latestFile!.content) return;
       dispatch({
         type: 'FILE_PATCH',
         patch: { content: body.content, ...('version' in body ? { version: body.version } : {}) },
@@ -408,7 +387,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveTimer,
       saveInFlight,
       pollTimer,
-      searchGeneration: searchGen,
       syncGeneration: syncGen,
       openGeneration: openGen,
       openingFolderGeneration: openingFolderGen,
@@ -435,10 +413,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<AppActions>(() => ({
     bootstrap: workspace.bootstrap, openFolder: workspace.openFolder, openFolderByName: workspace.openFolderByName,
     loadFiles: workspace.loadFiles, markVisibleFilesPendingForSearch: workspace.markVisibleFilesPendingForSearch,
-    refreshIndexState: workspace.refreshIndexState, runSync: workspace.runSync, runSearch: workspace.runSearch,
+    refreshIndexState: workspace.refreshIndexState, runSync: workspace.runSync,
     setFolderOrder: workspace.setFolderOrder, dismissIndexWarning: workspace.dismissIndexWarning,
     decideSemanticIndexing: workspace.decideSemanticIndexing,
     selectFile: workspace.selectFile, selectFileWithHighlight: workspace.selectFileWithHighlight,
+    openLibraryFile: workspace.openLibraryFile,
     openInNewTab: workspace.openInNewTab, newTab: workspace.newTab, closeTab: workspace.closeTab,
     closeActiveTab: workspace.closeActiveTab, activateTab: workspace.activateTab,
     navigateTo: workspace.navigateTo, consumePendingScroll: workspace.consumePendingScroll,
@@ -463,14 +442,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     renameFile: workspace.renameFile, renameFolder: workspace.renameFolder, moveFile: workspace.moveFile, upload: workspace.upload,
     scheduleSave: workspace.scheduleSave, flushSave: workspace.flushSave,
     registerEditor: workspace.registerEditor,
-    registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   }), [
     workspace,
     resolveCascadePrompt,
     showAlert, askConfirm, resolveModal, toast,
-    registerSearchInput, focusSearch,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
   ]);

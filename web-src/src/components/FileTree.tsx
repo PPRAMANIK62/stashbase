@@ -510,7 +510,9 @@ function FileRow({
         const activeTab = state.activeTabId
           ? state.tabs.find((t) => t.id === state.activeTabId)
           : null;
-        if (activeTab?.file?.name === path) {
+        // An out-of-folder tab with the same rel name is a DIFFERENT file —
+        // fall through to selectFile so the tree's file actually opens.
+        if (activeTab?.file?.name === path && !activeTab.file.folder) {
           dispatch({ type: 'SELECT_PATH', path });
         } else {
           void actions.selectFile(path);
@@ -568,11 +570,11 @@ function CancelledGlyph() {
 
 function agentRulesIcon(basename: string) {
   const normalized = basename.toLowerCase();
-  // In the tree both rules-book glyphs render monochrome/muted like the
-  // neutral bot — `fill-current` overrides the Claude mark's brand fill so
-  // the icon follows the row's muted icon color. The brand-colored mark
-  // stays where the agent itself is the subject (agent picker / chat).
-  if (normalized === 'claude.md') return <ClaudeIcon className="fill-current" />;
+  // The Claude mark keeps its baked-in brand coral: the tree's file-type
+  // glyphs are Material Icon Theme marks in their brand colours (PDF red,
+  // docx blue, …), so a brand-coloured rules-book matches the system.
+  // AGENTS.md stays muted — its bot represents a vendor-neutral contract.
+  if (normalized === 'claude.md') return <ClaudeIcon />;
   if (normalized === 'agents.md') return <BotIcon className="agent-rules-icon" />;
   return null;
 }

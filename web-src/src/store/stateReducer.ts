@@ -2,7 +2,7 @@
  * Pure renderer reducer. State and action definitions remain in the stable
  * state.ts facade; transition helpers live in stateHelpers.ts.
  */
-import type { Action, OpenFile, State } from './state';
+import type { Action, OpenFile, State, Tab } from './state';
 import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
@@ -19,6 +19,13 @@ import {
   remapOnePath,
   rememberChatTab,
 } from './stateHelpers';
+
+/** The sidebar's focused row for a tab — '' for an out-of-folder tab, whose
+ *  rel name would otherwise highlight an unrelated same-named row of the
+ *  ACTIVE folder's tree. */
+function selectablePath(tab: Tab | null | undefined): string {
+  return tab?.file && !tab.file.folder ? tab.file.name : '';
+}
 
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
@@ -61,18 +68,8 @@ export function reducer(s: State, a: Action): State {
         unsupportedFiles: a.unsupportedFiles,
         ...(folderChanged
           ? {
-              activeSidebarView: 'files' as const,
-              filterQuery: '',
-              searching: false,
-              searchHits: null,
-              keywordResult: null,
-              searchError: null,
               recentFilePaths: [],
               editorHistory: [],
-              // Scope names a subfolder of the previous folder; type
-              // filters are per-folder session state too.
-              searchScope: null,
-              searchTypes: [],
               unsupportedModalOpen: false,
             }
           : {}),
@@ -92,8 +89,13 @@ export function reducer(s: State, a: Action): State {
         format: a.body.format,
         content: a.body.content,
         version: a.body.version,
+        ...(a.libraryFolder ? { folder: a.libraryFolder } : {}),
       };
-      const liveEditing = file.format === 'md';
+      // Out-of-folder tabs are strictly read-only viewers: never Live
+      // Editing, never the tree's focused row, never in the folder-local
+      // recents (Quick Open would resolve the rel name in the wrong folder).
+      const outOfFolder = Boolean(a.libraryFolder);
+      const liveEditing = file.format === 'md' && !outOfFolder;
       // New-tab mode (double-click in tree, `+` then a click): create
       // a fresh tab and load into it. Otherwise replace the active
       // tab's file (VS Code single-click mode). If there's no active
@@ -107,10 +109,10 @@ export function reducer(s: State, a: Action): State {
         return {
           ...s,
           tabs: [...s.tabs, tab],
-          recentFilePaths: rememberRecentFile(s.recentFilePaths, file.name),
+          recentFilePaths: outOfFolder ? s.recentFilePaths : rememberRecentFile(s.recentFilePaths, file.name),
           editorHistory: rememberActivatedTab(s.editorHistory, tab.id),
           activeTabId: tab.id,
-          selectedPath: file.name,
+          selectedPath: outOfFolder ? '' : file.name,
         };
       }
       return {
@@ -127,10 +129,10 @@ export function reducer(s: State, a: Action): State {
           // preview/pinned status.
           ...(a.preview != null ? { preview: a.preview } : {}),
         }),
-        recentFilePaths: rememberRecentFile(s.recentFilePaths, file.name),
+        recentFilePaths: outOfFolder ? s.recentFilePaths : rememberRecentFile(s.recentFilePaths, file.name),
         // The branch above already returned unless `s.activeTabId` is set.
         editorHistory: rememberActivatedTab(s.editorHistory, s.activeTabId!),
-        selectedPath: file.name,
+        selectedPath: outOfFolder ? '' : file.name,
       };
     }
     case 'FILE_PATCH': {
@@ -153,9 +155,11 @@ export function reducer(s: State, a: Action): State {
       return patchActiveTab(s, { dirty: a.dirty });
     case 'PRUNE_MISSING_FILE_TABS': {
       const names = new Set(a.names);
+      // `names` is the ACTIVE folder's listing; out-of-folder tabs are
+      // legitimately absent from it and must never be pruned by it.
       const stale = new Set(
         s.tabs
-          .filter((t) => t.file && !t.dirty && !names.has(t.file.name))
+          .filter((t) => t.file && !t.file.folder && !t.dirty && !names.has(t.file.name))
           .map((t) => t.id),
       );
       if (stale.size === 0) return s;
@@ -173,7 +177,7 @@ export function reducer(s: State, a: Action): State {
         tabs: nextTabs,
         editorHistory: forgetClosedTabs(s.editorHistory, new Set(nextTabs.map((t) => t.id))),
         activeTabId: activeId,
-        selectedPath: activeWasStale ? active?.file?.name ?? '' : s.selectedPath,
+        selectedPath: activeWasStale ? selectablePath(active) : s.selectedPath,
       };
     }
     case 'REMAP_PATHS': {
@@ -186,7 +190,9 @@ export function reducer(s: State, a: Action): State {
         return path === f.path ? f : { ...f, path };
       });
       const tabs = s.tabs.map((t) => {
-        if (!t.file) return t;
+        // Renames happen in the active folder; an out-of-folder tab's disk
+        // file did not move even when its rel name collides.
+        if (!t.file || t.file.folder) return t;
         const nextName = remapOnePath(t.file.name, a.from, a.to, a.kind);
         return nextName === t.file.name ? t : { ...t, file: { ...t.file, name: nextName } };
       });
@@ -230,7 +236,7 @@ export function reducer(s: State, a: Action): State {
         tabs: next,
         editorHistory: forgetClosedTabs(s.editorHistory, new Set(next.map((t) => t.id))),
         activeTabId: activeId,
-        selectedPath: active?.file?.name ?? '',
+        selectedPath: selectablePath(active),
       };
     }
     case 'ACTIVATE_TAB': {
@@ -240,11 +246,11 @@ export function reducer(s: State, a: Action): State {
       return {
         ...s,
         activeTabId: a.id,
-        recentFilePaths: target.file
+        recentFilePaths: target.file && !target.file.folder
           ? rememberRecentFile(s.recentFilePaths, target.file.name)
           : s.recentFilePaths,
         editorHistory: rememberActivatedTab(s.editorHistory, a.id),
-        selectedPath: target.file?.name ?? '',
+        selectedPath: selectablePath(target),
       };
     }
     case 'TABS_RESET':
@@ -252,6 +258,9 @@ export function reducer(s: State, a: Action): State {
     case 'EDIT_MODE': {
       const tab = getActiveTab(s);
       if (!tab) return s;
+      // Out-of-folder tabs are read-only: their save path would write a
+      // same-named file into the ACTIVE folder.
+      if (a.on && tab.file?.folder) return s;
       return patchActiveTab(s, {
         editMode: a.on,
         saveStatus: a.on ? tab.saveStatus : { text: '', cls: '' },
@@ -431,40 +440,8 @@ export function reducer(s: State, a: Action): State {
       return patchActiveTab(s, { saveStatus: a.status });
     case 'SYNC_RUNNING':
       return { ...s, syncRunning: a.running };
-    case 'FILTER':
-      return { ...s, filterQuery: a.q };
-    case 'SEARCH_START':
-      return { ...s, searching: true, searchHits: null, keywordResult: null, searchError: null };
-    case 'SEARCH_HITS':
-      return { ...s, searching: false, searchHits: a.hits, keywordResult: null, searchError: null };
-    case 'SEARCH_KEYWORD':
-      return { ...s, searching: false, keywordResult: a.result, searchHits: null, searchError: null };
-    case 'SEARCH_ERROR':
-      return { ...s, searching: false, searchError: a.error, searchHits: null, keywordResult: null };
-    case 'SEARCH_CLEAR':
-      return { ...s, searching: false, searchHits: null, keywordResult: null, searchError: null };
-    case 'SEARCH_MODE':
-      // Clear prior results so the renderer shows the new mode's empty
-      // state immediately; runSearch will repopulate if a query is live.
-      return { ...s, searchMode: a.mode, searchHits: null, keywordResult: null, searchError: null };
     case 'EMBEDDER_KEY_STATE':
-      return {
-        ...s,
-        embedderHasKey: a.hasKey,
-        ...(a.hasKey ? {} : { searchHits: null }),
-      };
-    case 'SIDEBAR_VIEW':
-      return { ...s, activeSidebarView: a.view };
-    case 'SEARCH_CASE_STRICT':
-      // Result set semantics change → clear and let runSearch refill.
-      return { ...s, caseStrict: a.strict, keywordResult: null };
-    case 'SEARCH_WHOLE_WORD':
-      return { ...s, wholeWord: a.on, keywordResult: null };
-    case 'SEARCH_SCOPE':
-      // Scope and type filters change both modes' result sets.
-      return { ...s, searchScope: a.scope, searchHits: null, keywordResult: null };
-    case 'SEARCH_TYPES':
-      return { ...s, searchTypes: a.types, searchHits: null, keywordResult: null };
+      return { ...s, embedderHasKey: a.hasKey };
     case 'INDEX_WARNING':
       return { ...s, indexWarning: a.warning };
     case 'PREPARATION_FAILURES':

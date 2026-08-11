@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { isEditorHistoryChord } from '../editorHistory';
 import { useApp } from '../store/AppContext';
+import { openLibrarySearch } from './LibrarySearch';
 
 type WindowShortcutInput = Pick<
   KeyboardEvent,
@@ -35,8 +36,8 @@ export function isCommandPaletteShortcut(input: WindowShortcutInput): boolean {
  *   Cmd/Ctrl + W        → close the active tab
  *   Cmd/Ctrl + F        → open in-document find bar
  *   Cmd/Ctrl + G        → next find match (Shift = prev). No-op when bar is closed.
- *   Cmd/Ctrl + Shift + E → switch sidebar to Files view (VS Code convention)
- *   Cmd/Ctrl + Shift + F → switch sidebar to Search view + focus input
+ *   Cmd/Ctrl + Shift + E → reveal the sidebar file tree (VS Code convention)
+ *   Cmd/Ctrl + Shift + F → open the library search popup
  *   Esc                  → close the find bar (only when it's open)
  *
  * `actions` is stable (memoised) and every handler is action-only — no
@@ -70,17 +71,17 @@ export function Hotkeys() {
       }
       if (!(e.metaKey || e.ctrlKey)) return;
       const k = e.key.toLowerCase();
-      // Sidebar view switchers (VS Code: ⌘⇧E Explorer, ⌘⇧F Search).
+      // VS Code conventions: ⌘⇧E reveals the file tree, ⌘⇧F searches.
       // Check shift-chords BEFORE the bare versions so ⌘⇧F doesn't
       // also trigger plain ⌘F's in-document find.
       if (e.shiftKey && k === 'e') {
         e.preventDefault();
-        dispatch({ type: 'SIDEBAR_VIEW', view: 'files' });
+        dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: false });
         return;
       }
       if (e.shiftKey && k === 'f') {
         e.preventDefault();
-        actions.focusSearch();
+        openLibrarySearch();
         return;
       }
       // The native application menu owns shifted New Window / Close Window

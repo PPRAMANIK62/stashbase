@@ -75,8 +75,9 @@ client of StashBase context, not a separate AI workspace.
   decorative slider marks.
 - A new chat's empty state makes the composer the hero: it centers in the
   panel, and a single muted usage suggestion sits toward the pane's
-  bottom edge, rotating through scope-appropriate "Ask me to …" lines on
-  a quiet timer that pauses while the suggestion is hovered or focused.
+  bottom edge, rotating through scope-appropriate, action-first prompts in
+  the user's voice on a quiet timer that pauses while the suggestion is
+  hovered or focused.
   A single short title above the composer — "Your knowledge is here." —
   names the space; no wordmark or agent branding beyond that: the tab's
   Agent glyph and the composer's "Message <Agent>…" placeholder carry

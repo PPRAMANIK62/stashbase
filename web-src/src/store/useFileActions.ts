@@ -177,7 +177,9 @@ export function useFileActions(
       }
       const before = stateRef.current;
       const stale = before.tabs.filter(
-        (t) => t.file && t.file.name.startsWith(path + '/'),
+        // Out-of-folder tabs live elsewhere on disk — a same-named prefix
+        // in the active folder must not close them.
+        (t) => t.file && !t.file.folder && t.file.name.startsWith(path + '/'),
       );
       for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';

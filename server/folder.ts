@@ -81,6 +81,12 @@ export function notifyFolderSwitch(newRoot: string, windowId = currentWindowId()
  *  file ops resolve against the right member folder — the filesystem layer
  *  (`files.ts`) is already rooted at `getCurrentFolder()`, so setting the
  *  window's current folder to `absRoot` is all that's needed. */
+/** In-flight request count per synthetic `__folder:` binding. The binding's
+ *  value is fully determined by its id, so concurrent requests share one
+ *  entry — an early finisher must not delete it out from under a sibling
+ *  (an iframe's parallel asset fetches hit exactly that). */
+const syntheticFolderRefs = new Map<string, number>();
+
 export async function runWithFolderRoot<T>(
   absRoot: string,
   fn: () => T | Promise<T>,
@@ -88,14 +94,18 @@ export async function runWithFolderRoot<T>(
   const root = resolveFolderRoot(absRoot);
   return runWithWindowId(`__folder:${root}`, async () => {
     const windowId = currentWindowId();
-    const hadPrev = currentFolders.has(windowId);
-    const prev = currentFolders.get(windowId);
+    syntheticFolderRefs.set(windowId, (syntheticFolderRefs.get(windowId) ?? 0) + 1);
     currentFolders.set(windowId, root);
     try {
       return await fn();
     } finally {
-      if (hadPrev && prev) currentFolders.set(windowId, prev);
-      else currentFolders.delete(windowId);
+      const remaining = (syntheticFolderRefs.get(windowId) ?? 1) - 1;
+      if (remaining <= 0) {
+        syntheticFolderRefs.delete(windowId);
+        currentFolders.delete(windowId);
+      } else {
+        syntheticFolderRefs.set(windowId, remaining);
+      }
     }
   });
 }

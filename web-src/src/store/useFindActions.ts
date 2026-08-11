@@ -4,9 +4,8 @@ import type { Action, State } from './state';
 
 type Dispatch = (action: Action) => void;
 
-/** Owns focus routing and the active document view's find controller. */
+/** Owns the active document view's find controller. */
 export function useFindActions(stateRef: MutableRefObject<State>, dispatch: Dispatch) {
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const findControllerRef = useRef<FindController | null>(null);
 
   const applyMatchInfo = useCallback(async (
@@ -15,29 +14,6 @@ export function useFindActions(stateRef: MutableRefObject<State>, dispatch: Disp
     const info = await Promise.resolve(pending);
     dispatch({ type: 'FIND_SET', patch: { current: info.current, total: info.total } });
   }, [dispatch]);
-
-  const registerSearchInput = useCallback((element: HTMLInputElement | null) => {
-    searchInputRef.current = element;
-  }, []);
-
-  const focusSearch = useCallback(() => {
-    const state = stateRef.current;
-    if (state.sidebarCollapsed) {
-      dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: false });
-    }
-    if (state.activeSidebarView !== 'search') {
-      dispatch({ type: 'SIDEBAR_VIEW', view: 'search' });
-    }
-    requestAnimationFrame(() => {
-      const element = searchInputRef.current;
-      if (!element) return;
-      element.focus();
-      element.select();
-      element.classList.remove('flash-focus');
-      void element.offsetWidth;
-      element.classList.add('flash-focus');
-    });
-  }, [dispatch, stateRef]);
 
   const registerFindController = useCallback((controller: FindController | null) => {
     const previous = findControllerRef.current;
@@ -117,11 +93,9 @@ export function useFindActions(stateRef: MutableRefObject<State>, dispatch: Disp
     closeFind,
     findNext,
     findPrev,
-    focusSearch,
     openFind,
     primeFind,
     registerFindController,
-    registerSearchInput,
     setFindQuery,
     toggleFindCaseSensitive,
     toggleFindWholeWord,

@@ -31,7 +31,9 @@ export function useAudioTranscriptController(input: AudioTarget & { conversionRe
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
       try {
-        const next = await api.audioTranscript(name);
+        // Explicit folder: correct for out-of-folder tabs, and immune to the
+        // server's per-window folder fallback either way.
+        const next = await api.audioTranscript(name, { folder: folder || undefined });
         if (cancelled) return;
         setState(next);
         setError(null);

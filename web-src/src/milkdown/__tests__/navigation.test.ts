@@ -22,3 +22,15 @@ test('Milkdown local non-note assets never open in the external browser', () => 
   assert.deepEqual(resolveMilkdownLink('photo.png', 'notes/current.md'), { kind: 'ignore' });
   assert.deepEqual(resolveMilkdownLink('manual.pdf', 'notes/current.md'), { kind: 'ignore' });
 });
+
+test('links inside an out-of-folder document resolve back to that member folder', () => {
+  // Relative link: inherits the base URL's __folder token.
+  assert.deepEqual(resolveMilkdownLink('sibling.md', 'notes/current.md', '/Users/a/Other'), {
+    kind: 'note', path: 'notes/sibling.md', anchor: undefined, folder: '/Users/a/Other',
+  });
+  // Anchors and externals are unaffected by the folder context.
+  assert.deepEqual(resolveMilkdownLink('#part', 'notes/current.md', '/Users/a/Other'), { kind: 'anchor', id: 'part' });
+  assert.deepEqual(resolveMilkdownLink('https://example.com/a', 'notes/current.md', '/Users/a/Other'), {
+    kind: 'external', href: 'https://example.com/a',
+  });
+});

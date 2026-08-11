@@ -12,7 +12,7 @@ const expectedEntries = [
   'src/components/PdfPreview.tsx',
   'src/components/DocxPreview.tsx',
   'src/components/AudioPreview.tsx',
-  'src/components/SearchPanel.tsx',
+  'src/components/LibrarySearchDialog.tsx',
   'src/components/QuickOpenDialog.tsx',
   'src/components/ContextMenu.tsx',
   'src/components/DocumentOutline.tsx',

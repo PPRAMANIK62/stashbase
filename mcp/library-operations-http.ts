@@ -46,6 +46,16 @@ export function createHttpLibraryOperations(
         ...(types !== undefined ? { types } : {}),
       }),
     }),
+    keywordSearch: ({ query, caseStrict, wholeWord, folder, pathPrefix }) => json(`${webBase}/api/library/keyword-search`, {
+      method: 'POST', headers: headers({ 'content-type': 'application/json' }),
+      body: JSON.stringify({
+        query,
+        case_strict: caseStrict === true,
+        whole_word: wholeWord === true,
+        ...(folder ? { folder } : {}),
+        ...(pathPrefix ? { path_prefix: pathPrefix } : {}),
+      }),
+    }),
     reindex: ({ folder } = {}) => json(`${webBase}/api/library/reindex`, {
       method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify(folder ? { folder } : {}),
     }),

@@ -37,21 +37,12 @@ export interface ActiveFolderWorkspace {
   markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   runSync: () => Promise<void>;
-  runSearch: (
-    query: string,
-    mode?: 'semantic' | 'keyword',
-    opts?: {
-      caseStrict?: boolean;
-      wholeWord?: boolean;
-      scope?: string | null;
-      types?: import('../../../shared/search-types.ts').SearchTypeCategory[];
-    },
-  ) => Promise<void>;
   dismissIndexWarning: () => Promise<void>;
   decideSemanticIndexing: (decision: 'start' | 'defer') => Promise<void>;
   setFolderOrder: (parentPath: string, names: string[]) => Promise<void>;
   selectFile: (name: string) => Promise<void>;
   selectFileWithHighlight: (name: string, hit: PendingHighlight) => Promise<void>;
+  openLibraryFile: (folder: string, name: string, opts?: { hit?: PendingHighlight; anchor?: string }) => Promise<void>;
   openInNewTab: (name: string) => Promise<void>;
   newTab: () => Promise<void>;
   closeTab: (id: string) => Promise<void>;
@@ -83,7 +74,6 @@ interface WorkspaceRefs {
   saveTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   saveInFlight: MutableRefObject<Promise<boolean> | null>;
   pollTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  searchGeneration: MutableRefObject<number>;
   syncGeneration: MutableRefObject<number>;
   openGeneration: MutableRefObject<number>;
   openingFolderGeneration: MutableRefObject<number | null>;
@@ -118,7 +108,7 @@ export function useActiveFolderWorkspace(
 ): ActiveFolderWorkspace {
   const {
     state, folderContextPath, editor, saveTimer, saveInFlight, pollTimer,
-    searchGeneration, syncGeneration, openGeneration, openingFolderGeneration,
+    syncGeneration, openGeneration, openingFolderGeneration,
     lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace,
   } = refs;
   const {
@@ -128,7 +118,7 @@ export function useActiveFolderWorkspace(
   } = dependencies;
 
   const search = useSearchActions(
-    { stateRef: state, folderContextPath, pollTimer, searchGeneration, syncGeneration, openGeneration, openingFolderGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
+    { stateRef: state, folderContextPath, pollTimer, syncGeneration, openGeneration, openingFolderGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
     { loadFiles, loadFilesFromServer, refreshActiveTabFromDisk, toast }, dispatch,
   );
   const documents = useDocumentActions(
@@ -140,7 +130,7 @@ export function useActiveFolderWorkspace(
     { askCascadeForRename, askConfirm, flushSave: documents.flushSave, loadFiles, openInNewTab: documents.openInNewTab, refreshIndexState: search.refreshIndexState, toast }, dispatch,
   );
   const folders = useFolderActions(
-    { state, folderContextPath, editor, openGeneration, openingFolderGeneration, syncGeneration, searchGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
+    { state, folderContextPath, editor, openGeneration, openingFolderGeneration, syncGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
     { flushSave: documents.flushSave, loadFiles, loadFileOrder, markVisibleFilesPendingForSearch: search.markVisibleFilesPendingForSearch, refreshIndexState: search.refreshIndexState, toast }, dispatch,
   );
 
@@ -152,18 +142,22 @@ export function useActiveFolderWorkspace(
     ? activeTab.file.name
     : null;
   const activeBinaryTabId = activeBinaryName ? activeTab?.id ?? null : null;
+  // Out-of-folder tabs stat against their own folder; a bare rel stat would
+  // hit a same-named file in the active folder.
+  const activeBinaryFolder = activeBinaryName ? activeTab?.file?.folder : undefined;
   useEffect(() => {
     if (!activeBinaryName || !activeBinaryTabId) return;
     const folderPathAtStart = renderedState.folderPath;
-    void api.statFile(activeBinaryName).then((stat) => {
+    void api.statFile(activeBinaryName, activeBinaryFolder ? { folder: activeBinaryFolder } : undefined).then((stat) => {
       if (state.current.folderPath !== folderPathAtStart) return;
       const latest = getActiveTab(state.current);
       if (latest?.id !== activeBinaryTabId || latest.file?.name !== activeBinaryName) return;
+      if (latest.file.folder !== activeBinaryFolder) return;
       if (latest.file.version !== stat.version) dispatch({ type: 'FILE_PATCH', patch: { version: stat.version } });
     }).catch(() => {
       // The tree refresh owns deletion and error presentation.
     });
-  }, [activeBinaryName, activeBinaryTabId, dispatch, renderedState.folderPath, state]);
+  }, [activeBinaryName, activeBinaryTabId, activeBinaryFolder, dispatch, renderedState.folderPath, state]);
 
   useEffect(() => {
     const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
@@ -259,7 +253,6 @@ export function useActiveFolderWorkspace(
     search.decideSemanticIndexing,
     search.markVisibleFilesPendingForSearch,
     search.refreshIndexState,
-    search.runSearch,
     search.runSync,
     documents.activateTab,
     documents.closeActiveTab,
@@ -270,6 +263,7 @@ export function useActiveFolderWorkspace(
     documents.navigateTo,
     documents.newTab,
     documents.openInNewTab,
+    documents.openLibraryFile,
     documents.registerEditor,
     documents.scheduleSave,
     documents.selectFile,

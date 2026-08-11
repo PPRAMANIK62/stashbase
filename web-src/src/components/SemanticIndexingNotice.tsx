@@ -1,5 +1,12 @@
 import React from 'react';
 import { useApp } from '../store/AppContext';
+import { buttonVariants } from './ui/button';
+import { StatusMessage } from './ui/status';
+
+/** Plain <button> + the shared outline-button recipe: the node test loader
+ *  compiles this module graph with the classic JSX transform, under which
+ *  the ui/button component module (no explicit React import) cannot load. */
+const noticeButtonClass = buttonVariants({ variant: 'outline', size: 'xs' });
 
 export function SemanticIndexingNotice() {
   const { state, actions } = useApp();
@@ -36,24 +43,24 @@ export function SemanticIndexingNoticeView({
     ? ` · about ${(estimatedBytes / (1024 * 1024)).toFixed(estimatedBytes >= 10 * 1024 * 1024 ? 0 : 1)} MiB`
     : '';
   return (
-    <div className="search-status-banner warning" role="status" aria-live="polite">
-      <div className="search-status-copy">
-        <div className="search-status-title">{awaiting ? 'Large semantic indexing workload' : 'Semantic indexing paused'}</div>
-        <div className="search-status-detail">
+    <StatusMessage tone="warning" className="mx-3 mb-2 flex items-start justify-between gap-2.5 px-2.25 py-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="font-semibold">{awaiting ? 'Large semantic indexing workload' : 'Semantic indexing paused'}</div>
+        <div className="leading-snug opacity-90">
           About {count.toLocaleString()} file{count === 1 ? '' : 's'} waiting{size}. Indexing may take a while and use embedding-provider quota. Keyword search remains available.
         </div>
         {failureMessage && (
-          <div className="search-status-detail" role="alert">
+          <div className="leading-snug opacity-90" role="alert">
             Search also needs attention: {failureMessage}
           </div>
         )}
       </div>
-      <div className="search-status-actions">
-        <button type="button" onClick={onStart}>
+      <div className="flex shrink-0 items-center gap-1">
+        <button type="button" className={noticeButtonClass} onClick={onStart}>
           {awaiting ? 'Index now' : 'Start indexing'}
         </button>
-        {awaiting && <button type="button" onClick={onDefer}>Not now</button>}
+        {awaiting && <button type="button" className={noticeButtonClass} onClick={onDefer}>Not now</button>}
       </div>
-    </div>
+    </StatusMessage>
   );
 }

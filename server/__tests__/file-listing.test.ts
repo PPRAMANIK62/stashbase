@@ -42,6 +42,14 @@ test('file-listing scan and classification', async () => {
     const folderEmpty = path.join(tempDir, 'empty-dir');
     fs.mkdirSync(folderEmpty);
 
+    // 7. Junk dot-files: invisible infrastructure — never listed, never
+    //    tallied as unsupported; a folder holding only dot-files reads
+    //    as physically empty and stays visible.
+    fs.writeFileSync(path.join(tempDir, '.DS_Store'), '');
+    const folderDotOnly = path.join(tempDir, 'dot-only');
+    fs.mkdirSync(folderDotOnly);
+    fs.writeFileSync(path.join(folderDotOnly, '.DS_Store'), '');
+
     // Run listing scan
     setCurrentFolder(tempDir);
     const result = listFilesAndFolders();
@@ -55,6 +63,7 @@ test('file-listing scan and classification', async () => {
     assert.ok(folderPaths.includes('empty-dir'));
     assert.ok(!folderPaths.includes('src'), 'src directory (code only) should be pruned');
     assert.ok(!folderPaths.includes('node_modules'), 'node_modules directory should be excluded');
+    assert.ok(folderPaths.includes('dot-only'), 'a folder holding only dot-files stays visible as empty');
 
     // Verify files list
     const fileNames = result.files.map((f) => f.name);
@@ -62,6 +71,11 @@ test('file-listing scan and classification', async () => {
     assert.ok(fileNames.includes('docs/note2.html'));
     assert.ok(fileNames.includes('mixed/note3.md'));
     assert.ok(!fileNames.includes('src/main.ts'), 'unsupported files should not be in the files list');
+    assert.ok(!fileNames.includes('.DS_Store'), 'dot-files should not be listed');
+
+    // The unchanged counts below double as the dot-file regression: the
+    // two .DS_Store files must not appear in `other`/`otherExtensions`
+    // (they used to surface as "N files (no extension)").
 
     // Verify unsupported files counts
     // 'src/main.ts' (.ts) -> source

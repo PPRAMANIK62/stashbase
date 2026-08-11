@@ -6,6 +6,7 @@
  * errors; transports only parse and serialize requests.
  */
 import { memberFolderRoots } from '../folder.ts';
+import { filesystemPath } from '../filesystem-path.ts';
 import {
   normalizeLibrarySearchScope,
   requireLibraryStatusFolder,
@@ -23,8 +24,14 @@ import { getLibraryInfo, type LibraryInfo } from '../library-info.ts';
 import { createProjectFolder } from '../agent-projects.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer, syncFolderNow } from '../state.ts';
-import { createRetrieval, semanticHitsFromEvidence, type Retrieval } from '../retrieval/index.ts';
+import {
+  createRetrieval,
+  keywordFilesFromEvidence,
+  semanticHitsFromEvidence,
+  type Retrieval,
+} from '../retrieval/index.ts';
 import type { IndexStatus, SearchHit } from '../indexer.ts';
+import type { KeywordHitFile } from '../search-display.ts';
 import type { SyncResult } from '../sync.ts';
 import { LibraryOperationError } from './errors.ts';
 import type { SearchTypeCategory } from '../../shared/search-types.ts';
@@ -32,6 +39,10 @@ import type { SearchTypeCategory } from '../../shared/search-types.ts';
 export { LibraryOperationError } from './errors.ts';
 
 const log = logger('library-operations');
+
+/** One keyword-hit file: `folder` is the absolute member folder root and
+ * `path` is folder-relative, mirroring the per-folder keyword payload. */
+export type LibraryKeywordFile = KeywordHitFile & { folder: string };
 
 export interface LibraryOperations {
   info(): Promise<LibraryInfo>;
@@ -42,6 +53,16 @@ export interface LibraryOperations {
     pathPrefix?: string;
     types?: readonly SearchTypeCategory[];
   }): Promise<{ hits: SearchHit[] }>;
+  /** Ripgrep keyword search over every member folder (or one `folder`).
+   * File paths come back folder-relative next to their member folder root so
+   * a caller can open results across folders without prefix guessing. */
+  keywordSearch(input: {
+    query: string;
+    caseStrict?: boolean;
+    wholeWord?: boolean;
+    folder?: string;
+    pathPrefix?: string;
+  }): Promise<{ files: LibraryKeywordFile[]; totalMatches: number; truncated: boolean }>;
   reindex(input?: { folder?: string }): Promise<unknown>;
   /** Create a new project folder and register it into the library.
    * `agentSessionId` is request attribution (header-derived, never a tool
@@ -116,6 +137,74 @@ export function createLibraryOperations(
       return { hits: semanticHitsFromEvidence(result.evidence) };
     },
 
+    async keywordSearch({ query, caseStrict, wholeWord, folder, pathPrefix }) {
+      const trimmedQuery = query.trim();
+      if (!trimmedQuery) throw routeError('query required', 400);
+      const scope = normalizeLibrarySearchScope(folder, pathPrefix);
+      // A prefix without a folder would silently widen to every other
+      // folder's whole tree (relative() fails, prefix drops) — refuse it.
+      if (scope.pathPrefix && !scope.folderRoot) {
+        throw routeError('path_prefix requires folder', 400);
+      }
+      const roots = scope.folderRoot ? [scope.folderRoot] : deps.memberFolderRoots();
+      let lastError: unknown = null;
+      const perFolder = await mapWithConcurrency(roots, KEYWORD_FOLDER_CONCURRENCY, async (root) => {
+        try {
+          const result = await deps.retrieval.search({
+            mode: 'keyword',
+            query: trimmedQuery,
+            folderRoot: root,
+            pathPrefix: scope.pathPrefix,
+            caseStrict: caseStrict === true,
+            wholeWord: wholeWord === true,
+          });
+          return { root, files: keywordFilesFromEvidence(result.evidence, root), truncated: result.truncated };
+        } catch (err: unknown) {
+          // A vanished or unreadable member folder must not sink the whole
+          // library sweep; the remaining folders still answer.
+          log.warn(`library keyword search skipped ${root}: ${errorMessage(err)}`);
+          lastError = err;
+          return null;
+        }
+      });
+      // Every folder failing is a search failure, not an empty result —
+      // a silent empty 200 would read as "no matches".
+      if (roots.length > 0 && perFolder.every((outcome) => outcome === null)) {
+        throw lastError ?? routeError('keyword search failed', 500);
+      }
+      const files: LibraryKeywordFile[] = [];
+      let totalMatches = 0;
+      let delivered = 0;
+      let truncated = false;
+      for (const outcome of perFolder) {
+        if (!outcome) continue;
+        truncated = truncated || outcome.truncated;
+        for (const file of outcome.files) {
+          // Nested member folders: the deeper member's own sweep answers for
+          // its files — drop them from the ancestor's sweep so a hit never
+          // appears twice under two folder identities.
+          if (roots.length > 1 && !deepestOwnerIs(outcome.root, file.path, roots)) continue;
+          // One shared cap on delivered matches across folders so a broad
+          // query cannot multiply the single-folder payload bound by the
+          // library size. `totalMatches` keeps counting every remaining
+          // file's real match count (per-file `totalMatches` already
+          // exceeds `matches` under per-file caps), so the reported total
+          // stays the library-wide truth even after the cap fires.
+          totalMatches += file.totalMatches;
+          if (delivered >= LIBRARY_KEYWORD_TOTAL_CAP) {
+            truncated = true;
+            continue;
+          }
+          const room = LIBRARY_KEYWORD_TOTAL_CAP - delivered;
+          const matches = file.matches.length > room ? file.matches.slice(0, room) : file.matches;
+          if (matches.length < file.matches.length) truncated = true;
+          files.push({ ...file, matches, folder: outcome.root });
+          delivered += matches.length;
+        }
+      }
+      return { files, totalMatches, truncated };
+    },
+
     async reindex({ folder } = {}) {
       const folderRoot = requireLibraryStatusFolder(folder);
       const folders: Array<Record<string, unknown>> = [];
@@ -151,6 +240,43 @@ export function createLibraryOperations(
     move: ({ path, newPath, cascade }) => asLibraryOperation(() => deps.move(path, newPath, { cascade })),
     delete: (path) => asLibraryOperation(() => deps.delete(path)),
   };
+}
+
+/** True when `sweepRoot` is the DEEPEST member root containing the file —
+ * i.e. this sweep, not a nested member's own sweep, owns the hit. */
+function deepestOwnerIs(sweepRoot: string, relPath: string, roots: readonly string[]): boolean {
+  const abs = filesystemPath.join(sweepRoot, relPath);
+  let owner = sweepRoot;
+  for (const candidate of roots) {
+    if (candidate.length <= owner.length) continue;
+    if (filesystemPath.relative(candidate, abs) != null) owner = candidate;
+  }
+  return owner === sweepRoot;
+}
+
+/** Each folder is one ripgrep spawn plus a derived-text walk; a handful in
+ * flight keeps a many-folder library responsive without a process storm. */
+const KEYWORD_FOLDER_CONCURRENCY = 4;
+/** Delivered-match bound across the whole sweep — the same order of payload
+ * the single-folder route's per-call cap allows. */
+const LIBRARY_KEYWORD_TOTAL_CAP = 500;
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  work: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await work(items[index]);
+      }
+    }),
+  );
+  return results;
 }
 
 async function asLibraryOperation<T>(work: () => Promise<T>): Promise<T> {

@@ -39,7 +39,8 @@ to migrate them into a StashBase-specific storage model.
   panel's main content and fills the available space. Clicking a row
   switches this window's folder in place: the clicked folder moves up into
   the active zone and the previous one drops back into the list. Switching
-  resets the folder-scoped document tabs and search state, but keeps the
+  resets the folder-scoped document tabs, but keeps the search popup's
+  remembered query and results (search is library-scoped) and keeps the
   window's chat tabs and their running Agent sessions — each chat is pinned
   to its own scope (a library folder, or the whole library) — and surfaces
   a welcome chat for the new folder without disturbing any started chat or
@@ -71,7 +72,8 @@ to migrate them into a StashBase-specific storage model.
   browse location to the new project; and only a library-scoped chat moves
   its own binding there (see [Agent Panel](agent-panel.md)).
 - Each window centres on one current folder, with its own file tree, document
-  tabs, search state, and Agent panel.
+  tabs, search popup, and Agent panel. The search popup's remembered state is
+  window-local but not folder-scoped.
 - Users can open multiple windows from the application menu or a folder action
   to keep different folders or working contexts visible side by side. A folder
   action focuses an existing matching window when one is already available.
@@ -108,6 +110,11 @@ to migrate them into a StashBase-specific storage model.
   every platform, including macOS, since Cmd+Tab is the OS application
   switcher.
 - Search results and agent file links return users to those source files.
+  A target in another library folder opens as a read-only out-of-folder tab
+  without switching this window's folder; its banner names the folder and
+  offers Open Folder in New Window for full editing there. Out-of-folder
+  tabs stay outside the tree's selection, Quick Open recents, and the
+  folder-listing tab pruning.
 - Root-level `AGENTS.md` and optional `CLAUDE.md` bridge files are visible,
   editable user files. StashBase only creates missing defaults.
 - Opening a folder starts changed-content indexing checks in the background.
@@ -149,8 +156,12 @@ to migrate them into a StashBase-specific storage model.
   folder header and file tree), then the active Markdown document outline,
   with the Library folder list anchored at the bottom — the outline belongs
   to the working context above the global list. The Library and outline
-  sections stay independently collapsible.
-- StashBase displays only supported document and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a persistent callout banner in the Files panel.
+  sections stay independently collapsible. There is no activity rail: the
+  sidebar toggle and Search live as shell controls in the titlebar band at
+  the window's top-left (they stay put when the sidebar is collapsed, so
+  the toggle is always the way back in), and Settings is a quiet row at
+  the sidebar's bottom.
+- StashBase displays only supported document and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Dot-prefixed files (`.DS_Store`, tool configs) are invisible infrastructure: never listed and never counted as unsupported, and a folder holding only dot-files reads as physically empty. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a dismissable callout card in the Files panel — dismissal is per folder and persists, and the card returns when a new unsupported category appears.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.
 - Command Palette exposes only safe, context-available actions the app already

@@ -26,6 +26,7 @@ import { getScheduledConversion } from '../conversion.ts';
 import { listPreparationProblems, readProgress } from '../conversion-status.ts';
 import { isAudioFile } from '../format.ts';
 import { resolveExisting } from '../files.ts';
+import { exactMemberFolderRoot, runWithFolderRoot } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
 import { errorMessage, logger } from '../log.ts';
@@ -92,11 +93,21 @@ export function mount(app: express.Express): void {
     }
   });
 
-  app.get('/api/audio/transcript', (req, res) => {
+  app.get('/api/audio/transcript', async (req, res) => {
     try {
       const rel = typeof req.query.path === 'string' ? req.query.path.trim() : '';
       if (!rel || !isAudioFile(rel)) return res.status(415).json({ error: 'media path required' });
-      const sourceAbs = resolveExisting(rel);
+      // Optional `?folder=` resolves against an explicit member folder — an
+      // out-of-folder tab reading a transcript without switching the window.
+      const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+      let sourceAbs: string | null;
+      if (rawFolder) {
+        const member = exactMemberFolderRoot(rawFolder);
+        if (!member) return res.status(400).json({ error: 'folder is not a registered library folder' });
+        sourceAbs = await runWithFolderRoot(member, () => resolveExisting(rel));
+      } else {
+        sourceAbs = resolveExisting(rel);
+      }
       if (!sourceAbs) return res.status(404).json({ error: 'file not found' });
       const transcript = readAudioTranscript(sourceAbs);
       if (transcript) return res.json({ status: 'ready', transcript });

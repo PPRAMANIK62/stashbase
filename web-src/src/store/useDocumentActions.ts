@@ -1,6 +1,7 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import { api, ApiError } from '../api';
+import { folderRefsEqual } from '../folderPath';
 import type { EditorHandle } from './actionTypes';
 import {
   isFolderFileTab,
@@ -65,6 +66,9 @@ export function useDocumentActions(
       const tabId = tabAtStart?.id ?? null;
       const handle = editor.current;
       if (!currentFile || !handle) return true;
+      // Out-of-folder tabs are read-only; a PUT would write a same-named
+      // file into the ACTIVE folder.
+      if (currentFile.folder) return true;
       if (!tabAtStart?.dirty) return true;
       const content = handle.getValue();
       if (content === currentFile.content) {
@@ -140,7 +144,15 @@ export function useDocumentActions(
 
   const loadFile = useCallback(async (
     name: string,
-    opts: { newTab?: boolean; preview?: boolean; anchor?: string; expectedFolder?: string },
+    opts: {
+      newTab?: boolean;
+      preview?: boolean;
+      anchor?: string;
+      expectedFolder?: string;
+      /** Read from this explicit member folder instead of the window's own —
+       *  the resulting tab is an out-of-folder read-only viewer. */
+      libraryFolder?: string;
+    },
   ) => {
     if (opts.expectedFolder && state.current.folderPath !== opts.expectedFolder) return;
     const currentFile = getActiveTab(state.current)?.file ?? null;
@@ -148,11 +160,12 @@ export function useDocumentActions(
       if (!(await flushSave())) return;
     }
     if (opts.expectedFolder && state.current.folderPath !== opts.expectedFolder) return;
+    const readOpts = opts.libraryFolder ? { folder: opts.libraryFolder } : undefined;
 
     let body;
     if (/\.pdf$/i.test(name)) {
       try {
-        const stat = await api.statFile(name);
+        const stat = await api.statFile(name, readOpts);
         body = { name, format: 'pdf' as const, content: '', version: stat.version };
       } catch (err: unknown) {
         dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
@@ -160,13 +173,13 @@ export function useDocumentActions(
       }
     } else if (isDocxName(name)) {
       try {
-        const stat = await api.statFile(name);
+        const stat = await api.statFile(name, readOpts);
         body = { name, format: 'docx' as const, content: '', version: stat.version };
       } catch (err: unknown) {
         dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
         return;
       }
-      const folder = opts.expectedFolder ?? state.current.folderPath;
+      const folder = opts.libraryFolder ?? opts.expectedFolder ?? state.current.folderPath;
       void api.prepareDocx(name, { folder: folder || undefined })
         .then(() => refreshIndexState(folder || undefined))
         .catch((err: unknown) => {
@@ -174,13 +187,13 @@ export function useDocumentActions(
         });
     } else if (isAudioName(name)) {
       try {
-        const stat = await api.statFile(name);
+        const stat = await api.statFile(name, readOpts);
         body = { name, format: 'audio' as const, content: '', version: stat.version };
       } catch (err: unknown) {
         dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
         return;
       }
-      const folder = opts.expectedFolder ?? state.current.folderPath;
+      const folder = opts.libraryFolder ?? opts.expectedFolder ?? state.current.folderPath;
       void api.prepareAudio(name, { folder: folder || undefined })
         .then(() => refreshIndexState(folder || undefined))
         .catch((err: unknown) => {
@@ -188,7 +201,7 @@ export function useDocumentActions(
         });
     } else if (/\.(png|jpe?g|webp)$/i.test(name)) {
       try {
-        const stat = await api.statFile(name);
+        const stat = await api.statFile(name, readOpts);
         body = { name, format: 'image' as const, content: '', version: stat.version };
       } catch (err: unknown) {
         dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
@@ -196,7 +209,7 @@ export function useDocumentActions(
       }
     } else {
       try {
-        body = await api.getFile(name);
+        body = await api.getFile(name, readOpts);
       } catch (err: unknown) {
         dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
         return;
@@ -210,6 +223,7 @@ export function useDocumentActions(
       body,
       newTab: newTabMode ? !noActiveTab : undefined,
       preview: opts.preview,
+      libraryFolder: opts.libraryFolder,
     });
     dispatch({ type: 'PENDING_SCROLL', anchor: opts.anchor ?? null });
   }, [dispatch, editor, flushSave, refreshIndexState, state]);
@@ -238,25 +252,33 @@ export function useDocumentActions(
     await loadFile(name, { newTab: true, preview: true, expectedFolder });
   }, [dispatch, editor, flushSave, loadFile, state]);
 
+  const armHighlight = useCallback((hit: PendingHighlight) => {
+    dispatch({ type: 'PENDING_HIGHLIGHT', highlight: hit });
+    if (hit.openFindBar && hit.chunkText) {
+      primeFind(hit.chunkText, {
+        wholeWord: hit.findWholeWord ?? false,
+        caseSensitive: keywordFindCaseSensitive(hit.chunkText, hit.findCaseStrict ?? false),
+      });
+    }
+  }, [dispatch, primeFind]);
+
   const selectFileWithHighlight = useCallback(async (name: string, hit: PendingHighlight) => {
     const expectedFolder = state.current.folderPath;
+    const isTarget = () => {
+      const file = getActiveTab(state.current)?.file;
+      // Same rel name on an out-of-folder tab is a different document.
+      return file?.name === name && !file.folder;
+    };
     await selectFile(name);
     if (state.current.folderPath !== expectedFolder) return;
     for (let i = 0; i < 8; i++) {
-      if (getActiveTab(state.current)?.file?.name === name) break;
+      if (isTarget()) break;
       await waitForNextFrame();
       if (state.current.folderPath !== expectedFolder) return;
     }
-    if (getActiveTab(state.current)?.file?.name !== name) return;
-    dispatch({ type: 'PENDING_HIGHLIGHT', highlight: hit });
-    if (hit.openFindBar && hit.chunkText) {
-      const currentState = state.current;
-      primeFind(hit.chunkText, {
-        wholeWord: currentState.wholeWord,
-        caseSensitive: keywordFindCaseSensitive(hit.chunkText, currentState.caseStrict),
-      });
-    }
-  }, [dispatch, primeFind, selectFile, state]);
+    if (!isTarget()) return;
+    armHighlight(hit);
+  }, [armHighlight, selectFile, state]);
 
   const openInNewTab = useCallback(async (name: string, expectedFolder?: string) => {
     const targetFolder = expectedFolder ?? state.current.folderPath;
@@ -315,6 +337,56 @@ export function useDocumentActions(
     await loadFile(name, { newTab: true, anchor, expectedFolder });
   }, [dispatch, editor, flushSave, loadFile, state]);
 
+  /** Open a file by (member folder, rel path). A target in the window's
+   *  own folder goes through the normal selection path; anything else opens
+   *  an out-of-folder read-only tab WITHOUT switching the window's folder. */
+  const openLibraryFile = useCallback(async (
+    folder: string,
+    name: string,
+    opts?: { hit?: PendingHighlight; anchor?: string },
+  ) => {
+    const startState = state.current;
+    if (startState.folderPath && folderRefsEqual(folder, startState.folderPath)) {
+      if (opts?.hit) await selectFileWithHighlight(name, opts.hit);
+      else if (opts?.anchor) await navigateTo(name, opts.anchor);
+      else await selectFile(name);
+      return;
+    }
+    if (editor.current && !(await flushSave())) return;
+    const isTarget = () => {
+      const file = getActiveTab(state.current)?.file;
+      return file?.name === name && file.folder != null && folderRefsEqual(file.folder, folder);
+    };
+    const existing = state.current.tabs.find((tab) =>
+      tab.file?.name === name && tab.file.folder != null && folderRefsEqual(tab.file.folder, folder));
+    if (existing) {
+      if (state.current.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
+      if (opts?.anchor) dispatch({ type: 'PENDING_SCROLL', anchor: opts.anchor });
+    } else {
+      // Mirror selectFile's preview-tab semantics: fill a blank tab, reuse
+      // the preview tab, or open a fresh preview tab.
+      const active = getActiveTab(state.current);
+      const previewTab = active && !active.file ? null : state.current.tabs.find((tab) => tab.preview);
+      if (active && !active.file) {
+        await loadFile(name, { preview: true, libraryFolder: folder, anchor: opts?.anchor });
+      } else if (previewTab) {
+        if (state.current.activeTabId !== previewTab.id) dispatch({ type: 'ACTIVATE_TAB', id: previewTab.id });
+        await loadFile(name, { libraryFolder: folder, anchor: opts?.anchor });
+      } else {
+        await loadFile(name, { newTab: true, preview: true, libraryFolder: folder, anchor: opts?.anchor });
+      }
+    }
+    const hit = opts?.hit;
+    if (!hit) return;
+    for (let i = 0; i < 8; i++) {
+      if (isTarget()) break;
+      await waitForNextFrame();
+    }
+    if (!isTarget()) return;
+    armHighlight(hit);
+  }, [armHighlight, dispatch, editor, flushSave, loadFile, navigateTo, selectFile, selectFileWithHighlight, state]);
+
+
   const consumePendingScroll = useCallback(() => {
     dispatch({ type: 'PENDING_SCROLL', anchor: null });
   }, [dispatch]);
@@ -326,6 +398,9 @@ export function useDocumentActions(
   const toggleEditMode = useCallback(async () => {
     const tab = getActiveTab(state.current);
     if (!tab?.file) return;
+    // Out-of-folder tabs never edit — their save path would write into
+    // the ACTIVE folder.
+    if (tab.file.folder) return;
     if (tab.editMode) {
       if (!(await flushSave())) return;
       dispatch({ type: 'EDIT_MODE', on: false });
@@ -352,6 +427,7 @@ export function useDocumentActions(
     navigateTo,
     newTab,
     openInNewTab,
+    openLibraryFile,
     registerEditor,
     scheduleSave,
     selectFile,

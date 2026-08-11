@@ -32,6 +32,8 @@ export function HtmlPreview({ name, derived = false }: { name: string; derived?:
   const pendingAnchor = activeTab?.pendingAnchor ?? null;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const content = activeTab?.file?.content ?? '';
+  // Out-of-folder tab: the asset URL must carry the file's own folder.
+  const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const chunkReqRef = useRef(0);
   // Tracks which `name` the iframe has finished loading. We only post
@@ -63,8 +65,8 @@ export function HtmlPreview({ name, derived = false }: { name: string; derived?:
     return (h >>> 0).toString(36);
   }, [content, derived, derivedStateToken]);
   const src = derived
-    ? versionedDerivedAssetUrl(name, fingerprint)
-    : versionedAssetUrl(name, fingerprint);
+    ? versionedDerivedAssetUrl(name, fingerprint, sourceFolder)
+    : versionedAssetUrl(name, fingerprint, sourceFolder);
 
   function postScroll() {
     if (!pendingAnchor) return;

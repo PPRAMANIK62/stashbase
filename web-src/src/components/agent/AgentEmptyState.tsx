@@ -13,7 +13,7 @@ import { Button } from 'react-aria-components';
 import { ArrowInsertIcon } from '../../icons';
 
 interface Suggestion {
-  /** The rotating line the user reads ("Ask me to …"). */
+  /** The action-first rotating line the user reads. */
   label: string;
   /** The full prompt a press drops into the composer draft. Prompts that
    *  need an object end with ": " or a trailing space — the caret lands
@@ -21,31 +21,93 @@ interface Suggestion {
   prompt: string;
 }
 
-/* Scope-neutral suggestions shared by both lists. Every entry must carry a
- * sensible prompt — pure interaction tips ("Type @ …", "Drop in a file…")
- * have no prompt to prefill and don't belong in this rotation. */
-const SHARED_SUGGESTIONS: Suggestion[] = [
-  { label: 'Ask me to compare two documents', prompt: 'Compare these two documents: ' },
-  { label: 'Ask me to turn notes into an outline', prompt: 'Turn these notes into a structured outline: ' },
-  { label: 'Ask me to extract key points and action items', prompt: 'Extract the key points and action items from ' },
-  { label: 'Ask me to rewrite or polish a draft', prompt: 'Rewrite and polish this draft: ' },
-  { label: 'Ask me to draft a document', prompt: 'Draft a document about ' },
-];
-
+/* Every entry must carry a useful prompt to prefill. Labels stay short and
+ * action-first; prompts expand them into the source-aware journeys StashBase
+ * supports. Templates that need user input end at the insertion point. */
 const FOLDER_SUGGESTIONS: Suggestion[] = [
-  { label: 'Ask me anything about this folder', prompt: 'Answer from my files: ' },
-  { label: 'Ask me to summarize your notes', prompt: 'Summarize the notes in this folder and highlight the main themes' },
-  { label: 'Ask me to find connections across files', prompt: 'Find connections and recurring themes across the files in this folder' },
-  ...SHARED_SUGGESTIONS,
-  { label: 'Ask me to organize this folder', prompt: 'Summarize this folder and suggest how to organize it' },
+  {
+    label: 'Turn requirements into a checklist',
+    prompt: 'Review the requirements in this folder and create a checklist of constraints, acceptance criteria, and open questions. Cite the source files.',
+  },
+  {
+    label: 'Find related specs and decisions',
+    prompt: 'Find the specifications, meeting notes, and prior decisions related to: ',
+  },
+  {
+    label: 'Compare technical options',
+    prompt: 'Compare these technical options using evidence from this folder. Show the trade-offs, risks, and recommendation: ',
+  },
+  {
+    label: 'Build a design Canvas',
+    prompt: 'Create a Markdown Canvas with the goal, confirmed decisions, alternatives, trade-offs, and open questions.',
+  },
+  {
+    label: 'Check delivery against requirements',
+    prompt: 'Compare the current work with the original requirements. Mark each item satisfied, missing, or unclear, with evidence.',
+  },
+  {
+    label: 'Compare papers and methods',
+    prompt: 'Compare the papers or methods in this folder. Summarize their evidence, limitations, and disagreements.',
+  },
+  {
+    label: 'Create a source-linked reading note',
+    prompt: 'Create a reading note with the main claims, evidence, limitations, open questions, and source references about: ',
+  },
+  {
+    label: 'Build a research plan',
+    prompt: 'Turn the material in this folder into a research plan with a question, approach, experiments, milestones, and risks.',
+  },
+  {
+    label: 'Summarize progress and blockers',
+    prompt: 'Summarize recent progress from this folder. Separate completed work, findings, blockers, and next steps.',
+  },
+  {
+    label: 'Outline a presentation',
+    prompt: 'Turn the settled work in this folder into a presentation outline with an audience, core message, slide order, and supporting evidence.',
+  },
 ];
 
 const LIBRARY_SUGGESTIONS: Suggestion[] = [
-  { label: 'Ask me anything across your library', prompt: 'Answer from my library: ' },
-  { label: 'Ask me to summarize your notes', prompt: 'Summarize the notes in my library and highlight the main themes' },
-  { label: 'Ask me to find connections across folders', prompt: 'Find connections and recurring themes across the folders in my library' },
-  ...SHARED_SUGGESTIONS,
-  { label: 'Ask me to survey your library', prompt: 'Summarize the folders in my library and what each contains' },
+  {
+    label: 'Find something I vaguely remember',
+    prompt: 'Use meaning, not just exact wording, to search my library and show the most relevant sources about: ',
+  },
+  {
+    label: 'Explain why an earlier decision was made',
+    prompt: 'Find where my library explains this decision. Summarize the reasoning, alternatives, and source files: ',
+  },
+  {
+    label: 'Gather context across projects',
+    prompt: 'Gather the most relevant context across my library, group it by project or folder, and cite the sources about: ',
+  },
+  {
+    label: 'Compare approaches across my archive',
+    prompt: 'Compare how different projects or documents in my library approached this topic. Highlight recurring trade-offs and lessons: ',
+  },
+  {
+    label: 'Find papers comparing two methods',
+    prompt: 'Find papers or notes comparing these methods, then summarize the evidence and disagreements: ',
+  },
+  {
+    label: 'Map what’s in my library',
+    prompt: 'Survey my library and summarize what each folder contains, its main themes, and likely relationships.',
+  },
+  {
+    label: 'Find recurring themes and open questions',
+    prompt: 'Find recurring themes, decisions, and unresolved questions across my library, with representative sources.',
+  },
+  {
+    label: 'Trace a decision across projects',
+    prompt: 'Trace how this idea or decision evolved across projects and documents: ',
+  },
+  {
+    label: 'Build a briefing from my sources',
+    prompt: 'Build a concise briefing from my library. Separate established facts, prior decisions, conflicting evidence, and open questions about: ',
+  },
+  {
+    label: 'Start a project from existing sources',
+    prompt: 'Create a new project seeded with a Markdown Canvas and references to the most relevant sources in my library about: ',
+  },
 ];
 
 /* Slow cadence and a long crossfade keep the rotation ambient — the

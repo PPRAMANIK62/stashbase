@@ -9,11 +9,21 @@ import { TabStrip } from './TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { readPreferredAgent } from '../agentPreference';
 import { Button } from './ui/button';
+import { StatusMessage } from './ui/status';
 
 /** Muted "Loading…" bodies shared by the lazy viewer fallbacks. */
 const VIEWER_LOADING_CLASS = 'p-4 text-base text-muted-foreground';
 const VIEWER_PADDED_LOADING_CLASS = 'p-6 text-base text-muted-foreground';
 const VIEWER_CENTERED_LOADING_CLASS = 'grid h-full place-items-center text-base text-muted-foreground';
+
+/** Display name of an absolute member folder root. Duplicates
+ *  `librarySearch.folderBasename` on purpose — importing that module here
+ *  would pull the whole search-memory chunk into the entry bundle. */
+function folderBasename(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const segments = normalized.split('/');
+  return segments[segments.length - 1] || normalized;
+}
 
 const LazyCrepeDocument = lazyWithRetry(() => import('./CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
 const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
@@ -37,7 +47,19 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   const saveStatus = activeTab?.saveStatus ?? { text: '', cls: '' };
   const hasTabs = state.tabs.length > 0;
   const emptyTab = !!activeTab && !cur;
-  const resourceResetKey = cur ? `${cur.name}:${cur.version ?? ''}` : undefined;
+  const resourceResetKey = cur ? `${cur.folder ?? ''}:${cur.name}:${cur.version ?? ''}` : undefined;
+  // Out-of-folder tab (a library search hit viewed without switching the
+  // window's folder): a quiet identity banner with the one escape hatch —
+  // open that folder in its own window.
+  const outOfFolder = cur?.folder ?? null;
+  function openTabFolderInNewWindow() {
+    if (!outOfFolder) return;
+    const bridge = (window as { electron?: { openFolderWindow?: (folder: string) => Promise<boolean> } }).electron;
+    void (async () => {
+      const opened = await bridge?.openFolderWindow?.(outOfFolder);
+      if (!opened) actions.toast('New window is only available in the desktop app.', { level: 'error' });
+    })();
+  }
   // Reserve room for the absolute-positioned chrome (edit toggle / PDF
   // controls / floating-actions at top:44px, height ~28px) so editor /
   // preview content doesn't render underneath it. HTML / image viewers
@@ -52,6 +74,19 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
       inert={workspaceHidden || undefined}
     >
       {hasTabs && <TabStrip />}
+      {outOfFolder && (
+        /* Full-width identity strip flush under the tab strip (the DOCX
+         * status-row idiom). The absolute chrome below shifts down past it
+         * (see chromeTop). */
+        <StatusMessage tone="info" className="z-5 flex min-h-8 shrink-0 items-center gap-2.5 rounded-none border-x-0 border-t-0 px-3.5 py-1.5">
+          <span className="min-w-0 flex-1 truncate">
+            In <span className="font-semibold">{folderBasename(outOfFolder)}</span> — viewing a file outside the current folder.
+          </span>
+          <Button variant="outline" size="xs" className="shrink-0" onClick={openTabFolderInNewWindow}>
+            Open Folder in New Window
+          </Button>
+        </StatusMessage>
+      )}
       {/* Content host for every viewer (iframe preview / split editor).
         * Single-cell grid because a Chromium quirk: when an iframe with
         * `position: absolute; inset: 0` sits inside a flex child, its
@@ -111,6 +146,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
                 content={cur.content}
                 readOnly={!editMode}
                 active
+                folder={cur.folder}
               />
             </Suspense>
           </LazyLoadBoundary>
@@ -158,7 +194,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         </div>
       )}
       <FindBar />
-      {cur && cur.format === 'md' && (
+      {cur && cur.format === 'md' && !cur.folder && (
         /* Floating actions in the main pane's top-right — sits below the
          * tab strip (unconditionally present whenever there's an open
          * file, so a fixed offset is safe). The edit toggle lives here on
@@ -192,8 +228,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
       {cur && cur.format === 'pdf' && (
         // Slot that PdfPreview portals its zoom / page-count chrome
         // into — sits on the same row as back/forward + breadcrumb
-        // so we don't waste a row on viewer chrome.
-        <div className="pointer-events-none absolute top-11 right-3.5 left-3.5 z-5 flex items-center justify-stretch gap-2" id="pdf-chrome-slot" />
+        // so we don't waste a row on viewer chrome. The out-of-folder
+        // banner (min-h-8) pushes the slot down when present.
+        <div
+          className={'pointer-events-none absolute right-3.5 left-3.5 z-5 flex items-center justify-stretch gap-2 ' + (outOfFolder ? 'top-[76px]' : 'top-11')}
+          id="pdf-chrome-slot"
+        />
       )}
     </main>
   );

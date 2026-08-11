@@ -251,6 +251,17 @@ export function FilesViewIcon({ className }: IconProps) {
   );
 }
 
+/** Lucide `panel-left` — the sidebar show/hide toggle in the titlebar
+ *  controls (Cursor's glyph for the same control). */
+export function PanelLeftIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+    </svg>
+  );
+}
+
 export function EditIcon({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" strokeWidth={2} {...stroke}>

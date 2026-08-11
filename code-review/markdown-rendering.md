@@ -71,10 +71,19 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   Do not use Crepe's remote-upload examples or credentials. Do not expose the
   generic image URL input or load remote image URLs, including network-path
   (`//host/path`) references.
+- The `/asset*` base carries identity as reserved PATH tokens — `__window/<id>/`
+  and, for an out-of-folder tab, `__folder/<double-encoded-abs>/` — because
+  `<base href>`, iframe sub-assets, and the pdfjs worker cannot send headers or
+  propagate query strings. The folder token is double-encoded so one route-level
+  decode leaves it slash-free; the server validates library membership before
+  scoping resolution, and every URL parser (milkdown navigation, preview-iframe
+  click forwarding, the injected HTML bootstrap) must strip or capture both
+  tokens in step.
 - Relative Markdown links navigate inside the app. Decode path segments only
   after splitting, reject empty/dot/parent/embedded-separator segments, ignore
   non-note workspace assets, and hand only original HTTP(S) URLs to the system
-  browser. The edit and preview popovers share one compact, viewport-safe
+  browser. Links inside an out-of-folder document inherit its `__folder` token
+  and open in that same member folder, never the window's active folder. The edit and preview popovers share one compact, viewport-safe
   width. The link field must keep its URL-or-note-path guidance readable, and
   switching between states must not resize the surrounding document.
 - Preserve valid leading YAML frontmatter verbatim outside the Milkdown body.

@@ -121,7 +121,7 @@ export function TabStrip() {
               className={cls}
               draggable
               title={
-                (t.file?.name ?? 'Empty tab')
+                (t.file ? (t.file.folder ? `${t.file.folder}/${t.file.name}` : t.file.name) : 'Empty tab')
                 + (t.preview ? '  (preview — double-click to keep)' : '')
               }
               onClick={() => { void actions.activateTab(t.id); }}

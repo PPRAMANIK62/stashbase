@@ -31,7 +31,7 @@ const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeh
 const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
 
 export function EmbeddingPanel() {
-  const { state: appState, dispatch, actions } = useApp();
+  const { dispatch, actions } = useApp();
   const [state, setState] = useState<EmbedderState | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<EmbedderProvider>('openai');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -111,14 +111,10 @@ export function EmbeddingPanel() {
     if (!mountedRef.current) return;
     setKeyRemoveOpen(false);
     setState((s) => (s ? { ...s, hasKey: false } : s));
+    // The search popup re-checks the embedder before every semantic run, so
+    // flipping the shared key state here is all it needs.
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: false });
     void actions.refreshIndexState();
-    if (appState.searchMode === 'semantic' && appState.filterQuery.trim()) {
-      dispatch({
-        type: 'SEARCH_ERROR',
-        error: 'Semantic search is disabled until you add an embedding API key. Switch to keyword search to search without embeddings.',
-      });
-    }
   }
 
   if (loadError) {

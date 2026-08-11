@@ -31,6 +31,11 @@ export function normalizeLibrarySearchScope(folderRaw: unknown, pathPrefixRaw: u
   const pathPrefix = typeof pathPrefixRaw === 'string' && pathPrefixRaw.trim()
     ? normalizeLibraryPathPrefix(pathPrefixRaw.trim())
     : undefined;
+  // A prefix outside the requested folder would be dropped downstream and
+  // silently widen the search to the whole folder — reject the pair instead.
+  if (folderRoot && pathPrefix && filesystemPath.relative(folderRoot, pathPrefix) == null) {
+    throw routeError('path_prefix must live under folder', 400);
+  }
   return { folderRoot, pathPrefix };
 }
 

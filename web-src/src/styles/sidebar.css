@@ -1,7 +1,6 @@
-    /* sidebar — the shell (rail, panels, section headers, folder row,
-     * outline) is styled with Tailwind utilities in ActivityBar.tsx /
-     * Sidebar.tsx / DocumentOutline.tsx, the search view in
-     * SearchPanel.tsx, and the modal / MCP / embedder chrome in the
+    /* sidebar — the shell (panels, section headers, folder row,
+     * outline) is styled with Tailwind utilities in Sidebar.tsx /
+     * DocumentOutline.tsx, and the modal / MCP / embedder chrome in the
      * dialog components and settings panels. What remains here is the
      * exempted tree state machine (.tree-*) and the state rules called
      * out inline below. */
@@ -21,20 +20,6 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--bg);
-    }
-
-    /* Brief glow when something programmatically focuses the search
-     * input (empty-tab landing → "Search notes", ⌘⇧F hotkey). Without
-     * this the focus border alone is easy to miss when the user's
-     * eyes are still on the main pane. The class is toggled onto the
-     * (Tailwind-styled) search input by `useFindActions.focusSearch`. */
-    @keyframes search-focus-flash {
-      0%   { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.45); }
-      40%  { box-shadow: 0 0 0 5px rgba(var(--accent-rgb), 0.25); }
-      100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); }
-    }
-    input.flash-focus {
-      animation: search-focus-flash 0.7s ease-out;
     }
 
     .tree-row.file.preparation-failed {

@@ -24,6 +24,9 @@ export function DocxPreview({ name }: { name: string }) {
   const pendingAnchor = activeTab?.pendingAnchor ?? null;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const sourceVersion = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
+  // Out-of-folder tab: fetch source bytes + resolve embedded assets against
+  // the file's own member folder.
+  const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const loadedHtmlRef = useRef('');
   const findAtMount = useRef(state.find);
@@ -66,13 +69,13 @@ export function DocxPreview({ name }: { name: string }) {
 
     void (async () => {
       try {
-        const response = await fetch(versionedAssetUrl(name, sourceVersion), { signal: controller.signal });
+        const response = await fetch(versionedAssetUrl(name, sourceVersion, sourceFolder), { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
         worker = new Worker(new URL('../workers/docxPreview.worker.ts', import.meta.url), { type: 'module' });
         const bodyHtml = await convertDocxInWorker(worker, arrayBuffer, controller.signal);
         if (cancelled) return;
-        setHtml(renderDocxDocument(bodyHtml, name, assetBaseUrl(name)));
+        setHtml(renderDocxDocument(bodyHtml, name, assetBaseUrl(name, sourceFolder)));
       } catch (err: unknown) {
         if (cancelled || ((err as DOMException)?.name === 'AbortError' && !timedOut)) return;
         console.warn(`[docx] direct preview failed for ${name}:`, err);
@@ -88,7 +91,7 @@ export function DocxPreview({ name }: { name: string }) {
       controller.abort();
       worker?.terminate();
     };
-  }, [name, sourceVersion]);
+  }, [name, sourceVersion, sourceFolder]);
 
   useEffect(() => {
     if (!html) return;
@@ -183,7 +186,7 @@ export function DocxPreview({ name }: { name: string }) {
     const stillCurrent = () =>
       currentRef.current.folderPath === folderPathAtStart && currentRef.current.name === nameAtStart;
     try {
-      await api.reprocessFile(name, { folder: folderPathAtStart || undefined });
+      await api.reprocessFile(name, { folder: sourceFolder ?? (folderPathAtStart || undefined) });
     } catch (err: unknown) {
       if (stillCurrent()) setRetryError(errorMessage(err));
     } finally {

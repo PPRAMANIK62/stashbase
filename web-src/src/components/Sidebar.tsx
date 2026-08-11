@@ -11,17 +11,18 @@ import {
   NewFileIcon,
   NewFolderIcon,
   PlusIcon,
+  SettingsIcon,
   StarIcon,
   SyncIcon,
   TrashIcon,
 } from '../icons';
+import { openSettings } from './SettingsModal';
 import { useApp } from '../store/AppContext';
 import { makeChatTab, type Action, type LibraryFolderStatus, type State } from '../store/state';
 import { folderScope, LIBRARY_SCOPE, newChatPlan, type ChatScope } from './agent/folderState';
 import { AGENT_META, AGENTS, type AgentKind } from '../agentCatalog';
 import { readPreferredAgent, rememberPreferredAgent } from '../agentPreference';
 import { folderRefsEqual } from '../folderPath';
-import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { useDocumentOutline } from './DocumentOutlineContext';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
@@ -55,10 +56,6 @@ const OPEN_FOLDER_WATCHDOG_MS = 20_000;
 const SessionHistoryPopover = lazyWithRetry(() =>
   import('./agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
-/** Search is interaction-only, so keep its result rendering and filter
- *  dependencies out of the initial browsing shell. */
-const SearchPanel = lazyWithRetry(() =>
-  import('./SearchPanel').then((mod) => ({ default: mod.SearchPanel })));
 const DocumentOutline = lazyWithRetry(() =>
   import('./DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
 const SemanticIndexingNotice = lazyWithRetry(() =>
@@ -97,22 +94,18 @@ function libraryFolderState(status: IndexStatus): LibraryFolderStatus {
 }
 
 /**
- * Left rail composition. The activity bar (narrow icon column on the
- * far left) toggles between two mutually-exclusive side panels:
- *   - Files   → the Library folder list + the active folder's file tree
- *   - Search  → search input + ≈/= toggle + result list (see
- *               `SearchPanel.tsx`)
- *
- * Each panel keeps its own state when hidden — flipping back doesn't
- * blow away tree expansion or the active query.
+ * The sidebar is one Files panel — the Library folder list + the active
+ * folder's file tree — with no activity rail: the sidebar toggle and
+ * search live in the shell's titlebar controls (`TitlebarControls.tsx`),
+ * search itself in the library search popup (`LibrarySearchDialog.tsx`),
+ * and Settings in the panel's bottom row.
  */
 export function Sidebar() {
-  const { state } = useApp();
   return (
     /* Explicit h-full so the inner file list (flex-1) knows how much to
      * grow into; overflow-hidden clips content as the grid column
-     * resizes / collapses to the bare 44px rail — without it, file
-     * names visually spill into the main pane mid-transition.
+     * resizes / collapses to zero width — without it, file names
+     * visually spill into the main pane mid-transition.
      * `group/sidebar` drives the hover-reveal of the header action
      * icons (see the side-actions class strings below). */
     <aside className="sidebar group/sidebar relative flex h-full min-h-0 min-w-0 flex-row overflow-hidden border-r border-border bg-pane">
@@ -122,22 +115,9 @@ export function Sidebar() {
         * Structural rules live in globals.css (Electron chrome
         * exemption) — `-webkit-app-region` needs a real element. */}
       <div className="sidebar-drag-zone" aria-hidden="true" />
-      <ActivityBar />
-      {/* The panel that swaps content based on `state.activeSidebarView`;
-        * it owns the vertical stack (header / list). `sidebar-panel`
-        * carries the titlebar clearance (globals.css). */}
+      {/* `sidebar-panel` carries the titlebar clearance (globals.css). */}
       <div className="sidebar-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {state.activeSidebarView === 'search' ? (
-          <LazyLoadBoundary
-            className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
-            label="search"
-            resetKey={state.activeSidebarView}
-          >
-            <Suspense fallback={<div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">Opening search…</div>}>
-              <SearchPanel />
-            </Suspense>
-          </LazyLoadBoundary>
-        ) : <FilesPanel />}
+        <FilesPanel />
       </div>
     </aside>
   );
@@ -162,20 +142,24 @@ const sectionChevronClass =
   'inline-flex size-4 flex-none items-center justify-center transition-transform duration-fast '
   + '[&_svg]:size-3 [&_svg]:flex-none';
 
-const sectionTitleClass = 'min-w-0 truncate text-xs font-medium text-muted-foreground';
+/* text-sm, one step under the rows' text-base: the section headers sit
+ * INLINE in the same 28px row rhythm as the rows (icon included), so two
+ * steps down read as shrunken, not as hierarchy — muted colour + medium
+ * weight carry the "header, not row" distinction instead. */
+const sectionTitleClass = 'min-w-0 truncate text-sm font-medium text-muted-foreground';
 
 /** The Explorer view. The active folder zone (current folder header +
  * file tree), the LIBRARY resource list, and the active Markdown document
  * outline share this one sidebar as stacked sections. */
 function FilesPanel() {
-  const { activeTab } = useApp();
+  const { state, activeTab } = useApp();
   const { outline } = useDocumentOutline();
   const [outlineExpanded, setOutlineExpanded] = useState(true);
 
   const hasMarkdownDocument = activeTab?.file?.format === 'md';
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files" role="tabpanel">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files">
       <NewChatButton />
       {/* Explorer sections mirror VS Code's compact disclosure rows. The
         * folder zones and the active document's outline intentionally share
@@ -207,6 +191,32 @@ function FilesPanel() {
           </section>
         )}
       </LibrarySections>
+      {/* mt-auto only while no folder is active: with a folder open the
+        * Library section above already carries mt-auto (bottom anchor),
+        * and two auto margins would split the free space between them. */}
+      <SettingsRow anchored={!state.folderPath} />
+    </div>
+  );
+}
+
+/** Bottom chrome row (Cursor's account/settings strip position) — the
+ *  app's one Settings entry now that the activity rail is gone. A quiet
+ *  muted row in the sidebar's own idiom rather than a bare corner icon,
+ *  so it stays discoverable. */
+function SettingsRow({ anchored }: { anchored: boolean }) {
+  return (
+    <div className={(anchored ? 'mt-auto ' : '') + 'flex-none px-1.5 pt-1 pb-1.5'}>
+      <button
+        type="button"
+        className={
+          'flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 '
+          + 'text-left text-base text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-4 [&_svg]:flex-none'
+        }
+        onClick={() => openSettings()}
+      >
+        <SettingsIcon />
+        <span className="min-w-0 truncate">Settings</span>
+      </button>
     </div>
   );
 }
@@ -797,13 +807,10 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
         * space falls below the last section, never between sections. */}
       {/* While a folder is active the Library anchors to the sidebar
         * BOTTOM (mt-auto) so the working tree keeps the room; with no
-        * folder it flows as the main content. */}
-      {/* pb lines the collapsed header's centre up with the rail's
-        * settings gear (rail pb-2.5 + h-7 button → centre 24px from the
-        * bottom; the 30px header centres at 15px, so 9px makes up the
-        * difference — change one side, change both). */}
-      <section className={(activePath ? 'mt-auto ' : 'mt-3 ') + 'flex min-h-0 flex-col overflow-hidden pb-[9px] ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
-        <div className="group/lib flex min-h-[30px] flex-none items-center gap-1.5 py-0.5 pr-2 pl-3.5">
+        * folder it flows as the main content, taking the active-folder
+        * header's slot (28px row right after New Chat's pb-3). */}
+      <section className={(activePath ? 'mt-auto ' : '') + 'flex min-h-0 flex-col overflow-hidden pb-1 ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
+        <div className={'group/lib flex flex-none items-center gap-1.5 py-0.5 pr-2 pl-3.5 ' + (activePath ? 'min-h-[30px]' : 'min-h-7')}>
           <button
             type="button"
             className={sectionToggleClass + ' flex-none'}

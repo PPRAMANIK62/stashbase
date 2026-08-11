@@ -68,6 +68,26 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
     }
   });
 
+  // Keyword (ripgrep) search over the whole library, or one `folder`
+  // (optionally narrowed to a folder-relative `path_prefix`). Powers the
+  // in-app search popup's exact mode; deliberately outside the per-window
+  // folder gate so it answers before any folder is open. Hidden derived
+  // notes are remapped or dropped, same as every other search surface.
+  app.post('/api/library/keyword-search', async (req, res) => {
+    try {
+      const query = typeof req.body?.query === 'string' ? req.body.query : '';
+      res.json(await operations.keywordSearch({
+        query,
+        caseStrict: req.body?.case_strict === true,
+        wholeWord: req.body?.whole_word === true,
+        folder: typeof req.body?.folder === 'string' ? req.body.folder : undefined,
+        pathPrefix: typeof req.body?.path_prefix === 'string' ? req.body.path_prefix : undefined,
+      }));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
   // Index status for the whole library (or one `folder`). Powers the totals
   // MCP's `reindex` reports after a sweep.
   app.get('/api/library/index-status', async (req, res) => {

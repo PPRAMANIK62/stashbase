@@ -276,6 +276,18 @@ export interface KeywordSearchResult {
   truncated: boolean;
 }
 
+/** One keyword-hit file from the library-wide sweep: `folder` is the
+ *  absolute member folder root, `path` stays folder-relative. */
+export interface LibraryKeywordFile extends KeywordHitFile {
+  folder: string;
+}
+
+export interface LibraryKeywordSearchResult {
+  files: LibraryKeywordFile[];
+  totalMatches: number;
+  truncated: boolean;
+}
+
 export type EmbedderProvider = 'openai' | 'openrouter';
 
 export interface EmbedderState {

@@ -8,7 +8,33 @@ as the result identity.
 
 - Keyword retrieval supports exact and no-embedding scenarios.
 - Semantic retrieval supports meaning-based discovery when configured.
-- In-app search starts from the current folder and can narrow its scope.
+- In-app search is a popup (⌘⇧F / Ctrl+Shift+F, the titlebar Search
+  control, or the Command Palette) in the app's palette chrome, searching
+  the whole library by default. A scope pill can narrow the next search to the active
+  folder or one of its subfolders; with no folder open, search still answers
+  library-wide.
+- The popup remembers its query, mode, toggles, scope, and results across
+  close and reopen — and across the folder switch its own result-opens
+  cause. Reopening silently refreshes the remembered results against
+  current content.
+- Opening a result never switches the window's folder. A hit in the active
+  folder opens normally (highlight and find hand-off, tree reveals the
+  file); a hit in another member folder opens as a read-only out-of-folder
+  tab in the same window, with a banner naming its folder and offering to
+  open that folder in a new window. Only the no-folder workspace binds the
+  picked folder on open — there is no context to preserve there.
+- The search mode is one state-showing toggle: lit "≈ Similar" (the
+  default) searches by meaning, quiet "= Exact" matches literal text, with
+  exact-mode sub-options (Aa / Word) beside it. The label always names the
+  current state; the ≈/= mnemonics never stand alone. The scope pill closes
+  the same row as the chat composer's quiet scope pill — one "pick a
+  scope" trigger across the app — showing "All folders", the active
+  folder's name, or the picked subfolder's name. Its menu is a compact
+  indented subfolder list (hierarchy by indentation, full path in the
+  tooltip), not the composer menu's icon-and-description rows.
+- Results from outside the active folder carry a quiet folder label;
+  in-document find escalates to the popup ("All files") carrying its query
+  and exact-mode options, scoped to the current folder.
 - Results identify the source file, path, and useful evidence such as a snippet
   or page/timestamp hint. In-app snippets start at the file's content: a
   leading YAML frontmatter block never renders in the result list.
@@ -23,11 +49,14 @@ as the result identity.
   opening a result returns to the original source file.
 - Search distinguishes disabled, preparing, partially ready, paused, failed,
   and ready semantic states. A paused folder keeps a persistent Start indexing
-  action while keyword search remains usable.
+  action while keyword search remains usable. The popup's readiness banners
+  describe the active folder — other folders' readiness is not yet reported.
 - A sync failure is diagnostic and does not replace an awaiting or paused
   decision; its recovery action remains visible alongside failure guidance.
-- MCP offers orientation, search with the same file-type categories as the
-  app, read, reindex, and bounded file operations to authorized Agent clients.
+- MCP offers orientation, search with file-type categories, read, reindex,
+  and bounded file operations to authorized Agent clients. The in-app popup
+  does not expose a file-type filter — categories are an agent-facing
+  parameter.
 
 ## Experience Contract
 
@@ -51,6 +80,8 @@ as the result identity.
 ### Next
 
 - Improve clarity around search modes, readiness, partial results, and errors.
+- Report readiness library-wide — the popup's banners cover only the active
+  folder today.
 - Improve ranking, snippets, navigation to evidence, and useful filters.
 - Make context and MCP diagnostics easier to understand.
 - Improve search quality for diverse local document collections.

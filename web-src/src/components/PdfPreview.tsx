@@ -120,9 +120,10 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   // Stable URL for this PDF + cache-bust so reopening after a Retry
   // re-fetches the binary instead of the stale 404 / failed body.
   const sourceVersion = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
+  const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
   const fileUrl = useMemo(
-    () => versionedAssetUrl(name, sourceVersion),
-    [name, sourceVersion],
+    () => versionedAssetUrl(name, sourceVersion, sourceFolder),
+    [name, sourceVersion, sourceFolder],
   );
 
   function scrollToPage(pageNumber: number, behavior: ScrollBehavior = 'smooth') {
@@ -467,7 +468,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     const stillCurrent = () =>
       currentRef.current.folderPath === folderPathAtStart && currentRef.current.name === nameAtStart;
     try {
-      await api.reprocessFile(name, { folder: folderPathAtStart || undefined });
+      await api.reprocessFile(name, { folder: sourceFolder ?? (folderPathAtStart || undefined) });
       if (!stillCurrent()) return;
       setRetryStarted(true);
     } catch (err: unknown) {

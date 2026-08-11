@@ -333,17 +333,43 @@ test('pendingResume channel: request replaces, consume clears, folder-context lo
   assert.equal(state.pendingResume, null);
 });
 
-test('loading a different folder clears stale search state', () => {
+test('out-of-folder tabs stay read-only and outside folder-local flows', () => {
+  let state = reducer(freshState({ folder: 'A', folderPath: '/a' }), {
+    type: 'FILE_OPEN',
+    body: { name: 'notes/远方.md', format: 'md', content: '# hi' },
+    libraryFolder: '/b',
+  });
+  const tab = state.tabs[state.tabs.length - 1];
+  assert.equal(tab.file?.folder, '/b');
+  // Never Live Editing: the save path would write into the ACTIVE folder.
+  assert.equal(tab.editMode, false);
+  // Never the tree's focused row or the folder-local Quick Open recents.
+  assert.equal(state.selectedPath, '');
+  assert.deepEqual(state.recentFilePaths, []);
+
+  // The active-folder listing prune must not close it…
+  state = reducer(state, { type: 'PRUNE_MISSING_FILE_TABS', names: [] });
+  assert.ok(state.tabs.some((t) => t.id === tab.id));
+
+  // …an active-folder rename must not remap its (other-folder) path…
+  state = reducer(state, { type: 'REMAP_PATHS', from: 'notes', to: 'docs', kind: 'folder' });
+  assert.equal(state.tabs.find((t) => t.id === tab.id)?.file?.name, 'notes/远方.md');
+
+  // …and entering edit mode is refused outright.
+  assert.equal(reducer(state, { type: 'EDIT_MODE', on: true }), state);
+});
+
+test('loading a different folder clears per-folder session state', () => {
+  // Search state deliberately does NOT live in the reducer (the library
+  // search popup keeps it in module memory so it survives this switch —
+  // see librarySearch.ts); what resets here is the per-folder session
+  // state that would otherwise leak across folders.
   const state = freshState({
     folder: 'Old',
     folderPath: '/old',
-    activeSidebarView: 'search',
-    filterQuery: 'needle',
-    searching: true,
-    searchHits: [{ fileName: 'old.md', chunkIndex: 0, content: 'old', heading: '', score: 1 }],
-    searchError: 'stale',
-    searchScope: 'notes/archive',
-    searchTypes: ['pdf'],
+    recentFilePaths: ['old.md'],
+    editorHistory: ['old.md'],
+    unsupportedModalOpen: true,
   });
   const next = reducer(state, {
     type: 'FILES_LOADED',
@@ -352,38 +378,9 @@ test('loading a different folder clears stale search state', () => {
     folder: 'New',
     folderPath: '/new',
   });
-  assert.equal(next.activeSidebarView, 'files');
-  assert.equal(next.filterQuery, '');
-  assert.equal(next.searching, false);
-  assert.equal(next.searchHits, null);
-  assert.equal(next.keywordResult, null);
-  assert.equal(next.searchError, null);
-  assert.equal(next.searchScope, null);
-  assert.deepEqual(next.searchTypes, []);
-});
-
-test('scope and type filter changes clear both modes\' results', () => {
-  const hits = [{ fileName: 'a.md', chunkIndex: 0, content: 'x', heading: '', score: 1 }];
-  const keyword = { query: 'x', folder: 'f', files: [], totalMatches: 0, truncated: false };
-
-  const scoped = reducer(
-    freshState({ searchHits: hits, keywordResult: keyword }),
-    { type: 'SEARCH_SCOPE', scope: 'notes' },
-  );
-  assert.equal(scoped.searchScope, 'notes');
-  assert.equal(scoped.searchHits, null);
-  assert.equal(scoped.keywordResult, null);
-
-  const typed = reducer(
-    freshState({ searchHits: hits, keywordResult: keyword }),
-    { type: 'SEARCH_TYPES', types: ['pdf', 'docx'] },
-  );
-  assert.deepEqual(typed.searchTypes, ['pdf', 'docx']);
-  assert.equal(typed.searchHits, null);
-  assert.equal(typed.keywordResult, null);
-
-  const cleared = reducer(scoped, { type: 'SEARCH_SCOPE', scope: null });
-  assert.equal(cleared.searchScope, null);
+  assert.deepEqual(next.recentFilePaths, []);
+  assert.deepEqual(next.editorHistory, []);
+  assert.equal(next.unsupportedModalOpen, false);
 });
 
 test('PDF page numbers are isolated per tab and reset when replacing a file', () => {
