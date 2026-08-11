@@ -6,7 +6,8 @@ as the result identity.
 
 ## Current
 
-- Keyword retrieval supports exact and no-embedding scenarios.
+- Keyword retrieval supports exact and no-embedding scenarios, including raw
+  JSON keys and values.
 - Semantic retrieval supports meaning-based discovery when configured.
 - In-app search is a popup (⌘⇧F / Ctrl+Shift+F, the titlebar Search
   control, or the Command Palette) in the app's palette chrome, searching
@@ -62,10 +63,12 @@ as the result identity.
   describe the active folder — other folders' readiness is not yet reported.
 - A sync failure is diagnostic and does not replace an awaiting or paused
   decision; its recovery action remains visible alongside failure guidance.
-- MCP offers orientation, search with file-type categories, read, reindex,
-  and bounded file operations to authorized Agent clients. The in-app popup
-  does not expose a file-type filter — categories are an agent-facing
-  parameter.
+ - MCP offers orientation, search with file-type categories, read, reindex,
+   and bounded file operations to authorized Agent clients. The in-app popup
+   does not expose a file-type filter — categories are an agent-facing
+   parameter.
+ - The `data` type category selects JSON. JSON semantic indexing uses raw source
+   text and keeps the visible source path as result identity.
 
 ## Experience Contract
 
