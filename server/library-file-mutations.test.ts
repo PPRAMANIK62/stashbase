@@ -129,6 +129,34 @@ test('MCP library mutations work outside an active folder and enforce versions',
   assert.equal(deleted.alreadyGone, false);
   assert.equal(fs.existsSync(target), false);
 
+  const jsonSource = path.join(root, 'Data', 'config.JSON');
+  const jsonTarget = path.join(root, 'Archive', 'config.JSON');
+  const jsonCreated = await callTool(base, token, 'write_file', {
+    path: jsonSource,
+    content: '\uFEFF{\r\n  "z": 1,\r\n  "broken":\r\n',
+  });
+  const jsonRead = await callTool(base, token, 'read_file', { path: jsonSource });
+  assert.equal(jsonRead.format, 'json');
+  assert.equal(jsonRead.content, '\uFEFF{\r\n  "z": 1,\r\n  "broken":\r\n');
+  const jsonEdited = await callTool(base, token, 'edit_file', {
+    path: jsonSource,
+    old_text: '"z": 1',
+    new_text: '"z": 2',
+    baseVersion: jsonCreated.version,
+  });
+  assert.equal(jsonEdited.replacements, 1);
+  assert.equal(fs.readFileSync(jsonSource, 'utf8'), '\uFEFF{\r\n  "z": 2,\r\n  "broken":\r\n');
+  await assert.rejects(callTool(base, token, 'write_file', {
+    path: jsonSource,
+    content: '{}',
+    baseVersion: jsonCreated.version,
+  }), /409|FILE_CHANGED/);
+  await callTool(base, token, 'move_file', { path: jsonSource, new_path: jsonTarget });
+  assert.equal(fs.existsSync(jsonSource), false);
+  assert.equal(fs.readFileSync(jsonTarget, 'utf8').includes('"z": 2'), true);
+  await callTool(base, token, 'delete_file', { path: jsonTarget });
+  assert.equal(fs.existsSync(jsonTarget), false);
+
   const audioSource = path.join(root, 'Recordings', 'meeting.wav');
   const audioTarget = path.join(root, 'Archive', 'meeting.wav');
   fs.mkdirSync(path.dirname(audioSource), { recursive: true });

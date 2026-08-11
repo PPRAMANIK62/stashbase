@@ -16,6 +16,204 @@ with contextlib.redirect_stdout(io.StringIO()):
 
 
 class StashbaseDaemonTests(unittest.TestCase):
+    def test_json_scanner_rules_keep_note_bundles_note_only(self) -> None:
+        previous = {key: value.copy() if hasattr(value, "copy") else value for key, value in stashbase_daemon._RULES.items()}
+        try:
+            stashbase_daemon.op_set_rules(None, {
+                "include_extensions": [".html", ".htm", ".json"],
+                "note_extensions": [".md", ".markdown", ".html", ".htm"],
+            })
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "data.JSON").write_text("{ invalid", encoding="utf-8")
+                bundle = root / "data_files"
+                bundle.mkdir()
+                (bundle / "child.md").write_text("# Visible", encoding="utf-8")
+                scanned = stashbase_daemon._walk_disk(root)
+                self.assertIn("data.JSON", scanned)
+                self.assertIn("data_files/child.md", scanned)
+        finally:
+            stashbase_daemon._RULES.clear()
+            stashbase_daemon._RULES.update(previous)
+
+    def test_json_scan_diff_tracks_add_modify_delete_rename_and_admission(self) -> None:
+        previous = {key: value.copy() if hasattr(value, "copy") else value for key, value in stashbase_daemon._RULES.items()}
+        try:
+            stashbase_daemon.op_set_rules(None, {
+                "include_extensions": [".html", ".htm", ".json"],
+                "note_extensions": [".md", ".markdown", ".html", ".htm"],
+                "excluded_dirs": ["node_modules", ".git"],
+                "max_indexable_bytes": 32,
+            })
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                added = root / "added.JSON"
+                modified = root / "modified.json"
+                renamed = root / "renamed.JSON"
+                whitespace = root / "space.json"
+                added.write_text('{"added":true}', encoding="utf-8")
+                modified.write_text('{ malformed', encoding="utf-8")
+                renamed.write_text('{"same":true}', encoding="utf-8")
+                whitespace.write_text("  \n\t", encoding="utf-8")
+                (root / "empty.json").write_text("", encoding="utf-8")
+                (root / "large.json").write_text("x" * 33, encoding="utf-8")
+                (root / "node_modules").mkdir()
+                (root / "node_modules" / "hidden.json").write_text('{"hidden":true}', encoding="utf-8")
+
+                old_rename = (root / "old.json").as_posix()
+                deleted = (root / "deleted.json").as_posix()
+                indexed = {
+                    modified.as_posix(): "old-modified-hash",
+                    old_rename: stashbase_daemon.blake3(renamed.read_bytes()).hexdigest(),
+                    deleted: stashbase_daemon.blake3(b"deleted").hexdigest(),
+                }
+
+                class FakeStore:
+                    def get_indexed_files(self, _prefix):
+                        return indexed
+
+                class FakeService:
+                    def stores(self):
+                        return [("pk", None, FakeStore())]
+
+                result = stashbase_daemon.op_scan_diff(FakeService(), {"folder": root.as_posix()})
+                self.assertEqual(sorted(result["added"]), sorted([added.as_posix(), whitespace.as_posix()]))
+                self.assertEqual(result["modified"], [modified.as_posix()])
+                self.assertEqual(result["deleted"], [deleted])
+                self.assertEqual(result["renamed"], [{
+                    "old": old_rename,
+                    "new": renamed.as_posix(),
+                    "file_hash": indexed[old_rename],
+                }])
+                flattened = json.dumps(result)
+                self.assertNotIn("empty.json", flattened)
+                self.assertNotIn("large.json", flattened)
+                self.assertNotIn("hidden.json", flattened)
+        finally:
+            stashbase_daemon._RULES.clear()
+            stashbase_daemon._RULES.update(previous)
+
+    def test_json_real_store_ingestion_search_and_lifecycle(self) -> None:
+        """Raw JSON traverses the real chunker + Milvus store lifecycle."""
+        try:
+            import milvus_lite  # noqa: F401
+        except ImportError:
+            self.skipTest("milvus_lite is not installed")
+
+        class FakeEmbedder:
+            dimension = 3
+            model_name = "json-lifecycle-embedder"
+
+            def embed(self, texts):  # noqa: ANN001
+                return [[1.0, float("lifecycle_key" in text), 0.0] for text in texts]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve() / "library"
+            root.mkdir()
+            store_root = Path(tmp) / "store"
+            valid = root / "valid.json"
+            malformed = root / "broken.JSON"
+            valid_text = '{\n  "lifecycle_key": "first value"\n}\n'
+            malformed_text = '{"lifecycle_key": "unfinished"'
+            valid.write_text(valid_text, encoding="utf-8")
+            malformed.write_text(malformed_text, encoding="utf-8")
+
+            svc = stashbase_daemon.StashbaseStore(str(store_root))
+            try:
+                embedder = FakeEmbedder()
+                svc.bind_root(root.as_posix(), "openai", root_identity=root.as_posix())
+                # Materialize the real collection with the deterministic test embedder.
+                svc._ensure_store(embedder)
+                valid_hash = stashbase_daemon.blake3(valid_text.encode()).hexdigest()
+                malformed_hash = stashbase_daemon.blake3(malformed_text.encode()).hexdigest()
+                valid_result = stashbase_daemon.op_upsert(svc, {
+                    "path": valid.as_posix(), "content": valid_text,
+                    "ext": ".json", "file_hash": valid_hash,
+                })
+                malformed_result = stashbase_daemon.op_upsert(svc, {
+                    "path": malformed.as_posix(), "content": malformed_text,
+                    "ext": ".JSON", "file_hash": malformed_hash,
+                })
+                self.assertGreater(valid_result["chunks"], 0)
+                self.assertGreater(malformed_result["chunks"], 0)
+
+                store = svc.stores()[0][2]
+                fields = ["source", "chunk_text", "content_type", "file_hash"]
+                rows = store._query_all(
+                    f'source in ["{valid.as_posix()}", "{malformed.as_posix()}"]',
+                    output_fields=fields,
+                )
+                by_source = {}
+                for row in rows:
+                    by_source.setdefault(row["source"], []).append(row)
+                self.assertEqual(
+                    "".join(row["chunk_text"] for row in by_source[valid.as_posix()]),
+                    valid_text.rstrip("\n"),
+                )
+                self.assertEqual(
+                    "".join(row["chunk_text"] for row in by_source[malformed.as_posix()]),
+                    malformed_text,
+                )
+                self.assertTrue(all(row["content_type"] == "text" for row in rows))
+                self.assertEqual(by_source[valid.as_posix()][0]["file_hash"], valid_hash)
+
+                search = stashbase_daemon.op_search(svc, {
+                    "query": "lifecycle_key", "folder": root.as_posix(),
+                    "extensions": [".json"], "top_k": 10,
+                })
+                paths = {hit["path"] for hit in search["hits"]}
+                self.assertEqual(paths, {valid.as_posix(), malformed.as_posix()})
+                self.assertTrue(any("first value" in hit["chunk_text"] for hit in search["hits"]))
+                self.assertTrue(any("unfinished" in hit["chunk_text"] for hit in search["hits"]))
+                self.assertTrue(stashbase_daemon.op_status(
+                    svc, {"folder": root.as_posix()},
+                )["up_to_date"])
+
+                modified_text = '{"lifecycle_key":"modified value"}\n'
+                valid.write_text(modified_text, encoding="utf-8")
+                modified_hash = stashbase_daemon.blake3(modified_text.encode()).hexdigest()
+                stashbase_daemon.op_upsert(svc, {
+                    "path": valid.as_posix(), "content": modified_text,
+                    "ext": ".json", "file_hash": modified_hash,
+                })
+                modified_hits = stashbase_daemon.op_search(svc, {
+                    "query": "modified value", "folder": root.as_posix(),
+                    "extensions": [".json"], "top_k": 10,
+                })["hits"]
+                self.assertTrue(any(
+                    hit["path"] == valid.as_posix() and "modified value" in hit["chunk_text"]
+                    for hit in modified_hits
+                ))
+
+                renamed = root / "renamed.json"
+                valid.rename(renamed)
+                rename_result = stashbase_daemon.op_rename(svc, {
+                    "old": valid.as_posix(), "new": renamed.as_posix(),
+                    "content": modified_text, "ext": ".json", "file_hash": modified_hash,
+                })
+                self.assertTrue(rename_result["fast_path"])
+                indexed = stashbase_daemon.op_list(svc, {"folder": root.as_posix()})["files"]
+                self.assertNotIn(valid.as_posix(), indexed)
+                self.assertEqual(indexed[renamed.as_posix()], modified_hash)
+                self.assertTrue(stashbase_daemon.op_status(
+                    svc, {"folder": root.as_posix()},
+                )["up_to_date"])
+
+                malformed.unlink()
+                stashbase_daemon.op_delete(svc, {"path": malformed.as_posix()})
+                final_status = stashbase_daemon.op_status(svc, {"folder": root.as_posix()})
+                self.assertTrue(final_status["up_to_date"])
+                self.assertNotIn(malformed.as_posix(), stashbase_daemon.op_list(
+                    svc, {"folder": root.as_posix()},
+                )["files"])
+                final_hits = stashbase_daemon.op_search(svc, {
+                    "query": "unfinished", "folder": root.as_posix(),
+                    "extensions": [".json"], "top_k": 10,
+                })["hits"]
+                self.assertFalse(any(hit["path"] == malformed.as_posix() for hit in final_hits))
+            finally:
+                svc.close_all()
+
     def test_openrouter_embedder_uses_openai_compatible_endpoint(self) -> None:
         class FakeOpenAIClient:
             def __init__(self, **kwargs):
@@ -359,6 +557,7 @@ class StashbaseDaemonTests(unittest.TestCase):
                 return [
                     hit("/lib/a.md"), hit("/lib/b.pdf"), hit("/lib/c.md"),
                     hit("/lib/d.PDF"), hit("/lib/e.docx"), hit("/lib/f.pdf"),
+                    hit("/lib/data.JSON"),
                 ]
 
         class FakeEmbedder:
@@ -380,8 +579,13 @@ class StashbaseDaemonTests(unittest.TestCase):
             unfiltered = stashbase_daemon.op_search(svc, {"query": "q", "top_k": 2})
             self.assertEqual(len(unfiltered["hits"]), 2)
 
+            data = stashbase_daemon.op_search(svc, {
+                "query": "q", "top_k": 2, "extensions": [".json"],
+            })
+            self.assertEqual([h["path"] for h in data["hits"]], ["/lib/data.JSON"])
+
             # Filtered call over-fetches; unfiltered keeps the caller's k.
-            self.assertEqual(requested, [50, 2])
+            self.assertEqual(requested, [50, 2, 50])
 
     def test_search_filters_legacy_derived_rows_by_visible_source_type(self) -> None:
         hit = lambda source: types.SimpleNamespace(

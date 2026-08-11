@@ -42,9 +42,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
     const oldStructuredFormat = detectFormat(oldName);
     const viewerOnly = !oldStructuredFormat && isConvertibleSource(oldName);
     let newName = requested;
-    const requestedHasCompatibleExt = oldStructuredFormat
-      ? detectFormat(newName) !== null
-      : detectViewerFormat(newName) === oldFormat;
+    const requestedHasCompatibleExt = hasCompatibleRenameExtension(oldStructuredFormat, oldFormat, newName);
     if (!requestedHasCompatibleExt) {
       const oldExt = oldName.match(/\.[^./]+$/)?.[0] ?? '.md';
       newName += oldExt;
@@ -63,7 +61,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
     // collision must not discard a transcription the user did not move.
     await prepareFileOperation(oldName);
     const oldDerivedArtifacts = derivedArtifactsForSource(oldName);
-    const cascadeOn = req.body?.cascade !== false;
+    const cascadeOn = oldStructuredFormat !== 'json' && req.body?.cascade !== false;
     const asyncIndex = req.body?.async_index === true;
     const renames: RenameEntry[] = [{ kind: 'file', old: oldName, new: newName }];
     const bundleEntry = bundleRenameEntry(oldName, newName, 'pre');
@@ -237,6 +235,17 @@ export function mountFileMutationRoutes(app: express.Express): void {
       sendError(res, err);
     }
   });
+}
+
+export function hasCompatibleRenameExtension(
+  oldStructuredFormat: ReturnType<typeof detectFormat>,
+  oldFormat: NonNullable<ReturnType<typeof detectViewerFormat>>,
+  requestedName: string,
+): boolean {
+  if (!oldStructuredFormat) return detectViewerFormat(requestedName) === oldFormat;
+  return oldStructuredFormat === 'json'
+    ? detectFormat(requestedName) === 'json'
+    : detectFormat(requestedName) !== null;
 }
 
 function renameTargetPath(oldName: string, requested: string): string {

@@ -528,7 +528,7 @@ MAX_INDEXABLE_BYTES = 8 * 1024 * 1024
 _RULES = {
     "excluded_dirs": set(INDEX_EXCLUDED_DIRS),
     "max_indexable_bytes": MAX_INDEXABLE_BYTES,
-    "include_extensions": [".html", ".htm"],
+    "include_extensions": [".html", ".htm", ".json"],
     "note_extensions": [".md", ".markdown", ".html", ".htm"],
     "legacy_derived_source_extensions": [
         ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".docx",
@@ -971,7 +971,10 @@ def op_delete(svc: StashbaseStore, args: dict) -> dict:
     n = 0
     for _pk, _emb, store in svc.stores():
         try:
-            n += int(store.delete_by_source(path))
+            removed = int(store.delete_by_source(path))
+            if removed:
+                _flush_store(store)
+            n += removed
         except Exception:
             pass
     return {"removed": n}
@@ -1098,7 +1101,9 @@ def _try_rename_without_reembed(
         _flush_store(store)
     for _pk, _emb, store in svc.stores():
         try:
-            store.delete_by_source(old)
+            removed = int(store.delete_by_source(old))
+            if removed:
+                _flush_store(store)
         except Exception:
             pass
     return total
@@ -1209,7 +1214,10 @@ def op_delete_prefix(svc: StashbaseStore, args: dict) -> dict:
     removed = 0
     for _pk, _emb, store in svc.stores():
         try:
-            removed += int(store.delete_by_prefix(prefix))
+            store_removed = int(store.delete_by_prefix(prefix))
+            if store_removed:
+                _flush_store(store)
+            removed += store_removed
         except Exception:
             pass
     return {"removed": removed}
@@ -1380,7 +1388,7 @@ def _make_scanner():
     """Configure an MFS Scanner for our folder layout.
 
     Two tweaks over MFS defaults:
-      - `.html` / `.htm` aren't in `INDEXED_EXTENSIONS`, inject via
+      - `.html` / `.htm` / `.json` aren't guaranteed in `INDEXED_EXTENSIONS`, inject via
         `IndexingConfig.include_extensions`
       - generated/dependency/source-control dirs are skipped so a root
         pointed at a code checkout does not flood the indexer
@@ -1405,6 +1413,9 @@ def _walk_disk(root: Path, rel_prefix: str = "") -> dict:
     Filters out anything inside a ``<stem>_files/`` bundle dir and any
     0-byte note — same rules as the sidebar's tree walk.
     """
+    # Scanner resolves every returned path. Resolve the root once as well so
+    # macOS `/var` → `/private/var` aliases retain a valid relative identity.
+    root = root.resolve()
     scanner = _make_scanner()
     raw = []
     for f in scanner.scan([root]):

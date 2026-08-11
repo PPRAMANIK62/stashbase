@@ -16,6 +16,7 @@ import { runWithFolderRoot } from './folder.ts';
 import {
   createFolder,
   deleteFile,
+  fileVersion,
   isSameExistingPath,
   listFiles,
   listFolders,
@@ -88,6 +89,28 @@ test('editable file writes apply portable path, hidden-derived, and format polic
   assert.throws(() => validateEditableFileWrite('report.pdf'), /unsupported editable format/);
 });
 
+test('JSON save boundary preserves BOM/CRLF and rejects a stale renderer version', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-json-save-'));
+  try {
+    const source = '\uFEFF{\r\n  "value": 1\r\n}\r\n';
+    fs.writeFileSync(path.join(root, 'data.json'), source, 'utf8');
+    await runWithFolderRoot(root, async () => {
+      const version = fileVersion('data.json')!;
+      await saveFileContent('data.json', '\uFEFF{\n  "value": 2\n}\n', { baseVersion: version });
+      assert.equal(readText('data.json'), '\uFEFF{\r\n  "value": 2\r\n}\r\n');
+
+      saveText('data.json', '\uFEFF{\r\n  "value": "external"\r\n}\r\n');
+      await assert.rejects(
+        saveFileContent('data.json', '\uFEFF{\n  "value": 3\n}\n', { baseVersion: version }),
+        (err: Error & { code?: string }) => err.code === 'FILE_CHANGED',
+      );
+      assert.equal(readText('data.json'), '\uFEFF{\r\n  "value": "external"\r\n}\r\n');
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('server convertible membership follows the shared extension catalog', () => {
   for (const extension of PDF_EXTENSIONS) {
     assert.equal(isConvertibleSource(`document.${extension}`), true);
@@ -146,7 +169,7 @@ test('folder listing hides note bundles and legacy derived artifacts', async () 
   }
 });
 
-test('audio sources do not hide same-stem user Markdown as legacy derived output', async () => {
+test('audio same-stem dot Markdown stays user-owned while hidden from listing', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-audio-hidden-note-'));
   try {
     fs.writeFileSync(path.join(root, 'meeting.mp3'), 'audio bytes');
@@ -154,11 +177,7 @@ test('audio sources do not hide same-stem user Markdown as legacy derived output
     fs.writeFileSync(path.join(root, '.meeting.mp3.md'), '# Explicitly named note');
 
     await runWithFolderRoot(root, () => {
-      assert.deepEqual(listFiles().map((entry) => entry.name), [
-        '.meeting.md',
-        '.meeting.mp3.md',
-        'meeting.mp3',
-      ]);
+      assert.deepEqual(listFiles().map((entry) => entry.name), ['meeting.mp3']);
       assert.doesNotThrow(() => validateEditableFileWrite('.meeting.mp3.md'));
     });
   } finally {

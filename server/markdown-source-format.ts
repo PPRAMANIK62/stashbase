@@ -3,8 +3,8 @@
  * represents line breaks as LF internally, so an edited CRLF document needs
  * its original convention restored at the filesystem boundary.
  */
-export function preserveMarkdownSourceFormat(previous: string, next: string): string {
-  const hasBom = previous.startsWith('\uFEFF');
+export function preserveTextSourceFormat(previous: string, next: string): string {
+  const hasBom = previous.length === 0 ? next.startsWith('\uFEFF') : previous.startsWith('\uFEFF');
   const content = next.startsWith('\uFEFF') ? next.slice(1) : next;
   const lineEnding = dominantLineEnding(previous);
   const serialized = lineEnding
@@ -12,6 +12,8 @@ export function preserveMarkdownSourceFormat(previous: string, next: string): st
     : content;
   return (hasBom ? '\uFEFF' : '') + serialized;
 }
+
+export const preserveMarkdownSourceFormat = preserveTextSourceFormat;
 
 function dominantLineEnding(content: string): '\n' | '\r\n' | null {
   const crlf = (content.match(/\r\n/g) ?? []).length;

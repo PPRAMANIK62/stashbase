@@ -105,9 +105,10 @@ export async function moveLibraryFile(
 
     const oldDerivedArtifacts = derivedArtifactsForSource(oldTarget.folderRel);
     const renames: RenameEntry[] = [{ kind: 'file', old: oldTarget.folderRel, new: newTarget.folderRel }];
-    const linkPlan = opts.cascade === false ? [] : planRenameLinks(renames);
+    const cascadeOn = oldStructuredFormat !== 'json' && opts.cascade !== false;
+    const linkPlan = cascadeOn ? planRenameLinks(renames) : [];
     renameOnDisk(oldTarget.folderRel, newTarget.folderRel);
-    const applied = opts.cascade === false ? null : applyRenamePlan(linkPlan);
+    const applied = cascadeOn ? applyRenamePlan(linkPlan) : null;
     if (applied?.failed.length) {
       applied.rollback();
       renameOnDisk(newTarget.folderRel, oldTarget.folderRel);

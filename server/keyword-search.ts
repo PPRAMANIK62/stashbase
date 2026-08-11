@@ -12,7 +12,9 @@ import {
   isConvertibleSource,
   isDocxFile,
   matchesSearchTypes,
+  searchExtensionsForTypes,
 } from './format.ts';
+import { DIRECT_TEXT_EXTENSIONS } from '../shared/file-formats.ts';
 import { isCloudPlaceholderName, isIndexExcludedDirName } from './indexable.ts';
 import {
   type KeywordHitFile,
@@ -48,12 +50,12 @@ export async function runKeywordSearch(
   opts: KeywordSearchOpts,
 ): Promise<KeywordSearchResult> {
   const types = opts.types ?? [];
-  const wantsNotes = types.length === 0 || types.includes('notes');
+  const wantsDirectText = types.length === 0 || types.includes('notes') || types.includes('data');
   const wantsConvertible = types.length === 0
-    || types.some((type) => type !== 'notes');
+    || types.some((type) => type !== 'notes' && type !== 'data');
   const empty: KeywordSearchResult = { files: [], totalMatches: 0, truncated: false };
   return mergeKeywordResults(
-    wantsNotes ? await runRipgrep(query, folderRoot, opts) : empty,
+    wantsDirectText ? await runRipgrep(query, folderRoot, opts) : empty,
     wantsConvertible ? searchDerivedMarkdown(query, folderRoot, opts) : empty,
   );
 }
@@ -69,11 +71,14 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
       '--fixed-strings',
       '--max-count', String(RG_PER_FILE_CAP),
       '--max-filesize', '5M',
-      '--glob', '*.md',
-      '--glob', '*.markdown',
-      '--glob', '*.html',
-      '--glob', '*.htm',
     ];
+    const selected = searchExtensionsForTypes(opts.types ?? []);
+    const directExtensions = selected == null
+      ? DIRECT_TEXT_EXTENSIONS.map((extension) => `.${extension}`)
+      : selected.filter((extension) =>
+          (DIRECT_TEXT_EXTENSIONS as readonly string[]).includes(extension.slice(1)),
+        );
+    for (const extension of directExtensions) args.push('--iglob', `*${extension}`);
     args.push('-e', query, opts.pathPrefix ? `./${opts.pathPrefix}` : '.');
     execFile(RESOLVED_RG_PATH, args, {
       cwd,

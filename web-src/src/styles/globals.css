@@ -67,6 +67,14 @@
       --status-success: #047857;
       --status-warning: #a16207;
       --status-danger: var(--danger);
+      /* Structured-data syntax roles. Components consume these semantic
+       * variables; the light and dark palettes are calibrated separately. */
+      --syntax-json-property: #0369a1;
+      --syntax-json-string: #047857;
+      --syntax-json-boolean: #7c3aed;
+      --syntax-json-number: #b45309;
+      --syntax-json-punctuation: #68737a;
+      --syntax-json-invalid: #b91c1c;
       --hover: var(--surface-hover);
       --active: var(--surface-selected);
       /* Quiet thumb for chrome scrollers (.scrollbar-quiet, mainpane
@@ -118,6 +126,12 @@
       --status-success: #34d399;
       --status-warning: #fbbf24;
       --status-danger: var(--danger);
+      --syntax-json-property: #7dd3fc;
+      --syntax-json-string: #6ee7b7;
+      --syntax-json-boolean: #c4b5fd;
+      --syntax-json-number: #fbbf24;
+      --syntax-json-punctuation: #aab5ba;
+      --syntax-json-invalid: #fca5a5;
       --hover: var(--surface-hover);
       --active: var(--surface-selected);
     }
@@ -157,6 +171,12 @@
         --status-success: #34d399;
         --status-warning: #fbbf24;
         --status-danger: var(--danger);
+        --syntax-json-property: #7dd3fc;
+        --syntax-json-string: #6ee7b7;
+        --syntax-json-boolean: #c4b5fd;
+        --syntax-json-number: #fbbf24;
+        --syntax-json-punctuation: #aab5ba;
+        --syntax-json-invalid: #fca5a5;
         --hover: var(--surface-hover);
         --active: var(--surface-selected);
       }

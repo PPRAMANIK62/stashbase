@@ -369,7 +369,7 @@ function FileRow({
   siblings,
 }: {
   path: string;
-  format: 'md' | 'html' | 'pdf' | 'image' | 'docx' | 'audio';
+  format: 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio';
   paddingLeft: number;
   parent: string;
   siblings: string[];
@@ -651,7 +651,7 @@ function NewFolderInput({ parentPath, depth }: { parentPath: string; depth: numb
 // 6px "PDF"/"MD" label did not. Each SVG keeps its native viewBox and
 // hard-coded brand fill, so the `.format-*` CSS colour rules no longer
 // apply to them (they targeted `currentColor`).
-export function FileTypeIcon({ format }: { format: 'md' | 'html' | 'pdf' | 'image' | 'docx' | 'audio' }) {
+export function FileTypeIcon({ format }: { format: 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio' }) {
   if (format === 'image') {
     return (
       <svg viewBox="0 0 16 16">
@@ -670,6 +670,13 @@ export function FileTypeIcon({ format }: { format: 'md' | 'html' | 'pdf' | 'imag
     return (
       <svg viewBox="0 0 32 32">
         <path fill="#e65100" d="m4 4 2 22 10 2 10-2 2-22Zm19.72 7H11.28l.29 3h11.86l-.802 9.335L15.99 25l-6.635-1.646L8.93 19h3.02l.19 2 3.86.77 3.84-.77.29-4H8.84L8 8h16Z" />
+      </svg>
+    );
+  }
+  if (format === 'json') {
+    return (
+      <svg viewBox="0 0 24 24" role="img" aria-label="JSON file">
+        <path fill="#f5a623" d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2m8 1.5V8h4.5M9.2 10c-1 0-1.7.6-1.7 1.7v1.6c0 .8-.3 1.2-1 1.2v1c.7 0 1 .4 1 1.2v1.6c0 1.1.7 1.7 1.7 1.7h.8v-1.2h-.3c-.6 0-.8-.3-.8-.9v-1.5c0-.8-.3-1.3-.9-1.4.6-.2.9-.7.9-1.5V12c0-.6.2-.9.8-.9h.3V10zm5.6 0H14v1.2h.3c.6 0 .8.3.8.9v1.5c0 .8.3 1.3.9 1.5-.6.1-.9.6-.9 1.4V18c0 .6-.2.9-.8.9H14V20h.8c1 0 1.7-.6 1.7-1.7v-1.6c0-.8.3-1.2 1-1.2v-1c-.7 0-1-.4-1-1.2v-1.6c0-1.1-.7-1.7-1.7-1.7" />
       </svg>
     );
   }

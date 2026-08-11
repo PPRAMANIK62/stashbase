@@ -11,7 +11,8 @@
  * `server/html.ts:analyzeHtml`) so its markdown chunker keeps respecting
  * heading boundaries even though it has no HTML parser. The on-disk
  * file extension stays `.html` — only what we send to the indexer is
- * rewritten.
+ * rewritten. JSON is passed through byte-for-text unchanged with `.json` so
+ * the generic text chunker handles it without parsing or serialization.
  */
 import { blake3 } from '@noble/hashes/blake3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -86,7 +87,7 @@ export function retainedIndexedSource(
  *  file would forever look "modified" against the index. BLAKE3(content
  *  as UTF-8) here equals the daemon's BLAKE3 of the raw file bytes for
  *  any UTF-8 file — the same invariant SHA256 relied on. */
-function prepareForIndex(filePath: string, content: string): {
+export function prepareForIndex(filePath: string, content: string): {
   text: string;
   ext: string;
   fileHash: string;
@@ -106,8 +107,7 @@ function prepareForIndex(filePath: string, content: string): {
     const { plaintext } = analyzeHtml(content);
     return { text: plaintext, ext: '.md', fileHash };
   }
-  // Markdown (incl. the derived `.md` of an unstructured source): the
-  // file already IS the structured single source of truth — index as-is.
+  // Markdown and JSON already are the directly readable source of truth.
   return {
     text: content,
     ext: path.extname(filePath).toLowerCase() || '.md',
