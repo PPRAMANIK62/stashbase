@@ -69,6 +69,7 @@ const PDFJS_ASSET_BASE = '/pdfjs-assets';
  */
 export function PdfPreview({ name, showConversionBanner = true }: { name: string; showConversionBanner?: boolean }) {
   const { state, actions, activeTab } = useApp();
+  const { consumePendingHighlight, registerFindController, updateTabPdfPage } = actions;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef({ folderPath: state.folderPath, name });
@@ -147,7 +148,9 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     return Math.max(PDF_MIN_SCALE, Math.min(PDF_MAX_SCALE, available / pageWidth));
   }
 
-  // Load PDF on name change.
+  // The binary loader is keyed only by the versioned source URL. App-level
+  // command objects can change after unrelated polling or shell updates; they
+  // must never destroy and recreate the live pdf.js document.
   useEffect(() => {
     let cancelled = false;
     let loadingTask: ReturnType<typeof getDocument> | null = null;
@@ -196,7 +199,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
       cancelled = true;
       if (loadingTask) loadingTask.destroy().catch(() => { /* ignore */ });
     };
-  }, [fileUrl, actions]);
+  }, [fileUrl]);
 
   const initialScrollDone = useRef(false);
   useEffect(() => {
@@ -225,9 +228,9 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
 
   useEffect(() => {
     if (activeTab && activeTab.file?.format === 'pdf' && activeTab.pdfPage !== currentPage) {
-      actions.updateTabPdfPage(activeTab.id, currentPage);
+      updateTabPdfPage(activeTab.id, currentPage);
     }
-  }, [currentPage, activeTab?.id, activeTab?.file?.format, activeTab?.pdfPage, actions]);
+  }, [currentPage, activeTab?.id, activeTab?.file?.format, activeTab?.pdfPage, updateTabPdfPage]);
 
   useEffect(() => {
     const root = containerRef.current;
@@ -304,7 +307,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     if (!doc || !pendingHighlight?.chunkText) return;
     let cancelled = false;
     const cleaned = cleanPdfSearchText(pendingHighlight.chunkText);
-    if (!cleaned) { actions.consumePendingHighlight(); return; }
+    if (!cleaned) { consumePendingHighlight(); return; }
 
     void (async () => {
       let best: { page: number; idx: number; length: number; score: number; fp: FlatPage } | null = null;
@@ -335,7 +338,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
               top: Math.max(0, target.offsetTop - root.clientHeight * 0.12),
               behavior: 'smooth',
             });
-            actions.consumePendingHighlight();
+            consumePendingHighlight();
           }
         }
         return;
@@ -353,10 +356,10 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
           - root.clientHeight * 0.3;
         root.scrollTo({ top: Math.max(0, desiredScroll), behavior: 'smooth' });
       }
-      actions.consumePendingHighlight();
+      consumePendingHighlight();
     })();
     return () => { cancelled = true; };
-  }, [doc, numPages, pendingHighlight, actions]);
+  }, [doc, numPages, pendingHighlight, consumePendingHighlight]);
 
   // FindBar integration — registers a Cmd+F-driven controller so the
   // user can search PDFs the same way they search MD / HTML / code.
@@ -428,7 +431,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
       }
     }
 
-    actions.registerFindController({
+    registerFindController({
       setQuery: async (q, { wholeWord, caseSensitive }) => {
         await rebuild(q, wholeWord, caseSensitive);
         if (state.matches.length === 0) return { current: 0, total: 0 };
@@ -456,9 +459,9 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
 
     return () => {
       cancelled = true;
-      actions.registerFindController(null);
+      registerFindController(null);
     };
-  }, [doc, numPages, actions]);
+  }, [doc, numPages, registerFindController]);
 
   async function onRetry() {
     setRetryBusy(true);
