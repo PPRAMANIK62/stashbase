@@ -4,7 +4,7 @@ import { expect, type TestInfo } from '@playwright/test';
 import type { Page } from 'playwright';
 import { assertPortAvailable, launchApp, type LaunchedApp } from '../support/app.ts';
 import { createAppFixture, type AppFixture, type FixtureMembership } from '../support/fixtures.ts';
-import { fileTreeRow } from '../support/locators.ts';
+import { dismissEmbeddingKeyPrompt, fileTreeRow } from '../support/locators.ts';
 
 export interface VisualApp {
   app: LaunchedApp;
@@ -55,9 +55,7 @@ export async function openFixtureFolder(page: Page, folderName = 'project-alpha'
 }
 
 export async function dismissEmbeddingSetup(page: Page): Promise<void> {
-  const later = page.getByRole('button', { name: 'Later', exact: true });
-  await later.click();
-  await expect(later).toBeHidden();
+  await dismissEmbeddingKeyPrompt(page);
 }
 
 export async function openFixtureFile(page: Page, relativePath: string): Promise<void> {
