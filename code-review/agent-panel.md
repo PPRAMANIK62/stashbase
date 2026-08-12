@@ -374,10 +374,14 @@ The accepted baseline includes:
   step is a flat row (type glyph + verb + underlined file / mono command or
   query), expandable to its payload/result, with no per-step card, border, or
   status badge — inspectable command/read/search labels rather than
-  lifecycle-only summaries or "Done" chips. The group's collapsed summary is
-  count-free and stable live vs done (categories + singular/plural, never a
-  number), and never turns red on an intermediate step failure (the failed
-  row tints inside the expansion; the turn's own fatal notice owns real
+  lifecycle-only summaries or "Done" chips. The collapsed group summary uses
+  the same Codex row shape as its steps: one leading glyph (the liveness dot
+  while live, the first step's type icon once settled), the summary text, and
+  a trailing disclosure chevron that only fades in on hover or while open — a
+  resting summary is just icon + text, never a leading always-on caret. That
+  summary is count-free and stable live vs done (categories + singular/plural,
+  never a number), and never turns red on an intermediate step failure (the
+  failed row tints inside the expansion; the turn's own fatal notice owns real
   failure). The turn shows ONE liveness cue in ONE place at a time: while a
   tool group is the turn's live tail it keeps its own dot + shimmer + "…"
   lit across the whole stretch — running OR in the gap between consecutive

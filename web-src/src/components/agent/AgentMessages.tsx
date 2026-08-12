@@ -730,13 +730,17 @@ function ToolActivityGroup({ tools, live = false, onPermission, onOpenArtifact }
     // hide behind the collapse.
     <section className="agent-activity">
       <Button
-        className="flex w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left text-sm hover:bg-muted"
+        className="group/row flex w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left text-sm hover:bg-muted"
         onPress={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
-        <ChevronDownIcon className={cn('size-3 shrink-0 text-muted-foreground', !open && '-rotate-90')} />
-        {active && <Dot />}
+        {/* One leading glyph, Codex-style: the pulsing liveness Dot while the
+          * group is the live tail, the first step's type icon once settled.
+          * The disclosure chevron moves to the trailing edge and only fades
+          * in on hover (or while open), so a resting row is just icon + text. */}
+        {active ? <Dot /> : <ToolTypeIcon name={tools[0].name} input={tools[0].input} />}
         <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground', active && 'agent-shimmer')}>{summary}</span>
+        <ChevronDownIcon className={cn('ml-auto size-3 shrink-0 text-muted-foreground transition-opacity', open ? 'opacity-60' : 'opacity-0 group-hover/row:opacity-60', !open && '-rotate-90')} />
       </Button>
       {open && <div className="grid gap-0.5 pb-0.5 pl-5">{tools.map((tool) => <ToolRow key={tool.id} block={tool} />)}</div>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
