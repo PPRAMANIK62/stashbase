@@ -241,6 +241,12 @@ jobs:
           STASHBASE_E2E_SUMMARY_LABEL: Visual baselines
         run: xvfb-run -a pnpm test:e2e:visual
 
+      - name: Preserve visual comparison diagnostics
+        if: failure() && steps.visual.outcome == 'failure'
+        run: |
+          if [[ -d playwright-report ]]; then mv playwright-report playwright-report-comparison; fi
+          if [[ -d test-results/e2e ]]; then mv test-results/e2e test-results/e2e-comparison; fi
+
       - name: Generate candidate Linux visual baselines
         id: visual_candidates
         if: failure() && steps.visual.outcome == 'failure'
@@ -270,7 +276,9 @@ jobs:
             visual-baselines-status.txt
             e2e/visual/**/*-snapshots/**/*.png
             playwright-report/
+            playwright-report-comparison/
             test-results/e2e/
+            test-results/e2e-comparison/
           if-no-files-found: ignore
           retention-days: 14
 

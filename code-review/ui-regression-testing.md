@@ -174,8 +174,10 @@ fallback matters when the manual workflow is itself new and therefore cannot
 be dispatched from the default branch yet; candidate generation never approves
 or commits a baseline. On failure or cancellation, the job uploads the patch,
 candidate gallery, `playwright-report/`, and `test-results/e2e/` for 14 days.
-Review the candidate PNGs and comparison diagnostics before applying the binary
-patch, then let a fresh normal comparison verify it. Treat artifacts as
+The pre-update comparison is preserved separately so candidate generation
+cannot overwrite its expected/actual/diff evidence. Review those diagnostics
+and every candidate PNG before applying the binary patch, then let a fresh
+normal comparison verify it. Treat artifacts as
 diagnostics: do not put secrets or personal documents in fixtures or logs.
 
 ## Focus, disabled tests, and flakes
