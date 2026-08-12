@@ -62,8 +62,9 @@ export function ChatPane() {
   const activeId = state.activeChatTabId;
 
   return (
-    <div
+    <aside
       className="chat-pane-shell"
+      aria-label="Agent chat"
       aria-hidden={!state.chatOpen || undefined}
       inert={!state.chatOpen || undefined}
     >
@@ -184,6 +185,6 @@ export function ChatPane() {
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

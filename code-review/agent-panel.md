@@ -265,6 +265,9 @@ Community contributions can land as useful first iterations, but the long-term d
   clear busy/tool activity, and do not append a second failed-turn notice. A
   raw post-ready socket close gets the stable agent-specific disconnect
   fallback; explicit renderer/client teardown must suppress it.
+  Teardown may send the courtesy protocol close frame only while the socket is
+  still open; calling `send()` after it starts closing is itself a renderer
+  console error and must not make clean navigation fail strict UI checks.
 - Derive the shell layout from Chat visibility, document presence, and compact
   viewport state; do not add RAG/CoWork product modes. The chat-primary layout
   removes the document and splitter grid tracks without unmounting either
