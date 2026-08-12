@@ -127,3 +127,21 @@ when touching their components, deleting the rules in the same change.
   (no transform/layout animation under it).
 - Deleting a component deletes its styles; anything left behind in
   styles/*.css needs an exemption category above, or it is a defect.
+
+## Visual regression validation
+
+When a styling change affects the workspace shell, Markdown/JSON document
+surfaces, Appearance Settings, Quick Open, or Command Palette, run the
+representative visual spec and review whether its Linux baseline should
+change. The authoritative environment is Ubuntu 24.04 under Xvfb; do not
+approve a macOS or Windows screenshot as a replacement golden. Generate
+intentional updates through the manual **Generate visual baselines** workflow,
+review every expected/actual/diff image and the binary patch, then include only
+the approved PNG changes with the styling change.
+
+Run `pnpm test:e2e:visual` to compare existing baselines and
+`pnpm test:e2e:visual:update` only in the Linux-authoritative environment.
+Visual tests use explicit viewport/theme/content and reduced motion; do not
+silence a regression with broad masks, fixed sleeps, or a global pixel
+tolerance. The complete workflow and current gallery are defined in
+[UI Regression Testing](ui-regression-testing.md).

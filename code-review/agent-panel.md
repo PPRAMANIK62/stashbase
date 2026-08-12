@@ -355,6 +355,29 @@ Community contributions can land as useful first iterations, but the long-term d
   transcript and native identity; the server-side history and writer lifecycle
   contract lives in [architecture.md](architecture.md).
 
+## Validation
+
+Run `pnpm typecheck`, `pnpm test:renderer`, and
+`npx vite build --config web-src/vite.config.ts`, plus the narrow agent/server
+tests for any transport, session, permission, or history seam changed. The
+Playwright smoke suite proves that the Agent chat shell can launch alongside
+the workspace, and the workspace visual baseline renders deterministic
+"Agent unavailable" discovery. `pnpm test:e2e:agent-protocol` verifies the
+fake Codex executable's stdio JSON-RPC contract directly;
+`pnpm test:e2e:functional` runs that contract before a production-path
+Electron journey covering new chat, folder binding, command approval,
+transcript completion, a window-folder switch, and interruption. The fixture
+is selected through the shipping `STASHBASE_CODEX_BIN` override and uses no
+developer credentials, real CLI account, user CLI history, or network output.
+
+A credentialed real-CLI Agent turn, clipboard-image attachment, and packaged
+runtime discovery remain in the residual
+[release sanity checklist](../release-checklists/ui-sanity.md). Extend the
+automated Agent UI coverage only through a deterministic protocol fixture
+without weakening the transport and permission contracts described here. The
+shared harness, focus policy, artifact handling, and selector rules live in
+[UI Regression Testing](ui-regression-testing.md).
+
 ## Current Baseline
 
 The accepted baseline includes:
