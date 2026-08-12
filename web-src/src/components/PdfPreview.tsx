@@ -17,6 +17,7 @@ import { useApp } from '../store/AppContext';
 import { getFileReadiness } from '../store/fileReadiness';
 import {
   cleanPdfSearchText,
+  currentPdfPageForViewport,
   exactPageForHighlight,
   findPdfChunkMatch,
   flattenPageText,
@@ -69,6 +70,9 @@ const PDFJS_ASSET_BASE = '/pdfjs-assets';
  */
 export function PdfPreview({ name, showConversionBanner = true }: { name: string; showConversionBanner?: boolean }) {
   const { state, actions, activeTab } = useApp();
+  const updateTabPdfPage = actions.updateTabPdfPage;
+  const consumePendingHighlight = actions.consumePendingHighlight;
+  const registerFindController = actions.registerFindController;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef({ folderPath: state.folderPath, name });
@@ -137,6 +141,12 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
       behavior,
     });
     setCurrentPage(targetPage);
+    // Direct navigation must persist before the next pointer/keyboard event.
+    // Waiting for the passive currentPage effect lets an immediate tab switch
+    // unmount the viewer before the requested page reaches tab state.
+    if (activeTab?.file?.format === 'pdf' && activeTab.pdfPage !== targetPage) {
+      updateTabPdfPage(activeTab.id, targetPage);
+    }
   }
 
   function fitScale(): number {
@@ -196,7 +206,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
       cancelled = true;
       if (loadingTask) loadingTask.destroy().catch(() => { /* ignore */ });
     };
-  }, [fileUrl, actions]);
+  }, [fileUrl]);
 
   const initialScrollDone = useRef(false);
   useEffect(() => {
@@ -225,9 +235,9 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
 
   useEffect(() => {
     if (activeTab && activeTab.file?.format === 'pdf' && activeTab.pdfPage !== currentPage) {
-      actions.updateTabPdfPage(activeTab.id, currentPage);
+      updateTabPdfPage(activeTab.id, currentPage);
     }
-  }, [currentPage, activeTab?.id, activeTab?.file?.format, activeTab?.pdfPage, actions]);
+  }, [currentPage, activeTab?.id, activeTab?.file?.format, activeTab?.pdfPage, updateTabPdfPage]);
 
   useEffect(() => {
     const root = containerRef.current;
@@ -238,19 +248,18 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
       if (!initialScrollDone.current) return;
       const rootRect = root.getBoundingClientRect();
       const markerY = rootRect.top + Math.min(root.clientHeight * 0.35, 160);
-      let bestPage = 1;
-      let bestDistance = Number.POSITIVE_INFINITY;
       const pages = root.querySelectorAll<HTMLElement>('[data-page]');
-      pages.forEach((pageEl) => {
-        const page = Number(pageEl.dataset.page);
-        if (!Number.isFinite(page)) return;
-        const rect = pageEl.getBoundingClientRect();
-        const topDistance = Math.abs(rect.top - markerY);
-        const insideDistance = rect.top <= markerY && rect.bottom >= markerY ? 0 : topDistance;
-        if (insideDistance < bestDistance) {
-          bestDistance = insideDistance;
-          bestPage = page;
-        }
+      const bestPage = currentPdfPageForViewport({
+        scrollTop: root.scrollTop,
+        scrollHeight: root.scrollHeight,
+        clientHeight: root.clientHeight,
+        markerY,
+        pages: Array.from(pages).flatMap((pageEl) => {
+          const page = Number(pageEl.dataset.page);
+          if (!Number.isFinite(page)) return [];
+          const rect = pageEl.getBoundingClientRect();
+          return [{ page, top: rect.top, bottom: rect.bottom }];
+        }),
       });
       setCurrentPage((prev) => (prev === bestPage ? prev : bestPage));
     };
@@ -304,7 +313,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     if (!doc || !pendingHighlight?.chunkText) return;
     let cancelled = false;
     const cleaned = cleanPdfSearchText(pendingHighlight.chunkText);
-    if (!cleaned) { actions.consumePendingHighlight(); return; }
+    if (!cleaned) { consumePendingHighlight(); return; }
 
     void (async () => {
       let best: { page: number; idx: number; length: number; score: number; fp: FlatPage } | null = null;
@@ -335,7 +344,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
               top: Math.max(0, target.offsetTop - root.clientHeight * 0.12),
               behavior: 'smooth',
             });
-            actions.consumePendingHighlight();
+            consumePendingHighlight();
           }
         }
         return;
@@ -353,10 +362,10 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
           - root.clientHeight * 0.3;
         root.scrollTo({ top: Math.max(0, desiredScroll), behavior: 'smooth' });
       }
-      actions.consumePendingHighlight();
+      consumePendingHighlight();
     })();
     return () => { cancelled = true; };
-  }, [doc, numPages, pendingHighlight, actions]);
+  }, [doc, numPages, pendingHighlight, consumePendingHighlight]);
 
   // FindBar integration — registers a Cmd+F-driven controller so the
   // user can search PDFs the same way they search MD / HTML / code.
@@ -428,7 +437,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
       }
     }
 
-    actions.registerFindController({
+    registerFindController({
       setQuery: async (q, { wholeWord, caseSensitive }) => {
         await rebuild(q, wholeWord, caseSensitive);
         if (state.matches.length === 0) return { current: 0, total: 0 };
@@ -456,9 +465,9 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
 
     return () => {
       cancelled = true;
-      actions.registerFindController(null);
+      registerFindController(null);
     };
-  }, [doc, numPages, actions]);
+  }, [doc, numPages, registerFindController]);
 
   async function onRetry() {
     setRetryBusy(true);
@@ -507,7 +516,10 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
           setAutoFit(false);
           setScale((s) => Math.min(PDF_MAX_SCALE, s + 0.2));
         }}
-        onJumpToPage={scrollToPage}
+        // A numbered jump is a direct navigation, not continuous reading.
+        // Move synchronously so the scroll listener cannot observe the old
+        // page during a smooth-scroll frame and overwrite the requested page.
+        onJumpToPage={(page) => scrollToPage(page, 'auto')}
       />
       <div className="flex w-full flex-col items-center gap-2.5 pt-3.5 pb-10">
         {doc && Array.from({ length: numPages }, (_, i) => (

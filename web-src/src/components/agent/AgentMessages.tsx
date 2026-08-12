@@ -88,6 +88,10 @@ export function MessageList({
     // breathing room (it scrolls away with the transcript).
     <div
       className="agent-messages scrollbar-quiet flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-0 pb-2 [&>*:first-child]:mt-3"
+      role="log"
+      aria-label="Agent conversation"
+      aria-live="polite"
+      aria-busy={turnActive}
       ref={ref}
       onScroll={onScroll}
     >
