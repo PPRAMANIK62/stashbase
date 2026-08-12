@@ -181,7 +181,13 @@ to migrate them into a StashBase-specific storage model.
   sidebar toggle and Search live as shell controls in the titlebar band at
   the window's top-left (they stay put when the sidebar is collapsed, so
   the toggle is always the way back in), and Settings is a quiet row at
-  the sidebar's bottom.
+  the sidebar's bottom. That row's right end carries the get-help cluster:
+  Report a bug (a disabled placeholder until the report flow ships) and a
+  link to the community Discord. Reaching a human is the app's only escape
+  hatch when something is wrong, so it stays in persistent chrome instead
+  of behind a menu — and stays on the strip's muted neutral, because a
+  brand-coloured control that is always on screen would outrank the user's
+  own files.
  - StashBase displays only supported document, structured-data, and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Dot-prefixed files (`.DS_Store`, tool configs) are invisible infrastructure: never listed and never counted as unsupported, and a folder holding only dot-files reads as physically empty. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a dismissable callout card in the Files panel — dismissal is per folder and persists, and the card returns when a new unsupported category appears.
 - Quick Open is file navigation, not content retrieval: it stays scoped to the
   active folder and does not surface generated artifacts or search evidence.

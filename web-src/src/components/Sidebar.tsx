@@ -3,6 +3,7 @@ import {
   ChevronDownIcon,
   CollapseAllIcon,
   CubeLogoIcon,
+  DiscordIcon,
   ExpandAllIcon,
   ExternalLinkIcon,
   FolderIcon,
@@ -19,6 +20,7 @@ import {
   TrashIcon,
 } from '../icons';
 import { openSettings } from './SettingsModal';
+import { DISCORD_INVITE_URL, openExternalUrl } from '../lib/externalLink';
 import { useApp } from '../store/AppContext';
 import { makeChatTab, type Action, type LibraryFolderStatus, type State } from '../store/state';
 import { folderScope, LIBRARY_SCOPE, newChatPlan, type ChatScope } from './agent/folderState';
@@ -291,6 +293,23 @@ function SettingsRow() {
         className="inline-flex size-7 flex-none items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground opacity-45 [&_svg]:size-3.5"
       >
         <BugIcon />
+      </button>
+      {/* Community — the app's only in-product route to a human, so it sits
+        * in persistent chrome rather than behind a menu. Parked to the right
+        * of Report Bug on purpose: while that one is still a placeholder,
+        * this is where someone who is stuck actually gets unstuck, and the
+        * two read as one "get help" cluster once the report flow lands. */}
+      <button
+        type="button"
+        aria-label="Join the StashBase Discord"
+        title="Join the StashBase Discord"
+        className={
+          'inline-flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 '
+          + 'bg-transparent p-0 text-muted-foreground hover:text-foreground [&_svg]:size-3.5'
+        }
+        onClick={() => { openExternalUrl(DISCORD_INVITE_URL); }}
+      >
+        <DiscordIcon />
       </button>
     </div>
   );

@@ -258,8 +258,8 @@ export function McpClientsPanel() {
                 className={
                   'min-w-24 flex-none '
                   + (isConnected
-                    ? 'border-accent/30 bg-accent/8 text-accent hover:border-destructive/35 hover:bg-destructive/5 hover:text-destructive'
-                    : 'hover:border-accent/30 hover:bg-accent/8 hover:text-accent')
+                    ? 'border-accent/30 bg-accent/10 text-accent hover:border-destructive/45 hover:bg-destructive/5 hover:text-destructive'
+                    : 'hover:border-accent/30 hover:bg-accent/10 hover:text-accent')
                 }
                 disabled={busy != null}
                 onClick={() => void (isConnected ? disconnect(client.id) : connect(client.id))}
@@ -430,7 +430,7 @@ function CopyButton(props: { copied: boolean; disabled?: boolean; onCopy(): void
       className={
         'flex-none '
         + (props.copied
-          ? 'border-accent/40 bg-accent/8 text-accent hover:border-accent/40 hover:bg-accent/8 hover:text-accent'
+          ? 'border-accent/40 bg-accent/10 text-accent hover:border-accent/40 hover:bg-accent/10 hover:text-accent'
           : 'text-muted-foreground hover:border-accent hover:text-accent')
       }
       disabled={props.disabled}

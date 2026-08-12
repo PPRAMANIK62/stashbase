@@ -57,6 +57,12 @@ one answer — **body is 13 (`text-base`)**, and the `<body>` default matches it
   using both as general body reads as sloppiness, so 12 stays out of prose.
 - **13 (`text-base`)** — the body: paragraphs, control and menu-item labels,
   dialog content. The default.
+- **14 (`text-lg`)** exists in the ladder but carries no chrome text role:
+  it is reserved for optical glyph sizing (a `+` / `−` / `×` control glyph)
+  and never for labels or titles. 13 and 14 differ by 1px, so mixing them as
+  text reads as sloppiness for the same reason 12 and 13 do — a dialog or
+  card title stays at body 13 and lets weight carry it, and only a display
+  step (16 and up) goes larger.
 - **16 (`text-xl`)** — section and block titles.
 - Larger steps (20/24/30) are display-only — warmth-budget brand moments.
 

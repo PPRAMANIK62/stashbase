@@ -187,7 +187,7 @@ export function SessionHistoryMenu({
                         <Dialog role="alertdialog" aria-label="Delete chat session">
                           {({ close }) => (
                             <>
-                              <Heading slot="title" className="m-0 text-lg font-bold">Delete chat?</Heading>
+                              <Heading slot="title" className="m-0 text-base leading-none font-medium">Delete chat?</Heading>
                               <p className="mt-2 mb-0 text-sm leading-normal text-muted-foreground">Delete “{row.title}”? This cannot be undone.</p>
                               {deleteError && <div className="mt-2 text-sm text-status-danger" role="alert">{deleteError}</div>}
                               <div className="mt-4 flex justify-end gap-2">

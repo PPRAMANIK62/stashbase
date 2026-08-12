@@ -1325,7 +1325,7 @@ export function AgentView({
 
 const runtimeCardWrapClass = 'grid min-h-45 flex-1 place-items-center px-3 py-6';
 const runtimeCardClass = 'w-[min(440px,100%)] rounded-xl border border-border bg-pane p-4 text-foreground';
-const runtimeCardTitleClass = 'm-0 text-lg font-bold';
+const runtimeCardTitleClass = 'm-0 text-base font-semibold';
 const runtimeCardCopyClass = 'mt-1.75 mb-3 text-sm leading-normal text-muted-foreground';
 const runtimeCardActionsClass = 'mt-3 flex justify-end gap-2';
 

@@ -85,7 +85,7 @@ export function RequireApiKeyModal({
                 'min-h-[30px] cursor-pointer border-0 border-l border-border px-2.75 text-sm '
                 + 'whitespace-nowrap text-foreground transition-colors duration-fast first:border-l-0 '
                 + 'enabled:hover:bg-muted disabled:cursor-default disabled:opacity-60 '
-                + (selected ? 'bg-accent/8 font-semibold' : 'bg-transparent font-medium')
+                + (selected ? 'bg-accent/10 font-semibold' : 'bg-transparent font-medium')
               }
               role="radio"
               aria-checked={selected}

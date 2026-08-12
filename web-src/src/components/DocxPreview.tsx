@@ -285,7 +285,10 @@ function renderDocxDocument(bodyHtml: string, title: string, baseHref: string): 
     `  <base href="${escapeHtml(baseHref)}">`,
     `  <title>${escapeHtml(title)}</title>`,
     '  <style>',
-    '    body { font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #222; max-width: 840px; margin: 40px auto; padding: 0 32px; }',
+    // Mirrors the app's --font-sans (incl. the CJK fallbacks) so a Chinese
+    // .docx preview reads in the same face as the rest of the chrome; the
+    // iframe is isolated, so the stack is inlined rather than var()-linked.
+    '    body { font: 16px/1.55 -apple-system, system-ui, "Segoe UI", "PingFang SC", "Hiragino Sans", sans-serif; color: #222; max-width: 840px; margin: 40px auto; padding: 0 32px; }',
     '    img { max-width: 100%; height: auto; }',
     '    table { width: 100%; border-collapse: collapse; }',
     '    td, th { border: 1px solid #d7dbe2; padding: 6px 8px; text-align: left; vertical-align: top; }',

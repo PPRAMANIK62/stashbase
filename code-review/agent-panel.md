@@ -378,7 +378,12 @@ The accepted baseline includes:
   count-free and stable live vs done (categories + singular/plural, never a
   number), and never turns red on an intermediate step failure (the failed
   row tints inside the expansion; the turn's own fatal notice owns real
-  failure)
+  failure). The turn shows ONE liveness cue in ONE place at a time: while a
+  tool group is the turn's live tail it keeps its own dot + shimmer + "…"
+  lit across the whole stretch — running OR in the gap between consecutive
+  calls — and the generic "…is working" tail is suppressed whenever the tail
+  block is a tool of any status, so the dot never blinks off and hops onto a
+  separate line between calls
 - turn-level working-trace fold: a settled turn's thinking/interim
   narration/tool activity collapses under one "Worked for X" header, leaving
   the final answer (the last assistant block) visible; an interrupted turn

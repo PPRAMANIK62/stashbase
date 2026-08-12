@@ -230,7 +230,12 @@ owns the window lifecycle commands using the platform mappings documented in
 yield those native window chords without narrowing the established modifier
 handling of unrelated document commands. The menu advertises the platform
 accelerator, while the `BrowserWindow` input boundary dispatches it and owns
-the secondary non-macOS binding that cannot fit on the same menu item. macOS
+the secondary non-macOS binding that cannot fit on the same menu item. The
+menu also carries the outbound Help entries; the template module takes an
+open-external callback rather than importing Electron's `shell`, which is
+what keeps it unit-testable without an Electron runtime, and its URLs come
+from `shared/links.json` so the main process and the renderer's own links
+cannot drift apart. macOS
 activation recreates a window after the last one closes, while non-macOS
 platforms quit after the last window closes. The real Electron lifecycle smoke
 must send the platform accelerator input, enforce a parent-owned deadline, and

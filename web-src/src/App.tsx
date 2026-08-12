@@ -10,11 +10,11 @@ import {
 
 interface ElectronBridge {
   openFolderDialog?: (opts?: unknown) => Promise<string | null>;
-  openExternal?: (url: string) => Promise<boolean>;
   setWindowFolder?: (folder: string | null) => Promise<boolean>;
   onClipboardImage?: (handler: (offer: ClipboardOffer) => void) => (() => void);
   markClipboardHandled?: (hash: string) => void;
 }
+import { openExternalUrl } from './lib/externalLink';
 import { Sidebar } from './components/Sidebar';
 import { TitlebarControls } from './components/TitlebarControls';
 import { MainPane } from './components/MainPane';
@@ -324,12 +324,7 @@ function AppBody() {
           && !url.searchParams.has('windowId')) {
           url.searchParams.set('windowId', getWindowId());
         }
-        const bridge = (window as { electron?: ElectronBridge }).electron;
-        if (bridge?.openExternal) {
-          void bridge.openExternal(url.href);
-        } else {
-          window.open(url.href, '_blank', 'noopener,noreferrer');
-        }
+        openExternalUrl(url.href);
       } catch {
         // Ignore malformed messages from sandboxed preview content.
       }

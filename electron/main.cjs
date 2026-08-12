@@ -813,6 +813,7 @@ function installApplicationMenu() {
       const target = isLiveMainWindow(win) ? win : BrowserWindow.getFocusedWindow();
       if (isLiveMainWindow(target)) target.close();
     },
+    onOpenExternal: (url) => { void shell.openExternal(url); },
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

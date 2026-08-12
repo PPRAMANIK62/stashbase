@@ -292,6 +292,21 @@ export function BugIcon({ className }: IconProps) {
   );
 }
 
+/** Discord's wordless mark, beside Report Bug in the sidebar's bottom row.
+ *  A filled brand mark, so it takes the logo exemption from the one-stroke
+ *  rule above — a line-art redraw of a solid logo reads as a knock-off, and
+ *  the whole value of a community link is being recognised at a glance. It
+ *  still inherits `currentColor` and stays on the strip's muted neutral:
+ *  brand blurple on a persistent chrome control would be the loudest thing
+ *  in the sidebar. */
+export function DiscordIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.3 5.36A17.9 17.9 0 0 0 14.9 4l-.22.4a12.4 12.4 0 0 1 3.93 2A13.5 13.5 0 0 0 12 5.1a13.5 13.5 0 0 0-6.6 1.3 12.4 12.4 0 0 1 3.92-2L9.1 4a17.9 17.9 0 0 0-4.4 1.36C1.9 9.5 1.14 13.55 1.52 17.53A18 18 0 0 0 7 20.28l.9-1.24a11.7 11.7 0 0 1-1.96-.94l.4-.3a12.9 12.9 0 0 0 11.3 0l.4.3c-.62.37-1.28.69-1.96.94l.9 1.24a18 18 0 0 0 5.48-2.75c.45-4.61-.76-8.62-3.16-12.17ZM8.35 15.1c-1.07 0-1.95-.98-1.95-2.19s.86-2.2 1.95-2.2c1.1 0 1.97.99 1.95 2.2 0 1.21-.86 2.19-1.95 2.19Zm7.2 0c-1.07 0-1.95-.98-1.95-2.19s.86-2.2 1.95-2.2c1.1 0 1.97.99 1.95 2.2 0 1.21-.85 2.19-1.95 2.19Z" />
+    </svg>
+  );
+}
+
 /** Lucide `panel-right` — the chat-panel toggle mirroring PanelLeftIcon
  *  on the titlebar's right side. */
 export function PanelRightIcon({ className }: IconProps) {

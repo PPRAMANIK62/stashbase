@@ -135,10 +135,11 @@ export function MessageList({
       )}
       {turnActive && !tailBlockSpeaks(blocks) && (
         // Generic tail status renders only when no visible block already
-        // narrates the moment — a running tool group shimmers its own
-        // summary, live thinking shimmers "Thinking", and an awaiting
-        // permission card means the agent is waiting on the USER, where
-        // "is working…" would be a lie.
+        // narrates the moment — a tool group shimmers its own summary
+        // (running OR between consecutive calls, so it never blinks off and
+        // hands the cue to this line), live thinking shimmers "Thinking",
+        // and an awaiting permission card means the agent is waiting on the
+        // USER, where "is working…" would be a lie.
         <div className="flex items-center gap-1.5 p-0.5 text-sm text-muted-foreground">
           <Dot /><span className="agent-shimmer">{agentShortName} is working…</span>
         </div>
@@ -165,7 +166,12 @@ function tailBlockSpeaks(blocks: Block[]): boolean {
   const tail = blocks[blocks.length - 1];
   if (!tail) return false;
   if (tail.kind === 'thinking') return true;
-  return tail.kind === 'tool' && (tail.status === 'running' || tail.status === 'awaiting');
+  // A tail tool of ANY status is already narrated by its own activity group:
+  // while it is the turn's live tail that group keeps its dot + shimmer lit,
+  // so the generic line must not also appear in the gap after a call settles
+  // (running/awaiting were the only speaking states before — a settled tail
+  // tool used to fall through here and pop the generic line onto a new row).
+  return tail.kind === 'tool';
 }
 
 interface Turn { key: string; head: Extract<Block, { kind: 'user' }> | null; body: Block[] }
@@ -209,7 +215,7 @@ function renderReplyBlocks(blocks: Block[], liveBlockId: string | null, h: Reply
     else groups.push([block]);
   }
   return groups.map((group) => Array.isArray(group)
-    ? <ToolActivityGroup key={`activity-${group[0].id}`} tools={group} onPermission={h.onPermission} onOpenArtifact={h.onOpenArtifact} />
+    ? <ToolActivityGroup key={`activity-${group[0].id}`} tools={group} live={group[group.length - 1].id === liveBlockId} onPermission={h.onPermission} onOpenArtifact={h.onOpenArtifact} />
     : <BlockView
       key={group.id}
       block={group}
@@ -703,13 +709,19 @@ function BlockView({ block, live, onPermission, onCopyUserMessage, onResendUserM
   }
 }
 
-function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
+function ToolActivityGroup({ tools, live = false, onPermission, onOpenArtifact }: {
   tools: ToolBlock[];
+  /** This group is the live tail of an active turn. Keep the liveness cue
+   *  (dot + shimmer + "…") lit across the whole tool stretch, not only while
+   *  one tool happens to be `running`: between consecutive calls the group
+   *  would otherwise go dark and the generic "…is working" tail would jump
+   *  onto its own line. */
+  live?: boolean;
   onPermission: (t: string, p: string, a: boolean) => void;
   onOpenArtifact: (path: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const active = tools.find((tool) => tool.status === 'running');
+  const active = live || tools.some((tool) => tool.status === 'running');
   const summary = activitySummary(tools, active);
   return (
     // Activity is narration, not a construct: a quiet text-level
@@ -1014,7 +1026,7 @@ function toolRowParts(name: string, input: Record<string, unknown>): { verb: str
  * phrased singular or plural to tell one from many — never an exact number,
  * and never different wording live vs done (which read as a glitch). An
  * active group appends "…". */
-function activitySummary(tools: ToolBlock[], active?: ToolBlock): string {
+function activitySummary(tools: ToolBlock[], active?: boolean): string {
   let reads = 0;
   let lists = 0;
   let searches = 0;

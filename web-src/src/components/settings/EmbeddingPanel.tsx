@@ -152,7 +152,7 @@ export function EmbeddingPanel() {
                     'inline-flex min-h-[30px] cursor-pointer items-center gap-1.5 border-0 border-l border-border '
                     + 'px-2.5 text-sm whitespace-nowrap text-foreground transition-colors duration-fast first:border-l-0 '
                     + 'enabled:hover:bg-muted disabled:cursor-default disabled:opacity-60 '
-                    + (selectedOption ? 'bg-accent/8 font-semibold' : 'bg-transparent')
+                    + (selectedOption ? 'bg-accent/10 font-semibold' : 'bg-transparent')
                   }
                   role="radio"
                   aria-checked={selectedOption}
@@ -183,9 +183,8 @@ export function EmbeddingPanel() {
                   onClick={() => setKeyEditOpen(true)}
                 >Change key…</Button>
                 <Button
-                  variant="outline"
+                  variant="destructive-outline"
                   size="sm"
-                  className="border-destructive/30 text-destructive hover:border-destructive/45 hover:bg-destructive/5 hover:text-destructive dark:border-destructive/40 dark:bg-transparent dark:hover:bg-destructive/15"
                   onClick={() => setKeyRemoveOpen(true)}
                 >Remove key…</Button>
               </div>

@@ -94,7 +94,7 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
     /* The dark scrim is a deliberate overlay color, independent of the
      * app theme — the lightbox always reads as a dark stage. The
      * `quick-open-blocking` marker keeps Quick Open from opening on top. */
-    <div className="quick-open-blocking fixed inset-0 z-90 flex flex-col bg-[rgba(18,18,20,0.92)] text-white" role="dialog" aria-modal="true" aria-label="Image preview">
+    <div className={`quick-open-blocking fixed inset-0 z-90 flex flex-col ${STAGE_SCRIM_CLASS} text-white`} role="dialog" aria-modal="true" aria-label="Image preview">
       <div
         ref={stageRef}
         className={
@@ -124,7 +124,7 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
           <LightboxIcon kind="close" />
         </button>
       </div>
-      <div className="absolute bottom-5 left-1/2 z-1 flex -translate-x-1/2 items-center gap-1 rounded-full bg-[rgba(31,32,42,0.96)] p-1 shadow-elevation">
+      <div className={`absolute bottom-5 left-1/2 z-1 flex -translate-x-1/2 items-center gap-1 rounded-full ${STAGE_TOOLBAR_CLASS} p-1 shadow-elevation`}>
         <button type="button" className={FLOATING_BTN_CLASS} aria-label="Zoom out" title="Zoom out" onClick={() => zoomBy(1 / 1.2)}>
           <ZoomGlyph />
         </button>
@@ -136,6 +136,15 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
     </div>
   );
 }
+
+/* The lightbox is a deliberate always-dark stage, independent of the app
+ * theme (light mode must not lighten it) — so these two dark layers are the
+ * one place raw values are correct, since theme tokens would wrongly flip
+ * them. Kept together and on a single neutral hue: the raised toolbar is a
+ * lighter step of the same near-black as the scrim, so the two read as one
+ * dark system rather than two unrelated darks. */
+const STAGE_SCRIM_CLASS = 'bg-[rgba(18,18,20,0.92)]';
+const STAGE_TOOLBAR_CLASS = 'bg-[rgba(38,39,42,0.96)]';
 
 /** 38px circular white-on-dark control — always styled for the dark
  *  stage, never the app theme. Stays `no-drag` so the frameless-window
