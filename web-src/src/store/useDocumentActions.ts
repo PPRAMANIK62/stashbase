@@ -412,6 +412,10 @@ export function useDocumentActions(
     dispatch({ type: 'TAB_PDF_PAGE', id: tabId, page });
   }, [dispatch]);
 
+  const setUnsupportedModalOpen = useCallback((open: boolean) => {
+    dispatch({ type: 'UNSUPPORTED_MODAL', open });
+  }, [dispatch]);
+
   return {
     activateTab,
     closeActiveTab,
@@ -427,10 +431,8 @@ export function useDocumentActions(
     scheduleSave,
     selectFile,
     selectFileWithHighlight,
+    setUnsupportedModalOpen,
     toggleEditMode,
     updateTabPdfPage,
-    setUnsupportedModalOpen: (open: boolean) => {
-      dispatch({ type: 'UNSUPPORTED_MODAL', open });
-    },
   };
 }

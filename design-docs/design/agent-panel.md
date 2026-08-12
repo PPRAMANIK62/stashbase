@@ -16,8 +16,8 @@ client of StashBase context, not a separate AI workspace.
 - A New Chat split button at the top of the sidebar (above the Library
   list) is the one place chats are created and Agents are chosen. Its
   main area starts a chat with the last-selected Agent; a subtle chevron
-  at the row's right edge offers New Claude Code Chat / New Codex Chat,
-  and picking one also updates the default for later New Chat clicks.
+  at the row's right edge chooses Claude Code or Codex as the default for
+  later New Chat clicks without starting a chat itself.
   The chat is scoped to the window's current folder — or to the Library
   when no folder is current — and it reuses a completely blank chat when
   one exists instead of stacking empty tabs, switching that chat's Agent

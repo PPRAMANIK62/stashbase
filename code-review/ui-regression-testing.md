@@ -134,13 +134,6 @@ app-server, not a credentialed Agent account. There is no credentialed/network
 Agent journey, visual binary-document gallery, preparation workflow,
 clipboard-image journey, or real native dialog in this suite.
 
-`workspace-empty`, `compact-document`, and `library-search-cross-folder` are
-new states with no committed Linux baseline yet. Until the **Generate visual
-baselines** workflow bootstraps them, `pnpm test:e2e:visual` fails on Linux
-CI for these three by design (see Visual baseline workflow above) — this is
-not a flake or a masking candidate; run the manual workflow and commit the
-produced PNGs before merging.
-
 ## Visual baseline workflow
 
 Authoritative snapshots are Linux PNGs adjacent to their specs under

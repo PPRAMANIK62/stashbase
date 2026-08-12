@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils';
 import type { FileMeta, FolderMeta } from '../../api';
 import { ImageLightbox } from '../ImageLightbox';
 import { baseName } from './attachments';
+import { FileAttachmentChip } from './FileAttachmentChip';
 import { effortLabel, effortOptions } from './effortMenuState';
 import {
   scopePillAriaLabel,
@@ -18,8 +19,8 @@ import { ScopeMenu } from '../ScopeMenu';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import {
-  attachChipClass, attachIconClass, attachImageChipClass, attachImagePreviewClass,
-  attachImageRemoveClass, attachNameClass, attachRemoveClass, iconGhostButtonClass,
+  attachImageChipClass, attachImagePreviewClass,
+  attachImageRemoveClass, attachRemoveClass, iconGhostButtonClass,
   menuHeadClass, menuSectionClass, optActiveClass, optCheckClass, optClass, optDescClass,
   optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
 } from './panelStyles';
@@ -475,11 +476,12 @@ export function AgentComposer({
                 </Button>
               </span>
             ) : (
-              <span key={a.path} className={attachChipClass} title={a.path}>
-                <FileGenericIcon className={attachIconClass} />
-                <span className={attachNameClass}>{a.name}</span>
-                <Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>
-              </span>
+              <FileAttachmentChip
+                key={a.path}
+                name={a.name}
+                path={a.path}
+                trailing={<Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>}
+              />
             ))}
             {uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
           </div>
