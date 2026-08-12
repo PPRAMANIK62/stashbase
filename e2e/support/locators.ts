@@ -9,7 +9,7 @@ export function settingsButton(page: Page): Locator {
 }
 
 export function folderButton(page: Page, name: string): Locator {
-  return page.getByRole('button', { name, exact: true });
+  return page.locator('#sidebar-files-section').getByRole('button', { name, exact: true });
 }
 
 export async function ensureLibraryExpanded(page: Page): Promise<void> {

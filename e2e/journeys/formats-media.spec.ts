@@ -101,7 +101,7 @@ test('malformed PDF and DOCX remain visible source identities with explicit fail
     await expect(app.page.getByRole('tab', { name: new RegExp(MALFORMED_PDF) })).toHaveAttribute('aria-selected', 'true');
 
     await fileTreeRow(app.page, MALFORMED_DOCX).click();
-    await expect(app.page.getByRole('status')).toContainText('searchable text is unavailable');
+    await expect(app.page.getByRole('status').filter({ hasText: 'searchable text is unavailable' })).toBeVisible();
     await expect(app.page.locator('iframe[title="HTML preview"]')).toBeVisible();
     await expect(app.page.getByRole('tab', { name: new RegExp(MALFORMED_DOCX) })).toHaveAttribute('aria-selected', 'true');
     expectOnlyKnownViewerFailures(app, [

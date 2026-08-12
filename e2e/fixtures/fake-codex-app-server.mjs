@@ -128,6 +128,7 @@ function startTurn(requestId, params) {
 
   if (/stop/i.test(prompt)) return;
   if (/terminal error/i.test(prompt)) {
+    record({ event: 'terminal-error', turnId, prompt });
     notify('error', {
       threadId: String(params.threadId || 'fake-thread-1'),
       turnId,

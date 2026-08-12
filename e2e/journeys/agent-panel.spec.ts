@@ -93,6 +93,8 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
 
     await composer.fill('terminal error');
     await panel.getByRole('button', { name: 'Send message' }).click();
+    await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'terminal-error')?.turnId)
+      .toBe('fake-turn-3');
     await expect(panel.getByText('Deterministic fake Agent failure.')).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
     app.errors.assertNone();
@@ -135,7 +137,7 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount + 1);
     panel = activeAgentPanel(app.page);
     composer = panel.locator('[aria-label="Message agent"]');
-    await expect(composer).toBeEmpty();
+    await expect(composer).toHaveText('');
     await expect(panel.getByRole('button', { name: 'Session folder: project-beta' })).toBeVisible();
 
     await ensureLibraryExpanded(app.page);
