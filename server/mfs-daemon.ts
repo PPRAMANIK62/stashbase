@@ -23,6 +23,7 @@ import { NOTE_EXTS } from './format.ts';
 import { EventEmitter } from 'node:events';
 import {
   CONVERTIBLE_SOURCE_EXTENSIONS,
+  DIRECT_TEXT_EXTENSIONS,
   LEGACY_DERIVED_SOURCE_EXTENSIONS,
   LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS,
 } from '../shared/file-formats.ts';
@@ -247,7 +248,7 @@ class MfsDaemon extends EventEmitter {
           excluded_dirs: [...INDEX_EXCLUDED_DIRS],
           max_indexable_bytes: MAX_INDEXABLE_BYTES,
           include_extensions: [
-            ...NOTE_EXTS.map((e) => `.${e}`),
+            ...DIRECT_TEXT_EXTENSIONS.map((e) => `.${e}`),
             // Convertible sources (PDF/image/DOCX/audio) are TRACKED by the disk walk so
             // their index entry — whose content is the app-data derived note,
             // indexed under the source path — isn't orphan-deleted, and so

@@ -8,6 +8,11 @@
 export const MARKDOWN_NOTE_EXTENSIONS = ['md', 'markdown'] as const;
 export const HTML_NOTE_EXTENSIONS = ['html', 'htm'] as const;
 export const NOTE_EXTENSIONS = [...MARKDOWN_NOTE_EXTENSIONS, ...HTML_NOTE_EXTENSIONS] as const;
+export const STRUCTURED_DATA_EXTENSIONS = ['json'] as const;
+export const DIRECT_TEXT_EXTENSIONS = [
+  ...NOTE_EXTENSIONS,
+  ...STRUCTURED_DATA_EXTENSIONS,
+] as const;
 export const PDF_EXTENSIONS = ['pdf'] as const;
 export const IMAGE_SOURCE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as const;
 export const DOCX_EXTENSIONS = ['docx'] as const;
@@ -46,7 +51,7 @@ export const LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS = [
 ] as const;
 
 export const VIEWABLE_FILE_EXTENSIONS = [
-  ...NOTE_EXTENSIONS,
+  ...DIRECT_TEXT_EXTENSIONS,
   ...CONVERTIBLE_SOURCE_EXTENSIONS,
 ] as const;
 

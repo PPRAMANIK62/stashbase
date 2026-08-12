@@ -170,3 +170,36 @@ document can support the next search or conversation.
 **Related areas:** [Local File Workspace](design/library.md),
 [Preparation](design/preparation.md), [Search and Retrieval](design/search.md),
 [Agent Panel](design/agent-panel.md)
+
+## 4. Inspect and Maintain JSON Alongside Project Documents
+
+Project folders often contain configuration, fixtures, exported records, and
+Agent-produced data as JSON. A user needs to inspect and search those files in
+the same workspace as their notes without an editor silently normalizing the
+source or rejecting a temporarily incomplete document.
+
+```text
+Open a JSON source
+  → inspect or find raw keys and values
+  → explicitly enter edit mode
+  → save without reformatting
+  → retrieve the updated source by keyword or meaning
+```
+
+JSON opens as raw, read-only source by default with syntax highlighting. The
+user explicitly enters edit mode before changing it, and StashBase saves the
+text as written, preserving its existing byte-order mark and line-ending
+convention. Malformed or partially written JSON remains visible, editable, and
+searchable because validity is not an admission or save requirement.
+
+Keyword search and semantic retrieval use the raw text and return the visible
+JSON source path. This lets a user find a configuration key, inspect a fixture
+value, repair incomplete generated output, or give an Agent the same local
+structured-data context without creating a converted copy.
+
+The result is one source-of-truth workflow for structured project data: JSON
+stays an ordinary local file while participating in the same navigation,
+editing, search, and Agent context as the rest of the folder.
+
+**Related areas:** [Local File Workspace](design/library.md),
+[Search and Retrieval](design/search.md)

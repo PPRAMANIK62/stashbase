@@ -13,6 +13,8 @@ import type { ToastOptions } from './useFeedbackActions';
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const AUDIO_SOURCE_RE = new RegExp(`\\.(${AUDIO_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
+const scheduleWithTimeout = (callback: () => void, delayMs: number) => setTimeout(callback, delayMs);
+const cancelTimeout = (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer);
 
 type Dispatch = (action: Action) => void;
 type Toast = (message: string, opts?: ToastOptions) => string;
@@ -29,6 +31,8 @@ interface DocumentActionDependencies {
   refreshIndexState: (folderPath?: string) => Promise<void>;
   toast: Toast;
   primeFind: (query: string, opts: { wholeWord: boolean; caseSensitive: boolean }) => void;
+  scheduleAfter?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+  cancelScheduled?: (timer: ReturnType<typeof setTimeout>) => void;
 }
 
 function isDocxName(name: string): boolean {
@@ -48,6 +52,8 @@ export function useDocumentActions(
 ) {
   const { editor, saveInFlight, saveTimer, state } = refs;
   const { loadFiles, refreshIndexState, toast, primeFind } = dependencies;
+  const scheduleAfter = dependencies.scheduleAfter ?? scheduleWithTimeout;
+  const cancelScheduled = dependencies.cancelScheduled ?? cancelTimeout;
 
   const flushSave = useCallback(async () => {
     const inFlight = saveInFlight.current;
@@ -56,7 +62,7 @@ export function useDocumentActions(
       if (!ok) return false;
     }
     if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
+      cancelScheduled(saveTimer.current);
       saveTimer.current = null;
     }
 
@@ -112,7 +118,7 @@ export function useDocumentActions(
         } else {
           dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
           if (!saveTimer.current) {
-            saveTimer.current = setTimeout(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
+            saveTimer.current = scheduleAfter(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
           }
         }
         void loadFiles();
@@ -133,14 +139,14 @@ export function useDocumentActions(
     } finally {
       if (saveInFlight.current === run) saveInFlight.current = null;
     }
-  }, [dispatch, editor, loadFiles, saveInFlight, saveTimer, state, toast]);
+  }, [cancelScheduled, dispatch, editor, loadFiles, saveInFlight, saveTimer, scheduleAfter, state, toast]);
 
   const scheduleSave = useCallback(() => {
     dispatch({ type: 'DOCUMENT_DIRTY', dirty: true });
     dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
-  }, [dispatch, flushSave, saveTimer]);
+    if (saveTimer.current) cancelScheduled(saveTimer.current);
+    saveTimer.current = scheduleAfter(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
+  }, [cancelScheduled, dispatch, flushSave, saveTimer, scheduleAfter]);
 
   const loadFile = useCallback(async (
     name: string,

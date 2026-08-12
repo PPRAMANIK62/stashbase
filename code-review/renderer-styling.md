@@ -97,8 +97,11 @@ Extend it when the contract grows; never weaken it to land a change.
   migrating the CSS.
 - **Rendered-content typography**: `.doc` (Markdown reading view), Crepe
   variable bridge (`.crepe-shell`), `.agent-prose` and agent thinking/diff
-  blocks, One-Dark syntax palette. Content follows `--reading-font-size`,
-  not the chrome scale, and may use its own serif/mono voices.
+  blocks, One-Dark syntax palette, and CodeMirror-generated JSON token classes.
+  JSON token classes consume the light/dark `--syntax-json-*` roles from the
+  global token layer; they never embed a fixed palette in the component.
+  Content follows `--reading-font-size`, not the chrome scale, and may use its
+  own serif/mono voices.
 - **State-machine and imperative-DOM hooks**: `.tree-row` family with
   drag-drop and `format-*` signature colors, the `agent-turn*` family
   (right-aligned user bubble + below-bubble actions), CodeMirror-created DOM

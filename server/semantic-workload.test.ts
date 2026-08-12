@@ -10,11 +10,14 @@ import {
 } from './semantic-workload.ts';
 import { publishSemanticPause, syncIndex } from './sync.ts';
 import type { Indexer } from './indexer.ts';
-import { excludePausedPendingHits, pausedWriteDisposition } from './indexer.mfs.ts';
+import { excludePausedPendingHits, pausedWriteDisposition, prepareForIndex } from './indexer.mfs.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { derivedPathsForPdf } from './pdf.ts';
 import { derivedHtmlPathForDocx } from './docx.ts';
 import { validatePreparedAudioTranscript } from './prepared-validation.ts';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { blake3 } from '@noble/hashes/blake3.js';
+import { hasNoExtractableText, indexableFileSizeError, MAX_INDEXABLE_BYTES } from './indexable.ts';
 
 function diff(root: string, count: number) {
   return {
@@ -36,6 +39,85 @@ test('semantic workload source threshold is inclusive and ignores hash-reused re
     sourceCount: 0, estimatedBytes: 0, large: false,
   });
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('JSON indexing keeps raw malformed text, extension, source hash, and visible identity', () => {
+  const content = '\uFEFF{\r\n  "z": 1,\r\n  "broken":\r\n';
+  const prepared = prepareForIndex('/library/Data.JSON', content);
+  assert.equal(prepared.text, content);
+  assert.equal(prepared.ext, '.json');
+  assert.equal(prepared.fileHash, bytesToHex(blake3(new TextEncoder().encode(content))));
+});
+
+test('JSON reconcile covers add, modify, delete, and hash-reused rename under source paths', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-json-reconcile-'));
+  try {
+    const added = path.join(root, 'added.json');
+    const modified = path.join(root, 'modified.JSON');
+    const deleted = path.join(root, 'deleted.json');
+    const oldName = path.join(root, 'old.json');
+    const renamed = path.join(root, 'renamed.JSON');
+    fs.writeFileSync(added, '{"added": true}');
+    fs.writeFileSync(modified, '{ malformed modified');
+    fs.writeFileSync(renamed, '{"same": true}');
+    const upserts: Array<[string, string]> = [];
+    const deletes: string[] = [];
+    const renames: Array<[string, string, string]> = [];
+    const indexer = {
+      syncDiff: async () => ({
+        added: [added], modified: [modified], deleted: [deleted],
+        renamed: [{ old: oldName, new: renamed, fileHash: 'same-hash' }],
+      }),
+      listFiles: async () => ({ [deleted]: 'old', [oldName]: 'same-hash' }),
+      upsertFile: async (source: string, content: string) => { upserts.push([source, content]); return 1; },
+      deleteFile: async (source: string) => { deletes.push(source); },
+      renameFile: async (oldPath: string, newPath: string, content: string) => {
+        renames.push([oldPath, newPath, content]); return 1;
+      },
+      status: async () => ({ pending: [], total: 3, indexed: 3, pendingCount: 0, orphanedCount: 0, orphaned: [], upToDate: true }),
+    } as unknown as Indexer;
+    const result = await syncIndex(indexer, root, { semanticEnabled: true });
+    assert.deepEqual(upserts, [[added, '{"added": true}'], [modified, '{ malformed modified']]);
+    assert.deepEqual(deletes, [deleted]);
+    assert.deepEqual(renames, [[oldName, renamed, '{"same": true}']]);
+    assert.deepEqual(result.added, ['added.json']);
+    assert.deepEqual(result.modified, ['modified.JSON']);
+    assert.deepEqual(result.removed, ['deleted.json']);
+    assert.deepEqual(result.renamed, ['renamed.JSON']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('JSON empty, whitespace, oversized, excluded, and preflight admission follows direct-text rules', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-json-admission-'));
+  try {
+    const empty = path.join(root, 'empty.json');
+    const whitespace = path.join(root, 'space.JSON');
+    const normal = path.join(root, 'normal.json');
+    const oversized = path.join(root, 'large.json');
+    const excluded = path.join(root, 'node_modules', 'hidden.json');
+    fs.writeFileSync(empty, '');
+    fs.writeFileSync(whitespace, '  \n\t');
+    fs.writeFileSync(normal, '{"counted": true}');
+    fs.closeSync(fs.openSync(oversized, 'w'));
+    fs.truncateSync(oversized, MAX_INDEXABLE_BYTES + 1);
+    fs.mkdirSync(path.dirname(excluded), { recursive: true });
+    fs.writeFileSync(excluded, '{"hidden": true}');
+    assert.equal(indexableFileSizeError(empty), 'empty file');
+    assert.equal(hasNoExtractableText(whitespace), true);
+    assert.match(indexableFileSizeError(oversized) ?? '', /too large/);
+    const estimate = await estimateSemanticWorkload(root, {
+      added: [empty, whitespace, normal, oversized, excluded], modified: [], deleted: [], renamed: [],
+    });
+    assert.deepEqual(estimate, {
+      sourceCount: 2,
+      estimatedBytes: fs.statSync(whitespace).size + fs.statSync(normal).size,
+      large: false,
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('semantic workload byte threshold is inclusive', async () => {

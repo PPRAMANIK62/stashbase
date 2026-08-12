@@ -144,6 +144,7 @@ Some formats need preparation before their contents can be searched. StashBase k
 |---|---|---|
 | Markdown | The Markdown file | Source text |
 | HTML | The HTML file | Clean text extracted from the HTML |
+| JSON | The JSON file | Raw source text |
 | PDF | The original PDF | Derived Markdown |
 | DOCX | The original DOCX | Derived HTML |
 | Images | The original image | OCR text |
@@ -155,7 +156,7 @@ For PDF, DOCX, audio, and video, Agents read the derived text while the original
 
 StashBase builds semantic and keyword search over:
 
-- Markdown and HTML text
+- Markdown, HTML, and raw JSON text
 - PDF-derived Markdown
 - DOCX-derived HTML
 - OCR text from images
@@ -309,7 +310,7 @@ Community-supported:
 Reasonably stable:
 
 - Local folder library model
-- Markdown, HTML, PDF, and image preview
+- Markdown, HTML, JSON, PDF, and image preview
 - PDF extraction, image OCR, and local audio and video transcription, with persisted failures and retry
 - Semantic and keyword search
 - MCP server and client connectors

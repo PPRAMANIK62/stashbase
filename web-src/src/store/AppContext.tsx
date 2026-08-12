@@ -185,6 +185,18 @@ export const AppContext = createContext<{
   dispatch: (a: Action) => void;
 } | null>(null);
 
+/** Re-check external text refresh ownership after its asynchronous disk read. */
+export function canApplyExternalTextRefresh(
+  state: State,
+  folderPathAtStart: string,
+  name: string,
+): boolean {
+  const latest = getActiveTab(state);
+  return state.folderPath === folderPathAtStart
+    && latest?.file?.name === name
+    && !latest.dirty;
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
@@ -350,6 +362,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const body = await api.getFile(name, readOpts);
       // The active tab may have been swapped (or the file renamed) in
       // the time it took to fetch — re-check before patching.
+      if (!canApplyExternalTextRefresh(stateRef.current, folderPathAtStart, name) && !opts.force) return;
       if (stateRef.current.folderPath !== folderPathAtStart) return;
       const latestActive = getActiveTab(stateRef.current);
       const latestFile = latestActive?.file;
