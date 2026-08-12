@@ -16,6 +16,7 @@ test('active-folder workspace shell keeps its redesigned composition', async ({}
     await openFixtureFolder(page);
     await dismissEmbeddingSetup(page);
 
+    await expect(page.getByRole('complementary', { name: 'Agent chat' }).getByRole('tab', { selected: true })).toBeInViewport();
     await expect(page.locator('aside.sidebar')).toBeVisible();
     await expect(page.locator('#sideHead')).toContainText('project-alpha');
     await expect(fileTreeRow(page, 'nested')).toBeVisible();
@@ -34,6 +35,7 @@ test('empty library keeps the redesigned zero-state composition', async ({}, tes
     const { page } = visual.app;
     await setVisualViewport(page, 1280, 820);
 
+    await expect(page.getByRole('complementary', { name: 'Agent chat' }).getByRole('tab', { selected: true })).toBeInViewport();
     await expect(page.getByText('Add a folder to build your searchable library.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add folder to library' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
