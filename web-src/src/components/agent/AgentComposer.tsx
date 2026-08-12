@@ -1,14 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, ListBox, ListBoxItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
-  ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
+  ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon,
   FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
 } from '../../icons';
 import { cn } from '../../lib/utils';
 import type { FileMeta, FolderMeta } from '../../api';
 import { ImageLightbox } from '../ImageLightbox';
 import { baseName } from './attachments';
-import { changedEffortSelection, effortLabel, effortOptions } from './effortMenuState';
+import { effortLabel, effortOptions } from './effortMenuState';
 import {
   scopePillAriaLabel,
   type ChatScope,
@@ -38,16 +38,20 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
  * distinguishable. The session settings live behind a single trigger, so
  * no pill needs emphasis. */
 
-/* Upward menus anchored to the pills. */
+/* Upward menus anchored to the pills. React Aria caps the popover height to
+ * the viewport (inline max-height); `overflow-y-auto` makes a tall panel
+ * (Mode + a long effort list) scroll INSIDE the card instead of spilling its
+ * rows out past the clipped card background. */
 const menuPopupClass =
-  'z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-card p-1.5 shadow-elevation';
+  'z-20 max-h-[min(70vh,560px)] w-80 max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-1.5 shadow-elevation scrollbar-quiet';
 const settingsDividerClass = 'mx-1 my-1.5 h-px bg-border';
 
-/* Explicit, touch-friendly effort choices — never tiny slider dots. */
-const effortChoiceClass =
-  'min-h-7.5 shrink-0 cursor-pointer rounded-md border border-border bg-transparent px-2 py-1 text-xs text-muted-foreground transition-colors duration-fast hover:bg-muted hover:text-foreground';
-const effortChoiceCurClass =
-  'border-accent bg-accent/15 font-semibold text-foreground hover:bg-accent/15 hover:text-foreground';
+/* Effort rows share the menu's row idiom (like Mode / Model): a compact
+ * single-line label with a trailing accent check on the selected row and a
+ * quiet neutral active surface — never an accent-filled box. Icon-less and
+ * description-less so any agent's level set stays short and never wraps. */
+const effortRowClass =
+  'flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted';
 
 /* Neutral send button — accent only on hover-when-ready (VSCode-style).
  * Circular, not squircular: it is the terminal action on the bar, and a
@@ -187,7 +191,7 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, effortInherit
               className={effortLocked ? 'pointer-events-none opacity-60' : undefined}
               title={effortLocked ? 'Effort is fixed for this session' : undefined}
             >
-              <EffortBar effort={effort} efforts={efforts} inherited={effortInherited} onSet={onSetEffort} />
+              <EffortList effort={effort} efforts={efforts} inherited={effortInherited} onSet={onSetEffort} />
             </div>
           </div>
         )}
@@ -196,42 +200,38 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, effortInherit
   );
 }
 
-function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
+/** Effort as a vertical list — the same row idiom as the Mode and Model
+ * lists above it, so the whole popover reads as one control. The Default
+ * row (clears any override) leads, then each level the runtime advertises,
+ * in its own order. Being data-driven rows, it renders any agent's set —
+ * Claude's Low…Max, Codex's Light…Ultra — with no wrapping or layout risk. */
+function EffortList({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
+  const rows: { id: string; label: string; selected: boolean; pick: () => void }[] = [
+    { id: '__default__', label: 'Default', selected: !effort, pick: () => onSet(undefined) },
+    ...efforts.map((lv) => ({ id: lv, label: effortLabel(lv), selected: effort === lv, pick: () => onSet(lv) })),
+  ];
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-accent/4 p-2">
-      <DumbbellIcon className="size-4 shrink-0 text-muted-foreground" />
-      <span className="flex-1 text-sm text-foreground">
-        Effort <span className="text-muted-foreground">({effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'})</span>
-      </span>
-      <ListBox
-        className="flex flex-wrap items-center justify-end gap-1 py-0.5"
-        aria-label="Effort"
-        selectionMode="single"
-        selectedKeys={[effort ?? '__default__']}
-        onSelectionChange={(keys) => {
-          const next = changedEffortSelection(keys, effort, efforts);
-          if (next !== null) onSet(next);
-        }}
-      >
-        <ListBoxItem
-          id="__default__"
-          className={({ isSelected }) => cn(effortChoiceClass, isSelected && effortChoiceCurClass)}
-          textValue="Default"
+    <div>
+      <div className={menuHeadClass}><span className="font-semibold text-foreground">Effort</span></div>
+      {rows.map((row) => (
+        <button
+          key={row.id}
+          type="button"
+          className={cn(effortRowClass, row.selected && optActiveClass)}
+          onClick={row.pick}
         >
-          Default
-        </ListBoxItem>
-        {efforts.map((lv) => (
-          <ListBoxItem
-            key={lv}
-            id={lv}
-            className={({ isSelected }) => cn(effortChoiceClass, isSelected && effortChoiceCurClass)}
-            aria-label={effortLabel(lv)}
-            textValue={effortLabel(lv)}
-          >
-            {effortLabel(lv)}
-          </ListBoxItem>
-        ))}
-      </ListBox>
+          <span className={cn('min-w-0 truncate', row.selected && 'font-medium')}>
+            {row.label}
+            {/* The session inherited a non-default effort from a resumed
+              * transcript; the Default row is where you'd clear it, so it's
+              * where the current inherited state reads. */}
+            {row.id === '__default__' && inherited && !effort && (
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">inherited</span>
+            )}
+          </span>
+          {row.selected && <CheckIcon className={optCheckClass} />}
+        </button>
+      ))}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Button } from 'react-aria-components';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
 import { AgentMarkdown } from './AgentMarkdown';
@@ -34,12 +34,22 @@ export interface QueuedTurnPreview {
   canSteer?: boolean;
 }
 
+/** Per-turn "Worked for X" data, produced by AgentView and keyed by the
+ * turn's user-message id. Absent for resumed history (no timing on the wire). */
+export interface TurnMeta {
+  /** Wall-clock ms the turn spent working, measured in the renderer. */
+  durationMs: number;
+  /** The user stopped this turn before it finished. */
+  interrupted: boolean;
+}
+
 export function MessageList({
-  blocks, queuedTurns, turnActive, phase, fatal, fatalRecoveryLabel, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
+  blocks, queuedTurns, turnActive, turnMeta, phase, fatal, fatalRecoveryLabel, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
 }: {
   blocks: Block[];
   queuedTurns: QueuedTurnPreview[];
   turnActive: boolean;
+  turnMeta: Record<string, TurnMeta>;
   phase: 'connecting' | 'live' | 'closed';
   fatal: string | null;
   fatalRecoveryLabel: 'Retry' | 'Reconnect';
@@ -74,8 +84,8 @@ export function MessageList({
   return (
     // `agent-messages` is a layout hook: the chat-primary grid rules in
     // styles/chat.css widen its padding to center the readable column.
-    // No top padding — sticky turn headers pin flush to the top; the first
-    // child carries the breathing room instead (it scrolls away).
+    // No top padding — the first child's own top margin carries the
+    // breathing room (it scrolls away with the transcript).
     <div
       className="agent-messages scrollbar-quiet flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-0 pb-2 [&>*:first-child]:mt-3"
       ref={ref}
@@ -95,8 +105,6 @@ export function MessageList({
             {turn.head && (
               <UserTurnHead
                 block={turn.head}
-                scrollRef={ref}
-                sticky={queuedTurns.length === 0}
                 onCopy={onCopyUserMessage}
                 onSendEdit={onResendUserMessage}
               />
@@ -104,6 +112,8 @@ export function MessageList({
             <TurnBody
               blocks={turn.body}
               liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
+              streaming={!settled}
+              meta={turn.head ? turnMeta[turn.head.id] : undefined}
               onPermission={onPermission}
               onCopyUserMessage={onCopyUserMessage}
               onResendUserMessage={onResendUserMessage}
@@ -175,21 +185,21 @@ function groupTurns(blocks: Block[]): Turn[] {
   return turns;
 }
 
-function TurnBody({ blocks, liveBlockId, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
-  blocks: Block[];
-  /** The stream's last block while the turn is active — the one block
-   *  whose meta label may shimmer as "working". */
-  liveBlockId: string | null;
+interface ReplyHandlers {
   onPermission: (t: string, p: string, a: boolean) => void;
   onCopyUserMessage: (text: string) => void;
   onResendUserMessage: (text: string) => void;
   onOpenArtifact: (path: string) => void;
-}) {
+}
+
+/** Render a run of reply blocks: consecutive completed/running tool blocks
+ * collapse into one ToolActivityGroup; everything else (thinking, assistant
+ * prose, errors, and awaiting-permission tools) renders inline. Permission
+ * requests stay OUT of the groups so their Allow/Reject controls are never
+ * hidden by a collapse. */
+function renderReplyBlocks(blocks: Block[], liveBlockId: string | null, h: ReplyHandlers): ReactNode {
   const groups: Array<Block | ToolBlock[]> = [];
   for (const block of blocks) {
-    // Permission requests are actions, not background activity. Keep each
-    // one outside the collapsible activity stream so its Allow/Reject controls
-    // remain visible even when the preceding tool group is collapsed.
     if (block.kind !== 'tool' || block.status === 'awaiting') {
       groups.push(block);
       continue;
@@ -198,49 +208,114 @@ function TurnBody({ blocks, liveBlockId, onPermission, onCopyUserMessage, onRese
     if (Array.isArray(previous)) previous.push(block);
     else groups.push([block]);
   }
-  return <>{groups.map((group) => Array.isArray(group)
-    ? <ToolActivityGroup key={`activity-${group[0].id}`} tools={group} onPermission={onPermission} onOpenArtifact={onOpenArtifact} />
+  return groups.map((group) => Array.isArray(group)
+    ? <ToolActivityGroup key={`activity-${group[0].id}`} tools={group} onPermission={h.onPermission} onOpenArtifact={h.onOpenArtifact} />
     : <BlockView
       key={group.id}
       block={group}
       live={group.id === liveBlockId}
-      onPermission={onPermission}
-      onCopyUserMessage={onCopyUserMessage}
-      onResendUserMessage={onResendUserMessage}
-      onOpenArtifact={onOpenArtifact}
+      onPermission={h.onPermission}
+      onCopyUserMessage={h.onCopyUserMessage}
+      onResendUserMessage={h.onResendUserMessage}
+      onOpenArtifact={h.onOpenArtifact}
     />
-  )}</>;
+  );
+}
+
+function TurnBody({ blocks, liveBlockId, streaming, meta, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
+  blocks: Block[];
+  /** The stream's last block while the turn is active — the one block
+   *  whose meta label may shimmer as "working". */
+  liveBlockId: string | null;
+  /** This turn is still streaming (the flat, everything-expanded phase). */
+  streaming: boolean;
+  meta?: TurnMeta;
+  onPermission: (t: string, p: string, a: boolean) => void;
+  onCopyUserMessage: (text: string) => void;
+  onResendUserMessage: (text: string) => void;
+  onOpenArtifact: (path: string) => void;
+}) {
+  const h: ReplyHandlers = { onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact };
+
+  // While streaming, render the trace flat and expanded — the work is
+  // happening live and there is no stable "final answer" to separate yet
+  // (the last assistant block keeps moving as tokens arrive).
+  if (streaming) return <>{renderReplyBlocks(blocks, liveBlockId, h)}</>;
+
+  // Interrupted: no clean answer was produced, so the whole trace stays in
+  // the collapsible, expanded by default, under "You stopped after X".
+  if (meta?.interrupted) return <WorkTrace blocks={blocks} meta={meta} handlers={h} defaultOpen />;
+
+  // Settled normally: the last assistant block is the answer; everything
+  // before it collapses under "Worked for X", and the answer stays visible.
+  const answerIdx = lastAssistantIndex(blocks);
+  const workBlocks = answerIdx >= 0 ? blocks.slice(0, answerIdx) : blocks;
+  const answerBlocks = answerIdx >= 0 ? blocks.slice(answerIdx) : [];
+  return (
+    <>
+      {workBlocks.length > 0 && <WorkTrace blocks={workBlocks} meta={meta} handlers={h} />}
+      {renderReplyBlocks(answerBlocks, null, h)}
+    </>
+  );
+}
+
+function lastAssistantIndex(blocks: Block[]): number {
+  for (let i = blocks.length - 1; i >= 0; i--) if (blocks[i].kind === 'assistant') return i;
+  return -1;
+}
+
+/** The turn's working trace — thinking, interim narration, and tool activity —
+ * folded under a single "Worked for X" (or "You stopped after X") header, the
+ * way Codex presents a completed turn. Collapsed by default once the turn is
+ * done (the answer below carries the result); an interrupted turn opens by
+ * default since it has no answer. The user can toggle it either way. */
+function WorkTrace({ blocks, meta, handlers, defaultOpen = false }: {
+  blocks: Block[];
+  meta?: TurnMeta;
+  handlers: ReplyHandlers;
+  defaultOpen?: boolean;
+}) {
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const open = userOpen ?? defaultOpen;
+  return (
+    <section className="agent-worktrace">
+      <Button
+        className="agent-worktrace-head"
+        onPress={() => setUserOpen((value) => !(value ?? defaultOpen))}
+        aria-expanded={open}
+      >
+        <span className="agent-worktrace-label">{workTraceLabel(meta)}</span>
+        <ChevronDownIcon className={cn('agent-worktrace-chev', !open && '-rotate-90')} />
+      </Button>
+      {open && <div className="agent-worktrace-body">{renderReplyBlocks(blocks, null, handlers)}</div>}
+    </section>
+  );
+}
+
+function workTraceLabel(meta?: TurnMeta): string {
+  const time = meta && typeof meta.durationMs === 'number' ? fmtDuration(meta.durationMs) : null;
+  if (meta?.interrupted) return time ? `You stopped after ${time}` : 'You stopped';
+  return time ? `Worked for ${time}` : 'Worked';
+}
+
+/** Compact wall-clock: "45s", "1m", "1m 24s". */
+function fmtDuration(ms: number): string {
+  const s = Math.max(1, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return rem ? `${m}m ${rem}s` : `${m}m`;
 }
 
 function UserTurnHead({
-  block, scrollRef, sticky = true, onCopy, onSendEdit,
+  block, onCopy, onSendEdit,
 }: {
   block: Extract<Block, { kind: 'user' }>;
-  scrollRef?: RefObject<HTMLDivElement | null>;
-  sticky?: boolean;
   onCopy: (text: string) => void;
   onSendEdit: (text: string) => void;
 }) {
-  const [stuck, setStuck] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(block.text);
-  const sentinelRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    if (!sticky) {
-      setStuck(false);
-      return;
-    }
-    const root = scrollRef?.current;
-    const sentinel = sentinelRef.current;
-    if (!root || !sentinel) return;
-    const io = new IntersectionObserver(
-      ([e]) => setStuck(!e.isIntersecting),
-      { root, threshold: 0 },
-    );
-    io.observe(sentinel);
-    return () => io.disconnect();
-  }, [scrollRef, sticky]);
 
   useEffect(() => {
     if (!editing) setDraft(block.text);
@@ -248,8 +323,7 @@ function UserTurnHead({
 
   return (
     <>
-      {sticky && <span ref={sentinelRef} className="agent-turn-sentinel" aria-hidden="true" />}
-      <div className={'agent-turn-head' + (sticky ? '' : ' static') + (stuck ? ' stuck' : '')}>
+      <div className="agent-turn-head">
         {block.attachments && block.attachments.length > 0 && <MessageAttachments attachments={block.attachments} />}
         {editing ? (
           <InlineUserMessageEditor
@@ -268,23 +342,24 @@ function UserTurnHead({
             }}
           />
         ) : (
-          <>
-            {block.text && (
-              <UserMessageText
-                text={block.text}
-                attachmentPaths={block.attachments?.map((attachment) => attachment.path)}
-              />
-            )}
-            {block.text && (
-              <UserMessageActions
-                text={block.text}
-                onCopy={onCopy}
-                onEdit={() => setEditing(true)}
-              />
-            )}
-          </>
+          block.text && (
+            <UserMessageText
+              text={block.text}
+              attachmentPaths={block.attachments?.map((attachment) => attachment.path)}
+            />
+          )
         )}
       </div>
+      {/* Actions live BELOW the bubble now, not floating in its corner: a
+        * quiet copy/edit row that also opens a little breathing room before
+        * the agent's reply. Revealed on hover/focus of the whole turn. */}
+      {!editing && block.text && (
+        <UserMessageActions
+          text={block.text}
+          onCopy={onCopy}
+          onEdit={() => setEditing(true)}
+        />
+      )}
     </>
   );
 }
@@ -635,16 +710,17 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
 }) {
   const [open, setOpen] = useState(false);
   const active = tools.find((tool) => tool.status === 'running');
-  const failures = tools.filter((tool) => tool.status === 'error' || tool.status === 'denied').length;
-  const summary = failures
-    ? `${failures} step${failures === 1 ? '' : 's'} need attention — ${activitySummary(tools, active)}`
-    : activitySummary(tools, active);
+  const summary = activitySummary(tools, active);
   return (
     // Activity is narration, not a construct: a quiet text-level
     // disclosure in the reading column (Cursor's "Explored 1 search"
-    // register) — no full-width band, no left edge. Failures color the
-    // summary text; permission cards never enter these groups, so
-    // nothing actionable can hide behind the collapse.
+    // register) — no full-width band, no left edge. It stays neutral even
+    // when a step errored: intermediate tool failures are normal and the
+    // agent usually recovers, so the collapsed line never shouts red. A
+    // failed step still tints its own row inside the expansion, and a turn
+    // that truly fails is explained by the inline fatal notice — not here.
+    // Permission cards never enter these groups, so nothing actionable can
+    // hide behind the collapse.
     <section className="agent-activity">
       <Button
         className="flex w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left text-sm hover:bg-muted"
@@ -653,7 +729,7 @@ function ToolActivityGroup({ tools, onPermission, onOpenArtifact }: {
       >
         <ChevronDownIcon className={cn('size-3 shrink-0 text-muted-foreground', !open && '-rotate-90')} />
         {active && <Dot />}
-        <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap', failures ? 'text-status-danger' : 'text-muted-foreground', active && !failures && 'agent-shimmer')}>{summary}</span>
+        <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground', active && 'agent-shimmer')}>{summary}</span>
       </Button>
       {open && <div className="grid gap-0.5 pb-0.5 pl-5">{tools.map((tool) => <ToolRow key={tool.id} block={tool} />)}</div>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
@@ -899,36 +975,10 @@ function askTitle(name: string): string {
   return `Allow ${name}?`;
 }
 
-function toolActivityTitle(name: string, input: Record<string, unknown>): string {
-  if (name === 'Bash') {
-    const action = commandActions(input)[0];
-    if (action?.type === 'read' && typeof action.path === 'string') return `Read ${baseName(action.path)}`;
-    if (action?.type === 'listFiles') return 'Listed files';
-    if (action?.type === 'search') return 'Searched files';
-    return 'Ran command';
-  }
-  if (/read_file$/i.test(name)) {
-    const path = mcpArgs(input).path ?? input.file_path;
-    return typeof path === 'string' ? `Read ${baseName(path)}` : 'Read file';
-  }
-  if (/write_file$/i.test(name)) {
-    const path = mcpArgs(input).path;
-    return typeof path === 'string' ? `Wrote ${baseName(path)}` : 'Wrote file';
-  }
-  if (/edit_file$/i.test(name)) {
-    const path = mcpArgs(input).path;
-    return typeof path === 'string' ? `Edited ${baseName(path)}` : 'Edited file';
-  }
-  if (/list_directory$/i.test(name)) return 'Listed files';
-  if (/search/i.test(name)) return 'Searched files';
-  if (name === 'File change') return 'Changed files';
-  return name;
-}
-
 /** Codex-style parts for an activity row: an action verb and, when there
  * is one, its object — a file name (rendered underlined, like a link) or
- * a command / query (rendered mono). Parallel to toolActivityTitle, which
- * stays concise for the collapsed group summary. */
+ * a command / query (rendered mono). The collapsed group summary uses its
+ * own count-free rollup (activitySummary). */
 function toolRowParts(name: string, input: Record<string, unknown>): { verb: string; target?: string; mono?: boolean } {
   if (name === 'Bash') {
     const action = commandActions(input)[0];
@@ -959,9 +1009,12 @@ function toolRowParts(name: string, input: Record<string, unknown>): { verb: str
   return { verb: name };
 }
 
+/** A quiet, count-free description of a group's work (Codex register:
+ * "Read files, ran a command"). It lists the categories present, each
+ * phrased singular or plural to tell one from many — never an exact number,
+ * and never different wording live vs done (which read as a glitch). An
+ * active group appends "…". */
 function activitySummary(tools: ToolBlock[], active?: ToolBlock): string {
-  if (active) return `${toolActivityTitle(active.name, active.input)}…`;
-
   let reads = 0;
   let lists = 0;
   let searches = 0;
@@ -986,16 +1039,16 @@ function activitySummary(tools: ToolBlock[], active?: ToolBlock): string {
     else toolsUsed++;
   }
   const labels = [
-    reads && `read ${reads} file${reads === 1 ? '' : 's'}`,
-    lists && `listed ${lists} folder${lists === 1 ? '' : 's'}`,
-    searches && `searched ${searches} time${searches === 1 ? '' : 's'}`,
-    commands && `ran ${commands} command${commands === 1 ? '' : 's'}`,
-    changes && `changed ${changes} file${changes === 1 ? '' : 's'}`,
-    toolsUsed && `used ${toolsUsed} tool${toolsUsed === 1 ? '' : 's'}`,
+    reads && `read ${reads === 1 ? 'a file' : 'files'}`,
+    lists && `listed ${lists === 1 ? 'a folder' : 'folders'}`,
+    searches && 'searched',
+    commands && `ran ${commands === 1 ? 'a command' : 'commands'}`,
+    changes && `edited ${changes === 1 ? 'a file' : 'files'}`,
+    toolsUsed && `used ${toolsUsed === 1 ? 'a tool' : 'tools'}`,
   ].filter(Boolean);
   const summary = labels.length ? labels.join(', ') : 'worked';
-  // Sentence-cap the summary (Cursor's "Explored 1 search" register).
-  return summary.charAt(0).toUpperCase() + summary.slice(1);
+  const capped = summary.charAt(0).toUpperCase() + summary.slice(1);
+  return active ? `${capped}…` : capped;
 }
 
 type DiffRow = { type: 'ctx' | 'del' | 'add'; text: string };

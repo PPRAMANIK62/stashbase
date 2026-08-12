@@ -231,7 +231,7 @@ Button/StatusMessage/Menu/Input primitives. `styles/chat.css` keeps only what
 utilities must not own: the `.app` grid tracks and chat splitter, the
 chat-primary centring rules keyed on the `agent-head` / `agent-messages` /
 `agent-composer` hook classes (keep those class names on the utility-styled
-elements), the sticky user-turn header system, `.agent-prose` content
+elements), the right-aligned user-turn bubble, `.agent-prose` content
 typography plus the One-Dark tool/diff palette, the `@`-mention popup
 (`.agent-mention-item.active` is a keyboard-navigation querySelector hook),
 and the CodeMirror-owned composer input DOM. `.agent-view` stays a class-name
@@ -241,8 +241,9 @@ pill ("Session folder" / "Session scope: Library"; when locked it appends
 "— set for this conversation"), the model pill ("Model: Default" when
 default so adjacent Defaults cannot be confused), and the mode pill
 ("Permission mode: …"), whose panel stacks the permission-mode list with
-the effort bar at the bottom. Sections render only when the runtime
-supports them; a locked model pill or effort bar stays visible but inert.
+the effort list at the bottom (same row idiom, Default first, data-driven
+from the runtime's advertised levels). Sections render only when the runtime
+supports them; a locked model pill or effort list stays visible but inert.
 An empty chat centers the composer as the hero layout: the
 composer swaps its `agent-composer` width hook for the hero column while
 empty, and keeps a stable React `key` so the same mounted instance (draft,
@@ -373,7 +374,19 @@ The accepted baseline includes:
   step is a flat row (type glyph + verb + underlined file / mono command or
   query), expandable to its payload/result, with no per-step card, border, or
   status badge — inspectable command/read/search labels rather than
-  lifecycle-only summaries or "Done" chips
+  lifecycle-only summaries or "Done" chips. The group's collapsed summary is
+  count-free and stable live vs done (categories + singular/plural, never a
+  number), and never turns red on an intermediate step failure (the failed
+  row tints inside the expansion; the turn's own fatal notice owns real
+  failure)
+- turn-level working-trace fold: a settled turn's thinking/interim
+  narration/tool activity collapses under one "Worked for X" header, leaving
+  the final answer (the last assistant block) visible; an interrupted turn
+  reads "You stopped after X" and stays expanded (no answer to isolate).
+  Duration is renderer-measured wall clock keyed by the turn's user-message
+  id (`AgentView` `setTurnBusy`/`stop`), so resumed history has none and shows
+  a plain "Worked"/"You stopped"; while streaming the trace is flat and
+  expanded, folding only on completion
 - visible permission cards outside collapsed activity
 - lightweight file/artifact open affordances
 - jump-to-latest behavior for transcript scrolling

@@ -119,8 +119,10 @@ client of StashBase context, not a separate AI workspace.
   concrete model name whenever the runtime reports one — including the
   catalog's default for a fresh session — falling back to "Model:
   Default" only when no identity is known. The mode pill's panel stacks
-  the permission-mode list with the reasoning-effort bar at the bottom
-  (the Claude Code treatment); a non-default effort echoes on the trigger
+  the permission-mode list with the reasoning-effort list beneath it in
+  the same panel — one row idiom for both, Default leading, so any agent's
+  advertised levels (Claude's Low…Max, Codex's Light…Ultra) render as rows
+  without wrapping. A non-default effort echoes on the trigger
   ("Ask · High"). Sections appear only when the runtime supports them;
   locked controls stay visible but inert.
 - Resumed Claude chats recover effort from their native active transcript
@@ -135,9 +137,22 @@ client of StashBase context, not a separate AI workspace.
   verb, and its object (a file name shown underlined like a link, a command
   or query in mono) — with no per-step card, border, or status badge. A step
   present in the finished transcript is by definition done, so it carries no
-  "Done" chip; failures tint their own row. The one tool surface that stays a
-  card is an approval ask: it is actionable and never hidden in collapsed
-  activity.
+  "Done" chip. The group's collapsed summary is count-free and identical live
+  or done (categories, singular/plural, never "searched 7 times"), and it
+  stays neutral even when a step errored — intermediate tool failures are
+  normal and the agent recovers, so the line never shouts red. A failed step
+  still tints its own row inside the expansion. The one tool surface that
+  stays a card is an approval ask: it is actionable and never hidden in
+  collapsed activity.
+- Once a turn finishes, its whole working process — thinking, interim
+  narration, and tool activity — folds under a single "Worked for X" header
+  (Codex register), leaving only the final answer visible; the header expands
+  to review the process. A turn the user stopped reads "You stopped after X"
+  and stays expanded, since it has no answer to isolate. Duration is measured
+  on the renderer clock (no timing exists on the wire), so a resumed history
+  turn shows a plain "Worked" / "You stopped" with no time. While a turn is
+  still streaming everything renders flat and expanded; the fold happens on
+  completion.
 - A failed turn leaves exactly one persistent inline explanation in the
   transcript, preferring the runtime's specific message when available. The
   failure remains attached to its turn before any queued follow-up continues.
@@ -190,9 +205,10 @@ client of StashBase context, not a separate AI workspace.
   surface as openable artifact cards; chat tab titles flatten mention
   paths to file names. Each
   assistant reply block reveals a corner ⋯ menu on hover — Copy Message
-  today, room for more actions later. Every user message reveals in-card
-  copy and edit actions on hover; editing resends the edited text as a
-  new prompt (sessions cannot rewind, so no forking).
+  today, room for more actions later. The user message is a right-aligned
+  bubble; its copy and edit actions sit in a row just below it, revealed on
+  hover, which also opens a little space before the reply. Editing resends
+  the edited text as a new prompt (sessions cannot rewind, so no forking).
 - Streaming must not steal reading position from a user inspecting earlier
   transcript content.
 - Presentation changes must not create a separate agent, context, permission,
