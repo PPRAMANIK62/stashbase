@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import { BotIcon, ChevronDownIcon, ClaudeIcon } from '../icons';
 import type { FileMeta, FolderMeta } from '../api';
@@ -38,6 +38,11 @@ interface FileNode {
 }
 
 type TreeNode = FolderNode | FileNode;
+
+const TreeFocusContext = createContext<{
+  rovingPath: string | null;
+  setRovingPath: (path: string) => void;
+}>({ rovingPath: null, setRovingPath: () => undefined });
 
 function buildTree(
   files: FileMeta[],
@@ -143,11 +148,35 @@ function displayName(name: string): string {
   return name;
 }
 
+function visibleNodePaths(nodes: TreeNode[], expanded: Set<string>, paths: string[] = []): string[] {
+  for (const node of nodes) {
+    paths.push(node.path);
+    if (node.type === 'folder' && expanded.has(node.path)) {
+      visibleNodePaths(node.children, expanded, paths);
+    }
+  }
+  return paths;
+}
+
 export function FileTree() {
   const { state } = useApp();
+  const [rovingPath, setRovingPath] = useState<string | null>(null);
   const root = useMemo(
     () => buildTree(state.files, state.folders, state.fileOrder),
     [state.files, state.folders, state.fileOrder],
+  );
+  const visiblePaths = useMemo(
+    () => visibleNodePaths(root.children, state.expanded),
+    [root, state.expanded],
+  );
+  const effectiveRovingPath = rovingPath && visiblePaths.includes(rovingPath)
+    ? rovingPath
+    : state.selectedPath && visiblePaths.includes(state.selectedPath)
+      ? state.selectedPath
+      : visiblePaths[0] ?? null;
+  const focusContext = useMemo(
+    () => ({ rovingPath: effectiveRovingPath, setRovingPath }),
+    [effectiveRovingPath],
   );
 
   const inputAtRoot = state.newFolderInputOpen && state.activeFolder === '';
@@ -167,10 +196,12 @@ export function FileTree() {
     return <div className="empty-list">No notes yet — click + to create one</div>;
   }
   return (
-    <>
-      {inputAtRoot && <NewFolderInput parentPath="" depth={0} />}
-      <TreeNodes nodes={root.children} depth={0} parent="" />
-    </>
+    <TreeFocusContext.Provider value={focusContext}>
+      <div role="tree" aria-label="Files">
+        {inputAtRoot && <NewFolderInput parentPath="" depth={0} />}
+        <TreeNodes nodes={root.children} depth={0} parent="" />
+      </div>
+    </TreeFocusContext.Provider>
   );
 }
 
@@ -195,6 +226,7 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
             key={n.path}
             path={n.path}
             format={n.meta.format}
+            depth={depth}
             paddingLeft={depth * 14 + 26}
             parent={parent}
             siblings={siblings}
@@ -203,6 +235,34 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
       )}
     </>
   );
+}
+
+function visibleTreeItems(current: HTMLElement): HTMLElement[] {
+  const tree = current.closest('[role="tree"]');
+  if (!tree) return [];
+  return Array.from(tree.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+    .filter((item) => !item.closest('.tree-children.collapsed'));
+}
+
+function moveTreeFocus(event: KeyboardEvent<HTMLDivElement>): boolean {
+  const items = visibleTreeItems(event.currentTarget);
+  const index = items.indexOf(event.currentTarget);
+  let target: HTMLElement | undefined;
+  if (event.key === 'ArrowDown') target = items[index + 1];
+  else if (event.key === 'ArrowUp') target = items[index - 1];
+  else if (event.key === 'Home') target = items[0];
+  else if (event.key === 'End') target = items.at(-1);
+  if (!target) return false;
+  event.preventDefault();
+  target.focus();
+  return true;
+}
+
+function focusParentTreeItem(current: HTMLElement, parentPath: string): boolean {
+  if (!parentPath) return false;
+  const parent = visibleTreeItems(current).find((item) => item.dataset.path === parentPath);
+  parent?.focus();
+  return !!parent;
 }
 
 function FolderRow({
@@ -217,6 +277,7 @@ function FolderRow({
   siblings: string[];
 }) {
   const { state, dispatch, actions } = useApp();
+  const treeFocus = useContext(TreeFocusContext);
   const isExpanded = state.expanded.has(node.path);
   const isActive = state.selectedPath === node.path;
   const renaming = useRenameTarget(node.path, 'folder');
@@ -320,7 +381,12 @@ function FolderRow({
     <>
       <div
         className={rowClass}
-        tabIndex={-1}
+        role="treeitem"
+        aria-label={node.name}
+        aria-level={depth + 1}
+        aria-expanded={isExpanded}
+        aria-selected={isActive}
+        tabIndex={treeFocus.rovingPath === node.path ? 0 : -1}
         style={{ paddingLeft: depth * 14 + 26 }}
         data-path={node.path}
         draggable={!renaming}
@@ -329,9 +395,28 @@ function FolderRow({
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
+        onFocus={() => treeFocus.setRovingPath(node.path)}
         onClick={() => {
           if (renaming) return;
           dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
+        }}
+        onKeyDown={(e) => {
+          if (moveTreeFocus(e)) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (!renaming) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
+          } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            if (!isExpanded) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
+            else {
+              const items = visibleTreeItems(e.currentTarget);
+              items[items.indexOf(e.currentTarget) + 1]?.focus();
+            }
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            if (isExpanded) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
+            else focusParentTreeItem(e.currentTarget, parent);
+          }
         }}
         onContextMenu={onContextMenu}
       >
@@ -340,6 +425,7 @@ function FolderRow({
           <RenameInput
             initialBasename={node.name}
             ext=""
+            ariaLabel={`Rename folder ${node.name}`}
             onCommit={(newName) => {
               void actions.renameFolder(node.path, newName);
             }}
@@ -351,6 +437,7 @@ function FolderRow({
       </div>
       <div
         className={'tree-children' + (isExpanded ? '' : ' collapsed')}
+        role="group"
       >
         {state.newFolderInputOpen && state.activeFolder === node.path && (
           <NewFolderInput parentPath={node.path} depth={depth + 1} />
@@ -364,17 +451,20 @@ function FolderRow({
 function FileRow({
   path,
   format,
+  depth,
   paddingLeft,
   parent,
   siblings,
 }: {
   path: string;
   format: 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio';
+  depth: number;
   paddingLeft: number;
   parent: string;
   siblings: string[];
 }) {
   const { state, actions, dispatch } = useApp();
+  const treeFocus = useContext(TreeFocusContext);
   const isActive = state.selectedPath === path;
   const readiness = getFileReadiness(state, path);
   const renaming = useRenameTarget(path, 'file');
@@ -487,10 +577,26 @@ function FileRow({
     });
   }
 
+  function openFile() {
+    const activeTab = state.activeTabId
+      ? state.tabs.find((t) => t.id === state.activeTabId)
+      : null;
+    // An out-of-folder tab with the same relative name is a different file.
+    if (activeTab?.file?.name === path && !activeTab.file.folder) {
+      dispatch({ type: 'SELECT_PATH', path });
+    } else {
+      void actions.selectFile(path);
+    }
+  }
+
   return (
     <div
       className={rowClass}
-      tabIndex={-1}
+      role="treeitem"
+      aria-label={display}
+      aria-level={depth + 1}
+      aria-selected={isActive}
+      tabIndex={treeFocus.rovingPath === path ? 0 : -1}
       style={{ paddingLeft }}
       data-path={path}
       title={title}
@@ -500,6 +606,7 @@ function FileRow({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      onFocus={() => treeFocus.setRovingPath(path)}
       onClick={() => {
         if (renaming) return;
         // Single-click → open the file in its own persistent tab (or
@@ -508,16 +615,17 @@ function FileRow({
         // `selectFile` — it sees the file is already shown and just
         // re-selects the row. There is no double-click open: one click
         // always opens a lasting tab.
-        const activeTab = state.activeTabId
-          ? state.tabs.find((t) => t.id === state.activeTabId)
-          : null;
-        // An out-of-folder tab with the same rel name is a DIFFERENT file —
-        // fall through to selectFile so the tree's file actually opens.
-        if (activeTab?.file?.name === path && !activeTab.file.folder) {
-          dispatch({ type: 'SELECT_PATH', path });
-        } else {
-          void actions.selectFile(path);
+        openFile();
+      }}
+      onKeyDown={(e) => {
+        if (moveTreeFocus(e)) return;
+        if (e.key === 'ArrowLeft') {
+          if (focusParentTreeItem(e.currentTarget, parent)) e.preventDefault();
+          return;
         }
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        if (!renaming) openFile();
       }}
       onContextMenu={onContextMenu}
     >
@@ -526,6 +634,7 @@ function FileRow({
         <RenameInput
           initialBasename={ext ? basename.slice(0, -ext.length) : basename}
           ext={ext}
+          ariaLabel={`Rename file ${basename}`}
           onCommit={(newBasename) => {
             void actions.renameFile(path, newBasename);
           }}
@@ -621,6 +730,7 @@ function NewFolderInput({ parentPath, depth }: { parentPath: string; depth: numb
       <input
         ref={ref}
         type="text"
+        aria-label={parentPath ? `New folder in ${parentPath}` : 'New folder in folder root'}
         className="tree-create-input"
         placeholder="New folder name…"
         onKeyDown={(e) => {

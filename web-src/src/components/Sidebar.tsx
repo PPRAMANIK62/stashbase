@@ -952,6 +952,7 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                   >
                     <button
                       type="button"
+                      aria-label={name}
                       className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent py-1 pr-1 pl-2 text-left text-base text-foreground/80 group-hover/root:text-foreground disabled:cursor-default"
                       disabled={!!openingFolder}
                       title={entry.path}
@@ -1196,21 +1197,29 @@ function ActiveFolderHeader({
       onDragLeave={onSideHeadDragLeave}
       onDrop={onSideHeadDrop}
     >
-      <span className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-foreground">
+      <span className="flex min-w-0 flex-1 items-center gap-2 text-foreground">
         {/* Folder glyph at rest; the pointer swaps in the fold chevron so
           * the collapse affordance appears only when it's actionable. */}
-        <span
-          className="inline-flex size-4 flex-none items-center justify-center text-muted-foreground"
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="size-4 flex-none rounded-sm p-0 text-muted-foreground hover:bg-transparent"
+          aria-label={`${state.folderCollapsed ? 'Expand' : 'Collapse'} files in ${name}`}
+          aria-expanded={!state.folderCollapsed}
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
         >
           <FolderIcon className="size-3.5 group-hover/head:hidden" />
           <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/head:inline-flex [&_svg]:size-3.5' + (state.folderCollapsed ? ' -rotate-90' : '')}><ChevronDownIcon /></span>
-        </span>
-        <span
-          className="min-w-0 flex-1 truncate text-base font-medium"
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto min-w-0 flex-1 shrink justify-start truncate p-0 text-left text-base font-medium text-foreground hover:bg-transparent hover:text-foreground active:translate-y-0"
+          aria-label={`Select ${name} folder root`}
           title={path}
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}
-        >{name}</span>
+        >{name}</Button>
         {favorite && (
           <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
         )}
@@ -1282,6 +1291,7 @@ function NewNoteButton() {
       size="icon-xs"
       className="text-muted-foreground"
       title={'New note in ' + target}
+      aria-label={'New note in ' + target}
       onClick={() => void actions.newNote()}
     ><NewFileIcon className="size-3.5" /></Button>
   );

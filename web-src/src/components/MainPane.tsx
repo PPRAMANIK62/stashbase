@@ -104,7 +104,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         * children a definite size unambiguously, sidestepping that bug.
         * The `main-body` class itself is the structural hook for
         * `.main.no-file > :not(.main-body)` in mainpane.css. */}
-      <div className={'main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden' + (chromeBand ? ' pt-8' : '')}>
+      <div
+        className={'main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden' + (chromeBand ? ' pt-8' : '')}
+        role={activeTab ? 'tabpanel' : undefined}
+        id={activeTab ? 'document-panel' : undefined}
+        aria-labelledby={activeTab ? `document-tab-${activeTab.id}` : undefined}
+      >
         {!hasTabs && !state.folderPath && (
           /* No folder open at all (empty library, or an open failure).
            * The sidebar's zero-folder block owns the add-folder action;

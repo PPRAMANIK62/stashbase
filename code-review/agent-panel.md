@@ -265,11 +265,17 @@ Community contributions can land as useful first iterations, but the long-term d
   clear busy/tool activity, and do not append a second failed-turn notice. A
   raw post-ready socket close gets the stable agent-specific disconnect
   fallback; explicit renderer/client teardown must suppress it.
+  Teardown may send the courtesy protocol close frame only while the socket is
+  still open; calling `send()` after it starts closing is itself a renderer
+  console error and must not make clean navigation fail strict UI checks.
 - Derive the shell layout from Chat visibility, document presence, and compact
   viewport state; do not add RAG/CoWork product modes. The chat-primary layout
   removes the document and splitter grid tracks without unmounting either
   surface. Hidden primary surfaces are inert so zero-width content cannot keep
   keyboard focus.
+- Initialize the renderer with Chat open. Boot may create the default blank tab
+  asynchronously, but the shell must not first paint a collapsed panel and
+  rely on a later effect to reveal the product's default workspace.
 - Opening a folder creates one fresh chat tab for the app-wide preferred
   Agent — but only when the window has no chat tabs. Existing tabs (and their
   folder-bound sessions) survive folder switches, so a switch never spawns an
@@ -352,9 +358,34 @@ Community contributions can land as useful first iterations, but the long-term d
   For resumed Claude history, render the server-reported effort and keep
   missing or unsupported metadata visibly inherited instead of inventing a
   renderer default. Replay must tolerate a protocol-v1 server retained during
-  restart. Changing effort on an idle restored session retains its rendered
+  restart. Codex uses the same protocol-v2 replay envelope with a null effort,
+  so its normal history path does not depend on a failed metadata probe.
+  Changing effort on an idle restored session retains its rendered
   transcript and native identity; the server-side history and writer lifecycle
   contract lives in [architecture.md](architecture.md).
+
+## Validation
+
+Run `pnpm typecheck`, `pnpm test:renderer`, and
+`npx vite build --config web-src/vite.config.ts`, plus the narrow agent/server
+tests for any transport, session, permission, or history seam changed. The
+Playwright smoke suite proves that the Agent chat shell can launch alongside
+the workspace, and the workspace visual baseline renders deterministic
+"Agent unavailable" discovery. `pnpm test:e2e:agent-protocol` verifies the
+fake Codex executable's stdio JSON-RPC contract directly;
+`pnpm test:e2e:functional` runs that contract before a production-path
+Electron journey covering new chat, folder binding, command approval,
+transcript completion, a window-folder switch, and interruption. The fixture
+is selected through the shipping `STASHBASE_CODEX_BIN` override and uses no
+developer credentials, real CLI account, user CLI history, or network output.
+
+A credentialed real-CLI Agent turn, clipboard-image attachment, and packaged
+runtime discovery remain in the residual
+[release sanity checklist](../release-checklists/ui-sanity.md). Extend the
+automated Agent UI coverage only through a deterministic protocol fixture
+without weakening the transport and permission contracts described here. The
+shared harness, focus policy, artifact handling, and selector rules live in
+[UI Regression Testing](ui-regression-testing.md).
 
 ## Current Baseline
 

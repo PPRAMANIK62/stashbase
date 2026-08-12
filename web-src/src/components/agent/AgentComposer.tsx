@@ -383,7 +383,10 @@ export function AgentComposer({
     // px-3 matches the transcript's 12px insets so the composer card and
     // the turn cards above share one column edge (the wrapper's
     // chat-primary width budgets for it — see `.agent-composer`).
-    <div className={cn('relative', hero ? 'mx-auto w-[min(656px,100%)] p-2' : 'agent-composer p-2 px-3')}>
+    <div
+      className={cn('relative', hero ? 'mx-auto w-[min(656px,100%)] p-2' : 'agent-composer p-2 px-3')}
+      data-draft-empty={text.trim() ? 'false' : 'true'}
+    >
       {mention && (choices.length > 0 || mention.kind === 'skill') && (
         <div className="agent-mention">
           <div className="agent-mention-head">

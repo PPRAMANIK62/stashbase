@@ -87,6 +87,10 @@ export function MessageList({
     // breathing room (it scrolls away with the transcript).
     <div
       className="agent-messages scrollbar-quiet flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-0 pb-2 [&>*:first-child]:mt-3"
+      role="log"
+      aria-label="Agent conversation"
+      aria-live="polite"
+      aria-busy={turnActive}
       ref={ref}
       onScroll={onScroll}
     >
@@ -251,11 +255,10 @@ function TurnBody({ blocks, liveBlockId, streaming, meta, onPermission, onCopyUs
   // the collapsible, expanded by default, under "You stopped after X".
   if (meta?.interrupted) return <WorkTrace blocks={blocks} meta={meta} handlers={h} defaultOpen />;
 
-  // Settled normally: the last assistant block is the answer; everything
-  // before it collapses under "Worked for X", and the answer stays visible.
-  const answerIdx = lastAssistantIndex(blocks);
-  const workBlocks = answerIdx >= 0 ? blocks.slice(0, answerIdx) : blocks;
-  const answerBlocks = answerIdx >= 0 ? blocks.slice(answerIdx) : [];
+  // Settled normally: the last assistant answer OR terminal error remains
+  // visible. Everything before it collapses under "Worked for X". Hiding a
+  // terminal error in the work trace leaves a failed turn unexplained.
+  const { workBlocks, answerBlocks } = settledReplySections(blocks);
   return (
     <>
       {workBlocks.length > 0 && <WorkTrace blocks={workBlocks} meta={meta} handlers={h} />}
@@ -264,9 +267,13 @@ function TurnBody({ blocks, liveBlockId, streaming, meta, onPermission, onCopyUs
   );
 }
 
-function lastAssistantIndex(blocks: Block[]): number {
-  for (let i = blocks.length - 1; i >= 0; i--) if (blocks[i].kind === 'assistant') return i;
-  return -1;
+export function settledReplySections(blocks: Block[]): { workBlocks: Block[]; answerBlocks: Block[] } {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i].kind === 'assistant' || blocks[i].kind === 'error') {
+      return { workBlocks: blocks.slice(0, i), answerBlocks: blocks.slice(i) };
+    }
+  }
+  return { workBlocks: blocks, answerBlocks: [] };
 }
 
 /** The turn's working trace — thinking, interim narration, and tool activity —

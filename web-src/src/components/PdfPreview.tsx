@@ -17,6 +17,7 @@ import { useApp } from '../store/AppContext';
 import { getFileReadiness } from '../store/fileReadiness';
 import {
   cleanPdfSearchText,
+  currentPdfPageForViewport,
   exactPageForHighlight,
   findPdfChunkMatch,
   flattenPageText,
@@ -137,6 +138,12 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
       behavior,
     });
     setCurrentPage(targetPage);
+    // Direct navigation must persist before the next pointer/keyboard event.
+    // Waiting for the passive currentPage effect lets an immediate tab switch
+    // unmount the viewer before the requested page reaches tab state.
+    if (activeTab?.file?.format === 'pdf' && activeTab.pdfPage !== targetPage) {
+      updateTabPdfPage(activeTab.id, targetPage);
+    }
   }
 
   /** Fit means fill: the page takes the pane's full width, edge to edge.
@@ -245,19 +252,18 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
       if (!initialScrollDone.current) return;
       const rootRect = root.getBoundingClientRect();
       const markerY = rootRect.top + Math.min(root.clientHeight * 0.35, 160);
-      let bestPage = 1;
-      let bestDistance = Number.POSITIVE_INFINITY;
       const pages = root.querySelectorAll<HTMLElement>('[data-page]');
-      pages.forEach((pageEl) => {
-        const page = Number(pageEl.dataset.page);
-        if (!Number.isFinite(page)) return;
-        const rect = pageEl.getBoundingClientRect();
-        const topDistance = Math.abs(rect.top - markerY);
-        const insideDistance = rect.top <= markerY && rect.bottom >= markerY ? 0 : topDistance;
-        if (insideDistance < bestDistance) {
-          bestDistance = insideDistance;
-          bestPage = page;
-        }
+      const bestPage = currentPdfPageForViewport({
+        scrollTop: root.scrollTop,
+        scrollHeight: root.scrollHeight,
+        clientHeight: root.clientHeight,
+        markerY,
+        pages: Array.from(pages).flatMap((pageEl) => {
+          const page = Number(pageEl.dataset.page);
+          if (!Number.isFinite(page)) return [];
+          const rect = pageEl.getBoundingClientRect();
+          return [{ page, top: rect.top, bottom: rect.bottom }];
+        }),
       });
       setCurrentPage((prev) => (prev === bestPage ? prev : bestPage));
     };
@@ -531,7 +537,10 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
           setAutoFit(false);
           setScale((s) => Math.min(PDF_MAX_SCALE, s + 0.2));
         }}
-        onJumpToPage={scrollToPage}
+        // A numbered jump is a direct navigation, not continuous reading.
+        // Move synchronously so the scroll listener cannot observe the old
+        // page during a smooth-scroll frame and overwrite the requested page.
+        onJumpToPage={(page) => scrollToPage(page, 'auto')}
       />
       {/* The gap above the first page follows the page's own margins.
         * Fitted, the sheet runs edge to edge and has none, so a top gap

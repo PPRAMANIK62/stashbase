@@ -360,7 +360,11 @@ export const initialState: State = {
   folderCollapsed: false,
   sidebarCollapsed: false,
   sidebarWidth: 280,
-  chatOpen: false,
+  // The app boots into the library-scoped Chat workspace. Keep the shell open
+  // from the first renderer frame; AppBody creates the initial blank tab once
+  // bootstrap settles, but the panel must not flash or remain collapsed while
+  // that asynchronous state arrives.
+  chatOpen: true,
   chatWidth: 480,
   agents: [],
   chatTabs: [],
