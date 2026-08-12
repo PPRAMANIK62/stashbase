@@ -105,6 +105,14 @@ to migrate them into a StashBase-specific storage model.
   file is focused rather than reopened. There is no preview/pinned tab split —
   one click always opens a lasting tab.
 - PDF tabs retain their active reading position (page number) across tab switches during a session. Opening a different file in a tab resets the stored page position.
+- A PDF opens fitted to the pane width — edge to edge, with no side margin,
+  and none above it either; zoom away from fit and the page takes the same
+  margin above it that it takes between pages. Its reading controls sit in
+  one quiet row at the top of the pane: zoom,
+  the current zoom level (click it for actual size), a Fit toggle that stays
+  pressed while auto-fit holds, and the current page over the total, which is
+  also the jump-to-page field. Page position lives there rather than beside
+  each page, since a fitted page leaves no margin to put it in.
 - Cmd/Ctrl+T opens a new blank tab, the keyboard equivalent of the tab
   strip's `+` button — distinct from Cmd/Ctrl+N, which creates a note file.
 - Cmd/Ctrl+O opens a focused Quick Open for visible source files in the active

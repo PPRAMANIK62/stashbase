@@ -117,6 +117,14 @@ view, editor, agent prose) follows its own reading sizes, not this scale.
   three neighbours — chrome, canvas, paper — stay mutually perceptible.
   A layout change resizes a pane; it never recolors one — surface roles
   must not depend on layout, or switching reads as a mode jump.
+- The PDF viewer is the one document pane that inverts this: its pages are
+  physical sheets, so the canvas behind them is sunken and the paper is the
+  only white in it. It fits a page to the full pane width, so that canvas
+  shows where it means something — between sheets, and around a page the
+  user has zoomed away from — and never as a decorative margin. Chrome above
+  such a pane stays on the base surface and separates with a stroke: tint it
+  and a fitted page turns the band into a third colour wedged between two
+  whites.
 - Separation comes from 1px subtle strokes and surface changes, not shadows.
 - Shadow is reserved for transient overlays (menus, dialogs, toasts) — the
   one elevation treatment — so floating things read as floating and nothing
