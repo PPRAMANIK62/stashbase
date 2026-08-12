@@ -138,8 +138,9 @@ panel with its one fresh tab.
 Chat creation has ONE entry point: the sidebar's New Chat split button.
 Its main area creates with the app-wide preferred agent
 (`readPreferredAgent`); its chevron menu ("Choose agent for new chat")
-creates with an explicit agent AND updates that preference
-(`rememberPreferredAgent` — clicking a chat tab also updates it).
+only updates that preference and MUST NOT create or activate a chat
+(`rememberPreferredAgent` — clicking a chat tab also updates it). The user
+must press the main New Chat area to create a session.
 Creation goes through `newChatPlan`: reuse the one COMPLETELY blank tab
 regardless of its agent — when the agent differs, switch the blank tab's
 agent in place via `CHAT_TAB_SET_AGENT` (the reducer refuses any tab
@@ -322,10 +323,10 @@ Community contributions can land as useful first iterations, but the long-term d
   action opens a document and causes Chat to dock.
 - Streaming should not steal the user's scroll position. If the user has scrolled away from the bottom, show a clear jump-to-latest affordance.
 - The current document is never implicit agent context. Users attach files by drag/drop, file picker, `@` mention, or a composer-focused image paste. Image paste must reuse transient attachments, preserve accompanying text, and suppress the competing clipboard library-import offer.
-- The sidebar's New Chat split button owns chat creation and agent selection
-  (its chevron menu also updates the default agent); chat tabs own switching
-  between open chats. The pane header carries only the History menu — no
-  corner launchers, no in-panel `+`.
+- The sidebar's New Chat split button owns chat creation and agent selection:
+  its chevron menu only updates the default agent, while its main area is the
+  sole creation action. Chat tabs own switching between open chats. The pane
+  header carries only the History menu — no corner launchers, no in-panel `+`.
 - Model catalogs and identifiers belong to their native runtime: use Claude's
   SDK discovery and Codex app-server `model/list`, never a shared hard-coded
   list. `undefined` means Default and must not change global CLI settings.

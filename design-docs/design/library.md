@@ -22,8 +22,8 @@ to migrate them into a StashBase-specific storage model.
   It leads with a `+`, not an Agent mark: the row's job is starting a
   chat, and which Agent that will be is named at the row's right edge,
   beside the chevron that changes it. Its main area starts a chat with
-  the last-selected Agent; the chevron offers New Claude Code Chat / New
-  Codex Chat, and picking one also makes that Agent the new default. The
+  the last-selected Agent; the chevron chooses Claude Code or Codex as
+  the new default without starting a chat. The
   chat is scoped to the window's current folder, or to the whole library
   when no folder is current, and a completely blank chat is reused
   (switching its Agent in place when needed) instead of stacking empty

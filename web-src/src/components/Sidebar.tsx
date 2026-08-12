@@ -26,7 +26,11 @@ import { useApp } from '../store/AppContext';
 import { makeChatTab, type Action, type LibraryFolderStatus, type State } from '../store/state';
 import { folderScope, LIBRARY_SCOPE, newChatPlan, type ChatScope } from './agent/folderState';
 import { AGENT_META, AGENTS, type AgentKind } from '../agentCatalog';
-import { readPreferredAgent, rememberPreferredAgent } from '../agentPreference';
+import {
+  newChatAgentSelectionPlan,
+  readPreferredAgent,
+  rememberPreferredAgent,
+} from '../agentPreference';
 import { folderRefsEqual } from '../folderPath';
 import { FileTree } from './FileTree';
 import { useDocumentOutline } from './DocumentOutlineContext';
@@ -339,14 +343,13 @@ function SettingsRow() {
 /** Full-width New Chat entry above the Library section (Cursor's "New
  *  Agent" position) — the app's ONE chat-creation entry point, a split
  *  button. The main area starts a chat with the last-selected agent; the
- *  chevron at the row's right edge opens a menu to start with a specific
- *  agent AND make it the new default. Creation reuses the one completely
- *  blank tab regardless of its agent (switching the blank tab's agent in
- *  place when it differs — `newChatPlan`); any content, draft,
- *  attachments, or resumed session means a fresh tab instead. Opens the
- *  chat panel when hidden. The reused/created tab's scope resolves to
- *  the window default (current folder, else Library) on connect, so no
- *  scope needs to be threaded here. */
+ *  chevron at the row's right edge only chooses the agent the next main-area
+ *  click will use. That click reuses the one completely blank tab regardless
+ *  of its agent (switching the blank tab's agent in place when it differs —
+ *  `newChatPlan`); any content, draft, attachments, or resumed session means
+ *  a fresh tab instead. It opens the chat panel when hidden. The
+ *  reused/created tab's scope resolves to the window default (current folder,
+ *  else Library) on connect, so no scope needs to be threaded here. */
 function NewChatButton() {
   const { state, dispatch } = useApp();
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
@@ -356,11 +359,13 @@ function NewChatButton() {
     activateChatTabForAgent(state, dispatch, agent);
   }
 
-  /** Explicit pick from the chevron menu: creates the chat AND updates
-   *  the app-wide default agent for later New Chat clicks. */
+  /** Picking from the chevron only updates the next-chat preference. Chat
+   *  creation stays behind the main New Chat action. */
   function pickAgent(agent: AgentKind) {
-    rememberPreferredAgent(agent);
-    startChat(agent);
+    const plan = newChatAgentSelectionPlan(agent);
+    rememberPreferredAgent(plan.preferredAgent);
+    if (plan.startAgent) startChat(plan.startAgent);
+    setMenuAnchor(null);
   }
 
   /* Agent NAMES, not "New <Agent> Chat": the row itself says New Chat and
@@ -373,9 +378,9 @@ function NewChatButton() {
     onSelect: () => pickAgent(agent.id),
   }));
 
-  // Read at render time, no state: every rememberPreferredAgent call site
-  // (this menu, the chat pane's launcher, openAgent) dispatches a store
-  // update in the same interaction, so this row re-renders fresh.
+  // Read at render time, no state: the picker closes its menu after writing,
+  // while the other rememberPreferredAgent call sites also dispatch a store
+  // update, so this row re-renders with the latest app-wide preference.
   const preferred = AGENT_META[readPreferredAgent()];
 
   return (
