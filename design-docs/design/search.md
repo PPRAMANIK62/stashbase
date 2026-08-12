@@ -93,7 +93,10 @@ as the result identity.
   choice already made.
   Browsing, editing, preview, and exact text search are local computations and must
   never be locked behind a remote service. Sign-in ships behind the account
-  system; until it lands the key path is the only one that activates.
+  system; until it lands the key path is the only one that activates. The
+  Files-panel setup callout and Settings remain the standing routes back to
+  AI Index; the static Anonymous row does not duplicate its source or setup
+  state (see [library.md](library.md)).
 - Activation persists; the skip does not. Activation is stored (with the key)
   and checked over localhost, so the app opens offline, keeps serving the
   existing index, and is never re-gated by a network or service error — it

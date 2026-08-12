@@ -7,10 +7,14 @@
  * without going looking in Settings. It exists so setup is never reachable
  * only from Settings.
  *
- * It lives in the sidebar's bottom chrome, beside Settings, because
+ * It lives in the sidebar's bottom chrome, above the account row, because
  * authorization is app-wide. Inside the file tree it sat between a folder
  * header and that folder's own files, which read as a claim about those
  * files and pushed the tree down for a secondary notice.
+ *
+ * This line owns the "not set up" prompt outright: the account row below it
+ * deliberately shows no index state and no sign-in call to action, so the
+ * offer is made once per screen rather than twice in adjacent rows.
  *
  * No dismiss control: it is already one quiet line, it disappears the
  * moment embedding is authorized, and the dialog is the thing that can be
@@ -41,8 +45,8 @@ export default function EmbeddingSetupCallout() {
     // row width reads as grime on the sidebar's already-sunken surface —
     // the same failure the app bans for selection and hover rows — and the
     // notice does not need a surface to be found, because it is one line
-    // above Settings with the only accent in the strip sitting on it.
-    // Padding matches the Settings row so the two share a left edge.
+    // above the account row with the only accent in the strip sitting on it.
+    // Padding matches the account row so the two share a left edge.
     // `flex-none` because the sidebar is a flex column: without it a tall
     // tree squeezes this to nothing.
     <div className="mx-1.5 mb-1 flex flex-none items-center gap-2 px-2 py-1 text-xs leading-snug text-muted-foreground">

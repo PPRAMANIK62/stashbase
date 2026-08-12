@@ -368,7 +368,7 @@ export function CopyIcon({ className }: IconProps) {
   );
 }
 
-/** Settings row. (phosphor `gear-six`, regular) */
+/** Settings, in the sidebar’s bottom account row. (phosphor `gear-six`, regular) */
 export function SettingsIcon({ className }: IconProps) {
   return (
     <Icon className={className}>
@@ -377,7 +377,7 @@ export function SettingsIcon({ className }: IconProps) {
   );
 }
 
-/** Account / sign-in. (phosphor `user`, regular) */
+/** Account — the avatar chip’s content while nobody is signed in. (phosphor `user`, regular) */
 export function UserIcon({ className }: IconProps) {
   return (
     <Icon className={className}>

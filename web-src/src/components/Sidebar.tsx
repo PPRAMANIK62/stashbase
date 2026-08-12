@@ -1,9 +1,7 @@
 import {
-  BugIcon,
   ChevronDownIcon,
   CollapseAllIcon,
   CubeLogoIcon,
-  DiscordIcon,
   ExpandAllIcon,
   ExternalLinkIcon,
   FolderIcon,
@@ -14,14 +12,12 @@ import {
   NewFolderIcon,
   OutlineIcon,
   PlusIcon,
-  SettingsIcon,
   StarFilledIcon,
   StarIcon,
   SyncIcon,
   TrashIcon,
 } from '../icons';
-import { openSettings } from './SettingsModal';
-import { DISCORD_INVITE_URL, openExternalUrl } from '../lib/externalLink';
+import { SidebarAccountRow } from './SidebarAccountRow';
 import { useApp } from '../store/AppContext';
 import { makeChatTab, type Action, type LibraryFolderStatus, type State } from '../store/state';
 import { folderScope, LIBRARY_SCOPE, newChatPlan, type ChatScope } from './agent/folderState';
@@ -108,7 +104,7 @@ function libraryFolderState(status: IndexStatus): LibraryFolderStatus {
  * folder's file tree — with no activity rail: the sidebar toggle and
  * search live in the shell's titlebar controls (`TitlebarControls.tsx`),
  * search itself in the library search popup (`LibrarySearchDialog.tsx`),
- * and Settings in the panel's bottom row.
+ * and the account (with Settings beside it) in the panel's bottom row.
  */
 export function Sidebar() {
   return (
@@ -209,7 +205,7 @@ function FilesPanel() {
           * never shifts the sections below under the pointer; a file
           * that cannot have an outline says so in the empty note. It
           * carries the dock's mt-auto anchor; the dock reads outline →
-          * Library → Settings, each a fixed block with a top hairline
+          * Library → account, each a fixed block with a top hairline
           * (they sit flush, so whitespace cannot separate them here).
           * The expanded list is the Library treatment — a capped
           * internal scroller, not a growing section. */}
@@ -256,8 +252,8 @@ function FilesPanel() {
         )}
       </LibrarySections>
       {/* AI Index authorization is APP-WIDE, not a property of the
-        * open folder, so it sits in the bottom chrome beside Settings
-        * rather than inside the file tree. Wedged between a folder header
+        * open folder, so it sits in the bottom chrome above the account
+        * row rather than inside the file tree. Wedged between a folder header
         * and its own files it read as a fact about those files, and it
         * pushed the tree — the thing the panel exists for — down the
         * screen for a secondary notice. */}
@@ -268,74 +264,7 @@ function FilesPanel() {
       )}
       {/* No mt-auto here: a dock block above always carries the bottom
         * anchor, and this row simply sits under it. */}
-      <SettingsRow />
-    </div>
-  );
-}
-
-/** Bottom chrome row (Cursor's account/settings strip position) — the
- *  app's one Settings entry now that the activity rail is gone. A quiet
- *  muted row in the sidebar's own idiom rather than a bare corner icon,
- *  so it stays discoverable. */
-function SettingsRow() {
-  return (
-    <div className="flex flex-none items-center gap-0.5 border-t border-border px-1.5 pt-1 pb-1.5">
-      {/* One icon scale app-wide: every glyph is 14px (size-3.5),
-        * centred in 16px grid slots — the titlebar controls, section
-        * headers, rows, and this strip. Hierarchy comes from
-        * colour/weight/text size, never glyph size; indicators
-        * (chevrons, stars, dots) run smaller still. */}
-      <button
-        type="button"
-        className={
-          /* Hover brightens the TEXT only — no filled row surface. This
-           * strip is app chrome pinned under the dock's section bands,
-           * not a list row, and a hover pill here read as a fourth
-           * selectable item in the stack. */
-          'flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 '
-          + 'text-left text-base text-muted-foreground hover:text-foreground [&_svg]:size-3.5 [&_svg]:flex-none'
-        }
-        onClick={() => openSettings()}
-      >
-        {/* 16px slot for the 38px gutter — see the New Chat row. */}
-        <span className="inline-flex size-4 flex-none items-center justify-center">
-          <SettingsIcon />
-        </span>
-        <span className="min-w-0 truncate">Settings</span>
-      </button>
-      {/* Report Bug — PLACEHOLDER parked at the row's right end: disabled
-        * and dimmed until the report flow exists; only then does it get a
-        * click handler and hover states. */}
-      {/* Same primitive and size as the section-header actions above
-        * (`ScopeHistoryButton`): a hand-rolled size-7 box here sat 4px wider
-        * than the 24px icon-xs buttons one row up, so the two pairs did not
-        * line up on their right edge. Explicit size-3.5 glyphs because
-        * icon-xs would otherwise render its own 12px default. */}
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        disabled
-        aria-label="Report a bug (coming soon)"
-        title="Report a bug (coming soon)"
-        className="flex-none text-muted-foreground"
-      >
-        <BugIcon className="size-3.5" />
-      </Button>
-      {/* Community — the app's only in-product route to a human, so it sits
-        * in persistent chrome rather than behind a menu. Parked to the right
-        * of Report Bug on purpose: while that one is still a placeholder,
-        * this is where someone who is stuck actually gets unstuck, and the
-        * two read as one "get help" cluster once the report flow lands. */}
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label="Join the StashBase Discord"
-        title="Join the StashBase Discord"
-        className="flex-none text-muted-foreground"
-        onClick={() => { openExternalUrl(DISCORD_INVITE_URL); }}
-      >
-        <DiscordIcon className="size-3.5" />
-      </Button>
+      <SidebarAccountRow />
     </div>
   );
 }
