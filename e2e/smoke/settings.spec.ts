@@ -19,7 +19,7 @@ test('user can navigate Settings and persist appearance across relaunch', async 
     await expect(settingsDialog(app.page)).toBeVisible();
     await expect(settingsTab(app.page, 'Appearance')).toHaveAttribute('aria-selected', 'true');
 
-    for (const section of ['Embedding', 'Transcription', 'MCP', 'Appearance']) {
+    for (const section of ['AI Index', 'Transcription', 'MCP', 'Appearance']) {
       await settingsTab(app.page, section).click();
       await expect(settingsTab(app.page, section)).toHaveAttribute('aria-selected', 'true');
     }

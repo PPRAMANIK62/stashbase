@@ -19,7 +19,8 @@ test('user can launch into the empty library workspace', async ({}, testInfo) =>
   } finally {
     await app?.close();
     await fixture.cleanup();
-}
+  }
+});
 
 test('user launches an existing library with Chat expanded', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
@@ -35,5 +36,4 @@ test('user launches an existing library with Chat expanded', async ({}, testInfo
     await app?.close();
     await fixture.cleanup();
   }
-});
 });

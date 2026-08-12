@@ -77,8 +77,8 @@ export function saveStatus(page: Page): Locator {
 }
 
 export async function dismissEmbeddingKeyPrompt(page: Page): Promise<void> {
-  const later = page.getByRole('button', { name: 'Later', exact: true });
-  await later.waitFor({ state: 'visible', timeout: 10_000 });
-  await later.click();
-  await later.waitFor({ state: 'hidden' });
+  const skip = page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
+  await skip.waitFor({ state: 'visible', timeout: 10_000 });
+  await skip.click();
+  await skip.waitFor({ state: 'hidden' });
 }
