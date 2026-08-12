@@ -201,12 +201,24 @@ to migrate them into a StashBase-specific storage model.
   would outrank the user's own files.
 - Nobody has to sign in. Until an account exists the identity strip reads
   **Anonymous**, which is a finished state and is presented as one: the row
-  is static and carries no sign-in button, badge, dot, or index-readiness
-  marker. Its label has lower contrast than navigation labels, keeping
-  identity available without competing with the Library hierarchy. AI Index
-  setup and source management stay in their existing
-  callout and Settings surfaces; the identity strip does not repeat them in
-  an account menu before a real account action exists. The utility actions
+  carries no sign-in button, badge, dot, or index-readiness marker.
+  Recommending the hosted path is the first-run setup dialog's job and it
+  happens once; this strip only states facts. Its label has lower contrast
+  than navigation labels, keeping identity available without competing with
+  the Library hierarchy — and a real account name arrives at the ordinary
+  weight, so the ink alone reports that the slot is filled.
+- Clicking the identity opens a menu rather than starting sign-in. Signing
+  in hands the user to a browser, and an action that leaves the app does not
+  fire from an unguarded click on what reads as a label; the menu is also
+  the only place to say what signing in buys, which is the question anyone
+  still signed out is actually asking. The gesture does not change once an
+  account exists — signing in changes what the menu contains, not what the
+  row does. Signed out the menu offers sign-in alone, marked as unavailable
+  until the account system ships. AI Index state stays out of it: the setup
+  callout sits directly above this row and owns that prompt, and once a key
+  is configured a source line would be status whose only action is the
+  Settings gear beside it. Signed in, the hosted quota does belong there,
+  because nothing else on screen reports it. The utility actions
   on the row use a slightly larger optical size than dense list actions so
   Settings and help remain clear without loosening the surrounding sidebar.
 - StashBase displays only supported document, structured-data, and media formats in the Files panel. Unsupported files are classified into source-code/project files and other unsupported formats. Dot-prefixed files (`.DS_Store`, tool configs) are invisible infrastructure: never listed and never counted as unsupported, and a folder holding only dot-files reads as physically empty. Folders that contain only unsupported files are pruned from the directory tree to keep navigation clean, while physically empty folders and folders with supported files remain visible. Users are notified of hidden unsupported files via a first-time onboarding explanation modal and a dismissable callout card in the Files panel — dismissal is per folder and persists, and the card returns when a new unsupported category appears.

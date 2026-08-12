@@ -95,8 +95,11 @@ as the result identity.
   never be locked behind a remote service. Sign-in ships behind the account
   system; until it lands the key path is the only one that activates. The
   Files-panel setup callout and Settings remain the standing routes back to
-  AI Index; the static Anonymous row does not duplicate its source or setup
-  state (see [library.md](library.md)).
+  AI Index. The sidebar's account menu is the second place sign-in is
+  offered, and it names the free monthly usage that signing in provides —
+  but while signed out it reports no index source or setup state of its own,
+  leaving that to the callout directly above it (see
+  [library.md](library.md)).
 - Activation persists; the skip does not. Activation is stored (with the key)
   and checked over localhost, so the app opens offline, keeps serving the
   existing index, and is never re-gated by a network or service error — it
