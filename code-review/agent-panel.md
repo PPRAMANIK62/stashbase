@@ -402,10 +402,22 @@ The accepted baseline includes:
   semantics, including permission decisions and destructive history
   confirmation. CodeMirror remains the owner of composer text, selection,
   undo, and mention-key handoff; keep its presentation chat-like and its
-  height capped so the transcript retains reading space. Image attachments
+  height capped so the transcript retains reading space. A non-image file
+  attachment renders as a two-line card — a muted type glyph (the file tree's
+  own `FileTypeIcon`, de-coloured through `currentColor`, never a brand hue),
+  the filename, and its type label — identically in the composer (with a
+  remove control) and in the sent turn. Image attachments
   show renderer-local thumbnails, never their transient filesystem paths;
   sent thumbnails remain available for the current transcript, while their URLs
   are revoked when removed, the transcript is replaced, or the panel unmounts.
+  The wire prompt appends a machine-facing `Attached files:` suffix so the
+  runtime can read each attachment; that suffix is context, never prose. On
+  replay the server lifts it back out of the shown user message so an
+  attachment reads as ONE chip instead of a chip plus its raw path
+  (`restoreHistoryAttachments`, shared by both runtimes): a transient image
+  becomes a thumbnail, any other known document extension becomes a name-only
+  card (no preview, no read access), and a line it cannot classify —
+  extension-less or an unrecognised type — stays in the prose untouched.
   Restored Claude and Codex sessions may recreate thumbnails only for live
   transient image files through the scoped local preview route; never expose
   an arbitrary path found in a transcript. The route resolves the real target

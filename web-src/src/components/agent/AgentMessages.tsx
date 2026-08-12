@@ -8,9 +8,8 @@ import { cn } from '../../lib/utils';
 import { ImageLightbox } from '../ImageLightbox';
 import { buttonVariants } from '../ui/button';
 import { StatusMessage } from '../ui/status';
-import {
-  attachChipClass, attachIconClass, attachImageChipClass, attachImagePreviewClass, attachNameClass,
-} from './panelStyles';
+import { FileAttachmentChip } from './FileAttachmentChip';
+import { attachImageChipClass, attachImagePreviewClass } from './panelStyles';
 import type { Attachment, Block, ToolBlock } from './types';
 
 const outlineSmClass = buttonVariants({ variant: 'outline', size: 'sm' });
@@ -423,11 +422,7 @@ function MessageAttachments({ attachments }: { attachments: Attachment[] }) {
             <img src={attachment.previewUrl} alt="" />
           </button>
         ) : (
-          <span key={attachment.path} className={attachChipClass} title={attachment.path}>
-            <FileGenericIcon className={attachIconClass} />
-            <span className={attachNameClass}>{attachment.name}</span>
-            {attachment.dims && <span className="shrink-0 text-muted-foreground">{attachment.dims}</span>}
-          </span>
+          <FileAttachmentChip key={attachment.path} name={attachment.name} path={attachment.path} meta={attachment.dims} />
         ))}
       </div>
       {previewAttachment?.previewUrl && (
