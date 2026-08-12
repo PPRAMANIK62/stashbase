@@ -47,6 +47,10 @@ editor save, and process shutdown are independent asynchronous boundaries.
 Close through the normal window/app lifecycle so pending saves settle, then
 delete only the fixture's validated scratch root. Harness lifecycle cases
 explicitly assert port release, including simultaneous isolated applications.
+After every test window has closed, the harness explicitly requests the normal
+application quit on every platform. This preserves the renderer save handshake
+while making the Linux/Windows last-window exit and the server cleanup ladder
+an explicit test boundary, rather than relying on event ordering.
 The launcher records a trace, Electron output, renderer errors, and the server
 log when available.
 

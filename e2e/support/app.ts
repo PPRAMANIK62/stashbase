@@ -72,9 +72,14 @@ async function quitElectronApplication(
       for (const window of BrowserWindow.getAllWindows()) window.close();
     });
     await windowClosed;
-    if (process.platform === 'darwin') {
-      // macOS intentionally keeps the app session alive after its final
-      // window closes. Quit only after the renderer save handshake completed.
+    if (page) {
+      // Closing the last window normally quits on Linux and Windows, but that
+      // event can race the harness's process-close wait. Request quit on every
+      // platform only after the renderer save handshake and window close have
+      // completed; it is required on macOS and makes the other platforms
+      // deterministic without bypassing the app's shutdown ladder. Failed
+      // launches have no renderer page and retain their separate startup
+      // cleanup path below.
       await electronApplication.evaluate(({ app }) => {
         setTimeout(() => app.quit(), 0);
       });
