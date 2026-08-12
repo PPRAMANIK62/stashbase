@@ -4,7 +4,7 @@ Describe the user-facing outcome and the problem this change solves.
 
 ## What changed
 
-- 
+-
 
 ## Validation
 
