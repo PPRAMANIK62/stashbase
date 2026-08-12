@@ -68,16 +68,16 @@ test('valid tiny PDF navigates pages and retains its selected page across a tab 
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, JOURNEY_PDF).click();
     const jump = app.page.getByTitle('Jump to page');
-    await expect(jump).toHaveText('Page 1 / 2');
+    await expect(jump).toHaveAccessibleName('Page 1 of 2 — jump to page');
     await jump.click();
     const pageInput = app.page.getByRole('textbox', { name: 'PDF page number' });
     await pageInput.fill('2');
     await pageInput.press('Enter');
-    await expect(app.page.getByTitle('Jump to page')).toHaveText('Page 2 / 2');
+    await expect(app.page.getByTitle('Jump to page')).toHaveAccessibleName('Page 2 of 2 — jump to page');
 
     await fileTreeRow(app.page, 'Welcome.md').click();
     await app.page.getByRole('tab', { name: new RegExp(JOURNEY_PDF) }).click();
-    await expect(app.page.getByTitle('Jump to page')).toHaveText('Page 2 / 2');
+    await expect(app.page.getByTitle('Jump to page')).toHaveAccessibleName('Page 2 of 2 — jump to page');
     expectOnlyKnownViewerFailures(app, [
       /request: HEAD .*\/api\/files\/(?:two-pages\.pdf|Welcome\.md): net::ERR_ABORTED/,
     ]);

@@ -1,5 +1,7 @@
 import type { Locator, Page } from 'playwright';
 
+const embeddingPromptDismissedPages = new WeakSet<Page>();
+
 export function appShell(page: Page): Locator {
   return page.locator('body[data-boot-settled="1"] > #root');
 }
@@ -77,8 +79,10 @@ export function saveStatus(page: Page): Locator {
 }
 
 export async function dismissEmbeddingKeyPrompt(page: Page): Promise<void> {
+  if (embeddingPromptDismissedPages.has(page)) return;
   const skip = page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
   await skip.waitFor({ state: 'visible', timeout: 10_000 });
   await skip.click();
   await skip.waitFor({ state: 'hidden' });
+  embeddingPromptDismissedPages.add(page);
 }
