@@ -15,6 +15,7 @@ import {
   OutlineIcon,
   PlusIcon,
   SettingsIcon,
+  StarFilledIcon,
   StarIcon,
   SyncIcon,
   TrashIcon,
@@ -285,32 +286,36 @@ function SettingsRow() {
       {/* Report Bug — PLACEHOLDER parked at the row's right end: disabled
         * and dimmed until the report flow exists; only then does it get a
         * click handler and hover states. */}
-      <button
-        type="button"
+      {/* Same primitive and size as the section-header actions above
+        * (`ScopeHistoryButton`): a hand-rolled size-7 box here sat 4px wider
+        * than the 24px icon-xs buttons one row up, so the two pairs did not
+        * line up on their right edge. Explicit size-3.5 glyphs because
+        * icon-xs would otherwise render its own 12px default. */}
+      <Button
+        variant="ghost"
+        size="icon-xs"
         disabled
         aria-label="Report a bug (coming soon)"
         title="Report a bug (coming soon)"
-        className="inline-flex size-7 flex-none items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground opacity-45 [&_svg]:size-3.5"
+        className="flex-none text-muted-foreground"
       >
-        <BugIcon />
-      </button>
+        <BugIcon className="size-3.5" />
+      </Button>
       {/* Community — the app's only in-product route to a human, so it sits
         * in persistent chrome rather than behind a menu. Parked to the right
         * of Report Bug on purpose: while that one is still a placeholder,
         * this is where someone who is stuck actually gets unstuck, and the
         * two read as one "get help" cluster once the report flow lands. */}
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon-xs"
         aria-label="Join the StashBase Discord"
         title="Join the StashBase Discord"
-        className={
-          'inline-flex size-7 flex-none cursor-pointer items-center justify-center rounded-md border-0 '
-          + 'bg-transparent p-0 text-muted-foreground hover:text-foreground [&_svg]:size-3.5'
-        }
+        className="flex-none text-muted-foreground"
         onClick={() => { openExternalUrl(DISCORD_INVITE_URL); }}
       >
-        <DiscordIcon />
-      </button>
+        <DiscordIcon className="size-3.5" />
+      </Button>
     </div>
   );
 }
@@ -1012,7 +1017,7 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                           ? <SyncIcon className="size-3.5 animate-spin" />
                           : <FolderIcon className="size-3.5" />}
                         {!opening && entry.favorite && (
-                          <StarIcon className="absolute -right-1 -bottom-0.5 size-2 fill-current" aria-label="Favorite" />
+                          <StarFilledIcon className="absolute -right-1 -bottom-0.5 size-2" aria-label="Favorite" />
                         )}
                       </span>
                       <span className="min-w-0 truncate">{name}</span>

@@ -28,10 +28,11 @@ them:
 - **Cyan + amber color pair.** Cyan is the working accent — interactive
   emphasis, focus, progress, info — but NOT selection surfaces: selected
   rows/pills use a quiet neutral one step past hover, because accent
-  washes at row width read loud. Amber is the counterpoint,
-  used sparingly where the brand shows (file-type marks, the occasional
-  brand moment). The pairing comes from the `.html`/`.md` file icons and is
-  deliberately not the generic AI-product purple. Sparingly is a hard
+  washes at row width read loud. Amber is the counterpoint, used sparingly
+  where the brand shows — search-hit marks, the occasional brand moment.
+  The pairing was drawn from the old `.html`/`.md` file icons; those icons
+  are muted now, but the hues stayed because they read as a tool rather
+  than as the generic AI-product purple. Sparingly is a hard
   budget: at most one amber moment per screen, and never on repeated
   elements (an icon that appears once per row multiplies into a loud
   surface). A screen that already reads cyan + amber + neutral is full —
@@ -43,6 +44,21 @@ them:
   fashion. Each voice is a single token (`--font-sans` / `--font-serif` /
   `--font-mono`, wired into the Tailwind `font-*` utilities); a surface that
   hand-writes its own stack is drift, not a fourth voice.
+- **One icon set.** Every glyph comes from Phosphor, at one size, in
+  `currentColor`. Weight is chosen by picking a different asset (`regular`
+  for chrome, `fill` where a solid silhouette carries meaning), never by
+  restyling one — mixing sets or hand-drawing a "close enough" glyph shows
+  up as inconsistent corner radii and stroke terminals long before anyone
+  can name what is wrong. The only exception is product brand marks (Claude,
+  Codex, the StashBase cube), which have no equivalent in any icon set and
+  keep their own colour — a logo is not a category, and each appears at most
+  once on screen.
+- File-type glyphs are **not** an exception. They use a solid silhouette
+  with the format's letterform knocked out, in the same muted chrome colour
+  as every other glyph. A hue per file type is the repeated-element case the
+  colour budget exists to prevent: it makes the sidebar the loudest surface
+  in the app while the user's own document sits beside it in black on white.
+  Shape carries the format; colour is not spent on it.
 
 ## Type scale
 

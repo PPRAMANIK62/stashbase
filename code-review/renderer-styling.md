@@ -76,6 +76,21 @@ surface inside a padding-inset parent sits exactly that padding tighter
 (`calc(var(--radius-md) - 1px)` in the segmented control), so the two curves
 stay concentric when the scale moves.
 
+## Icons
+
+`web-src/src/icons.tsx` is generated — run `node scripts/gen-icons.mjs` and
+edit the map in that script, never the paths in the output. Icons are
+inlined from the `@phosphor-icons/core` devDependency rather than imported
+from `@phosphor-icons/react`, which ships six weights per icon and would not
+fit the entry-chunk budget. Phosphor assets are 256-viewBox filled paths, so
+there is no stroke width to keep consistent and no `fill-current` trick for a
+solid state — a filled variant is a different asset (`StarIcon` /
+`StarFilledIcon`). Size comes from the parent's CSS in every case.
+
+Adding icons is not free: the budget below has little headroom, and each
+Phosphor path is bulkier than the hand-drawn strokes it replaced. Prefer
+reusing an existing export over adding a near-duplicate.
+
 ## Enforcement
 
 `web-src/src/__tests__/renderer-foundation.test.ts` locks the mapping, the
