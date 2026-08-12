@@ -101,6 +101,8 @@ jobs:
           UPDATE_OUTCOME: ${{ steps.update.outcome }}
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
           PATCH_OUTCOME: ${{ steps.patch.outcome }}
+          ARTIFACT_NAME: visual-baselines-${{ github.run_id }}-${{ github.run_attempt }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           {
             echo '### Linux visual baseline generation'
@@ -114,5 +116,19 @@ jobs:
             echo "| Unchanged rerun | ${VERIFY_OUTCOME} |"
             echo "| Binary patch | ${PATCH_OUTCOME} |"
             echo
-            echo 'This workflow never commits or pushes. Download the artifact, inspect the images and patch, then apply the reviewed changes locally.'
+            echo 'This workflow never commits or pushes. After reviewing the artifact, run the following from a local checkout of the PR head branch (with maintainer edits enabled):'
+            echo
+            echo '```sh'
+            echo "baseline_dir=\$(mktemp -d)"
+            echo "gh run download \"${RUN_ID}\" --name \"${ARTIFACT_NAME}\" --dir \"\${baseline_dir}\""
+            echo 'git apply --check "${baseline_dir}/visual-baselines.patch"'
+            echo 'git apply --binary "${baseline_dir}/visual-baselines.patch"'
+            echo 'git diff --check'
+            echo 'git diff -- e2e/visual'
+            echo 'git add e2e/visual'
+            echo 'git commit -m "test(e2e): update reviewed Linux visual baselines"'
+            echo 'git push'
+            echo '```'
+            echo
+            echo 'Do not apply the patch unless the Linux PNGs and patch have been reviewed. The patch is valid only for the exact ref shown above.'
           } >> "$GITHUB_STEP_SUMMARY"

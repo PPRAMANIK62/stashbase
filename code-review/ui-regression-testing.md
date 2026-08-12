@@ -163,10 +163,14 @@ For an intentional visual change:
    and unchanged rerun all succeeded.
 3. Download `visual-baselines-<run-id>-<attempt>`. Review every PNG and the
    Playwright expected/actual/diff diagnostics, then inspect
-   `visual-baselines-status.txt` and `visual-baselines.patch`.
-4. Apply the reviewed binary patch locally and include only the intended PNG
-   changes with the UI change. Never approve locally generated macOS/Windows
-   images as Linux baselines.
+   `visual-baselines-status.txt` and `visual-baselines.patch`. The workflow
+   summary provides copy-paste `gh run download` and `git apply --binary`
+   commands for that exact artifact.
+4. A maintainer applies the reviewed binary patch from a checkout of the PR
+   head branch, commits only the intended PNG changes, and pushes it. For a
+   fork PR, the author must enable **Allow edits from maintainers**; contributors
+   do not need to generate or commit Linux baselines. Never approve locally
+   generated macOS/Windows images as Linux baselines.
 5. Let the normal `ui-regression` job verify the committed baselines.
 
 The manual workflow has read-only repository permission, checks out without
