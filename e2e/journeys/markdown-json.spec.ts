@@ -82,10 +82,14 @@ test('Markdown preserves frontmatter across editing and safely routes links and 
 
     await app.page.getByRole('button', { name: 'Switch to Live Editing' }).click();
     const liveEditor = activeMarkdownEditor(app.page);
-    await liveEditor.focus();
-    await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
+    // Use real editor input to place ProseMirror's selection at the end of a
+    // known block, then create the empty paragraph required by the slash menu.
+    // Document-wide end shortcuts vary across Chromium platforms.
+    const documentHeading = activeDocument(app.page).getByRole('heading', { name: 'Journey Markdown' });
+    await documentHeading.click();
+    await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowRight' : 'End');
     await app.page.keyboard.press('Enter');
-    await app.page.keyboard.type('/');
+    await app.page.keyboard.insertText('/');
     const headingCommand = activeDocument(app.page).getByText('Heading 1', { exact: true });
     await expect(headingCommand).toBeVisible();
     await headingCommand.click();
