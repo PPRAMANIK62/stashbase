@@ -168,9 +168,14 @@ For an intentional visual change:
 
 The manual workflow has read-only repository permission, checks out without
 credentials, and never commits or pushes. Its artifact expires after 14 days.
-The pull-request jobs upload `playwright-report/` and `test-results/e2e/` for
-14 days only on failure or cancellation; these contain HTML reports, traces,
-screenshots, logs, and other per-test attachments. Treat artifacts as
+The pull-request job keeps the original visual comparison red, then reruns the
+gallery in update mode only to produce a complete candidate Linux patch. This
+fallback matters when the manual workflow is itself new and therefore cannot
+be dispatched from the default branch yet; candidate generation never approves
+or commits a baseline. On failure or cancellation, the job uploads the patch,
+candidate gallery, `playwright-report/`, and `test-results/e2e/` for 14 days.
+Review the candidate PNGs and comparison diagnostics before applying the binary
+patch, then let a fresh normal comparison verify it. Treat artifacts as
 diagnostics: do not put secrets or personal documents in fixtures or logs.
 
 ## Focus, disabled tests, and flakes

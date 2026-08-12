@@ -241,12 +241,34 @@ jobs:
           STASHBASE_E2E_SUMMARY_LABEL: Visual baselines
         run: xvfb-run -a pnpm test:e2e:visual
 
+      - name: Generate candidate Linux visual baselines
+        id: visual_candidates
+        if: failure() && steps.visual.outcome == 'failure'
+        env:
+          STASHBASE_E2E_SUMMARY_LABEL: Candidate visual baselines
+        run: xvfb-run -a pnpm test:e2e:visual:update
+
+      - name: Create candidate visual baseline patch
+        id: visual_candidate_patch
+        if: always() && steps.visual_candidates.outcome == 'success'
+        run: |
+          baseline_index="${RUNNER_TEMP}/visual-baselines-index-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -f "$baseline_index"
+          GIT_INDEX_FILE="$baseline_index" git read-tree HEAD
+          GIT_INDEX_FILE="$baseline_index" git add -N -- e2e/visual
+          GIT_INDEX_FILE="$baseline_index" git diff --binary -- e2e/visual > visual-baselines.patch
+          git status --short -- e2e/visual > visual-baselines-status.txt
+          rm -f "$baseline_index"
+
       - name: Upload UI regression diagnostics
         if: failure() || cancelled()
         uses: actions/upload-artifact@v6
         with:
           name: ui-regression-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            visual-baselines.patch
+            visual-baselines-status.txt
+            e2e/visual/**/*-snapshots/**/*.png
             playwright-report/
             test-results/e2e/
           if-no-files-found: ignore
@@ -260,6 +282,8 @@ jobs:
           LIST_OUTCOME: ${{ steps.list.outcome }}
           FUNCTIONAL_OUTCOME: ${{ steps.functional.outcome }}
           VISUAL_OUTCOME: ${{ steps.visual.outcome }}
+          VISUAL_CANDIDATES_OUTCOME: ${{ steps.visual_candidates.outcome }}
+          VISUAL_CANDIDATE_PATCH_OUTCOME: ${{ steps.visual_candidate_patch.outcome }}
         run: |
           {
             echo '### UI functional and visual regression'
@@ -270,4 +294,6 @@ jobs:
             echo "| Test inventory | ${LIST_OUTCOME} |"
             echo "| Functional journeys | ${FUNCTIONAL_OUTCOME} |"
             echo "| Visual baselines | ${VISUAL_OUTCOME} |"
+            echo "| Candidate baseline generation | ${VISUAL_CANDIDATES_OUTCOME} |"
+            echo "| Candidate baseline patch | ${VISUAL_CANDIDATE_PATCH_OUTCOME} |"
           } >> "$GITHUB_STEP_SUMMARY"
