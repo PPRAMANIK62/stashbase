@@ -351,7 +351,9 @@ Community contributions can land as useful first iterations, but the long-term d
   For resumed Claude history, render the server-reported effort and keep
   missing or unsupported metadata visibly inherited instead of inventing a
   renderer default. Replay must tolerate a protocol-v1 server retained during
-  restart. Changing effort on an idle restored session retains its rendered
+  restart. Codex uses the same protocol-v2 replay envelope with a null effort,
+  so its normal history path does not depend on a failed metadata probe.
+  Changing effort on an idle restored session retains its rendered
   transcript and native identity; the server-side history and writer lifecycle
   contract lives in [architecture.md](architecture.md).
 

@@ -121,7 +121,13 @@ test('exact search remembers state, distinguishes duplicate paths, and resolves 
     await ensureLibraryExpanded(app.page);
     await folderButton(app.page, 'project-alpha').click();
     await dismissEmbeddingKeyPrompt(app.page);
-    await documentTab(app.page, CROSS_FOLDER_NOTE).click();
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
+    await app.page.keyboard.press(`${primaryKey}+Shift+F`);
+    dialog = app.page.getByRole('dialog', { name: 'Search library' });
+    await expect(dialog.getByRole('combobox')).toHaveValue(EXACT_SEARCH_PHRASE);
+    const crossFolderMatch = dialog.locator(`[role="option"][title=${JSON.stringify(`${fixture.workspaces.projectB}/${CROSS_FOLDER_NOTE}`)}]`).last();
+    await crossFolderMatch.click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', `${fixture.workspaces.projectB}/${CROSS_FOLDER_NOTE}`);
     await expect(app.page.getByText(/viewing a file outside the current folder/)).toBeVisible();
     await expect(activeDocument(app.page).locator('img[src*="/asset/"]')).toBeVisible();
     app.errors.assertNone();

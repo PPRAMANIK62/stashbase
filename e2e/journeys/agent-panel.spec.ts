@@ -137,7 +137,7 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount + 1);
     panel = activeAgentPanel(app.page);
     composer = panel.locator('[aria-label="Message agent"]');
-    await expect(composer).toHaveText('');
+    await expect(panel.locator('[data-draft-empty]')).toHaveAttribute('data-draft-empty', 'true');
     await expect(panel.getByRole('button', { name: 'Session folder: project-beta' })).toBeVisible();
 
     await ensureLibraryExpanded(app.page);

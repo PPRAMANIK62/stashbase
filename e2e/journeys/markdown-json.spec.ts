@@ -82,12 +82,13 @@ test('Markdown preserves frontmatter across editing and safely routes links and 
 
     await app.page.getByRole('button', { name: 'Switch to Live Editing' }).click();
     const liveEditor = activeMarkdownEditor(app.page);
-    await liveEditor.click();
+    await liveEditor.focus();
     await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
-    await app.page.keyboard.insertText('\n/');
-    const slashMenu = app.page.locator('.crepe-slash-menu:visible');
-    await expect(slashMenu.getByText('Heading 1', { exact: true })).toBeVisible();
-    await slashMenu.getByText('Heading 1', { exact: true }).click();
+    await app.page.keyboard.press('Enter');
+    await app.page.keyboard.type('/');
+    const headingCommand = activeDocument(app.page).getByText('Heading 1', { exact: true });
+    await expect(headingCommand).toBeVisible();
+    await headingCommand.click();
     await app.page.keyboard.insertText('Slash journey heading');
     await expect(saveStatus(app.page)).toBeVisible();
     await expect.poll(() => fs.readFileSync(sourceFile, 'utf8')).toContain('# Slash journey heading');

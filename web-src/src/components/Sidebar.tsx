@@ -997,6 +997,7 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                   >
                     <button
                       type="button"
+                      aria-label={name}
                       className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent py-1 pr-1 pl-2 text-left text-base text-foreground/80 group-hover/root:text-foreground disabled:cursor-default"
                       disabled={!!openingFolder}
                       title={entry.path}

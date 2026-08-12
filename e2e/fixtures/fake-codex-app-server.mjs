@@ -7,6 +7,7 @@ import { fakeAgentNetworkPolicy } from './deny-network.mjs';
 const logFile = process.env.STASHBASE_FAKE_CODEX_LOG;
 let turnSequence = 0;
 let nextServerRequestId = 10_000;
+let historyCwd = process.cwd();
 const pendingApprovals = new Map();
 
 record({
@@ -69,12 +70,13 @@ function handleRequest(request) {
       respond(request.id, {});
       break;
     case 'thread/list':
+      if (typeof params.cwd === 'string' && params.cwd) historyCwd = params.cwd;
       respond(request.id, {
         data: [{
           id: 'fake-history-thread',
           name: 'Fixture history session',
           preview: 'Fixture history session',
-          cwd: process.cwd(),
+          cwd: historyCwd,
           updatedAt: 1_786_444_800,
         }],
         nextCursor: null,
@@ -85,7 +87,7 @@ function handleRequest(request) {
         thread: {
           id: String(params.threadId || 'fake-history-thread'),
           name: 'Fixture history session',
-          cwd: process.cwd(),
+          cwd: historyCwd,
           turns: [{
             id: 'fake-history-turn',
             items: [

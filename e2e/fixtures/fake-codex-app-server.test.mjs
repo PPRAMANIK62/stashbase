@@ -103,11 +103,14 @@ test('fake Codex executable speaks the app-server lifecycle used by StashBase', 
   assert.equal((await peer.response(4)).result.thread.id, 'fake-thread-1');
   peer.send({ id: 5, method: 'thread/name/set', params: { threadId: 'fake-thread-1', name: 'Approval turn' } });
   assert.deepEqual((await peer.response(5)).result, {});
-  peer.send({ id: 51, method: 'thread/list', params: { cwd: spawnedCwd } });
-  assert.deepEqual((await peer.response(51)).result.data.map((thread) => thread.id), ['fake-history-thread']);
+  const requestedHistoryCwd = path.join(root, 'workspace-spelling');
+  peer.send({ id: 51, method: 'thread/list', params: { cwd: requestedHistoryCwd } });
+  const historyRows = (await peer.response(51)).result.data;
+  assert.deepEqual(historyRows.map((thread) => thread.id), ['fake-history-thread']);
+  assert.equal(historyRows[0].cwd, requestedHistoryCwd);
   peer.send({ id: 52, method: 'thread/read', params: { threadId: 'fake-history-thread', includeTurns: true } });
   const history = (await peer.response(52)).result.thread;
-  assert.equal(history.cwd, spawnedCwd);
+  assert.equal(history.cwd, requestedHistoryCwd);
   assert.equal(history.turns[0].items[1].text, 'History fixture answer');
 
   peer.send({ id: 6, method: 'turn/start', params: {
