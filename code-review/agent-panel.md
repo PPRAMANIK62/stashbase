@@ -270,6 +270,9 @@ Community contributions can land as useful first iterations, but the long-term d
   removes the document and splitter grid tracks without unmounting either
   surface. Hidden primary surfaces are inert so zero-width content cannot keep
   keyboard focus.
+- Initialize the renderer with Chat open. Boot may create the default blank tab
+  asynchronously, but the shell must not first paint a collapsed panel and
+  rely on a later effect to reveal the product's default workspace.
 - Opening a folder creates one fresh chat tab for the app-wide preferred
   Agent — but only when the window has no chat tabs. Existing tabs (and their
   folder-bound sessions) survive folder switches, so a switch never spawns an
