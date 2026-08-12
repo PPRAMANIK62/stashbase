@@ -396,8 +396,15 @@ The accepted baseline includes:
 - lightweight file/artifact open affordances
 - jump-to-latest behavior for transcript scrolling
 - GFM Agent-message rendering through React elements, never an HTML string or
-  raw HTML parser. Keep remote images and non-HTTP(S), non-workspace links
-  inert; local links continue through the folder-safe workspace callback.
+  raw HTML parser. The same shared renderer parses `$...$`, `$$...$$`,
+  `\(...\)`, and `\[...\]` into untrusted, locally bundled KaTeX output for
+  both runtimes and restored history. Its delimiter normalization must remain
+  Markdown-aware: code, escapes, incomplete streaming input, and currency
+  prose stay literal; invalid TeX degrades visibly. Copy Reply continues to
+  use the untouched assistant source. Keep remote images and non-HTTP(S),
+  non-workspace links inert; local links continue through the folder-safe
+  workspace callback. Display overflow belongs to the formula block, not the
+  transcript or panel.
 - React Aria controls for popover dismissal, focus management, and menu/listbox
   semantics, including permission decisions and destructive history
   confirmation. CodeMirror remains the owner of composer text, selection,

@@ -166,8 +166,12 @@ client of StashBase context, not a separate AI workspace.
 - Agent file outputs refresh the Files sidebar without moving the user away
   from Chat. Their compact Open affordances and local file links lead back into
   the local workspace only when the user chooses them.
-- Agent response Markdown supports GFM, but treats raw HTML and remote images
-  as inert content; only workspace-relative links and HTTP(S) links are active.
+- Agent response Markdown supports GFM plus locally bundled KaTeX for inline
+  and display math. Formula rendering is presentation-only: Copy Reply and
+  restored history retain the original Markdown/LaTeX source. Raw HTML and
+  remote images remain inert; only workspace-relative links and HTTP(S) links
+  are active. Incomplete or invalid formulas stay visible rather than breaking
+  a streaming response, and wide display math scrolls inside the reply.
 - If a supported Agent CLI is missing, opening a chat for it shows a compact
   setup state with the copyable install command and a runtime-refresh action.
   A missing CLI is distinct from a runtime that is installed but failed to
