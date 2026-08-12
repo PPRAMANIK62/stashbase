@@ -56,12 +56,16 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
           code: 'INVALID_SEARCH_TYPES',
         });
       }
+      const mode = req.body?.mode === 'keyword' ? 'keyword' : 'semantic';
       res.json(await operations.search({
         query,
         topK,
         folder: req.body?.folder,
         pathPrefix: req.body?.path_prefix,
         types,
+        mode,
+        caseStrict: req.body?.case_strict === true,
+        wholeWord: req.body?.whole_word === true,
       }));
     } catch (err: unknown) {
       sendError(res, err);

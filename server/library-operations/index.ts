@@ -29,6 +29,7 @@ import {
   keywordFilesFromEvidence,
   semanticHitsFromEvidence,
   type Retrieval,
+  type RetrievalMode,
 } from '../retrieval/index.ts';
 import type { IndexStatus, SearchHit } from '../indexer.ts';
 import type { KeywordHitFile } from '../search-display.ts';
@@ -52,7 +53,13 @@ export interface LibraryOperations {
     folder?: string;
     pathPrefix?: string;
     types?: readonly SearchTypeCategory[];
-  }): Promise<{ hits: SearchHit[] }>;
+    /** `semantic` (default) is hybrid vector search and needs an embedding
+     *  key; `keyword` is exact ripgrep search that works without a key but
+     *  requires a folder scope. */
+    mode?: RetrievalMode;
+    caseStrict?: boolean;
+    wholeWord?: boolean;
+  }): Promise<{ hits: SearchHit[]; truncated?: boolean }>;
   /** Ripgrep keyword search over every member folder (or one `folder`).
    * File paths come back folder-relative next to their member folder root so
    * a caller can open results across folders without prefix guessing. */
@@ -115,17 +122,24 @@ export function createLibraryOperations(
   return {
     info: async () => deps.getLibraryInfo(),
 
-    async search({ query, topK = 8, folder, pathPrefix, types }) {
+    async search({ query, topK = 8, folder, pathPrefix, types, mode = 'semantic', caseStrict, wholeWord }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
       const scope = normalizeLibrarySearchScope(folder, pathPrefix);
+      // Keyword retrieval walks a folder subtree, so it needs a scope; a
+      // bare prefix without a folder would silently widen to the library.
+      if (mode === 'keyword' && !scope.folderRoot) {
+        throw routeError('keyword search requires a folder scope; pass `folder` or `path_prefix`', 400);
+      }
       const result = await deps.retrieval.search({
-        mode: 'semantic',
+        mode,
         query: trimmedQuery,
         topK,
         folderRoot: scope.folderRoot,
         pathPrefix: scope.pathPrefix,
         types,
+        caseStrict,
+        wholeWord,
       });
       if (result.availability.state === 'unavailable') {
         throw routeError(
@@ -134,7 +148,10 @@ export function createLibraryOperations(
           'EMBEDDER_KEY_REQUIRED',
         );
       }
-      return { hits: semanticHitsFromEvidence(result.evidence) };
+      return {
+        hits: semanticHitsFromEvidence(result.evidence),
+        ...(result.truncated ? { truncated: true } : {}),
+      };
     },
 
     async keywordSearch({ query, caseStrict, wholeWord, folder, pathPrefix }) {

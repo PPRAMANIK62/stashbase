@@ -63,10 +63,11 @@ as the result identity.
   describe the active folder — other folders' readiness is not yet reported.
 - A sync failure is diagnostic and does not replace an awaiting or paused
   decision; its recovery action remains visible alongside failure guidance.
-- MCP offers orientation, search with file-type categories, read, reindex,
-  and bounded file operations to authorized Agent clients. The in-app popup
-  does not expose a file-type filter — categories are an agent-facing
-  parameter.
+- MCP offers orientation, semantic and exact keyword search with file-type
+  categories, read, reindex, and bounded file operations to authorized Agent
+  clients. Exact keyword search works without AI Index and may narrow to an
+  authorized folder or path prefix. The in-app popup does not expose a
+  file-type filter — categories are an agent-facing parameter.
 - The `data` type category selects JSON. AI Index uses raw JSON source
   text and keeps the visible source path as result identity.
 
@@ -117,7 +118,6 @@ as the result identity.
   not as the headline. It keeps the hosted path from reading as the one with a
   privacy cost; users otherwise assume "my own key" means "stays local" and the
   account path is the one that uploads, when neither path uploads the files.
-
 ## Experience Contract
 
 - Search should be useful before AI Index is available.

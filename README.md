@@ -177,7 +177,7 @@ While the StashBase app is running, a local MCP server makes the same library av
 Core tools:
 
 - `library_info` - return the default folder home, opened folders, optional folder descriptions, and embedder status.
-- `search_library` - search the library, optionally scoped by folder, path prefix, or file-type categories.
+- `search_library` - search the library in semantic (default) or keyword mode, optionally scoped by folder, path prefix, or file-type categories. Keyword mode does exact matching and works without an embedding key.
 - `reindex` - reconcile disk changes and make updated files searchable.
 
 StashBase also exposes bounded file helpers for opened folders:

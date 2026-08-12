@@ -39,7 +39,8 @@ user-visible source file.
   not separate libraries or indexing runtimes.
 - In-app search and MCP retrieval both default to the whole library. Either can
   narrow to an authorized folder or path prefix; source file-type categories
-  remain an agent-facing parameter.
+  remain an agent-facing parameter. Both offer semantic and keyword modes;
+  keyword works without an embedding key and requires a folder scope.
 - MCP file operations are deliberately bounded to authorized library folders;
   they are never a general filesystem interface. The one membership-changing
   tool, `create_project`, only creates and registers a new folder under the
