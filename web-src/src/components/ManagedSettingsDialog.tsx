@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
   { id: 'appearance', label: 'Appearance', render: () => <AppearancePanel /> },
-  { id: 'embedding', label: 'Embedding', render: () => <EmbeddingPanel /> },
+  { id: 'embedding', label: 'AI Index', render: () => <EmbeddingPanel /> },
   { id: 'transcription', label: 'Transcription', render: () => <TranscriptionPanel /> },
   { id: 'mcp', label: 'MCP', render: () => <McpClientsPanel /> },
 ];

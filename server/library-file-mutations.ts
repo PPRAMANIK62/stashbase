@@ -144,7 +144,7 @@ export async function moveLibraryFile(
         }
         indexWarning = 'Searchable text is being regenerated in the background.';
       } else if (!getApiKey()) {
-        indexWarning = 'Semantic index was not updated because no embedding API key is configured.';
+        indexWarning = 'AI Index was not updated because it is not set up.';
       } else {
         const movedContent = readText(newTarget.folderRel) ?? content ?? '';
         const tooLarge = contentSizeError(movedContent);
@@ -152,7 +152,7 @@ export async function moveLibraryFile(
           await indexer.deleteFile(oldTarget.abs).catch((err) => {
             log.warn(`library move: failed to remove old index row ${oldTarget.abs}: ${errorMessage(err)}`);
           });
-          indexWarning = `${tooLarge}. The file moved, but semantic search will skip it until you split or reduce it and run sync.`;
+          indexWarning = `${tooLarge}. The file moved, but AI Index will skip it until you split or reduce it and run sync.`;
         } else {
           await indexer.renameFile(oldTarget.abs, newTarget.abs, movedContent);
         }
@@ -166,7 +166,7 @@ export async function moveLibraryFile(
     } catch (err) {
       // The disk move is already valid. Report semantic-index lag instead of
       // rolling it back after link rewrites have completed.
-      indexWarning = `Moved, but semantic index update failed: ${errorMessage(err)}`;
+      indexWarning = `Moved, but AI Index update failed: ${errorMessage(err)}`;
     }
     return {
       oldPath: oldTarget.abs,

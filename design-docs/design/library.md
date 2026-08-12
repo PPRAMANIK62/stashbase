@@ -130,14 +130,14 @@ to migrate them into a StashBase-specific storage model.
 - Root-level `AGENTS.md` and optional `CLAUDE.md` bridge files are visible,
   editable user files. StashBase only creates missing defaults.
 - Opening a folder starts changed-content indexing checks in the background.
-  When the pending semantic workload is unusually large, a persistent,
-  non-blocking notice lets the user start it or leave it paused for that folder.
+  When the pending AI Index workload is unusually large, a persistent,
+  non-blocking notice lets the user build it or leave it paused for that folder.
 
 ## Experience Contract
 
 - Opening a folder should feel like navigation, not a long preparation task.
-- Deferring semantic indexing must not block browsing, editing, preparation, or
-  keyword search, and the decision must remain recoverable after restart.
+- Deferring AI Index must not block browsing, editing, preparation, or exact
+  text search, and the decision must remain recoverable after restart.
 - Opening or closing one window must not switch or close another window's
   folder context.
 - Window lifecycle shortcuts must not be interpreted as document-tab commands.

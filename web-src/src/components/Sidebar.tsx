@@ -65,6 +65,7 @@ const DocumentOutline = lazyWithRetry(() =>
   import('./DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
 const SemanticIndexingNotice = lazyWithRetry(() =>
   import('./SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNotice })));
+const EmbeddingSetupCallout = lazyWithRetry(() => import('./EmbeddingSetupCallout'));
 const UnsupportedFilesCallout = lazyWithRetry(() => import('./UnsupportedFilesCallout'));
 
 /** Shorten an absolute path for display: `/Users/foo/Notes` → `~/Notes`
@@ -158,6 +159,10 @@ function FilesPanel() {
   const [outlineExpanded, setOutlineExpanded] = useState(true);
 
   const hasMarkdownDocument = activeTab?.file?.format === 'md';
+  // Tri-state: `null` means the embedder has not been read yet, and only a
+  // definite `false` should pull in the notice chunk. The card re-checks
+  // before rendering; this just decides whether loading it can matter.
+  const embeddingSetupPossible = state.embedderHasKey === false;
   // The outline block belongs to an OPEN DOCUMENT inside an open
   // folder. A bare workspace (chat only, nothing open) drops it, as
   // does a window with no folder — nothing there has an outline, and
@@ -246,6 +251,17 @@ function FilesPanel() {
         </section>
         )}
       </LibrarySections>
+      {/* AI Index authorization is APP-WIDE, not a property of the
+        * open folder, so it sits in the bottom chrome beside Settings
+        * rather than inside the file tree. Wedged between a folder header
+        * and its own files it read as a fact about those files, and it
+        * pushed the tree — the thing the panel exists for — down the
+        * screen for a secondary notice. */}
+      {embeddingSetupPossible && (
+        <Suspense fallback={null}>
+          <EmbeddingSetupCallout />
+        </Suspense>
+      )}
       {/* No mt-auto here: a dock block above always carries the bottom
         * anchor, and this row simply sits under it. */}
       <SettingsRow />

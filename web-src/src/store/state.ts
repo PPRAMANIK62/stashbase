@@ -269,7 +269,7 @@ export interface State {
    *  losing the window's folder context (CHAT_TABS_RESET) clears it. */
   pendingResume: PendingChatResume | null;
 
-  /** User-visible paths whose semantic-search content is still being
+  /** User-visible paths whose AI Index content is still being
    *  embedded/indexed. Keyword search ignores this state and can search
    *  converted/source text without embeddings. */
   pendingSemanticNames: Set<string>;
