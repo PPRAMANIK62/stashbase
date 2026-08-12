@@ -89,6 +89,11 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 - Preserve valid leading YAML frontmatter verbatim outside the Milkdown body.
   GitHub alert source remains ordinary blockquote Markdown and receives only a
   DOM presentation treatment; neither feature introduces a second serializer.
+- Agent-facing `write_file` and `edit_file` mutations validate the complete
+  replacement source before persistence. Reject C0 controls other than tab,
+  line feed, and carriage return without changing the existing file; these
+  bytes commonly signal that an interpreted JavaScript string consumed LaTeX
+  escapes. Valid literal backslashes must remain byte-for-byte unchanged.
 - Image activation stays within the shared app lightbox. Code blocks never
   execute, regardless of language label.
 - Do not add scripts, arbitrary embeds, remote document state, or AI features
