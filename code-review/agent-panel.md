@@ -132,8 +132,11 @@ the new folder (create_project auto-select, or switching back to a chat's
 own folder) NO welcome tab is spawned — that conversation is the working
 entry; otherwise reuse a blank tab (preferring the preferred agent's),
 else create a new tab and make it active. On a folder switch this must
-not change panel visibility; only the no-tabs folder-open path opens the
-panel with its one fresh tab.
+not change panel visibility when chats already exist. A new window or folder
+entry with no chat tabs opens one blank preferred-Agent tab through
+`shouldOpenInitialChatOnWindowEntry`; this is presentation initialization and
+MUST NOT invoke runtime installation. The first explicit chat action owns
+runtime readiness.
 
 Chat creation has ONE entry point: the sidebar's New Chat split button.
 Its main area creates with the app-wide preferred agent
@@ -141,6 +144,19 @@ Its main area creates with the app-wide preferred agent
 only updates that preference and MUST NOT create or activate a chat
 (`rememberPreferredAgent` — clicking a chat tab also updates it). The user
 must press the main New Chat area to create a session.
+Before applying the tab plan, every explicit chat-opening surface starts the
+selected Agent's readiness bootstrap. Discovery prefers an existing system CLI
+and falls back to the StashBase-managed executable. If neither exists, the
+bootstrap downloads only the selected Agent into AppData and configures its MCP
+entry; opening the app or a folder MUST NOT invoke it. The tab may render while
+preparation runs, but its WebSocket MUST stay closed until preparation is
+ready. The server repeats the idempotent MCP configuration immediately before
+attaching the native runtime so a renderer/catalog race cannot start an Agent
+without StashBase context.
+Server startup performs the same idempotent MCP write for cheaply discoverable
+installed runtimes, but MUST NOT invoke the installer or a login-shell probe.
+Startup configuration failure is visible in runtime metadata and logs without
+blocking the library workspace; a later explicit chat action retries it.
 Creation goes through `newChatPlan`: reuse the one COMPLETELY blank tab
 regardless of its agent — when the agent differs, switch the blank tab's
 agent in place via `CHAT_TAB_SET_AGENT` (the reducer refuses any tab
@@ -276,10 +292,10 @@ Community contributions can land as useful first iterations, but the long-term d
 - Initialize the renderer with Chat open. Boot may create the default blank tab
   asynchronously, but the shell must not first paint a collapsed panel and
   rely on a later effect to reveal the product's default workspace.
-- Opening a folder creates one fresh chat tab for the app-wide preferred
-  Agent — but only when the window has no chat tabs. Existing tabs (and their
-  folder-bound sessions) survive folder switches, so a switch never spawns an
-  extra tab or forces the panel open. The preference defaults to Codex,
+- Opening a new window or entering a folder with no chat tabs opens one reusable
+  blank tab without installing a runtime. Existing tabs (and their
+  folder-bound sessions) survive folder switches; their welcome-tab plan never
+  forces the panel open. The preference defaults to Codex,
   changes only through explicit Agent selection, and is recoverable when
   local UI storage is unavailable. Runtime availability remains
   authoritative: never silently fall back from an unavailable preferred
@@ -318,10 +334,10 @@ Community contributions can land as useful first iterations, but the long-term d
   the turn or emit a permanent error; `willRetry: false` may emit one error and
   settle only the matching turn once. Ignore repeated or late terminal events,
   and treat native `interrupted` completion as non-error.
-- A discovered missing Agent CLI is a setup state, not a disabled launcher or a
-  generic connection failure. Keep its install command copyable and let the
-  user re-run discovery after installation; do not conflate it with an
-  installed runtime that has failed.
+- A discovered missing Agent CLI is a preparation state, not a disabled
+  launcher or a generic connection failure. Show install/MCP progress, keep
+  failures retryable, retain the official manual command as fallback, and do
+  not conflate preparation failure with an installed runtime that later fails.
 - Keep background activity compact. Tool calls may be grouped or summarized, but the user must be able to inspect them when needed.
 - File outputs should be easy to open, but artifact UI should stay lightweight. Prefer rows or compact affordances over large delivery cards.
 - Successful file-changing tools refresh folder and index state but never

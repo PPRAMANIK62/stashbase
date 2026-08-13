@@ -533,11 +533,33 @@ The built-in panel is a convenience client for the same library, not a separate 
 
 Renderer and visual-design rules for this panel live in [agent-panel.md](agent-panel.md). This architecture section only defines the system boundary and durable state model.
 
-It runs the user's installed Agent CLI in the current folder and relies on the same global MCP configuration used by external clients.
+It runs either the user's supported Agent CLI or a StashBase-managed runtime.
+Normal discovery prefers an existing system executable, then falls back to the
+application-scoped executable under AppData. Managed runtimes never modify the
+user's PATH and still use the provider's normal account/config home when
+launched, so replacing a managed binary does not clear login or history.
 
 Each opened folder has one root-level `AGENTS.md` file for durable Agent instructions about that folder. Built-in Codex uses it directly through the normal folder context. Built-in Claude uses a root-level `CLAUDE.md` bridge that contains only `@AGENTS.md`; the bridge is created on first Claude launch if missing. Both files are ordinary Markdown source files, so the user can edit or delete them.
 
-Packaged builds resolve the user-installed `claude` and `codex` executables explicitly, including common Homebrew paths, npm global paths, and Windows npm command shims, before launching the built-in panel. This keeps the panel aligned with the user's normal CLI setup instead of depending on optional SDK binaries bundled in `node_modules`.
+Packaged builds resolve user-installed `claude` and `codex` executables
+explicitly, including common Homebrew paths, npm global paths, and Windows npm
+command shims. The first explicit chat-opening action starts the selected
+runtime's readiness gate; app boot and folder navigation never install an
+Agent. When no system or managed executable exists, Codex runs its official
+standalone installer with a private install directory, while Claude downloads
+the platform asset described by its official release manifest and verifies its
+size and SHA-256 before publishing it atomically. Installation is cancellable
+during app shutdown. Only the selected Agent is installed.
+
+Readiness configures the matching CLI's global StashBase MCP entry before
+reporting ready. Native attachment repeats that idempotent configuration before
+process startup, closing with an actionable error if the user config cannot be
+updated. Server startup also repairs MCP for installed runtimes found through
+cheap discovery; it never downloads an Agent or runs a login shell, and a
+configuration error cannot block the workspace. Development builds expose
+in-memory discovery and failure simulation controls plus targeted
+managed-runtime reset; these controls never uninstall a system Agent or clear
+provider credentials.
 
 The key architectural point is:
 

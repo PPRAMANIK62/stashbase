@@ -8,12 +8,12 @@ to migrate them into a StashBase-specific storage model.
 
 - Users can add, create, open, and remove local folders from the library.
 - The app has no landing page: a window boots straight into the workspace
-  with no folder selected, showing the chat panel on one blank
-  library-scoped chat (the New Chat default). Browsing a folder is always
-  an explicit sidebar click; only an explicit open request (such as Open
-  in New Window) or a same-window reload restores a folder. An empty
-  library shows a small zero-folder block in the sidebar with the app
-  mark, one line of guidance, and an Add Folder action.
+  with no folder selected and one reusable blank, library-scoped Chat tab.
+  This default surface does not install an Agent; the first explicit New Chat
+  owns that preparation. Browsing a folder is always an explicit sidebar click; only an
+  explicit open request (such as Open in New Window) or a same-window reload
+  restores a folder. An empty library shows a small zero-folder block in the
+  sidebar with the app mark, one line of guidance, and an Add Folder action.
 - The sidebar folder list refreshes itself while visible (a lightweight
   membership poll), so a project created by an agent in another window or
   by an external MCP client appears without any user action.
@@ -47,9 +47,10 @@ to migrate them into a StashBase-specific storage model.
   resets the folder-scoped document tabs, but keeps the search popup's
   remembered query and results (search is library-scoped) and keeps the
   window's chat tabs and their running Agent sessions — each chat is pinned
-  to its own scope (a library folder, or the whole library) — and surfaces
-  a welcome chat for the new folder without disturbing any started chat or
-  unsent draft. Visible library rows show a subtle warning dot when files
+  to its own scope (a library folder, or the whole library). When chats already
+  exist, the switch surfaces a welcome chat for the new folder without
+  disturbing any started chat or unsent draft; with no chats yet it opens one
+  reusable blank tab without preparing a runtime. Visible library rows show a subtle warning dot when files
   in that folder could not be prepared for search.
 - A `+` button in the Library header offers Open Folder… (any folder on
   disk, indexed in place) and New Folder… (created under the default
