@@ -69,9 +69,13 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
       '--json',
       opts.caseStrict ? '--case-sensitive' : '--smart-case',
       '--fixed-strings',
-      '--max-count', String(RG_PER_FILE_CAP),
       '--max-filesize', '5M',
     ];
+    // `--max-count` budgets ripgrep's own hits, which are still unfiltered.
+    // Whole-token filtering runs app-side, so a file whose first
+    // RG_PER_FILE_CAP hits are all substring-only would report nothing while
+    // real whole-token matches sit further down. Cap after filtering instead.
+    if (!opts.wholeWord) args.push('--max-count', String(RG_PER_FILE_CAP));
     const selected = searchExtensionsForTypes(opts.types ?? []);
     const directExtensions = selected == null
       ? DIRECT_TEXT_EXTENSIONS.map((extension) => `.${extension}`)
@@ -118,6 +122,10 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
         if (!bucket) {
           bucket = { path: relPath, matches: [], totalMatches: 0 };
           byFile.set(relPath, bucket);
+        }
+        if (opts.wholeWord && bucket.totalMatches >= RG_PER_FILE_CAP) {
+          truncated = true;
+          continue;
         }
         bucket.totalMatches += matchRanges.length;
         if (total < RG_TOTAL_CAP) {
