@@ -81,19 +81,23 @@ test('Markdown preserves frontmatter across editing and safely routes links and 
     expect(fs.readFileSync(sourceFile, 'utf8')).toContain('Edited through the journey.');
 
     await app.page.getByRole('button', { name: 'Switch to Live Editing' }).click();
-    // Use real editor input to place ProseMirror's selection at the end of a
-    // known block, then create the empty paragraph required by the slash menu.
-    // Document-wide end shortcuts vary across Chromium platforms.
+    await expect(editor).toBeVisible();
+    // Clicking the text block's trailing edge puts ProseMirror at a known block
+    // end without relying on platform-specific document-navigation shortcuts.
     const documentHeading = activeDocument(app.page).getByRole('heading', { name: 'Journey Markdown' });
-    await documentHeading.click();
-    await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowRight' : 'End');
+    const headingBox = await documentHeading.boundingBox();
+    expect(headingBox).not.toBeNull();
+    await documentHeading.click({
+      position: { x: Math.max(1, headingBox!.width - 2), y: headingBox!.height / 2 },
+    });
     await app.page.keyboard.press('Enter');
+    await expect(documentHeading).toBeVisible();
     await app.page.keyboard.insertText('/');
     // Crepe keeps command items for hidden menu groups mounted. Restrict the
     // lookup to its shown slash menu before selecting the interactive list item.
     const slashMenu = activeDocument(app.page).locator('.milkdown-slash-menu[data-show="true"]');
     await expect(slashMenu).toBeVisible();
-    const headingCommand = slashMenu.locator('li').filter({ hasText: /^Heading 1$/ });
+    const headingCommand = slashMenu.getByText('Heading 1', { exact: true });
     await expect(headingCommand).toBeVisible();
     await headingCommand.click();
     await app.page.keyboard.insertText('Slash journey heading');
