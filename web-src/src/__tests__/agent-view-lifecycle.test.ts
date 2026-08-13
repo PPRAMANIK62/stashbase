@@ -154,6 +154,14 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
     first.event({ t: 'ready' });
     first.event({ t: 'session-id', id: 'thread-123' });
     first.event({ t: 'turn-start' });
+    first.event({ t: 'text', delta: String.raw`Streamed formula: \(x^2` });
+    first.event({ t: 'text', delta: String.raw` + 1\).` });
+    first.event({ t: 'turn-end', isError: false });
+  });
+  assert.match(renderedText(renderer!), /Streamed formula:.*x\^2.*1/);
+
+  await act(async () => {
+    first.event({ t: 'turn-start' });
     first.event({ t: 'text', delta: 'Partial answer survives.' });
     first.event({ t: 'tool', id: 'tool-1', name: 'Bash', input: {} });
   });

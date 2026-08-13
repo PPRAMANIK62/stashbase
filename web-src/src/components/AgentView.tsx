@@ -763,14 +763,20 @@ export function AgentView({
   }
 
   function appendStream(kind: 'assistant' | 'thinking', delta: string) {
+    // Capture the stream boundary before scheduling React state. Several WS
+    // messages can arrive in one task, and turn-end/tool handling mutates the
+    // ref synchronously while React is still batching these updaters. Reading
+    // the ref inside the updater can therefore discard or split an earlier
+    // delta when completion follows immediately after it.
+    const appendToOpenBlock = openKind.current === kind;
+    openKind.current = kind;
     setBlocks((bs) => {
       const last = bs[bs.length - 1];
-      if (openKind.current === kind && last && (last.kind === 'assistant' || last.kind === 'thinking')) {
+      if (appendToOpenBlock && last?.kind === kind) {
         const next = bs.slice();
         next[next.length - 1] = { ...last, text: last.text + delta };
         return next;
       }
-      openKind.current = kind;
       return [...bs, { kind, id: nextId(), text: delta }];
     });
   }

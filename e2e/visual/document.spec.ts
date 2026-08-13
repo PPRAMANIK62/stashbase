@@ -20,9 +20,10 @@ test('Markdown reading, writing, and valid JSON keep distinct document surfaces'
 
     await openFixtureFile(page, 'Welcome.md');
     const markdown = activeDocument(page);
+    const markdownShell = markdown.locator('.crepe-shell');
     const readingToggle = page.getByRole('button', { name: 'Switch to Reading View' });
     if (await readingToggle.isVisible()) await readingToggle.click();
-    await expect(markdown).toHaveClass(/crepe-readonly/);
+    await expect(markdownShell).toHaveClass(/crepe-readonly/);
     await expect(markdown.getByRole('heading', { name: 'Welcome to Project Alpha' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Document outline' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Switch to Live Editing' })).toBeVisible();
@@ -30,7 +31,7 @@ test('Markdown reading, writing, and valid JSON keep distinct document surfaces'
 
     await setTheme(page, 'dark');
     await page.getByRole('button', { name: 'Switch to Live Editing' }).click();
-    await expect(markdown).not.toHaveClass(/crepe-readonly/);
+    await expect(markdownShell).not.toHaveClass(/crepe-readonly/);
     await expect(markdown.locator('.ProseMirror')).toHaveAttribute('contenteditable', 'true');
     await expect(page.getByRole('button', { name: 'Switch to Reading View' })).toBeVisible();
     await expectLinuxScreenshot(page, 'markdown-writing-dark.png');
