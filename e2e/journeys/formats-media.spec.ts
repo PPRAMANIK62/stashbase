@@ -79,7 +79,10 @@ test('valid tiny PDF navigates pages and retains its selected page across a tab 
     await expect(app.page.getByTitle('Jump to page')).toHaveAccessibleName('Page 2 of 2 — jump to page');
 
     await fileTreeRow(app.page, 'Welcome.md').click();
-    await app.page.getByRole('tab', { name: new RegExp(JOURNEY_PDF) }).click();
+    await expect(app.page.getByRole('tab', { name: 'Welcome.md' })).toHaveAttribute('aria-selected', 'true');
+    const pdfTab = app.page.getByRole('tab', { name: new RegExp(JOURNEY_PDF) });
+    await pdfTab.click();
+    await expect(pdfTab).toHaveAttribute('aria-selected', 'true');
     await expect(app.page.getByTitle('Jump to page')).toHaveAccessibleName('Page 2 of 2 — jump to page');
     expectOnlyKnownViewerFailures(app, [
       /request: HEAD .*\/api\/files\/(?:two-pages\.pdf|Welcome\.md): net::ERR_ABORTED/,

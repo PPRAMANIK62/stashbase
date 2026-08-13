@@ -26,14 +26,18 @@ test('persistent tabs prevent duplicates, reuse a blank tab, and expose MRU Edit
     await folderButton(app.page, 'project-alpha').click();
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
     await fileTreeRow(app.page, 'Second Note.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Second Note.md');
     await fileTreeRow(app.page, 'Welcome.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
     await expect(documentTab(app.page, 'Welcome.md')).toHaveCount(1);
     await expect(documentTab(app.page, 'Second Note.md')).toHaveCount(1);
 
     await app.page.keyboard.press(`${primaryKey}+T`);
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Empty tab');
     await fileTreeRow(app.page, 'AGENTS.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'AGENTS.md');
     await expect(app.page.locator('.tab-strip-inner > [role="tab"]')).toHaveCount(3);
     await expect(documentTab(app.page, 'AGENTS.md')).toHaveCount(1);
 
@@ -62,8 +66,11 @@ test('Quick Open honors editor recency and command availability while Settings o
     await folderButton(app.page, 'project-alpha').click();
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
     await fileTreeRow(app.page, 'Second Note.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Second Note.md');
     await documentTab(app.page, 'Welcome.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
 
     await app.page.keyboard.press(`${primaryKey}+O`);
     await expect(quickOpenDialog(app.page).getByRole('option').first()).toContainText('Welcome.md');
