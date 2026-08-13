@@ -68,21 +68,19 @@ async function quitElectronApplication(
     const windowClosed = page && !page.isClosed()
       ? page.waitForEvent('close', { timeout: 10_000 })
       : Promise.resolve();
-    await electronApplication.evaluate(({ BrowserWindow }) => {
-      for (const window of BrowserWindow.getAllWindows()) window.close();
-    });
+    // Start one application-level quit. Electron closes every window through
+    // the normal `close` event first, so StashBase's renderer flush guard still
+    // completes before `will-quit` drains the server. Driving window close and
+    // app quit separately races those two shutdown paths on Linux and can
+    // orphan the server after Electron exits.
+    await electronApplication.evaluate(({ app }) => app.quit());
     await windowClosed;
-    if (page) {
-      // Closing the last window normally quits on Linux and Windows, but that
-      // event can race the harness's process-close wait. Request quit on every
-      // platform only after the renderer save handshake and window close have
-      // completed; it is required on macOS and makes the other platforms
-      // deterministic without bypassing the app's shutdown ladder. Failed
-      // launches have no renderer page and retain their separate startup
-      // cleanup path below.
-      await electronApplication.evaluate(({ app }) => {
-        setTimeout(() => app.quit(), 0);
-      });
+    if (process.platform === 'darwin' && page) {
+      // The asynchronous renderer flush cancels the first quit request. Linux
+      // and Windows start a new quit from the final window's `closed` handler;
+      // macOS intentionally keeps a windowless session alive, so resume quit
+      // directly after the save-guarded close completes.
+      await electronApplication.evaluate(({ app }) => app.quit());
     }
   } catch (error) {
     // The application can close the evaluation channel before returning from

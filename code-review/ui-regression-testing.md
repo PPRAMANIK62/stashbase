@@ -44,13 +44,15 @@ Launch is ready only after the first window exists and
 `body[data-boot-settled="1"]` is set. From there, wait for semantic UI state
 with Playwright assertions. Do not use fixed sleeps or `networkidle`: indexing,
 editor save, and process shutdown are independent asynchronous boundaries.
-Close through the normal window/app lifecycle so pending saves settle, then
-delete only the fixture's validated scratch root. Harness lifecycle cases
-explicitly assert port release, including simultaneous isolated applications.
-After every test window has closed, the harness explicitly requests the normal
-application quit on every platform. This preserves the renderer save handshake
-while making the Linux/Windows last-window exit and the server cleanup ladder
-an explicit test boundary, rather than relying on event ordering.
+Close through one application-level quit so Electron drives each window's
+renderer-save handshake before the server cleanup ladder, then delete only the
+fixture's validated scratch root. Do not separately close windows and request
+quit: those are competing shutdown initiators and can orphan the server on
+Linux. When that asynchronous window guard cancels the initial quit, the final
+window restarts quit on Linux/Windows; the harness resumes it after the guarded
+window close on macOS, where a windowless session otherwise remains alive.
+Harness lifecycle cases explicitly assert port release, including simultaneous
+isolated applications.
 The launcher records a trace, Electron output, renderer errors, and the server
 log when available.
 
