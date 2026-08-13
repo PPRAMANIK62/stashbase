@@ -136,8 +136,8 @@ export function reducer(s: State, a: Action): State {
       if (!tab?.file) return s;
       const file = { ...tab.file, ...a.patch };
       const pdfSourceChanged = tab.file.format === 'pdf'
-        && tab.file.version !== undefined
-        && a.patch.version !== undefined
+        && tab.file.version
+        && a.patch.version
         && a.patch.version !== tab.file.version;
       const renamed = a.patch.name && s.selectedPath === tab.file.name;
       return {
