@@ -7,6 +7,24 @@ invariants, high-risk paths, and validation expectations for maintainers and
 AI reviewers. Neither folder replaces the codebase as the source of truth for
 the current implementation.
 
+## GitHub access for this repository
+
+For GitHub write operations on `liliu-z/stashbase` (including PR/issue
+comments, reviews, merges, and workflow dispatches), use the locally
+authenticated `gh` CLI directly. The GitHub Connector is authenticated as a
+different account and does not have write access to this repository, so do not
+probe a Connector write first. Connector reads remain available when useful.
+
+## Temporary worktrees
+
+Secondary Git worktrees do not inherit ignored local dependencies. Before
+running Electron E2E journeys that exercise indexing or sync, make sure the
+worktree has `python/.venv.nosync`: reuse a working primary checkout's venv via
+an explicit symlink when appropriate, or run `pnpm setup:python`. Without it,
+`/api/index-status` and `/api/sync` return misleading 500 responses with
+`ModuleNotFoundError: No module named 'mfs'`; treat that as worktree setup, not
+as a product regression. Never commit the venv or its symlink.
+
 You are responsible for keeping the relevant docs under `design-docs/` and
 `code-review/` up to date. Update them as a side effect of relevant code
 changes — never as a standalone "documentation pass". If a change touches the

@@ -452,8 +452,10 @@ The accepted baseline includes:
   `\(...\)`, and `\[...\]` into untrusted, locally bundled KaTeX output for
   both runtimes and restored history. Its delimiter normalization must remain
   Markdown-aware: code, escapes, incomplete streaming input, and currency
-  prose stay literal; invalid TeX degrades visibly. Copy Reply continues to
-  use the untouched assistant source. Keep remote images and non-HTTP(S),
+  prose stay literal; invalid TeX degrades visibly. Keep KaTeX and its fonts
+  behind a math-present dynamic boundary so ordinary chat does not pay that
+  parse/render weight. Copy Reply continues to use the untouched assistant
+  source. Keep remote images and non-HTTP(S),
   non-workspace links inert; local links continue through the folder-safe
   workspace callback. Display overflow belongs to the formula block, not the
   transcript or panel.

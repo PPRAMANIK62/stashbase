@@ -130,7 +130,10 @@ contract, then the `electron-functional` Playwright project. The executable
 fixture speaks the production stdio JSON-RPC vocabulary through
 `STASHBASE_CODEX_BIN` and records only disposable test data. It makes no
 network request, reads no credentials, and does not replace the packaged
-real-CLI sanity check. Use `pnpm test:e2e:functional --list` for the current
+real-CLI sanity check. The Agent journey also owns browser-level math checks:
+streamed and restored replies render through the shared surface, Copy Reply
+keeps the original source, and a wide equation scrolls without widening its
+panel. Use `pnpm test:e2e:functional --list` for the current
 authoritative inventory rather than copying a test count into documentation.
 
 The visual gallery covers the empty-library zero state; the active-folder
