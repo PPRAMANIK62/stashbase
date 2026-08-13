@@ -32,7 +32,10 @@ data, folder home, artifacts directory, and loopback port. It redirects
 `STASHBASE_LOCAL_DATA_ROOT`, `STASHBASE_FOLDER_HOME`, and
 `STASHBASE_E2E_USER_DATA`, and pins locale and time zone. Tests must never read
 the developer's StashBase config, folders, credentials, CLI history, or normal
-application data.
+application data. Ordinary fixtures also force Agent discovery to the empty
+fixture-owned managed-runtime root, so a developer-installed Codex or Claude
+cannot create background sessions or error UI. The deterministic Agent journey
+alone opts into `system-only` discovery with its fixture executable.
 
 Seed only the data needed by the journey. Mutate the disposable files through
 shipping UI or a narrowly scoped native-boundary stub, then assert the
