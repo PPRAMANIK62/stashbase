@@ -94,14 +94,13 @@ function nextUnescapedSingleDollar(source: string, start: number): number {
  * allowing forms such as `$328.57$`, `$2x$`, and `$2 + 2 = 4$`.
  */
 function isCurrencyDollar(source: string, index: number): boolean {
-  const previous = source[index - 1];
-  if (previous && /[\p{L}\p{N}]/u.test(previous)) return false;
   const amount = source.slice(index + 1).match(/^\d+(?:,\d{3})*(?:\.\d+)?/);
   if (!amount) return false;
 
   const amountEnd = index + 1 + amount[0].length;
   const afterAmount = source[amountEnd];
   if (afterAmount === '$') return false;
+  if (/^\s*[-–—]\s*\$\d/.test(source.slice(amountEnd))) return true;
   if (afterAmount && !/[\s.,;:!?)}\]]/.test(afterAmount)) return false;
 
   const closing = nextUnescapedSingleDollar(source, amountEnd);
@@ -118,11 +117,15 @@ function isCurrencyDollar(source: string, index: number): boolean {
  * literal. The original transcript string remains untouched for persistence
  * and Copy Reply.
  */
-export function normalizeAgentMathDelimiters(markdown: string): string {
+export function prepareAgentMathMarkdown(markdown: string): {
+  markdown: string;
+  hasMath: boolean;
+} {
   let output = '';
   let cursor = 0;
   let fence: Fence | null = null;
   let codeTicks = 0;
+  let hasMath = false;
 
   while (cursor < markdown.length) {
     const atLineStart = cursor === 0 || markdown[cursor - 1] === '\n';
@@ -145,6 +148,7 @@ export function normalizeAgentMathDelimiters(markdown: string): string {
       const compactDisplayMath = expandCompactDisplayMath(line);
       if (compactDisplayMath) {
         output += compactDisplayMath;
+        hasMath = true;
         cursor = end;
         continue;
       }
@@ -176,6 +180,10 @@ export function normalizeAgentMathDelimiters(markdown: string): string {
       continue;
     }
 
+    if (character === '$' && !isEscaped(markdown, cursor)) {
+      hasMath = true;
+    }
+
     if (
       character === '\\'
       && (markdown[cursor + 1] === '(' || markdown[cursor + 1] === '[')
@@ -186,6 +194,7 @@ export function normalizeAgentMathDelimiters(markdown: string): string {
       const closing = findBackslashMathClose(markdown, cursor + 2, close, inline);
       if (closing !== -1) {
         const content = markdown.slice(cursor + 2, closing);
+        hasMath = true;
         if (inline) {
           output += `$${content}$`;
         } else {
@@ -222,5 +231,9 @@ export function normalizeAgentMathDelimiters(markdown: string): string {
     cursor += 1;
   }
 
-  return output;
+  return { markdown: output, hasMath };
+}
+
+export function normalizeAgentMathDelimiters(markdown: string): string {
+  return prepareAgentMathMarkdown(markdown).markdown;
 }

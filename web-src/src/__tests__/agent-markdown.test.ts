@@ -4,17 +4,27 @@ import test from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AgentMarkdown, isHttpUrl, localAssistantLinkPath } from '../components/agent/AgentMarkdown.tsx';
+import { AgentMathMarkdownCore } from '../components/agent/AgentMathMarkdownCore.tsx';
 import { turnReplyText } from '../components/agent/AgentMessages.tsx';
 import { normalizeAgentMathDelimiters } from '../components/agent/agentMath.ts';
 
 function renderMarkdown(markdown: string): string {
+  return renderToStaticMarkup(
+    createElement(AgentMathMarkdownCore, {
+      markdown: normalizeAgentMathDelimiters(markdown),
+      onOpenArtifact: () => {},
+    }),
+  );
+}
+
+function renderPlainMarkdown(markdown: string): string {
   return renderToStaticMarkup(
     createElement(AgentMarkdown, { markdown, onOpenArtifact: () => {} }),
   );
 }
 
 test('agent Markdown keeps GFM content but renders raw HTML as text', () => {
-  const html = renderMarkdown('- [x] done\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n<script>alert(1)</script>');
+  const html = renderPlainMarkdown('- [x] done\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n<script>alert(1)</script>');
 
   assert.match(html, /type="checkbox"/);
   assert.match(html, /<table>/);
@@ -30,7 +40,7 @@ test('agent Markdown link policy only opens local files and HTTP(S) URLs', () =>
   assert.equal(isHttpUrl('https://example.com'), true);
   assert.equal(isHttpUrl('javascript:alert(1)'), false);
 
-  const html = renderMarkdown('[local](notes/a.md) [bad](javascript:alert(1)) ![remote](https://example.com/a.png)');
+  const html = renderPlainMarkdown('[local](notes/a.md) [bad](javascript:alert(1)) ![remote](https://example.com/a.png)');
   assert.match(html, /href="notes\/a.md"/);
   assert.doesNotMatch(html, /javascript:|<img/);
 });
@@ -88,13 +98,27 @@ test('agent math normalization leaves code, escapes, incomplete streams, and cur
   assert.ok(normalized.includes(String.raw`\\(\frac{1}{2}`));
   assert.ok(normalized.includes(String.raw`\\) and \\]`));
 
-  const html = renderMarkdown(source);
+  const html = renderPlainMarkdown(source);
   assert.doesNotMatch(html, /class="katex"/);
   assert.ok(html.includes('$328.57'));
   assert.ok(html.includes(String.raw`\(x + 1\)`));
   assert.ok(html.includes(String.raw`\[not math\]`));
   assert.ok(html.includes(String.raw`\(\frac{1}{2}`));
   assert.ok(html.includes(String.raw`\) and \]`));
+});
+
+test('agent Markdown keeps adjacent currency amounts and ranges as prose', () => {
+  const source = [
+    'Revenue was USD$328.57 in 2024 and USD$400.00 in 2025.',
+    'The compact range is $328.57-$400.00.',
+    'The spaced range is $328.57 - $400.00.',
+  ].join('\n');
+  const html = renderMarkdown(source);
+
+  assert.doesNotMatch(html, /class="katex(?:-error)?"/);
+  assert.match(html, /USD\$328\.57 in 2024 and USD\$400\.00/);
+  assert.match(html, /\$328\.57-\$400\.00/);
+  assert.match(html, /\$328\.57 - \$400\.00/);
 });
 
 test('agent Markdown keeps unsafe content inert beside math and degrades invalid TeX visibly', () => {
@@ -107,6 +131,8 @@ $\notARealCommand{$`);
   assert.match(html, /class="katex"/);
   assert.match(html, /class="katex-error"/);
   assert.match(html, /notARealCommand/);
+  assert.match(html, /color:var\(--status-danger\)/);
+  assert.doesNotMatch(html, /#cc0000/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(html, /<script>|javascript:|<img/);
 });
@@ -125,8 +151,9 @@ test('copy reply retains the original Markdown and LaTeX source', () => {
 
 test('agent display math owns narrow-panel overflow and offline KaTeX assets', () => {
   const css = fs.readFileSync('web-src/src/styles/chat.css', 'utf8');
+  const mathRenderer = fs.readFileSync('web-src/src/components/agent/AgentMathMarkdown.tsx', 'utf8');
 
-  assert.match(css, /@import 'katex\/dist\/katex\.min\.css'/);
+  assert.match(mathRenderer, /import 'katex\/dist\/katex\.min\.css'/);
   assert.match(css, /\.agent-prose \.katex-display\s*\{[^}]*max-width: 100%/s);
   assert.match(css, /\.agent-prose \.katex-display\s*\{[^}]*overflow-x: auto/s);
 });
