@@ -1,7 +1,8 @@
-import { useCallback, type MutableRefObject } from 'react';
+import { useCallback, useMemo, type MutableRefObject } from 'react';
 import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import { api, ApiError } from '../api';
 import { folderRefsEqual } from '../folderPath';
+import { basename } from '../lib/paths';
 import type { EditorHandle } from './actionTypes';
 import {
   isFolderFileTab,
@@ -36,7 +37,10 @@ interface DocumentActionDependencies {
 }
 
 function isDocxName(name: string): boolean {
-  const base = name.replace(/\\/g, '/').split('/').pop() ?? name;
+  // Names reaching loadFile are POSIX rel paths (listings, search hits, and
+  // preview links already URL-resolved, which folds `\` into `/`), so no
+  // backslash normalization is needed before taking the basename.
+  const base = basename(name);
   return /\.docx$/i.test(base) && !base.startsWith('~$') && !base.startsWith('.~');
 }
 
@@ -257,8 +261,8 @@ export function useDocumentActions(
     dispatch({ type: 'PENDING_HIGHLIGHT', highlight: hit });
     if (hit.openFindBar && hit.chunkText) {
       primeFind(hit.chunkText, {
-        wholeWord: hit.findWholeWord ?? false,
-        caseSensitive: keywordFindCaseSensitive(hit.chunkText, hit.findCaseStrict ?? false),
+        wholeWord: false,
+        caseSensitive: keywordFindCaseSensitive(hit.chunkText, false),
       });
     }
   }, [dispatch, primeFind]);
@@ -416,7 +420,10 @@ export function useDocumentActions(
     dispatch({ type: 'UNSUPPORTED_MODAL', open });
   }, [dispatch]);
 
-  return {
+  // One stable actions object: the workspace memo depends on this object,
+  // not on individually listed members, so a new action added here is
+  // tracked automatically.
+  return useMemo(() => ({
     activateTab,
     closeActiveTab,
     closeTab,
@@ -434,5 +441,23 @@ export function useDocumentActions(
     setUnsupportedModalOpen,
     toggleEditMode,
     updateTabPdfPage,
-  };
+  }), [
+    activateTab,
+    closeActiveTab,
+    closeTab,
+    consumePendingHighlight,
+    consumePendingScroll,
+    flushSave,
+    navigateTo,
+    newTab,
+    openInNewTab,
+    openLibraryFile,
+    registerEditor,
+    scheduleSave,
+    selectFile,
+    selectFileWithHighlight,
+    setUnsupportedModalOpen,
+    toggleEditMode,
+    updateTabPdfPage,
+  ]);
 }

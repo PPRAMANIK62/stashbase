@@ -1,9 +1,10 @@
-import { useCallback, type MutableRefObject } from 'react';
+import { useCallback, useMemo, type MutableRefObject } from 'react';
 import {
   CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION,
   VIEWABLE_FILE_EXTENSION_ALTERNATION,
 } from '../../../shared/file-formats.ts';
 import { api, ApiError, errorMessage } from '../api';
+import { basename } from '../lib/paths';
 import { isFolderFileTab } from './appContextHelpers';
 import {
   getActiveTab,
@@ -335,8 +336,8 @@ export function useFileActions(
   const moveFile = useCallback(async (oldPath: string, targetDir: string) => {
     const targetFolderPath = stateRef.current.folderPath;
     if (!targetFolderPath) return false;
-    const basename = oldPath.split('/').pop() ?? oldPath;
-    const newPath = targetDir ? `${targetDir}/${basename}` : basename;
+    const movedName = basename(oldPath);
+    const newPath = targetDir ? `${targetDir}/${movedName}` : movedName;
     if (newPath === oldPath) return true;
     const cascade = await askCascadeForRename('file', oldPath, newPath);
     if (stateRef.current.folderPath !== targetFolderPath) return false;
@@ -448,7 +449,10 @@ export function useFileActions(
   }, [loadFiles, refreshIndexState, openInNewTab, toast]);
 
 
-  return {
+  // One stable actions object: the workspace memo depends on this object,
+  // not on individually listed members, so a new action added here is
+  // tracked automatically.
+  return useMemo(() => ({
     deleteFile,
     deleteFolder,
     moveFile,
@@ -457,5 +461,14 @@ export function useFileActions(
     renameFile,
     renameFolder,
     upload,
-  };
+  }), [
+    deleteFile,
+    deleteFolder,
+    moveFile,
+    newFolder,
+    newNote,
+    renameFile,
+    renameFolder,
+    upload,
+  ]);
 }

@@ -88,12 +88,12 @@ export default function ChatPane() {
             <div
               key={tab.id}
               className={cn(
-                // text-base (13px) matches the document tabs in the main
-                // pane — the two tab strips are one role, one size.
-                // text-sm (12px) + py-1.5 (6px) = the document tab's exact
-                // type size and vertical padding, so both strips' tabs
-                // stand the same height in the same voice.
-                'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-md border border-transparent border-b-0 py-1.5 pr-1.5 pl-2.5 text-sm whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
+                // text-sm (12px) + py-1.5 (6px) + rounded-t-sm (the 6px
+                // control-role top corners) = the document tab's exact
+                // type size, vertical padding, and radius (`.tab` in
+                // mainpane.css), so both strips' tabs stand the same
+                // height in the same voice.
+                'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-sm border border-transparent border-b-0 py-1.5 pr-1.5 pl-2.5 text-sm whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
                 // bg-canvas, not bg-background: an active tab takes the
                 // colour of the surface it fronts, and this one fronts
                 // the chat canvas — `bg-background` is the document

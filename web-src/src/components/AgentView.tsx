@@ -10,11 +10,15 @@
  *
  * See design-docs/architecture.md §8 for the shared library path.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse, type FileMeta, type FolderMeta } from '../api';
 import { AGENT_META, type AgentKind } from '../agentCatalog';
+import { errorMessage } from '../apiTransport';
 import { FILE_MIME } from '../dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '../dragRouting';
+import { electronBridge } from '../electronBridge';
+import { useLatestRef } from '../hooks/useLatestRef';
+import { useStateWithRef } from '../hooks/useStateWithRef';
 import { useApp } from '../store/AppContext';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from './ui/button';
@@ -22,16 +26,8 @@ import { AgentComposer } from './agent/AgentComposer';
 import { EmptyChatGreeting, EmptyChatSuggestion } from './agent/AgentEmptyState';
 import { resolveAssistantLink } from './agent/assistantLinkTarget';
 import { MessageList, flattenFileMentions, type QueuedTurnPreview, type TurnMeta } from './agent/AgentMessages';
-
-/** Runtimes title sessions from the first message's RAW text, so a chat
- * opened with an @-mention would name its tab a bare relative path.
- * Flatten mentions to file names and collapse whitespace before the tab
- * ever sees it. */
-function tabTitleFromSession(raw: string): string {
-  const flat = flattenFileMentions(raw).replace(/\s+/g, ' ').trim();
-  return flat.length > 60 ? flat.slice(0, 60).trimEnd() + '…' : flat;
-}
-import { baseName, mergeAttachments, readImageDims } from './agent/attachments';
+import { mergeAttachments, readImageDims } from './agent/attachments';
+import { basename } from '../lib/paths';
 import { agentConnectionUrl } from './agent/connectionUrl';
 import {
   chatScopePill,
@@ -51,9 +47,19 @@ import {
 } from './agent/folderState';
 import { shouldConsumePendingResume } from './agent/sessionHistory';
 import { closeAgentSocketIntentionally, terminalAgentState } from './agent/connectionLifecycle';
+import { effortMenuLocked } from './agent/effortMenuState';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
 import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
+
+/** Runtimes title sessions from the first message's RAW text, so a chat
+ * opened with an @-mention would name its tab a bare relative path.
+ * Flatten mentions to file names and collapse whitespace before the tab
+ * ever sees it. */
+function tabTitleFromSession(raw: string): string {
+  const flat = flattenFileMentions(raw).replace(/\s+/g, ' ').trim();
+  return flat.length > 60 ? flat.slice(0, 60).trimEnd() + '…' : flat;
+}
 
 let blockSeq = 0;
 const nextId = () => `b${++blockSeq}`;
@@ -105,14 +111,16 @@ export function AgentView({
   const bootstrapFailed = bootstrapPhase === 'failed';
   const runtimeBlocked = runtimeUnavailable || bootstrapActive || bootstrapFailed;
   const capabilities = runtime?.capabilities ?? meta.capabilities;
-  const folderPathRef = useRef(state.folderPath);
-  folderPathRef.current = state.folderPath;
+  // Mirrored for the once-bound WS handler chain (`turn-end` →
+  // `runNextQueuedPrompt` → `mutateQueue`), which must not read the
+  // connect-render's stale capabilities.
+  const capabilitiesRef = useLatestRef(capabilities);
+  const folderPathRef = useLatestRef(state.folderPath);
   const mountedRef = useRef(true);
   const attachmentPreviewUrlsRef = useRef(new Set<string>());
   const uploadCountRef = useRef(0);
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [turnActive, setTurnActive] = useState(false);
-  const turnActiveRef = useRef(false);
+  const [blocks, setBlocks, blocksRef] = useStateWithRef<Block[]>([]);
+  const [turnActive, setTurnActive, turnActiveRef] = useStateWithRef(false);
   // Per-turn "Worked for X" data, keyed by the turn's user-message id.
   // Measured on the renderer wall clock (no duration exists on the wire);
   // `interrupted` is set when the user stops the turn. Resumed history has
@@ -120,54 +128,49 @@ export function AgentView({
   const [turnMeta, setTurnMeta] = useState<Record<string, TurnMeta>>({});
   const turnStartRef = useRef<number | null>(null);
   const interruptedKeyRef = useRef<string | null>(null);
+  // The prompt queue's single source of truth. The rendered preview
+  // (`queuedTurns`) is derived from it inside `mutateQueue`/`clearQueue`
+  // below — every mutation funnels through them, so no call site can
+  // forget to refresh the preview.
   const queuedPromptsRef = useRef<QueuedPrompt[]>([]);
   const [queuedTurns, setQueuedTurns] = useState<QueuedTurnPreview[]>([]);
   // Composer attachments (context files) — lifted here so a drop anywhere
   // on the panel, the composer `+`, and the send path all share one list.
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachments, setAttachments, attachmentsRef] = useStateWithRef<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // Connection lifecycle. `connecting` → waiting for the session to come
   // up; `live` → session ready, accepting prompts; `closed` → ended or
   // failed (see `fatal`). `nonce` bumps to force a reconnect.
   const [phase, setPhase] = useState<'connecting' | 'live' | 'closed'>('connecting');
-  const [fatal, setFatal] = useState<string | null>(null);
-  const fatalRef = useRef<string | null>(null);
-  fatalRef.current = fatal;
+  const [fatal, setFatal, fatalRef] = useStateWithRef<string | null>(null);
   const [fatalRecoveryLabel, setFatalRecoveryLabel] = useState<'Retry' | 'Reconnect'>('Retry');
   const [nonce, setNonce] = useState(0);
   // Permission mode for this session — drives the composer's Modes
   // dropdown. Switching it sends `set-mode` so the agent applies it live.
-  const [mode, setMode] = useState<PermMode>('default');
-  const modeRef = useRef<PermMode>('default');
+  const [mode, setMode, modeRef] = useStateWithRef<PermMode>('default');
   // Thinking effort is opt-in. Undefined preserves the native runtime
   // default; an explicit choice rides the connect URL for a new session.
-  const [effort, setEffort] = useState<EffortLevel | undefined>(undefined);
-  const effortRef = useRef<EffortLevel | undefined>(undefined);
+  const [effort, setEffort, effortRef] = useStateWithRef<EffortLevel | undefined>(undefined);
   const [restoredClaudeSession, setRestoredClaudeSession] = useState(false);
   const [effortInherited, setEffortInherited] = useState(false);
   // User intent and runtime telemetry must stay separate: an active model
   // reached through Default must never become an explicit override later.
-  const [modelControl, setModelControl] = useState<ModelControlState>({ models: [], notice: null, resumedSession: false });
+  const [modelControl, setModelControl, modelControlRef] = useStateWithRef<ModelControlState>({ models: [], notice: null, resumedSession: false });
   // Session scope (Cursor-style picker: a library folder, or "Library").
   // `pickedScope` is the user's explicit choice for the NEXT session;
   // undefined follows the window default (current folder, else library).
   // `connectedScope` is the binding the live session actually connected
   // with — captured per connect and never rebound.
-  const [pickedScope, setPickedScope] = useState<ChatScope | undefined>(undefined);
-  const pickedScopeRef = useRef<ChatScope | undefined>(undefined);
-  const [connectedScope, setConnectedScope] = useState<ChatScope | null>(null);
-  const connectedScopeRef = useRef<ChatScope | null>(null);
+  const [pickedScope, setPickedScope, pickedScopeRef] = useStateWithRef<ChatScope | undefined>(undefined);
+  const [connectedScope, setConnectedScope, connectedScopeRef] = useStateWithRef<ChatScope | null>(null);
   // Unsent draft text lifted from the composer: a draft freezes the tab's
   // scope on a window-folder switch and keeps the tab from counting as a
   // reusable blank welcome tab.
-  const [hasDraftText, setHasDraftText] = useState(false);
-  const draftTextRef = useRef(false);
-  const recentRef = useRef(state.recent);
-  recentRef.current = state.recent;
+  const [hasDraftText, setHasDraftText, hasDraftTextRef] = useStateWithRef(false);
+  const recentRef = useLatestRef(state.recent);
   const [skills, setSkills] = useState<AgentSkill[]>([]);
   const [skillState, setSkillState] = useState<'available' | 'empty' | 'failed'>('empty');
-  const modelControlRef = useRef(modelControl);
   // `resumeIdRef` holds a session id to resume on the next connect; it
   // rides the connect URL (like effort) and is consumed-and-cleared there.
   const resumeIdRef = useRef<string | null>(null);
@@ -175,8 +178,8 @@ export function AgentView({
   // message handler (bound once per connection) reads current values
   // when it renames the tab on the first turn-end.
   const sessionIdRef = useRef<string | null>(null);
-  const idRef = useRef(id); idRef.current = id;
-  const titleRef = useRef(title); titleRef.current = title;
+  const idRef = useLatestRef(id);
+  const titleRef = useLatestRef(title);
   // Empty-state starter suggestion → composer draft. Prefill only; the
   // nonce lets the same template be re-applied after the user edits it.
   const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
@@ -217,36 +220,30 @@ export function AgentView({
   const mentionFiles = mentionsDisabled ? [] : listingRoot ? sessionListing?.files ?? [] : state.files;
   const mentionFolders = mentionsDisabled ? [] : listingRoot ? sessionListing?.folders ?? [] : state.folders;
   const knownFilePaths = useMemo(() => new Set(mentionFiles.map((f) => f.name)), [mentionFiles]);
+  // Mirrored for prompt sends driven from the once-bound WS handler
+  // (queued prompts fire on `turn-end`): `resolveFolderContext` must
+  // validate against the listing as of send time, not connect time.
+  const knownFilePathsRef = useLatestRef(knownFilePaths);
   // An unbound tab that is still empty and draft-free follows the window's
   // folder: a sidebar switch reconnects its next (empty) session to the
   // new window default. A tab holding an unsent draft freezes its scope
   // (the draft keeps the binding the user saw). Bound tabs — content,
   // queued prompts, an explicit pick, or a resume — keep their session
   // and transcript untouched.
-  const blocksLengthRef = useRef(0);
-  blocksLengthRef.current = blocks.length;
-  const blocksRef = useRef<Block[]>([]);
-  blocksRef.current = blocks;
-  const queuedCountRef = useRef(0);
-  queuedCountRef.current = queuedTurns.length;
-  const attachmentsCountRef = useRef(0);
-  attachmentsCountRef.current = attachments.length;
   useEffect(() => {
     const plan = windowFolderSwitchPlan({
       connectedScope: connectedScopeRef.current,
       picked: pickedScopeRef.current,
       resumedSession: modelControlRef.current.resumedSession,
-      hasContent: blocksLengthRef.current > 0 || queuedCountRef.current > 0,
+      hasContent: blocksRef.current.length > 0 || queuedPromptsRef.current.length > 0,
       turnActive: turnActiveRef.current,
-      hasDraft: draftTextRef.current || attachmentsCountRef.current > 0,
+      hasDraft: hasDraftTextRef.current || attachmentsRef.current.length > 0,
       windowFolder: state.folderPath,
     });
     if (plan === 'freeze') {
       // Promote the connected scope to an explicit pick so a draft can
       // never be silently rebound by this or a later window switch.
-      const frozen = connectedScopeRef.current ?? undefined;
-      pickedScopeRef.current = frozen;
-      setPickedScope(frozen);
+      setPickedScope(connectedScopeRef.current ?? undefined);
       return;
     }
     if (plan !== 'follow') return;
@@ -272,33 +269,21 @@ export function AgentView({
   }
 
   function setAgentComposerFocused(focused: boolean) {
-    const bridge = (window as {
-      electron?: {
-        setAgentComposerFocused?: (value: boolean) => void;
-        markCurrentClipboardImageHandled?: () => void;
-      };
-    }).electron;
-    bridge?.setAgentComposerFocused?.(focused);
+    electronBridge()?.setAgentComposerFocused?.(focused);
   }
 
   /** Tell every OTHER window's sidebar the library gained a member (the
    *  owning window refreshes through its own openFolder). Desktop-only; the
    *  browser dev shell has one window and needs no broadcast. */
   function notifyLibraryFolderAdded(path: string) {
-    const bridge = (window as {
-      electron?: { notifyLibraryFolderAdded?: (folder: string) => Promise<boolean> };
-    }).electron;
-    void bridge?.notifyLibraryFolderAdded?.(path);
+    void electronBridge()?.notifyLibraryFolderAdded?.(path);
   }
 
   function pasteImages(files: File[]) {
-    const bridge = (window as {
-      electron?: { markCurrentClipboardImageHandled?: () => void };
-    }).electron;
     // The native watcher independently observes screenshots. Mark this
     // explicit composer paste first so it cannot surface later as a library
     // import prompt once focus leaves the input.
-    bridge?.markCurrentClipboardImageHandled?.();
+    electronBridge()?.markCurrentClipboardImageHandled?.();
     void uploadFiles(files);
   }
 
@@ -325,7 +310,6 @@ export function AgentView({
 
   function setTurnBusy(active: boolean) {
     const was = turnActiveRef.current;
-    turnActiveRef.current = active;
     setTurnActive(active);
     if (!was && active) {
       // Turn began: start the wall clock.
@@ -341,6 +325,122 @@ export function AgentView({
       turnStartRef.current = null;
       interruptedKeyRef.current = null;
     }
+  }
+
+  /** Rewrite the prompt queue and derive its rendered preview in the same
+   *  step. The ref stays the queue's single source of truth; every mutation
+   *  (and the resets below) must go through here or `clearQueue`. */
+  function mutateQueue(mutate: (queue: QueuedPrompt[]) => QueuedPrompt[]) {
+    queuedPromptsRef.current = mutate(queuedPromptsRef.current);
+    setQueuedTurns(queuedPromptsRef.current.map((p) => ({
+      id: p.id,
+      text: p.text,
+      attachments: p.attachments.length ? p.attachments : undefined,
+      status: p.status,
+      canSteer: capabilitiesRef.current?.steering === true && !p.skill,
+    })));
+  }
+
+  function clearQueue() {
+    mutateQueue(() => []);
+  }
+
+  /** The one session-reset path. All resets share the same core — drop
+   *  queued prompts, forget in-flight tool names, close the open stream
+   *  block, settle the turn — and each caller states only its deltas
+   *  through the named options. */
+  function resetSessionState({
+    transcript = 'keep',
+    clearAttachments = false,
+    forgetNativeSession = false,
+    adoptSessionId,
+    resumeId,
+    modelReset,
+    turnStillActive = false,
+    nextFatal = null,
+    recoveryLabel = 'Retry',
+    nextPhase = 'connecting',
+    startConnection = true,
+  }: {
+    /** 'keep' retains the visible transcript (a fatal reconnect keeps the
+     *  conversation for context); 'clear' empties it; an array replaces it
+     *  with replayed history; a function maps the current blocks (terminal
+     *  close settles still-running tool cards). Clearing or replacing also
+     *  drops per-turn "Worked for X" entries whose user-message blocks left
+     *  the transcript, so dead keys never accumulate and replayed history
+     *  never inherits an invented duration. */
+    transcript?: 'keep' | 'clear' | Block[] | ((current: Block[]) => Block[]);
+    /** The composer owns its attachment chips: empty them AND revoke their
+     *  image object-URLs together, so no chip is ever left rendering a dead
+     *  URL. Only safe when the transcript that may still show the same
+     *  thumbnails is cleared or replaced. A fatal reconnect and a terminal
+     *  close keep the composer intact (draft and chips survive for the
+     *  retry), so they leave this off. */
+    clearAttachments?: boolean;
+    /** Drop the native session identity and its restored-session flags —
+     *  the next connect starts a brand-new session. */
+    forgetNativeSession?: boolean;
+    /** Adopt a native session id (resuming replayed history). */
+    adoptSessionId?: string;
+    /** Session id the next connect should resume (may be null: a fatal
+     *  reconnect forwards whatever id the dead session had). */
+    resumeId?: string | null;
+    /** 'new-session' clears live telemetry so a fresh session cannot wear
+     *  the old session's active model; 'resumed' locks the control to the
+     *  resumed session's own model (drops the previous tab's catalog). */
+    modelReset?: 'new-session' | 'resumed';
+    /** Whether the current turn survives the reset. No caller keeps one
+     *  alive today; the default settles it. */
+    turnStillActive?: boolean;
+    /** Fatal message the pane shows after the reset (null clears one). */
+    nextFatal?: string | null;
+    recoveryLabel?: 'Retry' | 'Reconnect';
+    /** Connection phase after the reset. */
+    nextPhase?: 'connecting' | 'closed';
+    /** Bump the connect nonce so the socket effect starts a new session. */
+    startConnection?: boolean;
+  }) {
+    if (clearAttachments) {
+      releaseAllAttachmentPreviews();
+      setAttachments([]);
+    }
+    if (transcript !== 'keep') {
+      const nextBlocks = transcript === 'clear'
+        ? []
+        : typeof transcript === 'function' ? transcript(blocksRef.current) : transcript;
+      setBlocks(nextBlocks);
+      // `turnMeta` is keyed by the turn's user-message block id. Trim it to
+      // the blocks that survive: 'clear' drops every entry, replayed history
+      // carries fresh ids (so stale durations vanish; resumed turns render
+      // none), and a mapping function preserves ids (entries stay).
+      setTurnMeta((prev) => {
+        const kept: Record<string, TurnMeta> = {};
+        for (const block of nextBlocks) {
+          if (block.kind === 'user' && prev[block.id]) kept[block.id] = prev[block.id];
+        }
+        return kept;
+      });
+    }
+    clearQueue();
+    toolNamesRef.current.clear();
+    openKind.current = null;
+    setTurnBusy(turnStillActive);
+    setFatal(nextFatal);
+    setFatalRecoveryLabel(recoveryLabel);
+    if (forgetNativeSession) {
+      sessionIdRef.current = null;
+      setRestoredClaudeSession(false);
+      setEffortInherited(false);
+    }
+    if (adoptSessionId !== undefined) sessionIdRef.current = adoptSessionId;
+    if (resumeId !== undefined) resumeIdRef.current = resumeId;
+    if (modelReset === 'new-session') {
+      setModelControl((current) => ({ ...current, activeModel: undefined, resumedSession: false }));
+    } else if (modelReset === 'resumed') {
+      setModelControl({ models: [], notice: null, resumedSession: true });
+    }
+    setPhase(nextPhase);
+    if (startConnection) setNonce((n) => n + 1);
   }
 
   function finishRendererSession({
@@ -360,15 +460,13 @@ export function AgentView({
       currentFatal: fatalRef.current,
     };
     const terminal = terminalAgentState({ ...input, blocks: [] });
-    queuedPromptsRef.current = [];
-    openKind.current = null;
-    toolNamesRef.current.clear();
-    setBlocks((currentBlocks) => terminalAgentState({ ...input, blocks: currentBlocks }).blocks);
-    setQueuedTurns(terminal.queuedTurns);
-    setTurnBusy(terminal.turnActive);
-    setFatal(terminal.fatal);
-    setFatalRecoveryLabel(terminal.recoveryLabel);
-    setPhase(terminal.phase);
+    resetSessionState({
+      transcript: (currentBlocks) => terminalAgentState({ ...input, blocks: currentBlocks }).blocks,
+      nextFatal: terminal.fatal,
+      recoveryLabel: terminal.recoveryLabel,
+      nextPhase: terminal.phase,
+      startConnection: false,
+    });
   }
 
   useEffect(() => {
@@ -404,7 +502,6 @@ export function AgentView({
       folderPathRef.current,
       recentRef.current.map((entry) => entry.path),
     );
-    connectedScopeRef.current = sessionScope;
     setConnectedScope(sessionScope);
     // Mirror the binding into the tab model: the window-folder switch
     // logic skips spawning a welcome tab when the active chat already
@@ -449,41 +546,21 @@ export function AgentView({
   /** Tear down and start a fresh session (Retry button / after the user
    *  reopens a folder). */
   function reconnect() {
-    releaseAllAttachmentPreviews();
-    setBlocks([]);
-    setFatal(null);
-    setFatalRecoveryLabel('Retry');
-    queuedPromptsRef.current = [];
-    setQueuedTurns([]);
-    setTurnBusy(false);
-    sessionIdRef.current = null;
-    setRestoredClaudeSession(false);
-    setEffortInherited(false);
-    toolNamesRef.current.clear();
-    openKind.current = null;
-    setModelControl((current) => {
-      const next = { ...current, activeModel: undefined, resumedSession: false };
-      modelControlRef.current = next;
-      return next;
+    resetSessionState({
+      transcript: 'clear',
+      clearAttachments: true,
+      forgetNativeSession: true,
+      modelReset: 'new-session',
     });
-    setPhase('connecting');
-    setNonce((n) => n + 1);
   }
 
   /** A fatal runtime reconnect keeps the transcript available for context and
    * diagnosis. The dead native session cannot be resumed implicitly, but the
-   * visible conversation must not disappear as the replacement connects. */
+   * visible conversation must not disappear as the replacement connects.
+   * The composer keeps its draft and attachment chips for the same reason:
+   * the user retries the send, not the setup. */
   function reconnectAfterFatal() {
-    setFatal(null);
-    setFatalRecoveryLabel('Retry');
-    queuedPromptsRef.current = [];
-    setQueuedTurns([]);
-    setTurnBusy(false);
-    toolNamesRef.current.clear();
-    openKind.current = null;
-    resumeIdRef.current = sessionIdRef.current;
-    setPhase('connecting');
-    setNonce((n) => n + 1);
+    resetSessionState({ resumeId: sessionIdRef.current });
   }
 
   /** Refresh after a failed or successful connection so the chrome reflects
@@ -519,45 +596,65 @@ export function AgentView({
     try {
       const replay = await api.getSessionReplay(id, agent, scopeRequestParams(scope));
       hist = replay.messages as Block[];
-      const inheritedEffort = agent === 'claude' ? replay.effort ?? undefined : undefined;
-      setEffort(inheritedEffort);
-      effortRef.current = inheritedEffort;
+      setEffort(agent === 'claude' ? replay.effort ?? undefined : undefined);
       setRestoredClaudeSession(agent === 'claude');
       setEffortInherited(agent === 'claude' && replay.effort === null);
     } catch {
       actions.toast('Could not load that session.', { level: 'error' });
       return;
     }
-    const nextPick = chatScopesEqual(scope, newChatScope(folderPathRef.current)) ? undefined : scope;
-    setPickedScope(nextPick);
-    pickedScopeRef.current = nextPick;
-    releaseAllAttachmentPreviews();
-    setBlocks(hist);
-    setFatal(null);
-    setFatalRecoveryLabel('Retry');
-    queuedPromptsRef.current = [];
-    setQueuedTurns([]);
-    setTurnBusy(false);
-    sessionIdRef.current = id;
-    toolNamesRef.current.clear();
-    openKind.current = null;
-    resumeIdRef.current = id;
-    // The previous tab may have been configured for another model. Clear it
-    // before reconnecting so the locked resumed chat cannot mislabel itself.
-    // No notice line: the locked model pill (and its tooltip) already says
-    // the session keeps its own model — notices are for failures only.
-    const resumedModelControl: ModelControlState = {
-      models: [], notice: null, resumedSession: true,
-    };
-    modelControlRef.current = resumedModelControl;
-    setModelControl(resumedModelControl);
+    setPickedScope(chatScopesEqual(scope, newChatScope(folderPathRef.current)) ? undefined : scope);
+    resetSessionState({
+      transcript: hist,
+      clearAttachments: true,
+      adoptSessionId: id,
+      resumeId: id,
+      // The previous tab may have been configured for another model; the
+      // 'resumed' reset clears it so the locked resumed chat cannot
+      // mislabel itself. No notice line: the locked model pill (and its
+      // tooltip) already says the session keeps its own model — notices
+      // are for failures only.
+      modelReset: 'resumed',
+    });
     // Name the tab from the resumed session right away — otherwise a tab
     // opened to a past session keeps its "New Chat" placeholder until the
     // user sends a prompt (the `turn-end` path that usually renames never
     // fires on a pure load). Safe: `maybeNameTab` only overwrites a placeholder.
     void maybeNameTab();
-    setPhase('connecting');
-    setNonce((n) => n + 1);
+  }
+
+  /** The agent may have changed files: sync the folder this session is
+   *  bound to (a library-wide chat has no bound folder — reconcile the
+   *  window's current folder so the visible tree stays fresh), then refresh
+   *  whichever surface shows it. Same-folder windows refresh index state;
+   *  a cross-folder tab instead re-fetches its session-folder listing so
+   *  mentions and attachment validation see the new files. The sync itself
+   *  is best-effort in both callers — a failure falls through to the
+   *  refresh, and the next status poll surfaces it. */
+  async function reconcileSessionFolder({ reloadWindowTree }: {
+    /** Reload the window's visible file tree before the index-state
+     *  refresh. The mid-turn tool-result path turns this on so new files
+     *  appear immediately; the turn-end sweep leaves it off and lets the
+     *  regular poll repaint the tree. */
+    reloadWindowTree: boolean;
+  }): Promise<void> {
+    const boundScope = connectedScopeRef.current;
+    const folder = boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current;
+    if (!folder) return; // library chat in a no-folder window: nothing visible to reconcile
+    await api.sync(folder).catch(() => { /* best-effort; next poll surfaces it */ });
+    if (folderPathRef.current !== folder) {
+      setSessionListingNonce((n) => n + 1);
+      return;
+    }
+    if (reloadWindowTree) {
+      await actions.loadFiles();
+      // The reload awaited: the window may have switched folders meanwhile.
+      // Re-check before touching index state — this second check is
+      // deliberate, so a stale tab can never refresh another folder's
+      // index chrome.
+      if (folderPathRef.current !== folder) return;
+    }
+    void actions.refreshIndexState();
   }
 
   function handleEvent(ev: ServerEvent) {
@@ -578,18 +675,18 @@ export function AgentView({
         }
         // A fresh session always starts at permissionMode 'default'; if the
         // user had picked a non-default mode, re-apply it so a reconnect
-        // (Retry / effort change) doesn't silently reset it.
-        if (mode !== 'default') wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode }));
+        // (Retry / effort change) doesn't silently reset it. Read through
+        // the ref: this handler is bound once per connection and must see
+        // the mode as of ready time, not connect time.
+        if (modeRef.current !== 'default') {
+          wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: modeRef.current }));
+        }
         break;
       case 'session-id':
         sessionIdRef.current = ev.id;
         break;
       case 'models':
-        setModelControl((current) => {
-          const next = applyModelEvent(current, ev);
-          modelControlRef.current = next;
-          return next;
-        });
+        setModelControl((current) => applyModelEvent(current, ev));
         break;
       case 'skills': setSkills(ev.skills); setSkillState(ev.state); break;
       case 'session-title':
@@ -628,26 +725,10 @@ export function AgentView({
         if (!ev.isError) {
           const toolName = toolNamesRef.current.get(ev.id);
           if (shouldRefreshAfterTool(toolName)) {
-            // Reconcile the folder the session is bound to; the window tree
-            // reload below is skipped when the tab works cross-folder. A
-            // library-wide session has no bound folder — reconcile the
-            // window's current folder so the visible tree stays fresh.
-            const boundScope = connectedScopeRef.current;
-            const toolFolder = boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current;
-            void (async () => {
-              if (!toolFolder) return; // library chat in a no-folder window: nothing visible to reconcile
-              await api.sync(toolFolder).catch(() => { /* turn-end / next poll will surface it */ });
-              if (folderPathRef.current !== toolFolder) {
-                // Cross-folder tab: refresh the session-folder listing so
-                // mentions and attachment validation see the new files.
-                setSessionListingNonce((n) => n + 1);
-                return;
-              }
-              await actions.loadFiles();
-              if (folderPathRef.current !== toolFolder) return;
-              void actions.refreshIndexState();
-            })().catch((err) => {
-              actions.toast(`Could not refresh files: ${errorText(err)}`, { level: 'error' });
+            // Mid-turn: reload the window tree too, and surface a failed
+            // reload — the user is watching files land while the turn runs.
+            void reconcileSessionFolder({ reloadWindowTree: true }).catch((err) => {
+              actions.toast(`Could not refresh files: ${errorMessage(err)}`, { level: 'error' });
             });
           }
         }
@@ -680,7 +761,6 @@ export function AgentView({
         // windows only receive the membership update.
         const next = scopeChangedScope(ev.scope);
         if (!next || next.kind !== 'folder') break;
-        connectedScopeRef.current = next;
         setConnectedScope(next);
         // Update the tab-model binding BEFORE opening the folder, so the
         // switch effect sees the active tab already bound to the project
@@ -689,7 +769,7 @@ export function AgentView({
         notifyLibraryFolderAdded(next.path);
         if (folderPathRef.current !== next.path) {
           void actions.openFolder(next.path).catch((err) => {
-            actions.toast(`Could not open the new project: ${errorText(err)}`, { level: 'error' });
+            actions.toast(`Could not open the new project: ${errorMessage(err)}`, { level: 'error' });
           });
         }
         break;
@@ -713,19 +793,9 @@ export function AgentView({
         // The agent may have written files via shell during the turn —
         // reconcile now (deterministic, replaces fs.watch). MCP writes
         // already index on their own path; this catches `Bash`/editor
-        // writes the moment the turn finishes.
-        {
-          const boundScope = connectedScopeRef.current;
-          const turnFolder = boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current;
-          if (turnFolder) {
-            void api.sync(turnFolder)
-              .catch(() => { /* next status poll surfaces it */ })
-              .finally(() => {
-                if (folderPathRef.current === turnFolder) void actions.refreshIndexState();
-                else setSessionListingNonce((n) => n + 1);
-              });
-          }
-        }
+        // writes the moment the turn finishes. No tree reload here (the
+        // poll owns it) and nothing can reject, so no error surface.
+        void reconcileSessionFolder({ reloadWindowTree: false });
         recordFailureBeforeContinuing(
           terminal,
           (message) => setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: message }]),
@@ -743,12 +813,7 @@ export function AgentView({
         // An error before the session is ready is fatal (e.g. no folder
         // open / not authenticated); mid-session it's just a notice.
         if (!readyRef.current) {
-          queuedPromptsRef.current = [];
-          setQueuedTurns([]);
-          setTurnBusy(false);
-          setFatalRecoveryLabel('Retry');
-          setFatal(ev.message);
-          setPhase('closed');
+          resetSessionState({ nextFatal: ev.message, nextPhase: 'closed', startConnection: false });
         } else {
           turnErrorTrackerRef.current.explain();
           setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: ev.message }]);
@@ -781,28 +846,19 @@ export function AgentView({
     });
   }
 
-  function queuePreview(): QueuedTurnPreview[] {
-    return queuedPromptsRef.current.map((p) => ({
-      id: p.id,
-      text: p.text,
-      attachments: p.attachments.length ? p.attachments : undefined,
-      status: p.status,
-      canSteer: capabilities?.steering === true && !p.skill,
-    }));
-  }
-
   function setQueuedPromptStatus(id: string, status: QueuedPrompt['status']) {
-    queuedPromptsRef.current = queuedPromptsRef.current.map((p) => (p.id === id ? { ...p, status } : p));
-    setQueuedTurns(queuePreview());
+    mutateQueue((queue) => queue.map((p) => (p.id === id ? { ...p, status } : p)));
   }
 
   function send(text: string, skill?: string) {
+    // Deliberate: this reads the composer's CURRENT attachments, so
+    // edit-and-resend from history attaches whatever chips are in the
+    // composer now — resend is a brand-new prompt, not a replay of the
+    // original turn's context.
     const atts = attachments;
     const titleHint = capabilities?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
     if (turnActiveRef.current) {
-      const id = nextId();
-      queuedPromptsRef.current.push({ id, text, attachments: atts, titleHint, skill, status: 'waiting' });
-      setQueuedTurns(queuePreview());
+      mutateQueue((queue) => [...queue, { id: nextId(), text, attachments: atts, titleHint, skill, status: 'waiting' }]);
       setAttachments([]);
       return;
     }
@@ -815,9 +871,12 @@ export function AgentView({
   }
 
   function runNextQueuedPrompt() {
-    queuedPromptsRef.current = queuedPromptsRef.current.filter((p) => p.status === 'waiting');
-    const next = queuedPromptsRef.current.shift();
-    setQueuedTurns(queuePreview());
+    let next: QueuedPrompt | undefined;
+    mutateQueue((queue) => {
+      const waiting = queue.filter((p) => p.status === 'waiting');
+      next = waiting[0];
+      return waiting.slice(1);
+    });
     if (!next) {
       setTurnBusy(false);
       return;
@@ -837,7 +896,7 @@ export function AgentView({
       ws.send(JSON.stringify({ t: 'steer', id, text: wire }));
     } catch (err) {
       setQueuedPromptStatus(id, 'waiting');
-      setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not steer Codex: ${errorText(err)}` }]);
+      setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not steer Codex: ${errorMessage(err)}` }]);
     }
   }
 
@@ -881,7 +940,7 @@ export function AgentView({
       if (clearAttachments) clearComposerAttachments();
     } catch (err) {
       setTurnBusy(false);
-      setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not send message: ${errorText(err)}` }]);
+      setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not send message: ${errorMessage(err)}` }]);
     }
   }
 
@@ -895,7 +954,7 @@ export function AgentView({
   }
 
   async function resolveFolderContext(path: string): Promise<AgentContextFile | null> {
-    if (!knownFilePaths.has(path)) return null;
+    if (!knownFilePathsRef.current.has(path)) return null;
     // Resolve against the session's bound folder — a cross-folder tab must
     // not look the file up under the window's current folder. (A library
     // chat never reaches here: its folder-file listing is empty.)
@@ -979,7 +1038,7 @@ export function AgentView({
     const clean = paths.filter((p) => p && knownFilePaths.has(p));
     const skipped = paths.filter((p) => p && !knownFilePaths.has(p)).length;
     if (skipped) actions.toast("Only files from this chat's folder can be attached.", { level: 'warning' });
-    const add = clean.map((p) => ({ path: p, name: baseName(p) }));
+    const add = clean.map((p) => ({ path: p, name: basename(p) }));
     if (add.length) setAttachments((a) => mergeAttachments(a, add));
   }
 
@@ -1010,21 +1069,23 @@ export function AgentView({
   /** Switch permission mode and tell the server to apply it live. */
   function changeMode(m: PermMode) {
     setMode(m);
-    modeRef.current = m;
     wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: m }));
   }
 
   /** Change thinking effort. Restored idle transcripts reconnect to the same
    * native session; their visible history is retained. */
   function changeEffort(level: EffortLevel | undefined) {
-    if (turnActive || (blocks.length > 0 && !restoredClaudeSession)) return;
+    if (effortMenuLocked(blocks.length > 0, turnActive, restoredClaudeSession)) return;
     setEffort(level);
-    effortRef.current = level;
     setEffortInherited(false);
     if (blocks.length > 0 && sessionIdRef.current) {
-      resumeIdRef.current = sessionIdRef.current;
-      setPhase('connecting');
-      setNonce((n) => n + 1);
+      // Resume the same native session with the transcript kept. The guard
+      // above means this runs only while idle, so the reset's queue,
+      // tool-name, and turn-settle steps are no-ops (an idle session has
+      // drained its queue and settled its turn) — the reset contributes
+      // resumeId + phase + a connect-nonce bump, plus clearing any
+      // leftover fatal exactly like the other reconnect paths.
+      resetSessionState({ resumeId: sessionIdRef.current });
     } else {
       reconnect();
     }
@@ -1037,9 +1098,7 @@ export function AgentView({
    * to follow-the-window. */
   function changeScope(next: ChatScope) {
     if (blocks.length > 0 || turnActive || modelControl.resumedSession) return;
-    const pick = chatScopesEqual(next, newChatScope(folderPathRef.current)) ? undefined : next;
-    setPickedScope(pick);
-    pickedScopeRef.current = pick;
+    setPickedScope(chatScopesEqual(next, newChatScope(folderPathRef.current)) ? undefined : next);
     reconnect();
   }
 
@@ -1047,11 +1106,7 @@ export function AgentView({
    * transcript is immutable here, so it can never silently switch models. */
   function changeModel(next: string | undefined) {
     if (blocks.length > 0 || turnActive) return;
-    setModelControl((current) => {
-      const updated = { ...current, selectedModel: next, activeModel: undefined, notice: null, resumedSession: false };
-      modelControlRef.current = updated;
-      return updated;
-    });
+    setModelControl((current) => ({ ...current, selectedModel: next, activeModel: undefined, notice: null, resumedSession: false }));
     reconnect();
   }
 
@@ -1074,7 +1129,7 @@ export function AgentView({
     } catch { /* leave the placeholder if the lookup fails */ }
   }
 
-  const effortLocked = turnActive || (blocks.length > 0 && !restoredClaudeSession);
+  const effortLocked = effortMenuLocked(blocks.length > 0, turnActive, restoredClaudeSession);
   const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
   // Session-scope pill state. The shown scope is the live binding once
   // connected, else the scope the next session would bind (picked scope or
@@ -1129,8 +1184,7 @@ export function AgentView({
   }, [pendingResume, active]);
 
   function handleDraftChange(hasText: boolean) {
-    draftTextRef.current = hasText;
-    setHasDraftText((prev) => (prev === hasText ? prev : hasText));
+    setHasDraftText(hasText);
   }
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
@@ -1176,6 +1230,44 @@ export function AgentView({
     }
   }
 
+  /** Runtime-readiness gates, most fundamental first: discovery has not
+   *  answered yet, preparation is running, preparation failed, CLI missing.
+   *  Null once the runtime is usable — the chat UI below owns the pane. */
+  function renderRuntimeGate(): ReactNode {
+    if (!runtime) {
+      return <AgentRuntimeChecking name={meta.name} onRefresh={() => void refreshRuntimes()} />;
+    }
+    const copyInstallHint = () => {
+      void copyText(runtime.installHint).then((copied) => {
+        actions.toast(copied ? 'Install command copied.' : 'Could not copy install command.', { level: copied ? 'info' : 'error' });
+      });
+    };
+    if (bootstrapActive) {
+      return <AgentRuntimeProgress runtime={runtime} fallbackName={meta.name} />;
+    }
+    if (bootstrapFailed) {
+      return (
+        <AgentRuntimeFailure
+          runtime={runtime}
+          fallbackName={meta.name}
+          onRetry={() => void startRuntimeBootstrap()}
+          onCopy={copyInstallHint}
+        />
+      );
+    }
+    if (runtimeUnavailable) {
+      return (
+        <AgentRuntimeSetup
+          runtime={runtime}
+          fallbackName={meta.name}
+          onInstall={() => void startRuntimeBootstrap()}
+          onRefresh={() => void refreshRuntimes()}
+        />
+      );
+    }
+    return null;
+  }
+
   // Empty chat (no turns yet, session usable) renders the hero layout:
   // greeting + centered composer + starter templates. Any transcript
   // content, a queued prompt, or a closed/failed session falls back to the
@@ -1207,38 +1299,7 @@ export function AgentView({
       {/* No pane header: the chat tab already names the conversation and
         * the composer's scope pill carries the binding — repeating either
         * here was pure noise. */}
-      {!runtime ? (
-        <AgentRuntimeChecking name={meta.name} onRefresh={() => void refreshRuntimes()} />
-      ) : bootstrapActive ? (
-        <AgentRuntimeProgress runtime={runtime} fallbackName={meta.name} />
-      ) : bootstrapFailed ? (
-        <AgentRuntimeFailure
-          runtime={runtime}
-          fallbackName={meta.name}
-          onRetry={() => void startRuntimeBootstrap()}
-          onCopy={() => {
-            void copyText(runtime.installHint).then((copied) => {
-              actions.toast(copied ? 'Install command copied.' : 'Could not copy install command.', { level: copied ? 'info' : 'error' });
-            });
-          }}
-        />
-      ) : runtimeUnavailable ? (
-        <AgentRuntimeSetup
-          runtime={runtime}
-          fallbackName={meta.name}
-          onCopy={() => {
-            if (!runtime) return;
-            void copyText(runtime.installHint).then((copied) => {
-              actions.toast(
-                copied ? 'Install command copied.' : 'Could not copy install command.',
-                { level: copied ? 'info' : 'error' },
-              );
-            });
-          }}
-          onInstall={() => void startRuntimeBootstrap()}
-          onRefresh={() => void refreshRuntimes()}
-        />
-      ) : <>
+      {renderRuntimeGate() ?? <>
         {emptyChat ? (
           // Empty chat: the composer is the hero. The greeting bottoms out
           // this flex-[3] band and the rotating suggestion bottoms out the
@@ -1290,14 +1351,12 @@ export function AgentView({
             }}
           />
         )}
-        {phase === 'closed' && (
-        !fatal && (
+        {phase === 'closed' && !fatal && (
           <div className="flex items-center justify-between gap-2.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
             <span>Session ended.</span>
             <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={reconnect}>Reconnect</Button>
           </div>
-        )
-      )}
+        )}
       <AgentComposer
         key="composer"
         hero={emptyChat}
@@ -1305,42 +1364,45 @@ export function AgentView({
         disabled={phase !== 'live'}
         turnActive={turnActive}
         active={active}
-        mode={mode}
-        onSetMode={changeMode}
-        effort={effort}
-        effortInherited={effortInherited}
-        onSetEffort={changeEffort}
-        effortLocked={effortLocked}
-        selectedModel={modelControl.selectedModel}
-        activeModel={modelControl.activeModel}
-        models={modelControl.models}
-        modelLocked={modelLocked}
-        modelNotice={modelControl.notice}
-        resumedSession={modelControl.resumedSession}
-        supportedEfforts={supportedEfforts}
-        onSetModel={changeModel}
-        sessionScope={sessionScope}
-        folderEntries={folderEntries}
-        folderLocked={folderLocked}
-        folderHomeDir={state.homeDir}
-        onSetScope={changeScope}
-        onDraftChange={handleDraftChange}
-        showModeMenu={capabilities?.modes === true}
-        showEffortMenu={capabilities?.effort === true}
-        showModelMenu={modelMenuVisible(capabilities?.models === true, modelControl.models)}
-        mentionFiles={mentionFiles}
-        mentionFolders={mentionFolders}
-        skills={skills}
-        skillState={skillState}
-        onRefreshSkills={refreshSkills}
         agentShortName={meta.shortName}
         prefill={prefill}
-        attachments={attachments}
-        uploading={uploading}
-        onPickFiles={uploadFiles}
-        onPasteImages={pasteImages}
+        mode={{ show: capabilities?.modes === true, value: mode, onSet: changeMode }}
+        effort={{
+          show: capabilities?.effort === true,
+          level: effort,
+          inherited: effortInherited,
+          locked: effortLocked,
+          supported: supportedEfforts,
+          onSet: changeEffort,
+        }}
+        model={{
+          show: modelMenuVisible(capabilities?.models === true, modelControl.models),
+          selected: modelControl.selectedModel,
+          active: modelControl.activeModel,
+          models: modelControl.models,
+          locked: modelLocked,
+          notice: modelControl.notice,
+          resumedSession: modelControl.resumedSession,
+          onSet: changeModel,
+        }}
+        scope={{
+          current: sessionScope,
+          entries: folderEntries,
+          homeDir: state.homeDir,
+          locked: folderLocked,
+          onSet: changeScope,
+        }}
+        mentions={{ files: mentionFiles, folders: mentionFolders }}
+        skills={{ list: skills, state: skillState, onRefresh: refreshSkills }}
+        attachments={{
+          items: attachments,
+          uploading,
+          onPick: uploadFiles,
+          onPasteImages: pasteImages,
+          onRemove: removeAttachment,
+        }}
+        onDraftChange={handleDraftChange}
         onFocusChange={setAgentComposerFocused}
-        onRemoveAttachment={removeAttachment}
         onSend={send}
         onStop={stop}
       />
@@ -1363,21 +1425,22 @@ export function AgentView({
 }
 
 const runtimeCardWrapClass = 'grid min-h-45 flex-1 place-items-center px-3 py-6';
-const runtimeCardClass = 'w-[min(440px,100%)] rounded-xl border border-border bg-pane p-4 text-foreground';
-const runtimeCardTitleClass = 'm-0 text-base font-semibold';
-const runtimeCardCopyClass = 'mt-1.75 mb-3 text-sm leading-normal text-muted-foreground';
+/* One text rhythm with the app's dialogs (ManagedModalShell): body-size
+ * medium title, body-size muted copy at mt-2. Card surface is bg-card —
+ * chat is canvas, its cards float on the card role. */
+const runtimeCardClass = 'w-[min(440px,100%)] rounded-xl border border-border bg-card p-4 text-foreground';
+const runtimeCardTitleClass = 'm-0 text-base font-medium leading-snug';
+const runtimeCardCopyClass = 'mt-2 mb-3 text-base leading-normal text-muted-foreground';
 const runtimeCardActionsClass = 'mt-3 flex justify-end gap-2';
 
 function AgentRuntimeSetup({
   runtime,
   fallbackName,
-  onCopy,
   onInstall,
   onRefresh,
 }: {
   runtime: Agent | undefined;
   fallbackName: string;
-  onCopy: () => void;
   onInstall: () => void;
   onRefresh: () => void;
 }) {
@@ -1386,9 +1449,12 @@ function AgentRuntimeSetup({
     <div className={runtimeCardWrapClass} role="status">
       <div className={runtimeCardClass}>
         <h2 className={runtimeCardTitleClass}>{name} is not installed</h2>
-        <p className={runtimeCardCopyClass}>StashBase can install the official runtime privately without changing your system PATH.</p>
+        {/* First-run install keeps ONE primary path: no manual-command
+          * escape hatch and no PATH/implementation caveats here — that
+          * recovery detail lives on the failure card, where an install
+          * has actually gone wrong. */}
+        <p className={runtimeCardCopyClass}>StashBase can set up the official runtime for you.</p>
         <div className={runtimeCardActionsClass}>
-          <Button className={buttonVariants({ variant: 'ghost', size: 'sm' })} onPress={onCopy} aria-label={`Copy manual install command for ${name}`}>Copy manual command</Button>
           <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Check again</Button>
           <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onInstall}>Install and continue</Button>
         </div>
@@ -1408,7 +1474,7 @@ function AgentRuntimeProgress({ runtime, fallbackName }: { runtime: Agent; fallb
         <p className={runtimeCardCopyClass}>{status?.message ?? `Installing ${name}…`}</p>
         <div className="h-1.5 overflow-hidden rounded-full bg-muted">
           <div
-            className={'h-full rounded-full bg-accent transition-[width] duration-300 ' + (progress == null ? 'w-1/3 animate-pulse' : '')}
+            className={'h-full rounded-full bg-accent transition-[width] duration-standard ' + (progress == null ? 'w-1/3 animate-pulse' : '')}
             style={progress == null ? undefined : { width: `${Math.round(progress * 100)}%` }}
           />
         </div>
@@ -1436,7 +1502,7 @@ function AgentRuntimeFailure({
         <h2 className={runtimeCardTitleClass}>Couldn’t prepare {name}</h2>
         <p className={runtimeCardCopyClass}>{runtime.bootstrap?.error ?? 'The runtime setup did not finish.'}</p>
         <div className={runtimeCardActionsClass}>
-          <Button className={buttonVariants({ variant: 'ghost', size: 'sm' })} onPress={onCopy}>Copy manual command</Button>
+          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onCopy}>Copy manual command</Button>
           <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onRetry}>Retry</Button>
         </div>
       </div>
@@ -1497,6 +1563,3 @@ function isSafeFolderRelativePath(path: string): boolean {
   return path.split('/').every((part) => part.length > 0 && part !== '.' && part !== '..');
 }
 
-function errorText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}

@@ -66,7 +66,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = tr
           type="button"
           disabled={signInDisabled}
           onClick={onSignIn}
-          className="relative grid gap-0.5 rounded-xl border border-border bg-[color-mix(in_oklch,var(--accent),transparent_92%)] px-4 py-1.5 text-left transition-colors enabled:cursor-pointer enabled:hover:border-[var(--stroke-strong)] enabled:hover:bg-[color-mix(in_oklch,var(--accent),transparent_86%)] disabled:cursor-default"
+          className="relative grid gap-0.5 rounded-xl border border-border bg-accent/8 px-4 py-1.5 text-left transition-colors enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-accent/14 disabled:cursor-default"
         >
           <span className="text-base font-semibold leading-snug text-foreground">Sign in to StashBase</span>
           <span className="text-xs leading-snug text-muted-foreground">Free monthly AI Index usage</span>
@@ -82,7 +82,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = tr
         <button
           type="button"
           onClick={onUseOwnKey}
-          className="grid cursor-pointer gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-colors hover:border-[var(--stroke-strong)] hover:bg-muted/40"
+          className="grid cursor-pointer gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-colors hover:border-stroke-strong hover:bg-muted"
         >
           <span className="text-base font-semibold leading-snug text-foreground">Use your own API key</span>
           <span className="text-xs leading-snug text-muted-foreground">OpenAI or OpenRouter</span>

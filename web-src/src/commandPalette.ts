@@ -1,3 +1,5 @@
+import { fuzzyScore } from './lib/fuzzy';
+
 export type QuickAccessProvider = 'files' | 'commands' | 'help';
 
 export interface CommandContext {
@@ -33,18 +35,6 @@ export const commandDefinitions: readonly CommandDefinition[] = [
   { id: 'settings.open', label: 'Open Settings', category: 'Settings', available: () => true },
 ];
 
-function fuzzyMatch(value: string, query: string): number | null {
-  let cursor = 0;
-  let score = 0;
-  for (const char of query.toLocaleLowerCase()) {
-    const index = value.toLocaleLowerCase().indexOf(char, cursor);
-    if (index < 0) return null;
-    score += 10 - Math.min(index, 8);
-    cursor = index + 1;
-  }
-  return score;
-}
-
 /** Ranks only supplied, already-available commands. Recency is deliberately
  * owned by the picker component so it never becomes persisted activity data. */
 export function rankCommandPalette(
@@ -57,7 +47,7 @@ export function rankCommandPalette(
   return commands
     .map((command) => {
       const haystack = `${command.label} ${command.category} ${command.id}`;
-      const score = normalized ? fuzzyMatch(haystack, normalized) : 0;
+      const score = normalized ? fuzzyScore(haystack, normalized) : 0;
       return score == null ? null : { command, score, recent: recentRank.get(command.id) };
     })
     .filter((candidate): candidate is { command: CommandDefinition; score: number; recent: number | undefined } => candidate !== null)

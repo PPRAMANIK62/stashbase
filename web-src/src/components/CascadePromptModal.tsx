@@ -1,3 +1,4 @@
+import { basename } from '../lib/paths';
 import { useApp } from '../store/AppContext';
 import { ModalShell } from './ModalShell';
 import { Button } from './ui/button';
@@ -21,8 +22,8 @@ export function CascadePromptModal() {
 
   if (!prompt) return null;
 
-  const fromShort = prompt.oldPath.split('/').pop() || prompt.oldPath;
-  const toShort = prompt.newPath.split('/').pop() || prompt.newPath;
+  const fromShort = basename(prompt.oldPath);
+  const toShort = basename(prompt.newPath);
   const kindLabel = prompt.kind === 'folder' ? 'folder' : 'note';
 
   return (

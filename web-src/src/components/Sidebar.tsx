@@ -1,66 +1,45 @@
 import {
   ChevronDownIcon,
-  CollapseAllIcon,
   CubeLogoIcon,
-  ExpandAllIcon,
-  ExternalLinkIcon,
   FolderIcon,
-  HistoryIcon,
-  LibraryIcon,
   MoreHorizontalIcon,
   NewFileIcon,
-  NewFolderIcon,
   OutlineIcon,
   PlusIcon,
-  StarFilledIcon,
   StarIcon,
-  SyncIcon,
-  TrashIcon,
 } from '../icons';
 import { SidebarAccountRow } from './SidebarAccountRow';
 import { useApp } from '../store/AppContext';
-import { makeChatTab, type Action, type LibraryFolderStatus, type State } from '../store/state';
-import { folderScope, LIBRARY_SCOPE, newChatPlan, type ChatScope } from './agent/folderState';
+import { folderScope } from './agent/folderState';
+import { ALL_HISTORY_SCOPE } from './agent/sessionHistory';
 import { AGENT_META, AGENTS, type AgentKind } from '../agentCatalog';
 import {
   newChatAgentSelectionPlan,
   readPreferredAgent,
   rememberPreferredAgent,
 } from '../agentPreference';
+import { electronBridge } from '../electronBridge';
 import { folderRefsEqual } from '../folderPath';
+import { basename, shortenFolderPath } from '../lib/paths';
 import { FileTree } from './FileTree';
 import { useDocumentOutline } from './DocumentOutlineContext';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
-import { libraryListPlan } from './libraryListPlan';
+import { FolderMenu } from './FolderMenu';
 import { Menu, type MenuItem } from './Menu';
-import { ModalShell } from './ModalShell';
+import { RemoveFolderModal } from './RemoveFolderModal';
+import { activateChatTabForAgent, ScopeHistoryButton } from './ScopeHistoryButton';
 import { Button } from './ui/button';
-import { PopupLoadingStatus } from './ui/status';
-import { api, errorMessage, type IndexStatus } from '../api';
-import { requestAgentBootstrap } from '../agentBootstrap';
+import { api, errorMessage } from '../api';
 import { FILE_MIME } from '../dragMime';
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useFolderRemoval } from '../hooks/useFolderRemoval';
+import { refreshLibraryMembership } from '../hooks/useLibraryMembership';
+import { useLibraryReconcile } from '../hooks/useLibraryReconcile';
+import { Suspense, useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 
-interface ElectronBridge {
-  openFolderDialog?: (opts?: {
-    title?: string;
-    buttonLabel?: string;
-    defaultPath?: string;
-    allowCreateDirectory?: boolean;
-  }) => Promise<string | null>;
-  openFolderWindow?: (folder: string) => Promise<boolean>;
-  prepareFolderRemoval?: (folder: string) => Promise<boolean>;
-  notifyFolderRemoved?: (folder: string) => Promise<boolean>;
-}
-
-const LIBRARY_RECONCILE_COOLDOWN_MS = 30_000;
-const OPEN_FOLDER_WATCHDOG_MS = 20_000;
-
-/** The merged session-history popover loads at its interaction boundary
- *  so react-aria (which otherwise ships with the lazy chat chunk) stays
- *  out of the initial renderer bundle. */
-const SessionHistoryPopover = lazyWithRetry(() =>
-  import('./agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
+/** The chat-activation rule lives beside the History resume path in
+ *  `ScopeHistoryButton.tsx`; re-exported here because the titlebar chat
+ *  toggle imports it from this module. */
+export { activateChatTabForAgent } from './ScopeHistoryButton';
 
 const DocumentOutline = lazyWithRetry(() =>
   import('./DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
@@ -69,42 +48,11 @@ const SemanticIndexingNotice = lazyWithRetry(() =>
 const EmbeddingSetupCallout = lazyWithRetry(() => import('./EmbeddingSetupCallout'));
 const UnsupportedFilesCallout = lazyWithRetry(() => import('./UnsupportedFilesCallout'));
 
-/** Shorten an absolute path for display: `/Users/foo/Notes` → `~/Notes`
- *  when it lives under the user's home dir. Falls through unchanged
- *  otherwise (e.g. `/tmp/scratch`). */
-function prettifyHome(abs: string, home: string): string {
-  if (!home) return abs;
-  if (abs === home) return '~';
-  if (abs.startsWith(home + '/')) return '~/' + abs.slice(home.length + 1);
-  return abs;
-}
-
-function basenameOfPath(path: string): string {
-  const segs = path.split('/').filter(Boolean);
-  return segs.pop() || path;
-}
-
-/** Collapse a folder's `/api/index-status` payload to the coarse library
- *  readiness state the sidebar cares about. Only `failed` is surfaced (a
- *  subtle warning dot); `preparing`/`unknown` merely keep the poll alive. */
-function libraryFolderState(status: IndexStatus): LibraryFolderStatus {
-  const hasError = status.indexWarning
-    || (status.preparationFailures?.some((problem) => problem.status !== 'cancelled') ?? false);
-  const pending = status.pendingCount ?? 0;
-  const converting = status.pendingConversions?.length ?? 0;
-  const indexReady = status.indexReady !== false;
-  const isIndexing = !indexReady
-    || status.visibleIndexingSettled === false
-    || pending > 0
-    || converting > 0;
-  return hasError ? 'failed' : isIndexing ? 'preparing' : 'ready';
-}
-
 /**
- * The sidebar is one Files panel — the Library folder list + the active
- * folder's file tree — with no activity rail: the sidebar toggle and
- * search live in the shell's titlebar controls (`TitlebarControls.tsx`),
- * search itself in the library search popup (`LibrarySearchDialog.tsx`),
+ * The sidebar is one Files panel — the active folder's file tree — with
+ * no activity rail: the sidebar toggle, search, and the library folder
+ * switcher live in the shell's titlebar controls (`TitlebarControls.tsx`),
+ * search itself in the library search popup (`ManagedLibrarySearch.tsx`),
  * and the account (with Settings beside it) in the panel's bottom row.
  */
 export function Sidebar() {
@@ -152,8 +100,9 @@ const sectionToggleClass =
 const sectionTitleClass = 'min-w-0 truncate text-base text-muted-foreground';
 
 /** The Explorer view. The active folder zone (current folder header +
- * file tree), the LIBRARY resource list, and the active Markdown document
- * outline share this one sidebar as stacked sections. */
+ * file tree) and the active Markdown document outline share this one
+ * sidebar as stacked sections; library membership lives in the titlebar's
+ * folder switcher. */
 function FilesPanel() {
   const { state, activeTab } = useApp();
   const { outline } = useDocumentOutline();
@@ -270,7 +219,7 @@ function FilesPanel() {
   );
 }
 
-/** Full-width New Chat entry above the Library section (Cursor's "New
+/** Full-width New Chat entry at the sidebar's top (Cursor's "New
  *  Agent" position) — the app's ONE chat-creation entry point, a split
  *  button. The main area starts a chat with the last-selected agent; the
  *  chevron at the row's right edge only chooses the agent the next main-area
@@ -343,25 +292,37 @@ function NewChatButton() {
         {/* No right margin: the chevron's own 20px box already holds the
           * glyph 2px off the text, and any more read as two unrelated
           * controls rather than one label-plus-picker. */}
-        <span className="shrink-0 truncate text-xs text-muted-foreground">
+        {/* ALL chat history lives on this row since the Library section
+          * retired — with no per-folder rows left, this is the one place
+          * every session (each member folder + the library scope) stays
+          * reachable; rows resume in their own scope. It sits BEFORE the
+          * agent label so the "Codex ⌄" label-plus-picker pair stays
+          * adjacent. */}
+        <ScopeHistoryButton
+          scope={ALL_HISTORY_SCOPE}
+          label="Chat history"
+        />
+        <span className="ml-1 shrink-0 truncate text-xs text-muted-foreground">
           {preferred.launcherLabel}
         </span>
         <button
           ref={chevronRef}
           type="button"
           className={
+            /* Quiet-icon-button canon (TitlebarControls): muted hover
+             * surface; the app-wide `:focus-visible` outline rule paints
+             * the translucent halo, as on every hand-rolled sidebar
+             * button. Compact size-5 keeps the control inside the row;
+             * sub-24px keeps rounded-sm per the corner contract. */
             'mr-1 inline-flex size-5 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent '
-            /* bg-active, not bg-muted: this control nests inside a row
-             * that already hovers to bg-muted, so its own states need
-             * the one-step-darker surface to read. */
-            + 'text-muted-foreground hover:bg-active hover:text-foreground focus-visible:opacity-100 '
+            + 'text-muted-foreground hover:bg-muted hover:text-foreground '
             /* size-4, a step up from the sidebar's 14px glyphs: this
              * chevron sits beside 11px text rather than 13px row text,
              * so at 14px it read as a speck next to the word it opens. */
             + '[&_svg]:size-4 '
             /* Always visible (muted): the arrow IS the discoverability of
              * the agent menu — hover-only would hide the affordance. */
-            + (menuAnchor ? 'bg-active text-foreground' : '')
+            + (menuAnchor ? 'bg-muted text-foreground' : '')
           }
           aria-label="Choose agent for new chat"
           aria-haspopup="menu"
@@ -387,189 +348,32 @@ function NewChatButton() {
   );
 }
 
-/** Ensure the chat panel is open with a tab running `agent` active — the
- *  blank-tab reuse rule shared by New Chat, the History resume path, and
- *  the titlebar chat toggle (its open-with-no-tabs case):
- *  reuse the one COMPLETELY blank tab (switching its agent in place when
- *  it differs), else create a fresh tab; open the panel when hidden. */
-export function activateChatTabForAgent(
-  state: Pick<State, 'chatTabs' | 'chatOpen'>,
-  dispatch: (a: Action) => void,
-  agent: AgentKind,
-) {
-  requestAgentBootstrap(agent, dispatch);
-  const plan = newChatPlan(state.chatTabs, agent);
-  if (plan.kind === 'reuse') {
-    if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });
-    dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
-  } else {
-    dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
-  }
-  if (!state.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
-}
-
-/** History clock on a sidebar scope header: opens the merged
- *  session-history menu for that scope (both agents' sessions, newest
- *  first). Picking a session records a pending resume in the store and
- *  ensures a suitable chat tab is active (the New Chat blank-tab reuse
- *  rule); that tab's AgentView consumes the request and resumes the
- *  session within this scope. */
-function ScopeHistoryButton({
-  scope,
-  label,
-  onOpenChange,
+/** The active-folder header's ⋯ trigger (favorite / sync / new window /
+ *  remove live in its FolderMenu). */
+function RootMenuButton({
+  name,
+  menuOpen,
+  onMenu,
 }: {
-  scope: ChatScope;
-  /** Accessible name + tooltip, e.g. "Chat history in Notes". */
-  label: string;
-  /** Lets the owning header hold its hover-revealed cluster visible
-   *  while the menu is open. */
-  onOpenChange?: (open: boolean) => void;
+  name: string;
+  menuOpen: boolean;
+  onMenu: (rect: DOMRect) => void;
 }) {
-  const { state, dispatch } = useApp();
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-
-  function setOpenReported(next: boolean) {
-    setOpen(next);
-    onOpenChange?.(next);
-  }
-
-  function resumeSession(agent: AgentKind, sessionId: string) {
-    setOpenReported(false);
-    dispatch({
-      type: 'CHAT_RESUME_REQUEST',
-      resume: { agent, sessionId, folder: scope.kind === 'folder' ? scope.path : null },
-    });
-    activateChatTabForAgent(state, dispatch, agent);
-  }
-
-  const rect = open ? buttonRef.current?.getBoundingClientRect() : undefined;
-
   return (
-    <>
-      <Button
-        ref={buttonRef}
-        variant="ghost"
-        size="icon-xs"
-        className="text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
-        title={label}
-        aria-label={label}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpenReported(!open)}
-      >{/* Explicit size: icon-xs would otherwise render its own 12px
-          default, and every sidebar glyph is 14px. */}
-        <HistoryIcon className="size-3.5" /></Button>
-      {open && (
-        <Suspense
-          fallback={(
-            <PopupLoadingStatus
-              label="Opening history…"
-              left={rect?.left ?? 0}
-              top={(rect?.bottom ?? 0) + 4}
-              onCancel={() => setOpenReported(false)}
-            />
-          )}
-        >
-          <SessionHistoryPopover
-            scope={scope}
-            ariaLabel={label}
-            triggerRef={buttonRef}
-            onClose={() => setOpenReported(false)}
-            onResume={resumeSession}
-          />
-        </Suspense>
-      )}
-    </>
-  );
-}
-
-/** `+` in the Library header — a shared menu for both add-folder flows.
- *  "Open Folder…" picks any folder on disk and opens it in place (nothing
- *  is copied; it is indexed where it lives). "New Folder…" opens the same
- *  native picker at the default StashBase home so the OS panel's New
- *  Folder button lands in the expected place. Browser mode (no Electron
- *  bridge) has no portable absolute-path picker, so the button hides. */
-function AddFolderMenuButton() {
-  const { actions } = useApp();
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const bridge = useMemo<ElectronBridge | undefined>(
-    () => (window as { electron?: ElectronBridge }).electron,
-    [],
-  );
-  if (typeof bridge?.openFolderDialog !== 'function') return null;
-
-  async function openExistingFolder() {
-    try {
-      const picked = await bridge!.openFolderDialog!({
-        title: 'Select folder',
-        buttonLabel: 'Select folder',
-        allowCreateDirectory: true,
-      });
-      if (picked) await actions.openFolder(picked);
-    } catch (err) {
-      actions.toast('Could not open the folder: ' + errorMessage(err), { level: 'error' });
-    }
-  }
-
-  async function newFolderFromHome() {
-    try {
-      const { path } = await api.getFolderHome();
-      const picked = await bridge!.openFolderDialog!({
-        title: 'Create or select folder',
-        buttonLabel: 'Select folder',
-        defaultPath: path,
-        allowCreateDirectory: true,
-      });
-      if (picked) await actions.openFolder(picked);
-    } catch (err) {
-      actions.toast('New folder failed: ' + errorMessage(err), { level: 'error' });
-    }
-  }
-
-  const items: MenuItem[] = [
-    {
-      label: 'Open Folder…',
-      icon: <FolderIcon />,
-      detail: 'Any folder on your disk, indexed in place',
-      onSelect: () => { void openExistingFolder(); },
-    },
-    {
-      label: 'New Folder…',
-      icon: <NewFolderIcon />,
-      detail: 'Created under the StashBase folder home',
-      onSelect: () => { void newFolderFromHome(); },
-    },
-  ];
-
-  return (
-    <>
-      <Button
-        ref={buttonRef}
-        variant="ghost"
-        size="icon-xs"
-        className="text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
-        title="Add folder to library"
-        aria-label="Add folder to library"
-        aria-haspopup="menu"
-        aria-expanded={!!anchor}
-        onClick={() => {
-          if (anchor) { setAnchor(null); return; }
-          const rect = buttonRef.current?.getBoundingClientRect();
-          if (rect) setAnchor(rect);
-        }}
-      ><PlusIcon className="size-3.5" /></Button>
-      {anchor && (
-        <Menu
-          anchor={{ rect: anchor, align: 'right' }}
-          minWidth={210}
-          items={items}
-          onClose={() => setAnchor(null)}
-        />
-      )}
-    </>
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      className="shrink-0 text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
+      aria-label={`More actions for ${name}`}
+      aria-haspopup="menu"
+      aria-expanded={menuOpen}
+      onClick={(e) => {
+        e.stopPropagation();
+        onMenu(e.currentTarget.getBoundingClientRect());
+      }}
+    >
+      <MoreHorizontalIcon className="size-3.5" />
+    </Button>
   );
 }
 
@@ -603,36 +407,10 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
   const unsupportedFilesVisible = Boolean(
     (state.unsupportedFiles?.sourceCode ?? 0) + (state.unsupportedFiles?.other ?? 0),
   );
-  // Library defaults COLLAPSED while a folder is active (it anchors to
-  // the sidebar bottom, out of the way) and expanded when the window has
-  // no folder (it IS the main content then). A presence transition
-  // resets the default; manual toggles win until the next transition.
-  const [libraryExpanded, setLibraryExpanded] = useState(() => !state.folderPath);
-  const hadFolderRef = useRef(!!state.folderPath);
-  useEffect(() => {
-    const hasFolder = !!state.folderPath;
-    if (hadFolderRef.current !== hasFolder) {
-      hadFolderRef.current = hasFolder;
-      setLibraryExpanded(!hasFolder);
-    }
-  }, [state.folderPath]);
-  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
-  const [removing, setRemoving] = useState(false);
-  // Library-wide chat-history menu open: keeps the header's
-  // hover-revealed actions visible while the popover is up.
-  const [libraryHistoryOpen, setLibraryHistoryOpen] = useState(false);
+  const { pendingRemoval, removing, requestRemoval, cancelRemoval, removeFolder } =
+    useFolderRemoval(dispatch, actions.toast);
   const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
-  // Library row whose History popup is open — keeps that row's
-  // hover-revealed action cluster visible while the popup shows.
-  const [historyOpenPath, setHistoryOpenPath] = useState<string | null>(null);
-  const [folderStates, setFolderStates] = useState<Record<string, LibraryFolderStatus>>({});
-  const [openingFolder, setOpeningFolder] = useState<{ path: string; name: string } | null>(null);
-  const reconcileStartedAt = useRef<Map<string, number>>(new Map());
-  const openingRequestRef = useRef(0);
-  const bridge = useMemo<ElectronBridge | undefined>(
-    () => (window as { electron?: ElectronBridge }).electron,
-    [],
-  );
+  const bridge = electronBridge();
 
   const isCurrent = useCallback(
     (path: string) => !!state.folderPath && folderRefsEqual(state.folderPath, path),
@@ -641,20 +419,9 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
 
   const activePath = state.folderPath;
 
-  // Ordering for the LIBRARY resource list: favorites first, then the rest
-  // in recents order; the active folder never appears here (it lives in
-  // the active zone above). All rows render — overflow is handled by the
-  // list's fixed-height scroll, not disclosure.
-  const plan = useMemo(
-    () => libraryListPlan(state.recent, activePath),
-    [activePath, state.recent],
-  );
-
-  // Status polling covers every rendered row (the whole membership —
-  // scrolled-out rows included, since scrolling shouldn't change liveness).
-  const visibleRowPathsKey = plan.visible.map((entry) => entry.path).join('\n');
-  // Background reconcile still covers every non-current member — hidden
-  // rows included, because recovery must not depend on what is on screen.
+  // Background reconcile covers every non-current member — membership is
+  // no longer rendered as rows, and recovery must not depend on what is
+  // on screen, so this loop runs unconditionally.
   const otherRootPathsKey = state.recent
     .filter((entry) => !isCurrent(entry.path))
     .map((entry) => entry.path)
@@ -674,85 +441,10 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
     });
     void api.setFolderFavorite(path, favorite).catch((e) => {
       actions.toast(errorMessage(e), { level: 'error' });
-      void api.getFolder()
-        .then((j) => dispatch({ type: 'RECENT_LOADED', recent: j.recent ?? [], homeDir: j.homeDir }))
+      void refreshLibraryMembership(dispatch)
         .catch(() => { /* keep the optimistic flip until the next refresh */ });
     });
   }, [actions, dispatch, state.homeDir, state.recent]);
-
-  // Library membership can change without this window acting: an agent's
-  // create_project in another window, or an external MCP client. There is
-  // no server→renderer membership push, so poll the lightweight
-  // /api/folder while the sidebar is visible and adopt the list only when
-  // the member set/order actually changed (openedAt churn is ignored —
-  // recency labels refresh on the next explicit action).
-  const recentKeyRef = useRef('');
-  recentKeyRef.current = state.recent.map((r) => r.path).join('\n');
-  useEffect(() => {
-    if (!libraryExpanded) return undefined;
-    let cancelled = false;
-    const timer = setInterval(() => {
-      void api.getFolder()
-        .then((j) => {
-          if (cancelled) return;
-          const recent = j.recent ?? [];
-          const key = recent.map((r) => r.path).join('\n');
-          if (key !== recentKeyRef.current) {
-            dispatch({ type: 'RECENT_LOADED', recent, homeDir: j.homeDir });
-          }
-        })
-        .catch(() => { /* transient; next tick retries */ });
-    }, 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [dispatch, libraryExpanded]);
-
-  const removeFolder = useCallback((path: string) => {
-    setRemoving(true);
-    void (async () => {
-      if (bridge?.prepareFolderRemoval) {
-        const ready = await bridge.prepareFolderRemoval(path);
-        if (!ready) {
-          throw new Error('Another window could not save its current edit. The folder was not removed.');
-        }
-      }
-      await api.removeFolder(path);
-      await bridge?.notifyFolderRemoved?.(path);
-      dispatch({ type: 'LIBRARY_FOLDER_STATUS_REMOVE', path });
-      const j = await api.getFolder();
-      dispatch({ type: 'RECENT_LOADED', recent: j.recent ?? [], homeDir: j.homeDir });
-    })()
-      .catch((e) => actions.toast(errorMessage(e), { level: 'error' }))
-      .finally(() => { setRemoving(false); setConfirmRemove(null); });
-  }, [actions, bridge, dispatch]);
-
-  const openRoot = useCallback((path: string) => {
-    if (isCurrent(path)) return;
-    const requestId = ++openingRequestRef.current;
-    setFolderMenu(null);
-    setOpeningFolder({ path, name: basenameOfPath(path) });
-    void actions.openFolder(path)
-      .catch((e) => {
-        if (requestId !== openingRequestRef.current) return;
-        const msg = errorMessage(e);
-        actions.toast(msg, { level: 'error' });
-        // Remove the failed entry immediately so a stale/deleted path
-        // doesn't remain clickable if the server refresh also fails.
-        dispatch({
-          type: 'RECENT_LOADED',
-          recent: state.recent.filter((r) => r.path !== path),
-          homeDir: state.homeDir,
-        });
-        void api.getFolder()
-          .then((j) => dispatch({ type: 'RECENT_LOADED', recent: j.recent ?? [], homeDir: j.homeDir }))
-          .catch(() => { /* keep the optimistic removal */ });
-      })
-      .finally(() => {
-        if (requestId === openingRequestRef.current) setOpeningFolder(null);
-      });
-  }, [actions, dispatch, isCurrent, state.homeDir, state.recent]);
 
   const openRootInNewWindow = useCallback(async (path: string) => {
     setFolderMenu(null);
@@ -762,94 +454,20 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
     }
   }, [actions, bridge]);
 
-  // Watchdog: a folder open that neither resolves nor rejects should not
-  // leave the row stuck in its busy state forever.
-  useEffect(() => {
-    if (!openingFolder) return undefined;
-    const opening = openingFolder;
-    const timer = setTimeout(() => {
-      setOpeningFolder(null);
-      actions.toast(
-        `Opening ${opening.name} is taking longer than expected. Please try again.`,
-        { level: 'error' },
-      );
-    }, OPEN_FOLDER_WATCHDOG_MS);
-    return () => clearTimeout(timer);
-  }, [actions, openingFolder]);
+  useLibraryReconcile(true, otherRootPathsKey);
 
-  // Poll the visible list rows' index status while the list is shown so
-  // they can carry a quiet needs-attention dot. The current folder's
-  // readiness is owned by the in-folder surfaces (tree markers, Search
-  // view), which can point at the affected files.
-  useEffect(() => {
-    const paths = visibleRowPathsKey ? visibleRowPathsKey.split('\n') : [];
-    if (!libraryExpanded || openingFolder || paths.length === 0) {
-      setFolderStates({});
-      return;
-    }
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    async function refreshFolderStates() {
-      const entries = await Promise.all(paths.map(async (path) => {
-        try {
-          const status = await api.indexStatus(path);
-          return [path, libraryFolderState(status)] as const;
-        } catch {
-          return [path, state.libraryFolderStatuses[path] ?? 'unknown'] as const;
-        }
-      }));
-      if (cancelled) return;
-      const fresh = Object.fromEntries(entries) as Record<string, LibraryFolderStatus>;
-      setFolderStates(fresh);
-      const keepPolling = Object.values(fresh).some((s) => s === 'preparing' || s === 'unknown');
-      if (keepPolling) timer = setTimeout(refreshFolderStates, 1500);
-    }
-    timer = setTimeout(refreshFolderStates, 750);
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [libraryExpanded, openingFolder, state.libraryFolderStatuses, visibleRowPathsKey]);
-
-  // Background reconcile for the non-current library folders, with a
-  // per-folder cooldown: previous library work (conversions, indexing)
-  // may still be incomplete, and status polling alone is not recovery.
-  useEffect(() => {
-    const paths = otherRootPathsKey ? otherRootPathsKey.split('\n') : [];
-    if (!libraryExpanded || openingFolder || paths.length === 0) return undefined;
-    const timer = setTimeout(() => {
-      const now = Date.now();
-      for (const path of paths) {
-        const lastStarted = reconcileStartedAt.current.get(path) ?? 0;
-        if (now - lastStarted < LIBRARY_RECONCILE_COOLDOWN_MS) continue;
-        reconcileStartedAt.current.set(path, now);
-        void api.sync(path)
-          .catch((err) => {
-            console.warn(`[library] reconcile failed for ${path}:`, err);
-          });
-      }
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [libraryExpanded, openingFolder, otherRootPathsKey]);
-
-  const removeTarget = confirmRemove
-    ? (() => {
-        const segs = confirmRemove.split('/').filter(Boolean);
-        const name = segs.pop() || confirmRemove;
-        const parent = prettifyHome(segs.length ? '/' + segs.join('/') : '/', state.homeDir ?? '');
-        return { path: confirmRemove, name, parent };
-      })()
+  const removeTarget = pendingRemoval
+    ? removalDialogTarget(pendingRemoval, state.homeDir ?? '')
     : null;
 
   const menuEntry = folderMenu ? state.recent.find((r) => r.path === folderMenu.path) : null;
-  const activeName = activePath ? basenameOfPath(activePath) : '';
+  const activeName = activePath ? basename(activePath) : '';
   const activeFavorite = !!activePath
     && !!state.recent.find((r) => folderRefsEqual(r.path, activePath))?.favorite;
-  const showZeroState = !activePath && state.recent.length === 0;
 
   return (
     <>
-      {activePath && (
+      {activePath ? (
         /* ACTIVE ZONE — the window's current folder. It takes ALL the
          * room the bottom dock leaves (flex-1) and scrolls the tree
          * internally; a content-height cap would strand blank space
@@ -883,259 +501,58 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
             </div>
           )}
         </section>
+      ) : (
+        /* NO-FOLDER ZONE — membership now lives in the titlebar's folder
+         * switcher ("Library ⌄"), so this window state carries either the
+         * zero-folder brand moment or a single quiet pointer at the
+         * switcher. One anchor, no competing list (visual-style: empty
+         * states name one deliberate anchor). */
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {state.recent.length === 0 ? <ZeroFolderState /> : (
+            <p className="m-0 px-4 pt-5 text-sm leading-snug text-muted-foreground">
+              Pick a folder from the Library menu in the top bar.
+            </p>
+          )}
+        </section>
       )}
       {children}
-      {/* LIBRARY sizes to its content too, shrinking (with an internal
-        * scroll) only when the panel runs out of room — leftover blank
-        * space falls below the last section, never between sections. */}
-      {/* The Library lives in the sidebar's BOTTOM group — its position
-        * is fixed regardless of folder state, so opening a folder never
-        * makes the section jump. The mt-auto anchor sits on the FIRST
-        * block of that group: the Document Outline when one is shown,
-        * else here (two auto margins would split the free space). Only
-        * the default fold state changes: expanded in a no-folder window
-        * (it is the main content then), collapsed once a folder is
-        * active (see the presence-transition effect above). */}
-      {/* No bottom padding on the dock blocks: the next block's hairline
-        * separates — padding above a hairline reads as a white seam. */}
-      <section className={(hasOutline ? '' : 'mt-auto ') + 'flex min-h-0 flex-col overflow-hidden border-t border-border ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
-        {/* VS Code-style narrow tinted strip: shorter than the 28px
-          * rows, quiet bg tint, full-bleed. Action buttons run icon-xs
-          * (24px) so the strip can stay 26px. */}
-        <div className="group/lib flex min-h-[26px] flex-none items-center gap-1.5 bg-muted/45 pr-2 pl-3.5">
-          <button
-            type="button"
-            className={sectionToggleClass + ' flex-none'}
-            aria-expanded={libraryExpanded}
-            aria-controls="sidebar-files-section"
-            onClick={() => setLibraryExpanded((expanded) => !expanded)}
-          >
-            {/* Same treatment as the active-folder header: the Library
-              * glyph at rest, the fold chevron under the pointer — both
-              * at the app-wide 14px, inside the 16px grid slot. */}
-            <span className="inline-flex size-4 flex-none items-center justify-center">
-              <LibraryIcon className="size-3.5 group-hover/lib:hidden" />
-              <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/lib:inline-flex [&_svg]:size-3.5' + (libraryExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span>
-            </span>
-            <span className={sectionTitleClass}>Library</span>
-          </button>
-          <div className={(libraryHistoryOpen ? 'flex gap-0.5' : sideActionsClass) + ' ml-auto'}>
-            {/* Library-scoped chat sessions — covers library chats even in
-              * a no-folder window (which has no active-folder header). */}
-            <ScopeHistoryButton
-              scope={LIBRARY_SCOPE}
-              label="Library chat history"
-              onOpenChange={setLibraryHistoryOpen}
-            />
-            <AddFolderMenuButton />
-          </div>
-        </div>
-        <div id="sidebar-files-section" className={libraryExpanded ? 'flex min-h-0 flex-col overflow-hidden' : 'hidden'}>
-          {showZeroState ? <ZeroFolderState /> : (
-            /* One height in BOTH states: up to five 28px rows plus a
-             * half-row peek — the peek is the scroll affordance (macOS
-             * scrollbars stay hidden until the user scrolls); shorter
-             * memberships size to content. Letting the no-folder window
-             * grow the list instead made the same section change size
-             * when a folder opened, so the dock moved under the pointer
-             * exactly when the user was aiming at it. */
-            <div className="scrollbar-quiet max-h-[154px] min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5">
-              {plan.visible.map((entry) => {
-                const name = basenameOfPath(entry.path);
-                const opening = openingFolder?.path === entry.path;
-                const needsAttention = folderStates[entry.path] === 'failed';
-                const menuOpen = folderMenu?.path === entry.path;
-                return (
-                  <div
-                    key={entry.path}
-                    className={`group/root relative flex min-h-7 items-center rounded-md pr-0.5 ${
-                      menuOpen ? 'bg-muted' : 'hover:bg-muted'
-                    }${opening ? ' opacity-60' : ''}`}
-                  >
-                    <button
-                      type="button"
-                      aria-label={name}
-                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent py-1 pr-1 pl-2 text-left text-base text-foreground/80 group-hover/root:text-foreground disabled:cursor-default"
-                      disabled={!!openingFolder}
-                      title={entry.path}
-                      onClick={() => openRoot(entry.path)}
-                    >
-                      {/* Leading 16px slot: muted folder glyph (spinner while
-                        * opening); favorites carry a small star overlay at the
-                        * glyph's corner instead of a second leading icon.
-                        * Glyphs at the app-wide 14px inside the 16px slot,
-                        * matching the file tree rows. */}
-                      <span className="relative inline-flex size-4 flex-none items-center justify-center text-muted-foreground">
-                        {opening
-                          ? <SyncIcon className="size-3.5 animate-spin" />
-                          : <FolderIcon className="size-3.5" />}
-                        {!opening && entry.favorite && (
-                          <StarFilledIcon className="absolute -right-1 -bottom-0.5 size-2" aria-label="Favorite" />
-                        )}
-                      </span>
-                      <span className="min-w-0 truncate">{name}</span>
-                      {needsAttention && (
-                        <span
-                          className="size-1.5 shrink-0 rounded-full bg-status-warning"
-                          role="img"
-                          aria-label="Search needs attention"
-                          title="Some files in this folder could not be prepared for search."
-                        />
-                      )}
-                    </button>
-                    <span
-                      /* Same geometry as the Library header's cluster:
-                       * icon-xs (24px) buttons, gap-0.5, and an 8px
-                       * effective right inset (container px-1.5 + row
-                       * pr-0.5 = the header's pr-2) — all three must
-                       * match or the clock lands in a different column
-                       * per row. Change one side, change both. */
-                      className={`flex items-center gap-0.5 ${
-                        menuOpen || historyOpenPath === entry.path ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
-                      }`}
-                    >
-                      {/* Every scope carries its own History entry (the
-                        * same affordance as the Library header's clock). */}
-                      <ScopeHistoryButton
-                        scope={folderScope(entry.path)}
-                        label={`Chat history in ${name}`}
-                        onOpenChange={(open) => setHistoryOpenPath(open ? entry.path : null)}
-                      />
-                      <RootMenuButton
-                        name={name}
-                        menuOpen={menuOpen}
-                        onMenu={(rect) => setFolderMenu({ path: entry.path, name, rect })}
-                      />
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
       {folderMenu && (
-        <Menu
-          anchor={{ rect: folderMenu.rect, align: 'right' }}
-          minWidth={210}
-          items={[
-            // The window's current folder folds its low-frequency
-            // maintenance actions in here — the header row only keeps
-            // new-note, history, and this menu visible, so the folder
-            // name keeps its room.
-            ...(isCurrent(folderMenu.path) ? [
-              {
-                label: 'New Folder…',
-                icon: <NewFolderIcon />,
-                onSelect: () => {
-                  if (state.activeFolder) dispatch({ type: 'EXPAND_FOLDER', path: state.activeFolder });
-                  dispatch({ type: 'NEW_FOLDER_INPUT', open: true });
-                },
-              },
-              {
-                label: 'Sync Folder',
-                icon: <SyncIcon />,
-                detail: 'Re-scan disk for external changes',
-                onSelect: () => { void actions.runSync(); },
-              },
-              state.expanded.size === 0
-                ? {
-                    label: 'Expand All Folders',
-                    icon: <ExpandAllIcon />,
-                    onSelect: () => dispatch({ type: 'EXPAND_ALL_FOLDERS', paths: state.folders.map((f) => f.path) }),
-                  }
-                : {
-                    label: 'Collapse All Folders',
-                    icon: <CollapseAllIcon />,
-                    onSelect: () => dispatch({ type: 'COLLAPSE_ALL_FOLDERS' }),
-                  },
-              { separator: true },
-            ] satisfies MenuItem[] : []),
-            {
-              label: menuEntry?.favorite ? 'Remove from Favorites' : 'Add to Favorites',
-              icon: <StarIcon />,
-              onSelect: () => toggleFavorite(folderMenu.path),
-            },
-            ...(bridge?.openFolderWindow ? [{
-              label: 'Open in New Window',
-              icon: <ExternalLinkIcon />,
-              onSelect: () => { void openRootInNewWindow(folderMenu.path); },
-            } satisfies MenuItem] : []),
-            { separator: true },
-            {
-              label: 'Remove from Library',
-              icon: <TrashIcon />,
-              detail: 'Will not delete local files',
-              danger: true,
-              onSelect: () => setConfirmRemove(folderMenu.path),
-            },
-          ] satisfies MenuItem[]}
+        <FolderMenu
+          rect={folderMenu.rect}
+          isCurrent={isCurrent(folderMenu.path)}
+          favorite={!!menuEntry?.favorite}
+          canOpenInNewWindow={!!bridge?.openFolderWindow}
+          onToggleFavorite={() => toggleFavorite(folderMenu.path)}
+          onOpenInNewWindow={() => { void openRootInNewWindow(folderMenu.path); }}
+          onRemove={() => requestRemoval(folderMenu.path)}
           onClose={() => setFolderMenu(null)}
         />
       )}
       {removeTarget && (
-        <ModalShell
-          title="Remove from Library?"
-          description={
-            <>
-            StashBase will remove <strong className="font-semibold text-accent">{removeTarget.name}</strong> from your Library.
-            It will <strong>not</strong> delete the folder or its files from your disk.
-            </>
-          }
-          onCancel={removing ? () => { /* wait for removal */ } : () => setConfirmRemove(null)}
-          top
-        >
-          <div className="mt-2 truncate text-sm text-muted-foreground" title={removeTarget.path}>
-            {removeTarget.parent}
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button
-              variant="outline"
-              disabled={removing}
-              onClick={() => setConfirmRemove(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={removing}
-              onClick={() => removeFolder(removeTarget.path)}
-            >
-              {removing ? 'Removing…' : 'Remove'}
-            </Button>
-          </div>
-        </ModalShell>
+        <RemoveFolderModal
+          name={removeTarget.name}
+          path={removeTarget.path}
+          parentLabel={removeTarget.parent}
+          removing={removing}
+          onCancel={cancelRemoval}
+          onConfirm={() => removeFolder(removeTarget.path)}
+        />
       )}
     </>
   );
 }
 
-/** The ⋯ trigger shared by every folder row. */
-function RootMenuButton({
-  name,
-  menuOpen,
-  onMenu,
-}: {
-  name: string;
-  menuOpen: boolean;
-  onMenu: (rect: DOMRect) => void;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      className="shrink-0 text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
-      aria-label={`More actions for ${name}`}
-      aria-haspopup="menu"
-      aria-expanded={menuOpen}
-      onClick={(e) => {
-        e.stopPropagation();
-        onMenu(e.currentTarget.getBoundingClientRect());
-      }}
-    >
-      <MoreHorizontalIcon className="size-3.5" />
-    </Button>
-  );
+/** What the remove-folder confirm modal names: the folder plus its
+ *  shortened parent ("~/Projects"), so the dialog can say where the
+ *  folder keeps living on disk after it leaves the library. */
+function removalDialogTarget(
+  path: string,
+  homeDir: string,
+): { path: string; name: string; parent: string } {
+  const segs = path.split('/').filter(Boolean);
+  segs.pop();
+  const parent = shortenFolderPath(segs.length ? '/' + segs.join('/') : '/', homeDir);
+  return { path, name: basename(path), parent };
 }
 
 /** The active zone's header row — the window's current folder. Carries the
@@ -1249,10 +666,7 @@ function ActiveFolderHeader({
  *  a single line of guidance, and the primary add-folder action. */
 function ZeroFolderState() {
   const { actions } = useApp();
-  const bridge = useMemo<ElectronBridge | undefined>(
-    () => (window as { electron?: ElectronBridge }).electron,
-    [],
-  );
+  const bridge = electronBridge();
 
   async function addFolder() {
     try {

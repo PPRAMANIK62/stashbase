@@ -6,9 +6,8 @@ import {
 } from '../../icons';
 import { cn } from '../../lib/utils';
 import type { FileMeta, FolderMeta } from '../../api';
-import { ImageLightbox } from '../ImageLightbox';
-import { baseName } from './attachments';
-import { FileAttachmentChip } from './FileAttachmentChip';
+import { basename } from '../../lib/paths';
+import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from './FileAttachmentChip';
 import { effortLabel, effortOptions } from './effortMenuState';
 import {
   scopePillAriaLabel,
@@ -19,9 +18,8 @@ import { ScopeMenu } from '../ScopeMenu';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import {
-  attachImageChipClass, attachImagePreviewClass,
   attachImageRemoveClass, attachRemoveClass, iconGhostButtonClass,
-  menuHeadClass, menuSectionClass, optActiveClass, optCheckClass, optClass, optDescClass,
+  menuHeadClass, optActiveClass, optCheckClass, optClass, optDescClass,
   optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
 } from './panelStyles';
 import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from './types';
@@ -66,30 +64,91 @@ const sendReadyClass =
   'border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:cursor-default disabled:opacity-40';
 const sendStopClass = 'border-destructive bg-destructive text-primary-foreground';
 
-/** Model pill — stays its own control so the current model is always
- * visible on the bar. Locked once the session has content. */
-function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resumedSession, onSetModel }: {
-  selectedModel?: string;
-  activeModel?: string;
+/** Permission-mode control for the composer bar's Mode pill. */
+export interface ComposerModeControl {
+  show: boolean;
+  value: PermMode;
+  onSet: (mode: PermMode) => void;
+}
+
+/** Thinking-effort control, sharing the Mode pill's popover. */
+export interface ComposerEffortControl {
+  show: boolean;
+  /** Explicit override; undefined preserves the runtime default. */
+  level?: EffortLevel;
+  /** The resumed session carries a non-default effort the user never
+   * picked here (reads on the Default row). */
+  inherited: boolean;
+  locked: boolean;
+  /** Effort ids the effective model supports; undefined means all. */
+  supported?: string[];
+  onSet: (level?: EffortLevel) => void;
+}
+
+/** Model control for the bar's Model pill. */
+export interface ComposerModelControl {
+  show: boolean;
+  /** User intent for the next session; undefined means Default (no override). */
+  selected?: string;
+  /** Model the runtime says the live session is actually using. */
+  active?: string;
   models: AgentModel[];
   locked: boolean;
-  disabled: boolean;
+  notice: string | null;
   resumedSession: boolean;
-  onSetModel: (model?: string) => void;
-}) {
+  onSet: (model?: string) => void;
+}
+
+/** The scope this tab's session is (or will be) bound to. */
+export interface ComposerScopeControl {
+  current: ChatScope;
+  entries: LibraryFolderOption[];
+  homeDir: string;
+  locked: boolean;
+  onSet: (scope: ChatScope) => void;
+}
+
+/** File/folder listing that feeds `@` mention ranking. For a tab bound to
+ * another library folder this is the SESSION folder's listing, not the
+ * window's; empty for a library-wide chat (mentions disabled there). */
+export interface ComposerMentionSources {
+  files: FileMeta[];
+  folders: FolderMeta[];
+}
+
+/** `/` skill catalog for this session's folder. */
+export interface ComposerSkillSource {
+  list: AgentSkill[];
+  state: 'available' | 'empty' | 'failed';
+  onRefresh: () => void;
+}
+
+/** Context attachments — owned by AgentView so panel drops, the `+`
+ * picker, and the send path share one list. */
+export interface ComposerAttachments {
+  items: Attachment[];
+  uploading: boolean;
+  onPick: (files: File[]) => void;
+  onPasteImages: (files: File[]) => void;
+  onRemove: (path: string) => void;
+}
+
+/** Model pill — stays its own control so the current model is always
+ * visible on the bar. Locked once the session has content. */
+function ModelMenu({ model, disabled }: { model: ComposerModelControl; disabled: boolean }) {
   const [open, setOpen] = useState(false);
-  const defaultSelected = !selectedModel;
-  const label = modelMenuLabel(models, selectedModel, activeModel, resumedSession);
-  const pick = (model?: string) => { onSetModel(model); setOpen(false); };
+  const defaultSelected = !model.selected;
+  const label = modelMenuLabel(model.models, model.selected, model.active, model.resumedSession);
+  const pick = (id?: string) => { model.onSet(id); setOpen(false); };
   return (
     <MenuTrigger isOpen={open} onOpenChange={setOpen}>
       <Button
-        className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
-        isDisabled={disabled || locked}
-        aria-label={`Model: ${label}${locked ? ' — fixed for this conversation' : ''}`}
+        className={cn(pillClass, 'max-w-40', model.locked && pillLockedClass)}
+        isDisabled={disabled || model.locked}
+        aria-label={`Model: ${label}${model.locked ? ' — fixed for this conversation' : ''}`}
         // RAC forwards global DOM attributes (title) at runtime but its
         // ButtonProps type omits them; the spread keeps the tooltip typed.
-        {...{ title: locked ? `Model — ${label} (fixed for this conversation)` : `Model — ${label}` }}
+        {...{ title: model.locked ? `Model — ${label} (fixed for this conversation)` : `Model — ${label}` }}
       >
         {/* Text-only trigger (Cursor-style): the leading glyphs made the
           * bar read heavy; the label carries the meaning. */}
@@ -109,18 +168,18 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
           </span>
           {defaultSelected && <CheckIcon className={optCheckClass} />}
         </button>
-        {models.map((entry) => (
+        {model.models.map((entry) => (
           <button
             key={entry.id}
             type="button"
-            className={cn(optClass, selectedModel === entry.id && optActiveClass)}
+            className={cn(optClass, model.selected === entry.id && optActiveClass)}
             onClick={() => pick(entry.id)}
           >
             <span className={optTextClass}>
               <span className={optTitleClass}>{entry.label}</span>
               {entry.description && <span className={optDescClass}>{entry.description}</span>}
             </span>
-            {selectedModel === entry.id && <CheckIcon className={optCheckClass} />}
+            {model.selected === entry.id && <CheckIcon className={optCheckClass} />}
           </button>
         ))}
       </Popover>
@@ -133,66 +192,60 @@ function ModelMenu({ selectedModel, activeModel, models, locked, disabled, resum
  * bar, effort lives one click away and echoes on the trigger only when
  * non-default ("Ask · High"). If the runtime has no mode control the pill
  * degrades to an effort-only trigger. */
-function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, effortInherited, efforts, effortLocked, disabled, onSetEffort }: {
-  showMode: boolean;
-  mode: PermMode;
-  onSetMode: (m: PermMode) => void;
-  showEffort: boolean;
-  effort?: EffortLevel;
-  effortInherited: boolean;
-  efforts: EffortLevel[];
-  effortLocked: boolean;
+function ModeMenu({ mode, effort, disabled }: {
+  mode: ComposerModeControl;
+  effort: ComposerEffortControl;
   disabled: boolean;
-  onSetEffort: (level?: EffortLevel) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const active = MODES.find((m) => m.id === mode) ?? MODES[0];
-  const effortName = effort ? effortLabel(effort) : effortInherited ? 'Inherited' : 'Default';
-  const effortSuffix = showEffort && (effort || effortInherited) ? ` · ${effortName}` : '';
-  const label = showMode
-    ? `${active.label}${effortSuffix}`
+  const activeMode = MODES.find((m) => m.id === mode.value) ?? MODES[0];
+  const efforts = effortOptions(effort.supported);
+  const effortName = effort.level ? effortLabel(effort.level) : effort.inherited ? 'Inherited' : 'Default';
+  const effortSuffix = effort.show && (effort.level || effort.inherited) ? ` · ${effortName}` : '';
+  const label = mode.show
+    ? `${activeMode.label}${effortSuffix}`
     : `Effort: ${effortName}`;
   return (
     <MenuTrigger isOpen={open} onOpenChange={setOpen}>
       <Button
         className={pillClass}
         isDisabled={disabled}
-        aria-label={showMode
-          ? `Permission mode: ${active.label} — ${active.desc}${showEffort && effort ? `; reasoning effort ${effortLabel(effort)}` : ''}`
+        aria-label={mode.show
+          ? `Permission mode: ${activeMode.label} — ${activeMode.desc}${effort.show && effort.level ? `; reasoning effort ${effortLabel(effort.level)}` : ''}`
           : `Reasoning effort: ${effortName}`}
       >
         {label}
         <ChevronDownIcon className={pillChevronClass} />
       </Button>
       <Popover className={menuPopupClass} placement="top end">
-        {showMode && (
+        {mode.show && (
           <div>
             <div className={menuHeadClass}><span className="font-semibold text-foreground">Mode</span></div>
             {MODES.map((m) => (
               <button
                 key={m.id}
                 type="button"
-                className={cn(optClass, m.id === mode && optActiveClass)}
-                onClick={() => { onSetMode(m.id); setOpen(false); }}
+                className={cn(optClass, m.id === mode.value && optActiveClass)}
+                onClick={() => { mode.onSet(m.id); setOpen(false); }}
               >
                 <m.Icon className={optIconClass} />
                 <span className={optTextClass}>
                   <span className={optTitleClass}>{m.label}</span>
                   <span className={optDescClass}>{m.desc}</span>
                 </span>
-                {m.id === mode && <CheckIcon className={optCheckClass} />}
+                {m.id === mode.value && <CheckIcon className={optCheckClass} />}
               </button>
             ))}
           </div>
         )}
-        {showEffort && (
+        {effort.show && (
           <div>
-            {showMode && <div className={settingsDividerClass} />}
+            {mode.show && <div className={settingsDividerClass} />}
             <div
-              className={effortLocked ? 'pointer-events-none opacity-60' : undefined}
-              title={effortLocked ? 'Effort is fixed for this session' : undefined}
+              className={effort.locked ? 'pointer-events-none opacity-60' : undefined}
+              title={effort.locked ? 'Effort is fixed for this session' : undefined}
             >
-              <EffortList effort={effort} efforts={efforts} inherited={effortInherited} onSet={onSetEffort} />
+              <EffortList effort={effort.level} efforts={efforts} inherited={effort.inherited} onSet={effort.onSet} />
             </div>
           </div>
         )}
@@ -238,61 +291,33 @@ function EffortList({ effort, efforts, inherited, onSet }: { effort?: EffortLeve
 }
 
 export function AgentComposer({
-  phase, disabled, turnActive, active, mode, onSetMode, effort, onSetEffort,
-  effortInherited, effortLocked, supportedEfforts, selectedModel, activeModel, models, modelLocked, modelNotice, resumedSession, onSetModel, sessionScope, folderEntries, folderLocked, folderHomeDir, onSetScope, onDraftChange, mentionFiles, mentionFolders, skills, skillState, onRefreshSkills, attachments, uploading, agentShortName, showModeMenu, showEffortMenu, showModelMenu, prefill, hero, onPickFiles, onPasteImages, onFocusChange, onRemoveAttachment, onSend, onStop,
+  phase, disabled, turnActive, active, agentShortName, hero, prefill,
+  mode, effort, model, scope, mentions, skills, attachments,
+  onDraftChange, onFocusChange, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
   turnActive: boolean;
   active: boolean;
-  mode: PermMode;
-  onSetMode: (mode: PermMode) => void;
-  effort?: EffortLevel;
-  effortInherited: boolean;
-  onSetEffort: (level?: EffortLevel) => void;
-  effortLocked: boolean;
-  supportedEfforts?: string[];
-  selectedModel?: string;
-  activeModel?: string;
-  models: AgentModel[];
-  modelLocked: boolean;
-  modelNotice: string | null;
-  resumedSession: boolean;
-  onSetModel: (model?: string) => void;
-  /** The scope this tab's session is (or will be) bound to. */
-  sessionScope: ChatScope;
-  folderEntries: LibraryFolderOption[];
-  folderLocked: boolean;
-  folderHomeDir: string;
-  onSetScope: (scope: ChatScope) => void;
-  /** Reports whether the composer holds unsent draft text, so the tab
-   * model can freeze a drafted tab's scope and exclude it from blank-tab
-   * reuse. */
-  onDraftChange?: (hasText: boolean) => void;
-  /** File/folder listing that feeds `@` mention ranking. For a tab bound to
-   * another library folder this is the SESSION folder's listing, not the
-   * window's; empty for a library-wide chat (mentions disabled there). */
-  mentionFiles: FileMeta[];
-  mentionFolders: FolderMeta[];
-  skills: AgentSkill[];
-  skillState: 'available' | 'empty' | 'failed';
-  onRefreshSkills: () => void;
-  attachments: Attachment[];
-  uploading: boolean;
   agentShortName: string;
-  showModeMenu: boolean;
-  showEffortMenu: boolean;
-  showModelMenu: boolean;
-  /** Empty-state starter template. Prefills the draft only — never sends. */
-  prefill?: { text: string; nonce: number } | null;
   /** Empty-chat layout: AgentView centers the composer mid-panel, so the
    * root sizes itself to the hero column instead of the `agent-composer`
    * chat-primary width hook. Same mounted instance in both layouts. */
   hero?: boolean;
-  onPickFiles: (files: File[]) => void;
-  onPasteImages: (files: File[]) => void;
+  /** Empty-state starter template. Prefills the draft only — never sends. */
+  prefill?: { text: string; nonce: number } | null;
+  mode: ComposerModeControl;
+  effort: ComposerEffortControl;
+  model: ComposerModelControl;
+  scope: ComposerScopeControl;
+  mentions: ComposerMentionSources;
+  skills: ComposerSkillSource;
+  attachments: ComposerAttachments;
+  /** Reports whether the composer holds unsent draft text, so the tab
+   * model can freeze a drafted tab's scope and exclude it from blank-tab
+   * reuse. */
+  onDraftChange?: (hasText: boolean) => void;
   onFocusChange: (focused: boolean) => void;
-  onRemoveAttachment: (path: string) => void;
   onSend: (text: string, skill?: string) => void;
   onStop: () => void;
 }) {
@@ -315,22 +340,21 @@ export function AgentComposer({
   }, [prefill]);
 
   function cycleMode() {
-    const i = MODES.findIndex((m) => m.id === mode);
-    onSetMode(MODES[(i + 1) % MODES.length].id);
+    const i = MODES.findIndex((m) => m.id === mode.value);
+    mode.onSet(MODES[(i + 1) % MODES.length].id);
   }
 
   const suggestions = useMemo(() => {
     if (!mention || mention.kind !== 'mention') return [];
-    return rankMentionSuggestions(mentionFiles, mentionFolders, mention.q);
-  }, [mention, mentionFiles, mentionFolders]);
+    return rankMentionSuggestions(mentions.files, mentions.folders, mention.q);
+  }, [mention, mentions.files, mentions.folders]);
 
   const skillSuggestions = useMemo(() => mention?.kind === 'skill'
-    ? skills.filter((skill) => skill.label.toLowerCase().includes(mention.q.toLowerCase()) || (skill.description ?? '').toLowerCase().includes(mention.q.toLowerCase()))
-    : [], [mention, skills]);
+    ? skills.list.filter((skill) => skill.label.toLowerCase().includes(mention.q.toLowerCase()) || (skill.description ?? '').toLowerCase().includes(mention.q.toLowerCase()))
+    : [], [mention, skills.list]);
   const choices = mention?.kind === 'skill' ? skillSuggestions : suggestions;
 
   const activeSuggestionIndex = Math.min(activeMentionIndex, Math.max(choices.length - 1, 0));
-  const compatibleEfforts = effortOptions(supportedEfforts);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -361,9 +385,17 @@ export function AgentComposer({
     composerRef.current?.insertMention(path, mention);
     setMention(null);
   }
+
+  /** Turn a `/` suggestion into the selected skill's inline display token. */
+  function pickSkill(skill: AgentSkill, query: Exclude<MentionQuery, null>) {
+    setSelectedSkill(skill);
+    composerRef.current?.insertSkill(skill.label, query);
+    setMention(null);
+  }
+
   function submit(t: string) {
     const trimmed = t.trim();
-    if ((!trimmed && attachments.length === 0 && !selectedSkill) || disabled || uploading) return false;
+    if ((!trimmed && attachments.items.length === 0 && !selectedSkill) || disabled || attachments.uploading) return false;
     onSend(trimmed, selectedSkill?.id);
     setSelectedSkill(undefined);
     setMention(null);
@@ -395,7 +427,7 @@ export function AgentComposer({
           </div>
           {choices.length > 0 && <VisuallyHidden>
             <div role="status">
-              {`${mention.kind === 'skill' ? (skillSuggestions[activeSuggestionIndex]?.label ?? '') : baseName(suggestions[activeSuggestionIndex].path)}, ${activeSuggestionIndex + 1} of ${choices.length}`}
+              {`${mention.kind === 'skill' ? (skillSuggestions[activeSuggestionIndex]?.label ?? '') : basename(suggestions[activeSuggestionIndex].path)}, ${activeSuggestionIndex + 1} of ${choices.length}`}
             </div>
           </VisuallyHidden>}
           {choices.length > 0 ? <ListBox
@@ -405,11 +437,18 @@ export function AgentComposer({
             aria-label={mention.kind === 'skill' ? 'Matching available skills' : 'Matching library files and folders'}
             selectionMode="single"
             selectedKeys={[mention.kind === 'skill' ? skillSuggestions[activeSuggestionIndex]?.id ?? '' : suggestions[activeSuggestionIndex].path]}
-            onAction={(key) => { if (mention.kind === 'skill') { const skill = skills.find((item) => item.id === String(key)); if (skill) { setSelectedSkill(skill); composerRef.current?.insertSkill(skill.label, mention); setMention(null); } } else pickMention(String(key)); }}
+            onAction={(key) => {
+              if (mention.kind === 'skill') {
+                const skill = skills.list.find((item) => item.id === String(key));
+                if (skill) pickSkill(skill, mention);
+                return;
+              }
+              pickMention(String(key));
+            }}
           >
-            {mention.kind === 'skill' ? skillSuggestions.map((skill, index) => (
+            {mention.kind === 'skill' ? skillSuggestions.map((skill) => (
               <ListBoxItem key={skill.id} id={skill.id} className={({ isSelected }) => 'agent-mention-item' + (isSelected ? ' active' : '')} textValue={skill.label}><FileGenericIcon className="agent-mention-icon" /><span className="agent-mention-text"><span className="agent-mention-name">{skill.label}</span>{skill.description && <span className="agent-mention-path">{skill.description}</span>}</span></ListBoxItem>
-            )) : suggestions.map((suggestion, index) => (
+            )) : suggestions.map((suggestion) => (
               <ListBoxItem
                 key={suggestion.path}
                 id={suggestion.path}
@@ -420,14 +459,16 @@ export function AgentComposer({
                   ? <FolderIcon className="agent-mention-icon" />
                   : <FileGenericIcon className="agent-mention-icon" />}
                 <span className="agent-mention-text">
-                  <span className="agent-mention-name">{baseName(suggestion.path)}</span>
+                  <span className="agent-mention-name">{basename(suggestion.path)}</span>
                   <span className="agent-mention-path">{suggestion.path}</span>
                 </span>
               </ListBoxItem>
             ))}
           </ListBox> : (
             <div className="agent-mention-empty" role="status">
-              {skillState === 'failed' ? <><span>Could not load skills.</span><Button className="agent-mention-retry" onPress={onRefreshSkills}>Retry</Button></> : <span>No skills are available for this folder.</span>}
+              {skills.state === 'failed'
+                ? <><span>Could not load skills.</span><Button className="agent-mention-retry" onPress={skills.onRefresh}>Retry</Button></>
+                : <span>No skills are available for this folder.</span>}
             </div>
           )}
         </div>
@@ -450,40 +491,38 @@ export function AgentComposer({
         // pane's anchor needs. Four lines read as a form to fill in.
         hero && 'shadow-raised [--composer-min-h:56px]',
       )}>
-        {(attachments.length > 0 || uploading) && (
+        {(attachments.items.length > 0 || attachments.uploading) && (
           <div className="flex flex-wrap items-center gap-1">
-            {attachments.map((a) => a.previewUrl ? (
-              <span key={a.path} className={attachImageChipClass}>
-                <button
-                  type="button"
-                  className={attachImagePreviewClass}
-                  aria-label={`Preview ${a.name}`}
-                  onClick={() => setPreviewAttachment(a)}
-                >
-                  <img src={a.previewUrl} alt="" />
-                </button>
-                <Button
-                  className={attachImageRemoveClass}
-                  aria-label={`Remove ${a.name}`}
-                  onPress={() => {
-                    if (previewAttachment?.path === a.path) setPreviewAttachment(null);
-                    onRemoveAttachment(a.path);
-                  }}
-                >
-                  <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-                    <path d="m2.25 2.25 7.5 7.5M9.75 2.25l-7.5 7.5" />
-                  </svg>
-                </Button>
-              </span>
+            {attachments.items.map((a) => a.previewUrl ? (
+              <ImageAttachmentChip
+                key={a.path}
+                name={a.name}
+                previewUrl={a.previewUrl}
+                onPreview={() => setPreviewAttachment(a)}
+                trailing={
+                  <Button
+                    className={attachImageRemoveClass}
+                    aria-label={`Remove ${a.name}`}
+                    onPress={() => {
+                      if (previewAttachment?.path === a.path) setPreviewAttachment(null);
+                      attachments.onRemove(a.path);
+                    }}
+                  >
+                    <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+                      <path d="m2.25 2.25 7.5 7.5M9.75 2.25l-7.5 7.5" />
+                    </svg>
+                  </Button>
+                }
+              />
             ) : (
               <FileAttachmentChip
                 key={a.path}
                 name={a.name}
                 path={a.path}
-                trailing={<Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>}
+                trailing={<Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => attachments.onRemove(a.path)}>×</Button>}
               />
             ))}
-            {uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
+            {attachments.uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
           </div>
         )}
         <MentionComposer
@@ -501,22 +540,27 @@ export function AgentComposer({
             setActiveMentionIndex(0);
           }}
           onMentionNavigate={moveMention}
-            onMentionAccept={() => {
+          onMentionAccept={() => {
             if (!mention) return false;
             if (!choices.length) return mention.kind === 'skill';
-            if (mention.kind === 'skill') { const skill = skillSuggestions[activeSuggestionIndex]; if (!skill) return false; setSelectedSkill(skill); composerRef.current?.insertSkill(skill.label, mention); setMention(null); return true; }
+            if (mention.kind === 'skill') {
+              const skill = skillSuggestions[activeSuggestionIndex];
+              if (!skill) return false;
+              pickSkill(skill, mention);
+              return true;
+            }
             pickMention(suggestions[activeSuggestionIndex].path);
             return true;
           }}
-            onMentionDismiss={() => setMention(null)}
+          onMentionDismiss={() => setMention(null)}
           onSkillMarkerRemoved={() => setSelectedSkill(undefined)}
           onShiftTab={() => {
-            if (!showModeMenu || disabled) return false;
+            if (!mode.show || disabled) return false;
             cycleMode();
             return true;
           }}
           onSubmit={submit}
-          onPasteImages={onPasteImages}
+          onPasteImages={attachments.onPasteImages}
           onFocusChange={onFocusChange}
           mentionOpen={Boolean(mention && (choices.length > 0 || mention.kind === 'skill'))}
           mentionListboxId={mention && choices.length ? mentionListboxId : undefined}
@@ -527,7 +571,7 @@ export function AgentComposer({
           multiple
           hidden
           onChange={(e) => {
-            onPickFiles(Array.from(e.target.files ?? []));
+            attachments.onPick(Array.from(e.target.files ?? []));
             e.target.value = '';
           }}
         />
@@ -540,8 +584,8 @@ export function AgentComposer({
         <div className="flex items-center gap-1 pt-0.5">
           <Button
             className={iconGhostButtonClass}
-            aria-label={uploading ? 'Uploading files' : 'Upload local files'}
-            isDisabled={uploading}
+            aria-label={attachments.uploading ? 'Uploading files' : 'Upload local files'}
+            isDisabled={attachments.uploading}
             onPress={() => fileInputRef.current?.click()}
           >
             <PlusIcon />
@@ -549,42 +593,19 @@ export function AgentComposer({
           {/* Scope reads left (with the attach control); the run settings
             * — model, mode — group right next to send. */}
           <ScopeMenu
-            scope={sessionScope}
-            entries={folderEntries}
-            homeDir={folderHomeDir}
+            scope={scope.current}
+            entries={scope.entries}
+            homeDir={scope.homeDir}
             heading="Session scope"
             libraryDetail="Chat across your whole library"
-            ariaLabel={scopePillAriaLabel(sessionScope, folderLocked)}
-            locked={folderLocked}
+            ariaLabel={scopePillAriaLabel(scope.current, scope.locked)}
+            locked={scope.locked}
             disabled={disabled}
-            onSetScope={onSetScope}
+            onSetScope={scope.onSet}
           />
           <span className="flex-1" />
-          {showModelMenu && (
-            <ModelMenu
-              selectedModel={selectedModel}
-              activeModel={activeModel}
-              models={models}
-              locked={modelLocked}
-              disabled={disabled}
-              resumedSession={resumedSession}
-              onSetModel={onSetModel}
-            />
-          )}
-          {(showModeMenu || showEffortMenu) && (
-            <ModeMenu
-              showMode={showModeMenu}
-              mode={mode}
-              onSetMode={onSetMode}
-              showEffort={showEffortMenu}
-              effort={effort}
-              effortInherited={effortInherited}
-              efforts={compatibleEfforts}
-              effortLocked={effortLocked}
-              disabled={disabled}
-              onSetEffort={onSetEffort}
-            />
-          )}
+          {model.show && <ModelMenu model={model} disabled={disabled} />}
+          {(mode.show || effort.show) && <ModeMenu mode={mode} effort={effort} disabled={disabled} />}
           {turnActive ? (
             <Button className={cn(sendClass, sendStopClass)} aria-label="Stop agent" onPress={onStop}>
               <StopIcon />
@@ -593,22 +614,16 @@ export function AgentComposer({
             <Button
               className={cn(sendClass, sendReadyClass)}
               aria-label="Send message"
-              isDisabled={disabled || uploading || (!text.trim() && attachments.length === 0 && !selectedSkill)}
+              isDisabled={disabled || attachments.uploading || (!text.trim() && attachments.items.length === 0 && !selectedSkill)}
               onPress={() => composerRef.current?.submit()}
             >
               <ArrowUpIcon />
             </Button>
           )}
         </div>
-        {modelNotice && <div className="pt-1.5 text-xs leading-snug text-muted-foreground" role="status">{modelNotice}</div>}
+        {model.notice && <div className="pt-1.5 text-xs leading-snug text-muted-foreground" role="status">{model.notice}</div>}
       </div>
-      {previewAttachment?.previewUrl && (
-        <ImageLightbox
-          src={previewAttachment.previewUrl}
-          alt={previewAttachment.name}
-          onClose={() => setPreviewAttachment(null)}
-        />
-      )}
+      <AttachmentLightbox attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
     </div>
   );
 }

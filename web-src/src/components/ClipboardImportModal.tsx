@@ -3,7 +3,7 @@ import { lazyWithRetry } from './ErrorBoundary';
 import { useOverlayLayer } from './OverlayStack';
 import { ModalLoadingStatus } from './ui/status';
 
-const ClipboardImportDialog = lazyWithRetry(() => import('./ClipboardImportDialog'));
+const ManagedClipboardImport = lazyWithRetry(() => import('./ManagedClipboardImport'));
 
 export interface ClipboardOffer {
   dataUrl: string;
@@ -47,7 +47,7 @@ export function ClipboardImportModal({
         />
       )}
     >
-      <ClipboardImportDialog
+      <ManagedClipboardImport
         title="Add image to StashBase?"
         description={<>There's an image on your clipboard. Add it to this folder — its text gets extracted so you can search it later.</>}
         isTopmost={layer.isTopmost}
@@ -57,7 +57,7 @@ export function ClipboardImportModal({
         <div className="clipboard-offer-preview">
           <img src={offer.dataUrl} alt="Clipboard image" />
         </div>
-      </ClipboardImportDialog>
+      </ManagedClipboardImport>
     </Suspense>
   );
 }

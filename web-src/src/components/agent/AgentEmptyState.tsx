@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from 'react-aria-components';
 import { ArrowInsertIcon } from '../../icons';
+import { spinnerClass } from './panelStyles';
 
 interface Suggestion {
   /** The action-first rotating line the user reads. */
@@ -205,12 +206,7 @@ export function EmptyChatGreeting({ agentShortName, connecting }: {
       </h2>
       {connecting && (
         <p className="m-0 flex items-center justify-center gap-2 pb-4 text-sm text-muted-foreground" role="status">
-          {/* The global reduced-motion policy zeroes this keyframe animation,
-            * leaving a static arc while the text still conveys the state. */}
-          <span
-            className="size-3 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent"
-            aria-hidden="true"
-          />
+          <span className={spinnerClass} aria-hidden="true" />
           Connecting to {agentShortName}…
         </p>
       )}

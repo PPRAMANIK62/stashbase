@@ -40,6 +40,8 @@
    * which is transient hover. */
   --color-active: var(--active);
   --color-border: var(--border);
+  /* Emphasized hairline — hover/emphasis step above `border`. */
+  --color-stroke-strong: var(--stroke-strong);
   --color-input: var(--border);
   --color-accent: var(--accent);
   --color-primary: var(--accent);
@@ -57,6 +59,12 @@
   --color-status-warning: var(--status-warning);
   --color-status-danger: var(--status-danger);
   --color-accent-amber: var(--accent-amber);
+  /* Image-lightbox stage — deliberately theme-static (see globals.css). */
+  --color-scrim: var(--scrim);
+  /* Topmost-veil dim layers — theme-static like the scrim (globals.css):
+   * `veil` behind modal dialogs, `veil-quiet` behind the pickers. */
+  --color-veil: var(--veil);
+  --color-veil-quiet: var(--veil-quiet);
   --spacing-density: var(--density-gap);
   --spacing-control: var(--density-control);
   --radius-ui: var(--radius-ui);

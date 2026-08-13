@@ -5,6 +5,7 @@ import {
   orderEditorHistory,
   type EditorHistoryEntry,
 } from '../editorHistory';
+import { useLatestRef } from '../hooks/useLatestRef';
 import { useSettingsBlocking } from '../hooks/useSettingsBlocking';
 import { useApp } from '../store/AppContext';
 import {
@@ -82,12 +83,9 @@ export function EditorHistoryNavigator() {
   // commit path below closes over its own selection instead).
   const listRef = useRef<EditorHistoryEntry[]>([]);
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const settingsBlockingRef = useRef(settingsBlocking);
-  settingsBlockingRef.current = settingsBlocking;
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
+  const stateRef = useLatestRef(state);
+  const settingsBlockingRef = useLatestRef(settingsBlocking);
+  const phaseRef = useLatestRef(phase);
 
   function clearRevealTimer() {
     if (revealTimerRef.current) {

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage, versionedAssetUrl } from '../api';
-import { preparationWaitCopy } from '../preparation-copy.ts';
+import { useLatestRef } from '../hooks/useLatestRef';
+import { basename } from '../lib/paths';
+import { preparationWaitCopy } from '../preparationCopy.ts';
 import { useApp } from '../store/AppContext';
 import { getPreparationFailure } from '../store/fileReadiness';
+import { emptyStateClass } from './emptyState';
 import { Button } from './ui/button';
 import { StatusMessage } from './ui/status';
 
@@ -42,14 +45,18 @@ export function ImagePreview({ name }: { name: string }) {
   const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
   const src = useMemo(() => versionedAssetUrl(name, sourceVersion, sourceFolder), [name, sourceVersion, sourceFolder]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const currentRef = useRef({ folderPath: state.folderPath, name });
-  currentRef.current = { folderPath: state.folderPath, name };
+  const currentRef = useLatestRef({ folderPath: state.folderPath, name });
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [scale, setScale] = useState(1);
+  // Fit is a mode like PdfPreview's autoFit: pressed from the moment the
+  // user chooses it until any explicit zoom (buttons, %-reset, wheel/pinch)
+  // takes over. Unlike the PDF viewer it does not re-fit on pane resize —
+  // the image view is anchored to actual size by design.
+  const [fitMode, setFitMode] = useState(false);
   const [retryBusy, setRetryBusy] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const alt = name.split('/').pop() ?? name;
+  const alt = basename(name);
   const failure = getPreparationFailure(state, name);
   const conversionProgress = state.conversionProgress[name];
   const preparationStatus = !failure && conversionProgress
@@ -69,6 +76,7 @@ export function ImagePreview({ name }: { name: string }) {
   useEffect(() => {
     setNatural(null);
     setScale(1);
+    setFitMode(false);
     setLoadError(false);
     setRetryBusy(false);
     setRetryError(null);
@@ -83,6 +91,7 @@ export function ImagePreview({ name }: { name: string }) {
     function onWheel(e: WheelEvent) {
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
+      setFitMode(false);
       setScale((s) => clampScale(s * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
     }
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -153,7 +162,7 @@ export function ImagePreview({ name }: { name: string }) {
         * image scrolls here rather than being squeezed to fit. */}
       <div className="min-h-0 flex-1 overflow-auto" ref={scrollRef}>
         {loadError ? (
-          <div className="empty-list">
+          <div className={emptyStateClass}>
             Couldn’t load this image — the file may have moved or been deleted.
           </div>
         ) : (
@@ -181,12 +190,21 @@ export function ImagePreview({ name }: { name: string }) {
         /* Floating zoom controls, pinned to the pane (outside the scroll
          * area so they don't move with the image). */
         <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-border bg-background p-[3px] shadow-elevation">
-          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom out" onClick={() => setScale((s) => clampScale(s / 1.25))}>−</Button>
-          <Button variant="ghost" size="xs" className="min-w-12 px-2 font-normal text-muted-foreground tabular-nums" title="Actual size (100%)" onClick={() => setScale(1)}>
+          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom out" onClick={() => { setFitMode(false); setScale((s) => clampScale(s / 1.25)); }}>−</Button>
+          <Button variant="ghost" size="xs" className="min-w-12 px-2 font-normal text-muted-foreground tabular-nums" title="Actual size (100%)" onClick={() => { setFitMode(false); setScale(1); }}>
             {Math.round(scale * 100)}%
           </Button>
-          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom in" onClick={() => setScale((s) => clampScale(s * 1.25))}>+</Button>
-          <Button variant="ghost" size="xs" className="px-2 font-normal" title="Fit to pane" onClick={() => setScale(fitScale())}>Fit</Button>
+          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom in" onClick={() => { setFitMode(false); setScale((s) => clampScale(s * 1.25)); }}>+</Button>
+          {/* Pressed is the neutral selected surface — same semantics as
+            * PdfPreview's Fit toggle, and the same rationing of accent. */}
+          <Button
+            variant="ghost"
+            size="xs"
+            className="px-2 font-normal aria-pressed:bg-active aria-pressed:text-foreground aria-pressed:hover:bg-active"
+            title="Fit to pane"
+            aria-pressed={fitMode}
+            onClick={() => { setFitMode(true); setScale(fitScale()); }}
+          >Fit</Button>
         </div>
       )}
     </div>

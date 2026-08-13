@@ -4,7 +4,7 @@ import { useApp } from '../store/AppContext';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { PICKER_VEIL_CLASS } from './pickerChrome';
 
-const QuickOpenDialog = lazyWithRetry(() => import('./QuickOpenDialog'));
+const ManagedQuickOpen = lazyWithRetry(() => import('./ManagedQuickOpen'));
 
 interface QuickOpenRequest {
   commandsOnly: boolean;
@@ -46,7 +46,7 @@ export function QuickOpen() {
   return (
     <LazyLoadBoundary className={loadingClass} label="Quick Open" resetKey={String(request.id)}>
       <Suspense fallback={<div className={loadingClass}>Opening Quick Open…</div>}>
-        <QuickOpenDialog key={request.id} commandsOnly={request.commandsOnly} onClose={close} />
+        <ManagedQuickOpen key={request.id} commandsOnly={request.commandsOnly} onClose={close} />
       </Suspense>
     </LazyLoadBoundary>
   );

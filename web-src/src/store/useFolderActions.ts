@@ -1,4 +1,4 @@
-import { useCallback, useRef, type MutableRefObject } from 'react';
+import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { api, type FolderState } from '../api';
 import { folderRefsEqual, isAbsoluteFolderRef } from '../folderPath';
 import { createFolderMutationQueue } from '../folderTransition';
@@ -353,12 +353,22 @@ export function useFolderActions(
     toast,
   ]);
 
-  return {
+  // One stable actions object: the workspace memo depends on this object,
+  // not on individually listed members, so a new action added here is
+  // tracked automatically.
+  return useMemo(() => ({
     bootstrap,
     handleFolderRemoved,
     handleLibraryFolderAdded,
     openFolder,
     openFolderByName,
     prepareForFolderRemoval,
-  };
+  }), [
+    bootstrap,
+    handleFolderRemoved,
+    handleLibraryFolderAdded,
+    openFolder,
+    openFolderByName,
+    prepareForFolderRemoval,
+  ]);
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AudioPlaybackPosition } from '../audio-playback.ts';
+import { AudioPlaybackPosition } from '../audioPlayback.ts';
 
 test('search seek survives replacement with a compatible playback source', () => {
   const position = new AudioPlaybackPosition();

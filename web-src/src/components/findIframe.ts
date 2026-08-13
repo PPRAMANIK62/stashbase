@@ -18,6 +18,7 @@
  * Browser support: CSS Custom Highlight API ships in Chromium 105+,
  * which covers every Electron version we target. No fallback needed.
  */
+import { escapeRegExp } from '../lib/regex';
 import type { FindController, MatchInfo } from '../store/AppContext';
 
 const HL_ALL = 'stash-find';
@@ -236,18 +237,31 @@ export function scrollRangeIntoView(
   });
 }
 
-/** Inject highlight styles into the iframe doc once. Scoped to our two
+/** Inject highlight styles into the iframe doc. Scoped to our two
  *  highlight names so we don't fight any page-supplied `::highlight()`
- *  rules. Yellow for all matches, orange for the active one — Chrome's
- *  find-in-page palette. */
+ *  rules. Translucent amber for all matches (the sanctioned search-mark
+ *  hue) and the accent for the current one, mirroring the PDF hit
+ *  overlay — the accent carries the emphasis in the background because
+ *  `::highlight()` cannot draw the overlay's box-shadow ring. Token
+ *  values are resolved from the PARENT document root: the iframe never
+ *  receives the app stylesheet, so a var() reference would not resolve
+ *  there. Refreshed on every call so a theme flip re-syncs on the next
+ *  find. Backgrounds stay translucent and text color is inherited so
+ *  dark-themed preview content stays readable. */
 function ensureStyle(doc: Document): void {
-  if (doc.getElementById(STYLE_ID)) return;
-  const style = doc.createElement('style');
-  style.id = STYLE_ID;
-  style.textContent =
-    `::highlight(${HL_ALL}) { background: #ffe082; color: inherit; }` +
-    `::highlight(${HL_CURRENT}) { background: #1a73e8; color: #fff; }`;
-  doc.head.appendChild(style);
+  const tokens = getComputedStyle(document.documentElement);
+  const amber = tokens.getPropertyValue('--accent-amber-rgb').trim();
+  const accent = tokens.getPropertyValue('--accent-rgb').trim();
+  const css =
+    `::highlight(${HL_ALL}) { background: rgba(${amber}, 0.3); color: inherit; }` +
+    `::highlight(${HL_CURRENT}) { background: rgba(${accent}, 0.42); color: inherit; }`;
+  let style = doc.getElementById(STYLE_ID);
+  if (!style) {
+    style = doc.createElement('style');
+    style.id = STYLE_ID;
+    doc.head.appendChild(style);
+  }
+  if (style.textContent !== css) style.textContent = css;
 }
 
 function paint(win: Window, all: Range[], current: Range | null): void {
@@ -260,7 +274,7 @@ function paint(win: Window, all: Range[], current: Range | null): void {
     return;
   }
   // Active range is excluded from the "all matches" highlight so the
-  // orange current band reads cleanly without yellow bleed underneath.
+  // accent current band reads cleanly without amber bleed underneath.
   const others = current ? all.filter((r) => r !== current) : all;
   CSSNS.highlights.set(HL_ALL, new HL(...others));
   if (current) CSSNS.highlights.set(HL_CURRENT, new HL(current));
@@ -269,7 +283,7 @@ function paint(win: Window, all: Range[], current: Range | null): void {
 
 function buildRegex(q: string, wholeWord: boolean, caseSensitive: boolean): RegExp | null {
   if (!q) return null;
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = escapeRegExp(q);
   const body = wholeWord ? `(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])` : escaped;
   try {
     return new RegExp(body, caseSensitive ? 'gu' : 'giu');

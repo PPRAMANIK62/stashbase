@@ -1,4 +1,5 @@
 import { useRef, useState, type DragEvent } from 'react';
+import { basename } from '../lib/paths';
 import { useApp } from '../store/AppContext';
 
 const TAB_MIME = 'application/x-stashbase-tab';
@@ -106,7 +107,10 @@ export function TabStrip() {
       >
         {state.tabs.map((t) => {
           const isActive = t.id === state.activeTabId;
-          const label = t.file ? displayTabLabel(t.file.name) : 'Untitled';
+          // Tab label = the file's basename, extension included (`note.md`,
+          // not `note`) — the suffix keeps `.md` vs `.html` vs `.pdf` tabs
+          // unambiguous at a glance.
+          const label = t.file ? basename(t.file.name) : 'Untitled';
           const isDragging = dragId === t.id;
           const dropEdge = dropTarget?.id === t.id ? dropTarget.edge : null;
           const cls = 'tab'
@@ -186,11 +190,4 @@ export function TabStrip() {
       </div>
     </div>
   );
-}
-
-/** Tab label = the file's basename, extension included (`note.md`, not
- *  `note`). Showing the suffix keeps `.md` vs `.html` vs `.pdf` tabs
- *  unambiguous at a glance. */
-function displayTabLabel(path: string): string {
-  return path.split('/').pop() ?? path;
 }

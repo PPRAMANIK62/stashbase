@@ -1,27 +1,15 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import { BotIcon, ChevronDownIcon, ClaudeIcon } from '../icons';
 import type { FileMeta, FolderMeta } from '../api';
-import { FILE_MIME, FOLDER_MIME } from '../dragMime';
+import { useTreeRowDrag } from '../hooks/useTreeRowDrag';
+import { basename } from '../lib/paths';
 import { useApp } from '../store/AppContext';
 import { getFileReadiness } from '../store/fileReadiness';
+import { emptyStateClass } from './emptyState';
 import { RenameInput, useRenameTarget } from './RenameInput';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
-
-/** Where in a row the cursor is during dragover — drives the drop
- *  indicator + the action the drop triggers. `into` is folder-only
- *  (move the dragged file/folder into that folder, current behavior);
- *  `above` / `below` are reorder slots (same parent only). */
-type DropEdge = 'above' | 'into' | 'below' | null;
-
-// Module-scoped breadcrumbs the drag source writes at `dragstart` so
-// drop targets can verify "same parent" / "not yourself" without
-// resorting to MIME data (`dataTransfer.getData` is unreadable during
-// `dragover`). Cleared on `dragend`.
-let dragSourceParent: string | null = null;
-let dragSourceName: string | null = null;
-let dragSourceKind: 'file' | 'folder' | null = null;
 
 interface FolderNode {
   type: 'folder';
@@ -114,30 +102,6 @@ function buildTree(
   return root;
 }
 
-/** Split a path into `parent` and `basename`. Parent is `""` for
- *  folder-root entries. Used by drag-to-reorder to verify same-parent
- *  before accepting a drop. */
-function splitParent(p: string): { parent: string; base: string } {
-  const i = p.lastIndexOf('/');
-  return i < 0 ? { parent: '', base: p } : { parent: p.slice(0, i), base: p.slice(i + 1) };
-}
-
-/** Reorder helper: produce a new array where `dragName` lands at the
- *  position of `dropName` (above or below it). Used for the manual
- *  sidebar ordering optimistic update. */
-function reorder(
-  names: string[],
-  dragName: string,
-  dropName: string,
-  edge: 'above' | 'below',
-): string[] {
-  const without = names.filter((n) => n !== dragName);
-  const dropIdx = without.indexOf(dropName);
-  if (dropIdx < 0) return names; // dropName not in current list — bail
-  const insertAt = edge === 'above' ? dropIdx : dropIdx + 1;
-  return [...without.slice(0, insertAt), dragName, ...without.slice(insertAt)];
-}
-
 function displayName(name: string): string {
   // Show the extension. Three viewer formats (md / html / pdf) coexist
   // — PDF-derived notes ship as a `paper.pdf` + `paper.html` pair, and
@@ -185,15 +149,17 @@ export function FileTree() {
     const total = sourceCode + other;
     if (total > 0) {
       return (
-        <div className="empty-list">
-          <div style={{ fontWeight: 600, color: 'var(--fg)', marginBottom: '4px' }}>No supported files found</div>
-          <div style={{ fontSize: '11px', opacity: 0.8, lineHeight: 1.4 }}>
+        <div className={emptyStateClass + ' flex-col items-center gap-1 text-center'}>
+          <div className="font-semibold text-foreground">No supported files found</div>
+          {/* text-xs, the ramp's meta step — the note scales with
+            * --ui-scale where the old hardcoded 11px did not. */}
+          <div className="text-xs leading-snug">
             StashBase found {total} file{total === 1 ? '' : 's'} in this folder, but none can currently be displayed or indexed. Nothing on disk was changed.
           </div>
         </div>
       );
     }
-    return <div className="empty-list">No notes yet — click + to create one</div>;
+    return <div className={emptyStateClass}>No notes yet — click + to create one</div>;
   }
   return (
     <TreeFocusContext.Provider value={focusContext}>
@@ -281,7 +247,13 @@ function FolderRow({
   const isExpanded = state.expanded.has(node.path);
   const isActive = state.selectedPath === node.path;
   const renaming = useRenameTarget(node.path, 'folder');
-  const [dropEdge, setDropEdge] = useState<DropEdge>(null);
+  const { dropEdge, dragProps } = useTreeRowDrag({
+    kind: 'folder',
+    path: node.path,
+    name: node.name,
+    parent,
+    siblings,
+  });
 
   const rowClass =
     'tree-row folder' +
@@ -301,82 +273,6 @@ function FolderRow({
     });
   }
 
-  function onDragStart(e: DragEvent<HTMLDivElement>) {
-    e.stopPropagation();
-    e.dataTransfer.setData(FOLDER_MIME, node.path);
-    e.dataTransfer.effectAllowed = 'move';
-    dragSourceParent = parent;
-    dragSourceName = node.name;
-    dragSourceKind = 'folder';
-  }
-  function onDragEnd() {
-    dragSourceParent = null;
-    dragSourceName = null;
-    dragSourceKind = null;
-  }
-
-  function onDragOver(e: DragEvent<HTMLDivElement>) {
-    const t = e.dataTransfer.types;
-    const isFile = t.includes(FILE_MIME);
-    const isFolder = t.includes(FOLDER_MIME);
-    if (!isFile && !isFolder) return; // external OS drop → global handler
-    e.preventDefault();
-    e.stopPropagation();
-    // Self → no indicator.
-    if (dragSourceKind === 'folder' && dragSourceName === node.name && dragSourceParent === parent) {
-      setDropEdge(null);
-      e.dataTransfer.dropEffect = 'none';
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const r = (e.clientY - rect.top) / rect.height;
-    // Folder zones: 0–25% = above, 25–75% = into, 75–100% = below.
-    let edge: DropEdge = r < 0.25 ? 'above' : r >= 0.75 ? 'below' : 'into';
-    // Above/below means "same level as this row" even when dragging a
-    // file across folders. Middle still means "move into this folder".
-    if ((edge === 'above' || edge === 'below') && dragSourceParent !== parent && isFolder) {
-      edge = null;
-    }
-    if (edge === 'into' && isFolder) edge = null;
-    setDropEdge(edge);
-    e.dataTransfer.dropEffect = edge ? 'move' : 'none';
-  }
-  function onDragLeave() { setDropEdge(null); }
-
-  function onDrop(e: DragEvent<HTMLDivElement>) {
-    // External OS file drops bubble to the window importer, which
-    // targets this folder via `closest('.tree-row.folder')`. Swallowing
-    // them here (unconditional stopPropagation) made drops onto a folder
-    // row fail. Only internal move/reorder drags are handled below.
-    const t = e.dataTransfer.types;
-    if (!t.includes(FILE_MIME) && !t.includes(FOLDER_MIME)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const edge = dropEdge;
-    setDropEdge(null);
-    if (!edge) return;
-    if (edge === 'into') {
-      const filePath = e.dataTransfer.getData(FILE_MIME);
-      if (filePath) void actions.moveFile(filePath, node.path);
-      return;
-    }
-    if (!dragSourceName) return;
-    if (dragSourceParent !== parent) {
-      const filePath = e.dataTransfer.getData(FILE_MIME);
-      if (!filePath || dragSourceKind !== 'file') return;
-      const slot = edge;
-      void (async () => {
-        const moved = await actions.moveFile(filePath, parent);
-        if (!moved) return;
-        const next = reorder(siblings, dragSourceName!, node.name, slot);
-        await actions.setFolderOrder(parent, next);
-      })();
-      return;
-    }
-    const next = reorder(siblings, dragSourceName, node.name, edge);
-    void actions.setFolderOrder(parent, next);
-  }
-
   return (
     <>
       <div
@@ -390,11 +286,7 @@ function FolderRow({
         style={{ paddingLeft: depth * 14 + 26 }}
         data-path={node.path}
         draggable={!renaming}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
+        {...dragProps}
         onFocus={() => treeFocus.setRovingPath(node.path)}
         onClick={() => {
           if (renaming) return;
@@ -468,12 +360,18 @@ function FileRow({
   const isActive = state.selectedPath === path;
   const readiness = getFileReadiness(state, path);
   const renaming = useRenameTarget(path, 'file');
-  const [dropEdge, setDropEdge] = useState<DropEdge>(null);
 
-  const basename = path.split('/').pop() ?? path;
+  const name = basename(path);
   // Named agent rules-books are tagged by their owner's logo. They are still
   // ordinary Markdown files in the tree; only the glyph changes.
-  const metaIcon = agentRulesIcon(basename);
+  const metaIcon = agentRulesIcon(name);
+  const { dropEdge, dragProps } = useTreeRowDrag({
+    kind: 'file',
+    path,
+    name,
+    parent,
+    siblings,
+  });
 
   const rowClass =
     `tree-row file format-${format}` +
@@ -483,7 +381,7 @@ function FileRow({
     (dropEdge === 'above' ? ' drop-edge-above' : '') +
     (dropEdge === 'below' ? ' drop-edge-below' : '');
 
-  const display = displayName(basename);
+  const display = displayName(name);
   const title = readiness.preparationFailure
     ? `File preparation failed; this file may not be searchable. ${path}`
     : readiness.preparationCancellation
@@ -494,78 +392,8 @@ function FileRow({
   // images). Without the binaries here, editing "photo.png" exposes the
   // whole name and a user can drop ".png", which silently breaks format
   // detection (the row vanishes) and orphans the derived OCR note.
-  const extMatch = basename.match(VIEWABLE_EXTENSION_RE);
+  const extMatch = name.match(VIEWABLE_EXTENSION_RE);
   const ext = extMatch ? extMatch[0] : '';
-
-  function onDragStart(e: DragEvent<HTMLDivElement>) {
-    e.dataTransfer.setData(FILE_MIME, path);
-    e.dataTransfer.setData('text/plain', path);
-    e.dataTransfer.effectAllowed = 'move';
-    dragSourceParent = parent;
-    dragSourceName = basename;
-    dragSourceKind = 'file';
-  }
-  function onDragEnd() {
-    dragSourceParent = null;
-    dragSourceName = null;
-    dragSourceKind = null;
-  }
-
-  function onDragOver(e: DragEvent<HTMLDivElement>) {
-    const t = e.dataTransfer.types;
-    const isFile = t.includes(FILE_MIME);
-    const isFolder = t.includes(FOLDER_MIME);
-    if (!isFile && !isFolder) return;
-    e.preventDefault();
-    e.stopPropagation();
-    // File rows accept above/below only. For file drags across folders,
-    // above/below means "move to this row's parent at this level".
-    if (dragSourceParent !== parent && !isFile) {
-      setDropEdge(null);
-      e.dataTransfer.dropEffect = 'none';
-      return;
-    }
-    // Self → skip.
-    if (dragSourceParent === parent && dragSourceKind === 'file' && dragSourceName === basename) {
-      setDropEdge(null);
-      e.dataTransfer.dropEffect = 'none';
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const r = (e.clientY - rect.top) / rect.height;
-    setDropEdge(r < 0.5 ? 'above' : 'below');
-    e.dataTransfer.dropEffect = 'move';
-  }
-  function onDragLeave() { setDropEdge(null); }
-
-  function onDrop(e: DragEvent<HTMLDivElement>) {
-    // External OS file drops aren't ours — let them bubble to the
-    // window-level importer (`useGlobalDragDrop`). Unconditionally
-    // stopping propagation here is what made a drop landing on a file
-    // row silently fail. Only internal reorder drags are handled below.
-    const t = e.dataTransfer.types;
-    if (!t.includes(FILE_MIME) && !t.includes(FOLDER_MIME)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const edge = dropEdge;
-    setDropEdge(null);
-    if (!edge || edge === 'into') return;
-    if (!dragSourceName) return;
-    if (dragSourceParent !== parent) {
-      const filePath = e.dataTransfer.getData(FILE_MIME);
-      if (!filePath || dragSourceKind !== 'file') return;
-      const slot = edge;
-      void (async () => {
-        const moved = await actions.moveFile(filePath, parent);
-        if (!moved) return;
-        const next = reorder(siblings, dragSourceName!, basename, slot);
-        await actions.setFolderOrder(parent, next);
-      })();
-      return;
-    }
-    const next = reorder(siblings, dragSourceName, basename, edge);
-    void actions.setFolderOrder(parent, next);
-  }
 
   function onContextMenu(e: MouseEvent) {
     e.preventDefault();
@@ -601,11 +429,7 @@ function FileRow({
       data-path={path}
       title={title}
       draggable={!renaming}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+      {...dragProps}
       onFocus={() => treeFocus.setRovingPath(path)}
       onClick={() => {
         if (renaming) return;
@@ -632,9 +456,9 @@ function FileRow({
       <span className="icon">{metaIcon ?? <FileTypeIcon format={format} />}</span>
       {renaming ? (
         <RenameInput
-          initialBasename={ext ? basename.slice(0, -ext.length) : basename}
+          initialBasename={ext ? name.slice(0, -ext.length) : name}
           ext={ext}
-          ariaLabel={`Rename file ${basename}`}
+          ariaLabel={`Rename file ${name}`}
           onCommit={(newBasename) => {
             void actions.renameFile(path, newBasename);
           }}

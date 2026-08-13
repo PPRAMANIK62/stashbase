@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { agentConnectionUrl } from '../components/agent/connectionUrl.ts';
+import { basename, shortenFolderPath } from '../lib/paths.ts';
 import {
   blankTabToReuse,
   chatScopePill,
   chatScopesEqual,
-  folderDisplayName,
   folderMenuEntries,
   folderMenuLocked,
   folderScope,
@@ -19,7 +19,6 @@ import {
   scopeDisplayName,
   scopePillAriaLabel,
   scopeRequestParams,
-  shortenFolderPath,
   shouldFollowWindowFolder,
   shouldOpenInitialChatOnWindowEntry,
   switchWelcomeTabPlan,
@@ -303,7 +302,7 @@ test('create_project rebind: the pill flips from Library to the project and the 
 test('scope labels: the library scope is called "Library", never "Global"', () => {
   assert.equal(scopeDisplayName(LIBRARY_SCOPE), 'Library');
   assert.equal(scopeDisplayName(folderScope('/Users/me/Projects/Research')), 'Research');
-  assert.equal(folderDisplayName('/Users/me/Projects/Research'), 'Research');
+  assert.equal(basename('/Users/me/Projects/Research'), 'Research');
   assert.equal(shortenFolderPath('/Users/me/Projects/Research', '/Users/me'), '~/Projects/Research');
   assert.equal(shortenFolderPath('/srv/data', '/Users/me'), '/srv/data');
   assert.equal(scopePillAriaLabel(folderScope('/x/Research'), false), 'Session folder: Research');

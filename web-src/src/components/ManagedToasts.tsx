@@ -41,7 +41,7 @@ function ToastList() {
             <ToastContent>
               <ToastDescription>{toast.description}</ToastDescription>
               {count > 1 && (
-                <span className="shrink-0 self-center rounded-full bg-muted px-1.5 py-px text-xs font-bold text-muted-foreground tabular-nums">
+                <span className="shrink-0 self-center rounded-full bg-muted px-1.5 text-2xs leading-4 text-muted-foreground tabular-nums">
                   ×{count}
                 </span>
               )}

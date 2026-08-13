@@ -199,7 +199,7 @@ function ToastAction({ className, ...props }: ToastPrimitive.Action.Props) {
     <ToastPrimitive.Action
       data-slot="toast-action"
       className={cn(
-        "shrink-0 rounded border border-border bg-background px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-focus",
+        "shrink-0 rounded border border-border bg-background px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
         className
       )}
       {...props}
@@ -236,7 +236,7 @@ function ToastClearAll({
       type="button"
       variant="outline"
       size="xs"
-      className={cn("self-end shadow-sm", className)}
+      className={cn("self-end shadow-elevation", className)}
       onClick={() => managedFeedbackToasts.clear()}
     >
       Clear all ({count})

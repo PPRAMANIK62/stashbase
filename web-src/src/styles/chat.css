@@ -50,7 +50,7 @@
      * hook for exactly this. Any other layout keeps the shell to the
      * right of something, so the row needs no inset. */
     .app.sidebar-collapsed.chat-primary .chat-tab-row {
-      padding-left: calc(var(--titlebar-controls-left) + 66px);
+      padding-left: calc(var(--titlebar-controls-left) + var(--titlebar-controls-collapsed-width) + 8px);
     }
 
     /* Match the sidebar's drag handle (globals.css `.sidebar-splitter`):
@@ -231,8 +231,8 @@
       opacity: 1;
     }
     .agent-turn-user-actions button {
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       display: inline-grid;
       place-items: center;
       padding: 0;
@@ -254,6 +254,14 @@
       width: 14px;
       height: 14px;
     }
+    /* Entering edit must not collapse the bubble: the textarea has no
+     * intrinsic width, so the shrink-to-fit head would snap narrow and
+     * rewrap a long single-line message. While editing, the head takes
+     * the full bubble width instead — a deliberate "opens into an
+     * editor" expansion rather than a jarring collapse. */
+    .agent-turn-head:has(.agent-turn-edit) {
+      width: min(85%, 620px);
+    }
     .agent-turn-edit {
       display: flex;
       flex-direction: column;
@@ -274,6 +282,11 @@
       line-height: inherit;
       white-space: pre-wrap;
     }
+    /* No focus ring here ON PURPOSE (composer idiom): text fields always
+     * match :focus-visible, so a halo would flash on every edit open. The
+     * bubble's transformation into the edit card — full width, buttons —
+     * IS the focus affordance, and entry is always an explicit action on
+     * the Edit button, so keyboard visibility is carried by the mode. */
     .agent-turn-actions {
       display: inline-flex;
       align-items: center;
@@ -357,7 +370,7 @@
      * `<hr>` is a heavy beveled bar; instead paint a 1px block and halve it
      * with scaleY(0.5) for a true 0.5px hairline (one physical pixel on
      * Retina), faded to a fraction of the border — the same treatment as
-     * the reading view's `.doc hr`. */
+     * the Crepe editor's divider (mainpane.css). */
     .agent-prose hr {
       border: 0;
       height: 1px;
@@ -532,16 +545,7 @@
       outline: none;
       color: var(--fg);
     }
-    .agent-file-mention {
-      display: inline-block;
-      padding: 0 4px;
-      border-radius: var(--radius-xs);
-      background: var(--active);
-      color: var(--fg);
-      line-height: inherit;
-      vertical-align: baseline;
-      white-space: nowrap;
-    }
+    .agent-file-mention,
     .agent-skill-mention {
       display: inline-block;
       padding: 0 4px;
@@ -563,13 +567,15 @@
       max-height: 220px;
       overflow: hidden;
       box-sizing: border-box;
-      background: var(--bg);
+      /* Raised popup surface + the one shared elevation shadow — same
+       * treatment as every other transient overlay. */
+      background: var(--card);
       border: 1px solid var(--border);
       /* The overlay role, shared with the composer/session-history
        * popovers and the ui/ menus — one radius for every floating
        * surface. */
       border-radius: var(--radius-container);
-      box-shadow: 0 8px 24px rgba(var(--shadow-color), 0.12);
+      box-shadow: var(--shadow-elevation);
       padding: 4px;
       z-index: 30;
     }
@@ -579,8 +585,11 @@
        visible viewport. */
     .agent-mention-list { max-height: 182px; overflow-y: auto; scroll-padding-block: 4px; }
     .agent-mention-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
-    .agent-mention-retry { border: 0; border-radius: var(--radius-control); background: var(--active); color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
-    .agent-mention-retry:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    /* Reads like the outline button: bordered, transparent at rest, quiet
+     * neutral hover. Focus is the global translucent halo — no bespoke
+     * outline here. */
+    .agent-mention-retry { border: 1px solid var(--border); border-radius: var(--radius-ui); background: transparent; color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
+    .agent-mention-retry:hover { background: var(--hover); }
     .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10px * var(--ui-scale)); }
     .agent-mention-head > span:first-child { color: var(--fg); font-weight: 600; }
     .agent-mention-item {
@@ -597,8 +606,10 @@
       border-radius: var(--radius-ui);
       cursor: pointer;
     }
-    .agent-mention-item:hover,
-    .agent-mention-item.active { background: var(--hover); }
+    /* Hover and keyboard-selected are distinct steps on the neutral ramp,
+     * like tree rows: transient hover, then the quiet selected surface. */
+    .agent-mention-item:hover { background: var(--hover); }
+    .agent-mention-item.active { background: var(--active); }
     .agent-mention-icon { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--muted); }
     .agent-mention-text { display: flex; flex: 1; min-width: 0; flex-direction: column; }
     .agent-mention-name { font-size: calc(12px * var(--ui-scale)); color: var(--fg); }

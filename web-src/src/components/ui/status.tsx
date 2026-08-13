@@ -65,7 +65,7 @@ function ModalLoadingStatus({
       ref={dialogRef}
       aria-label={label}
       tabIndex={-1}
-      className="m-auto border-0 bg-transparent p-0 text-foreground outline-none backdrop:bg-black/35"
+      className="m-auto border-0 bg-transparent p-0 text-foreground outline-none backdrop:bg-veil"
       onCancel={(event) => {
         event.preventDefault()
         if (isTopmost) onCancel()

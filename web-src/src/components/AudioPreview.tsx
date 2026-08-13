@@ -7,14 +7,17 @@ import {
   audioPreviewProgressCopy,
   audioTranscriptStatusCopy,
   findAudioSeekSegment,
-} from '../audio-transcript.ts';
-import { AudioPlaybackPosition } from '../audio-playback.ts';
+} from '../audioTranscript.ts';
+import { AudioPlaybackPosition } from '../audioPlayback.ts';
+import { basename } from '../lib/paths';
 import { useApp } from '../store/AppContext';
+import { emptyStateClass } from './emptyState';
 import { openSettings } from './SettingsModal';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '../../../shared/transcription.ts';
 import { useAudioFallbackController } from './audio/useAudioFallbackController.ts';
 import { useAudioTranscriptController } from './audio/useAudioTranscriptController.ts';
 import { Button } from './ui/button';
+import { Select } from './ui/select';
 import { StatusMessage } from './ui/status';
 
 export function AudioPreview({ name }: { name: string }) {
@@ -80,7 +83,7 @@ export function AudioPreview({ name }: { name: string }) {
   return (
     <div className="grid h-full w-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-pane">
       <div className="border-b border-border bg-card px-6 pt-5 pb-4">
-        <div className="mb-2.5 truncate font-semibold">{name.split('/').pop()}</div>
+        <div className="mb-2.5 truncate font-semibold">{basename(name)}</div>
         <audio
           key={`${state.folderPath}:${fallback.playbackSrc}`}
           ref={audioRef}
@@ -100,8 +103,13 @@ export function AudioPreview({ name }: { name: string }) {
           <div className={HINT_CLASS}>
             <span>{fallbackProgressCopy}</span>
             {fallback.progress?.status === 'converting' && fallback.progress.totalMs > 0 && (
+              /* The app progress recipe (6px capsule, muted track, accent
+               * fill — see AgentRuntimeProgress) expressed on the native
+               * element: appearance-none lets the webkit pseudo-elements
+               * take the track/fill roles; accent-accent stays as the
+               * fallback should appearance ever revert to native. */
               <progress
-                className="h-1.5 w-[min(180px,28vw)] accent-accent"
+                className="h-1.5 w-[min(180px,28vw)] appearance-none overflow-hidden rounded-full accent-accent [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-accent"
                 max={100}
                 value={fallback.progress.percent}
                 aria-label="Compatible audio preview progress"
@@ -133,15 +141,14 @@ export function AudioPreview({ name }: { name: string }) {
           </div>
           {(transcription.state?.status === 'ready' || transcription.state?.status === 'failed' || transcription.state?.status === 'cancelled') && (
             <div className="flex items-center gap-1.5">
-              <select
-                className="h-7 rounded-md border border-input bg-card px-2 text-base text-foreground"
+              <Select
                 value={transcription.retryLanguage}
                 onChange={(event) => transcription.setRetryLanguage(event.target.value)}
                 disabled={transcription.retryBusy}
               >
                 <option value="">Use Settings default</option>
                 {TRANSCRIPTION_LANGUAGE_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-              </select>
+              </Select>
               <Button variant="outline" size="sm" disabled={transcription.retryBusy} onClick={() => { void transcription.reprocess(); }}>
                 {transcription.retryBusy ? 'Starting…' : 'Reprocess'}
               </Button>
@@ -171,7 +178,7 @@ export function AudioPreview({ name }: { name: string }) {
           </StatusMessage>
         )}
         {transcript && transcript.segments.length === 0 && (
-          <div className="row-start-3 p-6 text-muted-foreground">No speech was detected.</div>
+          <div className={`${emptyStateClass} row-start-3`}>No speech was detected.</div>
         )}
         {transcript && transcript.segments.length > 0 && (
           <div className="row-start-3 grid min-h-0 content-start gap-0.5 overflow-auto">
@@ -181,8 +188,11 @@ export function AudioPreview({ name }: { name: string }) {
                 type="button"
                 className={
                   'grid w-full cursor-pointer grid-cols-[68px_minmax(0,1fr)] gap-3 rounded-md border-0 px-2.5 py-2 text-left [font:inherit] text-foreground' +
+                  /* Playing reads from the surface like selection — the
+                   * neutral active wash, not an accent tint; the timestamp
+                   * column already carries the accent moment. */
                   (positionMs >= segment.startMs && positionMs < segment.endMs
-                    ? ' bg-accent/10'
+                    ? ' bg-active'
                     : ' bg-transparent hover:bg-muted')
                 }
                 onClick={() => seek(segment.startMs)}

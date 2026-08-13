@@ -5,7 +5,7 @@ import { ModalLoadingStatus } from './ui/status';
 
 export type SettingsSection = 'appearance' | 'agents' | 'embedding' | 'transcription' | 'mcp';
 
-export interface SettingsDialogProps {
+export interface SettingsModalProps {
   initialSection: SettingsSection;
   isTopmost: boolean;
   onClose: () => void;
@@ -15,7 +15,7 @@ interface OpenDetail {
   section?: SettingsSection;
 }
 
-const ManagedSettingsDialog = lazyWithRetry(() => import('./ManagedSettingsDialog'));
+const ManagedSettingsModal = lazyWithRetry(() => import('./ManagedSettingsModal'));
 
 export function openSettings(section?: SettingsSection): void {
   window.dispatchEvent(
@@ -60,7 +60,7 @@ export function SettingsPortal() {
         />
       )}
     >
-      <ManagedSettingsDialog
+      <ManagedSettingsModal
         initialSection={section}
         isTopmost={layer.isTopmost}
         onClose={() => setOpen(false)}

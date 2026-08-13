@@ -2,6 +2,7 @@
  * Shared renderer HTTP transport, error normalization, path encoding, and
  * per-window request identity.
  */
+import { electronBridge } from './electronBridge';
 
 /** Extract a printable message from any thrown value. ApiError wins
  *  first because its `.message` already includes the HTTP context. Use
@@ -28,9 +29,7 @@ const WINDOW_ID_KEY = 'stashbase.windowId';
 
 export function getWindowId(): string {
   try {
-    const assigned = (window as {
-      electron?: { windowId?: unknown };
-    }).electron?.windowId;
+    const assigned = electronBridge()?.windowId;
     let id = window.sessionStorage.getItem(WINDOW_ID_KEY);
     if (typeof assigned === 'string' && assigned.trim()) {
       id = assigned.trim().slice(0, 128);

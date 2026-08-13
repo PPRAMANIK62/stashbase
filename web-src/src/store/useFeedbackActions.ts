@@ -4,7 +4,7 @@ import {
   feedbackToasts,
   type ToastOptions,
 } from '../components/feedbackToasts';
-import type { Action, CascadeDecision, CascadePrompt } from './state';
+import type { Action, CascadeDecision, CascadePrompt, ModalRequest } from './state';
 
 type Dispatch = (action: Action) => void;
 
@@ -38,11 +38,14 @@ export function useFeedbackActions(dispatch: Dispatch) {
     });
   }, [dispatch]);
 
-  const askConfirm = useCallback((message: string): Promise<boolean> => {
+  const askConfirm = useCallback((
+    message: string,
+    opts?: Pick<ModalRequest, 'title' | 'confirmLabel' | 'destructive'>,
+  ): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
       modalResolveRef.current?.(false);
       modalResolveRef.current = resolve;
-      dispatch({ type: 'MODAL_OPEN', request: { type: 'confirm', message } });
+      dispatch({ type: 'MODAL_OPEN', request: { type: 'confirm', message, ...opts } });
     });
   }, [dispatch]);
 

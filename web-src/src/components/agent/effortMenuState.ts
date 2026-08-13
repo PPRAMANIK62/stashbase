@@ -10,6 +10,14 @@ const EFFORT_LABELS: Record<string, string> = {
   max: 'Max',
 };
 
+/** Locked like the model/scope menus — a transcript or an active turn pins
+ * the choice — with one exception: a restored Claude session stays
+ * adjustable while idle, because changing effort reconnects resuming the
+ * same native session with its history intact. */
+export function effortMenuLocked(hasTranscript: boolean, turnActive: boolean, restoredSession: boolean): boolean {
+  return turnActive || (hasTranscript && !restoredSession);
+}
+
 export function effortOptions(supported?: readonly string[]): EffortLevel[] {
   return supported?.length ? [...supported] : [...EFFORT_LEVELS];
 }

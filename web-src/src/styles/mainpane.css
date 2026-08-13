@@ -5,9 +5,8 @@
      * audio viewer chrome) styles itself with Tailwind utilities and the
      * shared ui/ primitives. This file keeps only what utilities can't
      * own: the structural `.main` shell, the tab strip (consumed raw by
-     * an Electron layout smoke), keyframe-driven overlays, the Crepe /
-     * Milkdown variable bridge, and `.doc` rendered-document
-     * typography. */
+     * an Electron layout smoke), keyframe-driven overlays, and the
+     * Crepe / Milkdown variable bridge. */
     .main {
       overflow: hidden;
       display: flex;
@@ -55,6 +54,13 @@
       background: var(--bg);
     }
     .crepe-error { flex-direction: column; color: var(--fg); }
+    /* The shell is a size container so the reading margins below track
+     * the PANE, not the window: with the Agent panel docked the document
+     * column narrows while the viewport stays wide, and a viewport media
+     * query would keep the full-width margins. */
+    .crepe-shell {
+      container-type: inline-size;
+    }
     .crepe-shell,
     /* Milkdown's frame stylesheet assigns its own variables directly on
        `.milkdown`. This bridge intentionally has higher specificity so
@@ -79,7 +85,7 @@
       --crepe-color-inverse: var(--fg);
       --crepe-color-on-inverse: var(--bg);
       --crepe-color-inline-code: var(--accent);
-      --crepe-color-error: #dc2626;
+      --crepe-color-error: var(--danger);
       --crepe-color-hover: var(--hover);
       --crepe-color-selected: color-mix(in srgb, var(--accent) 18%, var(--bg));
       --crepe-color-inline-area: var(--border);
@@ -94,11 +100,19 @@
       --crepe-shadow-2: 0 18px 44px rgba(var(--shadow-color), .28), 0 4px 12px rgba(var(--shadow-color), .18);
     }
     .crepe-shell .milkdown { min-height: 100%; background: transparent; color: var(--fg); }
-    .crepe-shell .ProseMirror {
+    /* Three-class selector on purpose: Crepe's packaged stylesheet ships
+     * `.milkdown .ProseMirror { padding: 60px 120px }` in the lazy chunk,
+     * which loads AFTER this file — equal specificity would let the
+     * package win and blow the gutters out to 120px. */
+    .crepe-shell .milkdown .ProseMirror {
       max-width: 820px;
       min-height: calc(100vh - 150px);
       margin: 0 auto;
-      padding: 28px 48px 88px;
+      /* Side gutters are container-relative (the shell is a size
+       * container): ~6% of the pane, clamped to 20-48px, so a docked
+       * Agent panel narrows the margins with the pane instead of
+       * keeping the full-width 48px inset. Vertical padding is fixed. */
+      padding: 28px clamp(20px, 6cqi, 48px) 88px;
       box-sizing: border-box;
       color: var(--fg);
       font-size: var(--reading-font-size);
@@ -117,8 +131,9 @@
     .crepe-shell .ProseMirror table { display: block; max-width: 100%; overflow-x: auto; }
     .crepe-shell .ProseMirror pre { border: 1px solid var(--border); border-radius: var(--radius-container); }
     /* Crepe's default divider is a solid block bar that reads far too heavy
-     * in a reading surface. Neutralize it to the same true-0.5px hairline as
-     * the reading view's `.doc hr` (see that rule for the scaleY trick). */
+     * in a reading surface. Neutralize it to a true 0.5px hairline: paint a
+     * 1px block and halve it with scaleY(0.5) — one physical pixel on Retina
+     * (same treatment as chat.css's `.agent-prose hr`). */
     .crepe-shell .ProseMirror hr {
       border: 0;
       height: 1px;
@@ -235,9 +250,28 @@
     .crepe-shell .ProseMirror blockquote.stashbase-alert-important { --alert-color: #7652d6; }
     .crepe-shell .ProseMirror blockquote.stashbase-alert-warning { --alert-color: #b77900; }
     .crepe-shell .ProseMirror blockquote.stashbase-alert-caution { --alert-color: #c33030; }
-    .crepe-readonly .crepe-block-handle { display: none; }
-    @media (max-width: 720px) {
-      .crepe-shell .ProseMirror { padding: 22px 20px 72px; }
+    /* Crepe names the handle element/class `milkdown-block-handle` (there
+     * is no `crepe-` prefixed variant). */
+    .crepe-readonly .milkdown-block-handle { display: none; }
+    /* EDITABLE gutters stay at the full 48px instead of the reading
+     * ramp: the left gutter seats the hover block handle, which reading
+     * mode never shows. The full two-tile handle (add + drag, 66px + a
+     * 16px float gap) only fits once the column's auto-margins kick in
+     * (pane ≳ 960px); below that the add tile yields (next rule). */
+    .crepe-shell:not(.crepe-readonly) .milkdown .ProseMirror {
+      padding-inline: 48px;
+    }
+    /* Under pane pressure the handle's ADD tile yields — typing "/"
+     * still inserts blocks — so the drag tile (32px + gap) fits the
+     * 48px editable gutter instead of clipping at the pane edge. */
+    @container (max-width: 960px) {
+      .crepe-shell:not(.crepe-readonly) .milkdown-block-handle .operation-item:first-child {
+        display: none;
+      }
+    }
+    /* Below the fluid-gutter floor the vertical rhythm tightens too. */
+    @container (max-width: 480px) {
+      .crepe-shell .milkdown .ProseMirror { padding-top: 22px; padding-bottom: 72px; }
     }
 
     /* Preparation-status pulse — the dot itself is utility-styled in
@@ -305,8 +339,8 @@
       min-width: 60px;
       border: 1px solid transparent;
       border-bottom: none;
-      border-top-left-radius: 6px;
-      border-top-right-radius: 6px;
+      border-top-left-radius: var(--radius-control);
+      border-top-right-radius: var(--radius-control);
       background: transparent;
       color: var(--muted);
       cursor: pointer;
@@ -362,7 +396,7 @@
       flex-shrink: 0;
     }
     .tab-close:hover {
-      background: var(--border);
+      background: var(--hover);
       color: var(--fg);
     }
     .tab-new {
@@ -375,7 +409,7 @@
       border: 0;
       background: transparent;
       color: var(--muted);
-      font-size: calc(18px * var(--ui-scale));
+      font-size: calc(16px * var(--ui-scale));
       line-height: 1;
       border-radius: var(--radius-ui);
       cursor: pointer;
@@ -387,120 +421,6 @@
     .tab-new:hover {
       background: var(--hover);
       color: var(--fg);
-    }
-
-    /* Rendered-document typography (content exemption) ---------------- */
-    .doc {
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 0 32px;
-      font-size: calc(15px * var(--ui-scale));
-      line-height: 1.7;
-    }
-
-    /* Typora-ish markdown */
-    .doc h1,
-    .doc h2,
-    .doc h3,
-    .doc h4 {
-      font-weight: 600;
-      line-height: 1.25;
-      margin: 1.8em 0 .6em;
-    }
-
-    .doc h1 {
-      font-size: calc(28px * var(--ui-scale));
-    }
-
-    .doc h2 {
-      font-size: calc(22px * var(--ui-scale));
-    }
-
-    .doc h3 {
-      font-size: calc(18px * var(--ui-scale));
-    }
-
-    .doc h4 {
-      font-size: calc(15px * var(--ui-scale));
-    }
-
-    .doc p {
-      margin: .8em 0;
-    }
-
-    .doc a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .doc a:hover {
-      text-decoration: underline;
-    }
-
-    .doc code {
-      background: var(--pane);
-      border-radius: var(--radius-xs);
-      padding: 1px 5px;
-      font: 12.5px/1 var(--font-mono);
-    }
-
-    .doc pre {
-      background: var(--pane);
-      border-radius: var(--radius-container);
-      padding: 14px 16px;
-      overflow-x: auto;
-      margin: 1em 0;
-    }
-
-    .doc pre code {
-      background: none;
-      padding: 0;
-      font-size: calc(12.5px * var(--ui-scale));
-      line-height: 1.55;
-    }
-
-    .doc blockquote {
-      border-left: 3px solid var(--border);
-      padding-left: 14px;
-      color: var(--muted);
-      margin: 1em 0;
-    }
-
-    .doc ul,
-    .doc ol {
-      padding-left: 1.6em;
-    }
-
-    .doc li {
-      margin: .25em 0;
-    }
-
-    /* A section divider is a whisper, not a rule. Below 1px a plain border
-     * either rounds back up or vanishes, so paint a 1px block and halve it
-     * with scaleY(0.5): a true 0.5px line — one physical pixel on a Retina
-     * display, the thinnest a screen can draw. Static transform, so reduced
-     * motion is unaffected. Both themes re-resolve via --border. */
-    .doc hr {
-      border: 0;
-      height: 1px;
-      background: color-mix(in srgb, var(--border) 85%, transparent);
-      transform: scaleY(0.5);
-      margin: 2em 0;
-    }
-
-    .doc table {
-      border-collapse: collapse;
-      margin: 1em 0;
-    }
-
-    .doc th,
-    .doc td {
-      border: 1px solid var(--border);
-      padding: 6px 10px;
-    }
-
-    .doc img {
-      max-width: 100%;
     }
 
     .drop-veil {
@@ -520,76 +440,6 @@
     .drop-veil.hot {
       display: flex;
     }
-
-    /* Folder-home migration: per-conflict resolver. One row per colliding
-     * folder name + a segmented Keep both / Skip / Overwrite control. */
-    .migrate-conflict-list {
-      display: flex;
-      flex-direction: column;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-container);
-      overflow: hidden;
-      margin: 4px 0;
-      max-height: 320px;
-      overflow-y: auto;
-    }
-    .migrate-conflict-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 12px;
-    }
-    .migrate-conflict-row + .migrate-conflict-row {
-      border-top: 1px solid var(--border);
-    }
-    .migrate-conflict-name {
-      font-size: calc(13px * var(--ui-scale));
-      font-weight: 500;
-      color: var(--fg);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .migrate-choices {
-      display: inline-flex;
-      flex-shrink: 0;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-container);
-      overflow: hidden;
-    }
-    .migrate-choice {
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      font: inherit;
-      font-size: calc(12px * var(--ui-scale));
-      padding: 5px 10px;
-      cursor: pointer;
-      transition: background 0.1s, color 0.1s;
-    }
-    .migrate-choice + .migrate-choice {
-      border-left: 1px solid var(--border);
-    }
-    .migrate-choice:hover {
-      background: var(--hover);
-      color: var(--fg);
-    }
-    .migrate-choice.active {
-      background: rgba(var(--accent-rgb), 0.10);
-      color: var(--accent);
-      font-weight: 600;
-    }
-    .migrate-choice.overwrite.active {
-      background: rgba(220, 38, 38, 0.10);
-      color: var(--danger);
-    }
-
-    /* Screen-recording status — a coloured, bold state word leading an
-     * otherwise-muted hint line (no heavy card; matches the flat style
-     * of the other settings tabs). */
-    .capture-state-ok { color: var(--accent); font-weight: 600; }
-    .capture-state-warn { color: #b45309; font-weight: 600; }
 
     .transcription-model-list {
       display: grid;
@@ -615,10 +465,12 @@
     .transcription-model-action { min-width: 104px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
     .transcription-model-error { grid-column: 1 / -1; }
 
+    /* The one progress recipe (matches the JSX bars: 6px capsule,
+     * muted/hover track, accent fill). */
     .transcription-download-progress {
       position: relative;
       width: 104px;
-      height: 7px;
+      height: 6px;
       overflow: hidden;
       border-radius: 999px;
       background: var(--hover);

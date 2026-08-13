@@ -12,20 +12,19 @@ import {
 // worker for both dev and the packaged build, unlike a bare `?url`.
 import PdfWorker from '../lib/pdfWorker?worker';
 import { api, errorMessage, versionedAssetUrl } from '../api';
-import { preparationWaitCopy } from '../preparation-copy.ts';
+import { preparationWaitCopy } from '../preparationCopy.ts';
+import { useLatestRef } from '../hooks/useLatestRef';
 import { useApp } from '../store/AppContext';
 import { getFileReadiness } from '../store/fileReadiness';
+import { makePdfFindController, scanPages } from './pdfFindController';
 import {
   cleanPdfSearchText,
   currentPdfPageForViewport,
   exactPageForHighlight,
   findPdfChunkMatch,
-  flattenPageText,
-  foldPdfText,
   highlightRectsForMatch,
   yRatioForIndex,
   type FlatPage,
-  type PdfHighlightRect,
   type PdfPageHighlight,
 } from './pdfText';
 
@@ -72,8 +71,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const { consumePendingHighlight, registerFindController, updateTabPdfPage } = actions;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const currentRef = useRef({ folderPath: state.folderPath, name });
-  currentRef.current = { folderPath: state.folderPath, name };
+  const currentRef = useLatestRef({ folderPath: state.folderPath, name });
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(activeTab?.pdfPage ?? 1);
@@ -87,27 +85,29 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const readiness = getFileReadiness(state, name);
   const failure = readiness.preparationFailure;
   const conversionProgress = state.conversionProgress[name];
-  const chromeStatus = failure && showConversionBanner
-    ? {
-        kind: 'error' as const,
+
+  function getChromeStatus(): { kind: 'error' | 'working'; text: string } | null {
+    if (failure && showConversionBanner) {
+      return {
+        kind: 'error',
         text: retryError
           ? 'This PDF is not searchable. Reprocess could not start. Try again.'
           : 'This PDF is not searchable. Reprocess it to try again.',
-      }
-    : showConversionBanner && conversionProgress
-      ? {
-          kind: 'working' as const,
-          text: conversionProgress.phase === 'queued'
-            ? preparationWaitCopy('searchable-text', conversionProgress.tasksAhead)
-            : conversionProgress.phase === 'yielded'
-              ? preparationWaitCopy('searchable-text', conversionProgress.tasksAhead)
-            : conversionProgress.phase === 'indexing'
-              ? 'Indexing searchable text…'
-              : conversionProgress.currentPage
-                ? `Reading page ${conversionProgress.currentPage}…`
-                : 'Preparing searchable text…',
-        }
-      : null;
+      };
+    }
+    if (!showConversionBanner || !conversionProgress) return null;
+    if (conversionProgress.phase === 'queued' || conversionProgress.phase === 'yielded') {
+      return { kind: 'working', text: preparationWaitCopy('searchable-text', conversionProgress.tasksAhead) };
+    }
+    if (conversionProgress.phase === 'indexing') {
+      return { kind: 'working', text: 'Indexing searchable text…' };
+    }
+    if (conversionProgress.currentPage) {
+      return { kind: 'working', text: `Reading page ${conversionProgress.currentPage}…` };
+    }
+    return { kind: 'working', text: 'Preparing searchable text…' };
+  }
+  const chromeStatus = getChromeStatus();
   const retryInProgress = retryBusy || retryStarted;
   // Sampled page 1 viewport at 1× scale. Used as the per-page
   // placeholder height so the lazy-rendered pages reserve the
@@ -127,17 +127,43 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     [name, sourceVersion, sourceFolder],
   );
 
-  function scrollToPage(pageNumber: number, behavior: ScrollBehavior = 'smooth') {
+  /** Single scroll owner for every jump-the-viewer path: page jumps, chunk-
+   *  highlight landings, and find-match navigation. `anchor` is the fraction
+   *  of the viewport height kept above the landing spot; `yRatio` (0 = page
+   *  top, 1 = bottom) picks the spot inside the page. Passing `highlight`
+   *  (null included) swaps the highlight overlay; omitting it leaves the
+   *  overlay untouched. Returns false — and changes nothing — when the page
+   *  element is not in the DOM. */
+  function scrollToTarget(
+    page: number,
+    {
+      yRatio = 0,
+      anchor,
+      behavior = 'smooth',
+      highlight,
+    }: {
+      yRatio?: number;
+      anchor: number;
+      behavior?: ScrollBehavior;
+      highlight?: PdfPageHighlight | null;
+    },
+  ): boolean {
     const root = containerRef.current;
-    if (!root || numPages <= 0) return;
-    const targetPage = Math.max(1, Math.min(numPages, Math.round(pageNumber)));
-    const target = root.querySelector(`[data-page="${targetPage}"]`) as HTMLElement | null;
-    if (!target) return;
+    const target = root?.querySelector(`[data-page="${page}"]`) as HTMLElement | null;
+    if (!root || !target) return false;
+    if (highlight !== undefined) setPageHighlight(highlight);
+    setCurrentPage(page);
     root.scrollTo({
-      top: Math.max(0, target.offsetTop - root.clientHeight * 0.08),
+      top: Math.max(0, target.offsetTop + yRatio * target.offsetHeight - root.clientHeight * anchor),
       behavior,
     });
-    setCurrentPage(targetPage);
+    return true;
+  }
+
+  function scrollToPage(pageNumber: number, behavior: ScrollBehavior = 'smooth') {
+    if (numPages <= 0) return;
+    const targetPage = Math.max(1, Math.min(numPages, Math.round(pageNumber)));
+    if (!scrollToTarget(targetPage, { anchor: 0.08, behavior })) return;
     // Direct navigation must persist before the next pointer/keyboard event.
     // Waiting for the passive currentPage effect lets an immediate tab switch
     // unmount the viewer before the requested page reaches tab state.
@@ -320,155 +346,62 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     if (!cleaned) { consumePendingHighlight(); return; }
 
     void (async () => {
-      let best: { page: number; idx: number; length: number; score: number; fp: FlatPage } | null = null;
-      for (let i = 0; i < numPages; i++) {
-        if (cancelled) return;
-        try {
-          const page = await doc.getPage(i + 1);
-          const fp = await flattenPageText(page);
-          const match = findPdfChunkMatch(fp, pendingHighlight.chunkText);
-          if (!match) continue;
-          if (!best || match.score > best.score) {
-            best = { page: i + 1, idx: match.idx, length: match.length, score: match.score, fp };
-            if (match.score >= 800) break;
-          }
-        } catch { /* skip page */ }
-      }
-      if (cancelled || !best) {
+      type ChunkMatch = { page: number; idx: number; length: number; score: number; fp: FlatPage };
+      // Widened initializer: TS cannot see the closure assignment below,
+      // so a bare `null` would narrow every later read to `never`.
+      let best = null as ChunkMatch | null;
+      await scanPages(doc, numPages, (page, fp) => {
+        const match = findPdfChunkMatch(fp, pendingHighlight.chunkText);
+        if (!match) return;
+        if (!best || match.score > best.score) {
+          best = { page, idx: match.idx, length: match.length, score: match.score, fp };
+          if (match.score >= 800) return false;
+        }
+      }, () => cancelled);
+      const found = best;
+      if (cancelled || !found) {
         if (!cancelled) {
           const fallbackPage = exactPageForHighlight(pendingHighlight, numPages);
-          const root = containerRef.current;
-          const target = fallbackPage
-            ? root?.querySelector(`[data-page="${fallbackPage}"]`) as HTMLElement | null
-            : null;
-          if (root && target && fallbackPage) {
-            setPageHighlight(null);
-            setCurrentPage(fallbackPage);
-            root.scrollTo({
-              top: Math.max(0, target.offsetTop - root.clientHeight * 0.12),
-              behavior: 'smooth',
-            });
+          if (fallbackPage && scrollToTarget(fallbackPage, { anchor: 0.12, highlight: null })) {
             consumePendingHighlight();
           }
         }
         return;
       }
-      const yRatio = yRatioForIndex(best.fp, best.idx);
-      const rects = highlightRectsForMatch(best.fp, best.idx, best.length);
-      setPageHighlight(rects.length > 0 ? { page: best.page, rects } : null);
-      setCurrentPage(best.page);
-      const root = containerRef.current;
-      const target = root?.querySelector(`[data-page="${best.page}"]`) as HTMLElement | null;
-      if (root && target) {
-        const renderedHeight = target.offsetHeight;
-        const desiredScroll = target.offsetTop
-          + yRatio * renderedHeight
-          - root.clientHeight * 0.3;
-        root.scrollTo({ top: Math.max(0, desiredScroll), behavior: 'smooth' });
-      }
+      const yRatio = yRatioForIndex(found.fp, found.idx);
+      const rects = highlightRectsForMatch(found.fp, found.idx, found.length);
+      scrollToTarget(found.page, {
+        yRatio,
+        anchor: 0.3,
+        highlight: rects.length > 0 ? { page: found.page, rects } : null,
+      });
       consumePendingHighlight();
     })();
     return () => { cancelled = true; };
   }, [doc, numPages, pendingHighlight, consumePendingHighlight]);
 
-  // FindBar integration — registers a Cmd+F-driven controller so the
-  // user can search PDFs the same way they search MD / HTML / code.
-  // The controller scans pdfjs text content across all pages, builds
-  // an in-memory list of match positions, and jumps to each one on
-  // next / prev. No overlay or per-match highlight (pdfjs canvas
-  // rendering doesn't host DOM-selectable spans) — the FindBar's
-  // "N of M" counter + scroll-on-jump carries the navigation; the
-  // user's eye picks the match on the page.
+  // FindBar integration — registers a Cmd+F-driven controller so the user
+  // can search PDFs the same way they search MD / HTML / code. The match
+  // scan and navigation state live in pdfFindController; this effect only
+  // wires its callbacks to viewer scroll/highlight state and tears the
+  // registration down with the document.
   useEffect(() => {
     if (!doc) return;
-    let cancelled = false;
-    type PdfMatch = { page: number; yRatio: number; rects: PdfHighlightRect[] };
-    const state: { matches: PdfMatch[]; current: number } = { matches: [], current: 0 };
-
-    function escapeRegExp(s: string): string {
-      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-    function scrollTo(m: PdfMatch) {
-      const root = containerRef.current;
-      const target = root?.querySelector(`[data-page="${m.page}"]`) as HTMLElement | null;
-      if (!root || !target) return;
-      const rendered = target.offsetHeight;
-      const desired = target.offsetTop + m.yRatio * rendered - root.clientHeight * 0.3;
-      setPageHighlight(m.rects.length > 0 ? { page: m.page, rects: m.rects } : null);
-      setCurrentPage(m.page);
-      root.scrollTo({ top: Math.max(0, desired), behavior: 'smooth' });
-    }
-    async function rebuild(query: string, wholeWord: boolean, caseSensitive: boolean): Promise<void> {
-      state.matches = [];
-      state.current = 0;
-      const needle = foldPdfText(query).trim();
-      if (!needle) return;
-      const re = wholeWord
-        ? new RegExp(`\\b${escapeRegExp(needle)}\\b`, caseSensitive ? 'g' : 'gi')
-        : null;
-      for (let i = 0; i < numPages; i++) {
-        if (cancelled) return;
-        try {
-          const page = await doc!.getPage(i + 1);
-          const fp = await flattenPageText(page);
-          const flat = fp.flat;
-          function emit(idx: number, length: number) {
-            state.matches.push({
-              page: i + 1,
-              yRatio: yRatioForIndex(fp, idx),
-              rects: highlightRectsForMatch(fp, idx, length),
-            });
-          }
-          if (re) {
-            re.lastIndex = 0;
-            let m: RegExpExecArray | null;
-            while ((m = re.exec(flat)) !== null) {
-              emit(m.index, m[0].length);
-              if (re.lastIndex === m.index) re.lastIndex += 1;
-            }
-          } else {
-            const needleCmp = caseSensitive ? needle : needle.toLowerCase();
-            const flatCmp = caseSensitive ? flat : flat.toLowerCase();
-            let from = 0;
-            while (true) {
-              const idx = flatCmp.indexOf(needleCmp, from);
-              if (idx === -1) break;
-              emit(idx, needle.length);
-              from = idx + needleCmp.length;
-            }
-          }
-        } catch { /* skip page */ }
-      }
-    }
-
-    registerFindController({
-      setQuery: async (q, { wholeWord, caseSensitive }) => {
-        await rebuild(q, wholeWord, caseSensitive);
-        if (state.matches.length === 0) return { current: 0, total: 0 };
-        scrollTo(state.matches[0]);
-        return { current: 1, total: state.matches.length };
+    const { controller, dispose } = makePdfFindController({
+      doc,
+      numPages,
+      onActiveMatch: (match) => {
+        scrollToTarget(match.page, {
+          yRatio: match.yRatio,
+          anchor: 0.3,
+          highlight: match.rects.length > 0 ? { page: match.page, rects: match.rects } : null,
+        });
       },
-      next: () => {
-        if (state.matches.length === 0) return { current: 0, total: 0 };
-        state.current = (state.current + 1) % state.matches.length;
-        scrollTo(state.matches[state.current]);
-        return { current: state.current + 1, total: state.matches.length };
-      },
-      prev: () => {
-        if (state.matches.length === 0) return { current: 0, total: 0 };
-        state.current = (state.current - 1 + state.matches.length) % state.matches.length;
-        scrollTo(state.matches[state.current]);
-        return { current: state.current + 1, total: state.matches.length };
-      },
-      close: () => {
-        state.matches = [];
-        state.current = 0;
-        setPageHighlight(null);
-      },
+      onClose: () => setPageHighlight(null),
     });
-
+    registerFindController(controller);
     return () => {
-      cancelled = true;
+      dispose();
       registerFindController(null);
     };
   }, [doc, numPages, registerFindController]);
@@ -508,7 +441,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
      * both jobs. `box-border` because Preflight is off here, so the
      * border would otherwise grow the pane past its row. */
     <div className="relative box-border flex h-full w-full flex-col items-center overflow-auto border-t border-border bg-pane" ref={containerRef}>
-      {error && <div className="p-4 text-base text-status-danger">Failed to open PDF: {error}</div>}
+      {error && <div className="p-4 text-base text-destructive">Failed to open PDF: {error}</div>}
       {!error && !doc && <div className="p-4 text-base text-muted-foreground">Loading PDF…</div>}
       <PdfChromePortal
         scale={scale}
@@ -651,7 +584,7 @@ function PdfChromePortal({
       <div
         className={
           'flex min-w-0 flex-1 items-center gap-1.5 leading-tight' +
-          (status?.kind === 'error' ? ' text-status-danger' : ' text-muted-foreground')
+          (status?.kind === 'error' ? ' text-destructive' : ' text-muted-foreground')
         }
         role="status"
       >

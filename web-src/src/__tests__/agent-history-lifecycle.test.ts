@@ -115,12 +115,12 @@ test('restored Claude effort and native identity survive an idle effort reconnec
   let resumed = new URL(HistoryWebSocket.instances[1]!.url);
   assert.equal(resumed.searchParams.get('resume'), 'native-1');
   assert.equal(resumed.searchParams.get('effort'), 'max');
-  assert.equal(renderer.root.findByType(AgentComposer).props.effort, 'max');
-  assert.equal(renderer.root.findByType(AgentComposer).props.effortLocked, false);
+  assert.equal(renderer.root.findByType(AgentComposer).props.effort.level, 'max');
+  assert.equal(renderer.root.findByType(AgentComposer).props.effort.locked, false);
   assert.equal(renderer.root.findByType(MessageList).props.blocks.length, 2);
 
   await act(async () => { HistoryWebSocket.instances[1]!.event({ t: 'ready' }); });
-  await act(async () => { renderer.root.findByType(AgentComposer).props.onSetEffort('high'); });
+  await act(async () => { renderer.root.findByType(AgentComposer).props.effort.onSet('high'); });
   assert.equal(HistoryWebSocket.instances.length, 3);
   resumed = new URL(HistoryWebSocket.instances[2]!.url);
   assert.equal(resumed.searchParams.get('resume'), 'native-1');
@@ -136,15 +136,15 @@ test('restored Claude effort and native identity survive an idle effort reconnec
     dispatchFromTest({ type: 'CHAT_RESUME_REQUEST', resume: { agent: 'claude', sessionId: 'native-2', folder: '/workspace' } });
   });
   const inherited = renderer.root.findByType(AgentComposer).props;
-  assert.equal(inherited.effort, undefined);
-  assert.equal(inherited.effortInherited, true);
-  assert.equal(inherited.effortLocked, false);
+  assert.equal(inherited.effort.level, undefined);
+  assert.equal(inherited.effort.inherited, true);
+  assert.equal(inherited.effort.locked, false);
   resumed = new URL(HistoryWebSocket.instances.at(-1)!.url);
   assert.equal(resumed.searchParams.get('resume'), 'native-2');
   assert.equal(resumed.searchParams.get('effort'), null);
 
   await act(async () => { HistoryWebSocket.instances.at(-1)!.event({ t: 'ready' }); });
-  await act(async () => { renderer.root.findByType(AgentComposer).props.onSetEffort('max'); });
+  await act(async () => { renderer.root.findByType(AgentComposer).props.effort.onSet('max'); });
   resumed = new URL(HistoryWebSocket.instances.at(-1)!.url);
   assert.equal(resumed.searchParams.get('resume'), 'native-2');
   assert.equal(resumed.searchParams.get('effort'), 'max');

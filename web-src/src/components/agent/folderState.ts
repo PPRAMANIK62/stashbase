@@ -18,6 +18,8 @@
  *   what the user saw instead of silently following the window.
  */
 
+import { basename } from '../../lib/paths';
+
 /** Explicit chat scope: one library folder, or the whole library. */
 export type ChatScope = { kind: 'library' } | { kind: 'folder'; path: string };
 
@@ -276,30 +278,16 @@ export function folderMenuLocked(hasTranscript: boolean, turnActive: boolean, re
   return hasTranscript || turnActive || resumedSession;
 }
 
-export function folderDisplayName(path: string): string {
-  const segments = path.split('/').filter(Boolean);
-  return segments.pop() || path;
-}
-
 /** Pill / header display name for a scope. The library scope is always
- * called "Library" in UI copy. */
+ * called "Library" in UI copy; a folder scope shows its `basename`
+ * (path display helpers live in `lib/paths`). */
 export function scopeDisplayName(scope: ChatScope): string {
-  return scope.kind === 'library' ? 'Library' : folderDisplayName(scope.path);
-}
-
-
-/** Shorten an absolute path for menu detail text: `/Users/foo/Notes` →
- * `~/Notes` when it lives under the user's home dir. */
-export function shortenFolderPath(abs: string, homeDir: string): string {
-  if (!homeDir) return abs;
-  if (abs === homeDir) return '~';
-  if (abs.startsWith(homeDir + '/')) return '~/' + abs.slice(homeDir.length + 1);
-  return abs;
+  return scope.kind === 'library' ? 'Library' : basename(scope.path);
 }
 
 export function scopePillAriaLabel(scope: ChatScope, locked: boolean): string {
   const base = scope.kind === 'library'
     ? 'Session scope: Library'
-    : `Session folder: ${folderDisplayName(scope.path)}`;
+    : `Session folder: ${basename(scope.path)}`;
   return locked ? `${base} — set for this conversation` : base;
 }

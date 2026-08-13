@@ -5,7 +5,7 @@ import type { LibrarySearchPrefill } from '../librarySearch';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { PICKER_VEIL_CLASS } from './pickerChrome';
 
-const LibrarySearchDialog = lazyWithRetry(() => import('./LibrarySearchDialog'));
+const ManagedLibrarySearch = lazyWithRetry(() => import('./ManagedLibrarySearch'));
 
 export const OPEN_LIBRARY_SEARCH_EVENT = 'stashbase-open-library-search';
 
@@ -60,7 +60,7 @@ export function LibrarySearch() {
   return (
     <LazyLoadBoundary className={loadingClass} label="Search" resetKey={String(request.id)}>
       <Suspense fallback={<div className={loadingClass}>Opening search…</div>}>
-        <LibrarySearchDialog key={request.id} prefill={request.prefill} onClose={close} />
+        <ManagedLibrarySearch key={request.id} prefill={request.prefill} onClose={close} />
       </Suspense>
     </LazyLoadBoundary>
   );

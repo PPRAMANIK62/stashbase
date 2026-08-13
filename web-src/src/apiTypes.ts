@@ -110,6 +110,9 @@ export interface SessionInfo {
   lastModified: number;
   cwd?: string;
   gitBranch?: string;
+  /** `scope=all` listings only: the member folder this session belongs
+   *  to; absent = the library bucket. */
+  folder?: string;
 }
 
 /** One block of a session's replayed transcript. Structurally a subset of

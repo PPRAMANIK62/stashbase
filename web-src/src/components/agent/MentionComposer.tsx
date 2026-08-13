@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef } from 'react';
 import { Compartment, EditorState, RangeSet, RangeValue, StateEffect, StateField } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, invertedEffects } from '@codemirror/commands';
 import { Decoration, type DecorationSet, EditorView, keymap, placeholder, WidgetType } from '@codemirror/view';
+import { basename } from '../../lib/paths';
 import { mentionKeyAction } from './mentionKeys';
 import { handleComposerPaste } from './clipboardAttachments';
 
@@ -41,7 +42,7 @@ class MentionWidget extends WidgetType {
   toDOM() {
     const token = document.createElement('span');
     token.className = this.kind === 'skill' ? 'agent-skill-mention' : 'agent-file-mention';
-    token.textContent = this.kind === 'skill' ? `/${this.path}` : this.path.split('/').pop() ?? this.path;
+    token.textContent = this.kind === 'skill' ? `/${this.path}` : basename(this.path);
     token.title = this.path;
     token.setAttribute('aria-label', this.kind === 'skill' ? `Selected skill: ${this.path}` : `File mention: ${this.path}`);
     return token;

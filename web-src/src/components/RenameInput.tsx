@@ -74,7 +74,7 @@ export function RenameInput({
 
   return (
     <span
-      className="flex min-w-0 flex-1 items-center rounded-sm border border-accent bg-card text-base"
+      className="flex min-w-0 flex-1 items-center rounded-md border border-accent bg-background text-base"
       onClick={(e) => e.stopPropagation()}
     >
       <input
