@@ -10,14 +10,43 @@ export function settingsButton(page: Page): Locator {
   return page.getByRole('button', { name: 'Settings', exact: true });
 }
 
-export function folderButton(page: Page, name: string): Locator {
-  return page.locator('#sidebar-files-section').getByRole('button', { name, exact: true });
+/** Titlebar folder switcher trigger — the one home for moving between
+ *  library folders. Its accessible name is a constant aria-label; the
+ *  visible label is the active folder's name ("Library" with none). */
+export function folderSwitcherTrigger(page: Page): Locator {
+  return page.getByRole('button', { name: 'Switch folder' });
 }
 
-export async function ensureLibraryExpanded(page: Page): Promise<void> {
-  const toggle = page.getByRole('button', { name: 'Library', exact: true });
-  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
-  await page.locator('#sidebar-files-section').waitFor({ state: 'visible' });
+function switcherMenu(page: Page): Locator {
+  return page.getByRole('menu');
+}
+
+export async function openFolderSwitcher(page: Page): Promise<void> {
+  await folderSwitcherTrigger(page).click();
+  await switcherMenu(page).waitFor({ state: 'visible' });
+}
+
+export async function closeFolderSwitcher(page: Page): Promise<void> {
+  await page.keyboard.press('Escape');
+  await switcherMenu(page).waitFor({ state: 'hidden' });
+}
+
+/** A library member row inside the OPEN switcher menu. The menuitem's
+ *  accessible name is the folder basename followed by its shortened
+ *  path detail, so match on the leading basename only. */
+export function switcherFolderItem(page: Page, name: string): Locator {
+  return page.getByRole('menuitem', { name: new RegExp(`^${escapeForRegExp(name)}`) });
+}
+
+/** Switch this window's folder in place through the titlebar switcher. */
+export async function openLibraryFolder(page: Page, name: string): Promise<void> {
+  await openFolderSwitcher(page);
+  await switcherFolderItem(page, name).click();
+  await switcherMenu(page).waitFor({ state: 'hidden' });
+}
+
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export function fileTreeRow(page: Page, relativePath: string): Locator {

@@ -3,7 +3,7 @@ import type { Page } from 'playwright';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { appShell, folderButton, settingsButton } from '../support/locators.ts';
+import { appShell, openLibraryFolder, settingsButton } from '../support/locators.ts';
 
 async function expectChatExpanded(page: Page): Promise<void> {
   const chat = page.getByRole('complementary', { name: 'Agent chat' });
@@ -36,7 +36,7 @@ test('user launches an existing library with Chat expanded', async ({}, testInfo
   try {
     app = await launchApp(fixture, testInfo);
     await expectChatExpanded(app.page);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await expectChatExpanded(app.page);
     app.errors.assertNone();
   } finally {

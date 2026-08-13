@@ -11,7 +11,7 @@ import {
   dismissEmbeddingKeyPrompt,
   documentTab,
   fileTreeRow,
-  folderButton,
+  openLibraryFolder,
   renameInput,
   saveStatus,
 } from '../support/locators.ts';
@@ -26,7 +26,7 @@ test('user can create, edit, save, navigate away, relaunch, and reopen a note', 
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     await app.page.getByTitle('New note in project-alpha').click();
@@ -52,7 +52,7 @@ test('user can create, edit, save, navigate away, relaunch, and reopen a note', 
     await expect(activeMarkdownEditor(app.page)).toContainText('Persisted through the real editor');
 
     app = await app.relaunch();
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, NOTE_NAME).click();
     await expect(activeMarkdownEditor(app.page)).toBeVisible({ timeout: 30_000 });

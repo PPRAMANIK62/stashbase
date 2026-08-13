@@ -3,7 +3,7 @@ import type { Route } from 'playwright';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { folderButton } from '../support/locators.ts';
+import { openLibraryFolder } from '../support/locators.ts';
 import { primaryKey } from './journey-helpers.ts';
 
 test('semantic search UI renders deterministic loading, grouped, empty, and error states', async ({}, testInfo) => {
@@ -55,7 +55,7 @@ test('semantic search UI renders deterministic loading, grouped, empty, and erro
       });
     });
 
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     const search = app.page.getByRole('dialog', { name: 'Search library' });
     const input = search.getByRole('combobox');

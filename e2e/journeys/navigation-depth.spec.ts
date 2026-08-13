@@ -7,10 +7,13 @@ import {
   activeDocumentTab,
   dismissEmbeddingKeyPrompt,
   documentTab,
+  closeFolderSwitcher,
   fileTreeRow,
-  folderButton,
+  openFolderSwitcher,
+  openLibraryFolder,
   quickOpenDialog,
   quickOpenInput,
+  switcherFolderItem,
 } from '../support/locators.ts';
 import { primaryKey } from './journey-helpers.ts';
 
@@ -23,7 +26,7 @@ test('persistent tabs prevent duplicates, reuse a blank tab, and expose MRU Edit
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
     await fileTreeRow(app.page, 'Second Note.md').click();
@@ -59,7 +62,7 @@ test('Quick Open honors editor recency and command availability while Settings o
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
     await fileTreeRow(app.page, 'Second Note.md').click();
@@ -98,29 +101,79 @@ test('Quick Open honors editor recency and command availability while Settings o
   }
 });
 
+// Intent preserved: favoriting pins a member ahead of the rest of the
+// library list (now the switcher menu's Favorites section before its
+// Library section), and removing the ACTIVE folder returns the window
+// Home without deleting anything on disk. Favorite/remove management
+// lives only on the active folder header's "More actions" menu now, so
+// each folder is favorited or removed while it is the window's folder.
 test('Favorites pin above recents and removing the active folder returns to Home without deleting it', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   const preserved = `${fixture.workspaces.projectA}/Welcome.md`;
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-beta');
     await dismissEmbeddingKeyPrompt(app.page);
-    await app.page.getByRole('button', { name: 'Library', exact: true }).click();
     await openFolderMenu(app, 'project-beta');
     await app.page.getByRole('menuitem', { name: 'Add to Favorites' }).click();
-    const library = app.page.locator('#sidebar-files-section');
-    await expect(library.getByRole('button', { name: 'project-beta', exact: true })).toHaveCount(1);
-    const labels = await library.locator('button[title]').allTextContents();
-    expect(labels[0]?.trim()).toBe('project-beta');
+
+    // Ordering surfaces in the switcher menu: a "Favorites" heading with
+    // project-beta appears before the "Library" heading with the
+    // non-favorite member project-alpha.
+    await openFolderSwitcher(app.page);
+    await expect(switcherFolderItem(app.page, 'project-beta')).toBeVisible();
+    const entries = await app.page.getByRole('menu')
+      .locator('[role="presentation"], [role="menuitem"]').allInnerTexts();
+    const indexOf = (prefix: string) => entries.findIndex((text) => text.trim().startsWith(prefix));
+    expect(indexOf('Favorites')).toBeGreaterThan(-1);
+    expect(indexOf('project-beta')).toBeGreaterThan(indexOf('Favorites'));
+    expect(indexOf('Library')).toBeGreaterThan(indexOf('project-beta'));
+    expect(indexOf('project-alpha')).toBeGreaterThan(indexOf('Library'));
+
+    // Selecting a member in the open menu switches this window in place.
+    await switcherFolderItem(app.page, 'project-alpha').click();
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
 
     await openFolderMenu(app, 'project-alpha');
     await app.page.getByRole('menuitem', { name: 'Remove from Library' }).click();
     await app.page.getByRole('dialog', { name: 'Remove from Library?' }).getByRole('button', { name: 'Remove' }).click();
     await expect(app.page).toHaveTitle('StashBase');
     await expect(app.page.getByRole('button', { name: 'Select project-alpha folder root' })).toHaveCount(0);
-    await expect(folderButton(app.page, 'project-beta')).toBeVisible();
+    await expect(app.page.getByText('Pick a folder from the Library menu in the top bar.')).toBeVisible();
+    // The removed folder is gone from the switcher menu; the remaining
+    // member is still offered.
+    await openFolderSwitcher(app.page);
+    await expect(switcherFolderItem(app.page, 'project-beta')).toBeVisible();
+    await expect(switcherFolderItem(app.page, 'project-alpha')).toHaveCount(0);
+    await closeFolderSwitcher(app.page);
     expect(fs.existsSync(preserved)).toBe(true);
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+test('the active-folder header switcher lists the library and swaps the window folder in place', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'two-folders' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
+    await dismissEmbeddingKeyPrompt(app.page);
+
+    // The titlebar trigger opens the picker: add-folder actions on top,
+    // membership rows below, the current folder carrying the check.
+    await app.page.getByRole('button', { name: 'Switch folder' }).click();
+    await expect(app.page.getByRole('menuitem', { name: 'Open Folder…' })).toBeVisible();
+    await expect(app.page.getByRole('menuitem', { name: /project-alpha/ })).toBeVisible();
+
+    // Selecting another member switches THIS window's folder in place.
+    await app.page.getByRole('menuitem', { name: /project-beta/ }).click();
+    await expect(app.page).toHaveTitle('project-beta — StashBase');
+    await expect(fileTreeRow(app.page, 'Notes.md')).toBeVisible();
     app.errors.assertNone();
   } finally {
     await app?.close();

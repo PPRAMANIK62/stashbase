@@ -4,7 +4,7 @@ import { expect, type TestInfo } from '@playwright/test';
 import type { Page } from 'playwright';
 import { assertPortAvailable, launchApp, type LaunchedApp } from '../support/app.ts';
 import { createAppFixture, type AppFixture, type FixtureMembership } from '../support/fixtures.ts';
-import { dismissEmbeddingKeyPrompt, fileTreeRow } from '../support/locators.ts';
+import { dismissEmbeddingKeyPrompt, fileTreeRow, openLibraryFolder } from '../support/locators.ts';
 
 export interface VisualApp {
   app: LaunchedApp;
@@ -49,7 +49,7 @@ export async function setVisualViewport(page: Page, width: number, height: numbe
 }
 
 export async function openFixtureFolder(page: Page, folderName = 'project-alpha'): Promise<void> {
-  await page.getByRole('button', { name: folderName, exact: true }).click();
+  await openLibraryFolder(page, folderName);
   await expect(page).toHaveTitle(`${folderName} — StashBase`);
   await expect(fileTreeRow(page, 'Welcome.md')).toBeVisible();
 }

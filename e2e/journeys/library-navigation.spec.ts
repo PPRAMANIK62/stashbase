@@ -5,36 +5,46 @@ import { createAppFixture } from '../support/fixtures.ts';
 import {
   activeDocument,
   activeDocumentTab,
+  closeFolderSwitcher,
   dismissEmbeddingKeyPrompt,
   documentTab,
   fileTreeRow,
-  folderButton,
+  openFolderSwitcher,
+  openLibraryFolder,
   quickOpenDialog,
   quickOpenInput,
+  switcherFolderItem,
 } from '../support/locators.ts';
 import { seedJourneyWorkspaces } from '../fixtures/journey-workspaces.ts';
 import { primaryKey } from './journey-helpers.ts';
 
+// Intent preserved: switching the window's folder resets the workspace
+// (tabs and tree) while the whole library membership stays reachable —
+// now through the titlebar folder switcher instead of the retired
+// sidebar Library section rows.
 test('folder switching resets the workspace while library membership remains available', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   seedJourneyWorkspaces(fixture);
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
     await expect(activeDocument(app.page)).toContainText('Project Alpha');
     await expect(app.page.getByRole('tab', { name: 'Welcome.md' })).toHaveAttribute('aria-selected', 'true');
 
-    await app.page.getByRole('button', { name: 'Library', exact: true }).click();
-    await folderButton(app.page, 'project-beta').click();
+    await openLibraryFolder(app.page, 'project-beta');
     await expect(app.page).toHaveTitle('project-beta — StashBase');
     await dismissEmbeddingKeyPrompt(app.page);
     await expect(fileTreeRow(app.page, 'Notes.md')).toBeVisible();
     await expect(fileTreeRow(app.page, 'Second Note.md')).toHaveCount(0);
-    await expect(folderButton(app.page, 'project-alpha')).toBeVisible();
-    await expect(folderButton(app.page, 'project-beta')).toHaveCount(0);
+    // Membership remains available after the switch: the switcher menu
+    // lists both members (the current folder stays listed with a check).
+    await openFolderSwitcher(app.page);
+    await expect(switcherFolderItem(app.page, 'project-alpha')).toBeVisible();
+    await expect(switcherFolderItem(app.page, 'project-beta')).toBeVisible();
+    await closeFolderSwitcher(app.page);
     await expect(documentTab(app.page, 'Welcome.md')).toHaveCount(0);
     app.errors.assertNone();
   } finally {
@@ -43,12 +53,16 @@ test('folder switching resets the workspace while library membership remains ava
   }
 });
 
+// Intent preserved: document tabs persist, Quick Open and the Command
+// Palette stay keyboard-operable, and dismissing them restores focus.
+// Folder entry goes through the titlebar switcher; the flow inside the
+// workspace is unchanged.
 test('persistent document tabs and Quick Open remain keyboard-operable and restore focus', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     const welcome = fileTreeRow(app.page, 'Welcome.md');
     await welcome.click();

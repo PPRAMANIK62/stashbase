@@ -7,8 +7,7 @@ import {
   activeDocumentTab,
   dismissEmbeddingKeyPrompt,
   documentTab,
-  ensureLibraryExpanded,
-  folderButton,
+  openLibraryFolder,
 } from '../support/locators.ts';
 import {
   CROSS_FOLDER_NOTE,
@@ -23,7 +22,7 @@ test('exact library search keeps cross-folder results in their owning identity',
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     const dialog = app.page.getByRole('dialog', { name: 'Search library' });
@@ -84,7 +83,7 @@ test('exact search remembers state, distinguishes duplicate paths, and resolves 
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     let dialog = app.page.getByRole('dialog', { name: 'Search library' });
@@ -94,8 +93,7 @@ test('exact search remembers state, distinguishes duplicate paths, and resolves 
     await expect(dialog.getByText('project-beta', { exact: true })).toBeVisible();
     await dialog.getByRole('combobox').press('Escape');
 
-    await ensureLibraryExpanded(app.page);
-    await folderButton(app.page, 'project-beta').click();
+    await openLibraryFolder(app.page, 'project-beta');
     await dismissEmbeddingKeyPrompt(app.page);
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     dialog = app.page.getByRole('dialog', { name: 'Search library' });
@@ -120,8 +118,7 @@ test('exact search remembers state, distinguishes duplicate paths, and resolves 
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Notes.md');
 
     await documentTab(app.page, CROSS_FOLDER_NOTE).click();
-    await ensureLibraryExpanded(app.page);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await expect(app.page).toHaveTitle('project-alpha — StashBase');
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);

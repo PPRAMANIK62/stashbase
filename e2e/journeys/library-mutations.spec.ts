@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { activeDocumentTab, activeMarkdownEditor, dismissEmbeddingKeyPrompt, fileTreeRow, folderButton } from '../support/locators.ts';
+import { activeDocumentTab, activeMarkdownEditor, dismissEmbeddingKeyPrompt, fileTreeRow, openLibraryFolder } from '../support/locators.ts';
 
 async function openCurrentFolderMenu(app: LaunchedApp, folderName: string): Promise<void> {
   await app.page.getByRole('button', { name: `More actions for ${folderName}` }).click();
@@ -29,7 +29,7 @@ test('file and folder CRUD honors rename and delete cancel/confirm with disk as 
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     await openCurrentFolderMenu(app, 'project-alpha');
@@ -87,14 +87,14 @@ test('Favorites and library removal persist without deleting the member folder',
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     await openCurrentFolderMenu(app, 'project-alpha');
     await app.page.getByRole('menuitem', { name: 'Add to Favorites' }).click();
     await expect.poll(() => readRecent(fixture.configFile).find((entry) => entry.path === fixture.workspaces.projectA)?.favorite).toBe(true);
     app = await app.relaunch();
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await openCurrentFolderMenu(app, 'project-alpha');
     await expect(app.page.getByRole('menuitem', { name: 'Remove from Favorites' })).toBeVisible();
@@ -125,7 +125,7 @@ test('visible Sync Folder reconciles an external filesystem mutation', async ({}
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     expect(await fileTreeRow(app.page, 'Externally Added.md').count()).toBe(0);
     fs.writeFileSync(externalFile, '# External mutation\n\nDetected by visible sync.\n');
@@ -146,7 +146,7 @@ test('a failed save blocks document navigation and Electron window close until p
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
 
@@ -191,7 +191,7 @@ test('real pointer drag reorders root files and moves a nested file to the targe
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     const second = fileTreeRow(app.page, 'Second Note.md');

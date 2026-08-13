@@ -1,9 +1,12 @@
 import type { ElectronApplication, Page } from 'playwright';
+import { openFolderSwitcher } from '../support/locators.ts';
 
 export const primaryKey = process.platform === 'darwin' ? 'Meta' : 'Control';
 
+/** Reach the native folder picker through the titlebar folder switcher —
+ *  the add-folder flows sit at the top of its menu. */
 export async function openFolderPickerMenu(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Add folder to library' }).click();
+  await openFolderSwitcher(page);
   await page.getByRole('menuitem', { name: 'Open Folder…' }).click();
 }
 

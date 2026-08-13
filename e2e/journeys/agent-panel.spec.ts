@@ -6,7 +6,7 @@ import type { Locator } from 'playwright';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { dismissEmbeddingKeyPrompt, ensureLibraryExpanded, fileTreeRow, folderButton } from '../support/locators.ts';
+import { dismissEmbeddingKeyPrompt, fileTreeRow, openLibraryFolder } from '../support/locators.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FAKE_CODEX = path.resolve(HERE, '..', 'fixtures', 'fake-codex-app-server.mjs');
@@ -46,7 +46,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
@@ -70,8 +70,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
       .toBe('accept');
     await expect(app.page.getByRole('tab', { name: /approval turn/i })).toHaveAttribute('aria-selected', 'true');
 
-    await ensureLibraryExpanded(app.page);
-    await folderButton(app.page, 'project-beta').click();
+    await openLibraryFolder(app.page, 'project-beta');
     await expect(app.page).toHaveTitle('project-beta — StashBase');
     await dismissEmbeddingKeyPrompt(app.page);
     const approvalTab = app.page.getByRole('tab', { name: /approval turn/i });
@@ -117,7 +116,7 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     const chatTabs = app.page.getByRole('tablist', { name: 'Chat sessions' });
@@ -130,8 +129,7 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     let panel = activeAgentPanel(app.page);
     let composer = panel.locator('[aria-label="Message agent"]');
     await composer.fill('unsent alpha draft');
-    await ensureLibraryExpanded(app.page);
-    await folderButton(app.page, 'project-beta').click();
+    await openLibraryFolder(app.page, 'project-beta');
     await dismissEmbeddingKeyPrompt(app.page);
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount + 1);
     await chatTabs.getByRole('tab', { name: /^New Chat Close New Chat$/ }).click();
@@ -154,7 +152,10 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
 
-    await ensureLibraryExpanded(app.page);
+    // Folder-scope chat history lives on the ACTIVE folder header, so
+    // switch the window back to project-alpha before resuming its session.
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
     await app.page.getByRole('button', { name: 'Chat history in project-alpha' }).click();
     const history = app.page.getByRole('dialog', { name: 'Chat history in project-alpha' });
     await expect(history.getByRole('button', { name: 'Resume Fixture history session' })).toBeVisible();
