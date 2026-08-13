@@ -10,6 +10,7 @@ import {
   type AgentBootstrapDependencies,
 } from '../agent-runtime-installer.ts';
 import {
+  initialAgentDiscoveryPolicy,
   managedCodexBinDir,
   setAgentRuntimeDebugState,
 } from '../agent-runtime-paths.ts';
@@ -108,6 +109,19 @@ test('Claude release platform mapping stays provider-shaped', () => {
   assert.equal(claudePlatform('linux', 'arm64', true), 'linux-arm64-musl');
   assert.equal(claudePlatform('win32', 'x64', false), 'win32-x64');
   assert.throws(() => claudePlatform('freebsd', 'x64', false), /does not publish/);
+});
+
+test('development fixtures can isolate discovery from developer-installed Agents', () => {
+  assert.equal(initialAgentDiscoveryPolicy({}), 'auto');
+  assert.equal(initialAgentDiscoveryPolicy({ STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only' }), 'auto');
+  assert.equal(initialAgentDiscoveryPolicy({
+    STASHBASE_AGENT_DEBUG: '1',
+    STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only',
+  }), 'managed-only');
+  assert.equal(initialAgentDiscoveryPolicy({
+    STASHBASE_AGENT_DEBUG: '1',
+    STASHBASE_AGENT_DISCOVERY_POLICY: 'invalid',
+  }), 'auto');
 });
 
 test('managed-only discovery ignores the global Agent without uninstalling it', () => {

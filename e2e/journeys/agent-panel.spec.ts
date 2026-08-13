@@ -36,6 +36,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
   const fixture = await createAppFixture({ membership: 'two-folders' });
   const protocolLog = path.join(fixture.artifacts, 'fake-codex-protocol.jsonl');
   fixture.env.STASHBASE_CODEX_BIN = FAKE_CODEX;
+  fixture.env.STASHBASE_AGENT_DISCOVERY_POLICY = 'system-only';
   fixture.env.STASHBASE_FAKE_CODEX_LOG = protocolLog;
   let app: LaunchedApp | undefined;
   try {
@@ -107,6 +108,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
 test('Agent chooser reuses only blank chats, drafts freeze scope, and history resumes through the fake runtime', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   fixture.env.STASHBASE_CODEX_BIN = FAKE_CODEX;
+  fixture.env.STASHBASE_AGENT_DISCOVERY_POLICY = 'system-only';
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);

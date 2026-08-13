@@ -155,6 +155,10 @@ export async function createAppFixture(
     STASHBASE_FOLDER_HOME: folderHome,
     STASHBASE_E2E_USER_DATA: userData,
     STASHBASE_E2E_ARTIFACTS: artifacts,
+    // Keep ordinary journeys independent of developer-installed Agents. The
+    // credential-free Agent journey opts into its fake executable explicitly.
+    STASHBASE_AGENT_DEBUG: '1',
+    STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only',
     TZ: 'UTC',
     LANG: 'en_US.UTF-8',
   };

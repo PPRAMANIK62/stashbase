@@ -26,7 +26,19 @@ interface ManagedRuntimeManifest {
   executable: string;
 }
 
-let discoveryPolicy: AgentDiscoveryPolicy = 'auto';
+const DISCOVERY_POLICIES = new Set<AgentDiscoveryPolicy>(['auto', 'managed-only', 'system-only']);
+
+export function initialAgentDiscoveryPolicy(
+  env: NodeJS.ProcessEnv = process.env,
+): AgentDiscoveryPolicy {
+  const value = env.STASHBASE_AGENT_DISCOVERY_POLICY;
+  const debugEnabled = env.STASHBASE_DEV_VITE === '1' || env.STASHBASE_AGENT_DEBUG === '1';
+  return debugEnabled && DISCOVERY_POLICIES.has(value as AgentDiscoveryPolicy)
+    ? value as AgentDiscoveryPolicy
+    : 'auto';
+}
+
+let discoveryPolicy: AgentDiscoveryPolicy = initialAgentDiscoveryPolicy();
 let simulateInstallFailure = false;
 let simulateMcpFailure = false;
 
@@ -53,7 +65,7 @@ export function setAgentRuntimeDebugState(
     throw Object.assign(new Error('Agent runtime test controls are available in development builds only.'), { status: 404 });
   }
   if (patch.discoveryPolicy !== undefined) {
-    if (!['auto', 'managed-only', 'system-only'].includes(patch.discoveryPolicy)) {
+    if (!DISCOVERY_POLICIES.has(patch.discoveryPolicy)) {
       throw Object.assign(new Error('Invalid Agent discovery policy.'), { status: 400 });
     }
     discoveryPolicy = patch.discoveryPolicy;
