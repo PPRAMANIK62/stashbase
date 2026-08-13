@@ -43,7 +43,10 @@ export function activeDocument(page: Page): Locator {
 }
 
 export function activeMarkdownEditor(page: Page): Locator {
-  return activeDocument(page).locator('[contenteditable="true"]');
+  // A Markdown document can contain an editable CodeMirror code block. The
+  // document editor itself is the ProseMirror textbox, which is the surface
+  // that owns document-level typing and selection.
+  return activeDocument(page).locator('[role="textbox"].ProseMirror[contenteditable="true"]');
 }
 
 export function renameInput(page: Page, relativePath: string): Locator {
