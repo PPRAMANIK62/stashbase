@@ -21,6 +21,7 @@ import {
   scopeRequestParams,
   shortenFolderPath,
   shouldFollowWindowFolder,
+  shouldOpenInitialChatOnWindowEntry,
   switchWelcomeTabPlan,
   windowFolderSwitchPlan,
 } from '../components/agent/folderState.ts';
@@ -329,6 +330,17 @@ test('switchWelcomeTabPlan: an active tab already bound to the new folder means 
     { id: 't2', agent: 'claude', blank: true },
   ];
   assert.deepEqual(switchWelcomeTabPlan(tabs, 't1', '/lib/proj', 'claude'), { kind: 'none' });
+});
+
+test('a new window opens one blank Chat entry without waiting for a folder', () => {
+  assert.equal(shouldOpenInitialChatOnWindowEntry(false, '', 0, null), false);
+  assert.equal(shouldOpenInitialChatOnWindowEntry(true, '', 0, null), true);
+  assert.equal(shouldOpenInitialChatOnWindowEntry(false, '/lib/proj', 0, null), true);
+  assert.equal(shouldOpenInitialChatOnWindowEntry(true, '/lib/proj', 1, null), false);
+  // Closing the last tab must not make the entry effect immediately recreate
+  // it in the same scope; a later folder entry may open one again.
+  assert.equal(shouldOpenInitialChatOnWindowEntry(true, '', 0, ''), false);
+  assert.equal(shouldOpenInitialChatOnWindowEntry(true, '', 0, '/lib/proj'), true);
 });
 
 test('switchWelcomeTabPlan: otherwise reuse a blank tab, else create', () => {

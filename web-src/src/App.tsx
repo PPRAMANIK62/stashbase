@@ -45,7 +45,10 @@ import {
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_MAX_WIDTH,
 } from './store/state';
-import { switchWelcomeTabPlan } from './components/agent/folderState';
+import {
+  shouldOpenInitialChatOnWindowEntry,
+  switchWelcomeTabPlan,
+} from './components/agent/folderState';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { getWindowId } from './api';
 import { api } from './api';
@@ -100,7 +103,7 @@ function AppBody() {
     hasDocument,
     compact: compactWorkspace,
   });
-  const defaultChatFolderRef = useRef('');
+  const defaultChatFolderRef = useRef<string | null>(null);
   const responsiveChatCollapsedRef = useRef(false);
   const previousWorkspaceRef = useRef({
     folderPath: '',
@@ -146,11 +149,15 @@ function AppBody() {
   }, [state.chatOpen]);
   useEffect(() => {
     if (!state.folderPath) {
+      if (!state.booted || defaultChatFolderRef.current === '') return;
+      const shouldOpen = shouldOpenInitialChatOnWindowEntry(
+        state.booted,
+        '',
+        state.chatTabs.length,
+        defaultChatFolderRef.current,
+      );
       defaultChatFolderRef.current = '';
-      // Boot default is the library-scoped New Chat workspace: no folder
-      // is selected until the user clicks one, and the chat panel opens
-      // with one blank tab (its scope resolves to Library).
-      if (state.booted && state.chatTabs.length === 0) {
+      if (shouldOpen) {
         const agent = readPreferredAgent();
         dispatch({
           type: 'CHAT_AGENT_OPEN',
@@ -163,19 +170,20 @@ function AppBody() {
     if (defaultChatFolderRef.current === state.folderPath) return;
     defaultChatFolderRef.current = state.folderPath;
     const agent = readPreferredAgent();
-    // Chat tabs (and their scope-bound sessions) survive folder switches.
-    // A window with NO chat tabs gets the one fresh tab on folder open
-    // (panel opens); a switch instead activates a welcome tab for the new
+    // Chat tabs (and their scope-bound sessions) survive folder switches. A
+    // switch with existing chats activates a welcome tab for the new
     // folder without touching panel visibility — reusing a completely
     // blank tab when one exists (it follows the window default on its
     // next connect), else creating a fresh tab. Started chats, drafts,
     // and attachments are never rebound by this.
     if (state.chatTabs.length === 0) {
-      dispatch({
-        type: 'CHAT_AGENT_OPEN',
-        agent,
-        tab: makeChatTab(agent, state.chatTabs),
-      });
+      if (shouldOpenInitialChatOnWindowEntry(state.booted, state.folderPath, 0, null)) {
+        dispatch({
+          type: 'CHAT_AGENT_OPEN',
+          agent,
+          tab: makeChatTab(agent, state.chatTabs),
+        });
+      }
       return;
     }
     const plan = switchWelcomeTabPlan(state.chatTabs, state.activeChatTabId, state.folderPath, agent);
