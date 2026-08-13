@@ -183,7 +183,7 @@ test('a save acknowledgement advances the version without replacing the live doc
   assert.equal(next.tabs[0].file?.version, 'after');
 });
 
-test('replacing a PDF source version clears its saved page', () => {
+test('replacing a known PDF source version clears its saved page', () => {
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',
     body: { name: 'paper.pdf', format: 'pdf', content: '', version: 'before' },
@@ -193,6 +193,17 @@ test('replacing a PDF source version clears its saved page', () => {
 
   const unchanged = reducer(state, { type: 'FILE_PATCH', patch: { version: 'before' } });
   assert.equal(unchanged.tabs[0].pdfPage, 10);
+
+  let unversioned = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'unversioned.pdf', format: 'pdf', content: '' },
+  });
+  unversioned = reducer(unversioned, { type: 'TAB_PDF_PAGE', id: unversioned.activeTabId!, page: 10 });
+  const retained = reducer(
+    unversioned,
+    { type: 'FILE_PATCH', patch: { version: 'first-known-version' } },
+  );
+  assert.equal(retained.tabs[0].pdfPage, 10);
 
   const replaced = reducer(state, { type: 'FILE_PATCH', patch: { version: 'after' } });
   assert.equal(replaced.tabs[0].file?.version, 'after');
