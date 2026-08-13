@@ -136,7 +136,7 @@ test('macOS application menu keeps Cmd+W for tabs and uses Cmd+Shift+W for windo
   assert.equal(closeWindow.accelerator, 'Command+Shift+W');
 });
 
-test('application menu exposes Report Bug from Help without coupling it to renderer UI', () => {
+test('application menu exposes Report a Bug from Help without coupling it to renderer UI', () => {
   let reports = 0;
   const template = createApplicationMenuTemplate({
     platform: 'linux',
@@ -145,7 +145,7 @@ test('application menu exposes Report Bug from Help without coupling it to rende
     onReportBug: () => { reports += 1; },
   });
   const helpMenu = template.find((item) => item.label === 'Help');
-  const reportBug = helpMenu.submenu.find((item) => item.label === 'Report Bug…');
+  const reportBug = helpMenu.submenu.find((item) => item.label === 'Report a Bug…');
 
   assert.ok(reportBug);
   reportBug.click();

@@ -1,12 +1,32 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { scanBugReportText } = require('./bug-report-redaction.cjs');
+const {
+  prepareBugReportText,
+  scanBugReportText,
+} = require('./bug-report-redaction.cjs');
+const {
+  MAX_SCREENSHOT_BYTES,
+  MAX_SCREENSHOT_EDGE,
+} = require('./bug-report-screenshot.cjs');
 
 const DRAFT_STATE = Object.freeze({
-  DRAFT: 'draft',
+  COLLECTING: 'collecting',
+  REVIEWABLE: 'reviewable',
   REVIEWING: 'reviewing',
+  APPROVED: 'approved',
 });
+
+const ARTIFACT_KIND = Object.freeze({
+  SCREENSHOT: 'screenshot',
+  LOG: 'log',
+  DIAGNOSTICS: 'diagnostics',
+});
+
+const REPORT_FIELDS = Object.freeze(['happened', 'expected', 'reproduction']);
+const MAX_REPORT_FIELD_LENGTH = 12_000;
+const MAX_REPORT_TEXT_LENGTH = 24_000;
+const MAX_LOG_PREVIEW_BYTES = 64 * 1024;
 
 const ERROR = Object.freeze({
   INVALID_DRAFT: Object.freeze({
@@ -24,6 +44,26 @@ const ERROR = Object.freeze({
   INVALID_OWNER: Object.freeze({
     code: 'INVALID_OWNER',
     message: 'The bug report draft could not be associated with this window.',
+  }),
+  INVALID_STATE: Object.freeze({
+    code: 'INVALID_STATE',
+    message: 'That bug report action is not available in the current state.',
+  }),
+  INVALID_DESCRIPTION: Object.freeze({
+    code: 'INVALID_DESCRIPTION',
+    message: 'The bug report description is invalid or too long.',
+  }),
+  INVALID_ARTIFACT: Object.freeze({
+    code: 'INVALID_ARTIFACT',
+    message: 'The bug report artifact reference is invalid.',
+  }),
+  ARTIFACT_UNAVAILABLE: Object.freeze({
+    code: 'ARTIFACT_UNAVAILABLE',
+    message: 'That bug report artifact is unavailable.',
+  }),
+  PRIVACY_CHECK_FAILED: Object.freeze({
+    code: 'PRIVACY_CHECK_FAILED',
+    message: 'Potentially sensitive report content was excluded.',
   }),
   REVIEW_ALREADY_BOUND: Object.freeze({
     code: 'REVIEW_ALREADY_BOUND',
@@ -55,59 +95,85 @@ function toIso(now) {
   return new Date(now()).toISOString();
 }
 
-function safeDiagnostics(value) {
+function prepareSafeString(value, prepareText) {
+  if (typeof value !== 'string') return null;
+  const prepared = prepareText(value);
+  return prepared?.ok && typeof prepared.text === 'string' ? prepared.text : null;
+}
+
+function safeDiagnostics(value, prepareText) {
   if (!value || typeof value !== 'object' || !value.app || !value.os) return null;
   const { app, os } = value;
   if (
     !Number.isSafeInteger(value.schemaVersion)
     || typeof value.capturedAt !== 'string'
-    || typeof app.name !== 'string'
-    || typeof app.version !== 'string'
     || typeof app.packaged !== 'boolean'
-    || typeof app.electronVersion !== 'string'
-    || typeof os.platform !== 'string'
-    || typeof os.release !== 'string'
-    || typeof os.arch !== 'string'
   ) {
     return null;
   }
+  const capturedAt = new Date(value.capturedAt);
+  if (Number.isNaN(capturedAt.getTime()) || capturedAt.toISOString() !== value.capturedAt) return null;
+  const appName = prepareSafeString(app.name, prepareText);
+  const appVersion = prepareSafeString(app.version, prepareText);
+  const electronVersion = prepareSafeString(app.electronVersion, prepareText);
+  const platform = prepareSafeString(os.platform, prepareText);
+  const release = prepareSafeString(os.release, prepareText);
+  const architecture = prepareSafeString(os.arch, prepareText);
+  if ([appName, appVersion, electronVersion, platform, release, architecture].includes(null)) return null;
   return Object.freeze({
     schemaVersion: value.schemaVersion,
     capturedAt: value.capturedAt,
     app: Object.freeze({
-      name: app.name,
-      version: app.version,
+      name: appName,
+      version: appVersion,
       packaged: app.packaged,
-      electronVersion: app.electronVersion,
+      electronVersion,
     }),
     os: Object.freeze({
-      platform: os.platform,
-      release: os.release,
-      arch: os.arch,
+      platform,
+      release,
+      arch: architecture,
     }),
   });
 }
 
-function copyDiagnostics(value) {
-  return value === null ? null : {
-    schemaVersion: value.schemaVersion,
+function copySafeDiagnosticsView(value) {
+  if (value === null) return null;
+  return {
     capturedAt: value.capturedAt,
-    app: { ...value.app },
-    os: { ...value.os },
+    appName: value.app.name,
+    appVersion: value.app.version,
+    mode: value.app.packaged ? 'Packaged' : 'Development',
+    electronVersion: value.app.electronVersion,
+    platform: value.os.platform,
+    platformRelease: value.os.release,
+    architecture: value.os.arch,
   };
 }
 
 function safeScreenshot(value) {
-  if (!value || !Buffer.isBuffer(value.bytes) || value.bytes.length === 0 || value.mimeType !== 'image/png') {
+  if (
+    !value
+    || !Buffer.isBuffer(value.bytes)
+    || value.bytes.length === 0
+    || value.bytes.length > MAX_SCREENSHOT_BYTES
+    || value.mimeType !== 'image/png'
+    || !isPositiveInteger(value.width)
+    || !isPositiveInteger(value.height)
+    || value.width > MAX_SCREENSHOT_EDGE
+    || value.height > MAX_SCREENSHOT_EDGE
+  ) {
     return null;
   }
   return Object.freeze({
     bytes: Buffer.from(value.bytes),
     mimeType: 'image/png',
+    width: value.width,
+    height: value.height,
   });
 }
 
-function safeLog(value) {
+function safeLog(value, scanText) {
   if (
     !value
     || typeof value.text !== 'string'
@@ -119,16 +185,40 @@ function safeLog(value) {
   ) {
     return null;
   }
-  // Collectors are not trusted merely because they run in the main process.
-  // Scan their output independently so an incomplete redaction pass cannot
-  // make sensitive text eligible for preview or future artifact creation.
-  const scanned = scanBugReportText(value.text);
-  if (!scanned.safe) return null;
+  const byteLength = Buffer.byteLength(value.text, 'utf8');
+  if (byteLength > MAX_LOG_PREVIEW_BYTES) return null;
+  const scanned = scanText(value.text);
+  if (!scanned?.safe) return null;
   return Object.freeze({
     text: value.text,
-    byteLength: Buffer.byteLength(value.text, 'utf8'),
+    byteLength,
     truncated: value.truncated,
     redactionCount: value.redactionCount,
+  });
+}
+
+function copyApprovedArtifactResource(artifact) {
+  if (artifact.kind === ARTIFACT_KIND.SCREENSHOT) {
+    return Object.freeze({
+      bytes: Buffer.from(artifact.resource.bytes),
+      mimeType: artifact.resource.mimeType,
+      width: artifact.resource.width,
+      height: artifact.resource.height,
+    });
+  }
+  if (artifact.kind === ARTIFACT_KIND.LOG) {
+    return Object.freeze({
+      text: artifact.resource.text,
+      byteLength: artifact.resource.byteLength,
+      truncated: artifact.resource.truncated,
+      redactionCount: artifact.resource.redactionCount,
+    });
+  }
+  return Object.freeze({
+    schemaVersion: artifact.resource.schemaVersion,
+    capturedAt: artifact.resource.capturedAt,
+    app: Object.freeze({ ...artifact.resource.app }),
+    os: Object.freeze({ ...artifact.resource.os }),
   });
 }
 
@@ -144,55 +234,162 @@ async function collectSafely(collector, source, normalize) {
   }
 }
 
-/**
- * Main-process authority for the bug-report lifecycle.
- *
- * Drafts deliberately retain future report resources as private placeholders.
- * Renderer callers receive snapshots only; filesystem paths, artifacts, and
- * privileged resource handles never cross this boundary.
- */
+function isExactDescriptionPayload(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return keys.length === REPORT_FIELDS.length
+    && REPORT_FIELDS.every((field) => keys.includes(field) && typeof value[field] === 'string');
+}
+
+/** Main-process authority for the complete local review lifecycle. */
 function createBugReportService({
   createId: createDraftId = createId,
+  createArtifactId = createId,
+  createApprovalId = createId,
   now = () => Date.now(),
   captureScreenshot,
   collectDiagnostics,
   collectLog,
+  prepareText = prepareBugReportText,
+  scanText = scanBugReportText,
 } = {}) {
   const drafts = new Map();
+  const artifactIds = new Set();
 
-  function safePreview(draft) {
+  function createUniqueArtifactId() {
+    const id = createArtifactId();
+    if (
+      typeof id !== 'string'
+      || !id
+      || id.length > 256
+      || drafts.has(id)
+      || artifactIds.has(id)
+    ) {
+      throw new Error('Invalid artifact identifier');
+    }
+    artifactIds.add(id);
+    return id;
+  }
+
+  function retireDraft(draft) {
+    if (!draft || drafts.get(draft.id) !== draft) return false;
+    drafts.delete(draft.id);
+    for (const artifact of draft.artifacts) artifactIds.delete(artifact.id);
+    return true;
+  }
+
+  function createArtifact(kind, resource) {
+    const available = resource !== null;
+    return {
+      id: createUniqueArtifactId(),
+      kind,
+      available,
+      included: available,
+      resource,
+    };
+  }
+
+  function safeDraftMetadata(draft) {
+    const availability = Object.create(null);
+    for (const artifact of draft.artifacts) availability[artifact.kind] = artifact.available;
     return {
       id: draft.id,
       state: draft.state,
       createdAt: draft.createdAt,
       updatedAt: draft.updatedAt,
       available: {
-        screenshot: draft.screenshot !== null,
-        diagnostics: draft.diagnostics !== null,
-        log: draft.log !== null,
-        reportMetadata: draft.reportMetadata !== null,
-      },
-      collection: {
-        screenshot: draft.screenshot === null
-          ? { available: false }
-          : { available: true, mimeType: draft.screenshot.mimeType, byteLength: draft.screenshot.bytes.length },
-        diagnostics: copyDiagnostics(draft.diagnostics),
-        log: draft.log === null
-          ? { available: false }
-          : {
-            available: true,
-            byteLength: draft.log.byteLength,
-            truncated: draft.log.truncated,
-            redactionCount: draft.log.redactionCount,
-          },
+        screenshot: availability.screenshot === true,
+        diagnostics: availability.diagnostics === true,
+        log: availability.log === true,
       },
     };
   }
 
+  function safeReviewArtifact(artifact) {
+    const base = {
+      id: artifact.id,
+      kind: artifact.kind,
+      available: artifact.available,
+      included: artifact.available && artifact.included,
+    };
+    if (!artifact.available) return base;
+    if (artifact.kind === ARTIFACT_KIND.SCREENSHOT) {
+      return {
+        ...base,
+        summary: {
+          mimeType: artifact.resource.mimeType,
+          byteLength: artifact.resource.bytes.length,
+          width: artifact.resource.width,
+          height: artifact.resource.height,
+        },
+      };
+    }
+    if (artifact.kind === ARTIFACT_KIND.LOG) {
+      return {
+        ...base,
+        summary: {
+          byteLength: artifact.resource.byteLength,
+          truncated: artifact.resource.truncated,
+          redactionCount: artifact.resource.redactionCount,
+        },
+      };
+    }
+    return {
+      ...base,
+      details: copySafeDiagnosticsView(artifact.resource),
+    };
+  }
+
+  function safeArtifactPreview(artifact) {
+    if (artifact.kind === ARTIFACT_KIND.SCREENSHOT) {
+      return {
+        kind: artifact.kind,
+        mimeType: artifact.resource.mimeType,
+        dataUrl: `data:image/png;base64,${artifact.resource.bytes.toString('base64')}`,
+        byteLength: artifact.resource.bytes.length,
+        width: artifact.resource.width,
+        height: artifact.resource.height,
+      };
+    }
+    if (artifact.kind === ARTIFACT_KIND.LOG) {
+      return {
+        kind: artifact.kind,
+        text: artifact.resource.text,
+        byteLength: artifact.resource.byteLength,
+        truncated: artifact.resource.truncated,
+        redactionCount: artifact.resource.redactionCount,
+      };
+    }
+    return {
+      kind: artifact.kind,
+      details: copySafeDiagnosticsView(artifact.resource),
+    };
+  }
+
+  function safeApprovedReport(draft) {
+    return {
+      state: DRAFT_STATE.APPROVED,
+      approvedAt: draft.approvedReport.approvedAt,
+      description: { ...draft.approvedReport.description },
+      artifacts: draft.approvedReport.artifacts.map((artifact) => ({
+        id: artifact.id,
+        kind: artifact.kind,
+      })),
+    };
+  }
+
+  function safeReviewModel(draft) {
+    return {
+      state: draft.state,
+      createdAt: draft.createdAt,
+      updatedAt: draft.updatedAt,
+      description: { ...draft.description },
+      artifacts: draft.artifacts.map(safeReviewArtifact),
+      approval: draft.approvedReport === null ? null : safeApprovedReport(draft),
+    };
+  }
+
   function canAccess(draft, senderWebContentsId) {
-    // Binding the dedicated review window transfers renderer access. The
-    // source renderer can no longer inspect or mutate a draft it did not
-    // receive through that review boundary.
     if (draft.reviewWebContentsId !== null) {
       return senderWebContentsId === draft.reviewWebContentsId;
     }
@@ -200,7 +397,7 @@ function createBugReportService({
   }
 
   function findAccessibleDraft(id, senderWebContentsId) {
-    if (typeof id !== 'string' || !id) return fail(ERROR.INVALID_DRAFT);
+    if (typeof id !== 'string' || !id || id.length > 256) return fail(ERROR.INVALID_DRAFT);
     const draft = drafts.get(id);
     if (!draft) return fail(ERROR.NOT_FOUND);
     if (!isPositiveInteger(senderWebContentsId) || !canAccess(draft, senderWebContentsId)) {
@@ -209,19 +406,73 @@ function createBugReportService({
     return { ok: true, draft };
   }
 
+  function findReviewDraft(id, senderWebContentsId) {
+    const found = findAccessibleDraft(id, senderWebContentsId);
+    if (!found.ok) return found;
+    if (found.draft.reviewWebContentsId !== senderWebContentsId) return fail(ERROR.FORBIDDEN);
+    if (![DRAFT_STATE.REVIEWING, DRAFT_STATE.APPROVED].includes(found.draft.state)) {
+      return fail(ERROR.INVALID_STATE);
+    }
+    return found;
+  }
+
+  function findMutableReviewDraft(id, senderWebContentsId) {
+    const found = findReviewDraft(id, senderWebContentsId);
+    if (!found.ok) return found;
+    return found.draft.state === DRAFT_STATE.REVIEWING ? found : fail(ERROR.INVALID_STATE);
+  }
+
+  function findOwnedArtifact(draft, artifactId) {
+    if (typeof artifactId !== 'string' || !artifactId || artifactId.length > 256) {
+      return fail(ERROR.INVALID_ARTIFACT);
+    }
+    const artifact = draft.artifacts.find((candidate) => candidate.id === artifactId);
+    return artifact ? { ok: true, artifact } : fail(ERROR.INVALID_ARTIFACT);
+  }
+
+  function setArtifactIncluded(id, senderWebContentsId, artifactId, included) {
+    const found = findMutableReviewDraft(id, senderWebContentsId);
+    if (!found.ok) return found;
+    const owned = findOwnedArtifact(found.draft, artifactId);
+    if (!owned.ok) return owned;
+    if (!owned.artifact.available) return fail(ERROR.ARTIFACT_UNAVAILABLE);
+    if (owned.artifact.included !== included) {
+      owned.artifact.included = included;
+      found.draft.updatedAt = toIso(now);
+    }
+    return { ok: true, draft: safeReviewModel(found.draft) };
+  }
+
+  function selectedContentPassesPrivacy(draft) {
+    for (const field of REPORT_FIELDS) {
+      if (!scanText(draft.description[field])?.safe) return false;
+    }
+    for (const artifact of draft.artifacts) {
+      if (!artifact.available || !artifact.included) continue;
+      if (artifact.kind === ARTIFACT_KIND.LOG && !scanText(artifact.resource.text)?.safe) return false;
+      if (artifact.kind === ARTIFACT_KIND.DIAGNOSTICS) {
+        const diagnosticText = JSON.stringify(copySafeDiagnosticsView(artifact.resource));
+        if (!scanText(diagnosticText)?.safe) return false;
+      }
+    }
+    return true;
+  }
+
   return {
     async createDraft(source) {
+      let draft = null;
       try {
         if (!source || !isPositiveInteger(source.webContentsId) || typeof source.windowId !== 'string' || !source.windowId) {
           return fail(ERROR.INVALID_OWNER);
         }
-
         const id = createDraftId();
-        if (typeof id !== 'string' || !id || drafts.has(id)) return fail(ERROR.UNAVAILABLE);
+        if (typeof id !== 'string' || !id || id.length > 256 || drafts.has(id) || artifactIds.has(id)) {
+          return fail(ERROR.UNAVAILABLE);
+        }
         const timestamp = toIso(now);
-        const draft = {
+        draft = {
           id,
-          state: DRAFT_STATE.DRAFT,
+          state: DRAFT_STATE.COLLECTING,
           createdAt: timestamp,
           updatedAt: timestamp,
           source: {
@@ -229,47 +480,150 @@ function createBugReportService({
             windowId: source.windowId,
           },
           reviewWebContentsId: null,
-          // Collected resources remain main-process-owned and are never
-          // persisted merely because a draft was created.
-          screenshot: null,
-          diagnostics: null,
-          log: null,
-          reportMetadata: null,
+          description: {
+            happened: '',
+            expected: '',
+            reproduction: '',
+          },
+          artifacts: [],
+          approvedReport: null,
+          approvedHandoff: null,
         };
         drafts.set(draft.id, draft);
         const [screenshot, diagnostics, log] = await Promise.all([
           collectSafely(captureScreenshot, draft.source, safeScreenshot),
-          collectSafely(collectDiagnostics, draft.source, safeDiagnostics),
-          collectSafely(collectLog, draft.source, safeLog),
+          collectSafely(collectDiagnostics, draft.source, (value) => safeDiagnostics(value, prepareText)),
+          collectSafely(collectLog, draft.source, (value) => safeLog(value, scanText)),
         ]);
-        // A window can close while capture is in flight. Do not revive a draft
-        // that its owner already retired.
         if (drafts.get(draft.id) !== draft) return fail(ERROR.NOT_FOUND);
-        draft.screenshot = screenshot;
-        draft.diagnostics = diagnostics;
-        draft.log = log;
+        draft.artifacts.push(createArtifact(ARTIFACT_KIND.SCREENSHOT, screenshot));
+        draft.artifacts.push(createArtifact(ARTIFACT_KIND.LOG, log));
+        draft.artifacts.push(createArtifact(ARTIFACT_KIND.DIAGNOSTICS, diagnostics));
+        draft.state = DRAFT_STATE.REVIEWABLE;
         draft.updatedAt = toIso(now);
-
-        return { ok: true, draft: safePreview(draft) };
+        return { ok: true, draft: safeDraftMetadata(draft) };
       } catch {
+        if (draft) retireDraft(draft);
         return fail(ERROR.UNAVAILABLE);
       }
     },
 
     getPreview(id, senderWebContentsId) {
       const found = findAccessibleDraft(id, senderWebContentsId);
-      return found.ok ? { ok: true, draft: safePreview(found.draft) } : found;
+      return found.ok ? { ok: true, draft: safeDraftMetadata(found.draft) } : found;
+    },
+
+    getReview(id, senderWebContentsId) {
+      const found = findReviewDraft(id, senderWebContentsId);
+      return found.ok ? { ok: true, draft: safeReviewModel(found.draft) } : found;
+    },
+
+    getArtifactPreview(id, senderWebContentsId, artifactId) {
+      const found = findReviewDraft(id, senderWebContentsId);
+      if (!found.ok) return found;
+      const owned = findOwnedArtifact(found.draft, artifactId);
+      if (!owned.ok) return owned;
+      if (!owned.artifact.available) return fail(ERROR.ARTIFACT_UNAVAILABLE);
+      return { ok: true, preview: safeArtifactPreview(owned.artifact) };
+    },
+
+    updateDescription(id, senderWebContentsId, payload) {
+      const found = findMutableReviewDraft(id, senderWebContentsId);
+      if (!found.ok) return found;
+      if (!isExactDescriptionPayload(payload)) return fail(ERROR.INVALID_DESCRIPTION);
+      const totalLength = REPORT_FIELDS.reduce((total, field) => total + payload[field].length, 0);
+      if (
+        totalLength > MAX_REPORT_TEXT_LENGTH
+        || REPORT_FIELDS.some((field) => payload[field].length > MAX_REPORT_FIELD_LENGTH)
+      ) {
+        return fail(ERROR.INVALID_DESCRIPTION);
+      }
+      const description = Object.create(null);
+      for (const field of REPORT_FIELDS) {
+        const prepared = prepareText(payload[field]);
+        if (!prepared?.ok || typeof prepared.text !== 'string') return fail(ERROR.PRIVACY_CHECK_FAILED);
+        description[field] = prepared.text;
+      }
+      found.draft.description = {
+        happened: description.happened,
+        expected: description.expected,
+        reproduction: description.reproduction,
+      };
+      found.draft.updatedAt = toIso(now);
+      return { ok: true, draft: safeReviewModel(found.draft) };
+    },
+
+    includeArtifact(id, senderWebContentsId, artifactId) {
+      return setArtifactIncluded(id, senderWebContentsId, artifactId, true);
+    },
+
+    excludeArtifact(id, senderWebContentsId, artifactId) {
+      return setArtifactIncluded(id, senderWebContentsId, artifactId, false);
+    },
+
+    approveDraft(id, senderWebContentsId) {
+      const found = findReviewDraft(id, senderWebContentsId);
+      if (!found.ok) return found;
+      if (found.draft.state === DRAFT_STATE.APPROVED) {
+        return { ok: true, report: safeApprovedReport(found.draft), alreadyApproved: true };
+      }
+      if (!selectedContentPassesPrivacy(found.draft)) return fail(ERROR.PRIVACY_CHECK_FAILED);
+      const approvedAt = toIso(now);
+      const selectedArtifacts = found.draft.artifacts
+        .filter((artifact) => artifact.available && artifact.included);
+      found.draft.approvedReport = Object.freeze({
+        approvedAt,
+        description: Object.freeze({ ...found.draft.description }),
+        artifacts: Object.freeze(selectedArtifacts.map((artifact) => Object.freeze({
+          id: artifact.id,
+          kind: artifact.kind,
+          resource: artifact.resource,
+        }))),
+      });
+      for (const artifact of found.draft.artifacts) {
+        if (!selectedArtifacts.includes(artifact)) artifactIds.delete(artifact.id);
+      }
+      found.draft.artifacts = selectedArtifacts;
+      found.draft.state = DRAFT_STATE.APPROVED;
+      found.draft.updatedAt = approvedAt;
+      return { ok: true, report: safeApprovedReport(found.draft), alreadyApproved: false };
+    },
+
+    claimApprovedReport(id, senderWebContentsId) {
+      const found = findReviewDraft(id, senderWebContentsId);
+      if (!found.ok) return found;
+      if (found.draft.state !== DRAFT_STATE.APPROVED || found.draft.approvedReport === null) {
+        return fail(ERROR.INVALID_STATE);
+      }
+      if (found.draft.approvedHandoff === null) {
+        const approvalId = createApprovalId();
+        if (typeof approvalId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(approvalId)) {
+          return fail(ERROR.UNAVAILABLE);
+        }
+        found.draft.approvedHandoff = Object.freeze({
+          approvalId,
+          approvedAt: found.draft.approvedReport.approvedAt,
+          description: Object.freeze({ ...found.draft.approvedReport.description }),
+          artifacts: Object.freeze(found.draft.approvedReport.artifacts.map((artifact) => Object.freeze({
+            kind: artifact.kind,
+            resource: copyApprovedArtifactResource(artifact),
+          }))),
+        });
+      }
+      return {
+        ok: true,
+        report: safeApprovedReport(found.draft),
+        snapshot: found.draft.approvedHandoff,
+      };
     },
 
     discardDraft(id, senderWebContentsId) {
       const found = findAccessibleDraft(id, senderWebContentsId);
       if (!found.ok) return found;
-      drafts.delete(found.draft.id);
+      retireDraft(found.draft);
       return { ok: true };
     },
 
-    /** Reserve the draft for a future dedicated review window. This remains
-     * main-process-only so renderers cannot grant themselves access. */
     bindReviewWindow(id, reviewWebContentsId) {
       try {
         if (typeof id !== 'string' || !id) return fail(ERROR.INVALID_DRAFT);
@@ -277,37 +631,33 @@ function createBugReportService({
         if (!draft) return fail(ERROR.NOT_FOUND);
         if (!isPositiveInteger(reviewWebContentsId)) return fail(ERROR.INVALID_OWNER);
         if (draft.reviewWebContentsId !== null) return fail(ERROR.REVIEW_ALREADY_BOUND);
+        if (draft.state !== DRAFT_STATE.REVIEWABLE) return fail(ERROR.INVALID_STATE);
         draft.reviewWebContentsId = reviewWebContentsId;
         draft.state = DRAFT_STATE.REVIEWING;
         draft.updatedAt = toIso(now);
-        return { ok: true, draft: safePreview(draft) };
+        return { ok: true, draft: safeDraftMetadata(draft) };
       } catch {
         return fail(ERROR.UNAVAILABLE);
       }
     },
 
-    /** Main-process window retirement cannot leave an orphaned in-memory
-     * draft behind. A future bound review window continues to own its draft. */
     discardUnreviewedDraftsForSource(sourceWebContentsId) {
       if (!isPositiveInteger(sourceWebContentsId)) return 0;
       let discarded = 0;
-      for (const [id, draft] of drafts) {
+      for (const draft of [...drafts.values()]) {
         if (draft.source.webContentsId === sourceWebContentsId && draft.reviewWebContentsId === null) {
-          drafts.delete(id);
-          discarded += 1;
+          if (retireDraft(draft)) discarded += 1;
         }
       }
       return discarded;
     },
 
-    /** Future review-window destruction uses the same owner-only cleanup. */
     discardDraftsForReviewWindow(reviewWebContentsId) {
       if (!isPositiveInteger(reviewWebContentsId)) return 0;
       let discarded = 0;
-      for (const [id, draft] of drafts) {
+      for (const draft of [...drafts.values()]) {
         if (draft.reviewWebContentsId === reviewWebContentsId) {
-          drafts.delete(id);
-          discarded += 1;
+          if (retireDraft(draft)) discarded += 1;
         }
       }
       return discarded;
@@ -316,6 +666,9 @@ function createBugReportService({
 }
 
 module.exports = {
+  ARTIFACT_KIND,
   DRAFT_STATE,
+  MAX_REPORT_FIELD_LENGTH,
+  MAX_REPORT_TEXT_LENGTH,
   createBugReportService,
 };

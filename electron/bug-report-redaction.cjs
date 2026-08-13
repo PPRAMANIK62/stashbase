@@ -52,8 +52,15 @@ function replaceHomeVariant(text, variant, caseInsensitive, counts) {
     const index = haystack.indexOf(needle, searchFrom);
     if (index === -1) break;
     const end = index + variant.length;
+    const previous = text[index - 1];
     const next = text[end];
-    if (end !== text.length && next !== '/' && next !== '\\') {
+    // A separator-normalized POSIX home such as `\\Users\\Jane Doe` must
+    // not match inside a different rooted path such as
+    // `C:\\Users\\Jane Doe`. The exact home may follow log punctuation,
+    // quotes, or a URI separator, but never a path/name prefix or drive colon.
+    const hasStartBoundary = index === 0 || !/[A-Za-z0-9_.:-]/.test(previous);
+    const hasEndBoundary = end === text.length || next === '/' || next === '\\';
+    if (!hasStartBoundary || !hasEndBoundary) {
       searchFrom = index + 1;
       continue;
     }

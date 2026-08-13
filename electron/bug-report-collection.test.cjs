@@ -1,13 +1,18 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
 const {
   collectRedactedApplicationLog,
   readApplicationLogTail,
 } = require('./bug-report-log.cjs');
-const { captureWindowScreenshot } = require('./bug-report-screenshot.cjs');
+const {
+  MAX_SCREENSHOT_BYTES,
+  captureWindowScreenshot,
+} = require('./bug-report-screenshot.cjs');
 
 function fakeFs(text) {
   const bytes = Buffer.from(text, 'utf8');
@@ -95,13 +100,16 @@ test('diagnostics are fixed to the privacy-reviewed allowlist and frozen', () =>
   assert.equal('environment' in diagnostics, false);
 });
 
-test('screenshot capture uses only the supplied current-window webContents and copies PNG bytes', async () => {
+test('screenshot capture retains one bounded lossless PNG with its exact dimensions', async () => {
   const original = Buffer.from('png-bytes');
   let captures = 0;
   const result = await captureWindowScreenshot({
     capturePage: async () => {
       captures += 1;
-      return { toPNG: () => original };
+      return {
+        toPNG: () => original,
+        getSize: () => ({ width: 1440, height: 900 }),
+      };
     },
   });
 
@@ -109,7 +117,35 @@ test('screenshot capture uses only the supplied current-window webContents and c
   assert.equal(captures, 1);
   assert.equal(result.mimeType, 'image/png');
   assert.equal(result.bytes.toString(), 'png-bytes');
+  assert.equal(result.width, 1440);
+  assert.equal(result.height, 900);
+  assert.equal('preview' in result, false);
   assert.equal('path' in result, false);
+});
+
+test('oversized screenshots are unavailable instead of crossing the review bound', async () => {
+  const result = await captureWindowScreenshot({
+    capturePage: async () => ({
+      toPNG: () => Buffer.alloc(MAX_SCREENSHOT_BYTES + 1),
+      getSize: () => ({ width: 1440, height: 900 }),
+    }),
+  });
+
+  assert.equal(result, null);
+});
+
+test('bug-report collection code never prints collected content', () => {
+  const files = [
+    'bug-report-diagnostics.cjs',
+    'bug-report-log.cjs',
+    'bug-report-redaction.cjs',
+    'bug-report-screenshot.cjs',
+    'bug-report-service.cjs',
+  ];
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    assert.doesNotMatch(source, /\bconsole\.(?:debug|dir|error|info|log|trace|warn)\s*\(/);
+  }
 });
 
 test('unavailable screenshot capture returns no artifact', async () => {

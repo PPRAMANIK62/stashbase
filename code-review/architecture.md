@@ -168,24 +168,59 @@ delete its isolated profile only after the child process exits.
 `electron/bug-report-service.cjs` is the sole owner of in-memory bug-report
 drafts. A draft records its main-process-derived source window identity and
 privately retains current-window screenshot bytes and bounded redacted log
-text. Diagnostics are restricted to the fixed product allowlist. The preload
-exposes only create, safe-preview, and discard operations: snapshots contain
-opaque IDs, lifecycle state, timestamps, resource size/availability metadata,
-and copied allowlisted diagnostics, never paths, ownership identities,
-mutable records, screenshot bytes, log text, or resource handles. An ID is a
-reference, not authorization. Access is checked against the IPC sender's
-`webContents` identity; binding a dedicated review window transfers renderer
-access to that window. Closing a source window drops only unreviewed drafts,
-while a review window has its own retirement path.
+text. Diagnostics are restricted to the fixed product allowlist. Native menu
+handling creates the draft; the workspace preload has no bug-report surface.
+The dedicated review preload exposes only read-review, exact description
+update, preview-by-artifact-reference, include/exclude-by-artifact-reference,
+prepare, open-prepared-GitHub, save-prepared-artifacts, and discard operations.
+It never accepts a draft ID, path, destination, or URL. Main resolves the draft
+from a private review-`webContents` mapping, then validates every artifact
+reference against that draft. A reference is not authorization.
+
+Review models are newly copied, purpose-built data. They contain lifecycle
+state, timestamps, validated user text, random opaque artifact references, a
+lossless screenshot's dimensions and size, log metadata without log text, and
+a flattened diagnostics allowlist. A separate sender-bound preview response
+contains only the referenced artifact's exact bounded sanitized log text or a
+size-bounded PNG data URL generated from the same lossless screenshot bytes
+retained for approval. Neither response contains paths, ownership identities,
+mutable records, screenshot `Buffer` objects, unredacted logs, raw diagnostic
+objects, or resource handles. Artifact inclusion is authoritative main-process
+state and independent of preview. Explicit preparation repeats the aggregate
+privacy scan and freezes only selected available resources plus the validated
+user fields; it retires every deselected or unavailable resource immediately.
+A main-private claim then copies that immutable input into the artifact
+handoff. Repeated claims and preparation are idempotent, while other mutations
+require the reviewing state.
+
+Screenshot fidelity is byte-preserving after capture: the retained PNG is the
+preview source, approved resource, and prepared `screenshot.png` content. The
+approval and handoff boundaries may make defensive `Buffer` copies but must not
+resize, recompress, re-encode, recapture, or change the image format.
+
+The local lifecycle is `COLLECTING → REVIEWABLE → REVIEWING → APPROVED`.
+`REVIEWABLE` is bound to the dedicated review window before its renderer is
+shown. Closing a source window drops only unbound drafts; a bound review
+survives. Closing or cancelling the review retires its draft and opaque
+references. Review-load failure and collection-time source closure also retire
+state, so neither stale mappings nor partially allocated references survive.
 
 Collection is best effort and cannot fail the whole draft. Log preparation
 uses the exact `os.homedir()` value, redacts recognized sensitive fields, and
 runs an independent fail-closed scan; the service scans collector output again
 before marking it available. Suspicious text is excluded, and collected
-content must never be echoed into application logs. Any future artifact writer
-must repeat the scan immediately before writing. Review, artifact exclusion,
-clipboard, browser, save, reveal, and cleanup work must extend this
-main-process service rather than moving ownership into a renderer.
+content must never be echoed into application logs. The artifact handoff
+repeats the scan on each formatted text artifact immediately before an atomic
+write, creates only selected PNG/log/diagnostics files, and removes a partial
+report directory on preparation failure. Electron clears the complete
+temporary bug-report root at the next boot. Preparation itself performs no
+external handoff. A later explicit action reveals the prepared directory before
+opening the encoded GitHub issue URL; another explicit action uses a native
+directory picker and copies only those prepared files outside the temporary
+root. Neither source path, chosen destination, nor private snapshot crosses
+IPC; the renderer receives only safe results and aggregate artifact counts.
+GitHub attachment and submission remain manual, and the prefilled issue body
+contains no attachment instructions.
 
 Electron owns the child server through a random per-launch shutdown token.
 Quit sends an authenticated loopback shutdown request and waits for the server

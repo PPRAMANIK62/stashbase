@@ -65,13 +65,6 @@ contextBridge.exposeInMainWorld('electron', {
    *  in-app webview overlay; too many sites block iframing for it to
    *  be reliable, and the system browser already has user cookies. */
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
-  /** Opaque bug-report draft lifecycle. Draft resources remain owned by the
-   * main process; this bridge never exposes paths, artifacts, or handles. */
-  bugReport: {
-    create: () => ipcRenderer.invoke('bug-report:create'),
-    preview: (id) => ipcRenderer.invoke('bug-report:preview', id),
-    discard: (id) => ipcRenderer.invoke('bug-report:discard', id),
-  },
   openFolderWindow: (name) => ipcRenderer.invoke('window:openFolder', name),
   /** Keep the main-process folder → BrowserWindow registry current so
    *  "Open in New Window" can focus an existing matching context. */

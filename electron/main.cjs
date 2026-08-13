@@ -24,6 +24,9 @@ const { createBugReportService } = require('./bug-report-service.cjs');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
 const { collectRedactedApplicationLog, readApplicationLogTail } = require('./bug-report-log.cjs');
 const { captureWindowScreenshot } = require('./bug-report-screenshot.cjs');
+const { createBugReportHandoff } = require('./bug-report-handoff.cjs');
+const { registerBugReportReviewIpc } = require('./bug-report-review-ipc.cjs');
+const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
   createApplicationMenuTemplate,
@@ -124,6 +127,8 @@ const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 let serverProc = null;
 let serverStartPromise = null;
 const mainWindows = new Set();
+const bugReportReviewWindows = new Set();
+const bugReportReviewDraftBySender = new Map();
 const windowRegistry = createWindowRegistry({ platform: process.platform });
 const rendererFlush = createRendererFlushCoordinator();
 const approvedWindowCloses = new WeakSet();
@@ -140,6 +145,46 @@ const bugReports = createBugReportService({
   collectLog: () => {
     const logPath = getServerLogPath();
     return logPath ? collectRedactedApplicationLog({ filePath: logPath }) : null;
+  },
+});
+const bugReportHandoff = createBugReportHandoff({
+  baseTemporaryDirectory: path.join(app.getPath('temp'), 'stashbase', 'bug-reports'),
+  revealDirectory: async (directory) => {
+    const error = await shell.openPath(directory);
+    if (error) throw new Error('The prepared report directory could not be opened.');
+  },
+  openExternal: (url) => shell.openExternal(url),
+});
+registerBugReportReviewIpc({
+  ipcMain,
+  bugReports,
+  draftIdForSender: (senderWebContentsId) => (
+    bugReportReviewDraftBySender.get(senderWebContentsId) ?? null
+  ),
+  prepareApprovedReport: (snapshot) => bugReportHandoff.prepare(snapshot),
+  openPreparedReport: (snapshot) => bugReportHandoff.openGitHub(snapshot),
+  savePreparedReport: async (snapshot, event) => {
+    try {
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      const options = {
+        title: 'Save Selected Artifacts',
+        buttonLabel: 'Save Here',
+        properties: ['openDirectory', 'createDirectory'],
+      };
+      const result = senderWindow && !senderWindow.isDestroyed()
+        ? await dialog.showOpenDialog(senderWindow, options)
+        : await dialog.showOpenDialog(options);
+      if (result.canceled || result.filePaths.length === 0) return { ok: true, canceled: true };
+      return bugReportHandoff.saveArtifacts(snapshot, result.filePaths[0]);
+    } catch {
+      return {
+        ok: false,
+        error: {
+          code: 'SAVE_FAILED',
+          message: 'StashBase could not save the selected report files. Please try again.',
+        },
+      };
+    }
   },
 });
 
@@ -576,48 +621,71 @@ function bugReportSourceForWindow(win) {
   return { windowId, webContentsId };
 }
 
-function bugReportCreateSourceForSender(event) {
-  const source = bugReportSourceForWindow(BrowserWindow.fromWebContents(event.sender));
-  return source ?? null;
+async function showBugReportError(win, message) {
+  const options = {
+    type: 'error',
+    title: 'Report a Bug',
+    message,
+  };
+  try {
+    if (isLiveMainWindow(win)) await dialog.showMessageBox(win, options);
+    else await dialog.showMessageBox(options);
+  } catch {
+    // A native error dialog is best effort and must not affect cleanup.
+  }
 }
 
-function bugReportSenderId(event) {
-  const senderId = event?.sender?.id;
-  return Number.isSafeInteger(senderId) && senderId > 0 ? senderId : null;
-}
-
-async function openBugReportPlaceholder(win) {
+async function openBugReportReview(win) {
   const source = bugReportSourceForWindow(win);
   if (!source) {
-    await dialog.showMessageBox({
-      type: 'error',
-      title: 'Report Bug',
-      message: 'StashBase could not start a bug report for this window.',
-    });
+    await showBugReportError(win, 'StashBase could not start a bug report for this window.');
     return;
   }
   const created = await bugReports.createDraft(source);
   if (!created.ok) {
-    await dialog.showMessageBox(win, {
-      type: 'error',
-      title: 'Report Bug',
-      message: 'StashBase could not start a bug report.',
-    });
+    await showBugReportError(win, 'StashBase could not start a bug report.');
     return;
   }
+
+  let review;
   try {
-    await dialog.showMessageBox(win, {
-      type: 'info',
-      title: 'Report Bug',
-      message: 'Bug report draft created.',
-      detail: 'The review and submission steps will be added in a later update.',
+    review = createBugReportReviewWindow({
+      BrowserWindow,
+      preloadPath: path.join(__dirname, 'bug-report-review-preload.cjs'),
+      htmlPath: path.join(__dirname, 'bug-report-review.html'),
     });
-  } catch (err) {
-    // Native dialogs are only a Phase 1 placeholder. A failure must not turn
-    // a menu action into an Electron crash or leave the draft reachable.
-    console.warn(`[electron] bug report placeholder failed: ${err?.message ?? err}`);
-  } finally {
+  } catch {
     bugReports.discardDraft(created.draft.id, source.webContentsId);
+    await showBugReportError(win, 'StashBase could not open the bug report review.');
+    return;
+  }
+
+  const reviewWindow = review.window;
+  const reviewWebContentsId = reviewWindow.webContents.id;
+  bugReportReviewWindows.add(reviewWindow);
+  bugReportReviewDraftBySender.set(reviewWebContentsId, created.draft.id);
+  reviewWindow.once('closed', () => {
+    bugReportReviewDraftBySender.delete(reviewWebContentsId);
+    bugReportReviewWindows.delete(reviewWindow);
+    bugReports.discardDraftsForReviewWindow(reviewWebContentsId);
+    if (mainWindows.size === 0 && bugReportReviewWindows.size === 0 && shouldQuitAfterLastWindow(process.platform)) {
+      app.quit();
+    }
+  });
+
+  const bound = bugReports.bindReviewWindow(created.draft.id, reviewWebContentsId);
+  if (!bound.ok) {
+    reviewWindow.destroy();
+    bugReports.discardDraft(created.draft.id, source.webContentsId);
+    await showBugReportError(win, 'StashBase could not authorize the bug report review.');
+    return;
+  }
+
+  try {
+    await review.loaded;
+  } catch {
+    if (!reviewWindow.isDestroyed()) reviewWindow.destroy();
+    await showBugReportError(win, 'StashBase could not load the bug report review.');
   }
 }
 
@@ -769,7 +837,7 @@ async function createWindow(initialFolder) {
     if (lastMainWindow === win) {
       lastMainWindow = [...mainWindows].find((candidate) => isLiveMainWindow(candidate)) ?? null;
     }
-    if (mainWindows.size === 0) {
+    if (mainWindows.size === 0 && bugReportReviewWindows.size === 0) {
       if (shouldQuitAfterLastWindow(process.platform)) app.quit();
     }
   });
@@ -874,7 +942,7 @@ function installApplicationMenu() {
     },
     onReportBug: () => {
       const target = BrowserWindow.getFocusedWindow();
-      void openBugReportPlaceholder(isLiveMainWindow(target) ? target : lastMainWindow);
+      void openBugReportReview(isLiveMainWindow(target) ? target : lastMainWindow);
     },
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -910,27 +978,6 @@ ipcMain.handle('dialog:openFolder', async (event, opts = {}) => {
 // local navigation through us.
 ipcMain.handle('shell:openExternal', async (_e, url) => {
   return openHttpExternal(url, 'renderer external URL');
-});
-
-// Bug-report IPC intentionally exposes only opaque draft lifecycle actions.
-// The main process derives source ownership from the IPC sender and never
-// accepts a renderer-supplied window identity, path, or artifact handle.
-ipcMain.handle('bug-report:create', (event) => {
-  const source = bugReportCreateSourceForSender(event);
-  if (!source) return { ok: false, error: { code: 'FORBIDDEN', message: 'This window cannot create a bug report draft.' } };
-  return bugReports.createDraft(source);
-});
-
-ipcMain.handle('bug-report:preview', (event, id) => {
-  const senderId = bugReportSenderId(event);
-  if (!senderId) return { ok: false, error: { code: 'FORBIDDEN', message: 'This window cannot access bug report drafts.' } };
-  return bugReports.getPreview(id, senderId);
-});
-
-ipcMain.handle('bug-report:discard', (event, id) => {
-  const senderId = bugReportSenderId(event);
-  if (!senderId) return { ok: false, error: { code: 'FORBIDDEN', message: 'This window cannot access bug report drafts.' } };
-  return bugReports.discardDraft(id, senderId);
 });
 
 ipcMain.handle('window:setFolder', (event, folder) => {
@@ -1015,6 +1062,11 @@ if (!hasSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
+    try {
+      await bugReportHandoff.initializeSession();
+    } catch {
+      console.warn('[electron] bug-report temporary session initialization failed');
+    }
     // Refresh the MCP wrapper on every launch so the most recently-opened
     // app owns it. Without this, a wrapper written by an earlier `pnpm
     // dev` run still points at a vanished `node_modules/.bin/tsx`, and
