@@ -30,6 +30,7 @@ function createApplicationMenuTemplate({
   onNewWindow,
   onCloseWindow,
   onOpenExternal,
+  onReportBug = () => { },
 }) {
   const isMac = platform === 'darwin';
   // Do not use Electron's `role: 'close'`: its Cmd/Ctrl+W binding conflicts
@@ -81,6 +82,10 @@ function createApplicationMenuTemplate({
         // Bugs belong on the issue tracker, not in chat: an issue is
         // searchable by the next person who hits the same thing, and a
         // Discord message is not.
+        {
+          label: 'Report a Bug…',
+          click: () => onReportBug(),
+        },
         {
           label: 'Report an Issue',
           click: () => onOpenExternal(LINKS.issues),

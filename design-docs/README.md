@@ -58,6 +58,7 @@ design and contribution ownership.
 | Preparation          | Make difficult formats searchable without replacing the source | [Preparation](design/preparation.md)     |
 | Search and Retrieval | Find source evidence for people and Agents                     | [Search and Retrieval](design/search.md) |
 | Agent Panel          | Collaborate with Claude or Codex against an explicit scope     | [Agent Panel](design/agent-panel.md)     |
+| Bug Reporting        | Prepare a local, user-reviewed report without telemetry        | [Bug Reporting](design/bug-reporting.md) |
 
 Each area document uses the same shape: user outcome, scope and non-goals,
 current experience, experience contract, cross-area seams, contribution
@@ -97,4 +98,3 @@ tell what the product does now without reconstructing code history.
 
 * Use issues and pull requests for schedules, owners, and implementation
   chronology. These documents are not ticket trackers or changelogs.
-
