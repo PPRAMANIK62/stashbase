@@ -394,6 +394,10 @@ Electron journey covering new chat, folder binding, command approval,
 transcript completion, a window-folder switch, and interruption. The fixture
 is selected through the shipping `STASHBASE_CODEX_BIN` override and uses no
 developer credentials, real CLI account, user CLI history, or network output.
+Its streamed-math journey deliberately sends consecutive text deltas followed
+immediately by turn completion. Queued React state updates must use the stream
+boundary captured when each protocol event arrived; completion or tool events
+must not retroactively change how an earlier delta is accumulated.
 
 A credentialed real-CLI Agent turn, clipboard-image attachment, and packaged
 runtime discovery remain in the residual
