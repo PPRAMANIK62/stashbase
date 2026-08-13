@@ -214,9 +214,13 @@ arguments. The renderer uses that identity for HTTP headers, asset URLs, and
 Agent WebSockets, and reports folder transitions back to the main process. The
 main-process registry uses those transitions to focus an existing matching
 folder window, excluding the sender when the user explicitly asks to open its
-current folder in another window. Native close first requests an awaited
-renderer save acknowledgement; failure or timeout leaves the window open.
-Only then does close remove the registry entry and retry server cleanup. The
+current folder in another window. Native close requests an awaited renderer
+save acknowledgement only after the current renderer explicitly reports that
+its save handler is registered; `did-finish-load` alone is not readiness, and
+navigation invalidates the prior handler state. Before that announcement there
+cannot yet be a renderer-owned edit, so close proceeds without manufacturing a
+save failure. Once ready, an actual save failure or timeout leaves the window
+open. Only then does close remove the registry entry and retry server cleanup. The
 server retires the identity with a bounded tombstone before clearing its
 folder and Agent context, so a late open request cannot recreate a ghost
 window. Folder removal uses the same save barrier for every matching window,
