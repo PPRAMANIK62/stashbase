@@ -145,7 +145,7 @@ Some formats need preparation before their contents can be searched. StashBase k
 |---|---|---|
 | Markdown | The Markdown file | Source text |
 | HTML | The HTML file | Clean text extracted from the HTML |
-| JSON | The JSON file | Raw source text |
+| JSON | The JSON file | Source-preserving tree and exact source text |
 | PDF | The original PDF | Derived Markdown |
 | DOCX | The original DOCX | Derived HTML |
 | Images | The original image | OCR text |

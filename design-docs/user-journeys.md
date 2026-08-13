@@ -45,7 +45,9 @@ editing behavior.
 1. Open a supported source in a persistent tab.
 2. Read it in the format-appropriate surface.
 3. For editable Markdown or JSON, explicitly enter the appropriate editing
-   state and save through the shared durability path.
+   state and save through the shared durability path. Valid JSON may be
+   inspected and patched structurally or edited as exact source; malformed JSON
+   remains recoverable in Source mode.
 4. Navigate with tabs, Quick Open, outlines, Find, local links, or search
    results.
 5. Close a tab or window without silently losing a live edit.
