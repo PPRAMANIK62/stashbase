@@ -37,6 +37,7 @@ import { ModalShell } from './ModalShell';
 import { Button } from './ui/button';
 import { PopupLoadingStatus } from './ui/status';
 import { api, errorMessage, type IndexStatus } from '../api';
+import { requestAgentBootstrap } from '../agentBootstrap';
 import { FILE_MIME } from '../dragMime';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 
@@ -396,6 +397,7 @@ export function activateChatTabForAgent(
   dispatch: (a: Action) => void,
   agent: AgentKind,
 ) {
+  requestAgentBootstrap(agent, dispatch);
   const plan = newChatPlan(state.chatTabs, agent);
   if (plan.kind === 'reuse') {
     if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });

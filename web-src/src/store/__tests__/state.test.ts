@@ -263,7 +263,7 @@ test('chat tab recency survives panel toggles and is cleaned as tabs close', () 
   assert.deepEqual(state.chatTabRecencyByAgent.codex, [second.id, first.id]);
   state = reducer(state, { type: 'CHAT_TOGGLE' });
   assert.equal(state.chatOpen, false);
-  // CHAT_AGENT_OPEN (folder open / MainPane's Start chat) reveals the
+  // CHAT_AGENT_OPEN (New Chat / MainPane's Start chat) reveals the
   // agent's most recent tab and reopens the hidden panel.
   state = reducer(state, { type: 'CHAT_AGENT_OPEN', agent: 'codex' });
   assert.equal(state.chatOpen, true);

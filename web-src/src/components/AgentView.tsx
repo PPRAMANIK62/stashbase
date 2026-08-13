@@ -100,6 +100,10 @@ export function AgentView({
   const meta = AGENT_META[agent];
   const runtime = state.agents.find((candidate) => candidate.id === agent);
   const runtimeUnavailable = runtime?.state === 'unavailable';
+  const bootstrapPhase = runtime?.bootstrap?.phase ?? 'idle';
+  const bootstrapActive = bootstrapPhase === 'installing' || bootstrapPhase === 'configuring';
+  const bootstrapFailed = bootstrapPhase === 'failed';
+  const runtimeBlocked = runtimeUnavailable || bootstrapActive || bootstrapFailed;
   const capabilities = runtime?.capabilities ?? meta.capabilities;
   const folderPathRef = useRef(state.folderPath);
   folderPathRef.current = state.folderPath;
@@ -305,6 +309,12 @@ export function AgentView({
     if (!runtime) void refreshRuntimes();
   }, [runtime]);
 
+  useEffect(() => {
+    if (!bootstrapActive) return;
+    const timer = window.setInterval(() => { void refreshRuntimes(); }, 500);
+    return () => window.clearInterval(timer);
+  }, [bootstrapActive]);
+
   /** The current turn's identity = its user-message id (stable for the
    *  turn's whole life, unlike the streaming block that keeps changing). */
   function currentTurnKey(): string | null {
@@ -372,7 +382,7 @@ export function AgentView({
     // Discovery is authoritative once it has returned. Do not open a socket
     // for a known-missing CLI: the setup card below is the actionable state,
     // rather than a generic connection failure.
-    if (runtimeUnavailable) {
+    if (runtimeBlocked) {
       readyRef.current = false;
       setPhase('closed');
       setFatal(null);
@@ -434,7 +444,7 @@ export function AgentView({
     return () => {
       closeAgentSocketIntentionally(ws);
     };
-  }, [nonce, runtime?.endpoint, runtimeUnavailable, agent, meta.shortName]);
+  }, [nonce, runtime?.endpoint, runtimeBlocked, agent, meta.shortName]);
 
   /** Tear down and start a fresh session (Retry button / after the user
    *  reopens a folder). */
@@ -485,6 +495,15 @@ export function AgentView({
     } catch {
       // Retain the last known catalog so an unavailable runtime remains
       // actionable even while the local server is restarting.
+    }
+  }
+
+  async function startRuntimeBootstrap() {
+    try {
+      const result = await api.bootstrapAgent(agent);
+      dispatch({ type: 'AGENTS_LOADED', agents: result.clis });
+    } catch (error) {
+      actions.toast(error instanceof Error ? error.message : String(error), { level: 'error' });
     }
   }
 
@@ -1184,6 +1203,19 @@ export function AgentView({
         * here was pure noise. */}
       {!runtime ? (
         <AgentRuntimeChecking name={meta.name} onRefresh={() => void refreshRuntimes()} />
+      ) : bootstrapActive ? (
+        <AgentRuntimeProgress runtime={runtime} fallbackName={meta.name} />
+      ) : bootstrapFailed ? (
+        <AgentRuntimeFailure
+          runtime={runtime}
+          fallbackName={meta.name}
+          onRetry={() => void startRuntimeBootstrap()}
+          onCopy={() => {
+            void copyText(runtime.installHint).then((copied) => {
+              actions.toast(copied ? 'Install command copied.' : 'Could not copy install command.', { level: copied ? 'info' : 'error' });
+            });
+          }}
+        />
       ) : runtimeUnavailable ? (
         <AgentRuntimeSetup
           runtime={runtime}
@@ -1197,6 +1229,7 @@ export function AgentView({
               );
             });
           }}
+          onInstall={() => void startRuntimeBootstrap()}
           onRefresh={() => void refreshRuntimes()}
         />
       ) : <>
@@ -1333,24 +1366,72 @@ function AgentRuntimeSetup({
   runtime,
   fallbackName,
   onCopy,
+  onInstall,
   onRefresh,
 }: {
   runtime: Agent | undefined;
   fallbackName: string;
   onCopy: () => void;
+  onInstall: () => void;
   onRefresh: () => void;
 }) {
   const name = runtime?.label ?? fallbackName;
-  const installHint = runtime?.installHint ?? '';
   return (
     <div className={runtimeCardWrapClass} role="status">
       <div className={runtimeCardClass}>
         <h2 className={runtimeCardTitleClass}>{name} is not installed</h2>
-        <p className={runtimeCardCopyClass}>Install its CLI to start a built-in chat.</p>
-        <code className="block overflow-x-auto rounded-md border border-border bg-background p-2 font-mono text-sm whitespace-nowrap">{installHint}</code>
+        <p className={runtimeCardCopyClass}>StashBase can install the official runtime privately without changing your system PATH.</p>
         <div className={runtimeCardActionsClass}>
-          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onCopy}>Copy command</Button>
-          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Refresh status</Button>
+          <Button className={buttonVariants({ variant: 'ghost', size: 'sm' })} onPress={onCopy} aria-label={`Copy manual install command for ${name}`}>Copy manual command</Button>
+          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Check again</Button>
+          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onInstall}>Install and continue</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentRuntimeProgress({ runtime, fallbackName }: { runtime: Agent; fallbackName: string }) {
+  const status = runtime.bootstrap;
+  const name = runtime.label || fallbackName;
+  const progress = typeof status?.progress === 'number' ? Math.max(0, Math.min(1, status.progress)) : null;
+  return (
+    <div className={runtimeCardWrapClass} role="status" aria-live="polite">
+      <div className={runtimeCardClass}>
+        <h2 className={runtimeCardTitleClass}>Preparing {name}</h2>
+        <p className={runtimeCardCopyClass}>{status?.message ?? `Installing ${name}…`}</p>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className={'h-full rounded-full bg-accent transition-[width] duration-300 ' + (progress == null ? 'w-1/3 animate-pulse' : '')}
+            style={progress == null ? undefined : { width: `${Math.round(progress * 100)}%` }}
+          />
+        </div>
+        <p className="mt-2 mb-0 text-xs text-muted-foreground">You can keep browsing while this finishes.</p>
+      </div>
+    </div>
+  );
+}
+
+function AgentRuntimeFailure({
+  runtime,
+  fallbackName,
+  onRetry,
+  onCopy,
+}: {
+  runtime: Agent;
+  fallbackName: string;
+  onRetry: () => void;
+  onCopy: () => void;
+}) {
+  const name = runtime.label || fallbackName;
+  return (
+    <div className={runtimeCardWrapClass} role="alert">
+      <div className={runtimeCardClass}>
+        <h2 className={runtimeCardTitleClass}>Couldn’t prepare {name}</h2>
+        <p className={runtimeCardCopyClass}>{runtime.bootstrap?.error ?? 'The runtime setup did not finish.'}</p>
+        <div className={runtimeCardActionsClass}>
+          <Button className={buttonVariants({ variant: 'ghost', size: 'sm' })} onPress={onCopy}>Copy manual command</Button>
+          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onRetry}>Retry</Button>
         </div>
       </div>
     </div>
