@@ -47,9 +47,10 @@ test('read-only HTML, image, and audio sources use their dedicated viewers', asy
     await expect(audio).toBeVisible();
     await expect(audio).toHaveAttribute('src', /\/asset\//);
     await expect(app.page.getByText('Transcript', { exact: true })).toBeVisible();
-    await expect(app.page.getByRole('alert').filter({
-      hasText: /whisper-cli is missing|Transcription is not configured/,
-    })).toBeVisible();
+    const transcriptionState = app.page.locator('[role="status"], [role="alert"]').filter({
+      hasText: /Download the small local model|whisper-cli is missing|Transcription is not configured/,
+    });
+    await expect(transcriptionState).toBeVisible();
     await expect(app.page.getByRole('button', { name: 'Switch to Live Editing' })).toHaveCount(0);
     expectOnlyKnownViewerFailures(app, [
       /request: HEAD .*\/api\/files\/(?:pixel\.png|silence\.wav): net::ERR_ABORTED/,

@@ -14,6 +14,7 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
 const initialJsBudgetBytes = 416 * 1024;
 const expectedEntries = [
   'src/components/ChatPane.tsx',
+  'src/components/agent/AgentMathMarkdown.tsx',
   'src/components/CrepeDocument.tsx',
   'src/components/PdfPreview.tsx',
   'src/components/DocxPreview.tsx',

@@ -214,9 +214,13 @@ arguments. The renderer uses that identity for HTTP headers, asset URLs, and
 Agent WebSockets, and reports folder transitions back to the main process. The
 main-process registry uses those transitions to focus an existing matching
 folder window, excluding the sender when the user explicitly asks to open its
-current folder in another window. Native close first requests an awaited
-renderer save acknowledgement; failure or timeout leaves the window open.
-Only then does close remove the registry entry and retry server cleanup. The
+current folder in another window. Native close requests an awaited renderer
+save acknowledgement only after the current renderer explicitly reports that
+its save handler is registered; `did-finish-load` alone is not readiness, and
+navigation invalidates the prior handler state. Before that announcement there
+cannot yet be a renderer-owned edit, so close proceeds without manufacturing a
+save failure. Once ready, an actual save failure or timeout leaves the window
+open. Only then does close remove the registry entry and retry server cleanup. The
 server retires the identity with a bounded tombstone before clearing its
 folder and Agent context, so a late open request cannot recreate a ghost
 window. Folder removal uses the same save barrier for every matching window,
@@ -439,11 +443,13 @@ StashBase supports two retrieval paths:
 
 ## 6.2 Scope
 
-Search defaults to the whole library for MCP callers and the in-app popup
-alike. It can be narrowed by folder root and path prefix; MCP additionally
-narrows by source file-type categories.
+The in-app popup defaults to the whole library in either mode. MCP semantic
+retrieval has the same default, while MCP keyword retrieval requires a member
+folder or a path prefix whose owning member can be derived. Both can narrow by
+folder root and path prefix; MCP additionally narrows by source file-type
+categories.
 
-The desktop popup's semantic path uses the same ungated `POST /api/library/search` that powers MCP `search_library`; its exact path uses `POST /api/library/keyword-search`, a library-operations sweep that runs the per-folder ripgrep + derived-text search across every member folder (bounded concurrency, one shared delivered-match cap) and returns folder-qualified relative paths. A folder scope (with an optional escape-safe subfolder prefix) narrows either call; `normalizeLibrarySearchScope` rejects a prefix outside the requested folder instead of silently widening. File-type category chips are agent-facing only (`shared/search-types.ts` defines and validates the `notes` / `pdf` / `image` / `docx` / `audio` vocabulary; `server/format.ts` maps categories to source extensions). MCP `search_library` accepts those categories. The app and library HTTP routes plus the shared MCP handler normalize raw values through that validator; Library Operations accepts only validated categories before reaching Retrieval. Scope and type narrowing compose. The semantic path passes the extension filter to the daemon, which over-fetches from MFS (bounded), resolves any legacy sibling-derived row to its live visible source identity, filters by that source suffix, and truncates back to `top_k` before returning. Node pushes the note and legacy-source extension vocabularies with the daemon indexing rules so this compatibility logic cannot drift from the shared format catalog. A very sparse type can still return fewer than `top_k` hits. The keyword path restricts the ripgrep target and the derived-text walk to the scoped subtree and enabled categories. Display-path remapping is unchanged: filters act on source paths, and derived notes never surface.
+The desktop popup's semantic path uses the same ungated `POST /api/library/search` that powers MCP `search_library`; its exact path uses `POST /api/library/keyword-search`, a library-operations sweep that runs the per-folder ripgrep + derived-text search across every member folder (bounded concurrency, one shared delivered-match cap) and returns folder-qualified relative paths. A folder scope (with an optional escape-safe subfolder prefix) narrows either call; `normalizeLibrarySearchScope` rejects a prefix outside the requested folder instead of silently widening and derives the owning member for a prefix-only scope. File-type category chips are agent-facing only (`shared/search-types.ts` defines and validates the `notes` / `pdf` / `image` / `docx` / `audio` vocabulary; `server/format.ts` maps categories to source extensions). MCP `search_library` accepts those categories. The app and library HTTP routes plus the shared MCP handler normalize raw mode and type values through shared validators; Library Operations accepts only validated values before reaching Retrieval. Scope and type narrowing compose. The semantic path passes the extension filter to the daemon, which over-fetches from MFS (bounded), resolves any legacy sibling-derived row to its live visible source identity, filters by that source suffix, and truncates back to `top_k` before returning. Node pushes the note and legacy-source extension vocabularies with the daemon indexing rules so this compatibility logic cannot drift from the shared format catalog. A very sparse type can still return fewer than `top_k` hits. The keyword path restricts the ripgrep target and the derived-text walk to the scoped subtree and enabled categories, then applies the same `top_k` response bound and reports partial/truncated availability if either retrieval or that bound omitted matches. Display-path remapping is unchanged: filters act on source paths, and derived notes never surface.
 
 `server/retrieval/` returns one flat list of visible-source evidence for an explicit `keyword` or `semantic` query. The source path is absolute at this seam; MCP retains the absolute path, the library keyword sweep qualifies each file with its member folder root, and the popup maps semantic hits' absolute paths onto (folder, relative) identities client-side (`web-src/src/librarySearch.ts`), dropping any hit the current member list cannot place. A result reports `ready`, `partial`, or `unavailable` availability so an embedding-key absence is not confused with preparation or indexing work. `server/index-status.ts` owns the folder-scoped readiness snapshot behind `/api/index-status`, including semantic pending work, conversion state, durable attention records, tree versions, and index warnings. `web-src/src/store/useSearchActions.ts` mirrors that snapshot for file rows and for the search popup's readiness banners, which therefore describe the active folder only. The readiness, caching, failure, and cancellation rules belong to [data-layer §8.2](data-layer.md#82-conversion-scheduler-and-renderer-notification).
 
@@ -470,7 +476,7 @@ StashBase does not embed an LLM. It gives AI clients retrieval tools, explicit r
 The core MCP tools are:
 
 - **`library_info()`**: returns the default folder home, opened folders, optional folder descriptions, and embedder information so a client can orient itself.
-- **`search_library(query, folder?, path_prefix?, types?, top_k?)`**: searches the library and returns source paths, chunks, line ranges, and scores; `types` accepts the shared source categories and is echoed in the response.
+- **`search_library(query, mode?, folder?, path_prefix?, types?, case_strict?, whole_word?, top_k?)`**: searches in semantic mode by default or exact keyword mode, returning the same source-hit shape; keyword mode requires `folder` or `path_prefix`, and `types` accepts the shared source categories.
 - **`reindex(folder?)`**: reconciles disk state with the index after local files change.
 
 StashBase also exposes bounded file helpers:
@@ -529,11 +535,33 @@ The built-in panel is a convenience client for the same library, not a separate 
 
 Renderer and visual-design rules for this panel live in [agent-panel.md](agent-panel.md). This architecture section only defines the system boundary and durable state model.
 
-It runs the user's installed Agent CLI in the current folder and relies on the same global MCP configuration used by external clients.
+It runs either the user's supported Agent CLI or a StashBase-managed runtime.
+Normal discovery prefers an existing system executable, then falls back to the
+application-scoped executable under AppData. Managed runtimes never modify the
+user's PATH and still use the provider's normal account/config home when
+launched, so replacing a managed binary does not clear login or history.
 
 Each opened folder has one root-level `AGENTS.md` file for durable Agent instructions about that folder. Built-in Codex uses it directly through the normal folder context. Built-in Claude uses a root-level `CLAUDE.md` bridge that contains only `@AGENTS.md`; the bridge is created on first Claude launch if missing. Both files are ordinary Markdown source files, so the user can edit or delete them.
 
-Packaged builds resolve the user-installed `claude` and `codex` executables explicitly, including common Homebrew paths, npm global paths, and Windows npm command shims, before launching the built-in panel. This keeps the panel aligned with the user's normal CLI setup instead of depending on optional SDK binaries bundled in `node_modules`.
+Packaged builds resolve user-installed `claude` and `codex` executables
+explicitly, including common Homebrew paths, npm global paths, and Windows npm
+command shims. The first explicit chat-opening action starts the selected
+runtime's readiness gate; app boot and folder navigation never install an
+Agent. When no system or managed executable exists, Codex runs its official
+standalone installer with a private install directory, while Claude downloads
+the platform asset described by its official release manifest and verifies its
+size and SHA-256 before publishing it atomically. Installation is cancellable
+during app shutdown. Only the selected Agent is installed.
+
+Readiness configures the matching CLI's global StashBase MCP entry before
+reporting ready. Native attachment repeats that idempotent configuration before
+process startup, closing with an actionable error if the user config cannot be
+updated. Server startup also repairs MCP for installed runtimes found through
+cheap discovery; it never downloads an Agent or runs a login shell, and a
+configuration error cannot block the workspace. Development builds expose
+in-memory discovery and failure simulation controls plus targeted
+managed-runtime reset; these controls never uninstall a system Agent or clear
+provider credentials.
 
 The key architectural point is:
 

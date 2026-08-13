@@ -81,6 +81,7 @@ test('Markdown preserves frontmatter across editing and safely routes links and 
     expect(fs.readFileSync(sourceFile, 'utf8')).toContain('Edited through the journey.');
 
     await app.page.getByRole('button', { name: 'Switch to Live Editing' }).click();
+    await expect(editor).toBeVisible();
     // Click the final paragraph directly before creating the empty paragraph
     // required by the slash menu. Chromium's document-end shortcut can leave
     // ProseMirror's retained virtual selection at its earlier heading.
@@ -90,7 +91,8 @@ test('Markdown preserves frontmatter across editing and safely routes links and 
     await app.page.keyboard.press('Enter');
     await app.page.keyboard.insertText('/');
     // Crepe keeps command items for hidden menu groups mounted. Restrict the
-    // lookup to its shown slash menu before selecting the interactive list item.
+    // lookup to its shown slash menu before selecting the exact visible label. The
+    // list item also contains icon text, so matching the whole item is brittle.
     const slashMenu = activeDocument(app.page).locator('.milkdown-slash-menu[data-show="true"]');
     await expect(slashMenu).toBeVisible();
     const headingCommand = slashMenu.getByText('Heading 1', { exact: true });

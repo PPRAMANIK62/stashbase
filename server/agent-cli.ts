@@ -1,6 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import {
+  agentDiscoveryPolicy,
+  managedAgentExecutable,
+  type ManagedAgentId,
+} from './agent-runtime-paths.ts';
 
 export interface AgentCliSpec {
   name: string;
@@ -24,6 +30,9 @@ const CLI_SEARCH_DIRS = [
 ];
 
 const WINDOWS_EXECUTABLE_EXTENSIONS = new Set(['.com', '.exe', '.cmd', '.bat']);
+const LOGIN_SHELL_HIT_CACHE_MS = 5 * 60_000;
+const LOGIN_SHELL_MISS_CACHE_MS = 10_000;
+const loginShellCache = new Map<string, { checkedAt: number; executable: string | null }>();
 
 export function isWindowsLaunchableAgentCliPath(file: string): boolean {
   return WINDOWS_EXECUTABLE_EXTENSIONS.has(path.extname(file).toLowerCase());
@@ -75,7 +84,16 @@ export function agentCliExecutableCandidates(name: string, platform: NodeJS.Plat
   return [`${name}.exe`, `${name}.cmd`, `${name}.bat`, `${name}.com`, name];
 }
 
-export function resolveAgentCli(spec: AgentCliSpec, warn?: (message: string) => void): string | null {
+function managedIdForName(name: string): ManagedAgentId | null {
+  if (name === 'claude' || name === 'codex') return name;
+  return null;
+}
+
+function resolveSystemAgentCli(
+  spec: AgentCliSpec,
+  warn?: (message: string) => void,
+  probeLoginShell = false,
+): string | null {
   const explicit = spec.envNames
     .map((name) => process.env[name])
     .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
@@ -92,7 +110,71 @@ export function resolveAgentCli(spec: AgentCliSpec, warn?: (message: string) => 
     }
   }
 
+  // GUI apps on macOS/Linux commonly start without the PATH assembled by
+  // nvm/fnm/asdf in the user's shell profile. Only an explicit readiness
+  // action performs this synchronous probe; ordinary catalog polling reuses
+  // its cache and never blocks the server on shell startup.
+  if (process.platform !== 'win32' && /^[A-Za-z0-9_-]+$/.test(spec.name)) {
+    const cached = loginShellCache.get(spec.name);
+    const cacheLifetime = cached?.executable ? LOGIN_SHELL_HIT_CACHE_MS : LOGIN_SHELL_MISS_CACHE_MS;
+    if (cached && Date.now() - cached.checkedAt < cacheLifetime) {
+      return cached.executable && isExecutable(cached.executable) ? cached.executable : null;
+    }
+    if (!probeLoginShell) return null;
+    let executable: string | null = null;
+    try {
+      const result = spawnSync(process.env.SHELL || '/bin/zsh', ['-l', '-i', '-c', `command -v ${spec.name}`], {
+        encoding: 'utf8',
+        timeout: 5_000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+      });
+      if (result.status === 0) {
+        const candidate = result.stdout.trim().split(/\r?\n/).at(-1);
+        if (candidate) {
+          const resolved = path.resolve(expandHome(candidate));
+          if (isExecutable(resolved)) executable = resolved;
+        }
+      }
+    } catch {
+      // A slow or broken profile is not an Agent failure; managed discovery
+      // remains the fallback.
+    }
+    loginShellCache.set(spec.name, { checkedAt: Date.now(), executable });
+    if (executable) return executable;
+  }
+
   return null;
+}
+
+/** Resolve according to the product policy: an existing user installation
+ * wins in normal operation, with the application-scoped runtime as fallback.
+ * Development can isolate either source without uninstalling anything. */
+function resolveAgentCliWithPolicy(
+  spec: AgentCliSpec,
+  warn: ((message: string) => void) | undefined,
+  probeLoginShell: boolean,
+): string | null {
+  const managedId = managedIdForName(spec.name);
+  if (!managedId) return resolveSystemAgentCli(spec, warn, probeLoginShell);
+  const policy = agentDiscoveryPolicy();
+  if (policy === 'managed-only') return managedAgentExecutable(managedId);
+  const system = resolveSystemAgentCli(spec, warn, probeLoginShell);
+  if (system || policy === 'system-only') return system;
+  return managedAgentExecutable(managedId);
+}
+
+export function resolveAgentCli(spec: AgentCliSpec, warn?: (message: string) => void): string | null {
+  return resolveAgentCliWithPolicy(spec, warn, false);
+}
+
+/** Explicit New Chat readiness may pay the one-time login-shell probe needed
+ * to find version-manager installations hidden from a GUI process PATH. */
+export function resolveAgentCliWithLoginShell(
+  spec: AgentCliSpec,
+  warn?: (message: string) => void,
+): string | null {
+  return resolveAgentCliWithPolicy(spec, warn, true);
 }
 
 export function agentCliNeedsShell(command: string): boolean {

@@ -313,6 +313,10 @@ export interface Agent {
   vendor: string;
   installHint: string;
   installed: boolean;
+  /** Which executable discovery selected. `managed` lives under StashBase
+   * AppData; `system` is an existing user installation. */
+  source?: 'system' | 'managed' | null;
+  bootstrap?: AgentBootstrapStatus;
   /** Full shell command the panel feeds to the shell once it's ready
    *  (e.g. `claude --theme light`). Built by the server from the agent
    *  registry so the renderer doesn't have to track per-agent flags. */
@@ -338,6 +342,25 @@ export interface Agent {
   };
 }
 
+export type AgentBootstrapPhase = 'idle' | 'installing' | 'configuring' | 'ready' | 'failed';
+
+export interface AgentBootstrapStatus {
+  phase: AgentBootstrapPhase;
+  progress?: number;
+  message?: string;
+  error?: string;
+}
+
+export type AgentDiscoveryPolicy = 'auto' | 'managed-only' | 'system-only';
+
+export interface AgentRuntimeDebugState {
+  enabled: boolean;
+  discoveryPolicy: AgentDiscoveryPolicy;
+  simulateInstallFailure: boolean;
+  simulateMcpFailure: boolean;
+}
+
 export interface AgentsResponse {
   clis: Agent[];
+  debug?: AgentRuntimeDebugState;
 }

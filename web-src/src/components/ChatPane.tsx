@@ -53,7 +53,7 @@ export function ChatSessionBoundary({
   );
 }
 
-export function ChatPane() {
+export default function ChatPane() {
   const { state, dispatch } = useApp();
   // The panel renders with or without a window folder: chats are scoped
   // per tab (a library folder, or the whole library), so a no-folder

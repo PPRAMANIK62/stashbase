@@ -48,6 +48,33 @@ test('Retrieval normalizes keyword matches into flat visible-source evidence', a
   });
 });
 
+test('Retrieval applies top_k to keyword evidence and reports truncation', async () => {
+  const retrieval = createRetrieval({
+    keywordSearch: async () => ({
+      files: [{
+        path: 'notes/brief.md', totalMatches: 2,
+        matches: [
+          { line: 4, text: 'first match', ranges: [[0, 5]] },
+          { line: 9, text: 'second match', ranges: [[0, 6]] },
+        ],
+      }],
+      truncated: false,
+    }),
+  });
+
+  const result = await retrieval.search({
+    mode: 'keyword',
+    query: 'match',
+    folderRoot: '/library',
+    topK: 1,
+  });
+
+  assert.equal(result.evidence.length, 1);
+  assert.equal(result.evidence[0]?.locator.line, 4);
+  assert.deepEqual(result.availability, { state: 'partial', reason: 'truncated' });
+  assert.equal(result.truncated, true);
+});
+
 test('Retrieval preserves semantic source identity and source-safe locators', async () => {
   const retrieval = createRetrieval({
     hasEmbeddingKey: () => true,

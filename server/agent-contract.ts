@@ -8,6 +8,9 @@
 import type { WebSocket } from 'ws';
 import { CLIS, launchCommandFor } from './terminal.ts';
 import { resolveAgentCli } from './agent-cli.ts';
+import { agentExecutableSource } from './agent-runtime-paths.ts';
+import { agentBootstrapStatus } from './agent-runtime-installer.ts';
+import { configureMcpClient } from './routes/mcp.ts';
 import { filesystemPath } from './filesystem-path.ts';
 
 export type AgentId = 'claude' | 'codex';
@@ -246,7 +249,9 @@ export interface AgentRuntimeDescriptor {
   launchCommand: string;
   endpoint: '/ws/agent';
   installed: boolean;
+  source: 'system' | 'managed' | null;
   state: AgentRuntimeState;
+  bootstrap: ReturnType<typeof agentBootstrapStatus>;
   error?: string;
   capabilities: AgentCapabilities;
 }
@@ -279,7 +284,9 @@ export function runtimeDescriptorFor(adapter: AgentAdapter, executable = agentEx
     launchCommand: launchCommandFor(cli),
     endpoint: '/ws/agent',
     installed,
+    source: agentExecutableSource(adapter.id, executable),
     state,
+    bootstrap: agentBootstrapStatus(adapter.id),
     ...(failure ? { error: failure } : {}),
     capabilities: adapter.capabilities,
   };
@@ -305,6 +312,14 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
   }
   if (!agentExecutableFor(adapter.id)) {
     ws.send(JSON.stringify({ t: 'error', message: `${adapter.label} CLI is not available.` }));
+    ws.close();
+    return;
+  }
+  try {
+    configureMcpClient(adapter.id === 'codex' ? 'codex-cli' : 'claude-code');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    ws.send(JSON.stringify({ t: 'error', message: `Could not connect StashBase MCP: ${message}` }));
     ws.close();
     return;
   }

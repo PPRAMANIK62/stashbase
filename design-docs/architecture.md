@@ -24,6 +24,7 @@ library per installation.
 | Local files and folders | User | They remain the source of truth. |
 | `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never overwritten by StashBase. |
 | Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
+| Application-scoped Agent runtimes | StashBase | They are downloaded on demand into AppData, remain outside the user's PATH, and can be rebuilt without touching provider accounts or global installations. |
 | Credentials and user settings | StashBase settings | They are managed through Settings, not environment variables. Appearance is user-wide, updates every open window immediately, and is limited to theme plus UI and reading-size presets. |
 
 Derived artifacts must not appear as ordinary files in the workspace. When
@@ -36,8 +37,10 @@ user-visible source file.
 - Each window works primarily in one current folder. Multiple windows may
   show different folders at the same time; those are independent UI scopes,
   not separate libraries or indexing runtimes.
-- In-app search and MCP retrieval both default to the whole library. Either can
-  narrow to an authorized folder or path prefix; source file-type categories
+- In-app search defaults to the whole library in either mode. MCP semantic
+  retrieval does the same, while MCP keyword retrieval requires an authorized
+  folder or path-prefix scope. Both surfaces offer semantic and keyword modes;
+  keyword works before AI Index is set up, and source file-type categories
   remain an agent-facing parameter.
 - MCP file operations are deliberately bounded to authorized library folders;
   they are never a general filesystem interface. The one membership-changing
@@ -45,6 +48,11 @@ user-visible source file.
   default folder home or inside an already-authorized location.
 - One local runtime owns indexing state. Other processes communicate through
   its supported boundary rather than maintaining competing copies of the index.
+- Agent readiness is demand-driven. An explicit chat action may reuse a
+  supported system CLI or install the selected official runtime into AppData;
+  opening the app or a folder alone must not download one. Startup repairs MCP
+  configuration for cheaply discoverable installed runtimes, and MCP
+  configuration is completed again before the built-in Agent session starts.
 - Closing a window releases only that window's UI and folder context. Shared
   indexing, settings, and MCP resources remain alive until the application
   session quits. A closed window identity cannot be revived by a request that

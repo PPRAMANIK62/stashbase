@@ -78,8 +78,17 @@ contextBridge.exposeInMainWorld('electron', {
   /** Flush renderer-owned edits before main releases this window's server
    * context. Returning false cancels close/removal. */
   onPrepareContextRelease: (handler) => {
+    const wasReady = contextReleaseHandlers.size > 0;
     contextReleaseHandlers.add(handler);
-    return () => contextReleaseHandlers.delete(handler);
+    if (!wasReady && contextReleaseHandlers.size > 0) {
+      ipcRenderer.send('window:context-release-handler-state', { ready: true });
+    }
+    return () => {
+      const removed = contextReleaseHandlers.delete(handler);
+      if (removed && contextReleaseHandlers.size === 0) {
+        ipcRenderer.send('window:context-release-handler-state', { ready: false });
+      }
+    };
   },
   contextReleaseReady: () => contextReleaseHandlers.size > 0,
   /** Before removing a library member, ask every window currently showing it

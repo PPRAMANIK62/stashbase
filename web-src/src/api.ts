@@ -280,6 +280,15 @@ export const api = {
   // the renderer just calls them "agents". `listAgents` populates the
   // launcher registry / installed-state.
   listAgents: () => getJson<AgentsResponse>('/api/terminal/clis'),
+  bootstrapAgent: (agent: 'claude' | 'codex') =>
+    send<AgentsResponse>('POST', `/api/terminal/clis/${encodeURIComponent(agent)}/bootstrap`),
+  setAgentRuntimeDebug: (patch: Partial<{
+    discoveryPolicy: 'auto' | 'managed-only' | 'system-only';
+    simulateInstallFailure: boolean;
+    simulateMcpFailure: boolean;
+  }>) => send<AgentsResponse>('PUT', '/api/terminal/debug', patch),
+  resetManagedAgent: (agent: 'claude' | 'codex') =>
+    send<AgentsResponse>('DELETE', `/api/terminal/clis/${encodeURIComponent(agent)}/managed`),
   mcpStatus: () =>
     getJson<{
       clients: Record<string, boolean | { configured?: boolean; cliInstalled?: boolean; restartRequired?: boolean }>;

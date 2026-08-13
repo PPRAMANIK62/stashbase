@@ -36,9 +36,11 @@ organizes the source material and narrative; it is not the slide editor.
 > Chat is for exploring. Canvas is for converging.
 
 The workspace follows that progression without asking the user to choose a
-mode. A folder opens with Chat as the primary surface and the file list still
-visible. Opening a source or creating the Canvas reveals the document beside
-the same conversation; closing the last document lets Chat expand again.
+mode. Chat opens as the primary surface with one reusable blank tab and the
+file list still visible; opening the app or a folder alone does not install an
+Agent, while the first explicit New Chat owns runtime preparation.
+Opening a source or creating the Canvas reveals the document beside the same
+conversation; closing the last document lets Chat expand again.
 
 ## 1. Take an Engineering Project from Requirements to Delivery
 

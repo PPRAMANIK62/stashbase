@@ -409,6 +409,24 @@
     }
     .agent-prose ul, .agent-prose ol { padding-left: 1.4em; margin: 0.4em 0; }
     .agent-prose a { color: var(--accent); }
+    .agent-prose .katex { font-size: inherit; }
+    .agent-prose .katex-display {
+      max-width: 100%;
+      margin: 0.75em 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 2px;
+    }
+    .agent-prose .katex-display > .katex {
+      display: inline-block;
+      min-width: max-content;
+    }
+    .agent-prose .katex-error {
+      color: var(--status-danger);
+      font-family: var(--font-mono);
+      font-size: inherit;
+      overflow-wrap: anywhere;
+    }
 
     /* Working shimmer (Cursor register): a soft light band sweeps through
      * a meta label while the agent is actively thinking or running.

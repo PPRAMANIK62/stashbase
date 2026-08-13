@@ -99,7 +99,7 @@ export function UnsupportedFilesModal({ unsupportedFiles, onClose }: Unsupported
   return null;
 }
 
-export function UnsupportedFilesModalGate() {
+export default function UnsupportedFilesModalGate() {
   const { state, dispatch } = useApp();
   const { sourceCode = 0, other = 0 } = state.unsupportedFiles || {};
   const total = sourceCode + other;

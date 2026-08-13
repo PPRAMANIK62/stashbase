@@ -212,6 +212,20 @@ export function newChatPlan(
   return { kind: 'reuse', id: reuseId, switchAgent: tab?.agent !== agent };
 }
 
+/** Whether a newly entered window scope needs its one blank Chat entry.
+ * Kept separate from Agent readiness: opening this surface must not install
+ * a runtime until the user explicitly presses New Chat. */
+export function shouldOpenInitialChatOnWindowEntry(
+  booted: boolean,
+  windowFolder: string,
+  chatTabCount: number,
+  previousWindowFolder: string | null,
+): boolean {
+  return chatTabCount === 0
+    && previousWindowFolder !== windowFolder
+    && (booted || Boolean(windowFolder));
+}
+
 /** What the chat panel does when the WINDOW's folder switches:
  * - the ACTIVE tab is already bound to the new folder → nothing. The
  *   conversation the user is looking at IS the working entry for that

@@ -29,6 +29,7 @@ import {
 } from './state';
 import type { AgentKind } from '../agentCatalog';
 import { rememberPreferredAgent } from '../agentPreference';
+import { requestAgentBootstrap } from '../agentBootstrap';
 import type { EditorHandle, FindController } from './actionTypes';
 import { useFeedbackActions } from './useFeedbackActions';
 import { useFindActions } from './useFindActions';
@@ -444,6 +445,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openAgent: (agent) => {
       rememberPreferredAgent(agent);
       const current = stateRef.current;
+      requestAgentBootstrap(agent, dispatch, (error) => {
+        toast(error instanceof Error ? error.message : String(error), { level: 'error' });
+      });
       const hasOpenTab = current.chatTabs.some((tab) => tab.agent === agent);
       dispatch({
         type: 'CHAT_AGENT_OPEN',

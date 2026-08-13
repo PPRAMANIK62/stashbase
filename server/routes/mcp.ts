@@ -110,7 +110,7 @@ function cliIdForMcpClient(client: string): string | null {
   return null;
 }
 
-function configureMcpClient(client: string): Record<string, unknown> {
+export function configureMcpClient(client: string): Record<string, unknown> {
   if (!fs.existsSync(MCP_ENTRY)) {
     throw new Error(`MCP entry missing: ${MCP_ENTRY}`);
   }

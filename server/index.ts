@@ -69,6 +69,10 @@ import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
 import { mount as mountOnboardingRoutes } from './routes/onboarding.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from './agent-adapters.ts';
+import {
+  cancelAgentRuntimeInstalls,
+  connectInstalledAgentMcpOnStartup,
+} from './agent-runtime-installer.ts';
 
 const log = logger('server');
 
@@ -366,6 +370,10 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   void mcpHttpService.start().catch((err: unknown) => {
     log.warn(`MCP HTTP startup failed: ${err instanceof Error ? err.message : String(err)}`);
   });
+  for (const { id, status } of connectInstalledAgentMcpOnStartup()) {
+    if (status.phase === 'ready') log.info(`connected StashBase MCP for installed ${id} runtime`);
+    else if (status.phase === 'failed') log.warn(`could not connect StashBase MCP for ${id}: ${status.error ?? 'unknown error'}`);
+  }
   if (DEV_VITE) log.info(`dev-proxy → vite at http://localhost:${VITE_PORT}`);
   // We own :8090 now → we're THE server. Reap any orphan daemon left by a
   // previous server that died hard (kill -9 / crash / lost the startup
@@ -582,6 +590,7 @@ async function shutdown(reason: string): Promise<void> {
   try {
     await runShutdownCleanup({
       closeMcp: () => mcpHttpService.close(),
+      cancelAgentInstalls: cancelAgentRuntimeInstalls,
       cancelModelDownloads: cancelAllTranscriptionModelDownloads,
       cancelConversions: cancelAllConversions,
       closeStateDb,
@@ -591,6 +600,9 @@ async function shutdown(reason: string): Promise<void> {
       },
       onModelDownloadsCancelled: (cancelled) => {
         if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} model download(s)`);
+      },
+      onAgentInstallsCancelled: (cancelled) => {
+        if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} Agent install(s)`);
       },
       onError: (step, err) => {
         log.warn(`shutdown: ${step} cleanup failed: ${err instanceof Error ? err.message : String(err)}`);

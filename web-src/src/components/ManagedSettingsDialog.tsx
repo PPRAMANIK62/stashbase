@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { CloseIcon } from '../icons';
 import type { SettingsDialogProps, SettingsSection } from './SettingsModal';
 import { AppearancePanel } from './settings/AppearancePanel';
+import { AgentRuntimePanel } from './settings/AgentRuntimePanel';
 import { EmbeddingPanel } from './settings/EmbeddingPanel';
 import { McpClientsPanel } from './settings/McpClientsPanel';
 import { TranscriptionPanel } from './settings/TranscriptionPanel';
@@ -10,6 +11,7 @@ import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
   { id: 'appearance', label: 'Appearance', render: () => <AppearancePanel /> },
+  { id: 'agents', label: 'Agents', render: () => <AgentRuntimePanel /> },
   { id: 'embedding', label: 'AI Index', render: () => <EmbeddingPanel /> },
   { id: 'transcription', label: 'Transcription', render: () => <TranscriptionPanel /> },
   { id: 'mcp', label: 'MCP', render: () => <McpClientsPanel /> },

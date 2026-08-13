@@ -32,7 +32,10 @@ data, folder home, artifacts directory, and loopback port. It redirects
 `STASHBASE_LOCAL_DATA_ROOT`, `STASHBASE_FOLDER_HOME`, and
 `STASHBASE_E2E_USER_DATA`, and pins locale and time zone. Tests must never read
 the developer's StashBase config, folders, credentials, CLI history, or normal
-application data.
+application data. Ordinary fixtures also force Agent discovery to the empty
+fixture-owned managed-runtime root, so a developer-installed Codex or Claude
+cannot create background sessions or error UI. The deterministic Agent journey
+alone opts into `system-only` discovery with its fixture executable.
 
 Seed only the data needed by the journey. Mutate the disposable files through
 shipping UI or a narrowly scoped native-boundary stub, then assert the
@@ -127,7 +130,10 @@ contract, then the `electron-functional` Playwright project. The executable
 fixture speaks the production stdio JSON-RPC vocabulary through
 `STASHBASE_CODEX_BIN` and records only disposable test data. It makes no
 network request, reads no credentials, and does not replace the packaged
-real-CLI sanity check. Use `pnpm test:e2e:functional --list` for the current
+real-CLI sanity check. The Agent journey also owns browser-level math checks:
+streamed and restored replies render through the shared surface, Copy Reply
+keeps the original source, and a wide equation scrolls without widening its
+panel. Use `pnpm test:e2e:functional --list` for the current
 authoritative inventory rather than copying a test count into documentation.
 
 The visual gallery covers the empty-library zero state; the active-folder

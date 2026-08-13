@@ -38,11 +38,18 @@ client of StashBase context, not a separate AI workspace.
   session's Agent, and the conversation resumes within its own scope —
   started chats are never hijacked. The Library header's History keeps
   library chats reachable even when no folder is selected.
-- Opening a folder starts a fresh chat with the user's last selected Agent
-  when the window has no chats yet. Codex is the default until the user
-  explicitly selects another Agent. An unavailable preferred runtime remains
-  a visible setup state; StashBase does not silently substitute another
-  runtime.
+- Opening the app or entering a folder opens Chat with one reusable blank tab,
+  but that presentation state never downloads an Agent. The first explicit
+  New Chat prepares the selected Agent: StashBase reuses an
+  existing system installation when available, otherwise installs the official
+  runtime into application data, then connects StashBase MCP before the chat
+  starts. Codex is the default until the user explicitly selects another
+  Agent. StashBase prepares only the selected Agent and never silently
+  substitutes another runtime.
+- On app startup, StashBase also repairs the MCP connection for Codex or Claude
+  Code runtimes already discoverable without installing anything. A damaged
+  provider configuration never blocks the workspace; Agents surfaces the
+  error, and New Chat retries the connection.
 - Chats survive switching the window's folder: every chat is pinned to its
   own scope, so changing the sidebar's current folder keeps the open chat
   tabs and their running sessions intact. A chat whose scope differs from
@@ -167,12 +174,17 @@ client of StashBase context, not a separate AI workspace.
 - Agent file outputs refresh the Files sidebar without moving the user away
   from Chat. Their compact Open affordances and local file links lead back into
   the local workspace only when the user chooses them.
-- Agent response Markdown supports GFM, but treats raw HTML and remote images
-  as inert content; only workspace-relative links and HTTP(S) links are active.
-- If a supported Agent CLI is missing, opening a chat for it shows a compact
-  setup state with the copyable install command and a runtime-refresh action.
-  A missing CLI is distinct from a runtime that is installed but failed to
-  start.
+- Agent response Markdown supports GFM plus locally bundled KaTeX for inline
+  and display math. Formula rendering is presentation-only: Copy Reply and
+  restored history retain the original Markdown/LaTeX source. Raw HTML and
+  remote images remain inert; only workspace-relative links and HTTP(S) links
+  are active. Incomplete or invalid formulas stay visible rather than breaking
+  a streaming response, and wide display math scrolls inside the reply.
+- While a missing Agent is being prepared, its chat shows installation and MCP
+  connection progress without blocking file browsing. A failed preparation
+  remains retryable and retains the official manual install command as a
+  fallback. This setup state is distinct from an installed runtime that later
+  fails to start.
 - If a live runtime disconnects unexpectedly, the panel preserves its
   transcript, clears in-flight activity, explains the terminal cause once, and
   offers Reconnect. Intentional session teardown remains quiet.

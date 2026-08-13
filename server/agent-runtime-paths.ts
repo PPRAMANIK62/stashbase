@@ -1,0 +1,167 @@
+/**
+ * StashBase-managed Agent runtime paths and development discovery controls.
+ *
+ * Managed runtimes are application-scoped dependencies: they live under
+ * AppData, never modify the user's PATH, and continue to use each provider's
+ * normal account/config home when launched. The in-memory discovery policy is
+ * deliberately development-only state; production always resolves `auto`.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { appDataRoot } from './local-data.ts';
+
+export type ManagedAgentId = 'claude' | 'codex';
+export type AgentDiscoveryPolicy = 'auto' | 'managed-only' | 'system-only';
+
+export interface AgentRuntimeDebugState {
+  enabled: boolean;
+  discoveryPolicy: AgentDiscoveryPolicy;
+  simulateInstallFailure: boolean;
+  simulateMcpFailure: boolean;
+}
+
+interface ManagedRuntimeManifest {
+  version: string;
+  platform: string;
+  executable: string;
+}
+
+const DISCOVERY_POLICIES = new Set<AgentDiscoveryPolicy>(['auto', 'managed-only', 'system-only']);
+
+export function initialAgentDiscoveryPolicy(
+  env: NodeJS.ProcessEnv = process.env,
+): AgentDiscoveryPolicy {
+  const value = env.STASHBASE_AGENT_DISCOVERY_POLICY;
+  const debugEnabled = env.STASHBASE_DEV_VITE === '1' || env.STASHBASE_AGENT_DEBUG === '1';
+  return debugEnabled && DISCOVERY_POLICIES.has(value as AgentDiscoveryPolicy)
+    ? value as AgentDiscoveryPolicy
+    : 'auto';
+}
+
+let discoveryPolicy: AgentDiscoveryPolicy = initialAgentDiscoveryPolicy();
+let simulateInstallFailure = false;
+let simulateMcpFailure = false;
+
+export function agentRuntimeDebugEnabled(): boolean {
+  return process.env.STASHBASE_DEV_VITE === '1' || process.env.STASHBASE_AGENT_DEBUG === '1';
+}
+
+export function getAgentRuntimeDebugState(): AgentRuntimeDebugState {
+  if (!agentRuntimeDebugEnabled()) {
+    return {
+      enabled: false,
+      discoveryPolicy: 'auto',
+      simulateInstallFailure: false,
+      simulateMcpFailure: false,
+    };
+  }
+  return { enabled: true, discoveryPolicy, simulateInstallFailure, simulateMcpFailure };
+}
+
+export function setAgentRuntimeDebugState(
+  patch: Partial<Omit<AgentRuntimeDebugState, 'enabled'>>,
+): AgentRuntimeDebugState {
+  if (!agentRuntimeDebugEnabled()) {
+    throw Object.assign(new Error('Agent runtime test controls are available in development builds only.'), { status: 404 });
+  }
+  if (patch.discoveryPolicy !== undefined) {
+    if (!DISCOVERY_POLICIES.has(patch.discoveryPolicy)) {
+      throw Object.assign(new Error('Invalid Agent discovery policy.'), { status: 400 });
+    }
+    discoveryPolicy = patch.discoveryPolicy;
+  }
+  if (patch.simulateInstallFailure !== undefined) {
+    simulateInstallFailure = patch.simulateInstallFailure === true;
+  }
+  if (patch.simulateMcpFailure !== undefined) {
+    simulateMcpFailure = patch.simulateMcpFailure === true;
+  }
+  return getAgentRuntimeDebugState();
+}
+
+export function managedAgentRuntimeRoot(id: ManagedAgentId): string {
+  return path.join(appDataRoot(), 'agent-runtimes', id);
+}
+
+export function managedCodexBinDir(): string {
+  return path.join(managedAgentRuntimeRoot('codex'), 'bin');
+}
+
+export function managedCodexInstallerHome(): string {
+  return path.join(managedAgentRuntimeRoot('codex'), 'installer-home');
+}
+
+export function managedClaudeReleasesDir(): string {
+  return path.join(managedAgentRuntimeRoot('claude'), 'releases');
+}
+
+export function managedClaudeManifestPath(): string {
+  return path.join(managedAgentRuntimeRoot('claude'), 'current.json');
+}
+
+function executableFile(file: string): boolean {
+  try {
+    fs.accessSync(file, process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK);
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function readManagedClaudeManifest(): ManagedRuntimeManifest | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(managedClaudeManifestPath(), 'utf8')) as Partial<ManagedRuntimeManifest>;
+    if (
+      typeof parsed.version !== 'string'
+      || typeof parsed.platform !== 'string'
+      || typeof parsed.executable !== 'string'
+      || path.isAbsolute(parsed.executable)
+      || parsed.executable.split(/[\\/]+/).includes('..')
+    ) return null;
+    return parsed as ManagedRuntimeManifest;
+  } catch {
+    return null;
+  }
+}
+
+export function managedAgentExecutable(id: ManagedAgentId): string | null {
+  if (id === 'codex') {
+    const executable = path.join(managedCodexBinDir(), process.platform === 'win32' ? 'codex.exe' : 'codex');
+    return executableFile(executable) ? executable : null;
+  }
+  const manifest = readManagedClaudeManifest();
+  if (!manifest) return null;
+  const executable = path.resolve(managedAgentRuntimeRoot('claude'), manifest.executable);
+  const root = path.resolve(managedAgentRuntimeRoot('claude'));
+  if (executable !== root && !executable.startsWith(root + path.sep)) return null;
+  return executableFile(executable) ? executable : null;
+}
+
+export function writeManagedClaudeManifest(manifest: ManagedRuntimeManifest): void {
+  const root = managedAgentRuntimeRoot('claude');
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  const file = managedClaudeManifestPath();
+  const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  fs.renameSync(temp, file);
+}
+
+export function removeManagedAgentRuntime(id: ManagedAgentId): void {
+  const root = managedAgentRuntimeRoot(id);
+  const appRoot = path.resolve(appDataRoot());
+  const resolved = path.resolve(root);
+  if (!resolved.startsWith(appRoot + path.sep) || path.basename(path.dirname(resolved)) !== 'agent-runtimes') {
+    throw new Error('Refusing to remove an Agent runtime outside StashBase AppData.');
+  }
+  fs.rmSync(resolved, { recursive: true, force: true });
+}
+
+export function agentDiscoveryPolicy(): AgentDiscoveryPolicy {
+  return getAgentRuntimeDebugState().discoveryPolicy;
+}
+
+export function agentExecutableSource(id: ManagedAgentId, executable: string | null): 'system' | 'managed' | null {
+  if (!executable) return null;
+  const managed = managedAgentExecutable(id);
+  return managed && path.resolve(executable) === path.resolve(managed) ? 'managed' : 'system';
+}

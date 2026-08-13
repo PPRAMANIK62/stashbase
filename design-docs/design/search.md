@@ -63,10 +63,11 @@ as the result identity.
   describe the active folder — other folders' readiness is not yet reported.
 - A sync failure is diagnostic and does not replace an awaiting or paused
   decision; its recovery action remains visible alongside failure guidance.
-- MCP offers orientation, search with file-type categories, read, reindex,
-  and bounded file operations to authorized Agent clients. The in-app popup
-  does not expose a file-type filter — categories are an agent-facing
-  parameter.
+- MCP offers orientation, semantic and exact keyword search with file-type
+  categories, read, reindex, and bounded file operations to authorized Agent
+  clients. Exact keyword search works without AI Index and may narrow to an
+  authorized folder or path prefix. The in-app popup does not expose a
+  file-type filter — categories are an agent-facing parameter.
 - The `data` type category selects JSON. AI Index uses raw JSON source
   text and keeps the visible source path as result identity.
 
@@ -95,8 +96,11 @@ as the result identity.
   never be locked behind a remote service. Sign-in ships behind the account
   system; until it lands the key path is the only one that activates. The
   Files-panel setup callout and Settings remain the standing routes back to
-  AI Index; the static Anonymous row does not duplicate its source or setup
-  state (see [library.md](library.md)).
+  AI Index. The sidebar's account menu is the second place sign-in is
+  offered, and it names the free monthly usage that signing in provides —
+  but while signed out it reports no index source or setup state of its own,
+  leaving that to the callout directly above it (see
+  [library.md](library.md)).
 - Activation persists; the skip does not. Activation is stored (with the key)
   and checked over localhost, so the app opens offline, keeps serving the
   existing index, and is never re-gated by a network or service error — it

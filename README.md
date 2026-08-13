@@ -177,7 +177,7 @@ While the StashBase app is running, a local MCP server makes the same library av
 Core tools:
 
 - `library_info` - return the default folder home, opened folders, optional folder descriptions, and embedder status.
-- `search_library` - search the library, optionally scoped by folder, path prefix, or file-type categories.
+- `search_library` - search the library in semantic (default) or keyword mode, optionally filtered by source type. Semantic mode may search the whole library; exact keyword mode works before AI Index is set up and requires a folder or path-prefix scope.
 - `reindex` - reconcile disk changes and make updated files searchable.
 
 StashBase also exposes bounded file helpers for opened folders:
@@ -214,6 +214,8 @@ knowledge base. It adds:
   later folder chats use the Agent you last selected.
 - Tool calls and file edits can be reviewed in the app.
 - Session history stays in the Agent CLI's normal storage.
+- Agent replies render GFM and offline LaTeX math without changing the copied
+  or persisted Markdown source.
 - `@` mentions find files and folders with forgiving workspace-path search;
   selecting one inserts only its workspace-relative path.
 

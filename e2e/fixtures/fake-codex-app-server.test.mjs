@@ -111,7 +111,8 @@ test('fake Codex executable speaks the app-server lifecycle used by StashBase', 
   peer.send({ id: 52, method: 'thread/read', params: { threadId: 'fake-history-thread', includeTurns: true } });
   const history = (await peer.response(52)).result.thread;
   assert.equal(history.cwd, requestedHistoryCwd);
-  assert.equal(history.turns[0].items[1].text, 'History fixture answer');
+  assert.match(history.turns[0].items[1].text, /Restored formula from history:/);
+  assert.match(history.turns[0].items[1].text, /\\boxed\{/);
 
   peer.send({ id: 6, method: 'turn/start', params: {
     threadId: 'fake-thread-1',
@@ -151,6 +152,16 @@ test('fake Codex executable speaks the app-server lifecycle used by StashBase', 
     willRetry: false,
     message: 'Deterministic fake Agent failure.',
   });
+
+  peer.send({ id: 10, method: 'turn/start', params: {
+    threadId: 'fake-thread-1',
+    cwd: spawnedCwd,
+    input: [{ type: 'text', text: 'math reply', text_elements: [] }],
+  } });
+  assert.equal((await peer.response(10)).result.turn.id, 'fake-turn-4');
+  const firstMathDelta = await peer.notification('item/agentMessage/delta', (params) => params.turnId === 'fake-turn-4');
+  assert.equal(firstMathDelta.params.delta, String.raw`Streamed formula: \(x^2`);
+  assert.equal((await peer.notification('turn/completed', (params) => params.turn?.id === 'fake-turn-4')).params.turn.status, 'completed');
 
   child.kill('SIGTERM');
   await once(child, 'close');

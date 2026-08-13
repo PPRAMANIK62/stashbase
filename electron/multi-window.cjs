@@ -298,11 +298,35 @@ function createRendererFlushCoordinator({
   };
 }
 
+/** Tracks whether a renderer can answer the awaited save barrier. Kept as a
+ * separate seam because BrowserWindow `did-finish-load` precedes React effect
+ * registration, and closing inside that gap must not manufacture a save
+ * failure. */
+function createRendererFlushReadiness() {
+  let documentLoaded = false;
+  let handlerReady = false;
+  return {
+    markDocumentLoaded() {
+      documentLoaded = true;
+      // A navigation/reload destroys the previous renderer's handlers. The
+      // replacement must announce its own save barrier before main awaits it.
+      handlerReady = false;
+    },
+    markHandlerReady(ready) {
+      handlerReady = ready === true;
+    },
+    shouldRequest() {
+      return documentLoaded && handlerReady;
+    },
+  };
+}
+
 module.exports = {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
+  createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,

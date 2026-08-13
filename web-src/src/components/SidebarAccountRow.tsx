@@ -1,5 +1,7 @@
-import { BugIcon, DiscordIcon, SettingsIcon, UserIcon } from '../icons';
+import { useRef, useState } from 'react';
+import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '../icons';
 import { DISCORD_INVITE_URL, openExternalUrl } from '../lib/externalLink';
+import { Menu, type MenuItem } from './Menu';
 import { openSettings } from './SettingsModal';
 import { Button } from './ui/button';
 
@@ -11,13 +13,29 @@ import { Button } from './ui/button';
  * **Anonymous is a finished state, not a missing one.** Browsing, editing,
  * preview, and exact text search are local computations and must never be
  * gated behind a remote login, so the app has a working identity before
- * anyone signs in and says so plainly. The identity is static until there is
- * a real account action to offer: an inert AI Index/source menu only repeats
- * the setup callout and Settings, and makes this finished state look broken.
+ * anyone signs in and says so plainly. The row never carries a standing
+ * sign-in badge, dot, or index-readiness marker: recommending the hosted
+ * path is the first-run setup dialog's job and it happens once, while
+ * persistent chrome only ever states facts.
  *
- * The row never carries a standing sign-in badge or index-readiness marker.
- * `EmbeddingSetupCallout` and Settings already own those paths; repeating
- * them here would put two adjacent prompts in the sidebar's quietest chrome.
+ * Clicking the identity opens a MENU; it never jumps straight into sign-in.
+ * Signing in leaves the app for a browser round trip, and an action that
+ * takes the user somewhere else does not fire from an unguarded click on
+ * what reads as a label — someone clicking a status row is usually asking
+ * "what is this", not starting an auth flow. A direct jump also gets the
+ * asymmetry backwards, guarding the cheap glance and letting the expensive
+ * departure through. And the menu keeps the gesture identical once accounts
+ * exist: signing in changes what the menu CONTAINS, never what the row does.
+ *
+ * Signed out the menu holds sign-in ALONE. A one-item menu is usually a
+ * button in costume, but this one carries the thing a direct jump has
+ * nowhere to put — what signing in actually buys — which is the whole
+ * reason it exists, not a filler second row. AI Index state stays out:
+ * `EmbeddingSetupCallout` sits directly above this row and owns that
+ * prompt, so a source line here would be two prompts 8px apart, and once a
+ * key is configured it would be pure status whose only action is the
+ * Settings gear 60px to its right. Signed in, that line earns its place —
+ * nothing else on screen reports hosted quota.
  *
  * Settings anchors the row's far-right edge. It loses its text label in the
  * trade, which is the real cost of putting identity on the sidebar's one
@@ -27,6 +45,31 @@ import { Button } from './ui/button';
  * Bug remain adjacent immediately before it as the help/feedback group.
  */
 export function SidebarAccountRow() {
+  const identityRef = useRef<HTMLButtonElement | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
+
+  const items: MenuItem[] = [
+    {
+      label: 'Sign in to StashBase',
+      /* Leading external-link mark, the same one `Open in New Window` uses:
+       * a click that hands the user to another surface says so first. Drawn
+       * now rather than added with the flow later, so the item never changes
+       * shape under someone who has learned it. */
+      icon: <ExternalLinkIcon />,
+      /* The reason the menu exists. A direct jump has nowhere to say this,
+       * and "what do I get" is the actual question of anyone still signed
+       * out — not "how do I sign in". Same promise the setup dialog's
+       * recommended card makes, in the same words. */
+      detail: 'Free monthly AI Index usage',
+      /* Dimmed AND marked until the account system ships: either alone
+       * reads as the other — a fade with no mark looks broken, a mark with
+       * no fade looks clickable. */
+      shortcut: 'Coming soon',
+      disabled: true,
+      onSelect: () => {},
+    },
+  ];
+
   return (
     /* Taller than a list row on purpose. This is the sidebar's floor, and
      * the New Chat block caps its top with 8px above / 12px below the same
@@ -34,7 +77,23 @@ export function SidebarAccountRow() {
      * like it ran out of room rather than ended. The two caps now breathe
      * within 2px of each other. */
     <div className="flex flex-none items-center gap-1 border-t border-border px-1.5 pt-2 pb-2.5">
-      <div className="flex min-h-7 min-w-0 flex-1 items-center gap-2 px-2 text-left text-base text-muted-foreground">
+      <button
+        ref={identityRef}
+        type="button"
+        /* Hover brightens the TEXT only — no filled row surface. This strip
+         * is app chrome pinned under the dock's section bands, not a list
+         * row, and a hover pill here read as a fourth selectable item in
+         * the stack. */
+        className="group/account flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-muted-foreground"
+        title="Account"
+        aria-haspopup="menu"
+        aria-expanded={!!menuAnchor}
+        onClick={() => {
+          if (menuAnchor) { setMenuAnchor(null); return; }
+          const rect = identityRef.current?.getBoundingClientRect();
+          if (rect) setMenuAnchor(rect);
+        }}
+      >
         {/* A real avatar chip, not a resized glyph: the circle is the mark
           * and the person is its CONTENT, which is why the inner glyph runs
           * under the standalone utility cluster — it has to fit inside the
@@ -71,9 +130,20 @@ export function SidebarAccountRow() {
           * exists to prevent. It also buys the signed-in state its
           * indicator for free — a real name renders at
           * `text-muted-foreground`, so the ink steps up on its own with no
-          * dot, badge, or colour spent. */}
-        <span className="min-w-0 truncate text-placeholder">Anonymous</span>
-      </div>
+          * dot, badge, or colour spent.
+          *
+          * Hover (and an open menu) lifts it one step to the resting weight
+          * of a real name. That is the row's only affordance, so it has to
+          * move under the pointer; the momentary overlap with the signed-in
+          * colour costs nothing, since the string still reads "Anonymous"
+          * and hover only exists while a pointer sits on it. */}
+        <span className={
+          'min-w-0 truncate transition-colors '
+          + (menuAnchor ? 'text-muted-foreground' : 'text-placeholder group-hover/account:text-muted-foreground')
+        }>
+          Anonymous
+        </span>
+      </button>
       {/* Community, Report Bug, Settings — one utility cluster on the row's
         * right end. These sparse, persistent actions use the next optical
         * step above dense section-header controls: 28px targets with 16px
@@ -112,6 +182,20 @@ export function SidebarAccountRow() {
       >
         <SettingsIcon className="size-4" />
       </Button>
+      {menuAnchor && (
+        /* Anchored to the identity's left edge, under the thing it belongs
+          * to — the utility cluster on the right is a different subject.
+          * base-ui flips the popup above the row on its own, which is what
+          * always happens here: this strip is the last thing in the window.
+          * No minWidth: the promise line is longer than the label it
+          * explains, so the content already clears the popup's own floor and
+          * a number here would only be a second one to keep in sync. */
+        <Menu
+          anchor={{ rect: menuAnchor, align: 'left' }}
+          items={items}
+          onClose={() => setMenuAnchor(null)}
+        />
+      )}
     </div>
   );
 }

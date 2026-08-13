@@ -7,19 +7,16 @@
  * SDK in server/agent.ts, Codex app-server in server/codex-agent.ts),
  * not a PTY — this module no longer bridges a shell.
  */
-import { spawnSync } from 'node:child_process';
+import { resolveAgentCli } from './agent-cli.ts';
 
-/** Per-platform login shell, used by the on-PATH probe below. POSIX
- *  honours `$SHELL` (covers bash / fish / nu / etc.) with a zsh fallback
- *  for the rare case where the env var is unset. Windows ignores
- *  `$SHELL` entirely and uses `ComSpec` — falling back to PowerShell
- *  only if even that's missing (no user-overridable env var on
- *  Windows). */
-function defaultShell(): string {
-  if (process.platform === 'win32') {
-    return process.env.ComSpec || 'powershell.exe';
-  }
-  return process.env.SHELL || '/bin/zsh';
+function codexInstallHint(): string {
+  if (process.platform === 'win32') return 'irm https://chatgpt.com/codex/install.ps1 | iex';
+  return 'curl -fsSL https://chatgpt.com/codex/install.sh | sh';
+}
+
+function claudeInstallHint(): string {
+  if (process.platform === 'win32') return 'irm https://claude.ai/install.ps1 | iex';
+  return 'curl -fsSL https://claude.ai/install.sh | bash';
 }
 
 /** Registry of supported AI CLIs. Adding a new one = one entry here +
@@ -51,7 +48,7 @@ export const CLIS: Record<string, CliDef> = {
     // switchable in-app via the `/theme` slash command.
     launchArgs: [],
     install: ['install', '-g', '@anthropic-ai/claude-code'],
-    installHint: 'npm install -g @anthropic-ai/claude-code',
+    installHint: claudeInstallHint(),
   },
   codex: {
     id: 'codex',
@@ -63,7 +60,7 @@ export const CLIS: Record<string, CliDef> = {
     // a flag here if/when one appears.
     launchArgs: [],
     install: ['install', '-g', '@openai/codex'],
-    installHint: 'npm install -g @openai/codex',
+    installHint: codexInstallHint(),
   },
 };
 
@@ -73,42 +70,13 @@ export function launchCommandFor(cli: CliDef): string {
   return [cli.bin, ...cli.launchArgs].join(' ');
 }
 
-/** Check whether a given CLI's binary is on PATH. On Windows, use
- *  `where.exe` because `command -v` is a POSIX shell builtin. On POSIX,
- *  run `command -v <bin>` in the user's login + INTERACTIVE shell so
- *  PATH additions from `.zshrc` / `.bashrc` (where nvm, pyenv, rbenv,
- *  asdf and most version-manager bootstraps actually live) are
- *  sourced. `-l` alone is non-interactive, which on macOS only reads
- *  `.zprofile` / `.profile`, missing the npm-global PATH that most
- *  users install Claude Code into. Bounded by a 5s timeout so a
- *  pathologically slow rc file can't deadlock the request. */
+/** The shared resolver covers explicit overrides, GUI-process PATH, common
+ * install locations, a cached POSIX login-shell probe, and managed runtimes. */
 export function checkCliInstalled(id: string): boolean {
   const cli = CLIS[id];
   if (!cli) return false;
-  if (process.platform === 'win32') {
-    try {
-      const r = spawnSync('where.exe', [cli.bin], {
-        encoding: 'utf8',
-        timeout: 5000,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      return r.status === 0 && r.stdout.trim().length > 0;
-    } catch {
-      return false;
-    }
-  }
-  const shell = defaultShell();
-  try {
-    const r = spawnSync(shell, ['-l', '-i', '-c', `command -v ${cli.bin}`], {
-      encoding: 'utf8',
-      timeout: 5000,
-      // Close stdin — an interactive shell that tries to read (rare
-      // .zshrc patterns: `read -k`, `vared`, etc.) would otherwise
-      // hang for the full timeout.
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return r.status === 0 && r.stdout.trim().length > 0;
-  } catch {
-    return false;
-  }
+  const envNames = id === 'claude'
+    ? ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN']
+    : ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'];
+  return Boolean(resolveAgentCli({ name: cli.bin, envNames, logLabel: cli.label }));
 }
