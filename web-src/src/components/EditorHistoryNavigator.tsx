@@ -85,7 +85,12 @@ export function EditorHistoryNavigator() {
 
   const stateRef = useLatestRef(state);
   const settingsBlockingRef = useLatestRef(settingsBlocking);
-  const phaseRef = useLatestRef(phase);
+  /** The chord's SYNCHRONOUS phase authority. `phase` state only reaches
+   * a render-mirrored ref after React commits — under load a second Tab
+   * tap lands inside that window, reads a stale 'closed', and re-arms the
+   * pending switch at index 1 instead of cycling. Every transition writes
+   * this ref in the same synchronous handler that causes it. */
+  const chordPhaseRef = useRef<Phase>('closed');
 
   function clearRevealTimer() {
     if (revealTimerRef.current) {
@@ -108,18 +113,21 @@ export function EditorHistoryNavigator() {
   const cancel = () => {
     clearRevealTimer();
     detachPendingListeners();
+    chordPhaseRef.current = 'closed';
     setPhase('closed');
   };
   // Close: the overlay was visible and focus moved to it; restore it.
   const close = () => {
     clearRevealTimer();
     detachPendingListeners();
+    chordPhaseRef.current = 'closed';
     setPhase('closed');
     requestAnimationFrame(() => restoreRef.current?.focus());
   };
   const commit = (id: string) => {
     clearRevealTimer();
     detachPendingListeners();
+    chordPhaseRef.current = 'closed';
     setPhase('closed');
     requestAnimationFrame(() => restoreRef.current?.focus());
     void actions.activateTab(id);
@@ -147,7 +155,7 @@ export function EditorHistoryNavigator() {
   useEffect(() => {
     function onChord(event: Event) {
       const backward = (event as CustomEvent<{ backward?: boolean }>).detail?.backward === true;
-      if (phaseRef.current === 'closed') {
+      if (chordPhaseRef.current === 'closed') {
         const s = stateRef.current;
         const blocked = settingsBlockingRef.current
           || Boolean(s.modal || s.cascadePrompt || s.ctxMenu || s.renaming)
@@ -161,10 +169,12 @@ export function EditorHistoryNavigator() {
         restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         setEntries(list);
         setActive(initialIndex);
+        chordPhaseRef.current = 'pending';
         setPhase('pending');
         attachPendingListeners(list[initialIndex]);
         revealTimerRef.current = setTimeout(() => {
           revealTimerRef.current = null;
+          if (chordPhaseRef.current === 'pending') chordPhaseRef.current = 'open';
           setPhase((p) => (p === 'pending' ? 'open' : p));
         }, REVEAL_DELAY_MS);
         return;
@@ -176,6 +186,7 @@ export function EditorHistoryNavigator() {
       // before Hotkeys ever saw it to redispatch.)
       clearRevealTimer();
       detachPendingListeners();
+      chordPhaseRef.current = 'open';
       setActive((index) => cycleEditorHistoryIndex(index, listRef.current.length, backward));
       setPhase('open');
     }
