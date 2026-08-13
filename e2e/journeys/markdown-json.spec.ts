@@ -94,7 +94,8 @@ test('Markdown preserves frontmatter across editing and safely routes links and 
     await expect(documentHeading).toBeVisible();
     await app.page.keyboard.insertText('/');
     // Crepe keeps command items for hidden menu groups mounted. Restrict the
-    // lookup to its shown slash menu before selecting the interactive list item.
+    // lookup to its shown slash menu before selecting the exact visible label. The
+    // list item also contains icon text, so matching the whole item is brittle.
     const slashMenu = activeDocument(app.page).locator('.milkdown-slash-menu[data-show="true"]');
     await expect(slashMenu).toBeVisible();
     const headingCommand = slashMenu.getByText('Heading 1', { exact: true });
