@@ -25,13 +25,42 @@
       --surface-selected: #e0e5e9;
       --text-primary: #202427;
       --text-secondary: #68737a;
+      /* Placeholder text — its own role, deliberately lighter than
+       * secondary. A placeholder is a hint about what to type, not content:
+       * at the secondary weight an empty field reads as a filled one, which
+       * is the exact confusion it exists to avoid. Sits between secondary
+       * text and the strong stroke, so it stays legible while clearly
+       * ranking below every real string on screen. */
+      --text-placeholder: #8b969d;
       --text-on-accent: #ffffff;
       --stroke-subtle: #d9e0e3;
       --stroke-strong: #aeb9bf;
       --focus-ring: #0891b2;
+      /* Raw RGB of --focus-ring, for the ring's alpha (see the
+       * :focus-visible rule). */
+      --focus-ring-rgb: 8, 145, 178;
       --shadow-color: 25, 34, 39;
-      --radius-ui: 6px;
-      --radius-control: 4px;
+      /* Corner scale, split by ROLE rather than by size. The earlier ramp
+       * graded boxes by how big they were — a code block rounder than a
+       * card, a card rounder than a popover — and the result read as
+       * sloppiness rather than as hierarchy, because a person sees two
+       * boxes side by side and expects the same corner on both.
+       *
+       * So there is exactly one corner for every BOX, no matter its size,
+       * and smaller corners only for things that are not boxes: items that
+       * live inside a box, and runs of text inside a line. Half of the
+       * "continuous corner" read comes from the squircle rule further
+       * down, not the radii — change one without the other and the shape
+       * goes flat. */
+      --radius-xs: 4px;      /* inline runs: code spans, mentions, marks */
+      --radius-control: 6px; /* sub-24px icon buttons */
+      --radius-ui: 10px;     /* items inside a box: rows, menu items, buttons */
+      /* Every bordered or filled BOX: the composer, transcript cards, code
+       * blocks, inputs, cards, panels, menus, popovers, dialogs. Short
+       * boxes clamp this to half their height and come out capsule-ended,
+       * which is correct — a search field and the composer then read as
+       * the same object family at two sizes. */
+      --radius-container: 20px;
       --density-gap: 4px;
       --density-control: 28px;
       --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.14);
@@ -51,9 +80,11 @@
       /* Raw RGB of --accent, for alpha ramps: rgba(var(--accent-rgb), .08)
        * etc. Change the accent → change both lines, nothing else. */
       --accent-rgb: 8, 145, 178;
-      /* Amber counterpoint — rare brand moments only (drag-into-folder
-       * tint), never state; state yellows are --status-warning. File-type
-       * icons carry their own Material brand fills (FileTree.tsx). */
+      /* Amber counterpoint — rare brand moments only, never state (state
+       * yellows are --status-warning; the drag-into-folder tint moved to
+       * the accent, where interactive states belong). Search-hit marks
+       * are the one repeated use. File-type icons carry their own
+       * Material brand fills (FileTree.tsx). */
       --accent-amber: #d9a000;
       --accent-amber-rgb: 217, 160, 0;
       /* Danger red — destructive actions, error text, failure banners.
@@ -64,15 +95,35 @@
       --status-success: #047857;
       --status-warning: #a16207;
       --status-danger: var(--danger);
+      /* Structured-data syntax roles. Components consume these semantic
+       * variables; the light and dark palettes are calibrated separately. */
+      --syntax-json-property: #0369a1;
+      --syntax-json-string: #047857;
+      --syntax-json-boolean: #7c3aed;
+      --syntax-json-number: #b45309;
+      --syntax-json-punctuation: #68737a;
+      --syntax-json-invalid: #b91c1c;
       --hover: var(--surface-hover);
       --active: var(--surface-selected);
       /* Quiet thumb for chrome scrollers (.scrollbar-quiet, mainpane
        * .tabs). Derived from --fg at usage time, so the dark theme's
        * --fg override re-resolves it — no dark redefinition needed. */
       --scrollbar-thumb: color-mix(in srgb, var(--fg) 25%, transparent);
-      --ui-font-size: calc(14px * var(--ui-scale));
+      /* Body default = the primary chrome body size (13 = text-base), so
+       * unstyled text lands on the same size the type-scale roles call
+       * "body" instead of a phantom 14 that almost nothing else uses.
+       * (Type-scale roles: see design-docs/visual-style.md.) */
+      --ui-font-size: calc(13px * var(--ui-scale));
       --ui-scale: 1;
       --reading-font-size: 14px;
+      /* Three-voice typography, tokenized so every surface speaks ONE
+       * stack per voice (chrome sans, reading serif, data mono) instead of
+       * each component restating a slightly different literal. Wired into
+       * Tailwind's font-* utilities in styles.css @theme. Sans carries the
+       * CJK fallbacks; mono is the superset stack so no surface regresses. */
+      --font-sans: -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
+      --font-serif: ui-serif, Georgia, Cambria, "Songti SC", serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
     :root[data-ui-scale='small'] { --ui-scale: .9; }
@@ -92,10 +143,12 @@
       --surface-selected: #353f45;
       --text-primary: #edf2f3;
       --text-secondary: #aab5ba;
+      --text-placeholder: #87939a;
       --text-on-accent: #06191f;
       --stroke-subtle: #39444a;
       --stroke-strong: #64727a;
       --focus-ring: #46cce8;
+      --focus-ring-rgb: 70, 204, 232;
       --shadow-color: 0, 0, 0;
       --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.32);
       --fg: var(--text-primary);
@@ -114,6 +167,12 @@
       --status-success: #34d399;
       --status-warning: #fbbf24;
       --status-danger: var(--danger);
+      --syntax-json-property: #7dd3fc;
+      --syntax-json-string: #6ee7b7;
+      --syntax-json-boolean: #c4b5fd;
+      --syntax-json-number: #fbbf24;
+      --syntax-json-punctuation: #aab5ba;
+      --syntax-json-invalid: #fca5a5;
       --hover: var(--surface-hover);
       --active: var(--surface-selected);
     }
@@ -130,10 +189,12 @@
         --surface-selected: #353f45;
         --text-primary: #edf2f3;
         --text-secondary: #aab5ba;
+        --text-placeholder: #87939a;
         --text-on-accent: #06191f;
         --stroke-subtle: #39444a;
         --stroke-strong: #64727a;
         --focus-ring: #46cce8;
+        --focus-ring-rgb: 70, 204, 232;
         --shadow-color: 0, 0, 0;
         --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.32);
         --fg: var(--text-primary);
@@ -152,6 +213,12 @@
         --status-success: #34d399;
         --status-warning: #fbbf24;
         --status-danger: var(--danger);
+        --syntax-json-property: #7dd3fc;
+        --syntax-json-string: #6ee7b7;
+        --syntax-json-boolean: #c4b5fd;
+        --syntax-json-number: #fbbf24;
+        --syntax-json-punctuation: #aab5ba;
+        --syntax-json-invalid: #fca5a5;
         --hover: var(--surface-hover);
         --active: var(--surface-selected);
       }
@@ -161,6 +228,31 @@
       box-sizing: border-box;
     }
 
+    /* Continuous corners app-wide. The radii above set how MUCH a corner
+     * turns; `corner-shape: squircle` sets how it turns — a superellipse
+     * instead of a circular arc, which is the difference between "rounded
+     * rectangle" and the Apple-style corner. Chromium 139+ ships it (the
+     * renderer is on 142 via Electron 39); anywhere else the declaration
+     * is dropped and plain circular corners remain as the fallback.
+     *
+     * `corner-shape` does not inherit, so this has to be a universal
+     * selector rather than a rule on :root. */
+    *,
+    *::before,
+    *::after {
+      corner-shape: squircle;
+    }
+
+    /* Capsules and circles opt back out: at a 50%-or-larger radius a
+     * squircle is a fat superellipse, not the true capsule these
+     * affordances are drawing (the transcript's jump-to-latest pill,
+     * status dots, the lightbox toolbar). */
+    .rounded-full,
+    .transcription-download-progress,
+    .transcription-download-progress > span {
+      corner-shape: round;
+    }
+
     html,
     body {
       height: 100%;
@@ -168,7 +260,7 @@
     }
 
     body {
-      font: var(--ui-font-size)/1.55 -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
+      font: var(--ui-font-size)/1.55 var(--font-sans);
       color: var(--fg);
       background: var(--bg);
       overflow: hidden;
@@ -186,10 +278,51 @@
 
     /* One visible, token-backed focus treatment for legacy controls and new
      * primitives alike. It intentionally uses outline rather than layout so
-     * focus never shifts dense editor or panel chrome. */
+     * focus never shifts dense editor or panel chrome.
+     *
+     * A translucent halo HUGGING the control, deliberately matching the
+     * Button primitive's own `ring-3 ring-ring/50` (this rule is
+     * unlayered, so it wins over that utility — the two must therefore
+     * look alike, or the primitive's design is silently overridden). An
+     * opaque line set 2px off the control reads as a heavy detached box
+     * on 28px icon chrome, which is where focus most often lands:
+     * closing an overlay with Esc restores focus to its trigger, and
+     * that keyboard modality correctly re-shows the ring. */
     :where(button, input, select, textarea, [tabindex]):focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
+      outline: 2px solid rgba(var(--focus-ring-rgb), 0.55);
+      outline-offset: 1px;
+    }
+
+    /* `tabindex="-1"` marks an element the keyboard can NEVER tab to —
+     * it is focusable only by click or programmatic reveal (the file
+     * tree's rows). A keyboard-focus ring there signals nothing and, on
+     * a dense list row, reads as an accidental selection state. Rows
+     * that do take keyboard focus use tabindex="0" and keep the ring. */
+    [tabindex="-1"]:focus-visible {
+      outline: none;
+    }
+
+    /* Palette query inputs (Quick Open / library search): the modal panel is
+     * the focus affordance, and its overflow-hidden corners clip the ring to
+     * a stray thick bar under the input — suppress the ring here. (This rule
+     * is unlayered on purpose: the Tailwind `outline-0` utility loses to the
+     * unlayered ring rule above, so an unlayered override is required.) */
+    .quick-open-veil input:focus-visible,
+    .library-search-veil input:focus-visible {
+      outline: none;
+    }
+
+    /* Session-history search is the same palette pattern — the popover panel
+     * is the focus affordance, so the field shouldn't wear a loud cyan halo
+     * the moment the menu auto-focuses it. Unlike the veils above, this input
+     * is the `Input` primitive, so suppress ALL three of its focus cues: the
+     * global outline, the focus-visible border-ring, and the ring-3 glow
+     * (a box-shadow that `outline: none` alone can't clear). Unlayered, so it
+     * beats the primitive's Tailwind utilities. */
+    .session-history-popover input:focus-visible {
+      outline: none;
+      border-color: var(--border);
+      box-shadow: none;
     }
 
     /* One treatment for panel-chrome scrollers (sidebar tree/Library,
@@ -237,67 +370,77 @@
 
     /* No dedicated titlebar, Cursor-style — in Electron with
      * `hiddenInset` the macOS traffic lights (inset at x:14, y:12)
-     * float over the sidebar column instead. The rail and panel each
-     * reserve a quiet 36px band at their top (--titlebar-clearance):
-     * no content, just the columns' own backgrounds showing through,
-     * and the `.sidebar-drag-zone` element overlaying it is the window
-     * drag region. (A real element, not ::before — Chromium ignores
-     * `-webkit-app-region` on pseudo-elements.) Browser and non-darwin
-     * windows have no traffic lights, so they get no drag zone; there,
-     * and in macOS fullscreen (lights hidden, `.is-fullscreen` body
-     * class driven by Electron IPC via the preload), the band shrinks
-     * to a 10px breather rather than collapsing to zero — content
-     * pressed against the window edge reads as a bug, not density. */
+     * float over the sidebar column instead. Every platform reserves
+     * the same 36px band at the window top (--titlebar-clearance): it
+     * hosts the shell's `.titlebar-controls` (sidebar toggle + search,
+     * TitlebarControls.tsx), and on macOS the `.sidebar-drag-zone`
+     * element overlaying it is the window drag region. (A real element,
+     * not ::before — Chromium ignores `-webkit-app-region` on
+     * pseudo-elements; the controls stay clickable via the global
+     * button no-drag rule.) One height everywhere keeps the layout
+     * identical across macOS windowed/fullscreen, Linux/Windows, and
+     * the browser — only the controls' left inset moves, clearing the
+     * lights when they are present. */
     .sidebar-drag-zone {
       display: none;
     }
 
-    /* The clearance lives INSIDE each column (rail pt / panel pt), never
-     * as padding on the .sidebar container — container padding would cut
-     * the rail's full-height border-r short of the window's top edge,
-     * which reads as a broken line whenever the window isn't maximized. */
+    /* The clearance lives INSIDE the panel (padding-top), never as
+     * padding on the .sidebar container — container padding would cut
+     * the sidebar's full-height border-r short of the window's top
+     * edge, which reads as a broken line whenever the window isn't
+     * maximized. */
     :root {
-      --titlebar-clearance: 10px;
-    }
-
-    body.is-electron.platform-darwin {
       --titlebar-clearance: 36px;
+      --titlebar-controls-left: 8px;
     }
 
+    /* Lights occupy ~x14–66; 88px leaves a clear group break so the
+     * controls read as their own cluster, not a fourth light. */
+    body.is-electron.platform-darwin {
+      --titlebar-controls-left: 88px;
+    }
+
+    /* Fullscreen hides the lights (`.is-fullscreen` body class driven
+     * by Electron IPC via the preload) — the controls slide back to the
+     * window corner. */
     body.is-electron.platform-darwin.is-fullscreen {
-      --titlebar-clearance: 10px;
+      --titlebar-controls-left: 8px;
     }
 
-    /* Rail top padding = clearance + the panel's own first-row offset
-     * (NewChatButton's pt-2), so the first rail icon centers on the New
-     * Chat row — the rail's rhythm mirrors the panel's (see
-     * ActivityBar.tsx). */
-    .activity-rail {
-      position: relative;
-      padding-top: calc(var(--titlebar-clearance) + 8px);
-    }
-
-    /* The rail↔panel divider is a gradient seam, not a border: it fades
-     * in from transparent across the titlebar clearance, so on macOS it
-     * never cuts through the traffic lights, yet below them it reads as
-     * a normal full hairline — no broken-off line in any window state. */
-    .activity-rail::after {
-      content: '';
+    /* Shell-level controls in the titlebar band. Absolute over the
+     * `.app` grid (NOT inside the panel columns) so collapsing either
+     * panel leaves its toggle in place — always the way back in.
+     * z-index above the sidebar drag zone (6) so they stay clickable on
+     * macOS. Left cluster: sidebar toggle + search; right cluster: the
+     * mirrored chat-panel toggle. */
+    .titlebar-controls,
+    .titlebar-controls-right {
       position: absolute;
       top: 0;
-      right: 0;
-      bottom: 0;
-      width: 1px;
-      /* Stay FULLY transparent through the light band (lights end ~y26
-       * inside the 36px clearance), then fade in over the next 16px —
-       * a half-alpha hairline passing between the lights would still
-       * read as a cut. */
-      background: linear-gradient(
-        to bottom,
-        transparent calc(var(--titlebar-clearance) - 6px),
-        var(--border) calc(var(--titlebar-clearance) + 10px)
-      );
-      pointer-events: none;
+      height: var(--titlebar-clearance);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      z-index: 7;
+    }
+
+    .titlebar-controls {
+      left: var(--titlebar-controls-left);
+    }
+
+    /* No traffic lights on the right on any platform — a plain corner
+     * inset mirrors the left cluster's fullscreen position. */
+    .titlebar-controls-right {
+      right: 8px;
+    }
+
+    /* Chat closed: the right control floats over the MAIN pane's
+     * top-right — reserve the document tab strip's tail so tabs don't
+     * slide underneath it. (Chat open: the chat pane's own tab row
+     * carries the matching reserve — see ChatPane.tsx.) */
+    .app:not(.chat-open) .tab-strip {
+      padding-right: 44px;
     }
 
     .sidebar-panel {
@@ -354,11 +497,11 @@
        * Closed chat panel collapses its track to 0 instead of structurally
        * adding/removing columns, so CSS can transition the width smoothly.
        *
-       * Sidebar column = 44px ActivityBar rail + the user-resizable panel
-       * (`--sidebar-width`, driven from `state.sidebarWidth`). When the
-       * panel is collapsed the column shrinks to the bare 44px rail — the
-       * rail itself never disappears (VSCode semantics). */
-      grid-template-columns: calc(44px + var(--sidebar-width, 280px)) 1fr 0 0;
+       * Sidebar column = the user-resizable panel (`--sidebar-width`,
+       * driven from `state.sidebarWidth`); there is no activity rail.
+       * Collapsing shrinks the column to zero — the titlebar controls
+       * (shell-level, outside this column) remain the way back in. */
+      grid-template-columns: var(--sidebar-width, 280px) 1fr 0 0;
       /* Explicit single-row track so .sidebar fills the height instead
        * of shrinking to its content — the file list grows into the full
        * column height and depends on the column being tall. */
@@ -374,17 +517,30 @@
       transition: none;
     }
 
-    /* Panel collapsed — only the 44px activity rail remains. Keep the
-     * sidebar mounted (preserves selection / scroll / search state);
-     * shrinking the column + sidebar's own overflow:hidden hides the
-     * panel without unmounting. */
+    /* Panel collapsed — the sidebar column shrinks to zero. Keep the
+     * sidebar mounted (preserves selection / scroll state); shrinking
+     * the column + the sidebar's own overflow:hidden hides the panel
+     * without unmounting. The border-r would otherwise survive as a
+     * 1px sliver at the window edge, so it goes too. */
     .app.sidebar-collapsed {
-      grid-template-columns: 44px 1fr 0 0;
+      grid-template-columns: 0 1fr 0 0;
+    }
+
+    .app.sidebar-collapsed .sidebar {
+      border-right: none;
+    }
+
+    /* Collapsed, the titlebar controls (and on macOS the traffic
+     * lights) float over the MAIN pane's top — indent the tab strip so
+     * tabs don't slide underneath them. Controls end at
+     * `--titlebar-controls-left` + two 28px buttons + gap. */
+    .app.sidebar-collapsed .tab-strip {
+      padding-left: calc(var(--titlebar-controls-left) + 66px);
     }
 
     /* Drag handle on the sidebar's right edge. Absolutely positioned at
-     * `left: calc(44px + var(--sidebar-width))` (set inline by React) so
-     * it tracks the panel's right border without consuming a grid track.
+     * `left: var(--sidebar-width)` (set inline by React) so it tracks
+     * the panel's right border without consuming a grid track.
      * The element is a wide-ish (6px) invisible hit area; the visible
      * cue is a thin 1px line drawn by `::after`, so hovering shows a
      * crisp seam highlight rather than a fat colored band. */

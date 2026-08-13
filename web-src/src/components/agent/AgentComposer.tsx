@@ -1,37 +1,28 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, ListBox, ListBoxItem, MenuTrigger, Popover, VisuallyHidden } from 'react-aria-components';
 import {
-  ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon, DumbbellIcon,
-  FileGenericIcon, FolderIcon, HandIcon, LibraryIcon, PlusIcon, StopIcon,
+  ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon,
+  FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
 } from '../../icons';
 import { cn } from '../../lib/utils';
 import type { FileMeta, FolderMeta } from '../../api';
 import { ImageLightbox } from '../ImageLightbox';
-import {
-  Menu as SharedMenu,
-  MenuItem as SharedMenuItem,
-  MenuPopup as SharedMenuPopup,
-  MenuPortal as SharedMenuPortal,
-  MenuPositioner as SharedMenuPositioner,
-  MenuTrigger as SharedMenuTrigger,
-} from '../ui/menu';
 import { baseName } from './attachments';
-import { changedEffortSelection, effortLabel, effortOptions } from './effortMenuState';
+import { FileAttachmentChip } from './FileAttachmentChip';
+import { effortLabel, effortOptions } from './effortMenuState';
 import {
-  folderDisplayName,
-  folderScope,
-  LIBRARY_SCOPE,
-  scopeDisplayName,
   scopePillAriaLabel,
-  shortenFolderPath,
   type ChatScope,
   type LibraryFolderOption,
 } from './folderState';
+import { ScopeMenu } from '../ScopeMenu';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import {
-  attachChipClass, attachIconClass, attachImageChipClass, attachImagePreviewClass,
-  attachImageRemoveClass, attachNameClass, attachRemoveClass, iconGhostButtonClass,
+  attachImageChipClass, attachImagePreviewClass,
+  attachImageRemoveClass, attachRemoveClass, iconGhostButtonClass,
+  menuHeadClass, menuSectionClass, optActiveClass, optCheckClass, optClass, optDescClass,
+  optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
 } from './panelStyles';
 import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from './types';
 import { modelMenuLabel } from './modelState';
@@ -43,39 +34,34 @@ const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon 
   { id: 'auto', label: 'Auto', desc: 'Let the agent decide when approval is needed', Icon: BoltIcon },
 ];
 
-/* Composer-bar pills. Triggers are text-only (label + chevron) with a
+/* Composer-bar pills: the shared quiet pill trigger (panelStyles) with a
  * control-naming title/aria-label so adjacent "Default" values stay
- * distinguishable. All pills share one quiet treatment — the session
- * settings live behind a single trigger, so no pill needs emphasis. */
-const pillClass =
-  'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
-const pillLockedClass = 'cursor-default opacity-60';
-const pillChevronClass = '-ml-px size-3 shrink-0 opacity-75';
+ * distinguishable. The session settings live behind a single trigger, so
+ * no pill needs emphasis. */
 
-/* Upward menus anchored to the pills. */
+/* Upward menus anchored to the pills. React Aria caps the popover height to
+ * the viewport (inline max-height); `overflow-y-auto` makes a tall panel
+ * (Mode + a long effort list) scroll INSIDE the card instead of spilling its
+ * rows out past the clipped card background. */
 const menuPopupClass =
-  'z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-card p-1.5 shadow-elevation';
-const menuHeadClass = 'flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm';
-const optClass =
-  'flex w-full cursor-pointer items-start gap-2.5 rounded-md border-0 bg-transparent p-2 text-left text-foreground hover:bg-muted data-focused:bg-muted data-highlighted:bg-muted';
-const optActiveClass =
-  'bg-accent/12 shadow-[inset_2px_0_0_var(--accent)] hover:bg-accent/12 data-focused:bg-accent/12 data-highlighted:bg-accent/12';
-const optIconClass = 'mt-px size-4.5 shrink-0 text-muted-foreground';
-const optTextClass = 'flex min-w-0 flex-1 flex-col gap-0.5';
-const optTitleClass = 'text-base font-medium';
-const optDescClass = 'text-xs leading-snug text-muted-foreground';
-const optCheckClass = 'mt-0.5 size-4 shrink-0 text-accent';
+  'z-20 max-h-[min(70vh,560px)] w-80 max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-1.5 shadow-elevation scrollbar-quiet';
 const settingsDividerClass = 'mx-1 my-1.5 h-px bg-border';
 
-/* Explicit, touch-friendly effort choices — never tiny slider dots. */
-const effortChoiceClass =
-  'min-h-7.5 shrink-0 cursor-pointer rounded-md border border-border bg-transparent px-2 py-1 text-xs text-muted-foreground transition-colors duration-fast hover:bg-muted hover:text-foreground';
-const effortChoiceCurClass =
-  'border-accent bg-accent/15 font-semibold text-foreground hover:bg-accent/15 hover:text-foreground';
+/* Effort rows share the menu's row idiom (like Mode / Model): a compact
+ * single-line label with a trailing accent check on the selected row and a
+ * quiet neutral active surface — never an accent-filled box. Icon-less and
+ * description-less so any agent's level set stays short and never wraps. */
+const effortRowClass =
+  'flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted';
 
-/* Neutral send button — accent only on hover-when-ready (VSCode-style). */
+/* Neutral send button — accent only on hover-when-ready (VSCode-style).
+ * Circular, not squircular: it is the terminal action on the bar, and a
+ * true circle is the one shape that reads as a button rather than as a
+ * smaller copy of the composer around it. `rounded-full` also opts out of
+ * the app-wide squircle (see globals.css), which is what keeps it a
+ * circle instead of a bulged superellipse. */
 const sendClass =
-  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border p-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4.5';
+  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-full border p-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4.5';
 const sendReadyClass =
   'border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:cursor-default disabled:opacity-40';
 const sendStopClass = 'border-destructive bg-destructive text-primary-foreground';
@@ -206,7 +192,7 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, effortInherit
               className={effortLocked ? 'pointer-events-none opacity-60' : undefined}
               title={effortLocked ? 'Effort is fixed for this session' : undefined}
             >
-              <EffortBar effort={effort} efforts={efforts} inherited={effortInherited} onSet={onSetEffort} />
+              <EffortList effort={effort} efforts={efforts} inherited={effortInherited} onSet={onSetEffort} />
             </div>
           </div>
         )}
@@ -215,102 +201,39 @@ function ModeMenu({ showMode, mode, onSetMode, showEffort, effort, effortInherit
   );
 }
 
-function EffortBar({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
+/** Effort as a vertical list — the same row idiom as the Mode and Model
+ * lists above it, so the whole popover reads as one control. The Default
+ * row (clears any override) leads, then each level the runtime advertises,
+ * in its own order. Being data-driven rows, it renders any agent's set —
+ * Claude's Low…Max, Codex's Light…Ultra — with no wrapping or layout risk. */
+function EffortList({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
+  const rows: { id: string; label: string; selected: boolean; pick: () => void }[] = [
+    { id: '__default__', label: 'Default', selected: !effort, pick: () => onSet(undefined) },
+    ...efforts.map((lv) => ({ id: lv, label: effortLabel(lv), selected: effort === lv, pick: () => onSet(lv) })),
+  ];
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-accent/4 p-2">
-      <DumbbellIcon className="size-4 shrink-0 text-muted-foreground" />
-      <span className="flex-1 text-sm text-foreground">
-        Effort <span className="text-muted-foreground">({effort ? effortLabel(effort) : inherited ? 'Inherited' : 'Default'})</span>
-      </span>
-      <ListBox
-        className="flex flex-wrap items-center justify-end gap-1 py-0.5"
-        aria-label="Effort"
-        selectionMode="single"
-        selectedKeys={[effort ?? '__default__']}
-        onSelectionChange={(keys) => {
-          const next = changedEffortSelection(keys, effort, efforts);
-          if (next !== null) onSet(next);
-        }}
-      >
-        <ListBoxItem
-          id="__default__"
-          className={({ isSelected }) => cn(effortChoiceClass, isSelected && effortChoiceCurClass)}
-          textValue="Default"
+    <div>
+      <div className={menuHeadClass}><span className="font-semibold text-foreground">Effort</span></div>
+      {rows.map((row) => (
+        <button
+          key={row.id}
+          type="button"
+          className={cn(effortRowClass, row.selected && optActiveClass)}
+          onClick={row.pick}
         >
-          Default
-        </ListBoxItem>
-        {efforts.map((lv) => (
-          <ListBoxItem
-            key={lv}
-            id={lv}
-            className={({ isSelected }) => cn(effortChoiceClass, isSelected && effortChoiceCurClass)}
-            aria-label={effortLabel(lv)}
-            textValue={effortLabel(lv)}
-          >
-            {effortLabel(lv)}
-          </ListBoxItem>
-        ))}
-      </ListBox>
+          <span className={cn('min-w-0 truncate', row.selected && 'font-medium')}>
+            {row.label}
+            {/* The session inherited a non-default effort from a resumed
+              * transcript; the Default row is where you'd clear it, so it's
+              * where the current inherited state reads. */}
+            {row.id === '__default__' && inherited && !effort && (
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">inherited</span>
+            )}
+          </span>
+          {row.selected && <CheckIcon className={optCheckClass} />}
+        </button>
+      ))}
     </div>
-  );
-}
-
-/** Cursor-style session-scope picker. A new session binds the picked
- * scope — a library folder, or "Library" for a library-wide chat
- * (default: the window's current folder, else Library); once the chat has
- * content the pill stays visible but locked — a conversation never
- * rebinds. Same shared Base UI menu adapter as the model pill. */
-function ScopeMenu({ scope, entries, homeDir, locked, disabled, onSetScope }: {
-  scope: ChatScope;
-  entries: LibraryFolderOption[];
-  homeDir: string;
-  locked: boolean;
-  disabled: boolean;
-  onSetScope: (scope: ChatScope) => void;
-}) {
-  const name = scopeDisplayName(scope);
-  const label = scopePillAriaLabel(scope, locked);
-  const isLibrary = scope.kind === 'library';
-  return (
-    <SharedMenu>
-      <SharedMenuTrigger
-        className={cn(pillClass, 'max-w-40', locked && pillLockedClass)}
-        disabled={disabled || locked}
-        aria-label={label}
-        title={isLibrary
-          ? 'Session scope — the whole library'
-          : `Session folder — ${shortenFolderPath(scope.path, homeDir)}`}
-      >
-        {/* No leading glyph on the trigger: the scope NAME is the content
-          * (often carrying the user's own emoji), and a folder icon next
-          * to it reads as a double mark. The menu's rows keep icons. */}
-        <span className="truncate">{name}</span>
-        <ChevronDownIcon className={pillChevronClass} />
-      </SharedMenuTrigger>
-      <SharedMenuPortal>
-        <SharedMenuPositioner side="top" align="start" sideOffset={6} collisionPadding={8}>
-          <SharedMenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label="Session scope">
-            <div className={menuHeadClass}><span className="font-semibold text-foreground">Session scope</span></div>
-            <SharedMenuItem label="Library" className={cn(optClass, isLibrary && optActiveClass)} onClick={() => onSetScope(LIBRARY_SCOPE)}>
-            <LibraryIcon className={optIconClass} />
-            <span className={optTextClass}><span className={optTitleClass}>Library</span><span className={optDescClass}>Chat across your whole library</span></span>
-            {isLibrary && <CheckIcon className={optCheckClass} />}
-            </SharedMenuItem>
-            {entries.length > 0 && <div className="mx-2 my-1 border-t border-border" role="separator" />}
-            {entries.map((entry) => {
-              const active = scope.kind === 'folder' && scope.path === entry.path;
-              return (
-                <SharedMenuItem key={entry.path} label={folderDisplayName(entry.path)} className={cn(optClass, active && optActiveClass)} onClick={() => onSetScope(folderScope(entry.path))}>
-                <FolderIcon className={optIconClass} />
-                <span className={optTextClass}><span className={optTitleClass}>{folderDisplayName(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
-                {active && <CheckIcon className={optCheckClass} />}
-                </SharedMenuItem>
-              );
-            })}
-          </SharedMenuPopup>
-        </SharedMenuPositioner>
-      </SharedMenuPortal>
-    </SharedMenu>
   );
 }
 
@@ -422,13 +345,16 @@ export function AgentComposer({
     return () => cancelAnimationFrame(frame);
   }, [activeSuggestionIndex, choices.length]);
 
+  // "Explore with", not "Message": the agent here is pointed at the
+  // user's own library, and the generic chat-app phrasing said nothing
+  // about that. Kept as one line so the wording is easy to revisit.
   const placeholder = phase === 'connecting'
     ? 'Connecting…'
     : phase === 'closed'
       ? 'Reconnect to continue…'
       : turnActive
         ? 'Ask for follow-up changes'
-        : `Message ${agentShortName}…`;
+        : `Explore with ${agentShortName}…`;
 
   function pickMention(path: string) {
     if (!mention || mention.kind !== 'mention') return;
@@ -457,7 +383,10 @@ export function AgentComposer({
     // px-3 matches the transcript's 12px insets so the composer card and
     // the turn cards above share one column edge (the wrapper's
     // chat-primary width budgets for it — see `.agent-composer`).
-    <div className={cn('relative', hero ? 'mx-auto w-[min(656px,100%)] p-2' : 'agent-composer p-2 px-3')}>
+    <div
+      className={cn('relative', hero ? 'mx-auto w-[min(656px,100%)] p-2' : 'agent-composer p-2 px-3')}
+      data-draft-empty={text.trim() ? 'false' : 'true'}
+    >
       {mention && (choices.length > 0 || mention.kind === 'skill') && (
         <div className="agent-mention">
           <div className="agent-mention-head">
@@ -504,12 +433,22 @@ export function AgentComposer({
         </div>
       )}
       <div className={cn(
-        'flex flex-col gap-1.5 rounded-xl border border-border bg-background px-2 pt-2 pb-1.5 focus-within:border-accent',
+        // No focus treatment on the CARD: the caret already says where
+        // typing goes, and an accent ring around a box this large was the
+        // loudest thing on screen for the app's most common state — the
+        // composer is focused nearly all the time.
+        // The hero corner — one step past every overlay in the app. The
+        // composer is the surface the eye rests on, and the extra radius
+        // is what makes it read as the anchor rather than another panel.
+        'flex flex-col gap-1.5 rounded-2xl border border-border bg-background px-2 pt-2 pb-1.5',
         // Hero (empty-state) presentation: the composer is the visual
         // anchor of an otherwise bare pane, so it earns a taller resting
         // input and the one sanctioned non-overlay shadow. Docked mode
         // stays flat and compact beside a document.
-        hero && 'shadow-raised [&_.cm-editor]:min-h-16',
+        // 56px ≈ two and a half lines: a shade taller than the docked
+        // composer's two, which is all the extra presence the empty
+        // pane's anchor needs. Four lines read as a form to fill in.
+        hero && 'shadow-raised [--composer-min-h:56px]',
       )}>
         {(attachments.length > 0 || uploading) && (
           <div className="flex flex-wrap items-center gap-1">
@@ -537,11 +476,12 @@ export function AgentComposer({
                 </Button>
               </span>
             ) : (
-              <span key={a.path} className={attachChipClass} title={a.path}>
-                <FileGenericIcon className={attachIconClass} />
-                <span className={attachNameClass}>{a.name}</span>
-                <Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>
-              </span>
+              <FileAttachmentChip
+                key={a.path}
+                name={a.name}
+                path={a.path}
+                trailing={<Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => onRemoveAttachment(a.path)}>×</Button>}
+              />
             ))}
             {uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
           </div>
@@ -612,6 +552,9 @@ export function AgentComposer({
             scope={sessionScope}
             entries={folderEntries}
             homeDir={folderHomeDir}
+            heading="Session scope"
+            libraryDetail="Chat across your whole library"
+            ariaLabel={scopePillAriaLabel(sessionScope, folderLocked)}
             locked={folderLocked}
             disabled={disabled}
             onSetScope={onSetScope}

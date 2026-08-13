@@ -70,18 +70,15 @@ export function resizeChatByKeyboard(width: number, key: SplitterKey): number {
   );
 }
 
-/** Build a fresh empty tab. The id is `crypto.randomUUID` because every
+/** Build a fresh persistent tab. The id is `crypto.randomUUID` because every
  *  browser shipping in 2024+ (and Electron's bundled Chromium) has it;
- *  Node ≥19 also exposes it. New tabs default to pinned (not preview)
- *  — the `+` button is an explicit "I want a permanent slot" action;
- *  preview tabs are only created by the sidebar-single-click path. */
+ *  Node ≥19 also exposes it. */
 export function makeTab(): Tab {
   return {
     id: crypto.randomUUID(),
     file: null,
     editMode: false,
     dirty: false,
-    preview: false,
     pendingAnchor: null,
     pendingHighlight: null,
     saveStatus: { text: '', cls: '' },
@@ -154,7 +151,7 @@ export function forgetClosedTabs(history: string[], openIds: Set<string>): strin
  *  temporarily undercounting the backfill. */
 export function optimisticKeyBackfillPaths(files: FileMeta[]): string[] {
   return files
-    .filter((f) => f.format === 'md' || f.format === 'html' || f.format === 'pdf' || f.format === 'image' || f.format === 'docx')
+    .filter((f) => f.format === 'md' || f.format === 'html' || f.format === 'json' || f.format === 'pdf' || f.format === 'image' || f.format === 'docx')
     .map((f) => f.name)
     .filter((name) => !name.split('/').some((seg) => seg.startsWith('.')))
     .sort();

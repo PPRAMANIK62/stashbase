@@ -136,6 +136,37 @@ test('macOS application menu keeps Cmd+W for tabs and uses Cmd+Shift+W for windo
   assert.equal(closeWindow.accelerator, 'Command+Shift+W');
 });
 
+test('Help menu opens the shared links and is the last menu on both platforms', () => {
+  const links = require('../shared/links.json');
+  for (const platform of ['darwin', 'win32', 'linux']) {
+    const opened = [];
+    const template = createApplicationMenuTemplate({
+      platform,
+      onNewWindow: () => {},
+      onCloseWindow: () => {},
+      onOpenExternal: (url) => opened.push(url),
+    });
+    // `role: 'help'` is what makes macOS place it last and attach the
+    // system search field; a plain `label: 'Help'` silently loses both.
+    const help = template.at(-1);
+    assert.equal(help.role, 'help', `${platform}: Help must be the final menu`);
+
+    for (const [label, expected] of [
+      ['StashBase Website', links.website],
+      ['Community Discord', links.discord],
+      ['Report an Issue', links.issues],
+    ]) {
+      const item = help.submenu.find((entry) => entry.label === label);
+      assert.ok(item, `${platform}: Help is missing ${label}`);
+      item.click();
+      assert.equal(opened.at(-1), expected);
+    }
+    // Hard-coding a URL here would let the menu and the renderer's Discord
+    // button drift to different invites — the reason links.json exists.
+    assert.deepEqual(opened, [links.website, links.discord, links.issues]);
+  }
+});
+
 test('window lifecycle input follows the platform menu mapping without stealing tab chords', () => {
   const ctrlShiftN = {
     type: 'keyDown',

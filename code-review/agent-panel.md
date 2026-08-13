@@ -138,8 +138,9 @@ panel with its one fresh tab.
 Chat creation has ONE entry point: the sidebar's New Chat split button.
 Its main area creates with the app-wide preferred agent
 (`readPreferredAgent`); its chevron menu ("Choose agent for new chat")
-creates with an explicit agent AND updates that preference
-(`rememberPreferredAgent` — clicking a chat tab also updates it).
+only updates that preference and MUST NOT create or activate a chat
+(`rememberPreferredAgent` — clicking a chat tab also updates it). The user
+must press the main New Chat area to create a session.
 Creation goes through `newChatPlan`: reuse the one COMPLETELY blank tab
 regardless of its agent — when the agent differs, switch the blank tab's
 agent in place via `CHAT_TAB_SET_AGENT` (the reducer refuses any tab
@@ -231,7 +232,7 @@ Button/StatusMessage/Menu/Input primitives. `styles/chat.css` keeps only what
 utilities must not own: the `.app` grid tracks and chat splitter, the
 chat-primary centring rules keyed on the `agent-head` / `agent-messages` /
 `agent-composer` hook classes (keep those class names on the utility-styled
-elements), the sticky user-turn header system, `.agent-prose` content
+elements), the right-aligned user-turn bubble, `.agent-prose` content
 typography plus the One-Dark tool/diff palette, the `@`-mention popup
 (`.agent-mention-item.active` is a keyboard-navigation querySelector hook),
 and the CodeMirror-owned composer input DOM. `.agent-view` stays a class-name
@@ -241,15 +242,17 @@ pill ("Session folder" / "Session scope: Library"; when locked it appends
 "— set for this conversation"), the model pill ("Model: Default" when
 default so adjacent Defaults cannot be confused), and the mode pill
 ("Permission mode: …"), whose panel stacks the permission-mode list with
-the effort bar at the bottom. Sections render only when the runtime
-supports them; a locked model pill or effort bar stays visible but inert.
+the effort list at the bottom (same row idiom, Default first, data-driven
+from the runtime's advertised levels). Sections render only when the runtime
+supports them; a locked model pill or effort list stays visible but inert.
 An empty chat centers the composer as the hero layout: the
 composer swaps its `agent-composer` width hook for the hero column while
 empty, and keeps a stable React `key` so the same mounted instance (draft,
 CodeMirror state) moves between the hero and bottom layouts. The empty-state
-rotating suggestion only prefills the composer draft through the CodeMirror
-handle — it must never send — and its rotation pauses while hovered or
-focused so the press target cannot swap under the pointer. The connecting spinner is a keyframe
+rotating suggestion uses a short action-first label in the user's voice and
+only prefills the composer draft through the CodeMirror handle — it must never
+send — and its rotation pauses while hovered or focused so the press target
+cannot swap under the pointer. The connecting spinner is a keyframe
 animation the global reduced-motion policy stops.
 
 Community contributions can land as useful first iterations, but the long-term design should continue to be simplified toward this side-panel model when needed.
@@ -262,11 +265,17 @@ Community contributions can land as useful first iterations, but the long-term d
   clear busy/tool activity, and do not append a second failed-turn notice. A
   raw post-ready socket close gets the stable agent-specific disconnect
   fallback; explicit renderer/client teardown must suppress it.
+  Teardown may send the courtesy protocol close frame only while the socket is
+  still open; calling `send()` after it starts closing is itself a renderer
+  console error and must not make clean navigation fail strict UI checks.
 - Derive the shell layout from Chat visibility, document presence, and compact
   viewport state; do not add RAG/CoWork product modes. The chat-primary layout
   removes the document and splitter grid tracks without unmounting either
   surface. Hidden primary surfaces are inert so zero-width content cannot keep
   keyboard focus.
+- Initialize the renderer with Chat open. Boot may create the default blank tab
+  asynchronously, but the shell must not first paint a collapsed panel and
+  rely on a later effect to reveal the product's default workspace.
 - Opening a folder creates one fresh chat tab for the app-wide preferred
   Agent — but only when the window has no chat tabs. Existing tabs (and their
   folder-bound sessions) survive folder switches, so a switch never spawns an
@@ -320,10 +329,10 @@ Community contributions can land as useful first iterations, but the long-term d
   action opens a document and causes Chat to dock.
 - Streaming should not steal the user's scroll position. If the user has scrolled away from the bottom, show a clear jump-to-latest affordance.
 - The current document is never implicit agent context. Users attach files by drag/drop, file picker, `@` mention, or a composer-focused image paste. Image paste must reuse transient attachments, preserve accompanying text, and suppress the competing clipboard library-import offer.
-- The sidebar's New Chat split button owns chat creation and agent selection
-  (its chevron menu also updates the default agent); chat tabs own switching
-  between open chats. The pane header carries only the History menu — no
-  corner launchers, no in-panel `+`.
+- The sidebar's New Chat split button owns chat creation and agent selection:
+  its chevron menu only updates the default agent, while its main area is the
+  sole creation action. Chat tabs own switching between open chats. The pane
+  header carries only the History menu — no corner launchers, no in-panel `+`.
 - Model catalogs and identifiers belong to their native runtime: use Claude's
   SDK discovery and Codex app-server `model/list`, never a shared hard-coded
   list. `undefined` means Default and must not change global CLI settings.
@@ -349,9 +358,34 @@ Community contributions can land as useful first iterations, but the long-term d
   For resumed Claude history, render the server-reported effort and keep
   missing or unsupported metadata visibly inherited instead of inventing a
   renderer default. Replay must tolerate a protocol-v1 server retained during
-  restart. Changing effort on an idle restored session retains its rendered
+  restart. Codex uses the same protocol-v2 replay envelope with a null effort,
+  so its normal history path does not depend on a failed metadata probe.
+  Changing effort on an idle restored session retains its rendered
   transcript and native identity; the server-side history and writer lifecycle
   contract lives in [architecture.md](architecture.md).
+
+## Validation
+
+Run `pnpm typecheck`, `pnpm test:renderer`, and
+`npx vite build --config web-src/vite.config.ts`, plus the narrow agent/server
+tests for any transport, session, permission, or history seam changed. The
+Playwright smoke suite proves that the Agent chat shell can launch alongside
+the workspace, and the workspace visual baseline renders deterministic
+"Agent unavailable" discovery. `pnpm test:e2e:agent-protocol` verifies the
+fake Codex executable's stdio JSON-RPC contract directly;
+`pnpm test:e2e:functional` runs that contract before a production-path
+Electron journey covering new chat, folder binding, command approval,
+transcript completion, a window-folder switch, and interruption. The fixture
+is selected through the shipping `STASHBASE_CODEX_BIN` override and uses no
+developer credentials, real CLI account, user CLI history, or network output.
+
+A credentialed real-CLI Agent turn, clipboard-image attachment, and packaged
+runtime discovery remain in the residual
+[release sanity checklist](../release-checklists/ui-sanity.md). Extend the
+automated Agent UI coverage only through a deterministic protocol fixture
+without weakening the transport and permission contracts described here. The
+shared harness, focus policy, artifact handling, and selector rules live in
+[UI Regression Testing](ui-regression-testing.md).
 
 ## Current Baseline
 
@@ -368,8 +402,32 @@ The accepted baseline includes:
 - adaptive chat-first layout with a centred readable transcript/composer width,
   side-panel width restoration, explicit-hide precedence, and a document-first
   compact-window transition
-- compact activity grouping for non-actionable tool calls, with inspectable
-  command/read/search labels rather than lifecycle-only summaries
+- compact activity grouping for non-actionable tool calls: each completed
+  step is a flat row (type glyph + verb + underlined file / mono command or
+  query), expandable to its payload/result, with no per-step card, border, or
+  status badge — inspectable command/read/search labels rather than
+  lifecycle-only summaries or "Done" chips. The collapsed group summary uses
+  the same Codex row shape as its steps: one leading glyph (the liveness dot
+  while live, the first step's type icon once settled), the summary text, and
+  a trailing disclosure chevron that only fades in on hover or while open — a
+  resting summary is just icon + text, never a leading always-on caret. That
+  summary is count-free and stable live vs done (categories + singular/plural,
+  never a number), and never turns red on an intermediate step failure (the
+  failed row tints inside the expansion; the turn's own fatal notice owns real
+  failure). The turn shows ONE liveness cue in ONE place at a time: while a
+  tool group is the turn's live tail it keeps its own dot + shimmer + "…"
+  lit across the whole stretch — running OR in the gap between consecutive
+  calls — and the generic "…is working" tail is suppressed whenever the tail
+  block is a tool of any status, so the dot never blinks off and hops onto a
+  separate line between calls
+- turn-level working-trace fold: a settled turn's thinking/interim
+  narration/tool activity collapses under one "Worked for X" header, leaving
+  the final answer (the last assistant block) visible; an interrupted turn
+  reads "You stopped after X" and stays expanded (no answer to isolate).
+  Duration is renderer-measured wall clock keyed by the turn's user-message
+  id (`AgentView` `setTurnBusy`/`stop`), so resumed history has none and shows
+  a plain "Worked"/"You stopped"; while streaming the trace is flat and
+  expanded, folding only on completion
 - visible permission cards outside collapsed activity
 - lightweight file/artifact open affordances
 - jump-to-latest behavior for transcript scrolling
@@ -380,10 +438,22 @@ The accepted baseline includes:
   semantics, including permission decisions and destructive history
   confirmation. CodeMirror remains the owner of composer text, selection,
   undo, and mention-key handoff; keep its presentation chat-like and its
-  height capped so the transcript retains reading space. Image attachments
+  height capped so the transcript retains reading space. A non-image file
+  attachment renders as a two-line card — a muted type glyph (the file tree's
+  own `FileTypeIcon`, de-coloured through `currentColor`, never a brand hue),
+  the filename, and its type label — identically in the composer (with a
+  remove control) and in the sent turn. Image attachments
   show renderer-local thumbnails, never their transient filesystem paths;
   sent thumbnails remain available for the current transcript, while their URLs
   are revoked when removed, the transcript is replaced, or the panel unmounts.
+  The wire prompt appends a machine-facing `Attached files:` suffix so the
+  runtime can read each attachment; that suffix is context, never prose. On
+  replay the server lifts it back out of the shown user message so an
+  attachment reads as ONE chip instead of a chip plus its raw path
+  (`restoreHistoryAttachments`, shared by both runtimes): a transient image
+  becomes a thumbnail, any other known document extension becomes a name-only
+  card (no preview, no read access), and a line it cannot classify —
+  extension-less or an unrecognised type — stays in the prose untouched.
   Restored Claude and Codex sessions may recreate thumbnails only for live
   transient image files through the scoped local preview route; never expose
   an arbitrary path found in a transcript. The route resolves the real target
@@ -393,7 +463,7 @@ The accepted baseline includes:
   reconnect, while a closed picker cannot reopen until the session is ready. Leave
   trigger, Escape, and outside-interaction dismissal to the managed popup
   primitive. When a permission action removes its own controls, restore focus
-  to the persistent tool-card trigger.
+  to the permission card's persistent head.
 - Image-preview controls float over the image: Download and Close at the top
   right, and a bottom-centred zoom group. They need accessible names and hover
   titles; do not replace their semantic buttons with non-interactive artwork.

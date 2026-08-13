@@ -10,12 +10,13 @@ import {
 
 interface ElectronBridge {
   openFolderDialog?: (opts?: unknown) => Promise<string | null>;
-  openExternal?: (url: string) => Promise<boolean>;
   setWindowFolder?: (folder: string | null) => Promise<boolean>;
   onClipboardImage?: (handler: (offer: ClipboardOffer) => void) => (() => void);
   markClipboardHandled?: (hash: string) => void;
 }
+import { openExternalUrl } from './lib/externalLink';
 import { Sidebar } from './components/Sidebar';
+import { TitlebarControls } from './components/TitlebarControls';
 import { MainPane } from './components/MainPane';
 import { DropVeil } from './components/Overlays';
 import { EmbedderRequireKeyGate } from './components/EmbedderRequireKeyGate';
@@ -26,6 +27,7 @@ import { AlertConfirmModal } from './components/AlertConfirmModal';
 import { Toasts } from './components/Toasts';
 import { SettingsPortal, openSettings } from './components/SettingsModal';
 import { QuickOpen } from './components/QuickOpen';
+import { LibrarySearch } from './components/LibrarySearch';
 import { EditorHistoryNavigator } from './components/EditorHistoryNavigator';
 import { DocumentOutlineProvider } from './components/DocumentOutlineContext';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
@@ -109,8 +111,9 @@ function AppBody() {
   // unmount it — hiding the panel only collapses the column via CSS,
   // the underlying agent WebSocket sessions stay alive. Killing them
   // on every collapse would lose Claude Code's chat history and any
-  // in-flight agent run. The sidebar's New Chat split button is how the
-  // user starts a fresh session (and reopens the hidden panel).
+  // in-flight agent run. The titlebar's chat toggle shows/hides the
+  // panel; the sidebar's New Chat split button starts a fresh session
+  // (and also reopens the hidden panel).
   const [chatMounted, setChatMounted] = useState(state.chatOpen);
   // Prime the agent registry once per window (always-mounted home: the
   // chat surfaces are lazy/conditional). Each AgentView refreshes the
@@ -278,8 +281,12 @@ function AppBody() {
       if (type === 'stashbase-nav') {
         const path = typeof e.data.path === 'string' ? e.data.path : '';
         const anchor = typeof e.data.anchor === 'string' && e.data.anchor ? e.data.anchor : undefined;
+        const folder = typeof e.data.folder === 'string' && e.data.folder ? e.data.folder : undefined;
         if (!path) return;
-        void actions.navigateTo(path, anchor);
+        // `folder` = a link inside an out-of-folder document; the target
+        // stays in that member folder (validated server-side on fetch).
+        if (folder) void actions.openLibraryFile(folder, path, { anchor });
+        else void actions.navigateTo(path, anchor);
         return;
       }
       if (type === 'stashbase-preview-image') {
@@ -317,12 +324,7 @@ function AppBody() {
           && !url.searchParams.has('windowId')) {
           url.searchParams.set('windowId', getWindowId());
         }
-        const bridge = (window as { electron?: ElectronBridge }).electron;
-        if (bridge?.openExternal) {
-          void bridge.openExternal(url.href);
-        } else {
-          window.open(url.href, '_blank', 'noopener,noreferrer');
-        }
+        openExternalUrl(url.href);
       } catch {
         // Ignore malformed messages from sandboxed preview content.
       }
@@ -352,10 +354,11 @@ function AppBody() {
       {/* No dedicated titlebar strip, Cursor-style: the folder identity
        *  lives in `document.title` (the OS titlebar / Mission Control),
        *  and on macOS Electron the traffic lights float over the
-       *  sidebar's top drag zone (globals.css). The sidebar has no
-       *  explicit toggle button — it's resized (and collapsed) by
-       *  dragging its right edge, à la VSCode; the activity rail always
-       *  stays visible. */}
+       *  sidebar's top drag zone (globals.css). The titlebar band hosts
+       *  the shell-level sidebar-toggle + search controls
+       *  (TitlebarControls) — they survive a sidebar collapse, so the
+       *  toggle is always the way back in; the right edge still drags
+       *  to resize/collapse, à la VSCode. */}
       <div
         className={
           'app'
@@ -368,6 +371,7 @@ function AppBody() {
           '--sidebar-width': `${state.sidebarWidth}px`,
         } as CSSProperties}
       >
+        <TitlebarControls />
         <DocumentOutlineProvider>
           <Sidebar />
           <SidebarSplitter />
@@ -400,6 +404,7 @@ function AppBody() {
       )}
       <Hotkeys />
       <QuickOpen />
+      <LibrarySearch />
       <EditorHistoryNavigator />
       {previewImage && (
         <LazyLoadBoundary
@@ -433,7 +438,7 @@ function AppBody() {
       </Suspense>
       <AlertConfirmModal />
       <Toasts />
-      {state.folderPath ? <EmbedderRequireKeyGate /> : null}
+      <EmbedderRequireKeyGate />
       <SettingsPortal />
     </>
   );
@@ -484,11 +489,11 @@ function dataUrlToFile(dataUrl: string, filename: string, mime: string): File {
 
 /** Vertical drag handle on the sidebar's right edge (between the side
  *  panel and the main pane). Drags the panel width within [MIN, MAX];
- *  dragging narrower than COLLAPSE_AT collapses it to the rail-only
- *  state — the 44px activity rail itself never goes away. Stays mounted
- *  while collapsed (pinned to the rail's right edge at 44px) so the user
- *  can grab it and drag the panel back open. Positioned absolutely so it
- *  doesn't perturb the `.app` grid tracks; pointer-capture keeps the
+ *  dragging narrower than COLLAPSE_AT collapses the sidebar entirely
+ *  (the titlebar toggle is the visible way back in). Stays mounted
+ *  while collapsed (pinned at the window's left edge) so the user can
+ *  still grab it and drag the panel back open. Positioned absolutely so
+ *  it doesn't perturb the `.app` grid tracks; pointer-capture keeps the
  *  drag alive once the cursor crosses into the main pane. */
 function SidebarSplitter() {
   const { state, dispatch } = useApp();
@@ -579,8 +584,8 @@ function SidebarSplitter() {
       aria-valuetext={state.sidebarCollapsed ? 'Collapsed' : `${state.sidebarWidth} pixels`}
       style={{
         left: state.sidebarCollapsed
-          ? '44px'
-          : `calc(44px + var(--sidebar-width, ${SIDEBAR_MAX_WIDTH}px))`,
+          ? '0px'
+          : `var(--sidebar-width, ${SIDEBAR_MAX_WIDTH}px)`,
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

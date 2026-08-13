@@ -20,6 +20,8 @@ interface ElectronLifecycleBridge {
 }
 
 type Dispatch = (action: Action) => void;
+const ACTIVATION_REVALIDATED_FORMATS = new Set(['md', 'pdf', 'image', 'docx', 'audio']);
+
 type Toast = (message: string, opts?: {
   level?: 'info' | 'success' | 'warning' | 'error';
   ttl?: number | null;
@@ -37,21 +39,12 @@ export interface ActiveFolderWorkspace {
   markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   runSync: () => Promise<void>;
-  runSearch: (
-    query: string,
-    mode?: 'semantic' | 'keyword',
-    opts?: {
-      caseStrict?: boolean;
-      wholeWord?: boolean;
-      scope?: string | null;
-      types?: import('../../../shared/search-types.ts').SearchTypeCategory[];
-    },
-  ) => Promise<void>;
   dismissIndexWarning: () => Promise<void>;
   decideSemanticIndexing: (decision: 'start' | 'defer') => Promise<void>;
   setFolderOrder: (parentPath: string, names: string[]) => Promise<void>;
   selectFile: (name: string) => Promise<void>;
   selectFileWithHighlight: (name: string, hit: PendingHighlight) => Promise<void>;
+  openLibraryFile: (folder: string, name: string, opts?: { hit?: PendingHighlight; anchor?: string }) => Promise<void>;
   openInNewTab: (name: string) => Promise<void>;
   newTab: () => Promise<void>;
   closeTab: (id: string) => Promise<void>;
@@ -83,7 +76,6 @@ interface WorkspaceRefs {
   saveTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
   saveInFlight: MutableRefObject<Promise<boolean> | null>;
   pollTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  searchGeneration: MutableRefObject<number>;
   syncGeneration: MutableRefObject<number>;
   openGeneration: MutableRefObject<number>;
   openingFolderGeneration: MutableRefObject<number | null>;
@@ -118,7 +110,7 @@ export function useActiveFolderWorkspace(
 ): ActiveFolderWorkspace {
   const {
     state, folderContextPath, editor, saveTimer, saveInFlight, pollTimer,
-    searchGeneration, syncGeneration, openGeneration, openingFolderGeneration,
+    syncGeneration, openGeneration, openingFolderGeneration,
     lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace,
   } = refs;
   const {
@@ -128,7 +120,7 @@ export function useActiveFolderWorkspace(
   } = dependencies;
 
   const search = useSearchActions(
-    { stateRef: state, folderContextPath, pollTimer, searchGeneration, syncGeneration, openGeneration, openingFolderGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
+    { stateRef: state, folderContextPath, pollTimer, syncGeneration, openGeneration, openingFolderGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
     { loadFiles, loadFilesFromServer, refreshActiveTabFromDisk, toast }, dispatch,
   );
   const documents = useDocumentActions(
@@ -140,7 +132,7 @@ export function useActiveFolderWorkspace(
     { askCascadeForRename, askConfirm, flushSave: documents.flushSave, loadFiles, openInNewTab: documents.openInNewTab, refreshIndexState: search.refreshIndexState, toast }, dispatch,
   );
   const folders = useFolderActions(
-    { state, folderContextPath, editor, openGeneration, openingFolderGeneration, syncGeneration, searchGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
+    { state, folderContextPath, editor, openGeneration, openingFolderGeneration, syncGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
     { flushSave: documents.flushSave, loadFiles, loadFileOrder, markVisibleFilesPendingForSearch: search.markVisibleFilesPendingForSearch, refreshIndexState: search.refreshIndexState, toast }, dispatch,
   );
 
@@ -148,12 +140,14 @@ export function useActiveFolderWorkspace(
   // Revalidate it whenever it becomes active so retained Markdown editors and
   // binary previews never reuse source data from before an external change.
   const activeTab = getActiveTab(renderedState);
-  const activeFileName = activeTab?.file?.name ?? null;
-  const activeFileTabId = activeFileName ? activeTab?.id ?? null : null;
+  const revalidatedFileName = activeTab?.file && ACTIVATION_REVALIDATED_FORMATS.has(activeTab.file.format)
+    ? activeTab.file.name
+    : null;
+  const revalidatedTabId = revalidatedFileName ? activeTab?.id ?? null : null;
   useEffect(() => {
-    if (!activeFileName || !activeFileTabId) return;
+    if (!revalidatedFileName || !revalidatedTabId) return;
     void refreshActiveTabFromDisk();
-  }, [activeFileName, activeFileTabId, refreshActiveTabFromDisk]);
+  }, [refreshActiveTabFromDisk, revalidatedFileName, revalidatedTabId]);
 
   useEffect(() => {
     const bridge = (window as { electron?: ElectronLifecycleBridge }).electron;
@@ -249,7 +243,6 @@ export function useActiveFolderWorkspace(
     search.decideSemanticIndexing,
     search.markVisibleFilesPendingForSearch,
     search.refreshIndexState,
-    search.runSearch,
     search.runSync,
     documents.activateTab,
     documents.closeActiveTab,
@@ -260,6 +253,7 @@ export function useActiveFolderWorkspace(
     documents.navigateTo,
     documents.newTab,
     documents.openInNewTab,
+    documents.openLibraryFile,
     documents.registerEditor,
     documents.scheduleSave,
     documents.selectFile,

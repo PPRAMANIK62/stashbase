@@ -8,18 +8,29 @@ import { ImagePreview } from './ImagePreview';
 import { TabStrip } from './TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { readPreferredAgent } from '../agentPreference';
+import { retainedMarkdownTabs } from '../milkdown/retainedTabs';
 import { Button } from './ui/button';
+import { StatusMessage } from './ui/status';
 
 /** Muted "Loading…" bodies shared by the lazy viewer fallbacks. */
 const VIEWER_LOADING_CLASS = 'p-4 text-base text-muted-foreground';
 const VIEWER_PADDED_LOADING_CLASS = 'p-6 text-base text-muted-foreground';
 const VIEWER_CENTERED_LOADING_CLASS = 'grid h-full place-items-center text-base text-muted-foreground';
 
+/** Display name of an absolute member folder root. Duplicates
+ *  `librarySearch.folderBasename` on purpose — importing that module here
+ *  would pull the whole search-memory chunk into the entry bundle. */
+function folderBasename(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  const segments = normalized.split('/');
+  return segments[segments.length - 1] || normalized;
+}
+
 const LazyCrepeDocument = lazyWithRetry(() => import('./CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
 const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
 const LazyDocxPreview = lazyWithRetry(() => import('./DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
 const LazyAudioPreview = lazyWithRetry(() => import('./AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
-const RETAINED_MARKDOWN_EDITOR_LIMIT = 5;
+const LazyJsonDocument = lazyWithRetry(() => import('./JsonDocument').then((mod) => ({ default: mod.JsonDocument })));
 
 /**
  * Right rail. Layout from top to bottom:
@@ -38,19 +49,33 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   const saveStatus = activeTab?.saveStatus ?? { text: '', cls: '' };
   const hasTabs = state.tabs.length > 0;
   const emptyTab = !!activeTab && !cur;
-  const resourceResetKey = cur ? `${cur.name}:${cur.version ?? ''}` : undefined;
+  const resourceResetKey = cur ? `${cur.folder ?? ''}:${cur.name}:${cur.version ?? ''}` : undefined;
+  // Out-of-folder tab (a library search hit viewed without switching the
+  // window's folder): a quiet identity banner with the one escape hatch —
+  // open that folder in its own window.
+  const outOfFolder = cur?.folder ?? null;
+  function openTabFolderInNewWindow() {
+    if (!outOfFolder) return;
+    const bridge = (window as { electron?: { openFolderWindow?: (folder: string) => Promise<boolean> } }).electron;
+    void (async () => {
+      const opened = await bridge?.openFolderWindow?.(outOfFolder);
+      if (!opened) actions.toast('New window is only available in the desktop app.', { level: 'error' });
+    })();
+  }
   // Reserve room for the absolute-positioned chrome (edit toggle / PDF
-  // controls / floating-actions at top:44px, height ~28px) so editor /
+  // controls / floating-actions at top:44px, height 24px) so editor /
   // preview content doesn't render underneath it. HTML / image viewers
   // have no top chrome, so they skip the band and fill from just under
   // the tab strip.
+  //
+  // 32px is the floor, not a taste call. The chrome sits at a fixed
+  // top:44px while the tab strip above it grows with the interface-size
+  // preference (35.7 / 37.6 / 40.4px) — 44 is already as high as the
+  // chrome can start without the largest strip covering it, so the band
+  // has to span 44 - 35.7 + 24. Every control that lives in it is
+  // therefore 24px; put a 28px one back and it hangs into the document.
   const chromeBand = hasTabs && cur?.format !== 'html' && cur?.format !== 'image';
-  const retainedMarkdownTabIds = new Set(
-    state.editorHistory
-      .filter((id) => state.tabs.some((tab) => tab.id === id && tab.file?.format === 'md'))
-      .slice(0, RETAINED_MARKDOWN_EDITOR_LIMIT),
-  );
-  const markdownTabs = state.tabs.filter((tab) => retainedMarkdownTabIds.has(tab.id));
+  const markdownTabs = retainedMarkdownTabs(state.tabs, state.editorHistory, state.activeTabId);
 
   return (
     <main
@@ -59,6 +84,19 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
       inert={workspaceHidden || undefined}
     >
       {hasTabs && <TabStrip />}
+      {outOfFolder && (
+        /* Full-width identity strip flush under the tab strip (the DOCX
+         * status-row idiom). The absolute chrome below shifts down past it
+         * (see chromeTop). */
+        <StatusMessage tone="info" className="z-5 flex min-h-8 shrink-0 items-center gap-2.5 rounded-none border-x-0 border-t-0 px-3.5 py-1.5">
+          <span className="min-w-0 flex-1 truncate">
+            In <span className="font-semibold">{folderBasename(outOfFolder)}</span> — viewing a file outside the current folder.
+          </span>
+          <Button variant="outline" size="xs" className="shrink-0" onClick={openTabFolderInNewWindow}>
+            Open Folder in New Window
+          </Button>
+        </StatusMessage>
+      )}
       {/* Content host for every viewer (iframe preview / split editor).
         * Single-cell grid because a Chromium quirk: when an iframe with
         * `position: absolute; inset: 0` sits inside a flex child, its
@@ -68,7 +106,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         * children a definite size unambiguously, sidestepping that bug.
         * The `main-body` class itself is the structural hook for
         * `.main.no-file > :not(.main-body)` in mainpane.css. */}
-      <div className={'main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden' + (chromeBand ? ' pt-9' : '')}>
+      <div
+        className={'main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden' + (chromeBand ? ' pt-8' : '')}
+        role={activeTab ? 'tabpanel' : undefined}
+        id={activeTab ? 'document-panel' : undefined}
+        aria-labelledby={activeTab ? `document-tab-${activeTab.id}` : undefined}
+      >
         {!hasTabs && !state.folderPath && (
           /* No folder open at all (empty library, or an open failure).
            * The sidebar's zero-folder block owns the add-folder action;
@@ -113,28 +156,43 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           const active = tab.id === state.activeTabId;
           return (
             <div
-              key={`${tab.id}:${file.name}`}
+              key={`${tab.id}:${file.folder ?? ''}:${file.name}`}
               className="markdown-tab-layer"
               hidden={!active}
             >
               <LazyLoadBoundary
                 className={VIEWER_LOADING_CLASS}
                 label="Markdown document"
-                resetKey={`${file.name}:${file.version ?? ''}`}
+                resetKey={`${file.folder ?? ''}:${file.name}:${file.version ?? ''}`}
               >
-                <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening document…</div>}>
+                <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Opening document…</div>}>
                   <LazyCrepeDocument
                     tabId={tab.id}
                     name={file.name}
                     content={file.content}
                     readOnly={!tab.editMode}
                     active={active}
+                    dirty={tab.dirty}
+                    folder={file.folder}
                   />
                 </Suspense>
               </LazyLoadBoundary>
             </div>
           );
         })}
+        {cur && cur.format === 'json' && (
+          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="JSON document" resetKey={resourceResetKey}>
+            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening JSON…</div>}>
+              <LazyJsonDocument
+                key={activeTab?.id ?? cur.name}
+                tabId={activeTab?.id ?? ''}
+                content={cur.content}
+                readOnly={!editMode}
+                active
+              />
+            </Suspense>
+          </LazyLoadBoundary>
+        )}
         {cur && !editMode && cur.format === 'html' && (
           <HtmlPreview name={cur.name} />
         )}
@@ -173,12 +231,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         // Centered placeholder strip for an empty (Untitled) tab —
         // absolute + 50% transform centers it relative to .main, in the
         // same slot a breadcrumb path would occupy.
-        <div className="absolute top-11 left-1/2 z-4 flex h-7 max-w-[calc(100%-220px)] -translate-x-1/2 items-center overflow-hidden text-base whitespace-nowrap text-muted-foreground">
+        <div className="absolute top-11 left-1/2 z-4 flex h-6 max-w-[calc(100%-220px)] -translate-x-1/2 items-center overflow-hidden text-base whitespace-nowrap text-muted-foreground">
           <span className="px-1 py-0.5">Untitled</span>
         </div>
       )}
       <FindBar />
-      {cur && cur.format === 'md' && (
+      {cur && (cur.format === 'md' || cur.format === 'json') && !cur.folder && (
         /* Floating actions in the main pane's top-right — sits below the
          * tab strip (unconditionally present whenever there's an open
          * file, so a fixed offset is safe). The edit toggle lives here on
@@ -194,8 +252,8 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           )}
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground [&_svg:not([class*='size-'])]:size-5.5"
+            size="icon-xs"
+            className="text-muted-foreground"
             title={editMode ? 'Switch to Reading View' : 'Switch to Live Editing'}
             aria-label={editMode ? 'Switch to Reading View' : 'Switch to Live Editing'}
             onClick={() => { void actions.toggleEditMode(); }}
@@ -212,8 +270,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
       {cur && cur.format === 'pdf' && (
         // Slot that PdfPreview portals its zoom / page-count chrome
         // into — sits on the same row as back/forward + breadcrumb
-        // so we don't waste a row on viewer chrome.
-        <div className="pointer-events-none absolute top-11 right-3.5 left-3.5 z-5 flex items-center justify-stretch gap-2" id="pdf-chrome-slot" />
+        // so we don't waste a row on viewer chrome. The out-of-folder
+        // banner (min-h-8) pushes the slot down when present.
+        <div
+          className={'pointer-events-none absolute right-3.5 left-3.5 z-5 flex items-center justify-stretch gap-2 ' + (outOfFolder ? 'top-[76px]' : 'top-11')}
+          id="pdf-chrome-slot"
+        />
       )}
     </main>
   );

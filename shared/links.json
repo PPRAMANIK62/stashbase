@@ -1,0 +1,7 @@
+{
+  "_comment": "Outbound URLs, in JSON because it is the one format both sides read natively: the renderer imports it through Vite (resolveJsonModule), and electron/*.cjs runs unbuilt so it can only require(). A .ts module here would be unreachable from the main process. README.md restates these by hand — Markdown cannot import — so a URL change is two edits, not one.",
+  "website": "https://stashbase.ai",
+  "repository": "https://github.com/liliu-z/stashbase",
+  "issues": "https://github.com/liliu-z/stashbase/issues",
+  "discord": "https://discord.gg/zsRZH4PTq9"
+}

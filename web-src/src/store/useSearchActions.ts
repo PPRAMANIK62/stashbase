@@ -14,10 +14,8 @@ import {
 } from './state';
 import type { ToastOptions } from './useFeedbackActions';
 import { hasAggregatePreparationFailure } from './fileReadiness';
-import type { SearchTypeCategory } from '../../../shared/search-types.ts';
 import { runIndexStatusRequest } from './indexStatusRequest';
 
-const SEMANTIC_SEARCH_CANDIDATES = 30;
 const POLL_PENDING_MS = 1500;
 const POLL_IDLE_MS = 8000;
 
@@ -28,7 +26,6 @@ interface SearchActionRefs {
   stateRef: MutableRefObject<State>;
   folderContextPath: MutableRefObject<string>;
   pollTimer: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  searchGeneration: MutableRefObject<number>;
   syncGeneration: MutableRefObject<number>;
   openGeneration: MutableRefObject<number>;
   openingFolderGeneration: MutableRefObject<number | null>;
@@ -47,7 +44,8 @@ interface SearchActionDependencies {
   toast: Toast;
 }
 
-/** Owns search requests, index-status polling, and sync progress state. */
+/** Owns index-status polling and sync progress state. (Search requests
+ *  themselves live in the search popup — see `librarySearch.ts`.) */
 export function useSearchActions(
   refs: SearchActionRefs,
   dependencies: SearchActionDependencies,
@@ -62,7 +60,6 @@ export function useSearchActions(
     openGeneration: openGen,
     openingFolderGeneration,
     pollTimer,
-    searchGeneration: searchGen,
     stateRef,
     syncGeneration: syncGen,
   } = refs;
@@ -331,8 +328,6 @@ export function useSearchActions(
           // the renderer match instead of leaving a stale tree open.
           dispatch({ type: 'TABS_RESET' });
           dispatch({ type: 'CHAT_TABS_RESET' });
-          dispatch({ type: 'FILTER', q: '' });
-          dispatch({ type: 'SEARCH_CLEAR' });
           dispatch({ type: 'ACTIVE_FOLDER', path: '' });
           dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
           dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
@@ -352,97 +347,6 @@ export function useSearchActions(
     }
     scheduleNextPoll(nextDelay);
   }, [loadFiles, loadFilesFromServer, refreshActiveTabFromDisk]);
-
-  /** Fire whichever search the current `searchMode` selects and dispatch
-   *  the result. Empty query clears (back to tree view). Bails out on
-   *  stale responses so fast typing doesn't show flashes of older
-   *  results — also covers the case where the user toggled mode while a
-   *  prior query was in flight.
-   *
-   *  `modeOverride` exists because `stateRef.current.searchMode`
-   *  updates AFTER React commits, not in-line with a dispatch — so a
-   *  caller that just dispatched `SEARCH_MODE` and synchronously calls
-   *  `runSearch` would otherwise read the stale mode and fire the
-   *  wrong API. Mode-toggle callers pass the new mode explicitly. */
-  const runSearch = useCallback(async (
-    query: string,
-    modeOverride?: 'semantic' | 'keyword',
-    opts?: {
-      caseStrict?: boolean;
-      wholeWord?: boolean;
-      scope?: string | null;
-      types?: SearchTypeCategory[];
-    },
-  ) => {
-    const myGen = ++searchGen.current;
-    const q = query.trim();
-    if (!q) {
-      dispatch({ type: 'SEARCH_CLEAR' });
-      return;
-    }
-    const mode = modeOverride ?? stateRef.current.searchMode;
-    const folderPathAtStart = stateRef.current.folderPath;
-    const isStaleSearch = () => (
-      myGen !== searchGen.current ||
-      stateRef.current.folderPath !== folderPathAtStart ||
-      stateRef.current.filterQuery.trim() !== q
-    );
-    dispatch({ type: 'SEARCH_START' });
-    try {
-      if (mode === 'keyword') {
-        // Pull case-strict / whole-word / current folder straight from
-        // state. The `folder` field is the active folder of THIS window;
-        // passing it explicitly avoids the server falling back to the
-        // process-wide `currentFolder` singleton, which would pick the
-        // wrong folder in multi-window sessions.
-        const s = stateRef.current;
-        const scope = opts?.scope !== undefined ? opts.scope : s.searchScope;
-        const result = await api.keywordSearch(q, {
-          caseStrict: opts?.caseStrict ?? s.caseStrict,
-          wholeWord: opts?.wholeWord ?? s.wholeWord,
-          folder: folderPathAtStart || undefined,
-          pathPrefix: scope ?? undefined,
-          types: opts?.types ?? s.searchTypes,
-        });
-        if (isStaleSearch()) return;
-        dispatch({ type: 'SEARCH_KEYWORD', result });
-      } else {
-        const embedder = await api.getEmbedder();
-        if (isStaleSearch()) return;
-        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.hasKey });
-        if (!embedder.hasKey) {
-          dispatch({
-            type: 'SEARCH_ERROR',
-            error: 'Semantic search is disabled until you add an embedding API key. Switch to keyword search to search without embeddings.',
-          });
-          return;
-        }
-        const s = stateRef.current;
-        const scope = opts?.scope !== undefined ? opts.scope : s.searchScope;
-        const { hits } = await api.search(q, SEMANTIC_SEARCH_CANDIDATES, {
-          folder: folderPathAtStart || undefined,
-          pathPrefix: scope ?? undefined,
-          types: opts?.types ?? s.searchTypes,
-        });
-        if (isStaleSearch()) return;
-        // Keep every fetched candidate; the panel shows the strongest
-        // slice first and reveals the rest through progressive disclosure.
-        dispatch({ type: 'SEARCH_HITS', hits });
-      }
-    } catch (err) {
-      if (isStaleSearch()) return;
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[search:${mode}] failed:`, msg);
-      // 412 = no folder open: just clear (there's nothing to search), no
-      // error banner. Any other failure is a real error — surface it as
-      // such instead of a misleading empty "No matches".
-      if (err instanceof ApiError && err.status === 412) {
-        dispatch({ type: 'SEARCH_CLEAR' });
-      } else {
-        dispatch({ type: 'SEARCH_ERROR', error: msg });
-      }
-    }
-  }, []);
 
   const runSync = useCallback(async () => {
     if (stateRef.current.syncRunning) return;
@@ -488,7 +392,6 @@ export function useSearchActions(
     dismissIndexWarning,
     markVisibleFilesPendingForSearch,
     refreshIndexState,
-    runSearch,
     runSync,
   };
 }

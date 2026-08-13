@@ -20,19 +20,3 @@ export function effortLabel(effort: EffortLevel): string {
       .replace(/[_-]+/g, ' ')
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
-
-/** Normalize React Aria's controlled selection into a changed effort level. */
-export function changedEffortSelection(
-  keys: 'all' | Iterable<unknown>,
-  current: EffortLevel | undefined,
-  supported: readonly EffortLevel[] = EFFORT_LEVELS,
-): EffortLevel | undefined | null {
-  if (keys === 'all') return null;
-  const next = keys[Symbol.iterator]().next().value;
-  if (next === '__default__') return current ? undefined : null;
-  return typeof next === 'string'
-    && next !== current
-    && supported.includes(next as EffortLevel)
-    ? next as EffortLevel
-    : null;
-}

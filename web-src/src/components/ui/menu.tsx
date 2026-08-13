@@ -19,7 +19,11 @@ function MenuPositioner({ className, ...props }: MenuPrimitive.Positioner.Props)
   return (
     <MenuPrimitive.Positioner
       data-slot="menu-positioner"
-      className={cn("z-[100]", className)}
+      // Above the modal veils (z-1200): the menu portals to <body>, so a
+      // lower value leaves it stacked BEHIND whatever opened it whenever
+      // the trigger lives inside a veil — the search popup's scope pill
+      // did exactly that. Only the crash overlay (10000) outranks it.
+      className={cn("z-1300", className)}
       {...props}
     />
   )

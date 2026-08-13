@@ -1,7 +1,7 @@
 /**
  * Library-wide routes. External agents talk in absolute source paths because
  * they may run in sandboxes that cannot read the user's local filesystem.
- * These routes are the host-side bridge for semantic search, index status,
+ * These routes are the host-side bridge for semantic retrieval, index status,
  * orientation, library rules, and file CRUD.
  */
 import express from 'express';
@@ -62,6 +62,26 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
         folder: req.body?.folder,
         pathPrefix: req.body?.path_prefix,
         types,
+      }));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Keyword (ripgrep) search over the whole library, or one `folder`
+  // (optionally narrowed to a folder-relative `path_prefix`). Powers the
+  // in-app search popup's exact mode; deliberately outside the per-window
+  // folder gate so it answers before any folder is open. Hidden derived
+  // notes are remapped or dropped, same as every other search surface.
+  app.post('/api/library/keyword-search', async (req, res) => {
+    try {
+      const query = typeof req.body?.query === 'string' ? req.body.query : '';
+      res.json(await operations.keywordSearch({
+        query,
+        caseStrict: req.body?.case_strict === true,
+        wholeWord: req.body?.whole_word === true,
+        folder: typeof req.body?.folder === 'string' ? req.body.folder : undefined,
+        pathPrefix: typeof req.body?.path_prefix === 'string' ? req.body.path_prefix : undefined,
       }));
     } catch (err: unknown) {
       sendError(res, err);

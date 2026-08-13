@@ -11,8 +11,7 @@
      *   - the layout-independent 920px reading-column rules keyed on the
      *     layout hook classes `agent-head` / `agent-messages` /
      *     `agent-composer`
-     *   - the sticky user-turn header system (IntersectionObserver `stuck`
-     *     contract)
+     *   - the user-turn bubble (right-aligned) and its below-bubble actions
      *   - .agent-prose content typography and the One-Dark code palette
      *     (diff rows, tool status colors) — content, not chrome
      *   - the @-mention popup (`.agent-mention-item.active` is a keyboard
@@ -25,23 +24,33 @@
      * so the heavy panes do not re-render until the final width persists.
      * A thin splitter sits in its own grid column for a discrete target. */
     .app.chat-open {
-      grid-template-columns: calc(44px + var(--sidebar-width, 280px)) 1fr 6px var(--chat-width, 480px);
+      grid-template-columns: var(--sidebar-width, 280px) 1fr 6px var(--chat-width, 480px);
     }
     .app.sidebar-collapsed.chat-open {
-      grid-template-columns: 44px 1fr 6px var(--chat-width, 480px);
+      grid-template-columns: 0 1fr 6px var(--chat-width, 480px);
     }
     /* With no document, Chat is the workspace instead of a narrow side
      * panel. The document pane remains mounted so switching back preserves
      * editor state, but its track and splitter disappear. Compact windows
      * reuse this shape when the user explicitly brings Chat over a document. */
     .app.chat-primary {
-      grid-template-columns: calc(44px + var(--sidebar-width, 280px)) 0 0 minmax(0, 1fr);
+      grid-template-columns: var(--sidebar-width, 280px) 0 0 minmax(0, 1fr);
     }
     .app.sidebar-collapsed.chat-primary {
-      grid-template-columns: 44px 0 0 minmax(0, 1fr);
+      grid-template-columns: 0 0 0 minmax(0, 1fr);
     }
     .app.chat-primary .main {
       visibility: hidden;
+    }
+
+    /* Chat as the workspace with the sidebar collapsed: the shell starts
+     * at the window's left edge, so the titlebar controls (and on macOS
+     * the traffic lights) float over this tab row. Reserve their width
+     * the same way the document tab strip does — `.chat-tab-row` is the
+     * hook for exactly this. Any other layout keeps the shell to the
+     * right of something, so the row needs no inset. */
+    .app.sidebar-collapsed.chat-primary .chat-tab-row {
+      padding-left: calc(var(--titlebar-controls-left) + 66px);
     }
 
     /* Match the sidebar's drag handle (globals.css `.sidebar-splitter`):
@@ -118,59 +127,31 @@
       box-sizing: border-box;
     }
 
-    /* A turn = one user message (sticky header) + its reply blocks. */
+    /* A turn = one user message (a right-aligned bubble) + its reply blocks. */
     .agent-turn {
       position: relative;
       display: flex;
       flex-direction: column;
       gap: 10px;
     }
-    /* 1px sentinel at the turn's flow-top — when it scrolls above the
-     * scroll container's top edge, the header is pinned (see UserTurnHead's
-     * IntersectionObserver). Out of flow so it adds no gap. */
-    .agent-turn-sentinel {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 1px;
-      height: 1px;
-      pointer-events: none;
-    }
-    /* The user message renders as a full-width header pinned to the top
-     * of the scroll area while its reply scrolls past (VSCode-style).
-     * Sticky release is bounded by `.agent-turn`, so the next turn's
-     * header pushes this one up.
-     *
-     * At rest it sits flat and quiet, embedded in the chat. Only once
-     * pinned (`.stuck`) does it lift into a frosted-glass card — a
-     * translucent fill + backdrop blur let the reply blur softly
-     * underneath, and the shadow separates it from the scrolling chat. */
+    /* The user message renders as a right-aligned bubble with a left gap —
+     * the "this is what I said" side of the exchange (Codex/chat register).
+     * It scrolls normally with the transcript; it is NOT pinned. The reply
+     * blocks below stay full-width, so the left/right asymmetry is what reads
+     * as authorship. `radius-container` keeps it in the composer's shape
+     * family without having to match its width. */
     .agent-turn-head {
-      position: sticky;
-      top: 0;
-      z-index: 2;
+      align-self: flex-end;
+      max-width: min(85%, 620px);
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius-container);
       padding: 9px 12px;
       font-size: calc(13px * var(--ui-scale));
       line-height: 1.5;
       color: var(--fg);
       white-space: pre-wrap;
       word-break: break-word;
-      transition: box-shadow .18s ease;
-    }
-    /* When pinned: the box body stays opaque; only the bottom EDGE gets a
-     * soft, semi-transparent gradient shadow so the reply scrolling
-     * beneath fades out gently under the box rather than hitting a hard
-     * line (VSCode sticky-scroll style). The negative spread keeps the
-     * shadow at the bottom edge only; kept small per "阴影不用太大". */
-    .agent-turn-head.stuck {
-      box-shadow: 0 7px 8px -6px rgba(var(--shadow-color), 0.13);
-    }
-    .agent-turn-head.static {
-      position: relative;
-      top: auto;
     }
     /* Turns breathe apart while a turn's own pieces stay close — the
      * between-turn distance (on top of the list's 10px gap) is what makes
@@ -231,26 +212,22 @@
     .agent-turn-expand-icon.open {
       transform: rotate(180deg);
     }
-    /* In-card hover actions (Cursor register): a small cluster pinned to
-     * the card's top-right corner, invisible until the card is hovered or
-     * focused — no floating icons orphaned outside the card. The card
-     * backing keeps message text from showing through the cluster. */
+    /* Copy/edit actions sit in their own row BELOW the user bubble now — a
+     * quiet cluster aligned to the bubble's right edge, revealed on hover or
+     * focus of the turn. The row's reserved height also opens a little space
+     * between the user message and the agent's reply. */
     .agent-turn-user-actions {
-      position: absolute;
-      top: 5px;
-      right: 5px;
-      display: inline-flex;
+      display: flex;
+      justify-content: flex-end;
       align-items: center;
       gap: 2px;
-      padding: 1px;
-      border-radius: var(--radius-ui);
-      background: var(--card);
+      margin-top: -2px;
       color: var(--muted);
       opacity: 0;
       transition: opacity var(--motion-fast) var(--motion-ease);
     }
-    .agent-turn-head:hover .agent-turn-user-actions,
-    .agent-turn-head:focus-within .agent-turn-user-actions {
+    .agent-turn:hover .agent-turn-user-actions,
+    .agent-turn:focus-within .agent-turn-user-actions {
       opacity: 1;
     }
     .agent-turn-user-actions button {
@@ -269,9 +246,13 @@
       background: var(--hover);
       color: var(--fg);
     }
+    /* 14px, the app-wide chrome glyph size. At 16 these two sat a step
+     * above every other icon AND drew a heavier line — the icons carry a
+     * fixed stroke width against a 24 viewBox, so a larger box scales the
+     * stroke up with it. */
     .agent-turn-user-actions svg {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
     }
     .agent-turn-edit {
       display: flex;
@@ -322,33 +303,109 @@
       color: var(--accent);
     }
 
-    /* Assistant message content typography — reading content, not chrome. */
-    .agent-prose {
+    /* Worked-for trace: the turn's whole working process (thinking, interim
+     * narration, tool activity) folded under one quiet header, Codex-style.
+     * The header is a muted disclosure row — label + chevron — with a thin
+     * hairline beneath it; the folded blocks render below that line when
+     * expanded. */
+    .agent-worktrace-head {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+      border: 0;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+      background: transparent;
+      padding: 2px 0 8px;
+      color: var(--muted);
       font-size: calc(13px * var(--ui-scale));
-      line-height: 1.6;
+      text-align: left;
+      cursor: pointer;
+    }
+    .agent-worktrace-head:hover { color: var(--fg); }
+    .agent-worktrace-chev {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+      opacity: .7;
+      transition: transform .12s;
+    }
+    .agent-worktrace-body {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 10px;
+    }
+
+    /* Assistant message content typography — reading content, not chrome.
+     * The serif reading voice (three-voice typography): the assistant's
+     * long-form answer invites reading, distinct from the sans chrome and
+     * the sans user-turn header. Code/inline-code stay mono (rules below).
+     * Line-height sits a touch looser than sans body — serif at reading
+     * size wants the air. */
+    .agent-prose {
+      font-family: var(--font-serif);
+      font-size: calc(14px * var(--ui-scale));
+      line-height: 1.65;
       color: var(--fg);
       word-break: break-word;
     }
     .agent-prose > :first-child { margin-top: 0; }
     .agent-prose > :last-child { margin-bottom: 0; }
     .agent-prose p { margin: 0.5em 0; }
+    /* A section divider is a whisper, not a rule. Left to the browser the
+     * `<hr>` is a heavy beveled bar; instead paint a 1px block and halve it
+     * with scaleY(0.5) for a true 0.5px hairline (one physical pixel on
+     * Retina), faded to a fraction of the border — the same treatment as
+     * the reading view's `.doc hr`. */
+    .agent-prose hr {
+      border: 0;
+      height: 1px;
+      background: color-mix(in srgb, var(--border) 85%, transparent);
+      transform: scaleY(0.5);
+      margin: 1.3em 0;
+    }
+    /* Headings and bold were left to the browser defaults — h1 at 2em,
+     * h2 at 1.5em, everything emphatic at 700. In a reply that leans on
+     * bold for nearly every figure, that turns the panel into a wall of
+     * dark type. A chat reply is not a document: its headings step just
+     * far enough to group, and 600 carries emphasis without the jump to
+     * a full bold face (which CJK renders markedly heavier than Latin). */
+    .agent-prose h1,
+    .agent-prose h2,
+    .agent-prose h3,
+    .agent-prose h4,
+    .agent-prose h5,
+    .agent-prose h6 {
+      font-weight: 600;
+      line-height: 1.35;
+      margin: 1.1em 0 0.4em;
+    }
+    .agent-prose h1 { font-size: 1.2em; }
+    .agent-prose h2 { font-size: 1.12em; }
+    .agent-prose h3 { font-size: 1.05em; }
+    .agent-prose h4,
+    .agent-prose h5,
+    .agent-prose h6 { font-size: 1em; }
+    .agent-prose strong,
+    .agent-prose b { font-weight: 600; }
     .agent-prose pre {
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: var(--radius-container);
       padding: 8px 10px;
       overflow-x: auto;
       font-size: calc(12px * var(--ui-scale));
       line-height: 1.45;
     }
     .agent-prose code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: var(--font-mono);
       font-size: 0.88em;
     }
     .agent-prose :not(pre) > code {
       background: var(--hover);
       padding: 1px 5px;
-      border-radius: 4px;
+      border-radius: var(--radius-xs);
     }
     .agent-prose ul, .agent-prose ol { padding-left: 1.4em; margin: 0.4em 0; }
     .agent-prose a { color: var(--accent); }
@@ -407,19 +464,15 @@
       padding: 4px 0 6px 10px;
     }
 
-    /* Tool STATUS is UI state, so it speaks the app's semantic status
-     * tokens. The One-Dark palette below (diff tints/gutters) stays
-     * literal on purpose — diffs are CONTENT, rendered in the editor's
-     * own color world, not the chrome's. */
-    .agent-tool-status.s-done { color: var(--status-success); }
-    .agent-tool-status.s-error,
-    .agent-tool-status.s-denied { color: var(--status-danger); }
+    /* A failed tool result reads danger. The One-Dark palette below (diff
+     * tints/gutters) stays literal on purpose — diffs are CONTENT, rendered
+     * in the editor's own color world, not the chrome's. */
     .agent-tool-result.err { color: var(--status-danger); }
 
     /* Inline diff (also One-Dark add/del tints) */
     .agent-diff {
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: var(--radius-container);
       overflow: hidden;
       margin-top: 4px;
     }
@@ -427,12 +480,12 @@
       background: var(--pane);
       border-bottom: 1px solid var(--border);
       padding: 4px 9px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: var(--font-mono);
       font-size: calc(11px * var(--ui-scale));
       color: var(--muted);
     }
     .agent-diff-body {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: var(--font-mono);
       font-size: calc(11px * var(--ui-scale));
       line-height: 1.5;
       overflow-x: auto;
@@ -464,7 +517,7 @@
     .agent-file-mention {
       display: inline-block;
       padding: 0 4px;
-      border-radius: 4px;
+      border-radius: var(--radius-xs);
       background: var(--active);
       color: var(--fg);
       line-height: inherit;
@@ -474,7 +527,7 @@
     .agent-skill-mention {
       display: inline-block;
       padding: 0 4px;
-      border-radius: 4px;
+      border-radius: var(--radius-xs);
       background: var(--active);
       color: var(--fg);
       line-height: inherit;
@@ -494,9 +547,10 @@
       box-sizing: border-box;
       background: var(--bg);
       border: 1px solid var(--border);
-      /* 10px matches the composer/session-history popovers — one radius
-       * for every floating menu surface. */
-      border-radius: 10px;
+      /* The overlay role, shared with the composer/session-history
+       * popovers and the ui/ menus — one radius for every floating
+       * surface. */
+      border-radius: var(--radius-container);
       box-shadow: 0 8px 24px rgba(var(--shadow-color), 0.12);
       padding: 4px;
       z-index: 30;
@@ -507,7 +561,7 @@
        visible viewport. */
     .agent-mention-list { max-height: 182px; overflow-y: auto; scroll-padding-block: 4px; }
     .agent-mention-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; color: var(--muted); font-size: calc(12px * var(--ui-scale)); }
-    .agent-mention-retry { border: 0; border-radius: 4px; background: var(--active); color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
+    .agent-mention-retry { border: 0; border-radius: var(--radius-control); background: var(--active); color: var(--fg); padding: 3px 7px; font: inherit; cursor: pointer; }
     .agent-mention-retry:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
     .agent-mention-head { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px 6px; color: var(--muted); font-size: calc(10px * var(--ui-scale)); }
     .agent-mention-head > span:first-child { color: var(--fg); font-weight: 600; }

@@ -4,7 +4,6 @@ import type { Tab } from './store/state';
 export interface EditorHistoryEntry {
   id: string;
   label: string;
-  preview: boolean;
 }
 
 /** Order currently-open tabs by Editor History (most-recent-first). Any
@@ -17,7 +16,7 @@ export function orderEditorHistory(tabs: Tab[], history: string[]): EditorHistor
   const missingIds = tabs.filter((tab) => !known.has(tab.id)).map((tab) => tab.id);
   return [...orderedIds, ...missingIds].map((id) => {
     const tab = tabs.find((candidate) => candidate.id === id)!;
-    return { id, label: tab.file ? basename(tab.file.name) : 'Untitled', preview: tab.preview };
+    return { id, label: tab.file ? basename(tab.file.name) : 'Untitled' };
   });
 }
 

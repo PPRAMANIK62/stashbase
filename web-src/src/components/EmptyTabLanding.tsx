@@ -7,7 +7,7 @@ import { useApp } from '../store/AppContext';
  * component is a pure render of the available actions.
  */
 const ACTION_CLASS =
-  'inline-flex cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-1 text-lg font-medium hover:bg-muted [&_kbd]:[font-family:inherit] [&_kbd]:text-base [&_kbd]:font-normal [&_kbd]:tracking-wide [&_kbd]:text-muted-foreground';
+  'inline-flex cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-1 text-base font-medium hover:bg-muted [&_kbd]:[font-family:inherit] [&_kbd]:text-sm [&_kbd]:font-normal [&_kbd]:tracking-wide [&_kbd]:text-muted-foreground';
 
 export function EmptyTabLanding() {
   const { actions } = useApp();

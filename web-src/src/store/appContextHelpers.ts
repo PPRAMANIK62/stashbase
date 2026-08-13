@@ -1,10 +1,4 @@
-import type { SearchHit } from '../api';
 import type { State } from './state';
-
-const SEMANTIC_SEARCH_MAX_VISIBLE = 8;
-const SEMANTIC_MIN_TOP_RATIO = 0.8;
-const SEMANTIC_KNEE_DROP_RATIO = 0.18;
-const SEMANTIC_KNEE_TOP_RATIO = 0.88;
 
 export function shallowEqualIndexWarning(
   a: State['indexWarning'],
@@ -64,39 +58,6 @@ export function shallowEqualNumberRecord(
   return ak.length === bk.length && ak.every((key) => a[key] === b[key]);
 }
 
-/** How many of the fetched semantic hits to show before "show more".
- *  Finds the relevance knee in the score curve (capped at
- *  SEMANTIC_SEARCH_MAX_VISIBLE) so the strongest matches lead. The
- *  weaker fetched candidates are kept and revealed through progressive
- *  disclosure rather than discarded, so the count is an initial visible
- *  slice, not a hard result limit. */
-export function guiSemanticVisibleCount(hits: SearchHit[]): number {
-  if (hits.length <= 1) return hits.length;
-  const top = hits[0]?.score ?? 0;
-  if (!Number.isFinite(top) || top <= 0) {
-    return Math.min(hits.length, SEMANTIC_SEARCH_MAX_VISIBLE);
-  }
-
-  let cutoff = Math.min(hits.length, SEMANTIC_SEARCH_MAX_VISIBLE);
-  for (let i = 1; i < hits.length; i++) {
-    const current = hits[i]?.score ?? 0;
-    const previous = hits[i - 1]?.score ?? top;
-    const topRatio = current / top;
-    const prevDrop = previous > 0 ? (previous - current) / previous : 0;
-
-    if (topRatio < SEMANTIC_MIN_TOP_RATIO) {
-      cutoff = Math.min(cutoff, i);
-      break;
-    }
-    if (i >= 2 && prevDrop >= SEMANTIC_KNEE_DROP_RATIO && topRatio < SEMANTIC_KNEE_TOP_RATIO) {
-      cutoff = Math.min(cutoff, i);
-      break;
-    }
-  }
-
-  return Math.max(1, cutoff);
-}
-
 export function waitForNextFrame(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
@@ -111,6 +72,9 @@ export function keywordFindCaseSensitive(query: string, caseStrict: boolean): bo
   return caseStrict || query !== query.toLowerCase();
 }
 
+/** True when the tab holds the ACTIVE folder's file `name`. Out-of-folder
+ *  tabs (`file.folder` set) are a different document even under the same
+ *  rel name, so they never match. */
 export function isFolderFileTab(t: { file: State['tabs'][number]['file'] }, name: string): boolean {
-  return t.file?.name === name;
+  return t.file?.name === name && !t.file.folder;
 }

@@ -2,6 +2,10 @@
 
 const path = require('node:path');
 const crypto = require('node:crypto');
+// Shared with the renderer (web-src/src/lib/externalLink.ts) so the Help
+// menu and the sidebar's Discord button can never point at different
+// invites. JSON, because this file runs unbuilt and cannot require a .ts.
+const LINKS = require('../shared/links.json');
 
 const WINDOW_ID_ARG_PREFIX = '--stashbase-window-id=';
 
@@ -25,6 +29,7 @@ function createApplicationMenuTemplate({
   platform = process.platform,
   onNewWindow,
   onCloseWindow,
+  onOpenExternal,
 }) {
   const isMac = platform === 'darwin';
   // Do not use Electron's `role: 'close'`: its Cmd/Ctrl+W binding conflicts
@@ -55,6 +60,33 @@ function createApplicationMenuTemplate({
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
+    // Help is where both platforms train people to look when they are
+    // stuck, and it is the only route out of the app that survives a
+    // renderer that has failed to paint. `role: 'help'` matters on macOS:
+    // it is what puts the entry last and gives it the system search field.
+    // Opening is injected rather than calling `shell` here, so this module
+    // stays importable by the menu tests without an Electron runtime.
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'StashBase Website',
+          click: () => onOpenExternal(LINKS.website),
+        },
+        {
+          label: 'Community Discord',
+          click: () => onOpenExternal(LINKS.discord),
+        },
+        { type: 'separator' },
+        // Bugs belong on the issue tracker, not in chat: an issue is
+        // searchable by the next person who hits the same thing, and a
+        // Discord message is not.
+        {
+          label: 'Report an Issue',
+          click: () => onOpenExternal(LINKS.issues),
+        },
+      ],
+    },
   ];
 }
 

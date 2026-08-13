@@ -33,6 +33,24 @@ export function fileHeadStatus(name: string): number {
   return 204;
 }
 
+/** Run a READ handler against an explicit `?folder=` member folder when the
+ *  request carries one; otherwise against the window's own folder. Same
+ *  membership rule as the `/api/files?folder=` listing above. */
+async function runWithExplicitReadFolder(
+  req: express.Request,
+  res: express.Response,
+  fn: () => void,
+): Promise<void> {
+  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+  if (!rawFolder) return fn();
+  const member = filesystemPath.isAbsolute(rawFolder) ? exactMemberFolderRoot(rawFolder) : null;
+  if (!member) {
+    res.status(400).json({ error: 'folder is not a registered library folder' });
+    return;
+  }
+  await runWithFolderRoot(member, fn).catch((err: unknown) => sendError(res, err));
+}
+
 async function handleWriteFile(req: express.Request, res: express.Response): Promise<void> {
   const content = (req.body ?? {}).content;
   if (typeof content !== 'string') {
@@ -139,42 +157,50 @@ export function mount(app: express.Express): void {
     }
   });
 
+  // HEAD and GET accept an optional `?folder=` (validated member folder) so
+  // an out-of-folder tab — a search result viewed without switching the
+  // window's folder — can read by explicit folder. Reads only: every write
+  // route below stays bound to the window's own folder.
   app.head('/api/files/*', (req, res) => {
     const name = (req.params as any)[0] as string;
-    try {
-      const status = fileHeadStatus(name);
-      if (status === 204) {
-        const version = fileStatVersion(name);
-        if (version) res.setHeader('x-stashbase-file-version', version);
+    void runWithExplicitReadFolder(req, res, () => {
+      try {
+        const status = fileHeadStatus(name);
+        if (status === 204) {
+          const version = fileStatVersion(name);
+          if (version) res.setHeader('x-stashbase-file-version', version);
+        }
+        res.sendStatus(status);
+      } catch (err: unknown) {
+        sendError(res, err);
       }
-      res.sendStatus(status);
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+    });
   });
 
   // ----- read -----
   app.get('/api/files/*', (req, res) => {
     const name = (req.params as any)[0] as string;
-    try {
-      // Refuse anything that isn't a markdown / HTML note. Bundle assets
-      // (the PNG / CSS / WOFF that live alongside an arxiv html in its
-      // `_files/` folder) get saved to disk so the iframe can pull them
-      // via `/asset/*`, but they're not viewable through this route —
-      // a `readText` of binary bytes would otherwise hand the editor
-      // garbled UTF-8 to render.
-      const format = detectFormat(name);
-      if (!format) return res.status(415).json({ error: 'unsupported format' });
-      const content = readText(name);
-      if (content == null) return res.status(404).json({ error: 'not found' });
-      // Raw HTML in `content` (what the editor needs); the preview iframe
-      // loads its prepared version via `/asset/*` — keeping injected ids +
-      // bootstrap script out of the bytes that round-trip through the
-      // editor (otherwise autosave would rewrite the file to include them).
-      res.json({ name, format, content, version: fileVersion(name) ?? undefined });
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+    void runWithExplicitReadFolder(req, res, () => {
+      try {
+        // Refuse anything that isn't a markdown / HTML note. Bundle assets
+        // (the PNG / CSS / WOFF that live alongside an arxiv html in its
+        // `_files/` folder) get saved to disk so the iframe can pull them
+        // via `/asset/*`, but they're not viewable through this route —
+        // a `readText` of binary bytes would otherwise hand the editor
+        // garbled UTF-8 to render.
+        const format = detectFormat(name);
+        if (!format) return res.status(415).json({ error: 'unsupported format' });
+        const content = readText(name);
+        if (content == null) return res.status(404).json({ error: 'not found' });
+        // Raw HTML in `content` (what the editor needs); the preview iframe
+        // loads its prepared version via `/asset/*` — keeping injected ids +
+        // bootstrap script out of the bytes that round-trip through the
+        // editor (otherwise autosave would rewrite the file to include them).
+        res.json({ name, format, content, version: fileVersion(name) ?? undefined });
+      } catch (err: unknown) {
+        sendError(res, err);
+      }
+    });
   });
 
   // ----- write -----

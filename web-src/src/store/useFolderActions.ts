@@ -17,7 +17,6 @@ interface FolderActionRefs {
   openGeneration: MutableRefObject<number>;
   openingFolderGeneration: MutableRefObject<number | null>;
   syncGeneration: MutableRefObject<number>;
-  searchGeneration: MutableRefObject<number>;
   lastTreeVersion: MutableRefObject<number>;
   importConversionGrace: MutableRefObject<Map<string, number>>;
   importIndexGrace: MutableRefObject<Map<string, number>>;
@@ -104,7 +103,6 @@ export function useFolderActions(
     lastTreeVersion,
     openGeneration,
     openingFolderGeneration,
-    searchGeneration,
     state,
     syncGeneration,
   } = refs;
@@ -128,7 +126,6 @@ export function useFolderActions(
       });
     }
     syncGeneration.current += 1;
-    searchGeneration.current += 1;
     lastTreeVersion.current = -1;
     importConversionGrace.current.clear();
     importIndexGrace.current.clear();
@@ -145,7 +142,6 @@ export function useFolderActions(
     importIndexGrace,
     keyBackfillGrace,
     lastTreeVersion,
-    searchGeneration,
     state,
     syncGeneration,
   ]);

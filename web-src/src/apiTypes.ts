@@ -34,13 +34,13 @@ export interface AppearancePreferences {
   readingTextSize: AppearanceScale;
 }
 
-/** Viewer format the renderer uses for tab routing. `md` / `html` are
+/** Viewer format the renderer uses for tab routing. `md` / `html` / `json` are
  *  text formats loaded from `/api/files/*`; `pdf`, `image`, and `docx` load
  *  their source bytes from `/asset/*`. DOCX visible preview conversion happens
  *  in the renderer, while its searchable/Agent-readable text and preview
  *  fallback live in AppData-derived HTML. This type is therefore wider than
  *  the server's editable text format on purpose. */
-export type FileFormat = 'md' | 'html' | 'pdf' | 'image' | 'docx' | 'audio';
+export type FileFormat = 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio';
 
 export interface ApiKeySaveResult {
   hasKey: true;
@@ -137,9 +137,9 @@ export interface IndexStatus {
   orphanedCount: number;
   orphaned: string[];
   upToDate: boolean;
-  /** False when semantic indexing/search is unavailable, e.g. no embedding key. */
+  /** False when semantic indexing/retrieval is unavailable, e.g. no embedding key. */
   semanticEnabled?: boolean;
-  /** Human-readable reason when semantic indexing/search is disabled. */
+  /** Human-readable reason when semantic indexing/retrieval is disabled. */
   semanticDisabledReason?: string;
   /** True when no UI-visible file is waiting for embedding. Unlike
    *  upToDate, this ignores orphaned/hidden index rows that are not
@@ -272,6 +272,18 @@ export interface KeywordSearchResult {
   query: string;
   folder: string;
   files: KeywordHitFile[];
+  totalMatches: number;
+  truncated: boolean;
+}
+
+/** One keyword-hit file from the library-wide sweep: `folder` is the
+ *  absolute member folder root, `path` stays folder-relative. */
+export interface LibraryKeywordFile extends KeywordHitFile {
+  folder: string;
+}
+
+export interface LibraryKeywordSearchResult {
+  files: LibraryKeywordFile[];
   totalMatches: number;
   truncated: boolean;
 }

@@ -20,28 +20,32 @@ import { StatusMessage } from './ui/status';
 export function AudioPreview({ name }: { name: string }) {
   const { state, activeTab, actions } = useApp();
   const version = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
-  const directSrc = useMemo(() => versionedAssetUrl(name, version), [name, version]);
-  const fallbackSrc = useMemo(() => audioPreviewAssetUrl(name, version), [name, version]);
+  // Out-of-folder tab: every URL and prepare/transcript request must carry
+  // the file's own member folder instead of the window's.
+  const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
+  const requestFolder = sourceFolder ?? state.folderPath;
+  const directSrc = useMemo(() => versionedAssetUrl(name, version, sourceFolder), [name, version, sourceFolder]);
+  const fallbackSrc = useMemo(() => audioPreviewAssetUrl(name, version, sourceFolder), [name, version, sourceFolder]);
   const [positionMs, setPositionMs] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playbackPositionRef = useRef(new AudioPlaybackPosition());
   const fallback = useAudioFallbackController({
     name,
-    folder: state.folderPath,
+    folder: requestFolder,
     directSrc,
     fallbackSrc,
   });
   const transcription = useAudioTranscriptController({
     name,
-    folder: state.folderPath,
+    folder: requestFolder,
     version,
     conversionRevision: state.conversionRevision,
   });
 
   useEffect(() => {
     setPositionMs(0);
-    playbackPositionRef.current.setSourceIdentity(JSON.stringify([state.folderPath, name, version]));
-  }, [name, state.folderPath, version]);
+    playbackPositionRef.current.setSourceIdentity(JSON.stringify([requestFolder, name, version]));
+  }, [name, requestFolder, version]);
 
   useEffect(() => {
     const highlight = activeTab?.pendingHighlight;

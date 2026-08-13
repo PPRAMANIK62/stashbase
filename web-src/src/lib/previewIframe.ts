@@ -62,13 +62,19 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
   let url: URL;
   try { url = new URL(anchor.href, window.location.href); } catch { return; }
   if (url.origin === window.location.origin && url.pathname.startsWith('/asset/')) {
-    let decoded: string;
+    let decoded: { path: string; folder?: string };
     try { decoded = decodeAssetPathname(url.pathname); } catch { return; }
-    if (/\.(md|markdown|html|htm)$/i.test(decoded)) {
-      // Notes navigate in-app.
+    if (/\.(md|markdown|html|htm)$/i.test(decoded.path)) {
+      // Notes navigate in-app; a `__folder/` token keeps the target inside
+      // an out-of-folder document's own member folder.
       e.preventDefault();
       const hash = url.hash.startsWith('#') ? url.hash.slice(1) : '';
-      window.postMessage({ type: 'stashbase-nav', path: decoded, anchor: hash || undefined }, window.location.origin);
+      window.postMessage({
+        type: 'stashbase-nav',
+        path: decoded.path,
+        folder: decoded.folder,
+        anchor: hash || undefined,
+      }, window.location.origin);
       return;
     }
     // Non-note assets (recording webm, PDFs, images linked explicitly)
@@ -87,13 +93,22 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
   }
 }
 
-function decodeAssetPathname(pathname: string): string {
+function decodeAssetPathname(pathname: string): { path: string; folder?: string } {
   let encoded = pathname.slice('/asset/'.length);
   if (encoded.startsWith('__window/')) {
     const slash = encoded.indexOf('/', '__window/'.length);
     encoded = slash >= 0 ? encoded.slice(slash + 1) : '';
   }
-  return encoded.split('/').map(decodeURIComponent).join('/');
+  let folder: string | undefined;
+  if (encoded.startsWith('__folder/')) {
+    const slash = encoded.indexOf('/', '__folder/'.length);
+    if (slash >= 0) {
+      // Double-encoded in the URL: one decode here, one for the author's.
+      folder = decodeURIComponent(decodeURIComponent(encoded.slice('__folder/'.length, slash)));
+      encoded = encoded.slice(slash + 1);
+    }
+  }
+  return { path: encoded.split('/').map(decodeURIComponent).join('/'), folder };
 }
 
 function escapeAttr(value: string): string {

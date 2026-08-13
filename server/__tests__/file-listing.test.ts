@@ -31,7 +31,9 @@ test('file-listing scan and classification', async () => {
     fs.writeFileSync(path.join(folderMixed, 'note3.md'), '# Markdown');
     fs.writeFileSync(path.join(folderMixed, 'data.csv'), '1,2,3');
     fs.writeFileSync(path.join(folderMixed, 'archive.zip'), '');
-    fs.writeFileSync(path.join(folderMixed, 'config.json'), '{}');
+    fs.writeFileSync(path.join(folderMixed, 'config.JSON'), '{ invalid json');
+    fs.mkdirSync(path.join(folderMixed, 'config.json_files'));
+    fs.writeFileSync(path.join(folderMixed, 'config.json_files', 'asset.md'), '# visible child');
 
     // 5. Excluded directory (should not traverse, count, or return)
     const folderExcluded = path.join(tempDir, 'node_modules');
@@ -41,6 +43,14 @@ test('file-listing scan and classification', async () => {
     // 6. Physically empty folder (should keep folder)
     const folderEmpty = path.join(tempDir, 'empty-dir');
     fs.mkdirSync(folderEmpty);
+
+    // 7. Junk dot-files: invisible infrastructure — never listed, never
+    //    tallied as unsupported; a folder holding only dot-files reads
+    //    as physically empty and stays visible.
+    fs.writeFileSync(path.join(tempDir, '.DS_Store'), '');
+    const folderDotOnly = path.join(tempDir, 'dot-only');
+    fs.mkdirSync(folderDotOnly);
+    fs.writeFileSync(path.join(folderDotOnly, '.DS_Store'), '');
 
     // Run listing scan
     setCurrentFolder(tempDir);
@@ -55,13 +65,21 @@ test('file-listing scan and classification', async () => {
     assert.ok(folderPaths.includes('empty-dir'));
     assert.ok(!folderPaths.includes('src'), 'src directory (code only) should be pruned');
     assert.ok(!folderPaths.includes('node_modules'), 'node_modules directory should be excluded');
+    assert.ok(folderPaths.includes('dot-only'), 'a folder holding only dot-files stays visible as empty');
 
     // Verify files list
     const fileNames = result.files.map((f) => f.name);
     assert.ok(fileNames.includes('note1.md'));
     assert.ok(fileNames.includes('docs/note2.html'));
     assert.ok(fileNames.includes('mixed/note3.md'));
+    assert.ok(fileNames.includes('mixed/config.JSON'));
+    assert.ok(fileNames.includes('mixed/config.json_files/asset.md'), 'JSON must not claim a note bundle');
     assert.ok(!fileNames.includes('src/main.ts'), 'unsupported files should not be in the files list');
+    assert.ok(!fileNames.includes('.DS_Store'), 'dot-files should not be listed');
+
+    // The unchanged counts below double as the dot-file regression: the
+    // two .DS_Store files must not appear in `other`/`otherExtensions`
+    // (they used to surface as "N files (no extension)").
 
     // Verify unsupported files counts
     // 'src/main.ts' (.ts) -> source
@@ -71,18 +89,15 @@ test('file-listing scan and classification', async () => {
 
     // 'mixed/data.csv' (.csv) -> other
     // 'mixed/archive.zip' (.zip) -> other
-    // 'mixed/config.json' (.json) -> other
-    // Total other = 3
-    assert.equal(result.unsupportedFiles.other, 3);
+    // JSON is supported directly, leaving only CSV and ZIP unsupported.
+    assert.equal(result.unsupportedFiles.other, 2);
 
     // Verify otherExtensions mapping and sorting
-    // Extensions: .csv (1), .zip (1), .json (1)
-    // Since counts are equal, they should be sorted alphabetically: .csv, .json, .zip
+    // Extensions: .csv (1), .zip (1)
     const exts = result.unsupportedFiles.otherExtensions;
-    assert.equal(exts.length, 3);
+    assert.equal(exts.length, 2);
     assert.deepEqual(exts[0], { extension: '.csv', count: 1 });
-    assert.deepEqual(exts[1], { extension: '.json', count: 1 });
-    assert.deepEqual(exts[2], { extension: '.zip', count: 1 });
+    assert.deepEqual(exts[1], { extension: '.zip', count: 1 });
 
   } finally {
     clearCurrentFolder();

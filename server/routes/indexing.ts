@@ -268,13 +268,12 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Hybrid (vector + BM25) search, scoped to the current open folder.
-  // Cross-folder search lives behind the MCP `search_library` tool (different
-  // mental model: "AI searching all my notes" vs "I'm searching the library
-  // I'm currently editing"). Optional narrowing: `path_prefix` (folder-
-  // relative subfolder, resolved escape-safe) and `types` (file-type
-  // categories mapped to source extensions, applied daemon-side before
-  // the final top-k cut).
+  // Hybrid (vector + BM25) search, scoped to one folder (explicit `folder`
+  // or the window's current one). Library-wide search — the in-app popup
+  // and MCP `search_library` — lives on the ungated `/api/library/*` routes.
+  // Optional narrowing: `path_prefix` (folder-relative subfolder, resolved
+  // escape-safe) and `types` (file-type categories mapped to source
+  // extensions, applied daemon-side before the final top-k cut).
   app.post('/api/search', async (req, res) => {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
@@ -291,7 +290,7 @@ export function mount(app: express.Express): void {
       });
       if (result.availability.state === 'unavailable') {
         return res.status(412).json({
-          error: 'semantic search is disabled until you add an embedding API key',
+          error: 'AI Index is disabled until you set it up in StashBase Settings',
           code: 'EMBEDDER_KEY_REQUIRED',
         });
       }
@@ -308,7 +307,7 @@ export function mount(app: express.Express): void {
   // Keyword (substring / regex) search via ripgrep, scoped to the
   // active folder directory. Bypasses the daemon and the index — useful
   // for finding specific tokens (function names, exact phrases) that
-  // semantic search blurs out. Defaults to smart-case, restricts to
+  // meaning-based retrieval blurs out. Defaults to smart-case, restricts to
   // markdown / HTML (the only formats we index anyway), caps per-file
   // and total match counts so a generic query can't OOM the renderer.
   app.get('/api/keyword-search', async (req, res) => {

@@ -33,7 +33,7 @@ export function useAudioFallbackController(input: {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
       try {
-        const next = await api.audioPreviewStatus(name);
+        const next = await api.audioPreviewStatus(name, { folder: folder || undefined });
         if (!cancelled) setProgress(next);
       } catch {
         // The preparation request owns the actionable error.
@@ -56,7 +56,7 @@ export function useAudioFallbackController(input: {
     setProgress({ status: 'queued', tasksAhead: 0 });
     setError(null);
     try {
-      await api.prepareAudioPreview(name, { signal: controller.signal });
+      await api.prepareAudioPreview(name, { signal: controller.signal, folder: folder || undefined });
       if (controller.signal.aborted || controllerRef.current !== controller) return;
       setProgress({ status: 'ready' });
       setPlaybackSrc(fallbackSrc);

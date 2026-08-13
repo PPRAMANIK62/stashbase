@@ -21,7 +21,7 @@ import { buttonVariants } from './ui/button';
 import { AgentComposer } from './agent/AgentComposer';
 import { EmptyChatGreeting, EmptyChatSuggestion } from './agent/AgentEmptyState';
 import { resolveAssistantLink } from './agent/assistantLinkTarget';
-import { MessageList, flattenFileMentions, type QueuedTurnPreview } from './agent/AgentMessages';
+import { MessageList, flattenFileMentions, type QueuedTurnPreview, type TurnMeta } from './agent/AgentMessages';
 
 /** Runtimes title sessions from the first message's RAW text, so a chat
  * opened with an @-mention would name its tab a bare relative path.
@@ -109,6 +109,13 @@ export function AgentView({
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [turnActive, setTurnActive] = useState(false);
   const turnActiveRef = useRef(false);
+  // Per-turn "Worked for X" data, keyed by the turn's user-message id.
+  // Measured on the renderer wall clock (no duration exists on the wire);
+  // `interrupted` is set when the user stops the turn. Resumed history has
+  // no entry and renders no duration.
+  const [turnMeta, setTurnMeta] = useState<Record<string, TurnMeta>>({});
+  const turnStartRef = useRef<number | null>(null);
+  const interruptedKeyRef = useRef<string | null>(null);
   const queuedPromptsRef = useRef<QueuedPrompt[]>([]);
   const [queuedTurns, setQueuedTurns] = useState<QueuedTurnPreview[]>([]);
   // Composer attachments (context files) — lifted here so a drop anywhere
@@ -214,6 +221,8 @@ export function AgentView({
   // and transcript untouched.
   const blocksLengthRef = useRef(0);
   blocksLengthRef.current = blocks.length;
+  const blocksRef = useRef<Block[]>([]);
+  blocksRef.current = blocks;
   const queuedCountRef = useRef(0);
   queuedCountRef.current = queuedTurns.length;
   const attachmentsCountRef = useRef(0);
@@ -296,9 +305,32 @@ export function AgentView({
     if (!runtime) void refreshRuntimes();
   }, [runtime]);
 
+  /** The current turn's identity = its user-message id (stable for the
+   *  turn's whole life, unlike the streaming block that keeps changing). */
+  function currentTurnKey(): string | null {
+    const bs = blocksRef.current;
+    for (let i = bs.length - 1; i >= 0; i--) if (bs[i].kind === 'user') return bs[i].id;
+    return null;
+  }
+
   function setTurnBusy(active: boolean) {
+    const was = turnActiveRef.current;
     turnActiveRef.current = active;
     setTurnActive(active);
+    if (!was && active) {
+      // Turn began: start the wall clock.
+      turnStartRef.current = Date.now();
+    } else if (was && !active && turnStartRef.current != null) {
+      // Turn settled: attribute the elapsed time (and any interrupt) to it,
+      // keyed by its user message, for the "Worked for X" header.
+      const key = currentTurnKey();
+      if (key) {
+        const durationMs = Date.now() - turnStartRef.current;
+        setTurnMeta((prev) => ({ ...prev, [key]: { durationMs, interrupted: interruptedKeyRef.current === key } }));
+      }
+      turnStartRef.current = null;
+      interruptedKeyRef.current = null;
+    }
   }
 
   function finishRendererSession({
@@ -944,6 +976,9 @@ export function AgentView({
   }
 
   function stop() {
+    // Remember which turn the user interrupted so its settle records it as
+    // "You stopped after X" rather than "Worked for X".
+    interruptedKeyRef.current = currentTurnKey();
     wsRef.current?.send(JSON.stringify({ t: 'interrupt' }));
   }
 
@@ -1184,6 +1219,7 @@ export function AgentView({
             blocks={blocks}
             queuedTurns={queuedTurns}
             turnActive={turnActive}
+            turnMeta={turnMeta}
             phase={phase}
             fatal={fatal}
             fatalRecoveryLabel={fatalRecoveryLabel}
@@ -1289,7 +1325,7 @@ export function AgentView({
 
 const runtimeCardWrapClass = 'grid min-h-45 flex-1 place-items-center px-3 py-6';
 const runtimeCardClass = 'w-[min(440px,100%)] rounded-xl border border-border bg-pane p-4 text-foreground';
-const runtimeCardTitleClass = 'm-0 text-lg font-bold';
+const runtimeCardTitleClass = 'm-0 text-base font-semibold';
 const runtimeCardCopyClass = 'mt-1.75 mb-3 text-sm leading-normal text-muted-foreground';
 const runtimeCardActionsClass = 'mt-3 flex justify-end gap-2';
 

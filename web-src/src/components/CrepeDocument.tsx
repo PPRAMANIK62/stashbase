@@ -22,7 +22,7 @@ import { makeIframeFindController } from './findIframe';
 import { applyChunkHighlight } from './previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '../milkdown/paths';
 import { splitLeadingYamlFrontmatter } from '../milkdown/frontmatter';
-import { destroyCrepeIfCreated } from '../milkdown/crepeLifecycle';
+import { planIncomingMarkdownSync, startCrepeCreation } from '../milkdown/crepeLifecycle';
 import { resolveLocalImageUrl } from '../milkdown/imageUrls';
 import { activeHeadingId, extractDocumentHeadings, headingSlug, type DocumentHeading, type ProseMirrorDocument } from '../milkdown/headings';
 import { documentScroller, headingElementAtPosition, scrollOutlineToHeading, type HeadingNodeView } from '../milkdown/outlineNavigation';
@@ -31,10 +31,32 @@ import { Button } from './ui/button';
 import { StatusMessage } from './ui/status';
 
 type CreationState = 'creating' | 'ready' | 'failed';
+type RegistrationKind = 'editor' | 'find' | 'outline';
 
-let editorRegistrationOwner: symbol | null = null;
-let findRegistrationOwner: symbol | null = null;
-let outlineRegistrationOwner: symbol | null = null;
+const registrationOwners: Record<RegistrationKind, symbol | null> = {
+  editor: null,
+  find: null,
+  outline: null,
+};
+
+function claimRegistration(
+  kind: RegistrationKind,
+  owner: symbol,
+  register: () => void,
+  clear: () => void,
+): () => void {
+  registrationOwners[kind] = owner;
+  register();
+  return () => {
+    if (registrationOwners[kind] !== owner) return;
+    registrationOwners[kind] = null;
+    clear();
+  };
+}
+
+function documentBasename(path: string): string {
+  return path.split('/').pop() ?? path;
+}
 
 /**
  * A retained Markdown surface for one tab. CrepeBuilder provides Milkdown's
@@ -42,23 +64,37 @@ let outlineRegistrationOwner: symbol | null = null;
  * persistence, local asset paths, navigation and the application-level find
  * experience.
  */
-export function CrepeDocument({ tabId, name, content, readOnly, active }: {
+export function CrepeDocument({ tabId, name, content, readOnly, active, dirty, folder }: {
   tabId: string;
   name: string;
   content: string;
   readOnly: boolean;
   active: boolean;
+  dirty: boolean;
+  /** Absolute member folder for an out-of-folder tab — image/link
+   *  resolution carries it so relative refs stay in the file's folder. */
+  folder?: string;
 }) {
   const { actions, activeTab } = useApp();
+  const registerEditor = actions.registerEditor;
+  const registerFindController = actions.registerFindController;
+  const scheduleSave = actions.scheduleSave;
+  const toast = actions.toast;
   const { publishOutline, clearOutline } = useDocumentOutline();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<CrepeBuilder | null>(null);
   const registrationOwnerRef = useRef(Symbol(tabId));
   const nameRef = useRef(name);
+  const folderRef = useRef(folder);
   const contentRef = useRef(content);
   const readOnlyRef = useRef(readOnly);
   const activeRef = useRef(active);
-  const observedIncomingRef = useRef<string | null>(null);
+  const dirtyRef = useRef(dirty);
+  // The builder already consumes the initial prop as `defaultValue`. Mark it
+  // observed up front so the post-create content effect cannot mistake that
+  // same initial source for an external refresh and erase typing that began
+  // as soon as the editor became visible.
+  const observedIncomingRef = useRef(content);
   const suppressChangeRef = useRef(false);
   const refreshHeadingsRef = useRef<() => void>(() => {});
   const frontmatterRef = useRef(splitLeadingYamlFrontmatter(content).source);
@@ -68,9 +104,35 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [activeHeading, setActiveHeading] = useState<string | null>(null);
   nameRef.current = name;
+  folderRef.current = folder;
   contentRef.current = content;
   readOnlyRef.current = readOnly;
   activeRef.current = active;
+  dirtyRef.current = dirty;
+
+  const syncIncomingMarkdown = (editor: CrepeBuilder, source: string, sourceDirty: boolean) => {
+    const incoming = splitLeadingYamlFrontmatter(source);
+    const plan = planIncomingMarkdownSync({
+      currentBody: editor.getMarkdown(),
+      dirty: sourceDirty,
+      incomingBody: incoming.body,
+      incomingFrontmatter: incoming.source,
+      incomingSource: source,
+      observedSource: observedIncomingRef.current,
+    });
+    if (!plan) return;
+    observedIncomingRef.current = plan.observedSource;
+    frontmatterRef.current = plan.frontmatter;
+    if (plan.replacementBody === null) return;
+    suppressChangeRef.current = true;
+    editor.editor.action(replaceAll(plan.replacementBody));
+    queueMicrotask(() => {
+      suppressChangeRef.current = false;
+      // Read the new ProseMirror state after the replacement transaction;
+      // DOM decoration stays in its own render/effect pass.
+      refreshHeadingsRef.current();
+    });
+  };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -78,8 +140,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     host.replaceChildren();
     setCreationState('creating');
     headingSnapshotRef.current = null;
-    let disposed = false;
-    let destroyed = false;
+    let cancelReadyDecoration = () => {};
     const editor = new CrepeBuilder({ root: host, defaultValue: splitLeadingYamlFrontmatter(contentRef.current).body })
       .addFeature(placeholder, { text: 'Start writing… or type /', mode: 'block' })
       .addFeature(cursor)
@@ -95,17 +156,13 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
         inlineUploadPlaceholderText: 'Upload image',
         blockUploadPlaceholderText: 'Upload image',
         blockCaptionPlaceholderText: 'Describe this image…',
-        proxyDomURL: (source) => resolveLocalImageUrl(source, assetBaseUrl(nameRef.current), window.location.origin),
+        proxyDomURL: (source) => resolveLocalImageUrl(source, assetBaseUrl(nameRef.current, folderRef.current), window.location.origin),
       })
       .addFeature(blockEdit)
       .addFeature(toolbar)
       .addFeature(table)
       .addFeature(codeMirror, { languages, copyText: 'Copy code' })
       .addFeature(latex);
-    const destroyEditor = () => {
-      if (destroyed) return;
-      destroyed = destroyCrepeIfCreated(editor);
-    };
 
     const updateHeadings = () => {
       const view = currentEditorView(editor);
@@ -119,31 +176,32 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
         && !readOnlyRef.current
         && !suppressChangeRef.current
         && markdown !== previous
-      ) actions.scheduleSave();
+      ) scheduleSave();
       updateHeadings();
     }));
-    editor.create().then(() => {
-      if (disposed) {
-        destroyEditor();
-        return;
-      }
-      editorRef.current = editor;
-      editor.setReadonly(readOnlyRef.current);
-      refreshDocumentDom(host, nameRef.current);
-      updateHeadings();
-      setCreationState('ready');
-    }).catch((error: unknown) => {
-      if (disposed) return;
-      console.error('[markdown] failed to create Crepe editor:', error);
-      actions.toast('Could not open the Markdown editor.', { level: 'error' });
-      setCreationState('failed');
+    const stopCreation = startCrepeCreation(editor, {
+      ready: () => {
+        editorRef.current = editor;
+        editor.setReadonly(readOnlyRef.current);
+        // Reconcile props again after async creation. Activation revalidation
+        // may have delivered newer disk source while no editorRef existed.
+        syncIncomingMarkdown(editor, contentRef.current, dirtyRef.current);
+        cancelReadyDecoration = scheduleDocumentDomRefresh(host, nameRef.current, folderRef.current);
+        updateHeadings();
+        setCreationState('ready');
+      },
+      failed: (error) => {
+        console.error('[markdown] failed to create Crepe editor:', error);
+        toast('Could not open the Markdown editor.', { level: 'error' });
+        setCreationState('failed');
+      },
     });
 
     return () => {
-      disposed = true;
       if (editorRef.current === editor) editorRef.current = null;
       if (refreshHeadingsRef.current === updateHeadings) refreshHeadingsRef.current = () => {};
-      destroyEditor();
+      cancelReadyDecoration();
+      stopCreation();
     };
     // The one document instance remains mounted across Writer Mode and Reading
     // View so its history and selection survive the interaction-boundary switch.
@@ -160,43 +218,28 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
     const editor = editorRef.current;
     if (!editor || creationState !== 'ready' || !active || readOnly) return;
     const owner = registrationOwnerRef.current;
-    editorRegistrationOwner = owner;
-    actions.registerEditor({
-      getValue: () => frontmatterRef.current + editor.getMarkdown(),
-      focus: () => editor.editor.action((ctx) => ctx.get(editorViewCtx).focus()),
-    });
-    return () => {
-      if (editorRegistrationOwner !== owner) return;
-      editorRegistrationOwner = null;
-      actions.registerEditor(null);
-    };
-  }, [actions, active, creationState, readOnly]);
+    return claimRegistration(
+      'editor',
+      owner,
+      () => registerEditor({
+        getValue: () => frontmatterRef.current + editor.getMarkdown(),
+        focus: () => editor.editor.action((ctx) => ctx.get(editorViewCtx).focus()),
+      }),
+      () => registerEditor(null),
+    );
+  }, [active, creationState, readOnly, registerEditor]);
 
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
-    const incoming = splitLeadingYamlFrontmatter(content);
-    const current = editor.getMarkdown();
-    const previousIncoming = observedIncomingRef.current;
-    observedIncomingRef.current = content;
-    frontmatterRef.current = incoming.source;
-    if (previousIncoming === content || current === incoming.body) return;
-    suppressChangeRef.current = true;
-    editor.editor.action(replaceAll(incoming.body));
-    queueMicrotask(() => {
-      suppressChangeRef.current = false;
-      // Read the new ProseMirror state, but do not decorate the editor DOM
-      // inside the transaction. The headings effect handles DOM IDs later.
-      refreshHeadingsRef.current();
-    });
-  }, [content]);
+    syncIncomingMarkdown(editor, content, dirty);
+  }, [content, dirty]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const frame = requestAnimationFrame(() => refreshDocumentDom(host, name));
-    return () => cancelAnimationFrame(frame);
-  }, [content, name]);
+    return scheduleDocumentDomRefresh(host, name, folder);
+  }, [content, folder, name, readOnly]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -228,19 +271,14 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
   useEffect(() => {
     if (!active || creationState !== 'ready') return;
     const owner = registrationOwnerRef.current;
-    outlineRegistrationOwner = owner;
-    return () => {
-      if (outlineRegistrationOwner !== owner) return;
-      outlineRegistrationOwner = null;
-      clearOutline();
-    };
+    return claimRegistration('outline', owner, () => undefined, clearOutline);
   }, [active, clearOutline, creationState]);
 
   useEffect(() => {
     if (
       !active
       || creationState !== 'ready'
-      || outlineRegistrationOwner !== registrationOwnerRef.current
+      || registrationOwners.outline !== registrationOwnerRef.current
     ) return;
     publishOutline({
       headings,
@@ -266,14 +304,13 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       // an off-screen current match into view.
       () => hostRef.current?.querySelector<HTMLElement>('.milkdown') ?? null,
     );
-    findRegistrationOwner = owner;
-    actions.registerFindController(controller);
-    return () => {
-      if (findRegistrationOwner !== owner) return;
-      findRegistrationOwner = null;
-      actions.registerFindController(null);
-    };
-  }, [actions, active, creationState]);
+    return claimRegistration(
+      'find',
+      owner,
+      () => registerFindController(controller),
+      () => registerFindController(null),
+    );
+  }, [active, creationState, registerFindController]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -299,11 +336,14 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       // Markdown links are untrusted input. Take ownership before routing the
       // explicitly allowed targets so ignored schemes never reach the browser.
       event.preventDefault();
-      const link = resolveMilkdownLink(anchor.getAttribute('href') ?? '', nameRef.current);
+      const link = resolveMilkdownLink(anchor.getAttribute('href') ?? '', nameRef.current, folderRef.current);
       if (link.kind === 'anchor') {
         host.querySelector<HTMLElement>(`#${CSS.escape(link.id)}`)?.scrollIntoView({ block: 'start' });
       } else if (link.kind === 'note') {
-        void actions.navigateTo(link.path, link.anchor);
+        // A link inside an out-of-folder document resolves within that same
+        // member folder — never against the window's active folder.
+        if (link.folder) void actions.openLibraryFile(link.folder, link.path, { anchor: link.anchor });
+        else void actions.navigateTo(link.path, link.anchor);
       } else if (link.kind === 'external') {
         window.postMessage({ type: 'stashbase-open-external', href: link.href }, window.location.origin);
       }
@@ -340,6 +380,9 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
       data-document-name={name}
       data-state={creationState}
       data-tab-id={tabId}
+      role="region"
+      aria-label={`${documentBasename(name)} Markdown document`}
+      hidden={!active}
     >
       {creationState === 'creating' && (
         <StatusMessage className="crepe-status">Opening document…</StatusMessage>
@@ -351,7 +394,10 @@ export function CrepeDocument({ tabId, name, content, readOnly, active }: {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setCreationAttempt((attempt) => attempt + 1)}
+            onClick={() => {
+              setCreationState('creating');
+              setCreationAttempt((attempt) => attempt + 1);
+            }}
           >
             Try again
           </Button>
@@ -373,8 +419,22 @@ async function uploadLocalImage(file: File, noteName: string): Promise<string> {
   return portableImageMarkdownPath(relative);
 }
 
-function refreshDocumentDom(host: HTMLElement, name: string): void {
-  const base = new URL(assetBaseUrl(name), window.location.origin);
+/** Milkdown may finish replacing read-only node views one frame after React's
+ * effects. Decorate on the following frame so alerts and local assets attach
+ * to the settled DOM without running from a transaction listener. */
+function scheduleDocumentDomRefresh(host: HTMLElement, name: string, folder?: string): () => void {
+  let secondFrame: number | null = null;
+  const firstFrame = requestAnimationFrame(() => {
+    secondFrame = requestAnimationFrame(() => refreshDocumentDom(host, name, folder));
+  });
+  return () => {
+    cancelAnimationFrame(firstFrame);
+    if (secondFrame !== null) cancelAnimationFrame(secondFrame);
+  };
+}
+
+function refreshDocumentDom(host: HTMLElement, name: string, folder?: string): void {
+  const base = new URL(assetBaseUrl(name, folder), window.location.origin);
   for (const element of host.querySelectorAll<HTMLImageElement>('img[src]')) {
     const raw = element.dataset.stashbaseSource ?? element.getAttribute('src');
     if (!raw || raw.startsWith('#')) continue;

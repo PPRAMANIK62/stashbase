@@ -177,7 +177,9 @@ export function useFileActions(
       }
       const before = stateRef.current;
       const stale = before.tabs.filter(
-        (t) => t.file && t.file.name.startsWith(path + '/'),
+        // Out-of-folder tabs live elsewhere on disk — a same-named prefix
+        // in the active folder must not close them.
+        (t) => t.file && !t.file.folder && t.file.name.startsWith(path + '/'),
       );
       for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
@@ -259,7 +261,7 @@ export function useFileActions(
       if (j.indexWarning) {
         toast('Renamed. ' + j.indexWarning, { level: 'warning' });
       } else if (j.indexDeferred) {
-        toast('Renamed. Updating semantic index in the background.', { level: 'info' });
+        toast('Renamed. Updating AI Index in the background.', { level: 'info' });
       }
     } catch (e: unknown) {
       if (stateRef.current.folderPath !== targetFolderPath) return;
@@ -351,7 +353,7 @@ export function useFileActions(
       if (j.indexWarning) {
         toast('Moved. ' + j.indexWarning, { level: 'warning' });
       } else if (j.indexDeferred) {
-        toast('Moved. Updating semantic index in the background.', { level: 'info' });
+        toast('Moved. Updating AI Index in the background.', { level: 'info' });
       }
       return true;
     } catch (e: unknown) {
@@ -429,9 +431,8 @@ export function useFileActions(
       const first = j.files?.find(
         (x) => !x.error && VIEWABLE_FILE_RE.test(x.file),
       );
-      // Pinned, not preview: a drop is a deliberate, committed gesture
-      // (the double-click analog), so the imported file should stay open
-      // rather than be a tentative tab the next sidebar click evicts.
+      // A drop is a deliberate gesture, so show what landed in its own
+      // tab (mirrors dropping a file into an editor).
       if (first) void openInNewTab(first.file, targetFolderPath);
       const failed = (j.files || []).filter((x) => x.error);
       if (failed.length) {

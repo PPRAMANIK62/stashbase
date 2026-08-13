@@ -113,19 +113,38 @@ sha256_file() {
 }
 
 download_checked() {
-  local url="$1"
-  local destination="$2"
-  local expected="$3"
+  local destination="$1"
+  local expected="$2"
+  shift 2
+  local urls=("$@")
+  if [[ "${#urls[@]}" -eq 0 ]]; then
+    echo "download_checked requires at least one source URL" >&2
+    exit 1
+  fi
   if [[ -f "$destination" && "$(sha256_file "$destination")" == "$expected" ]]; then
     return
   fi
   local partial="${destination}.part"
-  curl --fail --location --retry 4 --retry-all-errors --continue-at - --output "$partial" "$url"
+  local downloaded=false
+  local url
+  for url in "${urls[@]}"; do
+    if curl --fail --location --retry 4 --retry-all-errors --connect-timeout 20 \
+      --continue-at - --output "$partial" "$url"; then
+      downloaded=true
+      break
+    fi
+    echo "download failed from $url; trying the next source" >&2
+  done
+  if [[ "$downloaded" != true ]]; then
+    rm -f "$partial"
+    echo "download failed from every source: ${urls[*]}" >&2
+    exit 1
+  fi
   local actual
   actual="$(sha256_file "$partial")"
   if [[ "$actual" != "$expected" ]]; then
     rm -f "$partial"
-    echo "checksum mismatch for $url: $actual" >&2
+    echo "checksum mismatch for downloaded archive: $actual" >&2
     exit 1
   fi
   mv "$partial" "$destination"
@@ -182,9 +201,9 @@ cmake --build "$WHISPER_BUILD" --config Release --target whisper-cli --parallel 
 OPUS_ARCHIVE="$DOWNLOADS/opus-$OPUS_VERSION.tar.gz"
 OPUS_SRC="$SRC/opus-$OPUS_VERSION"
 download_checked \
-  "https://downloads.xiph.org/releases/opus/opus-$OPUS_VERSION.tar.gz" \
   "$OPUS_ARCHIVE" \
-  "$OPUS_SHA256"
+  "$OPUS_SHA256" \
+  "https://downloads.xiph.org/releases/opus/opus-$OPUS_VERSION.tar.gz"
 cmake -E remove_directory "$OPUS_SRC"
 tar -xzf "$OPUS_ARCHIVE" -C "$SRC"
 OPUS_BUILD="$BUILD/opus"
@@ -208,9 +227,10 @@ cmake --install "$OPUS_BUILD" --config Release
 FFMPEG_ARCHIVE="$DOWNLOADS/ffmpeg-$FFMPEG_VERSION.tar.xz"
 FFMPEG_SRC="$SRC/ffmpeg-$FFMPEG_VERSION"
 download_checked \
-  "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" \
   "$FFMPEG_ARCHIVE" \
-  "$FFMPEG_SHA256"
+  "$FFMPEG_SHA256" \
+  "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" \
+  "https://www.ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz"
 cmake -E remove_directory "$FFMPEG_SRC"
 tar -xJf "$FFMPEG_ARCHIVE" -C "$SRC"
 FFMPEG_BUILD="$BUILD/ffmpeg"

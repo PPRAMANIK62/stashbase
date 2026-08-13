@@ -15,7 +15,7 @@ decisions, open alternatives, and unresolved questions, so they can explore a
 branch without losing the main thread.
 
 The journeys below describe the work users are trying to complete. Preparation,
-semantic search, Canvas, and Agent access are supporting capabilities within
+AI Index, Canvas, and Agent access are supporting capabilities within
 those journeys, not separate use cases.
 
 ## What Canvas Means
@@ -57,7 +57,7 @@ Requirements
 ```
 
 The engineer adds the project folder to StashBase and asks the Agent to turn
-the contract or PRD into a checklist. Semantic search helps the Agent find
+the contract or PRD into a checklist. AI Index helps the Agent find
 related specifications, meeting notes, ADRs, and previous design decisions
 even when the wording is different.
 
@@ -149,9 +149,9 @@ searchable representations while the original files remain visible in their
 existing locations.
 
 For a large new or changed archive, the folder remains immediately usable and
-StashBase explains the pending semantic workload before consuming embedding
-quota. The user can defer it, continue with files and keyword search, and start
-semantic indexing later from the persistent notice.
+StashBase explains the pending AI Index workload before consuming embedding
+quota. The user can defer it, continue with files and exact text search, and
+start AI Index later from the persistent notice.
 
 The user can search for “Why did this project reject PostgreSQL?” or “Which
 papers compared these two methods?” without remembering the original wording.
@@ -170,3 +170,36 @@ document can support the next search or conversation.
 **Related areas:** [Local File Workspace](design/library.md),
 [Preparation](design/preparation.md), [Search and Retrieval](design/search.md),
 [Agent Panel](design/agent-panel.md)
+
+## 4. Inspect and Maintain JSON Alongside Project Documents
+
+Project folders often contain configuration, fixtures, exported records, and
+Agent-produced data as JSON. A user needs to inspect and search those files in
+the same workspace as their notes without an editor silently normalizing the
+source or rejecting a temporarily incomplete document.
+
+```text
+Open a JSON source
+  → inspect or find raw keys and values
+  → explicitly enter edit mode
+  → save without reformatting
+  → retrieve the updated source by keyword or meaning
+```
+
+JSON opens as raw, read-only source by default with syntax highlighting. The
+user explicitly enters edit mode before changing it, and StashBase saves the
+text as written, preserving its existing byte-order mark and line-ending
+convention. Malformed or partially written JSON remains visible, editable, and
+searchable because validity is not an admission or save requirement.
+
+Exact text search and AI Index use the raw text and return the visible
+JSON source path. This lets a user find a configuration key, inspect a fixture
+value, repair incomplete generated output, or give an Agent the same local
+structured-data context without creating a converted copy.
+
+The result is one source-of-truth workflow for structured project data: JSON
+stays an ordinary local file while participating in the same navigation,
+editing, search, and Agent context as the rest of the folder.
+
+**Related areas:** [Local File Workspace](design/library.md),
+[Search and Retrieval](design/search.md)

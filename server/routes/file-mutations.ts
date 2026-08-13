@@ -42,9 +42,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
     const oldStructuredFormat = detectFormat(oldName);
     const viewerOnly = !oldStructuredFormat && isConvertibleSource(oldName);
     let newName = requested;
-    const requestedHasCompatibleExt = oldStructuredFormat
-      ? detectFormat(newName) !== null
-      : detectViewerFormat(newName) === oldFormat;
+    const requestedHasCompatibleExt = hasCompatibleRenameExtension(oldStructuredFormat, oldFormat, newName);
     if (!requestedHasCompatibleExt) {
       const oldExt = oldName.match(/\.[^./]+$/)?.[0] ?? '.md';
       newName += oldExt;
@@ -63,7 +61,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
     // collision must not discard a transcription the user did not move.
     await prepareFileOperation(oldName);
     const oldDerivedArtifacts = derivedArtifactsForSource(oldName);
-    const cascadeOn = req.body?.cascade !== false;
+    const cascadeOn = oldStructuredFormat !== 'json' && req.body?.cascade !== false;
     const asyncIndex = req.body?.async_index === true;
     const renames: RenameEntry[] = [{ kind: 'file', old: oldName, new: newName }];
     const bundleEntry = bundleRenameEntry(oldName, newName, 'pre');
@@ -110,7 +108,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
         }
         if (!getApiKey()) {
           log.info(`rename: skipped index update for ${oldName} -> ${newName} because no embedding key is configured`);
-          return 'Semantic index was not updated because no embedding API key is configured.';
+          return 'AI Index was not updated because it is not set up.';
         }
         const tooLarge = contentSizeError(content ?? '');
         if (tooLarge) {
@@ -118,7 +116,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
             log.warn(`rename: failed to remove old index row for oversized file ${oldName}: ${errorMessage(err)}`);
           });
           log.warn(`rename: skipped index update for ${newName}: ${tooLarge}`);
-          return `${tooLarge}. The file moved, but semantic search will skip it until you split or reduce it and run sync.`;
+          return `${tooLarge}. The file moved, but AI Index will skip it until you split or reduce it and run sync.`;
         }
         if (applied?.updated.length) await reindexUpdatedLinks();
         await indexer.renameFile(toSourcePath(oldName), toSourcePath(newName), content ?? '');
@@ -146,7 +144,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
         linksUpdated: linkPlan.length,
         indexDeferred: !warning && !noKey,
         indexWarning: warning
-          ? `${warning}. The file moved, but semantic search will skip it until you split or reduce it and run sync.`
+          ? `${warning}. The file moved, but AI Index will skip it until you split or reduce it and run sync.`
           : undefined,
       });
       void runWithFolderRoot(requestFolderRoot, () => updateLinksAndIndex({ rollbackLinksOnFailure: false }))
@@ -237,6 +235,17 @@ export function mountFileMutationRoutes(app: express.Express): void {
       sendError(res, err);
     }
   });
+}
+
+export function hasCompatibleRenameExtension(
+  oldStructuredFormat: ReturnType<typeof detectFormat>,
+  oldFormat: NonNullable<ReturnType<typeof detectViewerFormat>>,
+  requestedName: string,
+): boolean {
+  if (!oldStructuredFormat) return detectViewerFormat(requestedName) === oldFormat;
+  return oldStructuredFormat === 'json'
+    ? detectFormat(requestedName) === 'json'
+    : detectFormat(requestedName) !== null;
 }
 
 function renameTargetPath(oldName: string, requested: string): string {

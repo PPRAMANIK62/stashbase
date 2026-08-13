@@ -1,5 +1,5 @@
 /**
- * Settings → Embedding panel. The user can choose the direct OpenAI
+ * Settings → AI Index panel. The user can choose the direct OpenAI
  * embedding endpoint or OpenRouter's OpenAI-compatible endpoint. With no
  * key set, indexing and search are disabled (files still save and
  * preview); the `RequireApiKeyModal` auto-pop on folder load lives in
@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage, type EmbedderProvider, type EmbedderState } from '../../api';
 import { useApp } from '../../store/AppContext';
+import { EmbeddingAuthChoice } from '../embedder/EmbeddingAuthChoice';
 import { KeyModal } from '../embedder/KeyModal';
 import { RemoveKeyModal } from '../embedder/RemoveKeyModal';
 import { Button } from '../ui/button';
@@ -31,7 +32,7 @@ const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeh
 const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
 
 export function EmbeddingPanel() {
-  const { state: appState, dispatch, actions } = useApp();
+  const { dispatch, actions } = useApp();
   const [state, setState] = useState<EmbedderState | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<EmbedderProvider>('openai');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -43,6 +44,12 @@ export function EmbeddingPanel() {
   const [addKey, setAddKey] = useState('');
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  // Whether the bring-your-own-key form is revealed. Only relevant when
+  // nothing is authorized yet: that is the one state where Settings shows
+  // the same fork the Files-panel callout does, so a user who arrived here
+  // from either direction sees the two options with equal weight instead of
+  // a key field plus a footnote about accounts.
+  const [keyFormOpen, setKeyFormOpen] = useState(false);
   const mountedRef = useRef(false);
 
   useEffect(() => {
@@ -76,7 +83,7 @@ export function EmbeddingPanel() {
     setState((s) => (s ? { ...s, provider: result.provider, model: result.model, hasKey: true } : s));
     setSelectedProvider(result.provider);
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-    if (result.warning) actions.toast(`Embedding key saved, but validation could not reach the provider: ${result.warning}`, { level: 'warning' });
+    if (result.warning) actions.toast(`API key saved, but validation could not reach the provider: ${result.warning}`, { level: 'warning' });
     if (result.backfillStarted) void actions.markVisibleFilesPendingForSearch();
     void actions.refreshIndexState();
   }
@@ -95,7 +102,7 @@ export function EmbeddingPanel() {
       setState((s) => (s ? { ...s, provider: result.provider, model: result.model, hasKey: true } : s));
       setSelectedProvider(result.provider);
       dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-      if (result.warning) actions.toast(`Embedding key saved, but validation could not reach the provider: ${result.warning}`, { level: 'warning' });
+      if (result.warning) actions.toast(`API key saved, but validation could not reach the provider: ${result.warning}`, { level: 'warning' });
       if (result.backfillStarted) void actions.markVisibleFilesPendingForSearch();
       void actions.refreshIndexState();
     } catch (err: unknown) {
@@ -111,14 +118,10 @@ export function EmbeddingPanel() {
     if (!mountedRef.current) return;
     setKeyRemoveOpen(false);
     setState((s) => (s ? { ...s, hasKey: false } : s));
+    // The search popup re-checks the embedder before every semantic run, so
+    // flipping the shared key state here is all it needs.
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: false });
     void actions.refreshIndexState();
-    if (appState.searchMode === 'semantic' && appState.filterQuery.trim()) {
-      dispatch({
-        type: 'SEARCH_ERROR',
-        error: 'Semantic search is disabled until you add an embedding API key. Switch to keyword search to search without embeddings.',
-      });
-    }
   }
 
   if (loadError) {
@@ -135,15 +138,20 @@ export function EmbeddingPanel() {
   const selected = PROVIDERS[selectedProvider];
   const activeProviderSelected = state.provider === selectedProvider;
   const hasSelectedProviderKey = state.hasKey && activeProviderSelected;
+  // Provider and model are bring-your-own-key concerns. While the fork is
+  // up they would be answering a question the user has not reached yet, so
+  // the panel shows the choice alone until a path is picked.
+  const showingAuthChoice = !state.hasKey && !keyFormOpen;
 
   return (
     <>
       <div>
         <div>
-          <div className="mb-1 text-base font-semibold">Embedding</div>
+          <div className="mb-1 text-base font-semibold">AI Index</div>
           <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
-            Used for semantic search. The model stays fixed so the local index remains compatible.
+            Powers meaning-based search and Agent retrieval. The model stays fixed so the local index remains compatible.
           </div>
+          {!showingAuthChoice && (
           <div className="mt-0.5 mb-2 inline-flex max-w-full items-center overflow-hidden rounded-md border border-border bg-card" role="radiogroup" aria-label="Embedding provider">
             {PROVIDER_ORDER.map((provider) => {
               const option = PROVIDERS[provider];
@@ -156,7 +164,7 @@ export function EmbeddingPanel() {
                     'inline-flex min-h-[30px] cursor-pointer items-center gap-1.5 border-0 border-l border-border '
                     + 'px-2.5 text-sm whitespace-nowrap text-foreground transition-colors duration-fast first:border-l-0 '
                     + 'enabled:hover:bg-muted disabled:cursor-default disabled:opacity-60 '
-                    + (selectedOption ? 'bg-accent/8 font-semibold' : 'bg-transparent')
+                    + (selectedOption ? 'bg-accent/10 font-semibold' : 'bg-transparent')
                   }
                   role="radio"
                   aria-checked={selectedOption}
@@ -172,11 +180,14 @@ export function EmbeddingPanel() {
               );
             })}
           </div>
+          )}
+          {!showingAuthChoice && (
           <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
             {state.hasKey && <span>Current: {PROVIDERS[state.provider].label}</span>}
             <span>Model: <code>{selected.model}</code></span>
             <span>{selected.costHint}</span>
           </div>
+          )}
           {hasSelectedProviderKey ? (
             <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-0 text-sm leading-8 text-muted-foreground">Key configured</div>
@@ -187,9 +198,8 @@ export function EmbeddingPanel() {
                   onClick={() => setKeyEditOpen(true)}
                 >Change key…</Button>
                 <Button
-                  variant="outline"
+                  variant="destructive-outline"
                   size="sm"
-                  className="border-destructive/30 text-destructive hover:border-destructive/45 hover:bg-destructive/5 hover:text-destructive dark:border-destructive/40 dark:bg-transparent dark:hover:bg-destructive/15"
                   onClick={() => setKeyRemoveOpen(true)}
                 >Remove key…</Button>
               </div>
@@ -201,6 +211,14 @@ export function EmbeddingPanel() {
                   Save a {selected.label} key to switch from {PROVIDERS[state.provider].label}.
                 </div>
               )}
+              {/* Nothing authorized yet: lead with the fork, the same one
+                * the Files-panel callout shows. Switching providers with a
+                * key already on file is a different question and keeps the
+                * plain form. */}
+              {showingAuthChoice && (
+                <EmbeddingAuthChoice onUseOwnKey={() => setKeyFormOpen(true)} />
+              )}
+              {!showingAuthChoice && (
               <div className="flex min-w-0 items-center gap-2">
                 <Input
                   type="password"
@@ -219,12 +237,15 @@ export function EmbeddingPanel() {
                   disabled={addBusy || !addKey.trim()}
                 >{addBusy ? 'Validating…' : 'Add key'}</Button>
               </div>
+              )}
               {addError && <div className="mt-1.5 text-sm text-destructive">{addError}</div>}
             </>
           )}
-          <div className="mt-3.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
-            Stored locally in <code>~/.stashbase/config.json</code>. Used only for embeddings, never chat.
-          </div>
+          {!showingAuthChoice && (
+            <div className="mt-3.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
+              Stored locally in <code>~/.stashbase/config.json</code>. Used only for embeddings, never chat.
+            </div>
+          )}
         </div>
       </div>
 

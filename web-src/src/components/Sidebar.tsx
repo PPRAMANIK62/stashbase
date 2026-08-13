@@ -10,18 +10,24 @@ import {
   MoreHorizontalIcon,
   NewFileIcon,
   NewFolderIcon,
+  OutlineIcon,
   PlusIcon,
+  StarFilledIcon,
   StarIcon,
   SyncIcon,
   TrashIcon,
 } from '../icons';
+import { SidebarAccountRow } from './SidebarAccountRow';
 import { useApp } from '../store/AppContext';
 import { makeChatTab, type Action, type LibraryFolderStatus, type State } from '../store/state';
 import { folderScope, LIBRARY_SCOPE, newChatPlan, type ChatScope } from './agent/folderState';
 import { AGENT_META, AGENTS, type AgentKind } from '../agentCatalog';
-import { readPreferredAgent, rememberPreferredAgent } from '../agentPreference';
+import {
+  newChatAgentSelectionPlan,
+  readPreferredAgent,
+  rememberPreferredAgent,
+} from '../agentPreference';
 import { folderRefsEqual } from '../folderPath';
-import { ActivityBar } from './ActivityBar';
 import { FileTree } from './FileTree';
 import { useDocumentOutline } from './DocumentOutlineContext';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
@@ -55,14 +61,11 @@ const OPEN_FOLDER_WATCHDOG_MS = 20_000;
 const SessionHistoryPopover = lazyWithRetry(() =>
   import('./agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
-/** Search is interaction-only, so keep its result rendering and filter
- *  dependencies out of the initial browsing shell. */
-const SearchPanel = lazyWithRetry(() =>
-  import('./SearchPanel').then((mod) => ({ default: mod.SearchPanel })));
 const DocumentOutline = lazyWithRetry(() =>
   import('./DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
 const SemanticIndexingNotice = lazyWithRetry(() =>
   import('./SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNotice })));
+const EmbeddingSetupCallout = lazyWithRetry(() => import('./EmbeddingSetupCallout'));
 const UnsupportedFilesCallout = lazyWithRetry(() => import('./UnsupportedFilesCallout'));
 
 /** Shorten an absolute path for display: `/Users/foo/Notes` → `~/Notes`
@@ -97,22 +100,18 @@ function libraryFolderState(status: IndexStatus): LibraryFolderStatus {
 }
 
 /**
- * Left rail composition. The activity bar (narrow icon column on the
- * far left) toggles between two mutually-exclusive side panels:
- *   - Files   → the Library folder list + the active folder's file tree
- *   - Search  → search input + ≈/= toggle + result list (see
- *               `SearchPanel.tsx`)
- *
- * Each panel keeps its own state when hidden — flipping back doesn't
- * blow away tree expansion or the active query.
+ * The sidebar is one Files panel — the Library folder list + the active
+ * folder's file tree — with no activity rail: the sidebar toggle and
+ * search live in the shell's titlebar controls (`TitlebarControls.tsx`),
+ * search itself in the library search popup (`LibrarySearchDialog.tsx`),
+ * and the account (with Settings beside it) in the panel's bottom row.
  */
 export function Sidebar() {
-  const { state } = useApp();
   return (
     /* Explicit h-full so the inner file list (flex-1) knows how much to
      * grow into; overflow-hidden clips content as the grid column
-     * resizes / collapses to the bare 44px rail — without it, file
-     * names visually spill into the main pane mid-transition.
+     * resizes / collapses to zero width — without it, file names
+     * visually spill into the main pane mid-transition.
      * `group/sidebar` drives the hover-reveal of the header action
      * icons (see the side-actions class strings below). */
     <aside className="sidebar group/sidebar relative flex h-full min-h-0 min-w-0 flex-row overflow-hidden border-r border-border bg-pane">
@@ -122,22 +121,9 @@ export function Sidebar() {
         * Structural rules live in globals.css (Electron chrome
         * exemption) — `-webkit-app-region` needs a real element. */}
       <div className="sidebar-drag-zone" aria-hidden="true" />
-      <ActivityBar />
-      {/* The panel that swaps content based on `state.activeSidebarView`;
-        * it owns the vertical stack (header / list). `sidebar-panel`
-        * carries the titlebar clearance (globals.css). */}
+      {/* `sidebar-panel` carries the titlebar clearance (globals.css). */}
       <div className="sidebar-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {state.activeSidebarView === 'search' ? (
-          <LazyLoadBoundary
-            className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
-            label="search"
-            resetKey={state.activeSidebarView}
-          >
-            <Suspense fallback={<div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">Opening search…</div>}>
-              <SearchPanel />
-            </Suspense>
-          </LazyLoadBoundary>
-        ) : <FilesPanel />}
+        <FilesPanel />
       </div>
     </aside>
   );
@@ -157,43 +143,93 @@ const sectionToggleClass =
   'inline-flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left '
   + 'text-muted-foreground hover:text-foreground focus-visible:text-foreground';
 
-/* The 16px leading slot that centers the (smaller) section chevron. */
-const sectionChevronClass =
-  'inline-flex size-4 flex-none items-center justify-center transition-transform duration-fast '
-  + '[&_svg]:size-3 [&_svg]:flex-none';
-
-const sectionTitleClass = 'min-w-0 truncate text-xs font-medium text-muted-foreground';
+/* text-base — the SAME size as the rows: with the app-wide icons beside
+ * them, a smaller label reads shrunken rather than subordinate. Regular
+ * weight, not medium: these labels sit on their own tinted strip, and
+ * that band already says "header" — adding weight on top only made the
+ * bottom dock's three lines the heaviest ink in a quiet sidebar. */
+const sectionTitleClass = 'min-w-0 truncate text-base text-muted-foreground';
 
 /** The Explorer view. The active folder zone (current folder header +
  * file tree), the LIBRARY resource list, and the active Markdown document
  * outline share this one sidebar as stacked sections. */
 function FilesPanel() {
-  const { activeTab } = useApp();
+  const { state, activeTab } = useApp();
   const { outline } = useDocumentOutline();
   const [outlineExpanded, setOutlineExpanded] = useState(true);
 
   const hasMarkdownDocument = activeTab?.file?.format === 'md';
+  // Tri-state: `null` means the embedder has not been read yet, and only a
+  // definite `false` should pull in the notice chunk. The card re-checks
+  // before rendering; this just decides whether loading it can matter.
+  const embeddingSetupPossible = state.embedderHasKey === false;
+  // The outline block belongs to an OPEN DOCUMENT inside an open
+  // folder. A bare workspace (chat only, nothing open) drops it, as
+  // does a window with no folder — nothing there has an outline, and
+  // the sections below should hold the eye instead.
+  const showOutline = !!state.folderPath && !!activeTab?.file;
+
+  // Switching to another document re-applies the outline's default:
+  // expanded as soon as it actually HAS headings (they load async, so
+  // the switch only marks the intent). A manual fold wins within the
+  // current document — the same "transition resets the default" rule as
+  // the Library's folder-presence effect. Keyed by file identity so an
+  // in-place navigation refreshes the outline for the replacement file.
+  const documentKey = hasMarkdownDocument && activeTab?.file
+    ? `${activeTab.file.folder ?? ''}:${activeTab.file.name}`
+    : null;
+  const documentKeyRef = useRef(documentKey);
+  const outlineDefaultPending = useRef(false);
+  if (documentKeyRef.current !== documentKey) {
+    documentKeyRef.current = documentKey;
+    outlineDefaultPending.current = documentKey != null;
+  }
+  const hasHeadings = outline.headings.length > 0;
+  useEffect(() => {
+    if (outlineDefaultPending.current && hasHeadings) {
+      outlineDefaultPending.current = false;
+      setOutlineExpanded(true);
+    }
+  }, [documentKey, hasHeadings]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files" role="tabpanel">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files">
       <NewChatButton />
       {/* Explorer sections mirror VS Code's compact disclosure rows. The
         * folder zones and the active document's outline intentionally share
         * one navigation surface; neither becomes a floating editor
-        * companion. The outline slots between the working tree and the
-        * bottom-anchored Library — it belongs to the open document. */}
+        * companion. */}
       <LibrarySections>
-        {hasMarkdownDocument && (
-          /* Sections separate by whitespace, not hairlines. When expanded the
-           * outline keeps a guaranteed slice (min-h) even if the sections
-           * above it fill the panel, then grows into whatever is left. */
-          <section className={'mt-3 flex flex-col overflow-hidden ' + (outlineExpanded ? 'min-h-24 flex-[2_1_0%]' : 'min-h-0 flex-none')}>
-            <div className="flex min-h-[30px] items-center justify-between gap-1.5 py-[5px] pr-2 pl-3.5">
-              <button type="button" className={sectionToggleClass} aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
-                <span className={sectionChevronClass + (outlineExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span><span className={sectionTitleClass + ' flex-1'}>Document Outline</span><span className="ml-auto flex-none text-2xs text-muted-foreground">{outline.headings.length}</span>
-              </button>
-            </div>
-            <div id="sidebar-outline-section" className={outlineExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
+        {/* Shown for as long as SOME document is open (see
+          * `showOutline`) — not just Markdown ones — so switching tabs
+          * never shifts the sections below under the pointer; a file
+          * that cannot have an outline says so in the empty note. It
+          * carries the dock's mt-auto anchor; the dock reads outline →
+          * Library → account, each a fixed block with a top hairline
+          * (they sit flush, so whitespace cannot separate them here).
+          * The expanded list is the Library treatment — a capped
+          * internal scroller, not a growing section. */}
+        {showOutline && (
+        <section className="mt-auto flex flex-none flex-col overflow-hidden border-t border-border">
+          {/* Same narrow tinted strip as the Library header below. */}
+          <div className="group/outline flex min-h-[26px] items-center justify-between gap-1.5 bg-muted/45 pr-2 pl-3.5">
+            <button type="button" className={sectionToggleClass} aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
+              {/* Same treatment as the Library header: glyph at rest,
+                * fold chevron under the pointer. */}
+              <span className="inline-flex size-4 flex-none items-center justify-center">
+                <OutlineIcon className="size-3.5 group-hover/outline:hidden" />
+                <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/outline:inline-flex [&_svg]:size-3.5' + (outlineExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span>
+              </span>
+              <span className={sectionTitleClass + ' flex-1'}>Document Outline</span>
+            </button>
+          </div>
+          {/* FIXED height (VS Code's outline view), not a content cap:
+            * an expanded outline is always the same block, so switching
+            * between documents with different heading counts never
+            * moves the Library rows below. Same 154px as the Library
+            * list's cap — the two dock lists read as one rhythm. */}
+          <div id="sidebar-outline-section" className={outlineExpanded ? 'flex h-[154px] min-h-0 flex-col overflow-hidden' : 'hidden'}>
+            {hasHeadings ? (
               <LazyLoadBoundary
                 className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
                 label="document outline"
@@ -203,10 +239,32 @@ function FilesPanel() {
                   <DocumentOutline headings={outline.headings} activeId={outline.activeId} onSelect={outline.onSelect} />
                 </Suspense>
               </LazyLoadBoundary>
-            </div>
-          </section>
+            ) : (
+              /* Inline, so a permanently-visible empty block never pulls
+                * in the lazy outline chunk — that loads only once a real
+                * outline exists. ml-[38px] is the shared label gutter. */
+              <p className="my-1 mr-3 ml-[38px] text-sm text-muted-foreground">
+                {hasMarkdownDocument ? 'No headings' : 'No outline for this file'}
+              </p>
+            )}
+          </div>
+        </section>
         )}
       </LibrarySections>
+      {/* AI Index authorization is APP-WIDE, not a property of the
+        * open folder, so it sits in the bottom chrome above the account
+        * row rather than inside the file tree. Wedged between a folder header
+        * and its own files it read as a fact about those files, and it
+        * pushed the tree — the thing the panel exists for — down the
+        * screen for a secondary notice. */}
+      {embeddingSetupPossible && (
+        <Suspense fallback={null}>
+          <EmbeddingSetupCallout />
+        </Suspense>
+      )}
+      {/* No mt-auto here: a dock block above always carries the bottom
+        * anchor, and this row simply sits under it. */}
+      <SidebarAccountRow />
     </div>
   );
 }
@@ -214,14 +272,13 @@ function FilesPanel() {
 /** Full-width New Chat entry above the Library section (Cursor's "New
  *  Agent" position) — the app's ONE chat-creation entry point, a split
  *  button. The main area starts a chat with the last-selected agent; the
- *  chevron at the row's right edge opens a menu to start with a specific
- *  agent AND make it the new default. Creation reuses the one completely
- *  blank tab regardless of its agent (switching the blank tab's agent in
- *  place when it differs — `newChatPlan`); any content, draft,
- *  attachments, or resumed session means a fresh tab instead. Opens the
- *  chat panel when hidden. The reused/created tab's scope resolves to
- *  the window default (current folder, else Library) on connect, so no
- *  scope needs to be threaded here. */
+ *  chevron at the row's right edge only chooses the agent the next main-area
+ *  click will use. That click reuses the one completely blank tab regardless
+ *  of its agent (switching the blank tab's agent in place when it differs —
+ *  `newChatPlan`); any content, draft, attachments, or resumed session means
+ *  a fresh tab instead. It opens the chat panel when hidden. The
+ *  reused/created tab's scope resolves to the window default (current folder,
+ *  else Library) on connect, so no scope needs to be threaded here. */
 function NewChatButton() {
   const { state, dispatch } = useApp();
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
@@ -231,22 +288,28 @@ function NewChatButton() {
     activateChatTabForAgent(state, dispatch, agent);
   }
 
-  /** Explicit pick from the chevron menu: creates the chat AND updates
-   *  the app-wide default agent for later New Chat clicks. */
+  /** Picking from the chevron only updates the next-chat preference. Chat
+   *  creation stays behind the main New Chat action. */
   function pickAgent(agent: AgentKind) {
-    rememberPreferredAgent(agent);
-    startChat(agent);
+    const plan = newChatAgentSelectionPlan(agent);
+    rememberPreferredAgent(plan.preferredAgent);
+    if (plan.startAgent) startChat(plan.startAgent);
+    setMenuAnchor(null);
   }
 
+  /* Agent NAMES, not "New <Agent> Chat": the row itself says New Chat and
+   * now names its agent beside this chevron, so the menu is the picker
+   * that changes that name — repeating the whole action per item read as
+   * three ways to do the same thing. */
   const agentItems: MenuItem[] = AGENTS.map((agent) => ({
-    label: `New ${agent.launcherLabel} Chat`,
+    label: agent.launcherLabel,
     icon: <agent.Icon />,
     onSelect: () => pickAgent(agent.id),
   }));
 
-  // Read at render time, no state: every rememberPreferredAgent call site
-  // (this menu, the chat pane's launcher, openAgent) dispatches a store
-  // update in the same interaction, so this row re-renders fresh.
+  // Read at render time, no state: the picker closes its menu after writing,
+  // while the other rememberPreferredAgent call sites also dispatch a store
+  // update, so this row re-renders with the latest app-wide preference.
   const preferred = AGENT_META[readPreferredAgent()];
 
   return (
@@ -262,9 +325,26 @@ function NewChatButton() {
           title={`Start a ${preferred.launcherLabel} chat in the current folder, or across the whole library`}
           onClick={() => startChat(readPreferredAgent())}
         >
-          <preferred.Icon className="size-4 flex-none text-muted-foreground" />
+          {/* A PLUS, not the agent's mark: this row's job is "make a new
+            * chat", and leading with a vendor glyph made the action read
+            * as "Codex" with a label attached. Which agent it will use
+            * now rides beside the chevron, where the picker that changes
+            * it lives. 16px slot around the 14px glyph — every row does
+            * this, so the label lands on the shared 38px gutter line. */}
+          <span className="inline-flex size-4 flex-none items-center justify-center">
+            <PlusIcon className="size-3.5 text-muted-foreground" />
+          </span>
           <span className="min-w-0 truncate">New Chat</span>
         </button>
+        {/* The agent this row will start, named next to its picker — the
+          * row would otherwise give no clue which of the two runs, and
+          * the menu is where it changes. */}
+        {/* No right margin: the chevron's own 20px box already holds the
+          * glyph 2px off the text, and any more read as two unrelated
+          * controls rather than one label-plus-picker. */}
+        <span className="shrink-0 truncate text-xs text-muted-foreground">
+          {preferred.launcherLabel}
+        </span>
         <button
           ref={chevronRef}
           type="button"
@@ -274,7 +354,10 @@ function NewChatButton() {
              * that already hovers to bg-muted, so its own states need
              * the one-step-darker surface to read. */
             + 'text-muted-foreground hover:bg-active hover:text-foreground focus-visible:opacity-100 '
-            + '[&_svg]:size-3.5 '
+            /* size-4, a step up from the sidebar's 14px glyphs: this
+             * chevron sits beside 11px text rather than 13px row text,
+             * so at 14px it read as a speck next to the word it opens. */
+            + '[&_svg]:size-4 '
             /* Always visible (muted): the arrow IS the discoverability of
              * the agent menu — hover-only would hide the affordance. */
             + (menuAnchor ? 'bg-active text-foreground' : '')
@@ -304,10 +387,11 @@ function NewChatButton() {
 }
 
 /** Ensure the chat panel is open with a tab running `agent` active — the
- *  blank-tab reuse rule shared by New Chat and the History resume path:
+ *  blank-tab reuse rule shared by New Chat, the History resume path, and
+ *  the titlebar chat toggle (its open-with-no-tabs case):
  *  reuse the one COMPLETELY blank tab (switching its agent in place when
  *  it differs), else create a fresh tab; open the panel when hidden. */
-function activateChatTabForAgent(
+export function activateChatTabForAgent(
   state: Pick<State, 'chatTabs' | 'chatOpen'>,
   dispatch: (a: Action) => void,
   agent: AgentKind,
@@ -365,14 +449,16 @@ function ScopeHistoryButton({
       <Button
         ref={buttonRef}
         variant="ghost"
-        size="icon-sm"
+        size="icon-xs"
         className="text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
         title={label}
         aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpenReported(!open)}
-      ><HistoryIcon /></Button>
+      >{/* Explicit size: icon-xs would otherwise render its own 12px
+          default, and every sidebar glyph is 14px. */}
+        <HistoryIcon className="size-3.5" /></Button>
       {open && (
         <Suspense
           fallback={(
@@ -461,7 +547,7 @@ function AddFolderMenuButton() {
       <Button
         ref={buttonRef}
         variant="ghost"
-        size="icon-sm"
+        size="icon-xs"
         className="text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
         title="Add folder to library"
         aria-label="Add folder to library"
@@ -472,7 +558,7 @@ function AddFolderMenuButton() {
           const rect = buttonRef.current?.getBoundingClientRect();
           if (rect) setAnchor(rect);
         }}
-      ><PlusIcon /></Button>
+      ><PlusIcon className="size-3.5" /></Button>
       {anchor && (
         <Menu
           anchor={{ rect: anchor, align: 'right' }}
@@ -504,6 +590,10 @@ function AddFolderMenuButton() {
  *  bottom-most global section. */
 function LibrarySections({ children }: { children?: React.ReactNode }) {
   const { state, actions, dispatch } = useApp();
+  // `children` is the Document Outline section (or false when no
+  // Markdown document is open) — it decides which bottom block carries
+  // the mt-auto anchor.
+  const hasOutline = Boolean(children);
   const semanticNoticeVisible = Boolean(
     state.semanticIndexing
     && ['awaiting-decision', 'paused', 'partial-paused'].includes(state.semanticIndexing.state),
@@ -758,12 +848,13 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
   return (
     <>
       {activePath && (
-        /* ACTIVE ZONE — the window's current folder. It sizes to its
-         * CONTENT up to a 60% cap so LIBRARY follows right after the tree
-         * ends; past the cap the tree scrolls internally. Same quiet pane
-         * surface as the rest of the sidebar — the pill rows carry the
-         * hierarchy, so no hairline or surface split. */
-        <section className="flex max-h-[60%] flex-none flex-col overflow-hidden">
+        /* ACTIVE ZONE — the window's current folder. It takes ALL the
+         * room the bottom dock leaves (flex-1) and scrolls the tree
+         * internally; a content-height cap would strand blank space
+         * between the tree and the dock. Same quiet pane surface as the
+         * rest of the sidebar — the pill rows carry the hierarchy, so no
+         * hairline or surface split. */
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ActiveFolderHeader
             name={activeName}
             path={activePath}
@@ -795,15 +886,21 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
       {/* LIBRARY sizes to its content too, shrinking (with an internal
         * scroll) only when the panel runs out of room — leftover blank
         * space falls below the last section, never between sections. */}
-      {/* While a folder is active the Library anchors to the sidebar
-        * BOTTOM (mt-auto) so the working tree keeps the room; with no
-        * folder it flows as the main content. */}
-      {/* pb lines the collapsed header's centre up with the rail's
-        * settings gear (rail pb-2.5 + h-7 button → centre 24px from the
-        * bottom; the 30px header centres at 15px, so 9px makes up the
-        * difference — change one side, change both). */}
-      <section className={(activePath ? 'mt-auto ' : 'mt-3 ') + 'flex min-h-0 flex-col overflow-hidden pb-[9px] ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
-        <div className="group/lib flex min-h-[30px] flex-none items-center gap-1.5 py-0.5 pr-2 pl-3.5">
+      {/* The Library lives in the sidebar's BOTTOM group — its position
+        * is fixed regardless of folder state, so opening a folder never
+        * makes the section jump. The mt-auto anchor sits on the FIRST
+        * block of that group: the Document Outline when one is shown,
+        * else here (two auto margins would split the free space). Only
+        * the default fold state changes: expanded in a no-folder window
+        * (it is the main content then), collapsed once a folder is
+        * active (see the presence-transition effect above). */}
+      {/* No bottom padding on the dock blocks: the next block's hairline
+        * separates — padding above a hairline reads as a white seam. */}
+      <section className={(hasOutline ? '' : 'mt-auto ') + 'flex min-h-0 flex-col overflow-hidden border-t border-border ' + (libraryExpanded ? 'flex-initial' : 'flex-none')}>
+        {/* VS Code-style narrow tinted strip: shorter than the 28px
+          * rows, quiet bg tint, full-bleed. Action buttons run icon-xs
+          * (24px) so the strip can stay 26px. */}
+        <div className="group/lib flex min-h-[26px] flex-none items-center gap-1.5 bg-muted/45 pr-2 pl-3.5">
           <button
             type="button"
             className={sectionToggleClass + ' flex-none'}
@@ -812,10 +909,11 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
             onClick={() => setLibraryExpanded((expanded) => !expanded)}
           >
             {/* Same treatment as the active-folder header: the Library
-              * glyph at rest, the fold chevron under the pointer. */}
-            <span className="inline-flex size-4 flex-none items-center justify-center [&_svg]:size-3.5">
-              <LibraryIcon className="group-hover/lib:hidden" />
-              <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/lib:inline-flex' + (libraryExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span>
+              * glyph at rest, the fold chevron under the pointer — both
+              * at the app-wide 14px, inside the 16px grid slot. */}
+            <span className="inline-flex size-4 flex-none items-center justify-center">
+              <LibraryIcon className="size-3.5 group-hover/lib:hidden" />
+              <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/lib:inline-flex [&_svg]:size-3.5' + (libraryExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span>
             </span>
             <span className={sectionTitleClass}>Library</span>
           </button>
@@ -832,12 +930,14 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
         </div>
         <div id="sidebar-files-section" className={libraryExpanded ? 'flex min-h-0 flex-col overflow-hidden' : 'hidden'}>
           {showZeroState ? <ZeroFolderState /> : (
-            /* With a folder active the list is a fixed-height window: up
-             * to five 28px rows plus a half-row peek — the peek is the
-             * scroll affordance (macOS scrollbars stay hidden until the
-             * user scrolls); shorter memberships size to content. With no
-             * folder the Library IS the panel content, so no cap. */
-            <div className={(activePath ? 'max-h-[154px] ' : '') + 'scrollbar-quiet min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5 pb-2'}>
+            /* One height in BOTH states: up to five 28px rows plus a
+             * half-row peek — the peek is the scroll affordance (macOS
+             * scrollbars stay hidden until the user scrolls); shorter
+             * memberships size to content. Letting the no-folder window
+             * grow the list instead made the same section change size
+             * when a folder opened, so the dock moved under the pointer
+             * exactly when the user was aiming at it. */
+            <div className="scrollbar-quiet max-h-[154px] min-h-0 flex-[1_1_auto] overflow-y-auto px-1.5">
               {plan.visible.map((entry) => {
                 const name = basenameOfPath(entry.path);
                 const opening = openingFolder?.path === entry.path;
@@ -852,6 +952,7 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                   >
                     <button
                       type="button"
+                      aria-label={name}
                       className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent py-1 pr-1 pl-2 text-left text-base text-foreground/80 group-hover/root:text-foreground disabled:cursor-default"
                       disabled={!!openingFolder}
                       title={entry.path}
@@ -859,16 +960,15 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                     >
                       {/* Leading 16px slot: muted folder glyph (spinner while
                         * opening); favorites carry a small star overlay at the
-                        * glyph's corner instead of a second leading icon. */}
-                      {/* size-4 icons match the file tree's 16px leading
-                        * glyphs — rows share one icon size; the quieter
-                        * 14px tier belongs to section headers. */}
+                        * glyph's corner instead of a second leading icon.
+                        * Glyphs at the app-wide 14px inside the 16px slot,
+                        * matching the file tree rows. */}
                       <span className="relative inline-flex size-4 flex-none items-center justify-center text-muted-foreground">
                         {opening
-                          ? <SyncIcon className="size-4 animate-spin" />
-                          : <FolderIcon className="size-4" />}
+                          ? <SyncIcon className="size-3.5 animate-spin" />
+                          : <FolderIcon className="size-3.5" />}
                         {!opening && entry.favorite && (
-                          <StarIcon className="absolute -right-1 -bottom-0.5 size-2 fill-current" aria-label="Favorite" />
+                          <StarFilledIcon className="absolute -right-1 -bottom-0.5 size-2" aria-label="Favorite" />
                         )}
                       </span>
                       <span className="min-w-0 truncate">{name}</span>
@@ -883,11 +983,11 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
                     </button>
                     <span
                       /* Same geometry as the Library header's cluster:
-                       * icon-sm buttons, gap-0.5, and an 8px effective
-                       * right inset (container px-1.5 + row pr-0.5 =
-                       * the header's pr-2) — so the clock and trailing
-                       * icons form two clean columns across header and
-                       * rows. Change one side, change both. */
+                       * icon-xs (24px) buttons, gap-0.5, and an 8px
+                       * effective right inset (container px-1.5 + row
+                       * pr-0.5 = the header's pr-2) — all three must
+                       * match or the clock lands in a different column
+                       * per row. Change one side, change both. */
                       className={`flex items-center gap-0.5 ${
                         menuOpen || historyOpenPath === entry.path ? '' : 'opacity-0 transition-opacity duration-fast group-focus-within/root:opacity-100 group-hover/root:opacity-100'
                       }`}
@@ -1021,7 +1121,7 @@ function RootMenuButton({
   return (
     <Button
       variant="ghost"
-      size="icon-sm"
+      size="icon-xs"
       className="shrink-0 text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
       aria-label={`More actions for ${name}`}
       aria-haspopup="menu"
@@ -1031,7 +1131,7 @@ function RootMenuButton({
         onMenu(e.currentTarget.getBoundingClientRect());
       }}
     >
-      <MoreHorizontalIcon />
+      <MoreHorizontalIcon className="size-3.5" />
     </Button>
   );
 }
@@ -1086,28 +1186,40 @@ function ActiveFolderHeader({
     <div
       id="sideHead"
       className={
-        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-1 pl-2 hover:bg-muted'
+        /* pr-0.5 (not pr-1): with the row's mx-1.5 that lands the action
+         * cluster on the same 8px right inset as the Library header and
+         * its rows, so every action icon in the sidebar shares one
+         * column. */
+        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-0.5 pl-2 hover:bg-muted'
         + (sideHeadDrop ? ' drop-target' : '')
       }
       onDragOver={onSideHeadDragOver}
       onDragLeave={onSideHeadDragLeave}
       onDrop={onSideHeadDrop}
     >
-      <span className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-foreground">
+      <span className="flex min-w-0 flex-1 items-center gap-2 text-foreground">
         {/* Folder glyph at rest; the pointer swaps in the fold chevron so
           * the collapse affordance appears only when it's actionable. */}
-        <span
-          className="inline-flex size-4 flex-none items-center justify-center text-muted-foreground [&_svg]:size-3.5"
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="size-4 flex-none rounded-sm p-0 text-muted-foreground hover:bg-transparent"
+          aria-label={`${state.folderCollapsed ? 'Expand' : 'Collapse'} files in ${name}`}
+          aria-expanded={!state.folderCollapsed}
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
         >
-          <FolderIcon className="group-hover/head:hidden" />
-          <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/head:inline-flex' + (state.folderCollapsed ? ' -rotate-90' : '')}><ChevronDownIcon /></span>
-        </span>
-        <span
-          className="min-w-0 flex-1 truncate text-base font-medium"
+          <FolderIcon className="size-3.5 group-hover/head:hidden" />
+          <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/head:inline-flex [&_svg]:size-3.5' + (state.folderCollapsed ? ' -rotate-90' : '')}><ChevronDownIcon /></span>
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto min-w-0 flex-1 shrink justify-start truncate p-0 text-left text-base font-medium text-foreground hover:bg-transparent hover:text-foreground active:translate-y-0"
+          aria-label={`Select ${name} folder root`}
           title={path}
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}
-        >{name}</span>
+        >{name}</Button>
         {favorite && (
           <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
         )}
@@ -1176,10 +1288,11 @@ function NewNoteButton() {
   return (
     <Button
       variant="ghost"
-      size="icon-sm"
+      size="icon-xs"
       className="text-muted-foreground"
       title={'New note in ' + target}
+      aria-label={'New note in ' + target}
       onClick={() => void actions.newNote()}
-    ><NewFileIcon /></Button>
+    ><NewFileIcon className="size-3.5" /></Button>
   );
 }

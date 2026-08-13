@@ -44,9 +44,26 @@ test('chrome type scale and radius scale are the only visual values', () => {
   // Brand role: the amber counterpoint is a named token, so warmth-budget
   // surfaces never restate the literal.
   assert.match(styles, /--color-accent-amber: var\(--accent-amber\);/);
-  for (const [name, px] of [['sm', 'var(--radius-control)'], ['md', 'var(--radius-ui)'], ['lg', '8px'], ['xl', '10px']]) {
-    assert.match(styles, new RegExp(`--radius-${name}: ${px.replace(/[()*]/g, (c) => '\\' + c)};`));
+  // Every corner step forwards a globals.css role instead of restating a
+  // literal — that is what lets styles/*.css reach the same roles through
+  // var(--radius-container) and friends, and what keeps one edit re-shaping
+  // the whole app. lg/xl/2xl collapsing onto ONE container role is the
+  // contract, not an oversight: boxes are not graded by size here, so a
+  // component reaching for any of the three must land on the same corner.
+  for (const [name, role] of [
+    ['xs', 'var(--radius-xs)'],
+    ['sm', 'var(--radius-control)'],
+    ['md', 'var(--radius-ui)'],
+    ['lg', 'var(--radius-container)'],
+    ['xl', 'var(--radius-container)'],
+    ['2xl', 'var(--radius-container)'],
+  ]) {
+    assert.match(styles, new RegExp(`--radius-${name}: ${role.replace(/[()*]/g, (c) => '\\' + c)};`));
   }
+  // Buttons are items, not boxes. If the base ever reaches for a container
+  // step, every 32px button silently becomes a capsule.
+  const button = read('web-src/src/components/ui/button.tsx');
+  assert.doesNotMatch(button, /rounded-(lg|xl|2xl)/);
 
   // Legacy CSS stays on the shared scale: no half-pixel chrome sizes, no
   // off-palette accent blues, no odd font weights. (.doc rendered-document
@@ -57,6 +74,13 @@ test('chrome type scale and radius scale are the only visual values', () => {
   assert.doesNotMatch(legacy, /font-size: calc\((9|10|11|13)\.5px/);
   assert.doesNotMatch(legacy, /font-weight: *(650|800)\b/);
   assert.doesNotMatch(legacy, /46, ?116, ?230|#4a8cff|#4f7cff/);
+  // Corners come off the scale too. The transcript's jump-to-latest
+  // capsule is the one sanctioned literal — a 999px pill is a shape, not
+  // a scale step, and it opts out of the squircle for the same reason.
+  assert.deepEqual(legacy.match(/border-radius: *\d+px/g) ?? [], ['border-radius: 999px']);
+  // The squircle is what makes the corners read as continuous rather than
+  // merely large; losing it silently would flatten the whole app.
+  assert.match(legacy, /corner-shape: squircle;/);
   const doc = read('web-src/src/styles/mainpane.css');
   const halfPixel = doc.match(/12\.5px/g) ?? [];
   assert.ok(halfPixel.length <= 2, `unexpected half-pixel sizes outside .doc: ${halfPixel.length}`);
@@ -71,6 +95,9 @@ test('chrome type scale and radius scale are the only visual values', () => {
       const source = read(path.join(dir, file));
       assert.doesNotMatch(source, /text-\[calc\(/, `${dir}/${file} uses an arbitrary scaled font size — use the text-* ramp`);
       assert.doesNotMatch(source, /bg-\[var\(--hover\)\]/, `${dir}/${file} uses bg-[var(--hover)] — use bg-muted`);
+      // Placeholders are one role, not a per-field opacity guess. Four
+      // fields had drifted to three different values before this landed.
+      assert.doesNotMatch(source, /placeholder:text-(?!placeholder\b)/, `${dir}/${file} styles a placeholder off-role — use placeholder:text-placeholder`);
     }
   }
 });
@@ -101,6 +128,28 @@ test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
   const globals = read('web-src/src/styles/globals.css');
   assert.match(globals, /transition-property: opacity, color, background-color/);
   assert.match(globals, /animation-duration: 0\.01ms !important/);
+});
+
+test('Markdown Find controller registration is independent of changing action-bag identity', () => {
+  const markdown = read('web-src/src/components/CrepeDocument.tsx');
+  assert.match(markdown, /const registerFindController = actions\.registerFindController/);
+  assert.match(markdown, /\[active, creationState, registerFindController\]/);
+  assert.doesNotMatch(markdown, /registerFindController\(null\);\n  \}, \[actions, active\]\)/);
+});
+
+test('PDF load and Find registration are independent of changing action-bag identity', () => {
+  const pdf = read('web-src/src/components/PdfPreview.tsx');
+  assert.match(pdf, /\}, \[fileUrl\]\);/);
+  assert.match(pdf, /\[doc, numPages, registerFindController\]/);
+  assert.match(pdf, /function scrollToPage[\s\S]*updateTabPdfPage\(activeTab\.id, targetPage\)/);
+  assert.doesNotMatch(pdf, /\[fileUrl, actions\]/);
+});
+
+test('JSON Find registration is independent of changing action-bag identity', () => {
+  const json = read('web-src/src/components/JsonDocument.tsx');
+  assert.match(json, /const registerFindController = actions\.registerFindController/);
+  assert.match(json, /\[registerFindController, active\]/);
+  assert.doesNotMatch(json, /\[actions, active\]/);
 });
 
 test('shared interaction surfaces delegate behavior to the renderer UI layer', () => {
@@ -179,6 +228,46 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(popover, /<PopoverPrimitive\.Popup[\s\S]*\{\.\.\.props\}/);
 
   const tree = read('web-src/src/components/FileTree.tsx');
-  assert.match(tree, /tabIndex=\{-1\}/);
+  assert.match(tree, /tabIndex=\{treeFocus\.rovingPath === node\.path \? 0 : -1\}/);
+  assert.match(tree, /tabIndex=\{treeFocus\.rovingPath === path \? 0 : -1\}/);
   assert.match(tree, /currentTarget as HTMLElement\)\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(tree, /role="tree"/);
+  assert.match(tree, /aria-label="Files"/);
+  assert.match(tree, /role="treeitem"/);
+  assert.match(tree, /aria-selected=\{isActive\}/);
+
+  const tabs = read('web-src/src/components/TabStrip.tsx');
+  assert.match(tabs, /role="tablist"/);
+  assert.match(tabs, /aria-label="Open documents"/);
+  assert.match(tabs, /role="tab"/);
+  assert.match(tabs, /aria-selected=\{isActive\}/);
+  assert.match(tabs, /aria-label=\{`Close \$\{label\}`\}/);
+  assert.match(tabs, /aria-controls="document-panel"/);
+  assert.doesNotMatch(tabs, /aria-controls=\{`document-panel-\$\{t\.id\}`\}/);
+
+  const mainPane = read('web-src/src/components/MainPane.tsx');
+  assert.match(mainPane, /id=\{activeTab \? 'document-panel' : undefined\}/);
+
+  const sidebar = read('web-src/src/components/Sidebar.tsx');
+  assert.match(sidebar, /aria-label=\{`Select \$\{name\} folder root`\}/);
+  assert.match(sidebar, /aria-label=\{'New note in ' \+ target\}/);
+  assert.match(sidebar, /<Button\s+type="button"\s+variant="ghost"[\s\S]{0,400}aria-label=\{`Select \$\{name\} folder root`\}/);
+
+  const chat = read('web-src/src/components/ChatPane.tsx');
+  assert.match(chat, /role="tablist"/);
+  assert.match(chat, /aria-label="Chat sessions"/);
+  assert.match(chat, /aria-controls=\{chatPanelId\(tab\.id\)\}/);
+  assert.match(chat, /aria-labelledby=\{chatTabId\(tab\.id\)\}/);
+
+  const messages = read('web-src/src/components/agent/AgentMessages.tsx');
+  assert.match(messages, /role="log"/);
+  assert.match(messages, /aria-label="Agent conversation"/);
+
+  const markdown = read('web-src/src/components/CrepeDocument.tsx');
+  assert.match(markdown, /role="region"/);
+  assert.match(markdown, /aria-label=\{`\$\{documentBasename\(name\)\} Markdown document`\}/);
+
+  const json = read('web-src/src/components/JsonDocument.tsx');
+  assert.match(json, /role="region"/);
+  assert.match(json, /aria-label="JSON document"/);
 });

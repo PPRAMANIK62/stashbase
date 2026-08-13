@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '../store/AppContext';
+import { openLibrarySearch } from './LibrarySearch';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
@@ -26,7 +27,7 @@ const FIND_TOGGLE_CLASS =
   'px-1.5 font-semibold tracking-wide text-muted-foreground aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent';
 
 export function FindBar() {
-  const { state, actions, dispatch } = useApp();
+  const { state, actions } = useApp();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Re-focus on every open transition — Cmd+F'ing while the bar is
@@ -47,16 +48,19 @@ export function FindBar() {
   const hasQuery = query.length > 0;
   const noMatch = hasQuery && total === 0;
 
+  /** Escalate find-in-document to the search popup, carrying the query
+   *  over. This bar's Aa / Word latches stay behind: the popup has no such
+   *  controls, so sending them would leave it matching by rules the user
+   *  can neither see nor undo there. Folder scope: "all files" here means
+   *  the files around this document, not the whole library. */
   function searchAllFiles() {
     const q = query.trim();
     if (!q) return;
-    dispatch({ type: 'FILTER', q });
-    dispatch({ type: 'SEARCH_MODE', mode: 'keyword' });
-    dispatch({ type: 'SEARCH_CASE_STRICT', strict: caseSensitive });
-    dispatch({ type: 'SEARCH_WHOLE_WORD', on: wholeWord });
-    dispatch({ type: 'SIDEBAR_VIEW', view: 'search' });
-    dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: false });
-    void actions.runSearch(q, 'keyword', { caseStrict: caseSensitive, wholeWord });
+    openLibrarySearch({
+      query: q,
+      mode: 'keyword',
+      scope: state.folderPath ? { kind: 'folder', path: state.folderPath } : { kind: 'library' },
+    });
   }
 
   return (
@@ -72,7 +76,7 @@ export function FindBar() {
       <Input
         ref={inputRef}
         className={
-          'h-6 w-45 rounded-sm px-1.5 text-sm' +
+          'h-6 w-45 px-1.5 text-sm' +
           (noMatch ? ' border-destructive text-destructive' : '')
         }
         type="text"

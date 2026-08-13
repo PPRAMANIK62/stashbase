@@ -87,9 +87,9 @@
       --stash-code-gutter: color-mix(in srgb, var(--surface-sunken) 92%, var(--surface-base));
       --stash-code-current-line: color-mix(in srgb, var(--accent) 16%, var(--surface-sunken));
       --stash-code-selection: color-mix(in srgb, var(--accent) 34%, var(--surface-sunken));
-      --crepe-font-title: ui-serif, Georgia, Cambria, serif;
+      --crepe-font-title: var(--font-serif);
       --crepe-font-default: inherit;
-      --crepe-font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --crepe-font-code: var(--font-mono);
       --crepe-shadow-1: 0 12px 28px rgba(var(--shadow-color), .24), 0 2px 7px rgba(var(--shadow-color), .16);
       --crepe-shadow-2: 0 18px 44px rgba(var(--shadow-color), .28), 0 4px 12px rgba(var(--shadow-color), .18);
     }
@@ -115,7 +115,17 @@
     .crepe-shell .image-edit .placeholder .text,
     .crepe-shell .image-edit .confirm { display: none; }
     .crepe-shell .ProseMirror table { display: block; max-width: 100%; overflow-x: auto; }
-    .crepe-shell .ProseMirror pre { border: 1px solid var(--border); border-radius: 8px; }
+    .crepe-shell .ProseMirror pre { border: 1px solid var(--border); border-radius: var(--radius-container); }
+    /* Crepe's default divider is a solid block bar that reads far too heavy
+     * in a reading surface. Neutralize it to the same true-0.5px hairline as
+     * the reading view's `.doc hr` (see that rule for the scaleY trick). */
+    .crepe-shell .ProseMirror hr {
+      border: 0;
+      height: 1px;
+      background: color-mix(in srgb, var(--border) 85%, transparent);
+      transform: scaleY(0.5);
+      margin: 2em 0;
+    }
     /* CodeMirror ships its own active-line and selection paints. Those are
        independent of Crepe's variables, so map them explicitly to the same
        semantic dark/light surface roles rather than letting a light fallback
@@ -217,7 +227,7 @@
     .crepe-shell .ProseMirror blockquote.stashbase-alert {
       --alert-color: var(--accent);
       border-left: 4px solid var(--alert-color);
-      border-radius: 6px;
+      border-radius: var(--radius-container);
       background: color-mix(in srgb, var(--alert-color) 10%, transparent);
       padding: 10px 14px;
     }
@@ -245,7 +255,7 @@
      * pulse; rects are positioned inline by PdfPreview. */
     .pdf-page-highlight {
       position: absolute;
-      border-radius: 4px;
+      border-radius: var(--radius-xs);
       background: rgba(var(--accent-rgb), 0.18);
       box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.42);
       animation: pdf-hit-pulse 1.6s ease-out 1;
@@ -300,7 +310,10 @@
       background: transparent;
       color: var(--muted);
       cursor: pointer;
-      font-size: calc(13px * var(--ui-scale));
+      /* 12 (text-sm), the scale's dense-repeating-chip step — a tab strip
+       * is exactly that, not body text. The chat strip matches
+       * (ChatPane.tsx); the two are one role at one size. */
+      font-size: calc(12px * var(--ui-scale));
       user-select: none;
     }
     .tab:hover {
@@ -318,13 +331,6 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-    /* VS Code-style preview tabs: italic label is the visual cue that
-     * the tab is "tentative" and the next single-click in the sidebar
-     * will replace its content. Promoted to pinned (regular text) by
-     * double-clicking either the sidebar file or the tab title. */
-    .tab.preview .tab-label {
-      font-style: italic;
     }
 
     /* Drag-reorder (HTML5 DnD, mirrors FileTree's drop-indicator
@@ -348,7 +354,7 @@
       color: var(--muted);
       font-size: calc(14px * var(--ui-scale));
       line-height: 1;
-      border-radius: 4px;
+      border-radius: var(--radius-control);
       cursor: pointer;
       padding: 0;
       display: grid;
@@ -371,7 +377,7 @@
       color: var(--muted);
       font-size: calc(18px * var(--ui-scale));
       line-height: 1;
-      border-radius: 4px;
+      border-radius: var(--radius-ui);
       cursor: pointer;
       padding: 0;
       margin-left: 2px;
@@ -433,14 +439,14 @@
 
     .doc code {
       background: var(--pane);
-      border-radius: 4px;
+      border-radius: var(--radius-xs);
       padding: 1px 5px;
-      font: 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      font: 12.5px/1 var(--font-mono);
     }
 
     .doc pre {
       background: var(--pane);
-      border-radius: 6px;
+      border-radius: var(--radius-container);
       padding: 14px 16px;
       overflow-x: auto;
       margin: 1em 0;
@@ -469,9 +475,16 @@
       margin: .25em 0;
     }
 
+    /* A section divider is a whisper, not a rule. Below 1px a plain border
+     * either rounds back up or vanishes, so paint a 1px block and halve it
+     * with scaleY(0.5): a true 0.5px line — one physical pixel on a Retina
+     * display, the thinnest a screen can draw. Static transform, so reduced
+     * motion is unaffected. Both themes re-resolve via --border. */
     .doc hr {
       border: 0;
-      border-top: 1px solid var(--border);
+      height: 1px;
+      background: color-mix(in srgb, var(--border) 85%, transparent);
+      transform: scaleY(0.5);
       margin: 2em 0;
     }
 
@@ -514,7 +527,7 @@
       display: flex;
       flex-direction: column;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--radius-container);
       overflow: hidden;
       margin: 4px 0;
       max-height: 320px;
@@ -542,7 +555,7 @@
       display: inline-flex;
       flex-shrink: 0;
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: var(--radius-container);
       overflow: hidden;
     }
     .migrate-choice {
@@ -591,7 +604,7 @@
       gap: 8px 14px;
       padding: 10px 12px;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--radius-container);
       background: var(--card);
     }
 

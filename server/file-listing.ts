@@ -53,6 +53,7 @@ interface PreviewCacheEntry {
   imported_at: string;
 }
 const previewCache = new Map<string, PreviewCacheEntry>();
+const TEXT_PREVIEW_BYTES = 4096;
 
 onSwitch(() => previewCache.clear());
 
@@ -123,13 +124,10 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
   }
 
   const noteStems = new Set<string>();
-  const legacyDerivedStems = new Set<string>();
   for (const e of entries) {
     if (!e.isFile()) continue;
     const m = e.name.match(/^(.+)\.(md|markdown|html|htm|pdf)$/i);
     if (m) noteStems.add(m[1]);
-    const src = e.name.match(LEGACY_DERIVED_SOURCE_RE);
-    if (src) legacyDerivedStems.add(src[1]);
   }
 
   const acceptedEntries: fs.Dirent[] = [];
@@ -137,11 +135,14 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
     if (isCloudPlaceholderName(e.name)) continue;
     if (e.isDirectory() && isHiddenDirName(e.name)) continue;
     if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
-    if (e.isFile() && e.name.startsWith('.')) {
-      if (isDerivedScratchName(e.name)) continue;
-      if (isDerivedNoteName(e.name)) continue;
-      if (isLegacyDerivedNoteName(e.name, legacyDerivedStems)) continue;
-    }
+    /* Dot-FILES are invisible infrastructure — .DS_Store, tool configs,
+     * our own derived artifacts. Every file manager hides them, so they
+     * are neither listed nor tallied as "unsupported": disclosing files
+     * the user cannot see reads as a bug ("2 files (no extension)"),
+     * not as information. A folder holding only dot-files thus counts
+     * as physically empty and stays visible as an empty folder. Dot
+     * DIRECTORIES are pruned above by isHiddenDirName. */
+    if (e.isFile() && e.name.startsWith('.')) continue;
     if (e.isDirectory() && e.name.endsWith('_files')) {
       const stem = e.name.slice(0, -'_files'.length);
       if (noteStems.has(stem)) continue;
@@ -203,7 +204,20 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
           entry = { heading: '', snippet: '', imported_at };
         } else {
           let content: string;
-          try { content = fs.readFileSync(full, 'utf8'); } catch { continue; }
+          try {
+            if (format === 'json') {
+              const fd = fs.openSync(full, 'r');
+              try {
+                const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, st.size));
+                const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+                content = buffer.subarray(0, bytesRead).toString('utf8');
+              } finally {
+                fs.closeSync(fd);
+              }
+            } else {
+              content = fs.readFileSync(full, 'utf8');
+            }
+          } catch { continue; }
           const { heading, snippet } = preview(content, format);
           const imported_at = st.mtime.toISOString();
           previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
@@ -362,7 +376,9 @@ function preview(
   content: string,
   format: FileFormat,
 ): { heading: string; snippet: string } {
-  return format === 'md' ? previewMarkdown(content) : previewHtml(content);
+  if (format === 'md') return previewMarkdown(content);
+  if (format === 'html') return previewHtml(content);
+  return { heading: '', snippet: content.replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim().slice(0, 80) };
 }
 
 function previewMarkdown(md: string): { heading: string; snippet: string } {

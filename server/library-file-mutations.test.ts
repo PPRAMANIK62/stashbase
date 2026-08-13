@@ -93,6 +93,39 @@ test('MCP library mutations work outside an active folder and enforce versions',
   assert.equal(fs.readFileSync(source, 'utf8'), 'version one');
   assert.equal(folder.getCurrentFolder(), null);
 
+  const corruptedFormula = `[
+P_0=\frac{EPS_{\text{FY28}}\times PE}{1+r}
+]`;
+  assert.match(corruptedFormula, /[\u0008\u000c]/);
+  const corruptedSource = path.join(root, 'Drafts', 'Corrupted formula.md');
+  await assert.rejects(
+    callTool(base, token, 'write_file', {
+      path: corruptedSource,
+      content: corruptedFormula,
+    }),
+    /INVALID_TEXT_CONTENT|String\.raw/,
+  );
+  assert.equal(fs.existsSync(corruptedSource), false);
+
+  const literalFormula = String.raw`$$
+P_0=\frac{EPS_{\text{FY28}}\times PE}{1+r}
+$$`;
+  const formulaCreated = await callTool(base, token, 'write_file', {
+    path: corruptedSource,
+    content: literalFormula,
+  });
+  assert.equal(fs.readFileSync(corruptedSource, 'utf8'), literalFormula);
+  await assert.rejects(
+    callTool(base, token, 'edit_file', {
+      path: corruptedSource,
+      old_text: 'PE',
+      new_text: corruptedFormula,
+      baseVersion: formulaCreated.version,
+    }),
+    /INVALID_TEXT_CONTENT|String\.raw/,
+  );
+  assert.equal(fs.readFileSync(corruptedSource, 'utf8'), literalFormula);
+
   const updated = await callTool(base, token, 'write_file', {
     path: source,
     content: 'version two',
@@ -128,6 +161,34 @@ test('MCP library mutations work outside an active folder and enforce versions',
   const deleted = await callTool(base, token, 'delete_file', { path: target });
   assert.equal(deleted.alreadyGone, false);
   assert.equal(fs.existsSync(target), false);
+
+  const jsonSource = path.join(root, 'Data', 'config.JSON');
+  const jsonTarget = path.join(root, 'Archive', 'config.JSON');
+  const jsonCreated = await callTool(base, token, 'write_file', {
+    path: jsonSource,
+    content: '\uFEFF{\r\n  "z": 1,\r\n  "broken":\r\n',
+  });
+  const jsonRead = await callTool(base, token, 'read_file', { path: jsonSource });
+  assert.equal(jsonRead.format, 'json');
+  assert.equal(jsonRead.content, '\uFEFF{\r\n  "z": 1,\r\n  "broken":\r\n');
+  const jsonEdited = await callTool(base, token, 'edit_file', {
+    path: jsonSource,
+    old_text: '"z": 1',
+    new_text: '"z": 2',
+    baseVersion: jsonCreated.version,
+  });
+  assert.equal(jsonEdited.replacements, 1);
+  assert.equal(fs.readFileSync(jsonSource, 'utf8'), '\uFEFF{\r\n  "z": 2,\r\n  "broken":\r\n');
+  await assert.rejects(callTool(base, token, 'write_file', {
+    path: jsonSource,
+    content: '{}',
+    baseVersion: jsonCreated.version,
+  }), /409|FILE_CHANGED/);
+  await callTool(base, token, 'move_file', { path: jsonSource, new_path: jsonTarget });
+  assert.equal(fs.existsSync(jsonSource), false);
+  assert.equal(fs.readFileSync(jsonTarget, 'utf8').includes('"z": 2'), true);
+  await callTool(base, token, 'delete_file', { path: jsonTarget });
+  assert.equal(fs.existsSync(jsonTarget), false);
 
   const audioSource = path.join(root, 'Recordings', 'meeting.wav');
   const audioTarget = path.join(root, 'Archive', 'meeting.wav');

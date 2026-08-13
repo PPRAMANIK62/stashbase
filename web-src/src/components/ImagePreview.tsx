@@ -39,7 +39,8 @@ const clampScale = (v: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
 export function ImagePreview({ name }: { name: string }) {
   const { state, activeTab } = useApp();
   const sourceVersion = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
-  const src = useMemo(() => versionedAssetUrl(name, sourceVersion), [name, sourceVersion]);
+  const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
+  const src = useMemo(() => versionedAssetUrl(name, sourceVersion, sourceFolder), [name, sourceVersion, sourceFolder]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef({ folderPath: state.folderPath, name });
   currentRef.current = { folderPath: state.folderPath, name };
@@ -107,7 +108,7 @@ export function ImagePreview({ name }: { name: string }) {
     const stillCurrent = () =>
       currentRef.current.folderPath === folderPathAtStart && currentRef.current.name === nameAtStart;
     try {
-      await api.reprocessFile(name, { folder: folderPathAtStart || undefined });
+      await api.reprocessFile(name, { folder: sourceFolder ?? (folderPathAtStart || undefined) });
       // The failures list / banner clear on the next index-status poll.
     } catch (err: unknown) {
       if (!stillCurrent()) return;

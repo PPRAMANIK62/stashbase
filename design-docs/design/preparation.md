@@ -5,7 +5,9 @@ preserving the original file as the user's visible object.
 
 ## Current
 
-- Markdown is directly readable and indexable from its source.
+- Markdown and JSON are directly readable and indexable from their source.
+- JSON is structured data, not a note or preparation format; valid and
+  malformed files use their raw source text and never gain derived output.
 - HTML remains visible as source content while its text can support retrieval.
 - PDFs retain native preview and gain derived text for Agent reading and search.
 - DOCX retains a readable source-based preview and gains derived retrieval text.
@@ -25,7 +27,7 @@ preserving the original file as the user's visible object.
 - The UI distinguishes preparing, ready, unavailable, failed, and retryable
   states when that changes the user's next action.
 - Derived output is valid only when it corresponds to the current source.
-- Conversion completion and semantic indexing completion are different states.
+- Conversion completion and AI Index readiness are different states.
 
 ## Contribution Map
 

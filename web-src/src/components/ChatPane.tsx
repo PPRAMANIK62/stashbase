@@ -19,6 +19,8 @@ import { rememberPreferredAgent } from '../agentPreference';
 /** One tab body. Inactive panes stay mounted (preserving each session's
  *  state) but render invisible and inert. */
 const tabPaneClass = 'absolute inset-0 flex flex-col';
+const chatTabId = (id: string) => `chat-tab-${id}`;
+const chatPanelId = (id: string) => `chat-panel-${id}`;
 
 /** The inside of one tab body; `status` styles the "no active chat" notice
  *  and the lazy-load error fallback. */
@@ -60,30 +62,72 @@ export function ChatPane() {
   const activeId = state.activeChatTabId;
 
   return (
-    <div
+    <aside
       className="chat-pane-shell"
+      aria-label="Agent chat"
       aria-hidden={!state.chatOpen || undefined}
       inert={!state.chatOpen || undefined}
     >
       {/* Cursor-style tab strip. Scrolls horizontally when many tabs are
         * open; new tabs come from the sidebar's New Chat button, so it is
-        * tabs-only. */}
-      <div className="flex min-h-8 items-stretch gap-1 px-1.5 pt-1.5 pb-1">
-        <div className="scrollbar-quiet flex flex-1 gap-0.5 overflow-x-auto overflow-y-hidden">
-          {tabs.map((tab) => (
+        * tabs-only. pr-10 reserves the window's top-right corner for the
+        * shell's floating chat toggle (TitlebarControls).
+        *
+        * Geometry mirrors the document strip (`.tab-strip` in
+        * mainpane.css): 6px above, NOTHING below, tabs bottom-aligned.
+        * The two strips sit side by side across the window, so a 4px
+        * bottom pad here left the chat tabs floating above a line the
+        * document tabs sat on. Change one, change both. */}
+      <div className="chat-tab-row flex min-h-8 items-end gap-1 pt-1.5 pr-10 pl-2">
+        <div
+          className="scrollbar-quiet flex flex-1 gap-0.5 overflow-x-auto overflow-y-hidden"
+          role="tablist"
+          aria-label="Chat sessions"
+        >
+          {tabs.map((tab, index) => (
             <div
               key={tab.id}
               className={cn(
                 // text-base (13px) matches the document tabs in the main
                 // pane — the two tab strips are one role, one size.
-                'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-md border border-transparent border-b-0 py-1 pr-1.5 pl-2.5 text-base whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
-                tab.id === activeId && 'border-border bg-background pb-1.25 font-medium text-foreground hover:bg-background',
+                // text-sm (12px) + py-1.5 (6px) = the document tab's exact
+                // type size and vertical padding, so both strips' tabs
+                // stand the same height in the same voice.
+                'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-md border border-transparent border-b-0 py-1.5 pr-1.5 pl-2.5 text-sm whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
+                // bg-canvas, not bg-background: an active tab takes the
+                // colour of the surface it fronts, and this one fronts
+                // the chat canvas — `bg-background` is the document
+                // pane's paper white, which made the tab a bright chip
+                // floating on a panel it is supposed to open into. The
+                // border, weight, and text colour carry the selection.
+                tab.id === activeId && 'border-border bg-canvas font-medium text-foreground hover:bg-canvas',
               )}
               role="tab"
+              id={chatTabId(tab.id)}
               aria-selected={tab.id === activeId}
+              aria-controls={chatPanelId(tab.id)}
+              tabIndex={tab.id === activeId ? 0 : -1}
               onClick={() => {
                 if (isAgentKind(tab.agent)) rememberPreferredAgent(tab.agent);
                 dispatch({ type: 'CHAT_TAB_ACTIVATE', id: tab.id });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  dispatch({ type: 'CHAT_TAB_ACTIVATE', id: tab.id });
+                  return;
+                }
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const nextIndex = event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? tabs.length - 1
+                    : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+                const next = tabs[nextIndex];
+                if (!next) return;
+                dispatch({ type: 'CHAT_TAB_ACTIVATE', id: next.id });
+                requestAnimationFrame(() => document.getElementById(chatTabId(next.id))?.focus());
               }}
               title={tab.title}
             >
@@ -115,6 +159,8 @@ export function ChatPane() {
             key={tab.id}
             className={cn(tabPaneClass, tab.id === activeId ? 'visible' : 'invisible pointer-events-none')}
             role="tabpanel"
+            id={chatPanelId(tab.id)}
+            aria-labelledby={chatTabId(tab.id)}
             aria-hidden={tab.id !== activeId}
           >
             <ChatSessionBoundary tabId={tab.id} active={tab.id === activeId}>
@@ -139,6 +185,6 @@ export function ChatPane() {
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }
