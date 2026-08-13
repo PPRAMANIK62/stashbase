@@ -6,10 +6,15 @@ import type { Locator } from 'playwright';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { dismissEmbeddingKeyPrompt, ensureLibraryExpanded, folderButton } from '../support/locators.ts';
+import { dismissEmbeddingKeyPrompt, ensureLibraryExpanded, fileTreeRow, folderButton } from '../support/locators.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FAKE_CODEX = path.resolve(HERE, '..', 'fixtures', 'fake-codex-app-server.mjs');
+const HISTORY_MATH_REPLY = String.raw`Restored formula from history:
+
+\[
+\boxed{a_1 + a_2 + a_3 + a_4 + a_5 + a_6 + a_7 + a_8 + a_9 + a_{10} + a_{11} + a_{12} + a_{13} + a_{14} + a_{15} + a_{16} + a_{17} + a_{18} + a_{19} + a_{20} = 210}
+\]`;
 
 type ProtocolRecord = {
   event?: string;
@@ -141,6 +146,13 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     composer = panel.locator('[aria-label="Message agent"]');
     await expect(panel.locator('[data-draft-empty]')).toHaveAttribute('data-draft-empty', 'true');
     await expect(panel.getByRole('button', { name: 'Session folder: project-beta' })).toBeVisible();
+    await expect(composer).toHaveAttribute('contenteditable', 'true');
+
+    await composer.fill('math reply');
+    await panel.getByRole('button', { name: 'Send message' }).click();
+    await expect(panel.locator('.katex')).toBeVisible();
+    await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
 
     await ensureLibraryExpanded(app.page);
     await app.page.getByRole('button', { name: 'Chat history in project-alpha' }).click();
@@ -149,8 +161,36 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await history.getByRole('button', { name: 'Resume Fixture history session' }).click();
     panel = activeAgentPanel(app.page);
     await expect(panel.getByText('History fixture question')).toBeVisible();
-    await expect(panel.getByText('History fixture answer')).toBeVisible();
+    await expect(panel.getByText('Restored formula from history:')).toBeVisible();
+    const displayMath = panel.locator('.katex-display');
+    await expect(displayMath).toBeVisible();
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
+
+    await panel.getByRole('button', { name: 'Reply actions' }).click();
+    await app.page.getByRole('menuitem', { name: 'Copy Reply' }).click();
+    const copied = await app.electron.evaluate(({ clipboard }) => clipboard.readText());
+    expect(copied).toBe(HISTORY_MATH_REPLY);
+
+    await fileTreeRow(app.page, 'Welcome.md').click();
+    await expect(app.page.getByRole('tab', { name: 'Welcome.md' })).toBeVisible();
+    const layout = await displayMath.evaluate((element) => {
+      const prose = element.closest('.agent-prose');
+      const pane = element.closest('.chat-pane-shell');
+      if (!(prose instanceof HTMLElement) || !(pane instanceof HTMLElement)) {
+        throw new Error('math layout containers are missing');
+      }
+      return {
+        displayClient: element.clientWidth,
+        displayScroll: element.scrollWidth,
+        proseClient: prose.clientWidth,
+        proseScroll: prose.scrollWidth,
+        paneClient: pane.clientWidth,
+        paneScroll: pane.scrollWidth,
+      };
+    });
+    expect(layout.displayScroll).toBeGreaterThan(layout.displayClient);
+    expect(layout.proseScroll).toBeLessThanOrEqual(layout.proseClient + 1);
+    expect(layout.paneScroll).toBeLessThanOrEqual(layout.paneClient + 1);
     app.errors.assertNone();
   } finally {
     await app?.close();

@@ -9,6 +9,11 @@ let turnSequence = 0;
 let nextServerRequestId = 10_000;
 let historyCwd = process.cwd();
 const pendingApprovals = new Map();
+const HISTORY_MATH_REPLY = String.raw`Restored formula from history:
+
+\[
+\boxed{a_1 + a_2 + a_3 + a_4 + a_5 + a_6 + a_7 + a_8 + a_9 + a_{10} + a_{11} + a_{12} + a_{13} + a_{14} + a_{15} + a_{16} + a_{17} + a_{18} + a_{19} + a_{20} = 210}
+\]`;
 
 record({
   event: 'launch',
@@ -92,7 +97,7 @@ function handleRequest(request) {
             id: 'fake-history-turn',
             items: [
               { type: 'userMessage', content: [{ type: 'text', text: 'History fixture question' }] },
-              { type: 'agentMessage', text: 'History fixture answer' },
+              { type: 'agentMessage', text: HISTORY_MATH_REPLY },
             ],
           }],
         },
@@ -136,6 +141,26 @@ function startTurn(requestId, params) {
       turnId,
       willRetry: false,
       message: 'Deterministic fake Agent failure.',
+    });
+    return;
+  }
+  if (/math reply/i.test(prompt)) {
+    const itemId = `fake-message-${turnSequence}`;
+    notify('item/agentMessage/delta', {
+      threadId: String(params.threadId || 'fake-thread-1'),
+      turnId,
+      itemId,
+      delta: String.raw`Streamed formula: \(x^2`,
+    });
+    notify('item/agentMessage/delta', {
+      threadId: String(params.threadId || 'fake-thread-1'),
+      turnId,
+      itemId,
+      delta: String.raw` + 1\).`,
+    });
+    notify('turn/completed', {
+      threadId: String(params.threadId || 'fake-thread-1'),
+      turn: { id: turnId, items: [], status: 'completed' },
     });
     return;
   }
