@@ -150,9 +150,9 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
 
     await composer.fill('math reply');
     await panel.getByRole('button', { name: 'Send message' }).click();
-    await expect(panel.locator('.katex')).toBeVisible();
     await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
+    await expect(panel.locator('.katex')).toBeVisible();
 
     await ensureLibraryExpanded(app.page);
     await app.page.getByRole('button', { name: 'Chat history in project-alpha' }).click();
