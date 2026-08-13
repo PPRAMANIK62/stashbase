@@ -75,6 +75,11 @@ conversation state use their appropriate live semantics. When an interaction
 cannot be selected reliably, improve the shipping semantics and add a focused
 accessibility test instead of adding a brittle selector.
 
+Keyboard chord state machines must update the event-visible phase synchronously
+when a second key event can arrive before React commits. In particular, a rapid
+second `Ctrl+Tab` must cycle the existing Editor History list rather than
+restart the chord; test that path through the real Electron journey.
+
 ## Commands
 
 ```bash

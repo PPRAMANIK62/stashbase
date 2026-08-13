@@ -110,18 +110,21 @@ export function EditorHistoryNavigator() {
   const cancel = () => {
     clearRevealTimer();
     detachPendingListeners();
+    phaseRef.current = 'closed';
     setPhase('closed');
   };
   // Close: the overlay was visible and focus moved to it; restore it.
   const close = () => {
     clearRevealTimer();
     detachPendingListeners();
+    phaseRef.current = 'closed';
     setPhase('closed');
     requestAnimationFrame(() => restoreRef.current?.focus());
   };
   const commit = (id: string) => {
     clearRevealTimer();
     detachPendingListeners();
+    phaseRef.current = 'closed';
     setPhase('closed');
     requestAnimationFrame(() => restoreRef.current?.focus());
     void actions.activateTab(id);
@@ -163,11 +166,17 @@ export function EditorHistoryNavigator() {
         restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         setEntries(list);
         setActive(initialIndex);
+        // The second Ctrl+Tab can arrive before React commits this render.
+        // Event routing must see the pending phase immediately so it cycles
+        // the existing list rather than restarting the chord.
+        phaseRef.current = 'pending';
         setPhase('pending');
         attachPendingListeners(list[initialIndex]);
         revealTimerRef.current = setTimeout(() => {
           revealTimerRef.current = null;
-          setPhase((p) => (p === 'pending' ? 'open' : p));
+          if (phaseRef.current !== 'pending') return;
+          phaseRef.current = 'open';
+          setPhase('open');
         }, REVEAL_DELAY_MS);
         return;
       }
@@ -179,6 +188,7 @@ export function EditorHistoryNavigator() {
       clearRevealTimer();
       detachPendingListeners();
       setActive((index) => cycleEditorHistoryIndex(index, listRef.current.length, backward));
+      phaseRef.current = 'open';
       setPhase('open');
     }
     window.addEventListener('stashbase-open-editor-history', onChord);
