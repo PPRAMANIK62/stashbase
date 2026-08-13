@@ -36,7 +36,10 @@ export function normalizeLibrarySearchScope(folderRaw: unknown, pathPrefixRaw: u
   if (folderRoot && pathPrefix && filesystemPath.relative(folderRoot, pathPrefix) == null) {
     throw routeError('path_prefix must live under folder', 400);
   }
-  return { folderRoot, pathPrefix };
+  // A normalized prefix is already known to live under a library member.
+  // Return that owner when the caller omitted `folder` so folder-walking
+  // retrieval can honor a prefix-only scope without widening or rejecting it.
+  return { folderRoot: folderRoot ?? (pathPrefix ? memberRootForAbs(pathPrefix) ?? undefined : undefined), pathPrefix };
 }
 
 export function requireLibraryStatusFolder(folderRaw: unknown): string | undefined {

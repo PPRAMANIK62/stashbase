@@ -17,7 +17,9 @@ import { currentWindowId } from '../folder.ts';
 import { AGENT_SESSION_ID_HEADER } from '../agent-session-registry.ts';
 import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
 import {
+  parseSearchMode,
   parseSearchTypes,
+  SEARCH_MODE_VALIDATION_ERROR,
   SEARCH_TYPES_VALIDATION_ERROR,
 } from '../../shared/search-types.ts';
 
@@ -56,12 +58,22 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
           code: 'INVALID_SEARCH_TYPES',
         });
       }
+      const mode = parseSearchMode(req.body?.mode);
+      if (mode == null) {
+        return res.status(400).json({
+          error: SEARCH_MODE_VALIDATION_ERROR,
+          code: 'INVALID_SEARCH_MODE',
+        });
+      }
       res.json(await operations.search({
         query,
         topK,
         folder: req.body?.folder,
         pathPrefix: req.body?.path_prefix,
         types,
+        mode,
+        caseStrict: req.body?.case_strict === true,
+        wholeWord: req.body?.whole_word === true,
       }));
     } catch (err: unknown) {
       sendError(res, err);

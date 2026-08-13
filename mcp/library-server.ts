@@ -19,7 +19,10 @@ import {
 import type { LibraryOperations } from '../server/library-operations/index.ts';
 import { createHttpLibraryOperations } from './library-operations-http.ts';
 import {
+  parseSearchMode,
   parseSearchTypes,
+  SEARCH_MODE_VALIDATION_ERROR,
+  SEARCH_MODES,
   SEARCH_TYPE_CATEGORIES,
   SEARCH_TYPES_VALIDATION_ERROR,
 } from '../shared/search-types.ts';
@@ -104,21 +107,32 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
         };
       }
       const types = args.types == null ? undefined : parsedTypes;
+      const mode = parseSearchMode(args.mode);
+      if (mode == null) {
+        return {
+          content: [{ type: 'text', text: SEARCH_MODE_VALIDATION_ERROR }],
+          isError: true,
+        };
+      }
+      const caseStrict = args.case_strict === true;
+      const wholeWord = args.whole_word === true;
       const k = Math.max(
         1,
         Math.min(MAX_TOP_K, Math.floor(typeof args.top_k === 'number' ? args.top_k : DEFAULT_TOP_K)),
       );
-      const searchResult = await operations.search({ query, topK: k, folder, pathPrefix, types });
+      const searchResult = await operations.search({ query, topK: k, folder, pathPrefix, types, mode, caseStrict, wholeWord });
       const hits = annotateSearchHitsForMcp(searchResult.hits);
       return {
         content: [{
           type: 'text',
           text: JSON.stringify({
             query,
+            mode,
             folder: folder ?? null,
             path_prefix: pathPrefix ?? null,
             types: types ?? null,
             top_k: k,
+            ...(searchResult.truncated ? { truncated: true } : {}),
             hits,
           }, null, 2),
         }],
@@ -330,19 +344,29 @@ const BUILTIN_TOOLS = [
     {
       name: 'search_library',
       description:
-        'Hybrid (vector + full-text) search over opened local folders. ' +
+        'Search opened local folders. Two modes: `semantic` (default) is hybrid ' +
+        '(vector + full-text) meaning-based search and needs AI Index; `keyword` is ' +
+        'exact literal search (ripgrep) for identifiers, error codes, config keys, or quoted ' +
+        'phrases that semantic search blurs, and it works before AI Index is set up. ' +
         'Searches the **whole library** by default — every member folder from ' +
         '`library_info` — and scopes to one folder when `folder` is its absolute root (e.g. ' +
-        '"/Users/me/notes"). For finer control, `path_prefix` restricts hits to chunks ' +
-        'whose absolute source starts with that prefix (e.g. "/Users/me/notes/transcripts/"). ' +
-        'Each hit returns the absolute file path, the chunk content, ' +
-        'optional heading and source line range, and a fused relevance score. PDF hits include a ' +
-        '`read_hint`; use `read_file` on the PDF path to get extracted Markdown. Use this when ' +
-        'the user asks something the notes might answer; read full text documents with `read_file`.',
+        '"/Users/me/notes"). For finer control, `path_prefix` restricts hits to sources ' +
+        'starting with that prefix (e.g. "/Users/me/notes/transcripts/"). Keyword mode requires ' +
+        'a folder scope (`folder` or `path_prefix`). Each hit returns the absolute file path, ' +
+        'the matching content, optional heading and source line range, and (semantic) a fused ' +
+        'relevance score. PDF hits include a `read_hint`; use `read_file` on the PDF path to get ' +
+        'extracted Markdown. Read full text documents with `read_file`.',
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Natural-language query.' },
+          query: { type: 'string', description: 'Natural-language query (semantic) or literal text (keyword).' },
+          mode: {
+            type: 'string',
+            enum: [...SEARCH_MODES],
+            description:
+              'Search mode. "semantic" (default) is meaning-based and needs AI Index. ' +
+              '"keyword" is exact literal matching that works before AI Index setup but requires a folder scope.',
+          },
           folder: {
             type: 'string',
             description:
@@ -364,9 +388,17 @@ const BUILTIN_TOOLS = [
             items: { type: 'string', enum: [...SEARCH_TYPE_CATEGORIES] },
             uniqueItems: true,
           },
+          case_strict: {
+            type: 'boolean',
+            description: 'Keyword mode only: match case exactly. Default is smart-case.',
+          },
+          whole_word: {
+            type: 'boolean',
+            description: 'Keyword mode only: match whole words, so "agent" does not match "agents".',
+          },
           top_k: {
             type: 'integer',
-            description: `Number of chunks to return (1-${MAX_TOP_K}). Default ${DEFAULT_TOP_K}.`,
+            description: `Maximum number of search hits to return (1-${MAX_TOP_K}). Default ${DEFAULT_TOP_K}.`,
             minimum: 1,
             maximum: MAX_TOP_K,
           },

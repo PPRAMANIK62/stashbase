@@ -23,8 +23,8 @@ export interface SourceEvidence {
   sourceMatchCount?: number;
 }
 
-/** Compatibility adapter for existing semantic HTTP and MCP payloads. */
-export function semanticHitsFromEvidence(evidence: SourceEvidence[]): SearchHit[] {
+/** Compatibility adapter for the flat HTTP and MCP search-hit payload. */
+export function searchHitsFromEvidence(evidence: SourceEvidence[]): SearchHit[] {
   return evidence.map((entry, index) => ({
     fileName: entry.sourcePath,
     chunkIndex: entry.chunkIndex ?? index,

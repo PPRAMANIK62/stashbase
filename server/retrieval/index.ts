@@ -11,13 +11,13 @@ import { filesystemPath } from '../filesystem-path.ts';
 import { runKeywordSearch, type KeywordSearchOpts } from '../keyword-search.ts';
 import type { SearchHit } from '../indexer.ts';
 import { indexer } from '../state.ts';
-import type { SearchTypeCategory } from '../../shared/search-types.ts';
+import type { SearchMode, SearchTypeCategory } from '../../shared/search-types.ts';
 import { semanticEvidence } from './semantic.ts';
 import { visibleKeywordEvidence } from './keyword.ts';
 
-export { keywordFilesFromEvidence, semanticHitsFromEvidence, type SourceEvidence, type SourceLocator } from './evidence.ts';
+export { keywordFilesFromEvidence, searchHitsFromEvidence, type SourceEvidence, type SourceLocator } from './evidence.ts';
 
-export type RetrievalMode = 'keyword' | 'semantic';
+export type RetrievalMode = SearchMode;
 export type RetrievalAvailability =
   | { state: 'ready' }
   | { state: 'partial'; reason: 'truncated' }
@@ -87,10 +87,14 @@ export function createRetrieval(overrides: Partial<RetrievalDependencies> = {}):
           : undefined,
         types: query.types,
       });
+      const allEvidence = visibleKeywordEvidence(result.files, query.folderRoot);
+      const limit = query.topK == null ? undefined : Math.max(1, Math.floor(query.topK));
+      const evidence = limit == null ? allEvidence : allEvidence.slice(0, limit);
+      const truncated = result.truncated || evidence.length < allEvidence.length;
       return {
-        evidence: visibleKeywordEvidence(result.files, query.folderRoot),
-        availability: result.truncated ? { state: 'partial', reason: 'truncated' } : { state: 'ready' },
-        truncated: result.truncated,
+        evidence,
+        availability: truncated ? { state: 'partial', reason: 'truncated' } : { state: 'ready' },
+        truncated,
       };
     },
   };

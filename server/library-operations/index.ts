@@ -27,8 +27,9 @@ import { indexer, syncFolderNow } from '../state.ts';
 import {
   createRetrieval,
   keywordFilesFromEvidence,
-  semanticHitsFromEvidence,
+  searchHitsFromEvidence,
   type Retrieval,
+  type RetrievalMode,
 } from '../retrieval/index.ts';
 import type { IndexStatus, SearchHit } from '../indexer.ts';
 import type { KeywordHitFile } from '../search-display.ts';
@@ -52,7 +53,13 @@ export interface LibraryOperations {
     folder?: string;
     pathPrefix?: string;
     types?: readonly SearchTypeCategory[];
-  }): Promise<{ hits: SearchHit[] }>;
+    /** `semantic` (default) uses AI Index; `keyword` is exact ripgrep search
+     *  that works before AI Index setup but requires a folder or path-prefix
+     *  scope. */
+    mode?: RetrievalMode;
+    caseStrict?: boolean;
+    wholeWord?: boolean;
+  }): Promise<{ hits: SearchHit[]; truncated?: boolean }>;
   /** Ripgrep keyword search over every member folder (or one `folder`).
    * File paths come back folder-relative next to their member folder root so
    * a caller can open results across folders without prefix guessing. */
@@ -79,6 +86,7 @@ export interface LibraryOperations {
 
 export interface LibraryOperationsDependencies {
   getLibraryInfo: () => LibraryInfo;
+  normalizeSearchScope: typeof normalizeLibrarySearchScope;
   retrieval: Retrieval;
   reindexFolder: (folder: string) => Promise<SyncResult>;
   indexStatus: (folderRoot?: string) => Promise<IndexStatus>;
@@ -94,6 +102,7 @@ export interface LibraryOperationsDependencies {
 
 const productionDependencies: LibraryOperationsDependencies = {
   getLibraryInfo,
+  normalizeSearchScope: normalizeLibrarySearchScope,
   retrieval: createRetrieval(),
   reindexFolder: (folder) => syncFolderNow(folder, { reason: 'mcp reindex' }),
   indexStatus: (folderRoot) => indexer.status(folderRoot),
@@ -115,17 +124,24 @@ export function createLibraryOperations(
   return {
     info: async () => deps.getLibraryInfo(),
 
-    async search({ query, topK = 8, folder, pathPrefix, types }) {
+    async search({ query, topK = 8, folder, pathPrefix, types, mode = 'semantic', caseStrict, wholeWord }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      const scope = normalizeLibrarySearchScope(folder, pathPrefix);
+      const scope = deps.normalizeSearchScope(folder, pathPrefix);
+      // Keyword retrieval walks one member subtree, so a whole-library call
+      // must choose a folder or a prefix whose owning member can be derived.
+      if (mode === 'keyword' && !scope.folderRoot) {
+        throw routeError('keyword search requires a folder scope; pass `folder` or `path_prefix`', 400);
+      }
       const result = await deps.retrieval.search({
-        mode: 'semantic',
+        mode,
         query: trimmedQuery,
         topK,
         folderRoot: scope.folderRoot,
         pathPrefix: scope.pathPrefix,
         types,
+        caseStrict,
+        wholeWord,
       });
       if (result.availability.state === 'unavailable') {
         throw routeError(
@@ -134,18 +150,16 @@ export function createLibraryOperations(
           'EMBEDDER_KEY_REQUIRED',
         );
       }
-      return { hits: semanticHitsFromEvidence(result.evidence) };
+      return {
+        hits: searchHitsFromEvidence(result.evidence),
+        ...(result.truncated ? { truncated: true } : {}),
+      };
     },
 
     async keywordSearch({ query, caseStrict, wholeWord, folder, pathPrefix }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      const scope = normalizeLibrarySearchScope(folder, pathPrefix);
-      // A prefix without a folder would silently widen to every other
-      // folder's whole tree (relative() fails, prefix drops) — refuse it.
-      if (scope.pathPrefix && !scope.folderRoot) {
-        throw routeError('path_prefix requires folder', 400);
-      }
+      const scope = deps.normalizeSearchScope(folder, pathPrefix);
       const roots = scope.folderRoot ? [scope.folderRoot] : deps.memberFolderRoots();
       let lastError: unknown = null;
       const perFolder = await mapWithConcurrency(roots, KEYWORD_FOLDER_CONCURRENCY, async (root) => {

@@ -37,8 +37,10 @@ user-visible source file.
 - Each window works primarily in one current folder. Multiple windows may
   show different folders at the same time; those are independent UI scopes,
   not separate libraries or indexing runtimes.
-- In-app search and MCP retrieval both default to the whole library. Either can
-  narrow to an authorized folder or path prefix; source file-type categories
+- In-app search defaults to the whole library in either mode. MCP semantic
+  retrieval does the same, while MCP keyword retrieval requires an authorized
+  folder or path-prefix scope. Both surfaces offer semantic and keyword modes;
+  keyword works before AI Index is set up, and source file-type categories
   remain an agent-facing parameter.
 - MCP file operations are deliberately bounded to authorized library folders;
   they are never a general filesystem interface. The one membership-changing
