@@ -820,7 +820,7 @@ function TurnActions({ text, onCopy }: {
 
 /** The reply text a turn's actions act on: every assistant block in the
  *  turn, in order — what the user sees as "the answer". */
-function turnReplyText(turn: Turn): string {
+export function turnReplyText(turn: Turn): string {
   return turn.body
     .filter((block): block is Extract<Block, { kind: 'assistant' }> => block.kind === 'assistant')
     .map((block) => block.text)

@@ -1,6 +1,9 @@
 import React, { type ComponentProps } from 'react';
+import rehypeKatex from 'rehype-katex';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import { normalizeAgentMathDelimiters } from './agentMath';
 
 function localAssistantLinkPath(href: string): string | null {
   if (!href || href.startsWith('#') || href.startsWith('//') || /^[a-z][a-z\d+.-]*:/i.test(href)) return null;
@@ -28,7 +31,11 @@ export function AgentMarkdown({ markdown, onOpenArtifact }: {
 }) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: true }]]}
+      rehypePlugins={[[rehypeKatex, {
+        throwOnError: false,
+        trust: false,
+      }]]}
       components={{
         a: ({ href = '', children, ...props }: ComponentProps<'a'>) => {
           const localPath = localAssistantLinkPath(href);
@@ -45,7 +52,7 @@ export function AgentMarkdown({ markdown, onOpenArtifact }: {
         img: () => null,
       }}
     >
-      {markdown}
+      {normalizeAgentMathDelimiters(markdown)}
     </ReactMarkdown>
   );
 }

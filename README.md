@@ -214,6 +214,8 @@ knowledge base. It adds:
   later folder chats use the Agent you last selected.
 - Tool calls and file edits can be reviewed in the app.
 - Session history stays in the Agent CLI's normal storage.
+- Agent replies render GFM and offline LaTeX math without changing the copied
+  or persisted Markdown source.
 - `@` mentions find files and folders with forgiving workspace-path search;
   selecting one inserts only its workspace-relative path.
 
