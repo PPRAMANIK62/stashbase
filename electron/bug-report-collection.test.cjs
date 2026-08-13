@@ -53,6 +53,24 @@ test('log preparation redacts before returning a bounded report excerpt', () => 
   assert.equal(result.truncated, false);
 });
 
+test('log preparation excludes internal runtime paths before report content crosses the review boundary', () => {
+  const input = [
+    'server entry: /Volumes/private-checkout/stashbase/server/index.ts',
+    'server cwd: /Volumes/private-checkout/stashbase',
+    'resources: C:\\Users\\Jane\\AppData\\Local\\StashBase\\resources',
+    'INFO server ready',
+  ].join('\n');
+  const result = collectRedactedApplicationLog({
+    filePath: '/logs/server.log',
+    fsModule: fakeFs(input),
+    homeDir: '/Users/Jane Doe',
+  });
+
+  assert.equal(result.text, 'INFO server ready');
+  assert.equal(result.text.includes('/Volumes/private-checkout'), false);
+  assert.equal(result.text.includes('C:\\Users\\Jane'), false);
+});
+
 test('log preparation rejects output when the second scan remains suspicious', () => {
   const input = 'INFO MCP_BEARER_TOKEN=still-secret\n';
   const result = collectRedactedApplicationLog({

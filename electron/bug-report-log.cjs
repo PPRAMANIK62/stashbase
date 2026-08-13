@@ -4,6 +4,16 @@ const fs = require('node:fs');
 const { prepareBugReportText } = require('./bug-report-redaction.cjs');
 
 const MAX_LOG_TAIL_BYTES = 32 * 1024;
+const INTERNAL_PATH_LOG_PREFIX = /^(?:server entry|server cwd|resources|daemon|extractor|python):\s*/;
+
+/**
+ * Startup diagnostics include application-installation paths. They are useful
+ * in the normal local log but are not report content, so remove them before
+ * the report redaction boundary rather than trying to disclose those paths.
+ */
+function omitInternalPathLogLines(text) {
+  return text.split(/(?<=\n)/).filter((line) => !INTERNAL_PATH_LOG_PREFIX.test(line)).join('');
+}
 
 /** Read a bounded tail without loading the rest of the application log. */
 function readApplicationLogTail({
@@ -47,7 +57,7 @@ function collectRedactedApplicationLog(options = {}) {
   } = options;
   const tail = readApplicationLogTail(tailOptions);
   if (!tail) return null;
-  const prepared = prepareBugReportText(tail.text, { homeDir, redact, scan });
+  const prepared = prepareBugReportText(omitInternalPathLogLines(tail.text), { homeDir, redact, scan });
   if (!prepared.ok) return null;
   return {
     text: prepared.text,
@@ -61,5 +71,6 @@ function collectRedactedApplicationLog(options = {}) {
 module.exports = {
   MAX_LOG_TAIL_BYTES,
   collectRedactedApplicationLog,
+  omitInternalPathLogLines,
   readApplicationLogTail,
 };

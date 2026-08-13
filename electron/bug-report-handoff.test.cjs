@@ -230,6 +230,30 @@ test('artifacts absent from the approved snapshot are not materialized', async (
   assert.equal(await fs.stat(path.join(preparedDirectory, 'diagnostics.txt')).then(() => true, () => false), false);
 });
 
+test('concurrent preparation of one approved snapshot shares one materialized report', async (t) => {
+  const root = await temporaryRoot(t);
+  let reportIds = 0;
+  const handoff = createBugReportHandoff({
+    baseTemporaryDirectory: path.join(root, 'bug-reports'),
+    createSessionId: () => 'session',
+    createReportId: () => `report-${++reportIds}`,
+    createTemporaryId: () => 'write',
+    revealDirectory: async () => {},
+    openExternal: async () => {},
+  });
+  const approved = snapshot({ approvalId: 'approval-concurrent' });
+
+  const [first, second] = await Promise.all([handoff.prepare(approved), handoff.prepare(approved)]);
+
+  assert.deepEqual(first, { ok: true, prepared: { artifactCount: 3 } });
+  assert.deepEqual(second, first);
+  assert.equal(reportIds, 1);
+  assert.deepEqual(
+    await fs.readdir(path.join(root, 'bug-reports', 'session-session')),
+    ['report-report-1'],
+  );
+});
+
 test('session initialization removes stale previous-session reports and keeps current reports', async (t) => {
   const root = await temporaryRoot(t);
   const base = path.join(root, 'bug-reports');

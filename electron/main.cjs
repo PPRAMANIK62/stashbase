@@ -10,8 +10,6 @@
  * through the narrow IPC bridge in preload.cjs.
  */
 
-console.log("App Started");
-
 const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');

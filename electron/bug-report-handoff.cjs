@@ -217,12 +217,10 @@ function createBugReportHandoff({
     }
   }
 
-  async function materialize(snapshot) {
+  async function materializeUncached(snapshot) {
     if (!snapshot || typeof snapshot !== 'object' || !validFilesystemId(snapshot.approvalId)) {
       throw new Error('Invalid approved report snapshot');
     }
-    const cached = preparedByApproval.get(snapshot.approvalId);
-    if (cached) return cached;
     await initializeSession();
 
     const reportId = createReportId();
@@ -243,10 +241,28 @@ function createBugReportHandoff({
         fileNames: Object.freeze(files.map((file) => file.name)),
         issueUrl: buildGitHubIssueUrl(snapshot),
       });
-      preparedByApproval.set(snapshot.approvalId, prepared);
       return prepared;
     } catch (error) {
       await fsModule.rm(reportDirectory, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  async function materialize(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object' || !validFilesystemId(snapshot.approvalId)) {
+      throw new Error('Invalid approved report snapshot');
+    }
+    const cached = preparedByApproval.get(snapshot.approvalId);
+    if (cached) return cached;
+
+    const inFlight = materializeUncached(snapshot);
+    preparedByApproval.set(snapshot.approvalId, inFlight);
+    try {
+      return await inFlight;
+    } catch (error) {
+      if (preparedByApproval.get(snapshot.approvalId) === inFlight) {
+        preparedByApproval.delete(snapshot.approvalId);
+      }
       throw error;
     }
   }
@@ -264,7 +280,7 @@ function createBugReportHandoff({
     },
 
     async openGitHub(snapshot) {
-      const prepared = preparedByApproval.get(snapshot?.approvalId);
+      const prepared = await preparedByApproval.get(snapshot?.approvalId);
       if (!prepared) return fail(HANDOFF_ERROR.PREPARE_FAILED);
 
       try {
@@ -285,7 +301,7 @@ function createBugReportHandoff({
     },
 
     async saveArtifacts(snapshot, destinationDirectory) {
-      const prepared = preparedByApproval.get(snapshot?.approvalId);
+      const prepared = await preparedByApproval.get(snapshot?.approvalId);
       if (
         !prepared
         || typeof destinationDirectory !== 'string'

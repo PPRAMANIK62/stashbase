@@ -231,7 +231,8 @@ The collection pipeline and later report outcomes must keep these rules intact:
 * Read at most the final 32 KiB of the application log and discard a leading
   partial line. The sanitized retained text is both the preview source and the
   resource eligible for approval; metadata never substitutes for that review.
-  Never attach complete log history.
+  Never attach complete log history. Internal runtime-path startup diagnostics
+  are excluded before the report boundary.
 
 * Derive home-path replacement from the exact `os.homedir()` value and redact
   recognized credentials before preview. Independently scan the redacted
