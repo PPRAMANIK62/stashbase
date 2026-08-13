@@ -61,7 +61,9 @@ test('native folder dialog success, cancellation, and failure preserve their bou
 
     await stubOpenFolderDialog(app.electron, { kind: 'error', message: 'fixture picker failed' });
     await openFolderPickerMenu(app.page);
-    await expect(app.page.getByRole('alert')).toContainText(/Could not open the folder:.*fixture picker failed/);
+    await expect(app.page.getByRole('alert').filter({
+      hasText: /Could not open the folder:.*fixture picker failed/,
+    })).toBeVisible();
     await expect(app.page).toHaveTitle('StashBase');
 
     await stubOpenFolderDialog(app.electron, { kind: 'success', path: fixture.workspaces.projectA });

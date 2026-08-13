@@ -21,6 +21,15 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 - StashBase owns tab lifecycle, saving, conflict/version handling, local asset
   storage, local navigation, image lightbox, Find, anchors, search highlighting,
   app styling, and the trust boundary.
+- The five most-recently-used open Markdown tabs own retained CrepeBuilder
+  surfaces. Older inactive surfaces are evicted; reactivation remounts them
+  behind the explicit opening state and revalidates clean source content from
+  disk. Only the active surface may register the save/focus handle, Find
+  controller, outline, pending-anchor work, or pending search highlighting.
+  Registration cleanup must be ownership-aware so an old tab cannot clear a
+  newer active tab's handle. Closing a tab destroys its builder. A surface is
+  keyed by tab plus file identity so any in-place file replacement also
+  destroys the displaced builder.
 - Theme integration uses semantic StashBase tokens plus a scoped Milkdown token
   bridge. Milkdown's frame stylesheet assigns its variables directly on its
   root, so inherited app tokens alone are insufficient: keep the bridge more
@@ -53,6 +62,11 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   own scroller, rather than the renderer window. Controller registration effects
   depend on the stable registration command, not the composite action bag: a
   query update must not tear down, restore, and re-register the active controller.
+- Crepe creation has explicit creating, ready, and failed presentation states.
+  The editor shell remains non-paintable until ready; creation failure must
+  replace it with an actionable retry surface rather than an indefinite blank
+  pane. A builder whose creation rejected while Milkdown remains in `OnCreate`
+  must not enter Milkdown's retrying destroy path; retry uses a fresh builder.
 - Heading IDs derive from rendered heading text and remain stable enough for
   same-note and cross-note anchor navigation.
 - Document outlines read heading nodes from the retained ProseMirror document.
@@ -114,6 +128,12 @@ preservation, edit/save, Writer/Reading transitions, safe local and remote
 images, external links, local-note routing, tabs, and persisted content. On
 Linux, run `pnpm test:e2e:visual` when Markdown reading/writing composition
 changes.
+
+For retained-tab lifecycle changes, run the bounded real-Electron smoke and
+verify repeated switches preserve ready DOM identity without a naked active
+shell, activation observes clean external edits, the MRU bound holds, and tab
+close destroys only the closed builder. The smoke must close live windows
+before quitting so macOS cannot stall in application shutdown.
 
 The current Electron journey does not cover every Crepe interaction. When
 changing slash commands, tables, code blocks, math, selection popovers, or

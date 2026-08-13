@@ -133,7 +133,7 @@ test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
 test('Markdown Find controller registration is independent of changing action-bag identity', () => {
   const markdown = read('web-src/src/components/CrepeDocument.tsx');
   assert.match(markdown, /const registerFindController = actions\.registerFindController/);
-  assert.match(markdown, /\[registerFindController, active\]/);
+  assert.match(markdown, /\[active, creationState, registerFindController\]/);
   assert.doesNotMatch(markdown, /registerFindController\(null\);\n  \}, \[actions, active\]\)/);
 });
 

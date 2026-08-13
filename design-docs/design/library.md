@@ -104,7 +104,9 @@ to migrate them into a StashBase-specific storage model.
   directly.
 - A sidebar click opens the file in its own persistent tab; an already-open
   file is focused rather than reopened. There is no preview/pinned tab split —
-  one click always opens a lasting tab.
+  one click always opens a lasting tab. Format-owned session state may remain
+  mounted while a tab is inactive; Markdown's bounded retention contract lives
+  in [Markdown](markdown.md).
 - PDF tabs retain their active reading position (page number) across tab switches during a session. Opening a different file in a tab resets the stored page position.
 - A PDF opens fitted to the pane width — edge to edge, with no side margin,
   and none above it either; zoom away from fit and the page takes the same

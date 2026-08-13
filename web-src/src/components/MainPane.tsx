@@ -8,6 +8,7 @@ import { ImagePreview } from './ImagePreview';
 import { TabStrip } from './TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { readPreferredAgent } from '../agentPreference';
+import { retainedMarkdownTabs } from '../milkdown/retainedTabs';
 import { Button } from './ui/button';
 import { StatusMessage } from './ui/status';
 
@@ -74,6 +75,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   // has to span 44 - 35.7 + 24. Every control that lives in it is
   // therefore 24px; put a 28px one back and it hangs into the document.
   const chromeBand = hasTabs && cur?.format !== 'html' && cur?.format !== 'image';
+  const markdownTabs = retainedMarkdownTabs(state.tabs, state.editorHistory, state.activeTabId);
 
   return (
     <main
@@ -149,21 +151,35 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}
-        {cur && cur.format === 'md' && (
-          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="Markdown document" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening document…</div>}>
-              <LazyCrepeDocument
-                key={activeTab?.id ?? cur.name}
-                tabId={activeTab?.id ?? ''}
-                name={cur.name}
-                content={cur.content}
-                readOnly={!editMode}
-                active
-                folder={cur.folder}
-              />
-            </Suspense>
-          </LazyLoadBoundary>
-        )}
+        {markdownTabs.map((tab) => {
+          const file = tab.file!;
+          const active = tab.id === state.activeTabId;
+          return (
+            <div
+              key={`${tab.id}:${file.folder ?? ''}:${file.name}`}
+              className="markdown-tab-layer"
+              hidden={!active}
+            >
+              <LazyLoadBoundary
+                className={VIEWER_LOADING_CLASS}
+                label="Markdown document"
+                resetKey={`${file.folder ?? ''}:${file.name}:${file.version ?? ''}`}
+              >
+                <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Opening document…</div>}>
+                  <LazyCrepeDocument
+                    tabId={tab.id}
+                    name={file.name}
+                    content={file.content}
+                    readOnly={!tab.editMode}
+                    active={active}
+                    dirty={tab.dirty}
+                    folder={file.folder}
+                  />
+                </Suspense>
+              </LazyLoadBoundary>
+            </div>
+          );
+        })}
         {cur && cur.format === 'json' && (
           <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="JSON document" resetKey={resourceResetKey}>
             <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening JSON…</div>}>
