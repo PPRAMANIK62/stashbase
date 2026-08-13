@@ -40,6 +40,11 @@ test('persistent tabs prevent duplicates, reuse a blank tab, and expose MRU Edit
     await expect(app.page.locator('.tab-strip-inner > [role="tab"]')).toHaveCount(3);
     await expect(documentTab(app.page, 'AGENTS.md')).toHaveCount(1);
 
+    // The chord cancels on window blur BY DESIGN (alt-tab register), so
+    // make sure this window owns OS focus before pressing it — a stray
+    // focus steal between the two Tab presses re-arms the pending switch
+    // at index 1 and the selection lands one entry short.
+    await app.page.bringToFront();
     await activeDocumentTab(app.page).focus();
     await app.page.keyboard.down('Control');
     await app.page.keyboard.press('Tab');
@@ -134,6 +139,9 @@ test('Favorites pin above recents and removing the active folder returns to Home
     // Selecting a member in the open menu switches this window in place.
     await switcherFolderItem(app.page, 'project-alpha').click();
     await expect(app.page).toHaveTitle('project-alpha — StashBase');
+    // The AI Index offer follows the folder: alpha was never skipped in
+    // this window, so the switch re-offers before the header is usable.
+    await dismissEmbeddingKeyPrompt(app.page);
 
     await openFolderMenu(app, 'project-alpha');
     await app.page.getByRole('menuitem', { name: 'Remove from Library' }).click();

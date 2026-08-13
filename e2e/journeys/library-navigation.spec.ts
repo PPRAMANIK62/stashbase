@@ -100,3 +100,36 @@ test('persistent document tabs and Quick Open remain keyboard-operable and resto
     await fixture.cleanup();
   }
 });
+
+// Intent: the AI Index offer follows the FOLDER, not the window — skipping
+// it in one folder must not silence it for the rest of the library, while
+// returning to a skipped folder stays quiet (in-place switching through
+// the titlebar switcher is the primary flow now).
+test('the AI Index prompt re-offers per folder and stays quiet on return', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'two-folders' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    const skip = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
+
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(skip).toBeVisible();
+    await skip.click();
+    await expect(skip).toBeHidden();
+
+    await openLibraryFolder(app.page, 'project-beta');
+    await expect(skip).toBeVisible();
+    await skip.click();
+    await expect(skip).toBeHidden();
+
+    // Returning to a folder skipped in this window does not re-nag.
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
+    await app.page.waitForTimeout(1500);
+    await expect(skip).toBeHidden();
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});

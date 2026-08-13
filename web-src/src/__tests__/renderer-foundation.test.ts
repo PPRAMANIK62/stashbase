@@ -298,3 +298,51 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(json, /role="region"/);
   assert.match(json, /aria-label="JSON document"/);
 });
+
+test('shell geometry and reading-surface fixes stay pinned', () => {
+  const globals = read('web-src/src/styles/globals.css');
+  // Drag surfaces never overlap controls: the sidebar drag zone stops at
+  // the titlebar controls (per-element no-drag carve-outs proved
+  // intermittently stale on windowed macOS — geometry, not carving).
+  assert.match(globals, /\.sidebar-drag-zone \{[^}]*width: var\(--titlebar-controls-left\)/s);
+  // The left cluster ellipsizes at the sidebar column edge instead of
+  // bleeding onto the tab strip…
+  assert.match(globals, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\) - 8px\)/s);
+  // …and the collapsed-sidebar budget is ONE token shared by the cluster
+  // cap and both tab-row reserves, so the floating controls never overlap
+  // a tab.
+  assert.match(globals, /--titlebar-controls-collapsed-width:/);
+  assert.match(globals, /\.app\.sidebar-collapsed \.tab-strip \{[^}]*var\(--titlebar-controls-collapsed-width\)/s);
+  assert.match(globals, /\.app\.sidebar-collapsed \.titlebar-controls \{[^}]*max-width: var\(--titlebar-controls-collapsed-width\)/s);
+  assert.match(read('web-src/src/styles/chat.css'), /\.app\.sidebar-collapsed\.chat-primary \.chat-tab-row \{[^}]*var\(--titlebar-controls-collapsed-width\)/s);
+
+  const chat = read('web-src/src/styles/chat.css');
+  // Entering message edit must not collapse the bubble (the textarea has
+  // no intrinsic width): the head takes the full bubble width instead.
+  assert.match(chat, /\.agent-turn-head:has\(\.agent-turn-edit\) \{[^}]*width: min\(85%, 620px\)/s);
+  // No focus ring on the edit textarea ON PURPOSE (composer idiom): text
+  // fields always match :focus-visible, so a halo would flash on every
+  // edit open. The mode change is the affordance.
+  assert.doesNotMatch(chat, /\.agent-turn-edit textarea:focus-visible/);
+
+  const mainpane = read('web-src/src/styles/mainpane.css');
+  // Reading gutters follow the PANE, not the window.
+  assert.match(mainpane, /\.crepe-shell \{[^}]*container-type: inline-size/s);
+  assert.match(mainpane, /clamp\(20px, 6cqi, 48px\)/);
+  // THREE-class selector on purpose: Crepe's packaged stylesheet ships
+  // `.milkdown .ProseMirror { padding: 60px 120px }` in a LATER-loaded
+  // chunk — equal specificity would hand the gutters back to the package.
+  assert.match(mainpane, /\.crepe-shell \.milkdown \.ProseMirror \{/);
+  // Editable gutters seat the block handle (48px); under pane pressure
+  // the ADD tile yields so the drag tile fits instead of clipping.
+  assert.match(mainpane, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown \.ProseMirror \{[^}]*padding-inline: 48px/s);
+  assert.match(mainpane, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown-block-handle \.operation-item:first-child \{[^}]*display: none/s);
+  // Crepe names the handle `milkdown-block-handle`; a `crepe-`-prefixed
+  // selector silently matches nothing.
+  assert.match(mainpane, /\.crepe-readonly \.milkdown-block-handle \{ display: none; \}/);
+  assert.doesNotMatch(mainpane, /crepe-block-handle/);
+
+  // Composer pills yield width under pressure (min-w-0 + label truncate)
+  // so a tight chat panel truncates labels instead of clipping Send.
+  assert.match(read('web-src/src/components/agent/panelStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
+});

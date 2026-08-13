@@ -80,3 +80,46 @@ test('semantic search UI renders deterministic loading, grouped, empty, and erro
     await fixture.cleanup();
   }
 });
+
+// Intent: removing the API key re-gates AI Index IMMEDIATELY — the setup
+// dialog re-offers while the folder is still open, instead of waiting for
+// the next folder switch. Fully route-stubbed: no real key or provider.
+test('removing the API key re-offers the AI Index dialog right away', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'two-folders' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    let hasKey = true;
+    await app.page.route('**/api/embedder', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        provider: 'openai', hasKey, model: 'fixture-model',
+      }) });
+    });
+    await app.page.route('**/api/embedder/key', async (route) => {
+      hasKey = false;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        hasKey: false, provider: 'openai', model: 'fixture-model',
+      }) });
+    });
+
+    const skip = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
+    await openLibraryFolder(app.page, 'project-alpha');
+    // Keyed: no prompt.
+    await app.page.waitForTimeout(1200);
+    await expect(skip).toBeHidden();
+
+    // Remove the key through Settings.
+    await app.page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await app.page.getByRole('tab', { name: 'AI Index' }).click();
+    await app.page.getByRole('button', { name: 'Remove key…' }).click();
+    await app.page.getByRole('button', { name: 'Remove key', exact: true }).click();
+
+    // The gate re-evaluates on the key-state change: the dialog re-offers
+    // now, not on the next folder switch.
+    await expect(skip).toBeVisible();
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});

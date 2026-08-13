@@ -6,7 +6,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { newChatPlan } from '../components/agent/folderState.ts';
 import {
+  historyRequestParams,
   mergeAgentSessions,
+  rowResumeFolder,
+  rowScopeParams,
   shouldConsumePendingResume,
 } from '../components/agent/sessionHistory.ts';
 
@@ -69,4 +72,28 @@ test('sidebar resume shares the New Chat tab plan: reuse the one blank tab, else
     newChatPlan([{ id: 't1', agent: 'claude', blank: false }], 'claude'),
     { kind: 'new' },
   );
+});
+
+test('the all-scope listing resolves each ROW to its own scope for actions and resume', () => {
+  const all = { kind: 'all' } as const;
+  const folderRow = { id: 's1', title: 't', lastModified: 1, folder: '/work/alpha' };
+  const libraryRow = { id: 's2', title: 't', lastModified: 2 };
+
+  // Listing params: 'all' is a list-only mode; concrete scopes keep their
+  // folder/library params.
+  assert.deepEqual(historyRequestParams(all), { scope: 'all' });
+  assert.deepEqual(historyRequestParams({ kind: 'library' }), { scope: 'library' });
+  assert.deepEqual(historyRequestParams({ kind: 'folder', path: '/work/alpha' }), { folder: '/work/alpha' });
+
+  // Row actions (rename/delete) bind the row's own scope under 'all', and
+  // the menu's scope otherwise.
+  assert.deepEqual(rowScopeParams(all, folderRow), { folder: '/work/alpha' });
+  assert.deepEqual(rowScopeParams(all, libraryRow), { scope: 'library' });
+  assert.deepEqual(rowScopeParams({ kind: 'library' }, folderRow), { scope: 'library' });
+
+  // Resume binds the row's home folder (null = library scope).
+  assert.equal(rowResumeFolder(all, folderRow), '/work/alpha');
+  assert.equal(rowResumeFolder(all, libraryRow), null);
+  assert.equal(rowResumeFolder({ kind: 'folder', path: '/work/beta' }, folderRow), '/work/beta');
+  assert.equal(rowResumeFolder({ kind: 'library' }, folderRow), null);
 });
