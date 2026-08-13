@@ -118,6 +118,7 @@ as the result identity.
   not as the headline. It keeps the hosted path from reading as the one with a
   privacy cost; users otherwise assume "my own key" means "stays local" and the
   account path is the one that uploads, when neither path uploads the files.
+
 ## Experience Contract
 
 - Search should be useful before AI Index is available.
