@@ -21,6 +21,7 @@ const {
   WINDOW_ID_ARG_PREFIX,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
+  createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,
@@ -124,6 +125,7 @@ let serverStartPromise = null;
 const mainWindows = new Set();
 const windowRegistry = createWindowRegistry({ platform: process.platform });
 const rendererFlush = createRendererFlushCoordinator();
+const rendererFlushReadinessByWebContents = new Map();
 const approvedWindowCloses = new WeakSet();
 const pendingWindowCloses = new WeakSet();
 let lastMainWindow = null;
@@ -670,17 +672,18 @@ async function createWindow(initialFolder) {
     },
   });
   const webContentsId = win.webContents.id;
+  const rendererFlushReadiness = createRendererFlushReadiness();
+  rendererFlushReadinessByWebContents.set(webContentsId, rendererFlushReadiness);
   mainWindows.add(win);
   windowRegistry.add(windowId, win, initialFolder);
   lastMainWindow = win;
-  let rendererReadyForFlush = false;
   win.on('focus', () => {
     lastMainWindow = win;
     offerClipboardImage(win);
     startClipboardPolling();
   });
   win.on('close', (event) => {
-    if (approvedWindowCloses.has(win) || !rendererReadyForFlush) return;
+    if (approvedWindowCloses.has(win) || !rendererFlushReadiness.shouldRequest()) return;
     event.preventDefault();
     if (pendingWindowCloses.has(win)) return;
     pendingWindowCloses.add(win);
@@ -704,6 +707,7 @@ async function createWindow(initialFolder) {
   win.on('closed', () => {
     agentComposerFocusedContents.delete(webContentsId);
     rendererFlush.cancel(webContentsId);
+    rendererFlushReadinessByWebContents.delete(webContentsId);
     mainWindows.delete(win);
     windowRegistry.remove(windowId);
     releaseWindowContext(windowId);
@@ -740,7 +744,7 @@ async function createWindow(initialFolder) {
   win.on('enter-full-screen', pushFullscreen);
   win.on('leave-full-screen', pushFullscreen);
   win.webContents.on('did-finish-load', () => {
-    rendererReadyForFlush = true;
+    rendererFlushReadiness.markDocumentLoaded();
     pushFullscreen();
   });
 
@@ -873,6 +877,12 @@ ipcMain.handle('window:openFolder', async (event, name) => {
 
 ipcMain.on('window:context-release-ready', (event, payload) => {
   rendererFlush.handleResponse(event.sender.id, payload);
+});
+
+ipcMain.on('window:context-release-handler-state', (event, payload) => {
+  rendererFlushReadinessByWebContents
+    .get(event.sender.id)
+    ?.markHandlerReady(payload?.ready === true);
 });
 
 ipcMain.handle('window:prepareFolderRemoval', async (event, folder) => {

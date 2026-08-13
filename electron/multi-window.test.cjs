@@ -12,6 +12,7 @@ const {
   buildElectronSmokeArgs,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
+  createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,
@@ -363,6 +364,26 @@ test('renderer flush coordinator waits for the matching save acknowledgement', a
   assert.equal(coordinator.handleResponse(41, { requestId: 'wrong', ok: true }), false);
   assert.equal(coordinator.handleResponse(41, { requestId: 'request-1', ok: true }), true);
   assert.equal(await pending, true);
+});
+
+test('window close does not request a save acknowledgement before the renderer installs its handler', () => {
+  const readiness = createRendererFlushReadiness();
+  readiness.markDocumentLoaded();
+  assert.equal(readiness.shouldRequest(), false);
+  readiness.markHandlerReady(true);
+  assert.equal(readiness.shouldRequest(), true);
+  readiness.markHandlerReady(false);
+  assert.equal(readiness.shouldRequest(), false);
+});
+
+test('renderer navigation requires the replacement save handler to announce readiness', () => {
+  const readiness = createRendererFlushReadiness();
+  readiness.markDocumentLoaded();
+  readiness.markHandlerReady(true);
+  assert.equal(readiness.shouldRequest(), true);
+
+  readiness.markDocumentLoaded();
+  assert.equal(readiness.shouldRequest(), false);
 });
 
 test('preload reads and bounds the main-process window identity', () => {
