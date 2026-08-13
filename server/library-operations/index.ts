@@ -27,7 +27,7 @@ import { indexer, syncFolderNow } from '../state.ts';
 import {
   createRetrieval,
   keywordFilesFromEvidence,
-  semanticHitsFromEvidence,
+  searchHitsFromEvidence,
   type Retrieval,
   type RetrievalMode,
 } from '../retrieval/index.ts';
@@ -53,9 +53,9 @@ export interface LibraryOperations {
     folder?: string;
     pathPrefix?: string;
     types?: readonly SearchTypeCategory[];
-    /** `semantic` (default) is hybrid vector search and needs an embedding
-     *  key; `keyword` is exact ripgrep search that works without a key but
-     *  requires a folder scope. */
+    /** `semantic` (default) uses AI Index; `keyword` is exact ripgrep search
+     *  that works before AI Index setup but requires a folder or path-prefix
+     *  scope. */
     mode?: RetrievalMode;
     caseStrict?: boolean;
     wholeWord?: boolean;
@@ -86,6 +86,7 @@ export interface LibraryOperations {
 
 export interface LibraryOperationsDependencies {
   getLibraryInfo: () => LibraryInfo;
+  normalizeSearchScope: typeof normalizeLibrarySearchScope;
   retrieval: Retrieval;
   reindexFolder: (folder: string) => Promise<SyncResult>;
   indexStatus: (folderRoot?: string) => Promise<IndexStatus>;
@@ -101,6 +102,7 @@ export interface LibraryOperationsDependencies {
 
 const productionDependencies: LibraryOperationsDependencies = {
   getLibraryInfo,
+  normalizeSearchScope: normalizeLibrarySearchScope,
   retrieval: createRetrieval(),
   reindexFolder: (folder) => syncFolderNow(folder, { reason: 'mcp reindex' }),
   indexStatus: (folderRoot) => indexer.status(folderRoot),
@@ -125,9 +127,9 @@ export function createLibraryOperations(
     async search({ query, topK = 8, folder, pathPrefix, types, mode = 'semantic', caseStrict, wholeWord }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      const scope = normalizeLibrarySearchScope(folder, pathPrefix);
-      // Keyword retrieval walks a folder subtree, so it needs a scope; a
-      // bare prefix without a folder would silently widen to the library.
+      const scope = deps.normalizeSearchScope(folder, pathPrefix);
+      // Keyword retrieval walks one member subtree, so a whole-library call
+      // must choose a folder or a prefix whose owning member can be derived.
       if (mode === 'keyword' && !scope.folderRoot) {
         throw routeError('keyword search requires a folder scope; pass `folder` or `path_prefix`', 400);
       }
@@ -149,7 +151,7 @@ export function createLibraryOperations(
         );
       }
       return {
-        hits: semanticHitsFromEvidence(result.evidence),
+        hits: searchHitsFromEvidence(result.evidence),
         ...(result.truncated ? { truncated: true } : {}),
       };
     },
@@ -157,12 +159,7 @@ export function createLibraryOperations(
     async keywordSearch({ query, caseStrict, wholeWord, folder, pathPrefix }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      const scope = normalizeLibrarySearchScope(folder, pathPrefix);
-      // A prefix without a folder would silently widen to every other
-      // folder's whole tree (relative() fails, prefix drops) — refuse it.
-      if (scope.pathPrefix && !scope.folderRoot) {
-        throw routeError('path_prefix requires folder', 400);
-      }
+      const scope = deps.normalizeSearchScope(folder, pathPrefix);
       const roots = scope.folderRoot ? [scope.folderRoot] : deps.memberFolderRoots();
       let lastError: unknown = null;
       const perFolder = await mapWithConcurrency(roots, KEYWORD_FOLDER_CONCURRENCY, async (root) => {

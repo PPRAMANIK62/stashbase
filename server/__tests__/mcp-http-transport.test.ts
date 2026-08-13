@@ -62,6 +62,10 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     getToken: () => token,
     operations: createLibraryOperations({
       getLibraryInfo: () => ({ folder_home: '/tmp', folders: [] }),
+      normalizeSearchScope: (_folder, pathPrefix) => ({
+        folderRoot: '/tmp',
+        pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined,
+      }),
       retrieval: { search: async (input) => {
         searchInput = input as unknown as Record<string, unknown>;
         return {
@@ -93,6 +97,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       searchTool.inputSchema.properties.types.items.enum,
       ['notes', 'data', 'pdf', 'image', 'docx', 'audio'],
     );
+    assert.deepEqual(searchTool.inputSchema.properties.mode.enum, ['semantic', 'keyword']);
     const createProjectTool = listed.body.result.tools.find((tool: any) => tool.name === 'create_project');
     assert.deepEqual(createProjectTool.inputSchema.required, ['name']);
 
@@ -105,15 +110,32 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       method: 'tools/call',
       params: {
         name: 'search_library',
-        arguments: { query: 'paper', types: ['pdf', 'docx'] },
+        arguments: {
+          query: 'ExactMatch',
+          mode: 'keyword',
+          path_prefix: '/tmp/notes',
+          types: ['pdf', 'docx'],
+          case_strict: true,
+          whole_word: true,
+          top_k: 3,
+        },
       },
     }, token);
     assert.equal(searched.status, 200);
-    assert.deepEqual(searchInput?.types, ['pdf', 'docx']);
-    assert.deepEqual(
-      JSON.parse(searched.body.result.content[0].text).types,
-      ['pdf', 'docx'],
-    );
+    assert.deepEqual(searchInput, {
+      mode: 'keyword',
+      query: 'ExactMatch',
+      topK: 3,
+      folderRoot: '/tmp',
+      pathPrefix: '/tmp/notes',
+      types: ['pdf', 'docx'],
+      caseStrict: true,
+      wholeWord: true,
+    });
+    const searchPayload = JSON.parse(searched.body.result.content[0].text);
+    assert.equal(searchPayload.mode, 'keyword');
+    assert.equal(searchPayload.top_k, 3);
+    assert.deepEqual(searchPayload.types, ['pdf', 'docx']);
 
     const invalidSearch = await post(base, {
       jsonrpc: '2.0',
@@ -127,6 +149,19 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(invalidSearch.status, 200);
     assert.equal(invalidSearch.body.result.isError, true);
     assert.match(invalidSearch.body.result.content[0].text, /unknown search type/i);
+
+    const invalidMode = await post(base, {
+      jsonrpc: '2.0',
+      id: 7,
+      method: 'tools/call',
+      params: {
+        name: 'search_library',
+        arguments: { query: 'paper', mode: 'typo' },
+      },
+    }, token);
+    assert.equal(invalidMode.status, 200);
+    assert.equal(invalidMode.body.result.isError, true);
+    assert.match(invalidMode.body.result.content[0].text, /unknown search mode/i);
 
     // create_project reaches the operations seam with the model-controlled
     // arguments only — the HTTP MCP transport has no session attribution, so
@@ -149,11 +184,19 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(stdio.initialized.result.serverInfo.name, 'stashbase');
     assert.deepEqual(stdio.listed.result.tools, listed.body.result.tools);
     assert.deepEqual(stdio.called.result, called.body.result);
-    assert.deepEqual(stdioSearchBody?.types, ['image']);
-    assert.deepEqual(
-      JSON.parse(stdio.searched.result.content[0].text).types,
-      ['image'],
-    );
+    assert.deepEqual(stdioSearchBody, {
+      query: 'diagram',
+      top_k: 4,
+      path_prefix: '/tmp/images',
+      types: ['image'],
+      mode: 'keyword',
+      case_strict: true,
+      whole_word: true,
+    });
+    const stdioPayload = JSON.parse(stdio.searched.result.content[0].text);
+    assert.equal(stdioPayload.mode, 'keyword');
+    assert.equal(stdioPayload.top_k, 4);
+    assert.deepEqual(stdioPayload.types, ['image']);
     // The stdio host forwards its spawn-time session identity as the
     // attribution header — this is how a built-in panel session's
     // create_project call finds the live session to rebind.
@@ -267,7 +310,15 @@ async function runStdio(port: number): Promise<{
     method: 'tools/call',
     params: {
       name: 'search_library',
-      arguments: { query: 'diagram', types: ['image'] },
+      arguments: {
+        query: 'diagram',
+        mode: 'keyword',
+        path_prefix: '/tmp/images',
+        types: ['image'],
+        case_strict: true,
+        whole_word: true,
+        top_k: 4,
+      },
     },
   })}\n`);
   child.stdin.write(`${JSON.stringify({

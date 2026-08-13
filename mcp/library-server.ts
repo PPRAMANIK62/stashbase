@@ -19,7 +19,10 @@ import {
 import type { LibraryOperations } from '../server/library-operations/index.ts';
 import { createHttpLibraryOperations } from './library-operations-http.ts';
 import {
+  parseSearchMode,
   parseSearchTypes,
+  SEARCH_MODE_VALIDATION_ERROR,
+  SEARCH_MODES,
   SEARCH_TYPE_CATEGORIES,
   SEARCH_TYPES_VALIDATION_ERROR,
 } from '../shared/search-types.ts';
@@ -104,7 +107,13 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
         };
       }
       const types = args.types == null ? undefined : parsedTypes;
-      const mode = args.mode === 'keyword' ? 'keyword' : 'semantic';
+      const mode = parseSearchMode(args.mode);
+      if (mode == null) {
+        return {
+          content: [{ type: 'text', text: SEARCH_MODE_VALIDATION_ERROR }],
+          isError: true,
+        };
+      }
       const caseStrict = args.case_strict === true;
       const wholeWord = args.whole_word === true;
       const k = Math.max(
@@ -336,10 +345,10 @@ const BUILTIN_TOOLS = [
       name: 'search_library',
       description:
         'Search opened local folders. Two modes: `semantic` (default) is hybrid ' +
-        '(vector + full-text) meaning-based search and needs an embedding key; `keyword` is ' +
+        '(vector + full-text) meaning-based search and needs AI Index; `keyword` is ' +
         'exact literal search (ripgrep) for identifiers, error codes, config keys, or quoted ' +
-        'phrases that semantic search blurs, and it works even when no embedding key is ' +
-        'configured. Searches the **whole library** by default — every member folder from ' +
+        'phrases that semantic search blurs, and it works before AI Index is set up. ' +
+        'Searches the **whole library** by default — every member folder from ' +
         '`library_info` — and scopes to one folder when `folder` is its absolute root (e.g. ' +
         '"/Users/me/notes"). For finer control, `path_prefix` restricts hits to sources ' +
         'starting with that prefix (e.g. "/Users/me/notes/transcripts/"). Keyword mode requires ' +
@@ -353,10 +362,10 @@ const BUILTIN_TOOLS = [
           query: { type: 'string', description: 'Natural-language query (semantic) or literal text (keyword).' },
           mode: {
             type: 'string',
-            enum: ['semantic', 'keyword'],
+            enum: [...SEARCH_MODES],
             description:
-              'Search mode. "semantic" (default) is meaning-based and needs an embedding key. ' +
-              '"keyword" is exact literal matching that works without a key but requires a folder scope.',
+              'Search mode. "semantic" (default) is meaning-based and needs AI Index. ' +
+              '"keyword" is exact literal matching that works before AI Index setup but requires a folder scope.',
           },
           folder: {
             type: 'string',
@@ -389,7 +398,7 @@ const BUILTIN_TOOLS = [
           },
           top_k: {
             type: 'integer',
-            description: `Number of chunks to return (1-${MAX_TOP_K}). Default ${DEFAULT_TOP_K}.`,
+            description: `Maximum number of search hits to return (1-${MAX_TOP_K}). Default ${DEFAULT_TOP_K}.`,
             minimum: 1,
             maximum: MAX_TOP_K,
           },

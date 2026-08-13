@@ -71,6 +71,54 @@ test('Library Operations requires a folder scope for keyword search', async () =
   assert.equal(reached, false);
 });
 
+test('Library Operations forwards keyword mode, options, and a prefix-only scope to Retrieval', async () => {
+  let searchInput: Record<string, unknown> | undefined;
+  const operations = createLibraryOperations({
+    getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
+    normalizeSearchScope: (_folder, pathPrefix) => ({
+      folderRoot: '/library',
+      pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined,
+    }),
+    retrieval: { search: async (input) => {
+      searchInput = input as unknown as Record<string, unknown>;
+      return {
+        evidence: [{ sourcePath: '/library/notes/a.md', snippet: 'ExactMatch', locator: { line: 7 } }],
+        availability: { state: 'ready' as const },
+        truncated: false,
+      };
+    } },
+  });
+
+  const result = await operations.search({
+    query: 'ExactMatch',
+    mode: 'keyword',
+    pathPrefix: '/library/notes',
+    types: ['notes'],
+    caseStrict: true,
+    wholeWord: true,
+    topK: 3,
+  });
+
+  assert.deepEqual(searchInput, {
+    mode: 'keyword',
+    query: 'ExactMatch',
+    topK: 3,
+    folderRoot: '/library',
+    pathPrefix: '/library/notes',
+    types: ['notes'],
+    caseStrict: true,
+    wholeWord: true,
+  });
+  assert.deepEqual(result.hits, [{
+    fileName: '/library/notes/a.md',
+    chunkIndex: 0,
+    content: 'ExactMatch',
+    heading: '',
+    startLine: 7,
+    score: 0,
+  }]);
+});
+
 test('Library Operations surfaces a truncated result signal to the caller', async () => {
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),

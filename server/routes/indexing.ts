@@ -40,7 +40,7 @@ import {
   SEARCH_TYPES_VALIDATION_ERROR,
 } from '../../shared/search-types.ts';
 import { buildIndexStatus } from '../index-status.ts';
-import { createRetrieval, keywordFilesFromEvidence, semanticHitsFromEvidence } from '../retrieval/index.ts';
+import { createRetrieval, keywordFilesFromEvidence, searchHitsFromEvidence } from '../retrieval/index.ts';
 import {
   normalizeTranscriptionLanguage,
   type ConfiguredTranscriptionBlock,
@@ -294,7 +294,7 @@ export function mount(app: express.Express): void {
           code: 'EMBEDDER_KEY_REQUIRED',
         });
       }
-      const out = semanticHitsFromEvidence(result.evidence).flatMap((hit) => {
+      const out = searchHitsFromEvidence(result.evidence).flatMap((hit) => {
         const rel = filesystemPath.relative(folderRoot, hit.fileName);
         return rel == null ? [] : [{ ...hit, fileName: rel }];
       });

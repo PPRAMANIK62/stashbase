@@ -7,6 +7,10 @@ import { mount } from './library-files.ts';
 test('library search validates and forwards file-type filters', async () => {
   let searchInput: Record<string, unknown> | undefined;
   const operations = createLibraryOperations({
+    normalizeSearchScope: (_folder, pathPrefix) => ({
+      folderRoot: '/library',
+      pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined,
+    }),
     retrieval: { search: async (input) => {
       searchInput = input as unknown as Record<string, unknown>;
       return {
@@ -38,6 +42,32 @@ test('library search validates and forwards file-type filters', async () => {
     assert.deepEqual(searchInput?.types, ['pdf', 'docx']);
 
     searchInput = undefined;
+    const keyword = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        query: 'ExactMatch',
+        mode: 'keyword',
+        path_prefix: '/library/notes',
+        types: ['notes'],
+        case_strict: true,
+        whole_word: true,
+        top_k: 3,
+      }),
+    });
+    assert.equal(keyword.status, 200);
+    assert.deepEqual(searchInput, {
+      mode: 'keyword',
+      query: 'ExactMatch',
+      topK: 3,
+      folderRoot: '/library',
+      pathPrefix: '/library/notes',
+      types: ['notes'],
+      caseStrict: true,
+      wholeWord: true,
+    });
+
+    searchInput = undefined;
     const invalid = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -46,6 +76,17 @@ test('library search validates and forwards file-type filters', async () => {
     assert.equal(invalid.status, 400);
     assert.match((await invalid.json() as { error: string }).error, /unknown search type/i);
     assert.equal(searchInput, undefined);
+
+    const invalidMode = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'paper', mode: 'typo' }),
+    });
+    assert.equal(invalidMode.status, 400);
+    assert.deepEqual(await invalidMode.json(), {
+      error: 'unknown search mode; mode must be one of: semantic, keyword',
+      code: 'INVALID_SEARCH_MODE',
+    });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
