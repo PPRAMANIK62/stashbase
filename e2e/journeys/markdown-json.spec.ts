@@ -108,7 +108,7 @@ test('Markdown preserves frontmatter across editing and safely routes links and 
   }
 });
 
-test('JSON remains raw and read-only until explicit editing is enabled', async ({}, testInfo) => {
+test('JSON opens as a source-preserving tree and invalid source remains editable', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   seedJourneyWorkspaces(fixture);
   const sourceFile = path.join(fixture.workspaces.projectA, JOURNEY_JSON);
@@ -120,16 +120,52 @@ test('JSON remains raw and read-only until explicit editing is enabled', async (
     await fileTreeRow(app.page, JOURNEY_JSON).click();
 
     const region = app.page.getByRole('region', { name: 'JSON document' });
+    const tree = region.getByRole('tree', { name: 'JSON values' });
+    await expect(tree).toBeVisible();
+    await expect(tree).toContainText('"fixture"');
+    await expect(tree).toContainText('"raw journey"');
+    await expect(region.getByRole('button', { name: 'Tree', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(tree.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+    const treeItems = tree.getByRole('treeitem');
+    await treeItems.first().focus();
+    await app.page.keyboard.press('End');
+    await expect(treeItems.last()).toHaveAttribute('aria-selected', 'true');
+    await app.page.keyboard.press('Home');
+    await expect(treeItems.first()).toHaveAttribute('aria-selected', 'true');
+    await app.page.keyboard.press('ArrowDown');
+    await expect(treeItems.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await app.page.keyboard.press('ArrowLeft');
+    await expect(treeItems.first()).toHaveAttribute('aria-selected', 'true');
+
+    await region.getByRole('button', { name: 'Source' }).click();
     const source = region.locator('.cm-content');
     await expect(source).toContainText('"fixture": "raw journey"');
     await expect(source).toHaveAttribute('contenteditable', 'false');
+    await region.getByRole('button', { name: 'Tree', exact: true }).click();
     await app.page.getByRole('button', { name: 'Switch to Live Editing' }).click();
+    const fixtureRow = tree.getByRole('treeitem').filter({ hasText: '"fixture"' });
+    await fixtureRow.getByRole('button', { name: 'Edit', exact: true }).click();
+    const treeEditor = region.getByRole('group', { name: 'Edit $.fixture' });
+    await treeEditor.getByRole('button', { name: 'Cancel' }).click();
+    await expect(fixtureRow).toBeFocused();
+    await fixtureRow.getByRole('button', { name: 'Edit', exact: true }).click();
+    await treeEditor.getByLabel('JSON value').fill('"tree journey"');
+    await treeEditor.getByRole('button', { name: 'Apply' }).click();
+    await expect(fixtureRow).toBeFocused();
+    await expect(tree).toContainText('"tree journey"');
+    await expect(saveStatus(app.page)).toBeVisible();
+    await expect.poll(() => fs.readFileSync(sourceFile, 'utf8')).toContain('"fixture": "tree journey"');
+
+    await region.getByRole('button', { name: 'Source' }).click();
     await expect(source).toHaveAttribute('contenteditable', 'true');
+    await expect(source).toContainText('"fixture": "tree journey"');
     await source.click();
     await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
     await app.page.keyboard.insertText('\nmalformed tail');
     await expect(saveStatus(app.page)).toBeVisible();
     await expect.poll(() => fs.readFileSync(sourceFile, 'utf8')).toContain('malformed tail');
+    await expect(region.getByRole('button', { name: 'Tree', exact: true })).toBeDisabled();
+    await expect(region).toContainText(/line \d+, column \d+/u);
     await app.page.getByRole('button', { name: 'Switch to Reading View' }).click();
     await expect(source).toHaveAttribute('contenteditable', 'false');
     await expect(source).toContainText('malformed tail');

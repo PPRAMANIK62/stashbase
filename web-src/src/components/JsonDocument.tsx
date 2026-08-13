@@ -4,8 +4,14 @@ import { Decoration, EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
-import React, { useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, type FindController, type FindOptions, type MatchInfo } from '../store/AppContext';
+import { analyzeJsonSource, formatPath, matchingJsonTreeNodes } from './json/sourceModel';
+import type { JsonTreeSessionState } from './json/JsonTreeView';
+
+const LazyJsonTreeView = lazy(() => import('./json/JsonTreeView').then((module) => ({ default: module.JsonTreeView })));
+interface RetainedJsonSession { tree: JsonTreeSessionState; viewMode: 'tree' | 'source' }
+const retainedJsonSessions = new Map<string, RetainedJsonSession>();
 
 type LiveFindController = FindController & { refresh: () => MatchInfo };
 
@@ -44,6 +50,7 @@ export function createJsonEditor(host: HTMLElement, opts: {
   content: string;
   readOnly: boolean;
   onUserChange: () => void;
+  onContentChange?: (content: string) => void;
   onFindInfo: (info: MatchInfo) => void;
 }): JsonEditorSession {
   const readOnly = new Compartment();
@@ -61,6 +68,7 @@ export function createJsonEditor(host: HTMLElement, opts: {
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return;
+          opts.onContentChange?.(update.state.doc.toString());
           if (!applyingExternal) opts.onUserChange();
           // CodeMirror forbids nested dispatch from an update listener. Re-run
           // the live query after the document transaction has settled so match
@@ -118,6 +126,18 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
   const registerFindController = actions.registerFindController;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sessionRef = useRef<JsonEditorSession | null>(null);
+  const initialAnalysis = useMemo(() => analyzeJsonSource(content), [tabId]);
+  const retained = retainedJsonSessions.get(tabId);
+  const [source, setSource] = useState(content);
+  const [viewMode, setViewModeState] = useState<'tree' | 'source'>(retained?.viewMode ?? (initialAnalysis.available ? 'tree' : 'source'));
+  const [treeSession, setTreeSession] = useState<JsonTreeSessionState>(() => retained?.tree ?? {
+    expanded: new Set(['$']), selectedPath: '$', search: '', searchOptions: { wholeWord: false, caseSensitive: false },
+  });
+  const analysis = useMemo(() => analyzeJsonSource(source), [source]);
+  const sourceRef = useRef(source);
+  const treeSessionRef = useRef(treeSession);
+  sourceRef.current = source;
+  treeSessionRef.current = treeSession;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -126,6 +146,7 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
       content,
       readOnly,
       onUserChange: actions.scheduleSave,
+      onContentChange: setSource,
       onFindInfo: (info) => dispatch({ type: 'FIND_SET', patch: info }),
     });
     sessionRef.current = session;
@@ -156,36 +177,124 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
   useEffect(() => {
     if (activeTab?.dirty) return;
     sessionRef.current?.replaceFromDisk(content);
+    setSource(content);
   }, [activeTab?.dirty, content]);
 
+  const retainSession = (tree: JsonTreeSessionState, mode: 'tree' | 'source') => {
+    retainedJsonSessions.delete(tabId);
+    retainedJsonSessions.set(tabId, { tree, viewMode: mode });
+    while (retainedJsonSessions.size > 20) retainedJsonSessions.delete(retainedJsonSessions.keys().next().value!);
+  };
+  const setViewMode = (mode: 'tree' | 'source') => {
+    setViewModeState(mode);
+    retainSession(treeSession, mode);
+  };
+  const updateTreeSession = (next: JsonTreeSessionState) => {
+    retainSession(next, viewMode);
+    setTreeSession(next);
+  };
+  const treeSessionUpdaterRef = useRef(updateTreeSession);
+  treeSessionUpdaterRef.current = updateTreeSession;
+  const treeFindRef = useRef<FindController | null>(null);
+  if (!treeFindRef.current) treeFindRef.current = makeJsonTreeFindController(
+    () => sourceRef.current,
+    () => treeSessionRef.current,
+    (next) => treeSessionUpdaterRef.current(next),
+  );
   useEffect(() => {
     if (!active) return;
-    const controller = sessionRef.current?.find;
+    const controller = viewMode === 'tree' ? treeFindRef.current : sessionRef.current?.find;
     if (!controller) return;
     registerFindController(controller);
     return () => registerFindController(null);
-  }, [registerFindController, active]);
-
+  }, [registerFindController, active, viewMode]);
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   useEffect(() => {
+    if (!pendingHighlight?.chunkText) return;
+    if (viewMode === 'tree' && analysis.available) {
+      const selectedPath = jsonTreeHighlightPath(analysis, pendingHighlight.chunkText);
+      if (!selectedPath) { setViewMode('source'); return; }
+      const node = matchingJsonTreeNodes(analysis.root, pendingHighlight.chunkText, { caseSensitive: true, wholeWord: false })[0];
+      if (!node) return;
+      const expanded = new Set(treeSession.expanded);
+      for (let length = 0; length < node.path.length; length++) expanded.add(formatPath(node.path.slice(0, length)));
+      updateTreeSession({ ...treeSession, selectedPath, expanded });
+      actions.consumePendingHighlight();
+      return;
+    }
     const view = sessionRef.current?.view;
-    if (!pendingHighlight?.chunkText || !view) return;
+    if (!view) return;
     const from = view.state.doc.toString().indexOf(pendingHighlight.chunkText);
     if (from < 0) return;
     selectMatch(view, from, from + pendingHighlight.chunkText.length);
     actions.consumePendingHighlight();
-  }, [actions, content, pendingHighlight]);
+  }, [actions, analysis, pendingHighlight, viewMode]);
+  const applyTreeSource = (next: string) => {
+    const view = sessionRef.current?.view;
+    if (!view || next === source) return;
+    const current = view.state.doc.toString();
+    const normalized = next.replace(/\r\n?/gu, '\n');
+    let from = 0;
+    while (from < current.length && from < normalized.length && current[from] === normalized[from]) from++;
+    let currentTo = current.length;
+    let nextTo = normalized.length;
+    while (currentTo > from && nextTo > from && current[currentTo - 1] === normalized[nextTo - 1]) { currentTo--; nextTo--; }
+    view.dispatch({ changes: { from, to: currentTo, insert: normalized.slice(from, nextTo) } });
+  };
 
-  return (
-    <div
-      ref={hostRef}
-      className="json-document min-h-0 overflow-hidden"
-      data-tab-id={tabId}
-      role="region"
-      aria-label="JSON document"
-      hidden={!active}
-    />
-  );
+  return <div className="json-document min-h-0 overflow-hidden" data-tab-id={tabId} role="region" aria-label="JSON document" hidden={!active}>
+    <div className="json-view-mode" role="group" aria-label="JSON view mode">
+      <button type="button" aria-pressed={viewMode === 'tree'} disabled={!analysis.available} title={analysis.available ? 'Inspect JSON as a tree' : analysis.message} onClick={() => setViewMode('tree')}>Tree</button>
+      <button type="button" aria-pressed={viewMode === 'source'} onClick={() => setViewMode('source')}>Source</button>
+      {!analysis.available && <span role="status">{analysis.message}</span>}
+    </div>
+    <div ref={hostRef} className="json-source" hidden={viewMode !== 'source'} />
+    {viewMode === 'tree' && analysis.available && <Suspense fallback={<div className="json-tree-loading" role="status">Building JSON tree…</div>}>
+      <LazyJsonTreeView source={source} editable={!readOnly} session={treeSession} onSessionChange={updateTreeSession} onSourceChange={applyTreeSource} onRequestSource={() => setViewMode('source')} />
+    </Suspense>}
+  </div>;
+}
+
+export function jsonTreeHighlightPath(analysis: ReturnType<typeof analyzeJsonSource>, chunkText: string): string | null {
+  if (!analysis.available || !chunkText) return null;
+  const node = matchingJsonTreeNodes(analysis.root, chunkText, { caseSensitive: true, wholeWord: false })[0];
+  return node ? formatPath(node.path) : null;
+}
+
+export function makeJsonTreeFindController(
+  getSource: () => string,
+  getSession: () => JsonTreeSessionState,
+  setSession: (session: JsonTreeSessionState) => void,
+): FindController {
+  let matches: string[] = [];
+  let current = -1;
+  let query = '';
+  let options: FindOptions = { wholeWord: false, caseSensitive: false };
+  const info = (): MatchInfo => ({ current: current < 0 ? 0 : current + 1, total: matches.length });
+  const collect = () => {
+    const analysis = analyzeJsonSource(getSource());
+    if (!analysis.available || !query) { matches = []; current = -1; return; }
+    matches = matchingJsonTreeNodes(analysis.root, query, options).map((node) => formatPath(node.path));
+    if (!matches.length) current = -1;
+    else if (current < 0 || current >= matches.length) current = 0;
+  };
+  const select = () => {
+    if (current < 0) return;
+    const session = getSession();
+    const path = matches[current];
+    const expanded = new Set(session.expanded);
+    const analysis = analyzeJsonSource(getSource());
+    if (analysis.available) {
+      const node = matchingJsonTreeNodes(analysis.root, query, options).find((candidate) => formatPath(candidate.path) === path);
+      if (node) for (let length = 0; length < node.path.length; length++) expanded.add(formatPath(node.path.slice(0, length)));
+    }
+    setSession({ ...session, search: query, searchOptions: options, selectedPath: path, expanded });
+  };
+  const setQuery = (next: string, nextOptions: FindOptions) => {
+    query = next; options = nextOptions; current = -1; collect(); select(); return info();
+  };
+  const move = (delta: number) => { collect(); if (matches.length) { current = (current + delta + matches.length) % matches.length; select(); } return info(); };
+  return { setQuery, restoreQuery: setQuery, next: () => move(1), prev: () => move(-1), close: () => { matches = []; current = -1; query = ''; setSession({ ...getSession(), search: '' }); } };
 }
 
 export function makeJsonFindController(getView: () => EditorView | null): LiveFindController {
