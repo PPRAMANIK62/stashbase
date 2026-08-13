@@ -51,7 +51,7 @@
     "test:python": "node scripts/test-python.mjs",
     "test:config": "node --import tsx --test server/app-config.test.ts",
     "test:renderer": "node --import tsx --test web-src/src/__tests__/*.test.ts web-src/src/milkdown/__tests__/*.test.ts web-src/src/store/__tests__/*.test.ts",
-    "test:electron": "node --test --test-reporter=spec electron/multi-window.test.cjs",
+    "test:electron": "node --test --test-reporter=spec electron/multi-window.test.cjs electron/bug-report-service.test.cjs electron/bug-report-redaction.test.cjs electron/bug-report-collection.test.cjs electron/bug-report-handoff.test.cjs electron/bug-report-review.test.cjs",
     "test:electron:smoke": "node electron/multi-window-smoke-runner.cjs",
     "test:e2e:harness": "node --import tsx --test e2e/support/fixtures.test.ts && node --test e2e/support/ci-summary-reporter.test.cjs && playwright test e2e/harness --project=electron-smoke",
     "test:e2e:check-focus": "node --test scripts/check-e2e-focus.test.mjs && node scripts/check-e2e-focus.mjs e2e",

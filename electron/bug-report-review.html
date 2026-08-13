@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Report a Bug</title>
+    <link rel="stylesheet" href="./bug-report-review.css">
+  </head>
+  <body>
+    <main class="page">
+      <div id="review-flow">
+      <header class="hero">
+        <p class="eyebrow">Feedback</p>
+        <h1>Report a Bug</h1>
+        <p>Review exactly what you want to include. Nothing is uploaded or sent from this screen.</p>
+      </header>
+
+      <section class="privacy" aria-label="Privacy information">
+        <strong>Your report stays local.</strong>
+        <span>Collected information is checked for common secrets, but you remain in control. Remove anything you do not want included.</span>
+      </section>
+
+      <section class="card" aria-labelledby="details-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="details-heading">Report details</h2>
+            <p>Describe the problem in your own words.</p>
+          </div>
+        </div>
+        <label for="happened">What happened?</label>
+        <textarea id="happened" maxlength="12000" rows="4"></textarea>
+        <label for="expected">What did you expect to happen?</label>
+        <textarea id="expected" maxlength="12000" rows="3"></textarea>
+        <label for="reproduction">Steps to reproduce</label>
+        <textarea id="reproduction" maxlength="12000" rows="5"></textarea>
+      </section>
+
+      <section class="card" aria-labelledby="included-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="included-heading">Collected information</h2>
+            <p>Optional items are included only when marked Included.</p>
+          </div>
+        </div>
+        <div id="artifacts" class="artifacts" aria-live="polite"></div>
+      </section>
+
+      <section id="artifact-summary" class="artifact-summary" aria-labelledby="artifact-summary-heading">
+        <h2 id="artifact-summary-heading">Artifact selection</h2>
+        <div id="artifact-summary-groups" class="artifact-summary-groups"></div>
+      </section>
+      </div>
+
+      <section id="report-ready" class="report-ready" aria-labelledby="report-ready-heading" hidden>
+        <header class="hero">
+          <p class="eyebrow">Feedback</p>
+          <h1 id="report-ready-heading" tabindex="-1">Report ready</h1>
+          <p>Your selected artifacts have been prepared locally.</p>
+        </header>
+
+        <p class="retention-notice">Your temporary prepared files will be cleared the next time StashBase starts.</p>
+
+        <div class="handoff-actions">
+          <div class="handoff-action">
+            <p>File Explorer will open with your prepared artifacts. Drag and drop the files into the prefilled GitHub issue.</p>
+            <button id="open-github" class="button primary" type="button">Open GitHub</button>
+          </div>
+          <div class="handoff-action">
+            <p>Save the selected artifacts locally to keep or share them.</p>
+            <button id="save-artifacts" class="button secondary" type="button">Save Selected Artifacts</button>
+          </div>
+        </div>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <footer class="actions">
+        <button id="cancel" class="button secondary" type="button">Cancel</button>
+        <button id="approve" class="button primary" type="button">Prepare Report</button>
+      </footer>
+    </main>
+    <script src="./bug-report-review-renderer.js"></script>
+  </body>
+</html>

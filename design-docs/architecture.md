@@ -25,6 +25,7 @@ library per installation.
 | `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never overwritten by StashBase. |
 | Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
 | Application-scoped Agent runtimes | StashBase | They are downloaded on demand into AppData, remain outside the user's PATH, and can be rebuilt without touching provider accounts or global installations. |
+| Bug-report drafts | StashBase desktop application | They are ephemeral application state; renderers receive only opaque references and safe display metadata. |
 | Credentials and user settings | StashBase settings | They are managed through Settings, not environment variables. Appearance is user-wide, updates every open window immediately, and is limited to theme plus UI and reading-size presets. |
 
 Derived artifacts must not appear as ordinary files in the workspace. When
@@ -109,6 +110,9 @@ user-visible source file.
 - External URLs and local-file navigation follow explicit, validated paths.
 - Network, commands, deletion, rename, and broader filesystem access remain
   explicit approval decisions in the Agent Panel.
+- Bug-report draft lifecycle and any future report artifacts are owned by the
+  desktop application. Renderer views can present safe draft metadata but do
+  not own artifacts, filesystem access, or privileged actions.
 
 ## Documentation Boundary
 

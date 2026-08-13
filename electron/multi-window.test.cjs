@@ -168,6 +168,23 @@ test('Help menu opens the shared links and is the last menu on both platforms', 
   }
 });
 
+test('application menu exposes Report a Bug from Help without coupling it to renderer UI', () => {
+  let reports = 0;
+  const template = createApplicationMenuTemplate({
+    platform: 'linux',
+    onNewWindow: () => {},
+    onCloseWindow: () => {},
+    onOpenExternal: () => {},
+    onReportBug: () => { reports += 1; },
+  });
+  const helpMenu = template.find((item) => item.role === 'help');
+  const reportBug = helpMenu.submenu.find((item) => item.label === 'Report a Bug…');
+
+  assert.ok(reportBug);
+  reportBug.click();
+  assert.equal(reports, 1);
+});
+
 test('window lifecycle input follows the platform menu mapping without stealing tab chords', () => {
   const ctrlShiftN = {
     type: 'keyDown',
