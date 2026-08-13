@@ -547,8 +547,8 @@ function pushRecent(absPath: string): void {
   // No cap: this list IS the knowledge-base membership ("Your Folders"),
   // not a transient recency log. Opening a folder joins it; the only way
   // out is an explicit remove (`removeRecent`). A hard cap would silently
-  // evict the oldest member's searchability — see the folder-redesign
-  // model (data-layer.md §membership).
+  // evict the oldest member's searchability — see the library-membership
+  // ownership contract in code-review/data-lifecycle.md.
   cfg.recentFolders = filtered;
   // Drop the legacy field once we've migrated its content forward.
   delete cfg.recentVaults;

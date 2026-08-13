@@ -1,7 +1,7 @@
-# Markdown document runtime
+# Markdown Rendering
 
 > Code review contract for the shared Milkdown CrepeBuilder Markdown surface.
-> Product intent is in [design-docs/design/markdown.md](../design-docs/design/markdown.md).
+> Product intent is in [design-docs/design/documents.md](../design-docs/design/documents.md).
 
 Markdown files remain the source and index input. Opening a note parses it into
 one CommonMark + GFM Milkdown document. Writer Mode changes the retained
@@ -117,10 +117,20 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 - Do not add scripts, arbitrary embeds, remote document state, or AI features
   to the editor; the Agent panel is the application AI surface.
 
+## Implementation Map
+
+| Role | Stable entry points |
+|---|---|
+| Document Interface | `web-src/src/components/CrepeDocument.tsx` and its registered editor handle |
+| Markdown Modules | `web-src/src/milkdown/frontmatter.ts`, `headings.ts`, `outlineNavigation.ts`, `navigation.ts`, `paths.ts`, and `imageUrls.ts` |
+| Trust Interface | `sanitizeMarkdownHtml` in `shared/html-sanitization.ts` |
+| Workspace Adapter | `useDocumentActions.ts`, document tabs, Find, outline, lightbox, and upload actions |
+| Asset/navigation Adapter | `/asset` route plus `web-src/src/api.ts` and Milkdown navigation helpers |
+| Focused evidence | `web-src/src/milkdown/__tests__/`, navigation/image/Find renderer tests, and `e2e/journeys/markdown-*.spec.ts` |
+
 ## Validation
 
-Run `pnpm typecheck`, `pnpm test:renderer`, and
-`npx vite build --config web-src/vite.config.ts`. Add focused tests for local
+Run `pnpm typecheck`, `pnpm test:renderer`, and `pnpm build:web`. Add focused tests for local
 link validation, serialization/refresh behavior, document-scoped Find, and
 local image path derivation whenever those seams change. Run
 `pnpm test:e2e:functional` for the automated Markdown journey: frontmatter
@@ -140,4 +150,5 @@ changing slash commands, tables, code blocks, math, selection popovers, or
 lightbox behavior, verify the affected interaction manually and add the
 lowest-level focused regression practical. See
 [UI Regression Testing](ui-regression-testing.md) for fixture, selector, and
-baseline rules.
+baseline rules. Executable source HTML is a separate viewer and its current
+trust exception lives in [Document Viewers](document-viewers.md).

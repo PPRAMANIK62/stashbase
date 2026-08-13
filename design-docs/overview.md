@@ -33,11 +33,13 @@ re-explaining it.
 
 ## Product Shape
 
-- A local-file workspace for browsing and maintaining ordinary folders.
-- Document preparation and retrieval that make those folders useful as context.
-- An optional built-in Agent chat that leads before a document is opened and
-  adapts into a side panel beside active source work, complementing rather
-  than replacing bring-your-own-agent workflows.
+- A VS Code-like **Document Workbench** for browsing, reading, editing, and
+  navigating ordinary local files.
+- A Codex-like **Agent Panel** whose Chat leads before a document is opened and
+  docks beside active source work, while complementing bring-your-own-agent
+  workflows.
+- A **local RAG layer** that prepares difficult formats and retrieves
+  source-grounded evidence for built-in and external Agents.
 
 For the durable decision rules, see [Principles](principles.md). For the
 intended product shape, see [Product Direction](product-direction.md). For the

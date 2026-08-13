@@ -79,10 +79,11 @@ When you open StashBase for the first time:
 2. **(Optional) Set up AI Index**: To search by meaning and give Agents better retrieval, add an OpenAI or OpenRouter API key in **Settings → AI Index**. An OpenAI restricted key needs access only to embeddings with `text-embedding-3-small`; model-list access is not required.
 3. **(Optional) Set up transcription**: To transcribe audio or video, download a speech model from **Settings → Transcription**. Small (465 MiB) is the default; Tiny (74 MiB) and Base (141 MiB) are lighter options. Transcription runs entirely on your machine, with no API cost, and you can cancel or rerun it while viewing the file
 4. **(Optional) Connect to Claude/Codex**: From **Settings → MCP**, connect external AI tools to access your searchable library
-5. **Start in Chat**: Opening a folder starts a fresh built-in Agent chat.
-   Codex is the first default; after you choose Claude or Codex, StashBase
-   remembers that choice. Selecting a source file brings the document
-   alongside the same conversation.
+5. **Start in Chat**: Chat is already open with one reusable blank session.
+   Opening the app or a folder does not install an Agent; the first explicit
+   **New Chat** prepares the selected runtime. Codex is the initial default,
+   and StashBase remembers later Claude or Codex choices. Selecting a source
+   file brings the document alongside the same conversation.
 
 Your library is **opt-in**: only folders you open in StashBase are indexed. You can remove a folder at any time; StashBase clears its index but never deletes your files from disk.
 
@@ -202,16 +203,17 @@ For manual stdio setup, URL-based clients, Docker access, ports, CORS boundaries
 ## Built-In Agent Chat
 
 StashBase includes a built-in chat for running local Agent CLIs such as Claude
-Code and Codex against the current folder. Chat fills the workspace until you
-open a document, then adapts into a side panel so the conversation and source
-stay visible together.
+Code and Codex against the whole library or one selected folder. Chat fills the
+workspace until you open a document, then adapts into a side panel so the
+conversation and source stay visible together.
 
 The chat is a convenient client of the same MCP server, not a separate
 knowledge base. It adds:
 
-- Sessions run in the current folder, next to the files they work on.
-- A fresh conversation opens with each folder; Codex is the first default and
-  later folder chats use the Agent you last selected.
+- Sessions keep their chosen Library or folder scope even when the window
+  switches folders.
+- New Chat reuses a completely blank conversation when possible; Codex is the
+  first default and later chats use the Agent you last selected.
 - Tool calls and file edits can be reviewed in the app.
 - Session history stays in the Agent CLI's normal storage.
 - Agent replies render GFM and offline LaTeX math without changing the copied
@@ -251,6 +253,10 @@ areas without duplicating the source tree:
 - [Principles](design-docs/principles.md) - durable decision rules
 - [Architecture](design-docs/architecture.md) - system boundaries and invariants
 - [Product direction](design-docs/product-direction.md) - intended product shape
+- [Product scenarios](design-docs/product-scenarios.md) - high-level user motivations
+- [User journeys](design-docs/user-journeys.md) - observable workflows and stable coverage IDs
+- [Glossary](design-docs/glossary.md) - shared product language
+- [Code review contracts](code-review/README.md) - maintainer invariants and validation maps
 
 ---
 

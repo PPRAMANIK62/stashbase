@@ -12,6 +12,10 @@ Local files → Convert → Index → Retrieve → MCP → Agents
      └──────────── Agent-written files ─────────┘
 ```
 
+The Document Workbench is the user-facing surface over local files.
+Preparation and Search and Retrieval form the local RAG layer, while the Agent
+Panel is the built-in Agent client over the same authorized context.
+
 The desktop application owns file access, user interaction, format
 preparation, and the MCP boundary. A local indexing runtime owns chunking,
 embedding, storage, and semantic retrieval. Together they operate as one local
@@ -104,8 +108,10 @@ user-visible source file.
 
 ## Trust Boundaries
 
-- Untrusted document content is rendered without granting it application
-  privileges.
+- Untrusted document content must be rendered without granting it application
+  privileges. The current executable-HTML compatibility viewer is a known
+  exception tracked in
+  [Document Viewers](../code-review/document-viewers.md#trust-boundary).
 - External URLs and local-file navigation follow explicit, validated paths.
 - Network, commands, deletion, rename, and broader filesystem access remain
   explicit approval decisions in the Agent Panel.
