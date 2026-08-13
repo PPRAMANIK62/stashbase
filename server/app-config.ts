@@ -8,7 +8,6 @@
  * routes that only need a key shouldn't import the whole window-context machinery.
  */
 import fs from 'node:fs';
-import childProcess from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
@@ -180,37 +179,6 @@ function isConfigAccessError(err: unknown): err is NodeJS.ErrnoException {
   return code === 'EACCES' || code === 'EPERM';
 }
 
-function ownedRegularPath(target: string, uid: number): boolean {
-  try {
-    const stat = fs.lstatSync(target);
-    return !stat.isSymbolicLink() && (stat.isDirectory() || stat.isFile()) && stat.uid === uid;
-  } catch {
-    return false;
-  }
-}
-
-/** macOS ACLs can deny creation even when the POSIX mode is 0700. Repair only
- * the two StashBase-owned paths, only when they are real paths owned by this
- * process's user; never follow a symlink or touch another account's files. */
-function repairOwnedMacConfigAcl(): boolean {
-  if (process.platform !== 'darwin' || typeof process.getuid !== 'function') return false;
-  const uid = process.getuid();
-  if (!ownedRegularPath(CONFIG_DIR, uid)) return false;
-  const targets = [CONFIG_DIR];
-  if (ownedRegularPath(CONFIG_FILE, uid)) targets.push(CONFIG_FILE);
-  for (const target of targets) {
-    const result = childProcess.spawnSync('/bin/chmod', ['-N', target], { stdio: 'ignore' });
-    if (result.status !== 0) return false;
-  }
-  try {
-    fs.chmodSync(CONFIG_DIR, 0o700);
-    if (targets.includes(CONFIG_FILE)) fs.chmodSync(CONFIG_FILE, 0o600);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function configAccessError(cause: unknown): Error {
   let message = 'StashBase cannot save settings in ~/.stashbase. Check that your account has write access to this folder, then try again.';
   if (process.platform !== 'win32' && typeof process.getuid === 'function') {
@@ -259,15 +227,6 @@ export function writeAppConfigStrict(cfg: AppConfigFile): void {
     writeSerializedConfig(serialized);
   } catch (err) {
     if (!isConfigAccessError(err)) throw err;
-    if (repairOwnedMacConfigAcl()) {
-      try {
-        writeSerializedConfig(serialized);
-        return;
-      } catch (retryErr) {
-        if (!isConfigAccessError(retryErr)) throw retryErr;
-        throw configAccessError(retryErr);
-      }
-    }
     throw configAccessError(err);
   }
 }

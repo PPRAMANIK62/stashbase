@@ -39,7 +39,7 @@ function runConfigWrite(home: string) {
   );
 }
 
-test('macOS config writes repair a same-owner ACL that blocks atomic temp files', {
+test('macOS config writes do not alter an ACL that blocks atomic temp files', {
   skip: process.platform !== 'darwin',
 }, () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-config-acl-test-'));
@@ -56,13 +56,18 @@ test('macOS config writes repair a same-owner ACL that blocks atomic temp files'
     );
 
     const result = runConfigWrite(home);
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(
-      JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8')),
-      { embedder: { provider: 'openai', apiKey: 'test-key' } },
+    assert.equal(result.status, 17);
+    const failure = JSON.parse(result.stderr);
+    assert.equal(failure.code, 'CONFIG_NOT_WRITABLE');
+    assert.equal(failure.status, 500);
+    assert.match(failure.message, /cannot save settings/i);
+    assert.match(failure.message, /~\/\.stashbase/);
+    assert.doesNotMatch(failure.message, /config\.json\..*\.tmp/);
+    assert.throws(
+      () => fs.writeFileSync(deniedProbe, 'still blocked'),
+      (error: NodeJS.ErrnoException) => error.code === 'EACCES' || error.code === 'EPERM',
+      'StashBase must leave the user-managed ACL unchanged',
     );
-    assert.equal(fs.statSync(configDir).mode & 0o777, 0o700);
-    assert.equal(fs.statSync(path.join(configDir, 'config.json')).mode & 0o777, 0o600);
   } finally {
     execFileSync('/bin/chmod', ['-RN', configDir]);
     fs.rmSync(home, { recursive: true, force: true });
