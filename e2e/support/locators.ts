@@ -1,6 +1,5 @@
 import type { Locator, Page } from 'playwright';
 
-const embeddingPromptDismissedPages = new WeakSet<Page>();
 
 export function appShell(page: Page): Locator {
   return page.locator('body[data-boot-settled="1"] > #root');
@@ -111,10 +110,16 @@ export function saveStatus(page: Page): Locator {
 }
 
 export async function dismissEmbeddingKeyPrompt(page: Page): Promise<void> {
-  if (embeddingPromptDismissedPages.has(page)) return;
+  // The AI Index prompt re-offers PER FOLDER within a window (the skip is
+  // folder-scoped), so this can no longer cache per page: dismiss the
+  // dialog whenever it shows, and no-op when this folder was already
+  // skipped in this window (the timeout path).
   const skip = page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
-  await skip.waitFor({ state: 'visible', timeout: 10_000 });
+  try {
+    await skip.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
+    return;
+  }
   await skip.click();
   await skip.waitFor({ state: 'hidden' });
-  embeddingPromptDismissedPages.add(page);
 }
