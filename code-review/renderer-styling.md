@@ -26,8 +26,8 @@ this file records the mechanics a change must respect.
    `muted-foreground` is subdued text. The `dark:` variant is redefined to
    follow `data-theme`; never rely on the raw media query.
 3. **Primitives** (`web-src/src/components/ui/`) — shadcn-generated Base UI
-   adapters (button, input, segmented-control, card, dialog, alert-dialog,
-   menu, popover, toast, tooltip, status). Feature code must not recreate
+   adapters (button, input, select, segmented-control, dialog, alert-dialog,
+   menu, toast, tooltip, status). Feature code must not recreate
    their focus, Escape, outside-press, collision, timer, or announcement
    behavior, and new buttons/inputs/selectable groups use these instead of
    bespoke classes.
@@ -110,7 +110,7 @@ Extend it when the contract grows; never weaken it to land a change.
 - **Tab strip** (mainpane.css): `electron/tab-strip-layout-smoke.cjs` reads
   this file raw and asserts layout from it — migrate the test before
   migrating the CSS.
-- **Rendered-content typography**: `.doc` (Markdown reading view), Crepe
+- **Rendered-content typography**: Crepe
   variable bridge (`.crepe-shell`), `.agent-prose` and agent thinking/diff
   blocks, One-Dark syntax palette, and CodeMirror-generated JSON token classes.
   JSON token classes consume the light/dark `--syntax-json-*` roles from the
@@ -127,10 +127,21 @@ Extend it when the contract grows; never weaken it to land a change.
   (e.g. `.agent-view`, `quick-open-veil`) — do not re-grow
   styling onto them.
 
-Small still-unmigrated stragglers (`.migrate-*` cascade modal content,
-`.transcription-model-*`, `.capture-state-*`, `.clipboard-offer-preview`,
-`.empty-list`, preparation icons) are pending, not exempt — migrate them
-when touching their components, deleting the rules in the same change.
+Small still-unmigrated stragglers (`.transcription-model-*`,
+`.clipboard-offer-preview`, preparation icons) are pending, not exempt —
+migrate them when touching their components, deleting the rules in the
+same change.
+
+## Implementation Map
+
+| Role | Stable entry points |
+|---|---|
+| Token Interface | `web-src/src/styles/globals.css` |
+| Utility Adapter | Tailwind mapping in `web-src/src/styles.css` |
+| Primitive Interface | `web-src/src/components/ui/` |
+| Feature styling | JSX utility classes plus the documented exemptions under `web-src/src/styles/` |
+| Generated icon Adapter | source map in `scripts/gen-icons.mjs` → `web-src/src/icons.tsx` |
+| Focused evidence | `web-src/src/__tests__/renderer-foundation.test.ts`, `electron/tab-strip-layout-smoke.cjs`, and `e2e/visual/` |
 
 ## Review checklist for styling changes
 
@@ -154,7 +165,8 @@ intentional updates through the manual **Generate visual baselines** workflow,
 review every expected/actual/diff image and the binary patch, then include only
 the approved PNG changes with the styling change.
 
-Run `pnpm test:e2e:visual` to compare existing baselines and
+Run `pnpm typecheck`, `pnpm test:renderer`, and `pnpm build:web` for styling
+changes. Run `pnpm test:e2e:visual` to compare existing baselines and
 `pnpm test:e2e:visual:update` only in the Linux-authoritative environment.
 Visual tests use explicit viewport/theme/content and reduced motion; do not
 silence a regression with broad masks, fixed sleeps, or a global pixel

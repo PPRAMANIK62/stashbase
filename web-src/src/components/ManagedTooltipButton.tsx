@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef } from 'react';
 import type {
-  DeferredTooltipButtonProps,
+  TooltipButtonProps,
   FocusTransferRef,
-} from './DeferredTooltipButton';
+} from './TooltipButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
 export default function ManagedTooltipButton({
@@ -11,7 +11,7 @@ export default function ManagedTooltipButton({
   children,
   focusTransferRef,
   ...buttonProps
-}: DeferredTooltipButtonProps & {
+}: TooltipButtonProps & {
   focusTransferRef: FocusTransferRef;
 }) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);

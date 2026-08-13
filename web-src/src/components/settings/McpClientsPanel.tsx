@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type McpHttpStatus } from '../../api';
 import { MCP_CLIENTS, mcpClientLabel, type McpClientId } from '../../agentCatalog';
+import { useApp } from '../../store/AppContext';
 import { CopyIcon, CheckIcon } from '../../icons';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -17,6 +18,14 @@ interface McpConfigureResult {
   command?: string;
 }
 
+/** The `destructive-outline` Button variant's hover trio (ui/button.tsx),
+ * borrowed byte-for-byte. The connected button can't BE that variant: its
+ * accent rest tint clashes with the variant's `dark:` surface recipes, and
+ * `dark:`-prefixed rest overrides would in turn outrank the variant's own
+ * hover border. Keep in sync with the variant. */
+const DISCONNECT_HOVER_CLASS =
+  'hover:border-destructive/45 hover:bg-destructive/5 hover:text-destructive';
+
 type McpClientStatus = {
   configured: boolean;
   cliInstalled?: boolean;
@@ -24,6 +33,7 @@ type McpClientStatus = {
 };
 
 export function McpClientsPanel() {
+  const { actions } = useApp();
   const mountedRef = useRef(true);
   const copyResetTimerRef = useRef<number | null>(null);
   const [busy, setBusy] = useState<McpClientId | null>(null);
@@ -159,7 +169,11 @@ export function McpClientsPanel() {
   }
 
   async function rotateToken() {
-    if (!window.confirm('Rotate the MCP bearer token? URL-based clients using the current token will stop working.')) return;
+    const confirmed = await actions.confirm(
+      'Rotate the MCP bearer token? URL-based clients using the current token will stop working.',
+      { title: 'Rotate MCP token?', confirmLabel: 'Rotate', destructive: true },
+    );
+    if (!confirmed) return;
     setHttpBusy(true);
     setStatus(null);
     try {
@@ -243,7 +257,7 @@ export function McpClientsPanel() {
                   className={
                     'inline-flex h-6 min-w-[98px] items-center justify-center rounded-full border px-2.25 text-xs font-medium whitespace-nowrap '
                     + (badge.tone === 'warn'
-                      ? 'border-status-danger/30 bg-status-danger/5 text-destructive'
+                      ? 'border-status-danger/25 bg-status-danger/10 text-status-danger'
                       : 'border-status-warning/25 bg-status-warning/10 text-status-warning')
                   }
                   title={badge.title}
@@ -258,7 +272,7 @@ export function McpClientsPanel() {
                 className={
                   'min-w-24 flex-none '
                   + (isConnected
-                    ? 'border-accent/30 bg-accent/10 text-accent hover:border-destructive/45 hover:bg-destructive/5 hover:text-destructive'
+                    ? `border-accent/30 bg-accent/10 text-accent ${DISCONNECT_HOVER_CLASS}`
                     : 'hover:border-accent/30 hover:bg-accent/10 hover:text-accent')
                 }
                 disabled={busy != null}
@@ -302,14 +316,14 @@ export function McpClientsPanel() {
               <div className="flex min-w-0 items-center gap-1.5">
                 <Input
                   id="mcp-http-token"
-                  className="flex-1 font-mono text-sm"
+                  className="h-8 flex-1 font-mono text-sm"
                   type={showToken ? 'text' : 'password'}
                   readOnly
                   spellCheck={false}
                   value={http.token ?? ''}
                   placeholder={http.settingsError ? 'Unavailable' : undefined}
                 />
-                <Button variant="outline" size="sm" disabled={!http.token} onClick={() => setShowToken((shown) => !shown)}>
+                <Button variant="outline" disabled={!http.token} onClick={() => setShowToken((shown) => !shown)}>
                   {showToken ? 'Hide' : 'Show'}
                 </Button>
                 <CopyButton
@@ -321,7 +335,7 @@ export function McpClientsPanel() {
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
-              <Button variant="outline" size="sm" disabled={httpBusy || !http.token} onClick={() => void rotateToken()}>
+              <Button variant="outline" disabled={httpBusy || !http.token} onClick={() => void rotateToken()}>
                 Rotate token…
               </Button>
               <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-foreground">
@@ -340,7 +354,7 @@ export function McpClientsPanel() {
               <div className="flex min-w-0 items-center gap-1.5">
                 <Input
                   id="mcp-http-docker-port"
-                  className="flex-1 font-mono text-sm"
+                  className="h-8 flex-1 font-mono text-sm"
                   type="number"
                   min={1024}
                   max={65535}
@@ -351,7 +365,6 @@ export function McpClientsPanel() {
                 />
                 <Button
                   variant="outline"
-                  size="sm"
                   disabled={httpBusy || http.dockerAccess || !!http.settingsError || dockerPortInput === String(http.dockerPort)}
                   onClick={() => void saveDockerPort()}
                 >
@@ -382,7 +395,7 @@ export function McpClientsPanel() {
             )}
           </>
         ) : (
-          <div className="text-sm text-muted-foreground">Loading URL access…</div>
+          <div className="py-3 text-base text-muted-foreground">Loading URL access…</div>
         )}
       </div>
 
@@ -412,7 +425,7 @@ function McpHttpField(props: { label: string; value: string; copied: boolean; on
     <div className="mt-2.5 flex flex-col gap-1">
       <label htmlFor={id} className="text-xs font-semibold text-muted-foreground">{props.label}</label>
       <div className="flex min-w-0 items-center gap-1.5">
-        <Input id={id} className="flex-1 font-mono text-sm" type="text" readOnly spellCheck={false} value={props.value} />
+        <Input id={id} className="h-8 flex-1 font-mono text-sm" type="text" readOnly spellCheck={false} value={props.value} />
         <CopyButton copied={props.copied} onCopy={props.onCopy} label={props.label} />
       </div>
     </div>
@@ -420,13 +433,13 @@ function McpHttpField(props: { label: string; value: string; copied: boolean; on
 }
 
 /** Icon-only copy button (clipboard ↔ accent check — palette is
- * cyan/amber/red, no green). Sized to match the h-7 Input/Button rows. */
+ * cyan/amber/red, no green). Sized to match the h-8 Input/Button rows. */
 function CopyButton(props: { copied: boolean; disabled?: boolean; onCopy(): void; label: string }) {
   return (
     <Button
       type="button"
       variant="outline"
-      size="icon-sm"
+      size="icon"
       className={
         'flex-none '
         + (props.copied

@@ -7,7 +7,7 @@ import {
 } from 'react';
 import { lazyWithRetry } from './ErrorBoundary';
 
-export interface DeferredTooltipButtonProps
+export interface TooltipButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   label: string;
   side?: 'top' | 'bottom' | 'left' | 'right';
@@ -24,7 +24,7 @@ interface FocusTransferRef {
  * The accessible button is available immediately. Only its supplementary
  * visual tooltip is deferred, keeping Base UI positioning out of startup JS.
  */
-export function DeferredTooltipButton(props: DeferredTooltipButtonProps) {
+export function TooltipButton(props: TooltipButtonProps) {
   const focusTransferRef = useRef(false);
   return (
     <Suspense
@@ -42,7 +42,7 @@ function TooltipButtonFallback({
   children,
   focusTransferRef,
   ...buttonProps
-}: DeferredTooltipButtonProps & {
+}: TooltipButtonProps & {
   focusTransferRef: FocusTransferRef;
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { activeDocument, activeDocumentTab, dismissEmbeddingKeyPrompt, fileTreeRow, folderButton } from '../support/locators.ts';
+import { activeDocument, activeDocumentTab, dismissEmbeddingKeyPrompt, fileTreeRow, openLibraryFolder } from '../support/locators.ts';
 import { primaryKey } from './journey-helpers.ts';
 
 test('Find transfers its query and active-folder scope to exact all-files search', async ({}, testInfo) => {
@@ -12,7 +12,7 @@ test('Find transfers its query and active-folder scope to exact all-files search
     const launched = await launchApp(fixture, testInfo);
     app = launched;
     await test.step('open document Find', async () => {
-      await folderButton(launched.page, 'project-alpha').click();
+      await openLibraryFolder(launched.page, 'project-alpha');
       await dismissEmbeddingKeyPrompt(launched.page);
       await fileTreeRow(launched.page, 'Welcome.md').click();
       await expect(activeDocument(launched.page)).toContainText('Alpha smoke fixture content');
@@ -48,7 +48,7 @@ test('splitters expose keyboard-updated ARIA values and compact resize preserves
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
 

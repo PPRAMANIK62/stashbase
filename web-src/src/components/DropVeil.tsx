@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazyWithRetry } from './ErrorBoundary';
 
-const MotionDropVeil = lazy(() => import('./MotionDropVeil'));
+const ManagedDropVeil = lazyWithRetry(() => import('./ManagedDropVeil'));
 
 /** Drag-import veil. Visibility flows from the global drag handler in
  *  the parent (`useGlobalDragDrop`) via the `hot` prop. Motion is loaded only
@@ -9,7 +10,7 @@ export function DropVeil({ hot }: { hot: boolean }) {
   if (!hot) return null;
   return (
     <Suspense fallback={<div className="drop-veil hot">Release to import</div>}>
-      <MotionDropVeil />
+      <ManagedDropVeil />
     </Suspense>
   );
 }

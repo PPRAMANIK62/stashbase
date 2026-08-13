@@ -17,6 +17,7 @@ test('renderer foundation keeps Tailwind utility-only and maps semantic tokens',
   for (const token of [
     'background', 'foreground', 'pane', 'card', 'border', 'accent', 'focus', 'danger',
     'status-info', 'status-success', 'status-warning', 'status-danger',
+    'scrim', 'veil', 'veil-quiet', 'stroke-strong',
   ]) {
     assert.match(styles, new RegExp(`--color-${token}:`));
   }
@@ -66,14 +67,26 @@ test('chrome type scale and radius scale are the only visual values', () => {
   assert.doesNotMatch(button, /rounded-(lg|xl|2xl)/);
 
   // Legacy CSS stays on the shared scale: no half-pixel chrome sizes, no
-  // off-palette accent blues, no odd font weights. (.doc rendered-document
-  // typography is the one allowed exemption, all inside mainpane.css.)
+  // off-palette accent blues, no odd font weights.
   const legacy = ['globals', 'chat', 'sidebar', 'mainpane']
     .map((name) => read(`web-src/src/styles/${name}.css`))
     .join('\n');
-  assert.doesNotMatch(legacy, /font-size: calc\((9|10|11|13)\.5px/);
+  const legacyBlue = /46, ?116, ?230|#4a8cff|#4f7cff|#1a73e8/;
+  assert.doesNotMatch(legacy, /font-size: calc\((9|10|11|12|13)\.5px/);
   assert.doesNotMatch(legacy, /font-weight: *(650|800)\b/);
-  assert.doesNotMatch(legacy, /46, ?116, ?230|#4a8cff|#4f7cff/);
+  assert.doesNotMatch(legacy, legacyBlue);
+  // The ban covers TS/TSX too: the legacy blue once hid inside injected
+  // <style> strings (previewChunkHighlight, findIframe) where a CSS-only
+  // scan could not see it.
+  const walkSources = (dir: string): string[] =>
+    fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((entry) => {
+      const rel = path.join(dir, entry.name);
+      if (entry.isDirectory()) return entry.name === '__tests__' ? [] : walkSources(rel);
+      return /\.tsx?$/.test(entry.name) ? [rel] : [];
+    });
+  for (const file of walkSources('web-src/src')) {
+    assert.doesNotMatch(read(file), legacyBlue, `${file} carries a legacy accent blue`);
+  }
   // Corners come off the scale too. The transcript's jump-to-latest
   // capsule is the one sanctioned literal — a 999px pill is a shape, not
   // a scale step, and it opts out of the squircle for the same reason.
@@ -81,9 +94,6 @@ test('chrome type scale and radius scale are the only visual values', () => {
   // The squircle is what makes the corners read as continuous rather than
   // merely large; losing it silently would flatten the whole app.
   assert.match(legacy, /corner-shape: squircle;/);
-  const doc = read('web-src/src/styles/mainpane.css');
-  const halfPixel = doc.match(/12\.5px/g) ?? [];
-  assert.ok(halfPixel.length <= 2, `unexpected half-pixel sizes outside .doc: ${halfPixel.length}`);
 
   // Migrated components consume named tokens, not arbitrary-value escapes.
   const componentDirs = ['web-src/src/components', 'web-src/src/components/ui', 'web-src/src/components/agent', 'web-src/src/components/settings', 'web-src/src/components/embedder'];
@@ -102,6 +112,24 @@ test('chrome type scale and radius scale are the only visual values', () => {
   }
 });
 
+test('explicit-dark and system-dark token blocks stay identical', () => {
+  // globals.css maintains the dark palette twice: once for the explicit
+  // data-theme='dark' choice and once for system-following mode. They are
+  // hand-synced duplicates (see the comment above the blocks) — this guards
+  // against a token landing in one and silently missing from the other.
+  const globals = read('web-src/src/styles/globals.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const declarations = (block: RegExp): string[] => {
+    const body = globals.match(block)?.[1];
+    assert.ok(body, `dark theme block not found: ${block}`);
+    return body.split(';').map((decl) => decl.trim()).filter(Boolean);
+  };
+  const explicitDark = declarations(/:root\[data-theme='dark'\]\s*\{([^}]*)\}/);
+  const systemDark = declarations(
+    /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme\]\),\s*:root\[data-theme='system'\]\s*\{([^}]*)\}/,
+  );
+  assert.deepEqual(systemDark, explicitDark);
+});
+
 test('shadcn generation is configured for Base UI and renderer aliases', () => {
   const config = JSON.parse(read('components.json')) as Record<string, unknown>;
   assert.equal(config.style, 'base-nova');
@@ -111,20 +139,23 @@ test('shadcn generation is configured for Base UI and renderer aliases', () => {
 });
 
 test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
-  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /\.\/ui\/dialog/);
-  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /\.\/ui\/button/);
+  // The clipboard prompt rides the shared shell; the shell owns the one
+  // Base UI dialog recipe (surface, width, title role) for every modal.
+  assert.match(read('web-src/src/components/ManagedClipboardImport.tsx'), /\.\/ManagedModalShell/);
+  assert.match(read('web-src/src/components/ManagedClipboardImport.tsx'), /\.\/ui\/button/);
   assert.match(read('web-src/src/components/ui/dialog.tsx'), /@base-ui\/react\/dialog/);
-  assert.match(read('web-src/src/components/ui/dialog.tsx'), /bg-black\/35.*data-open:animate-in/);
+  assert.match(read('web-src/src/components/ui/dialog.tsx'), /bg-veil.*data-open:animate-in/);
   assert.match(read('web-src/src/components/ui/dialog.tsx'), /data-open:zoom-in-95/);
-  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /<DialogTitle/);
-  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /!w-\[min\(420px,90vw\)\] !max-w-\[90vw\] !gap-0/);
-  assert.match(read('web-src/src/components/ClipboardImportModal.tsx'), /<ClipboardImportDialog/);
-  assert.match(read('web-src/src/components/ClipboardImportDialog.tsx'), /autoFocus onClick=\{onAdd\}/);
+  assert.match(read('web-src/src/components/ManagedModalShell.tsx'), /\.\/ui\/dialog/);
+  assert.match(read('web-src/src/components/ManagedModalShell.tsx'), /<DialogTitle/);
+  assert.match(read('web-src/src/components/ManagedModalShell.tsx'), /w-\[min\(420px,90vw\)\]/);
+  assert.match(read('web-src/src/components/ClipboardImportModal.tsx'), /<ManagedClipboardImport/);
+  assert.match(read('web-src/src/components/ManagedClipboardImport.tsx'), /autoFocus onClick=\{onAdd\}/);
   assert.doesNotMatch(read('web-src/src/components/ClipboardImportModal.tsx'), /window\.addEventListener/);
-  assert.doesNotMatch(read('web-src/src/components/ModalShell.tsx'), /ClipboardImportDialog/);
-  assert.match(read('web-src/src/components/MotionDropVeil.tsx'), /MotionConfig reducedMotion="user"/);
-  assert.match(read('web-src/src/components/MotionDropVeil.tsx'), /animate=\{\{ opacity: 1 \}\}/);
-  assert.match(read('web-src/src/components/Overlays.tsx'), /lazy\(\(\) => import\('\.\/MotionDropVeil'\)\)/);
+  assert.doesNotMatch(read('web-src/src/components/ModalShell.tsx'), /ManagedClipboardImport/);
+  assert.match(read('web-src/src/components/ManagedDropVeil.tsx'), /MotionConfig reducedMotion="user"/);
+  assert.match(read('web-src/src/components/ManagedDropVeil.tsx'), /animate=\{\{ opacity: 1 \}\}/);
+  assert.match(read('web-src/src/components/DropVeil.tsx'), /lazyWithRetry\(\(\) => import\('\.\/ManagedDropVeil'\)\)/);
   const globals = read('web-src/src/styles/globals.css');
   assert.match(globals, /transition-property: opacity, color, background-color/);
   assert.match(globals, /animation-duration: 0\.01ms !important/);
@@ -156,7 +187,6 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   for (const [file, primitive] of [
     ['web-src/src/components/ui/alert-dialog.tsx', 'alert-dialog'],
     ['web-src/src/components/ui/menu.tsx', 'menu'],
-    ['web-src/src/components/ui/popover.tsx', 'popover'],
     ['web-src/src/components/ui/toast.tsx', 'toast'],
     ['web-src/src/components/ui/tooltip.tsx', 'tooltip'],
   ]) {
@@ -189,11 +219,12 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
 
   const app = read('web-src/src/App.tsx');
   assert.match(app, /<OverlayStackProvider>/);
-  assert.match(app, /role="separator"/);
-  assert.match(app, /aria-valuemin=/);
-  assert.match(app, /resizeSidebarByKeyboard/);
-  assert.match(app, /resizeChatByKeyboard/);
   assert.doesNotMatch(app, /classList\.add\('is-electron'\)/);
+  const splitters = read('web-src/src/components/WorkspaceSplitters.tsx');
+  assert.match(splitters, /role="separator"/);
+  assert.match(splitters, /aria-valuemin=/);
+  assert.match(splitters, /resizeSidebarByKeyboard/);
+  assert.match(splitters, /resizeChatByKeyboard/);
 
   const preload = read('electron/preload.cjs');
   assert.match(preload, /platform-\$\{process\.platform\}/);
@@ -222,10 +253,6 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   const loadingStatus = read('web-src/src/components/ui/status.tsx');
   assert.match(loadingStatus, /dialog\.showModal\(\)/);
   assert.match(loadingStatus, /if \(isTopmost\) onCancel\(\)/);
-
-  const popover = read('web-src/src/components/ui/popover.tsx');
-  assert.match(popover, /<PopoverPrimitive\.Positioner[\s\S]*side=\{side\}/);
-  assert.match(popover, /<PopoverPrimitive\.Popup[\s\S]*\{\.\.\.props\}/);
 
   const tree = read('web-src/src/components/FileTree.tsx');
   assert.match(tree, /tabIndex=\{treeFocus\.rovingPath === node\.path \? 0 : -1\}/);
@@ -265,9 +292,57 @@ test('shared overlays own loading modality, popup positioning, and focus return'
 
   const markdown = read('web-src/src/components/CrepeDocument.tsx');
   assert.match(markdown, /role="region"/);
-  assert.match(markdown, /aria-label=\{`\$\{documentBasename\(name\)\} Markdown document`\}/);
+  assert.match(markdown, /aria-label=\{`\$\{basename\(name\)\} Markdown document`\}/);
 
   const json = read('web-src/src/components/JsonDocument.tsx');
   assert.match(json, /role="region"/);
   assert.match(json, /aria-label="JSON document"/);
+});
+
+test('shell geometry and reading-surface fixes stay pinned', () => {
+  const globals = read('web-src/src/styles/globals.css');
+  // Drag surfaces never overlap controls: the sidebar drag zone stops at
+  // the titlebar controls (per-element no-drag carve-outs proved
+  // intermittently stale on windowed macOS — geometry, not carving).
+  assert.match(globals, /\.sidebar-drag-zone \{[^}]*width: var\(--titlebar-controls-left\)/s);
+  // The left cluster ellipsizes at the sidebar column edge instead of
+  // bleeding onto the tab strip…
+  assert.match(globals, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\) - 8px\)/s);
+  // …and the collapsed-sidebar budget is ONE token shared by the cluster
+  // cap and both tab-row reserves, so the floating controls never overlap
+  // a tab.
+  assert.match(globals, /--titlebar-controls-collapsed-width:/);
+  assert.match(globals, /\.app\.sidebar-collapsed \.tab-strip \{[^}]*var\(--titlebar-controls-collapsed-width\)/s);
+  assert.match(globals, /\.app\.sidebar-collapsed \.titlebar-controls \{[^}]*max-width: var\(--titlebar-controls-collapsed-width\)/s);
+  assert.match(read('web-src/src/styles/chat.css'), /\.app\.sidebar-collapsed\.chat-primary \.chat-tab-row \{[^}]*var\(--titlebar-controls-collapsed-width\)/s);
+
+  const chat = read('web-src/src/styles/chat.css');
+  // Entering message edit must not collapse the bubble (the textarea has
+  // no intrinsic width): the head takes the full bubble width instead.
+  assert.match(chat, /\.agent-turn-head:has\(\.agent-turn-edit\) \{[^}]*width: min\(85%, 620px\)/s);
+  // No focus ring on the edit textarea ON PURPOSE (composer idiom): text
+  // fields always match :focus-visible, so a halo would flash on every
+  // edit open. The mode change is the affordance.
+  assert.doesNotMatch(chat, /\.agent-turn-edit textarea:focus-visible/);
+
+  const mainpane = read('web-src/src/styles/mainpane.css');
+  // Reading gutters follow the PANE, not the window.
+  assert.match(mainpane, /\.crepe-shell \{[^}]*container-type: inline-size/s);
+  assert.match(mainpane, /clamp\(20px, 6cqi, 48px\)/);
+  // THREE-class selector on purpose: Crepe's packaged stylesheet ships
+  // `.milkdown .ProseMirror { padding: 60px 120px }` in a LATER-loaded
+  // chunk — equal specificity would hand the gutters back to the package.
+  assert.match(mainpane, /\.crepe-shell \.milkdown \.ProseMirror \{/);
+  // Editable gutters seat the block handle (48px); under pane pressure
+  // the ADD tile yields so the drag tile fits instead of clipping.
+  assert.match(mainpane, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown \.ProseMirror \{[^}]*padding-inline: 48px/s);
+  assert.match(mainpane, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown-block-handle \.operation-item:first-child \{[^}]*display: none/s);
+  // Crepe names the handle `milkdown-block-handle`; a `crepe-`-prefixed
+  // selector silently matches nothing.
+  assert.match(mainpane, /\.crepe-readonly \.milkdown-block-handle \{ display: none; \}/);
+  assert.doesNotMatch(mainpane, /crepe-block-handle/);
+
+  // Composer pills yield width under pressure (min-w-0 + label truncate)
+  // so a tight chat panel truncates labels instead of clipping Send.
+  assert.match(read('web-src/src/components/agent/panelStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
 });

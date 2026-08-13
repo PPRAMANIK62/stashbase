@@ -1,3 +1,6 @@
+import { fuzzyScore } from './lib/fuzzy';
+import { basename } from './lib/paths';
+
 export interface QuickOpenItem {
   path: string;
   basename: string;
@@ -5,24 +8,10 @@ export interface QuickOpenItem {
   score: number;
 }
 
-export const basename = (path: string) => path.split('/').pop() ?? path;
-
-/** A small deterministic fuzzy ranker. Basename matches win over path-only
- * matches; contiguous and early matches win within either field. */
-function fuzzyScore(value: string, query: string): number | null {
-  let cursor = 0;
-  let score = 0;
-  let previous = -2;
-  for (const char of query.toLocaleLowerCase()) {
-    const index = value.toLocaleLowerCase().indexOf(char, cursor);
-    if (index < 0) return null;
-    score += 10 - Math.min(index, 8);
-    if (index === previous + 1) score += 12;
-    previous = index;
-    cursor = index + 1;
-  }
-  return score;
-}
+/** Quick Open ranking policy over the shared scorer: basename matches win
+ * over path-only matches; contiguous and early matches win within either
+ * field. */
+const rank = (value: string, query: string) => fuzzyScore(value, query, { contiguityBonus: 12 });
 
 export function rankQuickOpen(paths: string[], query: string, recentPaths: string[]): QuickOpenItem[] {
   const normalized = query.trim();
@@ -34,8 +23,8 @@ export function rankQuickOpen(paths: string[], query: string, recentPaths: strin
   }
   return paths
     .map((path) => {
-      const nameScore = fuzzyScore(basename(path), normalized);
-      const pathScore = fuzzyScore(path, normalized);
+      const nameScore = rank(basename(path), normalized);
+      const pathScore = rank(path, normalized);
       if (nameScore == null && pathScore == null) return null;
       return { path, basename: basename(path), recent: recentRank.has(path), score: Math.max(nameScore ?? -Infinity, (pathScore ?? -Infinity) - 8) };
     })

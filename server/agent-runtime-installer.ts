@@ -102,11 +102,15 @@ export class AgentBootstrapCoordinator {
   }
 
   /** App startup may repair MCP for runtimes it can already discover, but it
-   * must never turn discovery into an implicit download. Login-shell probing
-   * remains attached to the explicit New Chat action so boot stays quick. */
-  connectIfInstalled(id: ManagedAgentId): AgentBootstrapStatus {
+   * must never turn discovery into an implicit download. The synchronous
+   * boot pass skips login-shell probing so listen stays quick; a deferred
+   * post-boot pass repeats it WITH the probe (see
+   * `connectInstalledAgentMcpAfterBoot`), so a system runtime that only a
+   * login shell can resolve still auto-connects without waiting for the
+   * first New Chat. */
+  connectIfInstalled(id: ManagedAgentId, options?: { probeLoginShell?: boolean }): AgentBootstrapStatus {
     if (this.runs.has(id)) return this.status(id);
-    if (!this.dependencies.resolveExecutable(id)) return this.status(id);
+    if (!this.dependencies.resolveExecutable(id, options)) return this.status(id);
     const debug = this.dependencies.debugState();
     try {
       if (debug.simulateMcpFailure) throw new Error('Simulated MCP configuration failure.');
@@ -183,6 +187,17 @@ export function connectInstalledAgentMcpOnStartup(): Array<{ id: ManagedAgentId;
   return (['codex', 'claude'] as const).map((id) => ({
     id,
     status: agentBootstrapCoordinator.connectIfInstalled(id),
+  }));
+}
+
+/** The deferred second startup pass, WITH the login-shell probe: system
+ * runtimes that only a login shell can resolve (nvm/homebrew paths) still
+ * auto-connect shortly after boot instead of waiting for the first New
+ * Chat. Runs off the listen path — the probe spawns a shell. */
+export function connectInstalledAgentMcpAfterBoot(): Array<{ id: ManagedAgentId; status: AgentBootstrapStatus }> {
+  return (['codex', 'claude'] as const).map((id) => ({
+    id,
+    status: agentBootstrapCoordinator.connectIfInstalled(id, { probeLoginShell: true }),
   }));
 }
 

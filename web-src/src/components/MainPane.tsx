@@ -9,6 +9,8 @@ import { TabStrip } from './TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { readPreferredAgent } from '../agentPreference';
 import { retainedMarkdownTabs } from '../milkdown/retainedTabs';
+import { electronBridge } from '../electronBridge';
+import { basename } from '../lib/paths';
 import { Button } from './ui/button';
 import { StatusMessage } from './ui/status';
 
@@ -16,15 +18,6 @@ import { StatusMessage } from './ui/status';
 const VIEWER_LOADING_CLASS = 'p-4 text-base text-muted-foreground';
 const VIEWER_PADDED_LOADING_CLASS = 'p-6 text-base text-muted-foreground';
 const VIEWER_CENTERED_LOADING_CLASS = 'grid h-full place-items-center text-base text-muted-foreground';
-
-/** Display name of an absolute member folder root. Duplicates
- *  `librarySearch.folderBasename` on purpose — importing that module here
- *  would pull the whole search-memory chunk into the entry bundle. */
-function folderBasename(path: string): string {
-  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
-  const segments = normalized.split('/');
-  return segments[segments.length - 1] || normalized;
-}
 
 const LazyCrepeDocument = lazyWithRetry(() => import('./CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
 const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
@@ -56,9 +49,8 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   const outOfFolder = cur?.folder ?? null;
   function openTabFolderInNewWindow() {
     if (!outOfFolder) return;
-    const bridge = (window as { electron?: { openFolderWindow?: (folder: string) => Promise<boolean> } }).electron;
     void (async () => {
-      const opened = await bridge?.openFolderWindow?.(outOfFolder);
+      const opened = await electronBridge()?.openFolderWindow?.(outOfFolder);
       if (!opened) actions.toast('New window is only available in the desktop app.', { level: 'error' });
     })();
   }
@@ -90,7 +82,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
          * (see chromeTop). */
         <StatusMessage tone="info" className="z-5 flex min-h-8 shrink-0 items-center gap-2.5 rounded-none border-x-0 border-t-0 px-3.5 py-1.5">
           <span className="min-w-0 flex-1 truncate">
-            In <span className="font-semibold">{folderBasename(outOfFolder)}</span> — viewing a file outside the current folder.
+            In <span className="font-semibold">{basename(outOfFolder)}</span> — viewing a file outside the current folder.
           </span>
           <Button variant="outline" size="xs" className="shrink-0" onClick={openTabFolderInNewWindow}>
             Open Folder in New Window

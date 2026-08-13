@@ -2,11 +2,7 @@ import { useEffect } from 'react';
 import { ModalShell } from './ModalShell';
 import { api, type OnboardingPreferences, type UnsupportedFileSummary } from '../api';
 import { useApp } from '../store/AppContext';
-
-interface UnsupportedFilesModalProps {
-  unsupportedFiles: UnsupportedFileSummary;
-  onClose: () => void;
-}
+import { Button } from './ui/button';
 
 function formatExtensions(otherExtensions: Array<{ extension: string; count: number }>): string {
   const list = otherExtensions.map((e) => e.extension);
@@ -19,36 +15,42 @@ function formatExtensions(otherExtensions: Array<{ extension: string; count: num
   return base;
 }
 
-export function UnsupportedFilesModal({ unsupportedFiles, onClose }: UnsupportedFilesModalProps) {
+const REMAIN_ON_DISK_COPY =
+  'These files remain unchanged on disk, but they will not appear in the Files view or StashBase search.';
+
+export function UnsupportedFilesModal({ unsupportedFiles, onClose }: {
+  unsupportedFiles: UnsupportedFileSummary;
+  onClose: () => void;
+}) {
   const { sourceCode, other, otherExtensions = [] } = unsupportedFiles;
 
   // Decide copy based on counts
   const showSource = sourceCode > 0;
   const showOther = other > 0;
 
+  const footer = (
+    <div className="mt-3.5 flex justify-end gap-2">
+      <Button type="button" autoFocus onClick={onClose}>Continue with supported files</Button>
+    </div>
+  );
+
   if (showSource && showOther) {
     // Combined Modal
     const extList = formatExtensions(otherExtensions);
     return (
       <ModalShell title="Some files in this folder aren't supported" onCancel={onClose} top>
-        <div className="unsupported-files-modal-content space-y-4">
-          <ul className="list-disc pl-5 space-y-2 text-sm text-imglytext/80 dark:text-dark-imglytext/80">
-            <li>
-              <strong>{sourceCode} source-code and project files</strong> are not shown or indexed.
-            </li>
-            <li>
-              <strong>{other} files in other unsupported formats</strong> are not shown or indexed: {extList}.
-            </li>
-          </ul>
-          <p className="text-sm text-imglytext/60 dark:text-dark-imglytext/60">
-            These files remain unchanged on disk, but they will not appear in the Files view or StashBase search.
-          </p>
-        </div>
-        <div className="modal-actions flex justify-end mt-6">
-          <button type="button" className="modal-btn primary" onClick={onClose}>
-            Continue with supported files
-          </button>
-        </div>
+        {/* No description slot here (a list can't nest in its <p>), so the
+          * list takes the description's top offset itself. */}
+        <ul className="m-0 mt-2 list-disc space-y-2 pl-5 text-base leading-normal text-muted-foreground">
+          <li>
+            <strong>{sourceCode} source-code and project files</strong> are not shown or indexed.
+          </li>
+          <li>
+            <strong>{other} files in other unsupported formats</strong> are not shown or indexed: {extList}.
+          </li>
+        </ul>
+        <p className="mt-3.5 mb-0 text-base leading-normal text-muted-foreground">{REMAIN_ON_DISK_COPY}</p>
+        {footer}
       </ModalShell>
     );
   }
@@ -56,20 +58,16 @@ export function UnsupportedFilesModal({ unsupportedFiles, onClose }: Unsupported
   if (showSource) {
     // Source code only
     return (
-      <ModalShell title="Source code files aren't supported" onCancel={onClose} top>
-        <div className="unsupported-files-modal-content space-y-3">
-          <p className="text-sm text-imglytext/80 dark:text-dark-imglytext/80">
-            StashBase found <strong>{sourceCode} source-code and project files</strong> in this folder.
-          </p>
-          <p className="text-sm text-imglytext/60 dark:text-dark-imglytext/60">
-            StashBase currently shows and indexes supported documents and media, not source code. These files remain unchanged on disk, but they will not appear in the Files view or StashBase search.
-          </p>
-        </div>
-        <div className="modal-actions flex justify-end mt-6">
-          <button type="button" className="modal-btn primary" onClick={onClose}>
-            Continue with supported files
-          </button>
-        </div>
+      <ModalShell
+        title="Source code files aren't supported"
+        description={<>StashBase found <strong>{sourceCode} source-code and project files</strong> in this folder.</>}
+        onCancel={onClose}
+        top
+      >
+        <p className="m-0 text-base leading-normal text-muted-foreground">
+          StashBase currently shows and indexes supported documents and media, not source code. {REMAIN_ON_DISK_COPY}
+        </p>
+        {footer}
       </ModalShell>
     );
   }
@@ -78,20 +76,14 @@ export function UnsupportedFilesModal({ unsupportedFiles, onClose }: Unsupported
     // Other formats only
     const extList = formatExtensions(otherExtensions);
     return (
-      <ModalShell title="Some file formats aren't supported yet" onCancel={onClose} top>
-        <div className="unsupported-files-modal-content space-y-3">
-          <p className="text-sm text-imglytext/80 dark:text-dark-imglytext/80">
-            StashBase found <strong>{other} files in unsupported formats</strong>: {extList}.
-          </p>
-          <p className="text-sm text-imglytext/60 dark:text-dark-imglytext/60">
-            These files remain unchanged on disk, but they will not appear in the Files view or StashBase search.
-          </p>
-        </div>
-        <div className="modal-actions flex justify-end mt-6">
-          <button type="button" className="modal-btn primary" onClick={onClose}>
-            Continue with supported files
-          </button>
-        </div>
+      <ModalShell
+        title="Some file formats aren't supported yet"
+        description={<>StashBase found <strong>{other} files in unsupported formats</strong>: {extList}.</>}
+        onCancel={onClose}
+        top
+      >
+        <p className="m-0 text-base leading-normal text-muted-foreground">{REMAIN_ON_DISK_COPY}</p>
+        {footer}
       </ModalShell>
     );
   }
@@ -120,7 +112,7 @@ export default function UnsupportedFilesModalGate() {
 
   if (!state.unsupportedModalOpen || total === 0) return null;
 
-  async function handleClose() {
+  async function onClose() {
     dispatch({ type: 'UNSUPPORTED_MODAL', open: false });
     const patch: Partial<OnboardingPreferences> = {};
     if (sourceCode > 0) patch.sourceCodeNoticeVersion = 1;
@@ -137,7 +129,7 @@ export default function UnsupportedFilesModalGate() {
   return (
     <UnsupportedFilesModal
       unsupportedFiles={state.unsupportedFiles!}
-      onClose={handleClose}
+      onClose={onClose}
     />
   );
 }

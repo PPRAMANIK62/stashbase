@@ -29,11 +29,23 @@ export function applyChunkHighlight(doc: Document, raw: string, root: HTMLElemen
 
 function ensureChunkHighlightStyle(doc: Document): void {
   const id = 'stashbase-chunk-style';
-  if (doc.getElementById(id)) return;
+  // Accent flash, same recipe as the PDF hit overlay (.pdf-page-highlight).
+  // The token is resolved from the PARENT document root because `doc` may
+  // be an iframe preview document (DOCX) that never receives the app
+  // stylesheet, so a var() reference would not resolve there. Refreshing
+  // the text on every call keeps an already-injected top-document style
+  // (Markdown view) in sync after a theme flip.
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim();
+  const css = `::highlight(stashbase-chunk) { background: rgba(${accent}, 0.18); ` +
+    `box-shadow: 0 0 0 2px rgba(${accent}, 0.42); }`;
+  const existing = doc.getElementById(id);
+  if (existing) {
+    if (existing.textContent !== css) existing.textContent = css;
+    return;
+  }
   const style = doc.createElement('style');
   style.id = id;
-  style.textContent = '::highlight(stashbase-chunk) { background: rgba(46, 116, 230, 0.18); ' +
-    'box-shadow: 0 0 0 2px rgba(46, 116, 230, 0.45); border-radius: 2px; }';
+  style.textContent = css;
   doc.head.appendChild(style);
 }
 

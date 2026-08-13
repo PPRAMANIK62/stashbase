@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { dismissEmbeddingKeyPrompt, fileTreeRow, folderButton } from '../support/locators.ts';
+import { dismissEmbeddingKeyPrompt, fileTreeRow, openLibraryFolder } from '../support/locators.ts';
 import {
   JOURNEY_AUDIO,
   JOURNEY_DOCX,
@@ -28,7 +28,7 @@ test('read-only HTML, image, and audio sources use their dedicated viewers', asy
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     await fileTreeRow(app.page, JOURNEY_HTML).click();
@@ -67,7 +67,7 @@ test('valid tiny PDF navigates pages and retains its selected page across a tab 
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, JOURNEY_PDF).click();
     const jump = app.page.getByTitle('Jump to page');
@@ -96,7 +96,7 @@ test('malformed PDF and DOCX remain visible source identities with explicit fail
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     await fileTreeRow(app.page, MALFORMED_PDF).click();
@@ -124,7 +124,7 @@ test('valid DOCX renders its document and legacy derived notes never surface as 
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
     await expect(fileTreeRow(app.page, LEGACY_DERIVED_NOTE)).toHaveCount(0);

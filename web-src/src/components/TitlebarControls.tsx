@@ -2,9 +2,10 @@ import { PanelLeftIcon, PanelRightIcon, SearchIcon } from '../icons';
 import { formatPrimaryShiftShortcut } from '../platformShortcuts';
 import { readPreferredAgent } from '../agentPreference';
 import { useApp } from '../store/AppContext';
+import { FolderSwitcher } from './FolderSwitcher';
 import { openLibrarySearch } from './LibrarySearch';
 import { activateChatTabForAgent } from './Sidebar';
-import { DeferredTooltipButton } from './DeferredTooltipButton';
+import { TooltipButton } from './TooltipButton';
 
 /* [&_svg]:size-3.5 — the app-wide 14px icon size (one scale everywhere;
  * hierarchy comes from colour/weight/text, never glyph size). */
@@ -14,12 +15,13 @@ const controlButtonClass =
 
 /**
  * Cursor-style window-top controls in the titlebar band: sidebar toggle
- * + library search at the window's top-left (right of the macOS traffic
- * lights), and the mirrored chat-panel toggle at the top-right —
- * `.titlebar-controls` / `.titlebar-controls-right` in globals.css own
- * the placement. They belong to the APP shell, not the panel columns,
- * so collapsing either panel leaves its toggle in place as the way
- * back in.
+ * + library search + the folder switcher at the window's top-left (right
+ * of the macOS traffic lights), and the mirrored chat-panel toggle at
+ * the top-right — `.titlebar-controls` / `.titlebar-controls-right` in
+ * globals.css own the placement. They belong to the APP shell, not the
+ * panel columns, so collapsing either panel leaves its toggle in place
+ * as the way back in, and the switcher keeps naming the window's folder
+ * while the sidebar is collapsed.
  */
 export function TitlebarControls() {
   const { state, dispatch } = useApp();
@@ -40,7 +42,7 @@ export function TitlebarControls() {
   return (
     <>
       <div className="titlebar-controls">
-        <DeferredTooltipButton
+        <TooltipButton
           className={controlButtonClass}
           aria-expanded={!collapsed}
           aria-controls="sidebar-panel-files"
@@ -48,25 +50,29 @@ export function TitlebarControls() {
           onClick={() => dispatch({ type: 'SIDEBAR_SET_COLLAPSED', collapsed: !collapsed })}
         >
           <PanelLeftIcon />
-        </DeferredTooltipButton>
-        <DeferredTooltipButton
+        </TooltipButton>
+        <TooltipButton
           className={controlButtonClass}
           aria-haspopup="dialog"
           label={`Search (${formatPrimaryShiftShortcut('F')})`}
           onClick={() => openLibrarySearch()}
         >
           <SearchIcon />
-        </DeferredTooltipButton>
+        </TooltipButton>
+        {/* Hairline between the icon utilities and the folder identity —
+          * short and centered, not a full-band cut. */}
+        <span className="mx-1.5 h-4 w-px flex-none bg-border" aria-hidden="true" />
+        <FolderSwitcher />
       </div>
       <div className="titlebar-controls-right">
-        <DeferredTooltipButton
+        <TooltipButton
           className={controlButtonClass}
           aria-expanded={chatOpen}
           label={`${chatOpen ? 'Hide' : 'Show'} chat panel`}
           onClick={toggleChat}
         >
           <PanelRightIcon />
-        </DeferredTooltipButton>
+        </TooltipButton>
       </div>
     </>
   );

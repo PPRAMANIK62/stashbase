@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { isEditorHistoryChord } from '../editorHistory';
+import { useLatestRef } from '../hooks/useLatestRef';
 import { useApp } from '../store/AppContext';
 import { openLibrarySearch } from './LibrarySearch';
 
@@ -48,8 +49,7 @@ export function Hotkeys() {
   const { state, actions, dispatch } = useApp();
   // Read state via ref so the listener doesn't rebind on every find
   // tick (which would shake out the listener registration unnecessarily).
-  const findOpenRef = useRef(state.find.open);
-  findOpenRef.current = state.find.open;
+  const findOpenRef = useLatestRef(state.find.open);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       // Esc closes the find bar without consuming the keystroke for

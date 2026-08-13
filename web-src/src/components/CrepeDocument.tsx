@@ -53,10 +53,7 @@ function claimRegistration(
     clear();
   };
 }
-
-function documentBasename(path: string): string {
-  return path.split('/').pop() ?? path;
-}
+import { basename } from '../lib/paths';
 
 /**
  * A retained Markdown surface for one tab. CrepeBuilder provides Milkdown's
@@ -381,7 +378,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, dirty, f
       data-state={creationState}
       data-tab-id={tabId}
       role="region"
-      aria-label={`${documentBasename(name)} Markdown document`}
+      aria-label={`${basename(name)} Markdown document`}
       hidden={!active}
     >
       {creationState === 'creating' && (

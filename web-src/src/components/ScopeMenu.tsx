@@ -8,12 +8,11 @@ import {
   MenuPositioner,
   MenuTrigger,
 } from './ui/menu';
+import { basename, shortenFolderPath } from '../lib/paths';
 import {
-  folderDisplayName,
   folderScope,
   LIBRARY_SCOPE,
   scopeDisplayName,
-  shortenFolderPath,
   type ChatScope,
   type LibraryFolderOption,
 } from './agent/folderState';
@@ -90,9 +89,9 @@ export function ScopeMenu({
             {entries.map((entry) => {
               const active = scope.kind === 'folder' && scope.path === entry.path;
               return (
-                <MenuItem key={entry.path} label={folderDisplayName(entry.path)} className={cn(optClass, active && optActiveClass)} onClick={() => onSetScope(folderScope(entry.path))}>
+                <MenuItem key={entry.path} label={basename(entry.path)} className={cn(optClass, active && optActiveClass)} onClick={() => onSetScope(folderScope(entry.path))}>
                   <FolderIcon className={optIconClass} />
-                  <span className={optTextClass}><span className={optTitleClass}>{folderDisplayName(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
+                  <span className={optTextClass}><span className={optTitleClass}>{basename(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
                   {active && <CheckIcon className={optCheckClass} />}
                 </MenuItem>
               );

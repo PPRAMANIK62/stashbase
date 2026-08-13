@@ -5,11 +5,11 @@ import {
   type TranscriptionModelId,
   type TranscriptionSettings,
 } from '../../api';
+import { formatMiB } from '../../lib/format';
 import { useApp } from '../../store/AppContext';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '../../../../shared/transcription.ts';
 import { Button } from '../ui/button';
-
-const SELECT_CLASS = 'h-7 min-w-45 self-start rounded-md border border-input bg-background px-2 text-base text-foreground';
+import { Select } from '../ui/select';
 
 export function TranscriptionPanel() {
   const { actions } = useApp();
@@ -99,7 +99,10 @@ export function TranscriptionPanel() {
 
   async function remove(modelId: TranscriptionModelId, confirmRemoval = true) {
     if (confirmRemoval) {
-      const confirmed = await actions.confirm(`Remove the downloaded ${modelId} transcription model? Existing transcripts stay available.`);
+      const confirmed = await actions.confirm(
+        `Remove the downloaded ${modelId} transcription model? Existing transcripts stay available.`,
+        { title: 'Remove transcription model?', confirmLabel: 'Remove', destructive: true },
+      );
       if (!confirmed) return;
     }
     setBusyModel(modelId);
@@ -135,8 +138,8 @@ export function TranscriptionPanel() {
           {selectedProvider?.description ?? 'Choose the provider and model used for audio transcription.'}
         </div>
         {settings.providers.length > 1 && (
-          <select
-            className={SELECT_CLASS}
+          <Select
+            className="min-w-45 self-start"
             value={selectedProvider?.id ?? ''}
             onChange={(event) => {
               const provider = settings.providers.find((candidate) => candidate.id === event.target.value);
@@ -145,7 +148,7 @@ export function TranscriptionPanel() {
             }}
           >
             {settings.providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
-          </select>
+          </Select>
         )}
         {selectedProvider?.runtimeError && (
           <div className="text-sm text-destructive">Transcription runtime unavailable: {selectedProvider.runtimeError}</div>
@@ -170,7 +173,7 @@ export function TranscriptionPanel() {
                   <span>
                     <strong>{model.label}</strong>
                     {(model.sizeBytes || model.speed || model.accuracy) && (
-                      <small>{[model.sizeBytes ? formatBytes(model.sizeBytes) : '', model.speed, model.accuracy].filter(Boolean).join(' · ')}</small>
+                      <small>{[model.sizeBytes ? formatMiB(model.sizeBytes) : '', model.speed, model.accuracy].filter(Boolean).join(' · ')}</small>
                     )}
                     {model.resourceUse && <small>{model.resourceUse} · multilingual</small>}
                   </span>
@@ -216,19 +219,16 @@ export function TranscriptionPanel() {
         <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
           Auto-detect evaluates every long-recording chunk independently. A different language can be chosen for an individual Reprocess attempt.
         </div>
-        <select
-          className={SELECT_CLASS}
+        <Select
+          className="min-w-45 self-start"
           value={settings.language}
           onChange={(event) => { void chooseLanguage(event.target.value); }}
         >
           {TRANSCRIPTION_LANGUAGE_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-        </select>
+        </Select>
       </div>
       {error && <div className="text-sm text-destructive">{error}</div>}
     </div>
   );
 }
 
-function formatBytes(bytes: number): string {
-  return `${Math.round(bytes / 1024 / 1024)} MiB`;
-}

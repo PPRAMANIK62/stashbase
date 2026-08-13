@@ -7,7 +7,18 @@ import {
 } from 'react';
 import { StatusMessage } from './ui/status';
 
-interface Props {
+/** One button recipe for both error surfaces. Hand-rolled on purpose:
+ *  this is the recovery path, so it must not depend on the primitive
+ *  stack that may have just crashed. The surface half is appended per
+ *  use (outline vs primary). */
+const ERROR_BUTTON_CLASS =
+  'rounded-md border px-2.5 py-1 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50';
+const ERROR_BUTTON_OUTLINE_CLASS =
+  `${ERROR_BUTTON_CLASS} border-border bg-background hover:bg-muted`;
+const ERROR_BUTTON_PRIMARY_CLASS =
+  `${ERROR_BUTTON_CLASS} border-transparent bg-primary text-primary-foreground hover:bg-primary/80`;
+
+interface ErrorBoundaryProps {
   children: ReactNode;
 }
 
@@ -85,7 +96,7 @@ export class LazyLoadBoundary extends Component<LazyLoadBoundaryProps, LazyLoadB
         <span>Could not open {this.props.label}.</span>
         <button
           type="button"
-          className="rounded-md border border-border bg-background px-2.5 py-1 text-sm hover:bg-muted"
+          className={ERROR_BUTTON_OUTLINE_CLASS}
           onClick={() => window.location.reload()}
         >
           Reload
@@ -110,7 +121,7 @@ export class LazyLoadBoundary extends Component<LazyLoadBoundaryProps, LazyLoadB
  * on every edit + a `beforeunload` `sendBeacon`), so a hard reload
  * loses at most the cursor position in the current tab.
  */
-export class ErrorBoundary extends Component<Props, State> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, State> {
   state: State = { error: null, componentStack: null };
 
   static getDerivedStateFromError(error: Error): Partial<State> {
@@ -141,7 +152,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/35 p-4">
+      <div className="fixed inset-0 z-[10000] grid place-items-center bg-veil p-4">
         <StatusMessage
           tone="error"
           className="grid max-h-[calc(100vh-32px)] w-[min(620px,calc(100vw-32px))] gap-3 overflow-hidden rounded-xl bg-popover p-5 text-popover-foreground shadow-elevation"
@@ -152,8 +163,8 @@ export class ErrorBoundary extends Component<Props, State> {
             {this.state.error.stack ?? '(no stack)'}
           </pre>
           <div className="flex justify-end gap-2">
-            <button type="button" className="rounded-md bg-primary px-2.5 py-1.5 text-sm font-medium text-primary-foreground" onClick={this.reset}>Reload</button>
-            <button type="button" className="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-medium hover:bg-muted" onClick={() => void this.copyDetails()}>Copy details</button>
+            <button type="button" className={ERROR_BUTTON_PRIMARY_CLASS} onClick={this.reset}>Reload</button>
+            <button type="button" className={ERROR_BUTTON_OUTLINE_CLASS} onClick={() => void this.copyDetails()}>Copy details</button>
           </div>
         </StatusMessage>
       </div>

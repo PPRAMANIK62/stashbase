@@ -7,11 +7,13 @@ const outputRoot = path.join(repoRoot, 'web', 'dist-app');
 const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
 /* Guardrail against a heavy module slipping into the always-loaded shell,
  * not a freeze on shell features. Raised 400 → 416 KiB when the activity
- * rail became the titlebar controls + a sidebar Settings row: that work is
- * eager chrome by definition, and it landed with under 1 KiB of headroom
- * left. Raise it only for shell UI that must load with the window —
- * anything a user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 416 * 1024;
+ * rail became the titlebar controls + a sidebar Settings row; 416 → 418
+ * when the active-folder header gained the folder-switcher trigger and
+ * its menu-item builder (the menu body itself stays in the lazy
+ * ManagedMenu chunk). Both are eager chrome by definition. Raise it only
+ * for shell UI that must load with the window — anything a user can open
+ * on demand belongs in a dynamic entry above. */
+const initialJsBudgetBytes = 418 * 1024;
 const expectedEntries = [
   'src/components/ChatPane.tsx',
   'src/components/agent/AgentMathMarkdown.tsx',
@@ -19,8 +21,8 @@ const expectedEntries = [
   'src/components/PdfPreview.tsx',
   'src/components/DocxPreview.tsx',
   'src/components/AudioPreview.tsx',
-  'src/components/LibrarySearchDialog.tsx',
-  'src/components/QuickOpenDialog.tsx',
+  'src/components/ManagedLibrarySearch.tsx',
+  'src/components/ManagedQuickOpen.tsx',
   'src/components/ContextMenu.tsx',
   'src/components/DocumentOutline.tsx',
   'src/components/SemanticIndexingNotice.tsx',

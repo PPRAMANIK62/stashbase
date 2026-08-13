@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   audioTranscriptStatusCopy,
   findAudioSeekSegment,
-} from '../audio-transcript.ts';
+} from '../audioTranscript.ts';
 
 const segments = [
   { id: 1, startMs: 1_000, endMs: 3_000, text: 'Welcome to the weekly planning meeting.' },

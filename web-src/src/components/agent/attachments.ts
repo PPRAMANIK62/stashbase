@@ -5,13 +5,13 @@ import {
 import type { FileGlyphFormat } from '../FileTree';
 import type { Attachment } from './types';
 
-/** The muted type glyph + short label a file attachment chip shows, keyed
- *  off the filename extension. Reuses the file tree's format vocabulary so a
- *  PDF reads the same glyph in the composer, the transcript, and the tree —
- *  and stays de-coloured (`FileTypeIcon` renders in `currentColor`), the same
- *  restraint that keeps a column of files quiet. Unknown types fall back to
- *  the generic document glyph and the bare uppercased extension. */
-export function attachmentFileType(name: string): { format: FileGlyphFormat; label: string } {
+/** The muted type glyph + short label for a file, keyed off the filename
+ *  extension. Reuses the file tree's format vocabulary so a PDF reads the
+ *  same glyph in the composer, the transcript, library search hits, and the
+ *  tree — and stays de-coloured (`FileTypeIcon` renders in `currentColor`),
+ *  the same restraint that keeps a column of files quiet. Unknown types fall
+ *  back to the generic document glyph and the bare uppercased extension. */
+export function fileGlyphFormat(name: string): { format: FileGlyphFormat; label: string } {
   const ext = name.toLowerCase().split('.').pop() ?? '';
   const label = ext ? ext.toUpperCase() : 'File';
   if (PDF_EXTENSIONS.includes(ext as never)) return { format: 'pdf', label };
@@ -42,5 +42,3 @@ export function readImageDims(file: File): Promise<string | undefined> {
     img.src = url;
   });
 }
-
-export const baseName = (p: string) => p.split('/').pop() || p;

@@ -8,8 +8,9 @@ import {
   documentTab,
   dismissEmbeddingKeyPrompt,
   fileTreeRow,
-  folderButton,
+  openFolderSwitcher,
   quickOpenDialog,
+  switcherFolderItem,
   quickOpenInput,
 } from '../support/locators.ts';
 
@@ -18,10 +19,12 @@ test('user can navigate folders, files, Quick Open, and persistent tabs', async 
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await expect(folderButton(app.page, 'project-alpha')).toBeVisible();
-    await expect(folderButton(app.page, 'project-beta')).toBeVisible();
+    // Library membership is visible in the titlebar folder switcher's menu.
+    await openFolderSwitcher(app.page);
+    await expect(switcherFolderItem(app.page, 'project-alpha')).toBeVisible();
+    await expect(switcherFolderItem(app.page, 'project-beta')).toBeVisible();
 
-    await folderButton(app.page, 'project-alpha').click();
+    await switcherFolderItem(app.page, 'project-alpha').click();
     await expect(app.page).toHaveTitle('project-alpha — StashBase');
     await expect(fileTreeRow(app.page, 'Welcome.md')).toBeVisible();
     await dismissEmbeddingKeyPrompt(app.page);

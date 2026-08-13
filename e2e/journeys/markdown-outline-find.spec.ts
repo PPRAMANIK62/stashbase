@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { dismissEmbeddingKeyPrompt, fileTreeRow, folderButton } from '../support/locators.ts';
+import { dismissEmbeddingKeyPrompt, fileTreeRow, openLibraryFolder } from '../support/locators.ts';
 import { JOURNEY_MARKDOWN, seedJourneyWorkspaces } from '../fixtures/journey-workspaces.ts';
 import { primaryKey } from './journey-helpers.ts';
 
@@ -18,7 +18,7 @@ test('Markdown outline disclosure and Find work in editing and reading modes wit
     const launched = await launchApp(fixture, testInfo);
     app = launched;
     await test.step('open seeded Markdown document', async () => {
-      await folderButton(launched.page, 'project-alpha').click();
+      await openLibraryFolder(launched.page, 'project-alpha');
       await dismissEmbeddingKeyPrompt(launched.page);
       await fileTreeRow(launched.page, JOURNEY_MARKDOWN).click();
     });

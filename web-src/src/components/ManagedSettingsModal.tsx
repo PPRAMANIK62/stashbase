@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { CloseIcon } from '../icons';
-import type { SettingsDialogProps, SettingsSection } from './SettingsModal';
+import type { SettingsModalProps, SettingsSection } from './SettingsModal';
 import { AppearancePanel } from './settings/AppearancePanel';
 import { AgentRuntimePanel } from './settings/AgentRuntimePanel';
 import { EmbeddingPanel } from './settings/EmbeddingPanel';
@@ -17,11 +17,11 @@ const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[
   { id: 'mcp', label: 'MCP', render: () => <McpClientsPanel /> },
 ];
 
-export default function ManagedSettingsDialog({
+export default function ManagedSettingsModal({
   initialSection,
   isTopmost,
   onClose,
-}: SettingsDialogProps) {
+}: SettingsModalProps) {
   const [current, setCurrent] = useState<SettingsSection>(initialSection);
   const active = SECTIONS.find((section) => section.id === current) ?? SECTIONS[0];
 
@@ -58,7 +58,7 @@ export default function ManagedSettingsDialog({
                 type="button"
                 role="tab"
                 aria-selected={section.id === current}
-                className="cursor-pointer rounded-md border-0 bg-transparent px-3 py-1.75 text-left text-base text-foreground transition-colors duration-fast hover:bg-muted aria-selected:bg-accent/10 aria-selected:font-semibold aria-selected:text-accent aria-selected:hover:bg-accent/10"
+                className="cursor-pointer rounded-md border-0 bg-transparent px-3 py-1.75 text-left text-base text-foreground transition-colors duration-fast hover:bg-muted aria-selected:bg-active aria-selected:hover:bg-active"
                 onClick={() => setCurrent(section.id)}
               >
                 {section.label}

@@ -1,9 +1,11 @@
 /**
- * Session-history popover for one chat scope, anchored on the sidebar's
- * scope headers: the active folder's header row lists that folder's
- * sessions, the Library section header lists the library-wide ones. The
- * menu merges BOTH agents' sessions (newest first, each row carrying its
- * agent's glyph); rename/delete route through the row's agent, and
+ * Session-history popover for one history scope: the active folder's
+ * header row lists that folder's sessions, and the New Chat row lists
+ * ALL sessions across the library (each row labeled with its home and
+ * resumed in its own scope). The menu merges BOTH agents' sessions
+ * (newest first, each row carrying its agent's glyph — the New Chat
+ * row's agent label is only the default for NEW chats, never a history
+ * filter); rename/delete route through the row's agent and scope, and
  * resume hands off through the store's pending-resume channel (see
  * `sessionHistory.ts`).
  *
@@ -17,12 +19,11 @@ import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } 
 import { api } from '../../api';
 import { AGENTS, AGENT_META, type AgentKind } from '../../agentCatalog';
 import { EditIcon, TrashIcon } from '../../icons';
+import { basename } from '../../lib/paths';
 import { buttonVariants } from '../ui/button';
 import { Input } from '../ui/input';
-import { scopeRequestParams, type ChatScope } from './folderState';
-import { mergeAgentSessions, type MergedSessionRow } from './sessionHistory';
-
-const emptyRowClass = 'px-2 py-3.5 text-center text-sm text-muted-foreground';
+import { emptyStateClass } from '../emptyState';
+import { historyRequestParams, mergeAgentSessions, rowResumeFolder, rowScopeParams, type HistoryScope, type MergedSessionRow } from './sessionHistory';
 
 function relTime(ms: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
@@ -38,16 +39,18 @@ const rowKey = (row: MergedSessionRow) => `${row.agent}:${row.id}`;
 export function SessionHistoryMenu({
   scope, ariaLabel, triggerRef, onClose, onResume,
 }: {
-  /** The scope whose sessions this menu lists — fixed per sidebar header,
-   *  independent of any chat tab's picked scope. */
-  scope: ChatScope;
+  /** The scope whose sessions this menu lists — fixed per anchor,
+   *  independent of any chat tab's picked scope. `all` (the New Chat
+   *  row) lists every session across the library, each row labeled and
+   *  resumed in its own scope. */
+  scope: HistoryScope;
   ariaLabel: string;
   /** The sidebar clock button this popover anchors to. */
   triggerRef: RefObject<HTMLButtonElement | null>;
   /** Dismissal (outside press / Escape). Selecting a session calls
    *  `onResume` instead; the owner closes in both paths. */
   onClose: () => void;
-  onResume: (agent: AgentKind, sessionId: string) => void;
+  onResume: (agent: AgentKind, sessionId: string, folder: string | null) => void;
 }) {
   const [rows, setRows] = useState<MergedSessionRow[]>([]);
   const [failedAgents, setFailedAgents] = useState<AgentKind[]>([]);
@@ -64,7 +67,7 @@ export function SessionHistoryMenu({
       // other's history — the failed agent surfaces as a quiet inline note.
       const lists = await Promise.all(AGENTS.map(async (agent) => ({
         agent: agent.id,
-        sessions: await api.listSessions(agent.id, scopeRequestParams(scope)).catch(() => null),
+        sessions: await api.listSessions(agent.id, historyRequestParams(scope)).catch(() => null),
       })));
       if (cancelled) return;
       const merged = mergeAgentSessions(lists);
@@ -88,13 +91,13 @@ export function SessionHistoryMenu({
     setEditingKey(null);
     if (!title) return;
     try {
-      const updated = await api.renameSession(row.id, title, row.agent, scopeRequestParams(scope));
+      const updated = await api.renameSession(row.id, title, row.agent, rowScopeParams(scope, row));
       setRows((rs) => rs.map((r) => (rowKey(r) === rowKey(row) ? { ...r, ...updated } : r)));
     } catch { /* leave list as-is */ }
   }
 
   async function remove(row: MergedSessionRow): Promise<boolean> {
-    try { await api.deleteSession(row.id, row.agent, scopeRequestParams(scope)); }
+    try { await api.deleteSession(row.id, row.agent, rowScopeParams(scope, row)); }
     catch {
       setDeleteError('Could not delete this session. Try again.');
       return false;
@@ -108,7 +111,7 @@ export function SessionHistoryMenu({
       triggerRef={triggerRef}
       isOpen
       onOpenChange={(next) => { if (!next) onClose(); }}
-      className="session-history-popover z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-pane p-1.5 shadow-elevation"
+      className="session-history-popover z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-card p-1.5 shadow-elevation"
       placement="bottom end"
     >
       <Dialog aria-label={ariaLabel}>
@@ -122,8 +125,8 @@ export function SessionHistoryMenu({
           />
         </div>
         <div className="max-h-80 overflow-y-auto">
-          {loading && <div className={emptyRowClass}>Loading…</div>}
-          {!loading && allFailed && <div className={emptyRowClass}>Could not load sessions.</div>}
+          {loading && <div className={emptyStateClass}>Loading…</div>}
+          {!loading && allFailed && <div className={emptyStateClass}>Could not load sessions.</div>}
           {!loading && !allFailed && failedAgents.length > 0 && (
             // Partial failure stays quiet: the loaded agent's rows render
             // normally with one muted note for the missing runtime.
@@ -132,7 +135,7 @@ export function SessionHistoryMenu({
             </div>
           )}
           {!loading && !allFailed && shown.length === 0 && (
-            <div className={emptyRowClass}>{q ? 'No matches.' : 'No sessions yet.'}</div>
+            <div className={emptyStateClass}>{q ? 'No matches.' : 'No sessions yet.'}</div>
           )}
           {!loading && !allFailed && shown.map((row) => {
             const key = rowKey(row);
@@ -158,18 +161,23 @@ export function SessionHistoryMenu({
                   />
                 ) : (
                   <Button
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent px-2.25 py-1.75 text-left text-foreground"
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2.25 py-1.75 text-left text-foreground"
                     aria-label={`Resume ${row.title}`}
-                    onPress={() => onResume(row.agent, row.id)}
+                    onPress={() => onResume(row.agent, row.id, rowResumeFolder(scope, row))}
                   >
                     <AgentIcon className="size-3.25 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate text-base">{row.title}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground group-hover/row:hidden group-focus-within/row:hidden">{relTime(row.lastModified)}</span>
+                    <span className="shrink-0 truncate text-xs text-muted-foreground group-hover/row:hidden group-focus-within/row:hidden">
+                      {/* The all-scope listing names each row's home so
+                        * "which folder was this?" never needs a click. */}
+                      {scope.kind === 'all' && `${row.folder ? basename(row.folder) : 'Library'} · `}
+                      {relTime(row.lastModified)}
+                    </span>
                   </Button>
                 )}
                 <div className="hidden shrink-0 gap-px pr-1.25 group-hover/row:flex group-focus-within/row:flex">
                   <Button
-                    className="grid size-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-active hover:text-foreground [&_svg]:size-3.75"
+                    className="grid size-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-3.75"
                     aria-label={`Rename ${row.title}`}
                     onPress={() => { setEditingKey(key); setEditText(row.title); }}
                   >
@@ -177,23 +185,23 @@ export function SessionHistoryMenu({
                   </Button>
                   <DialogTrigger onOpenChange={(isOpen) => { if (isOpen) setDeleteError(null); }}>
                     <Button
-                      className="grid size-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-active hover:text-foreground [&_svg]:size-3.75"
+                      className="grid size-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-3.75"
                       aria-label={`Delete ${row.title}`}
                     >
                       <TrashIcon />
                     </Button>
-                    <ModalOverlay className="fixed inset-0 z-40 grid place-items-center bg-black/35 p-4" isDismissable>
-                      <Modal className="w-[min(360px,100%)] rounded-xl border border-border bg-pane p-4 text-foreground shadow-elevation">
+                    <ModalOverlay className="fixed inset-0 z-[100] grid place-items-center bg-veil p-4" isDismissable>
+                      <Modal className="w-[min(420px,90vw)] rounded-xl border border-border bg-background px-6 pt-5.5 pb-5 text-foreground shadow-elevation">
                         <Dialog role="alertdialog" aria-label="Delete chat session">
                           {({ close }) => (
                             <>
                               <Heading slot="title" className="m-0 text-base leading-none font-medium">Delete chat?</Heading>
-                              <p className="mt-2 mb-0 text-sm leading-normal text-muted-foreground">Delete “{row.title}”? This cannot be undone.</p>
+                              <p className="mt-2 mb-0 text-base leading-normal text-muted-foreground">Delete “{row.title}”? This cannot be undone.</p>
                               {deleteError && <div className="mt-2 text-sm text-status-danger" role="alert">{deleteError}</div>}
-                              <div className="mt-4 flex justify-end gap-2">
-                                <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={close}>Cancel</Button>
+                              <div className="mt-3.5 flex justify-end gap-2">
+                                <Button className={buttonVariants({ variant: 'outline' })} onPress={close}>Cancel</Button>
                                 <Button
-                                  className={buttonVariants({ variant: 'destructive', size: 'sm' })}
+                                  className={buttonVariants({ variant: 'destructive' })}
                                   onPress={() => { void remove(row).then((deleted) => { if (deleted) close(); }); }}
                                 >
                                   Delete

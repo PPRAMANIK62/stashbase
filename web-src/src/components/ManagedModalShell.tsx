@@ -39,7 +39,7 @@ export default function ManagedModalShell({
         initialFocus={initialFocus}
         showCloseButton={false}
       >
-        <DialogTitle className="text-xl font-semibold leading-snug">{title}</DialogTitle>
+        <DialogTitle className="text-base font-medium leading-snug">{title}</DialogTitle>
         {description !== undefined && (
           <DialogDescription className="mt-2 mb-3.5 text-base leading-normal [&_code]:font-mono [&_code]:text-sm [&_code]:text-accent">{description}</DialogDescription>
         )}

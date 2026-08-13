@@ -41,7 +41,7 @@ export default function ManagedAlertConfirmModal({
       >
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {isConfirm ? 'Confirm action' : 'Notice'}
+            {isConfirm ? request.title ?? 'Confirm action' : 'Notice'}
           </AlertDialogTitle>
           <AlertDialogDescription className="my-0 text-base leading-normal">
             {request.message}
@@ -57,11 +57,12 @@ export default function ManagedAlertConfirmModal({
           )}
           <AlertDialogAction
             autoFocus
+            variant={request.destructive ? 'destructive' : 'default'}
             onClick={() => {
               resultRef.current = true;
             }}
           >
-            {isConfirm ? 'Confirm' : 'OK'}
+            {isConfirm ? request.confirmLabel ?? 'Confirm' : 'OK'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

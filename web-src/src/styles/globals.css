@@ -64,6 +64,17 @@
       --density-gap: 4px;
       --density-control: 28px;
       --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.14);
+      /* Image-lightbox stage scrim. Deliberately theme-static: the stage
+       * is a dark room in both themes, so this lives in the base :root
+       * only and neither dark block redefines it. */
+      --scrim: rgba(18, 18, 20, 0.92);
+      /* Topmost-veil dim, two strengths: --veil behind modal dialogs,
+       * --veil-quiet behind the lightweight pickers (Quick Open, Editor
+       * History). Deliberately theme-static like --scrim: a veil darkens
+       * whatever is under it in both themes, so neither dark block
+       * redefines these. */
+      --veil: rgba(0, 0, 0, 0.35);
+      --veil-quiet: rgba(0, 0, 0, 0.18);
       --motion-fast: 120ms;
       --motion-standard: 180ms;
       --motion-ease: cubic-bezier(.2, .8, .2, 1);
@@ -83,13 +94,14 @@
       /* Amber counterpoint — rare brand moments only, never state (state
        * yellows are --status-warning; the drag-into-folder tint moved to
        * the accent, where interactive states belong). Search-hit marks
-       * are the one repeated use. File-type icons carry their own
-       * Material brand fills (FileTree.tsx). */
+       * are the one repeated use. File-type glyphs are NOT an amber (or
+       * any other) exception: they paint as muted currentColor like every
+       * tree icon (see sidebar.css). */
       --accent-amber: #d9a000;
       --accent-amber-rgb: 217, 160, 0;
       /* Danger red — destructive actions, error text, failure banners.
-       * (chat.css's #e45649 is the One-Dark editor red and the sidebar's
-       * #dc2626 is the recording red — different palettes on purpose.) */
+       * (chat.css's #e45649 is the One-Dark editor red — a content
+       * palette, distinct from this chrome role on purpose.) */
       --danger: #b91c1c;
       --status-info: var(--accent);
       --status-success: #047857;
@@ -131,6 +143,8 @@
     :root[data-reading-text-size='small'] { --reading-font-size: 13px; }
     :root[data-reading-text-size='large'] { --reading-font-size: 17px; }
 
+    /* The explicit-dark block and the system-dark block below are hand-synced
+     * duplicates — renderer-foundation.test.ts asserts they stay identical. */
     :root[data-theme='dark'] {
       color-scheme: dark;
       --surface-base: #1b1f22;
@@ -350,11 +364,6 @@
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
       }
-
-      .icon-btn.spinning svg {
-        animation: none;
-      }
-
     }
 
     /* React mounts into #root — make IT the flex column so the `.app`
@@ -393,6 +402,11 @@
     :root {
       --titlebar-clearance: 36px;
       --titlebar-controls-left: 8px;
+      /* The left cluster's width budget while the sidebar is collapsed:
+       * the switcher label truncates against it, and the tab rows below
+       * reserve exactly this much so the floating cluster never overlaps
+       * a tab (globals tab-strip + chat.css chat-tab-row share it). */
+      --titlebar-controls-collapsed-width: 200px;
     }
 
     /* Lights occupy ~x14–66; 88px leaves a clear group break so the
@@ -427,6 +441,12 @@
 
     .titlebar-controls {
       left: var(--titlebar-controls-left);
+      /* Cap the cluster to the sidebar column: a long folder name in the
+       * switcher must ellipsize at the column edge, never bleed across
+       * the pane boundary onto the tab strip. The switcher's own spans
+       * carry min-width:0 + truncate, so the flex squeeze lands there.
+       * (Collapse keeps the stored --sidebar-width, so the cap holds.) */
+      max-width: calc(var(--sidebar-width) - var(--titlebar-controls-left) - 8px);
     }
 
     /* No traffic lights on the right on any platform — a plain corner
@@ -452,7 +472,14 @@
       position: absolute;
       top: 0;
       left: 0;
-      right: 0;
+      /* GEOMETRY, not carve-outs: the zone stops where the titlebar
+       * controls begin. Chromium computes draggable regions as drag
+       * rects minus no-drag rects, and on windowed macOS those
+       * carve-outs proved intermittently stale — clicks on the whole
+       * control band died. A drag surface that never overlaps a control
+       * needs no carving. The band right of the controls stops being a
+       * drag handle; the tab strip remains the wide drag surface. */
+      width: var(--titlebar-controls-left);
       height: 36px;
       z-index: 6;
       -webkit-app-region: drag;
@@ -482,7 +509,12 @@
     body.is-electron .tree-row,
     body.is-electron .tab,
     body.is-electron a,
-    body.is-electron strong {
+    body.is-electron strong,
+    /* The whole control clusters, not only their buttons: the titlebar
+     * band is a drag surface, and per-element carve-outs proved
+     * unreliable for the folder switcher on windowed macOS. */
+    body.is-electron .titlebar-controls,
+    body.is-electron .titlebar-controls-right {
       -webkit-app-region: no-drag;
     }
 
@@ -535,7 +567,13 @@
      * tabs don't slide underneath them. Controls end at
      * `--titlebar-controls-left` + two 28px buttons + gap. */
     .app.sidebar-collapsed .tab-strip {
-      padding-left: calc(var(--titlebar-controls-left) + 66px);
+      padding-left: calc(var(--titlebar-controls-left) + var(--titlebar-controls-collapsed-width) + 8px);
+    }
+    /* Collapsed: the sidebar-width cap above no longer describes the
+     * space the cluster may use — clamp to the fixed collapsed budget
+     * (the min-width:0 chain squeezes the switcher label into ellipsis). */
+    .app.sidebar-collapsed .titlebar-controls {
+      max-width: var(--titlebar-controls-collapsed-width);
     }
 
     /* Drag handle on the sidebar's right edge. Absolutely positioned at

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, assetBaseUrl, errorMessage, versionedAssetUrl } from '../api';
-import { preparationWaitCopy } from '../preparation-copy.ts';
+import { preparationWaitCopy } from '../preparationCopy.ts';
 import { useIframeDropForward } from '../hooks/useIframeDropForward';
+import { useLatestRef } from '../hooks/useLatestRef';
 import { previewClickHandler } from '../lib/previewIframe';
 import { useApp } from '../store/AppContext';
 import { getPreparationFailure } from '../store/fileReadiness';
@@ -29,10 +30,8 @@ export function DocxPreview({ name }: { name: string }) {
   const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const loadedHtmlRef = useRef('');
-  const findAtMount = useRef(state.find);
-  findAtMount.current = state.find;
-  const currentRef = useRef({ folderPath: state.folderPath, name });
-  currentRef.current = { folderPath: state.folderPath, name };
+  const findAtMount = useLatestRef(state.find);
+  const currentRef = useLatestRef({ folderPath: state.folderPath, name });
   const [html, setHtml] = useState<string | null>(null);
   const [directFailed, setDirectFailed] = useState(false);
   const [retryBusy, setRetryBusy] = useState(false);
@@ -277,6 +276,18 @@ function convertDocxInWorker(
 }
 
 function renderDocxDocument(bodyHtml: string, title: string, baseHref: string): string {
+  // Paper policy — same as PdfPreview's white pages: the DOCX sheet stays
+  // light-on-paper in both themes (the wrapper is `bg-white`, and the 20 s
+  // fallback — `server/docx.ts` durable HTML — is light-locked the same
+  // way), so the ink greys below are content values like the page white,
+  // not chrome tokens, and deliberately do not follow the active theme.
+  // The type stack IS a chrome role: resolve `--font-sans` from the parent
+  // document at build time (findIframe's token-resolution pattern — the
+  // iframe never receives the app stylesheet, so var() would not resolve
+  // there) instead of hand-copying the stack, so the CJK fallbacks cannot
+  // drift from the token layer.
+  const fontSans = getComputedStyle(document.documentElement)
+    .getPropertyValue('--font-sans').trim() || 'system-ui, sans-serif';
   return [
     '<!doctype html>',
     '<html>',
@@ -285,10 +296,7 @@ function renderDocxDocument(bodyHtml: string, title: string, baseHref: string): 
     `  <base href="${escapeHtml(baseHref)}">`,
     `  <title>${escapeHtml(title)}</title>`,
     '  <style>',
-    // Mirrors the app's --font-sans (incl. the CJK fallbacks) so a Chinese
-    // .docx preview reads in the same face as the rest of the chrome; the
-    // iframe is isolated, so the stack is inlined rather than var()-linked.
-    '    body { font: 16px/1.55 -apple-system, system-ui, "Segoe UI", "PingFang SC", "Hiragino Sans", sans-serif; color: #222; max-width: 840px; margin: 40px auto; padding: 0 32px; }',
+    `    body { font: 16px/1.55 ${fontSans}; color: #222; max-width: 840px; margin: 40px auto; padding: 0 32px; }`,
     '    img { max-width: 100%; height: auto; }',
     '    table { width: 100%; border-collapse: collapse; }',
     '    td, th { border: 1px solid #d7dbe2; padding: 6px 8px; text-align: left; vertical-align: top; }',

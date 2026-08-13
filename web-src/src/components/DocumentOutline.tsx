@@ -61,7 +61,7 @@ export function DocumentOutline({
             else next.add(heading.id);
             return next;
           })}><ChevronDownIcon /></button> : <span className="size-4 flex-none" aria-hidden="true" />}
-          <button type="button" className="flex min-w-0 flex-1 cursor-pointer items-center border-0 bg-transparent p-0 text-left [font:inherit] text-inherit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" title={label} aria-label={`Heading level ${heading.level}: ${label}`} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading)}><span className="label">{label}</span></button>
+          <button type="button" className="flex min-w-0 flex-1 cursor-pointer items-center border-0 bg-transparent p-0 text-left [font:inherit] text-inherit" title={label} aria-label={`Heading level ${heading.level}: ${label}`} aria-current={activeId === heading.id ? 'location' : undefined} onClick={() => onSelect(heading)}><span className="label">{label}</span></button>
         </div>;
       })}
     </div>

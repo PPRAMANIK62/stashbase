@@ -13,9 +13,10 @@
  *
  * Daily use is not tied to online auth (the check is a localhost call).
  * Activation persists (via the stored key) and clears only if the key is later
- * removed. The skip, by contrast, is per-window (see `embeddingAuth`): a fresh
- * window offers indexing again rather than staying silently opted out. Within
- * a window the skip clears on activation, so removing a key re-gates cleanly.
+ * removed. The skip, by contrast, is per folder within this window (see
+ * `embeddingAuth`): a fresh window or a different folder offers indexing
+ * again rather than staying silently opted out; the skip clears on
+ * activation, so removing a key re-gates cleanly.
  *
  * The gate owns the dialog rather than the card, because the post-save work
  * is app-level: reducer state, the validation-warning toast, marking visible
@@ -66,13 +67,17 @@ export function EmbedderRequireKeyGate() {
         dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.hasKey });
         // Recommend, don't force. Auto-open only with a folder open — the
         // dialog is a folder-context prompt; without one the standing callout
-        // carries the offer. The skip is per-window (see embeddingAuth), so a
-        // fresh window re-offers rather than staying silently skipped.
-        setOpen(!!folder && !isEmbeddingAuthorized(embedder) && !hasSkippedAiIndexing());
+        // carries the offer. The skip is per folder within the window (see
+        // embeddingAuth), so a different folder — or a fresh window —
+        // re-offers rather than staying silently skipped.
+        setOpen(!!folder && !isEmbeddingAuthorized(embedder) && !hasSkippedAiIndexing(folder));
       })
       .catch(() => { /* startup race with server boot — silent */ });
     return () => { cancelled = true; };
-  }, [folder]);
+    // embedderHasKey: removing the key in Settings must re-gate right away
+    // ("removing a key later re-gates cleanly"), not wait for the next
+    // folder switch to refire this effect.
+  }, [folder, appState.embedderHasKey]);
 
   useEffect(() => {
     function onOpen() { setOpen(true); }
@@ -92,16 +97,17 @@ export function EmbedderRequireKeyGate() {
           dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
           // Activated: clear any prior basic-mode choice so a future key
           // removal re-gates from a clean state instead of staying skipped.
-          setAiIndexingSkipped(false);
+          setAiIndexingSkipped(false, folder);
           setOpen(false);
           if (warning) actions.toast(`API key saved, but validation could not reach the provider: ${warning}`, { level: 'warning' });
           if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
           void actions.refreshIndexState();
         }}
         onSkip={() => {
-          // Deliberate opt-out to basic mode; remembered so it does not
-          // reappear every launch. The Files-panel entry reopens it.
-          setAiIndexingSkipped(true);
+          // Deliberate opt-out to basic mode for THIS folder in this
+          // window; another folder (or a relaunch) re-offers. The
+          // Files-panel entry reopens it any time.
+          setAiIndexingSkipped(true, folder);
           setOpen(false);
         }}
       />

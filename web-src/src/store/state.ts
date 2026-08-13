@@ -151,10 +151,6 @@ export interface PendingHighlight {
   /** Exact millisecond position supplied by an audio keyword hit. */
   audioSeekMs?: number;
   openFindBar?: boolean;
-  /** FindBar options for `openFindBar`, carried by the hit because the
-   *  search popup owns its exact-mode toggles outside the reducer. */
-  findCaseStrict?: boolean;
-  findWholeWord?: boolean;
   pdfPage?: number;
 }
 
@@ -179,6 +175,13 @@ export type CascadeDecision = 'update' | 'skip' | 'cancel';
 export interface ModalRequest {
   type: 'alert' | 'confirm';
   message: string;
+  /** Confirm-only presentation. Omitted fields keep the generic
+   *  'Confirm action' / 'Confirm' rendering so plain `confirm(message)`
+   *  call sites are unchanged. */
+  title?: string;
+  confirmLabel?: string;
+  /** Render the action button with the destructive Button variant. */
+  destructive?: boolean;
 }
 
 export interface State {
@@ -241,12 +244,11 @@ export interface State {
    *  toggle) override it. `''` = FOLDER root is the focused row. */
   selectedPath: string;
   folderCollapsed: boolean;
-  /** True hides the resizable side panel, leaving only the 44px activity
-   *  rail visible (VSCode-style — the rail itself never collapses). */
+  /** True hides the sidebar entirely; the titlebar toggle brings it
+   *  back (there is no activity rail). */
   sidebarCollapsed: boolean;
-  /** Width (px) of the resizable side panel — the part right of the
-   *  44px activity rail. User-resizable via the drag handle on the
-   *  sidebar's right edge; clamped to [SIDEBAR_MIN_WIDTH, MAX]. */
+  /** Width (px) of the sidebar. User-resizable via the drag handle on
+   *  the sidebar's right edge; clamped to [SIDEBAR_MIN_WIDTH, MAX]. */
   sidebarWidth: number;
   /** True opens the right-side chat panel. */
   chatOpen: boolean;

@@ -1,9 +1,9 @@
 # UI Regression Testing
 
-This contract defines the automated Electron UI layers, their fixture
-boundaries, and the small residual release-sanity pass. It is the source of
-truth for how to add UI coverage; the specs remain the source of truth for the
-asserted behavior.
+This contract defines Electron UI test mechanics: layers, fixture boundaries,
+selectors, readiness, visual baselines, and the residual release-sanity pass.
+The specs remain the source of truth for exact setup and assertions. Product
+evidence ownership lives in [Journey Coverage](journey-coverage.md).
 
 ## Layer ownership
 
@@ -75,7 +75,7 @@ conversation state use their appropriate live semantics. When an interaction
 cannot be selected reliably, improve the shipping semantics and add a focused
 accessibility test instead of adding a brittle selector.
 
-## Commands
+## Validation Commands
 
 ```bash
 pnpm test:e2e:check-focus
@@ -145,6 +145,20 @@ shell state; the functional Agent journey is a separate deterministic fake
 app-server, not a credentialed Agent account. There is no credentialed/network
 Agent journey, visual binary-document gallery, preparation workflow,
 clipboard-image journey, or real native dialog in this suite.
+
+## Implementation Map
+
+| Role | Stable entry points |
+|---|---|
+| Playwright configuration | `playwright.config.ts` |
+| Application harness Interface | `e2e/support/app.ts`, `fixtures.ts`, `locators.ts` |
+| Deterministic fixtures | `e2e/fixtures/journey-workspaces.ts` and the fake Codex app-server |
+| Required suites | `e2e/smoke/`, `e2e/journeys/`, and `e2e/visual/` |
+| Harness evidence | `e2e/harness/`, `e2e/support/fixtures.test.ts`, and CI summary reporter tests |
+| CI Adapter | `.github/workflows/ci.yml` and `.github/workflows/visual-baselines.yml` |
+
+Product-to-test ownership is deliberately outside this mechanics contract; use
+[Journey Coverage](journey-coverage.md).
 
 ## Visual baseline workflow
 

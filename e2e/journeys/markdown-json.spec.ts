@@ -11,7 +11,7 @@ import {
   dismissEmbeddingKeyPrompt,
   documentTab,
   fileTreeRow,
-  folderButton,
+  openLibraryFolder,
   saveStatus,
 } from '../support/locators.ts';
 import { JOURNEY_JSON, JOURNEY_MARKDOWN, seedJourneyWorkspaces } from '../fixtures/journey-workspaces.ts';
@@ -31,7 +31,7 @@ test('Markdown preserves frontmatter across editing and safely routes links and 
       if (request.url().includes('remote.invalid')) remoteRequests.push(request.url());
     });
     await stubExternalBrowser(app.electron);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, JOURNEY_MARKDOWN).click();
 
@@ -115,7 +115,7 @@ test('JSON remains raw and read-only until explicit editing is enabled', async (
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, JOURNEY_JSON).click();
 

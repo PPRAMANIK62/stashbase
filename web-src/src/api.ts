@@ -366,7 +366,9 @@ function agentSessionBase(agent: 'claude' | 'codex'): string {
  *  current folder (else the library). */
 export interface SessionScopeParams {
   folder?: string;
-  scope?: 'library';
+  /** `all` is a LIST-only mode: every member folder plus the library
+   *  bucket, rows tagged with their member `folder`. */
+  scope?: 'library' | 'all';
 }
 
 function sessionScopeQuery(params?: SessionScopeParams): string {

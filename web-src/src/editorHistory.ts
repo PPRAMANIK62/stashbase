@@ -1,4 +1,4 @@
-import { basename } from './quickOpen';
+import { basename } from './lib/paths';
 import type { Tab } from './store/state';
 
 export interface EditorHistoryEntry {

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type Agent, type AgentDiscoveryPolicy, type AgentRuntimeDebugState, type AgentsResponse } from '../../api';
 import { AGENT_META, AGENTS, type AgentKind } from '../../agentCatalog';
+import { useApp } from '../../store/AppContext';
 import { Button } from '../ui/button';
+import { Select } from '../ui/select';
 import { StatusMessage } from '../ui/status';
 
 const DEFAULT_DEBUG: AgentRuntimeDebugState = {
@@ -12,6 +14,7 @@ const DEFAULT_DEBUG: AgentRuntimeDebugState = {
 };
 
 export function AgentRuntimePanel() {
+  const { actions } = useApp();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [debug, setDebug] = useState<AgentRuntimeDebugState>(DEFAULT_DEBUG);
   const [busy, setBusy] = useState<string | null>(null);
@@ -67,7 +70,11 @@ export function AgentRuntimePanel() {
 
   async function resetFirstRun(agent: AgentKind) {
     const label = AGENT_META[agent].name;
-    if (!window.confirm(`Reset the StashBase-managed ${label} runtime? Your global installation and provider login are not changed.`)) return;
+    const confirmed = await actions.confirm(
+      `Reset the StashBase-managed ${label} runtime? Your global installation and provider login are not changed.`,
+      { title: `Reset ${label} runtime?`, confirmLabel: 'Reset', destructive: true },
+    );
+    if (!confirmed) return;
     setBusy(`reset:${agent}`);
     setStatus(null);
     try {
@@ -107,7 +114,13 @@ export function AgentRuntimePanel() {
                 disabled={busy != null || working}
                 onClick={() => void install(definition.id)}
               >
-                {working ? 'Preparing…' : runtime?.installed ? 'Connect MCP' : 'Install'}
+                {working
+                  ? 'Preparing…'
+                  : !runtime?.installed
+                    ? 'Install'
+                    : runtime.bootstrap?.phase === 'ready'
+                      ? 'Reconnect MCP'
+                      : 'Connect MCP'}
               </Button>
             </div>
           );
@@ -122,8 +135,8 @@ export function AgentRuntimePanel() {
           </p>
           <label className="flex items-center justify-between gap-3 text-sm text-foreground">
             <span>Discovery source</span>
-            <select
-              className="h-8 min-w-44 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+            <Select
+              className="min-w-44"
               value={debug.discoveryPolicy}
               disabled={busy != null}
               onChange={(event) => void updateDebug({ discoveryPolicy: event.target.value as AgentDiscoveryPolicy })}
@@ -131,7 +144,7 @@ export function AgentRuntimePanel() {
               <option value="auto">Auto</option>
               <option value="managed-only">Managed only</option>
               <option value="system-only">System only</option>
-            </select>
+            </Select>
           </label>
           <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-foreground">
             <input
@@ -177,5 +190,8 @@ function runtimeDescription(runtime: Agent | undefined): string {
   if (bootstrap?.phase === 'failed') return bootstrap.error ?? 'Setup failed';
   if (bootstrap?.phase === 'installing' || bootstrap?.phase === 'configuring') return bootstrap.message ?? 'Preparing…';
   if (!runtime.installed) return 'Not installed';
-  return runtime.source === 'managed' ? 'StashBase-managed runtime' : 'System runtime';
+  const source = runtime.source === 'managed' ? 'StashBase-managed runtime' : 'System runtime';
+  // Say when MCP is already wired — a standing "Connect MCP" button with
+  // no state read as "not connected" even right after an auto-connect.
+  return bootstrap?.phase === 'ready' ? `${source} · MCP connected` : source;
 }

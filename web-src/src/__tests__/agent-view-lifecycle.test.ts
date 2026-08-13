@@ -175,7 +175,7 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
   assert.match(output, /Reconnect/);
   assert.doesNotMatch(output, /Codex is working/);
   assert.doesNotMatch(output, /Running/);
-  assert.equal(renderer!.root.findByType(AgentComposer).props.effortLocked, true);
+  assert.equal(renderer!.root.findByType(AgentComposer).props.effort.locked, true);
 
   buttonNamed(renderer!.root, 'Reconnect');
   await act(async () => { renderer!.root.findByType(MessageList).props.onRetry(); });

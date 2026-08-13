@@ -9,15 +9,17 @@ import type { ChatTab, State, Tab } from './state';
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
 
 /** Sidebar side-panel resize bounds (px), shared by the reducer and the
- *  drag handle. The 44px activity rail is *not* part of this — it always
- *  stays visible. Dragging the panel narrower than `COLLAPSE_AT`
- *  collapses it (rail-only); between that and `MIN` it snaps to `MIN`. */
+ *  drag handle. Dragging the panel narrower than `COLLAPSE_AT` collapses
+ *  it entirely; between that and `MIN` it snaps to `MIN`. */
 export const SIDEBAR_MIN_WIDTH = 200;
 export const SIDEBAR_MAX_WIDTH = 520;
 export const SIDEBAR_COLLAPSE_AT = 100;
 
-/** Chat-panel resize bounds (px), shared by the reducer and drag handle. */
-export const CHAT_MIN_WIDTH = 280;
+/** Chat-panel resize bounds (px), shared by the reducer and drag handle.
+ *  The floor fits the composer bar's worst case — attach + scope pill +
+ *  model pill + mode pill + send — with the pills already truncating;
+ *  below ~320 the bar clips its terminal send button. */
+export const CHAT_MIN_WIDTH = 320;
 export const CHAT_MAX_WIDTH = 640;
 export const SPLITTER_KEYBOARD_STEP = 16;
 

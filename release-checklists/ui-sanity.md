@@ -5,6 +5,11 @@ platform packaging workflows succeed. It covers native, packaged, credentialed,
 and media seams that the required Playwright suite intentionally does not fake.
 It is not a second copy of the automated smoke suite.
 
+`Jxx` labels refer to the stable product flows in
+[`design-docs/user-journeys.md`](../design-docs/user-journeys.md). They show
+which journey owns a residual check without duplicating the automated
+coverage matrix.
+
 Record one result per package/platform:
 
 - Tag and commit SHA:
@@ -24,29 +29,29 @@ reason when a platform cannot exercise it.
 
 ## Residual checks
 
-- [ ] Install or unpack the release asset and launch it through the platform's
+- [ ] **J01** — Install or unpack the release asset and launch it through the platform's
   normal path. Confirm one window appears and quits cleanly. On unsigned macOS
   builds, verify the bundled `Fix.sh`/`Read Me.txt` recovery instructions when
   Gatekeeper blocks first launch.
-- [ ] Use the real native folder picker: cancel once without changing the
+- [ ] **J02** — Use the real native folder picker: cancel once without changing the
   library, then add a disposable folder and confirm it opens.
-- [ ] Drag a real OS file or folder onto each supported drop target and confirm
+- [ ] **J02 / J06** — Drag a real OS file or folder onto each supported drop target and confirm
   the intended import/attachment behavior and rejection feedback.
-- [ ] Exercise native menus and the platform shortcuts for Quick Open, Command
+- [ ] **J01 / J03** — Exercise native menus and the platform shortcuts for Quick Open, Command
   Palette, search, Settings, window close, and quit. Confirm focus returns to a
   sensible control after dismissing an overlay.
-- [ ] With tester-owned credentials and an installed supported CLI, send one
+- [ ] **J06** — With tester-owned credentials and an installed supported CLI, send one
   harmless Agent turn. Confirm streaming/activity, one permission or stop
   interaction when available, completion, and a clean close. Never use a real
   user workspace or capture credentials in evidence.
-- [ ] Paste one non-sensitive clipboard image into the Agent composer. Confirm
+- [ ] **J06** — Paste one non-sensitive clipboard image into the Agent composer. Confirm
   the attachment preview appears, accompanying text remains, and the competing
   clipboard library-import offer does not appear.
-- [ ] Open representative real PDF, DOCX, image, and audio fixtures in the
+- [ ] **J03 / J04** — Open representative real PDF, DOCX, image, and audio fixtures in the
   packaged app on platforms where those formats ship. The automated journey
   uses synthetic/minimal fixtures; here confirm production rendering and, for
   audio, that play/pause and seeking produce sound and preserve control state.
-- [ ] Open a second window, switch folders, close both windows, relaunch, and
+- [ ] **J01 / J02 / J03** — Open a second window, switch folders, close both windows, relaunch, and
   confirm no orphan process/port, duplicate unexpected window, or lost save.
 
 If a check fails, keep the candidate unpublished or stop the rollout, attach

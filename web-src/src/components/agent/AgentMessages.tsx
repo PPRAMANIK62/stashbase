@@ -1,20 +1,27 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from 'react-aria-components';
-import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
 import { AgentMarkdown } from './AgentMarkdown';
 import { ChevronDownIcon, CodeIcon, CopyIcon, EditIcon, FileGenericIcon, FolderIcon, MoreHorizontalIcon, NewFileIcon, SearchIcon } from '../../icons';
 import { Menu, type MenuItem } from '../Menu';
+import { basename } from '../../lib/paths';
 import { cn } from '../../lib/utils';
-import { ImageLightbox } from '../ImageLightbox';
 import { buttonVariants } from '../ui/button';
 import { StatusMessage } from '../ui/status';
-import { FileAttachmentChip } from './FileAttachmentChip';
-import { attachImageChipClass, attachImagePreviewClass } from './panelStyles';
+import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from './FileAttachmentChip';
+import { buildDiff, type DiffRow } from './diffModel';
+import { segmentFileMentions } from './mentionText';
+import { spinnerClass } from './panelStyles';
+import { activitySummary, askTitle, classifyTool, fileChanges, toolRowParts } from './toolActivity';
+import { clipResult, payloadPreview } from './toolPayload';
 import type { Attachment, Block, ToolBlock } from './types';
+
+// Stable seams live in focused modules; re-exported here for existing
+// importers (AgentView, tests) so their call sites compile unchanged.
+export { flattenFileMentions } from './mentionText';
+export { activitySummary } from './toolActivity';
 
 const outlineSmClass = buttonVariants({ variant: 'outline', size: 'sm' });
 const primarySmClass = buttonVariants({ variant: 'default', size: 'sm' });
-const ghostSmClass = buttonVariants({ variant: 'ghost', size: 'sm' });
 
 /** Accent status dot used by working/queued/running indicators. */
 function Dot() {
@@ -79,6 +86,12 @@ export function MessageList({
   });
 
   const turns = useMemo(() => groupTurns(blocks), [blocks]);
+  // The reply handlers travel as ONE object from here down through
+  // TurnBody/WorkTrace/BlockView instead of four parallel props per layer.
+  const handlers: ReplyHandlers = useMemo(
+    () => ({ onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }),
+    [onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact],
+  );
 
   return (
     // `agent-messages` is a layout hook: the chat-primary grid rules in
@@ -117,10 +130,7 @@ export function MessageList({
               liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
               streaming={!settled}
               meta={turn.head ? turnMeta[turn.head.id] : undefined}
-              onPermission={onPermission}
-              onCopyUserMessage={onCopyUserMessage}
-              onResendUserMessage={onResendUserMessage}
-              onOpenArtifact={onOpenArtifact}
+              handlers={handlers}
             />
             {replyText && <TurnActions text={replyText} onCopy={onCopyUserMessage} />}
           </div>
@@ -218,20 +228,12 @@ function renderReplyBlocks(blocks: Block[], liveBlockId: string | null, h: Reply
     else groups.push([block]);
   }
   return groups.map((group) => Array.isArray(group)
-    ? <ToolActivityGroup key={`activity-${group[0].id}`} tools={group} live={group[group.length - 1].id === liveBlockId} onPermission={h.onPermission} onOpenArtifact={h.onOpenArtifact} />
-    : <BlockView
-      key={group.id}
-      block={group}
-      live={group.id === liveBlockId}
-      onPermission={h.onPermission}
-      onCopyUserMessage={h.onCopyUserMessage}
-      onResendUserMessage={h.onResendUserMessage}
-      onOpenArtifact={h.onOpenArtifact}
-    />
+    ? <ToolActivityGroup key={`activity-${group[0].id}`} tools={group} live={group[group.length - 1].id === liveBlockId} onOpenArtifact={h.onOpenArtifact} />
+    : <BlockView key={group.id} block={group} live={group.id === liveBlockId} handlers={h} />
   );
 }
 
-function TurnBody({ blocks, liveBlockId, streaming, meta, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
+function TurnBody({ blocks, liveBlockId, streaming, meta, handlers: h }: {
   blocks: Block[];
   /** The stream's last block while the turn is active — the one block
    *  whose meta label may shimmer as "working". */
@@ -239,13 +241,8 @@ function TurnBody({ blocks, liveBlockId, streaming, meta, onPermission, onCopyUs
   /** This turn is still streaming (the flat, everything-expanded phase). */
   streaming: boolean;
   meta?: TurnMeta;
-  onPermission: (t: string, p: string, a: boolean) => void;
-  onCopyUserMessage: (text: string) => void;
-  onResendUserMessage: (text: string) => void;
-  onOpenArtifact: (path: string) => void;
+  handlers: ReplyHandlers;
 }) {
-  const h: ReplyHandlers = { onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact };
-
   // While streaming, render the trace flat and expanded — the work is
   // happening live and there is no stable "final answer" to separate yet
   // (the last assistant block keeps moving as tokens arrive).
@@ -267,6 +264,8 @@ function TurnBody({ blocks, liveBlockId, streaming, meta, onPermission, onCopyUs
   );
 }
 
+// Exported as a stable test seam (agent-message-layout), like the
+// re-exports at the top of this file.
 export function settledReplySections(blocks: Block[]): { workBlocks: Block[]; answerBlocks: Block[] } {
   for (let i = blocks.length - 1; i >= 0; i--) {
     if (blocks[i].kind === 'assistant' || blocks[i].kind === 'error') {
@@ -419,26 +418,17 @@ function MessageAttachments({ attachments }: { attachments: Attachment[] }) {
     <>
       <div className="agent-turn-attach">
         {attachments.map((attachment) => attachment.previewUrl ? (
-          <button
+          <ImageAttachmentChip
             key={attachment.path}
-            type="button"
-            className={cn(attachImageChipClass, attachImagePreviewClass)}
-            aria-label={`Preview ${attachment.name}`}
-            onClick={() => setPreviewAttachment(attachment)}
-          >
-            <img src={attachment.previewUrl} alt="" />
-          </button>
+            name={attachment.name}
+            previewUrl={attachment.previewUrl}
+            onPreview={() => setPreviewAttachment(attachment)}
+          />
         ) : (
           <FileAttachmentChip key={attachment.path} name={attachment.name} path={attachment.path} meta={attachment.dims} />
         ))}
       </div>
-      {previewAttachment?.previewUrl && (
-        <ImageLightbox
-          src={previewAttachment.previewUrl}
-          alt={previewAttachment.name}
-          onClose={() => setPreviewAttachment(null)}
-        />
-      )}
+      <AttachmentLightbox attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
     </>
   );
 }
@@ -494,30 +484,6 @@ function InlineUserMessageEditor({
 
 const USER_TEXT_CHAR_LIMIT = 300;
 const USER_TEXT_LINE_LIMIT = 4;
-const FILE_MENTION_RE = new RegExp(
-  `(^|\\s)@([^\\n]*?\\.(?:${VIEWABLE_FILE_EXTENSION_ALTERNATION}))(?![/.])`,
-  'gi',
-);
-/* Bare multi-segment paths (`topic/note.md`) chip too: history replay and
- * some runtimes serialize a mention without its `@`, and a raw relative
- * path glued into prose is the single roughest thing a transcript can
- * show. At least one `/` is required so ordinary "README.md" prose stays
- * text; the lookahead permits CJK or punctuation right after the
- * extension while rejecting longer paths/words. */
-const BARE_FILE_PATH_RE = new RegExp(
-  `(^|\\s)((?:[^\\s/@]+/)+[^\\s/]+?\\.(?:${VIEWABLE_FILE_EXTENSION_ALTERNATION}))(?![\\w./])`,
-  'gi',
-);
-
-/** Flatten mention syntax for plain-text surfaces (tab titles, previews):
- * `@topic/note.md` and bare multi-segment paths read as just the file
- * name. The transcript renders chips instead — this is for places that
- * can only hold a string. */
-export function flattenFileMentions(text: string): string {
-  return text
-    .replace(FILE_MENTION_RE, (_raw, lead: string, path: string) => `${lead}${baseName(path)}`)
-    .replace(BARE_FILE_PATH_RE, (_raw, lead: string, path: string) => `${lead}${baseName(path)}`);
-}
 
 function UserMessageText({ text, attachmentPaths }: { text: string; attachmentPaths?: string[] }) {
   const [open, setOpen] = useState(false);
@@ -541,47 +507,16 @@ function UserMessageText({ text, attachmentPaths }: { text: string; attachmentPa
 }
 
 /** The composer serializes its atomic @-mention widget as @<path>. Restore
- * that same compact file chip in the transcript — for `@`-prefixed
- * mentions, bare multi-segment paths, and exact occurrences of this
- * turn's attachment paths (any boundary — attachment paths are known
- * verbatim, so spaces and CJK adjacency are fine). Overlapping hits keep
- * the earliest, longest match. */
-function renderUserFileMentions(text: string, attachmentPaths: string[] = []): ReactNode[] {
-  const hits: Array<{ start: number; end: number; path: string; lead: string }> = [];
-  const collect = (re: RegExp) => {
-    re.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(text))) {
-      const [raw, lead, path] = match;
-      hits.push({ start: match.index, end: match.index + raw.length, path, lead });
-    }
-  };
-  collect(FILE_MENTION_RE);
-  collect(BARE_FILE_PATH_RE);
-  for (const path of attachmentPaths) {
-    if (!path) continue;
-    let from = 0;
-    for (let at = text.indexOf(path, from); at !== -1; at = text.indexOf(path, from)) {
-      hits.push({ start: at, end: at + path.length, path, lead: '' });
-      from = at + path.length;
-    }
-  }
-  hits.sort((a, b) => a.start - b.start || b.end - a.end);
-  const parts: ReactNode[] = [];
-  let cursor = 0;
-  for (const hit of hits) {
-    if (hit.start < cursor) continue;
-    if (hit.start > cursor) parts.push(text.slice(cursor, hit.start));
-    if (hit.lead) parts.push(hit.lead);
-    parts.push(
-      <span key={`${hit.start}:${hit.path}`} className="agent-file-mention" title={hit.path} aria-label={`File mention: ${hit.path}`}>
-        {baseName(hit.path)}
-      </span>,
-    );
-    cursor = hit.end;
-  }
-  if (cursor < text.length) parts.push(text.slice(cursor));
-  return parts.length ? parts : [text];
+ * that same compact file chip in the transcript (parsing rules live in
+ * mentionText.ts). */
+function renderUserFileMentions(text: string, attachmentPaths?: string[]): ReactNode[] {
+  return segmentFileMentions(text, attachmentPaths).map((segment) => segment.kind === 'mention'
+    ? (
+      <span key={`${segment.start}:${segment.path}`} className="agent-file-mention" title={segment.path} aria-label={`File mention: ${segment.path}`}>
+        {basename(segment.path)}
+      </span>
+    )
+    : segment.text);
 }
 
 /** Copy + edit on every user message (ChatGPT-history register). Editing
@@ -668,34 +603,24 @@ function FatalInline({
 function ConnectingNotice({ agentShortName }: { agentShortName: string }) {
   return (
     <div className="flex items-center gap-2 px-0.5 py-2 text-sm text-muted-foreground" role="status">
-      {/* The global reduced-motion policy zeroes this keyframe animation,
-        * leaving a static arc while the text still conveys the state. */}
-      <span
-        className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent"
-        aria-hidden="true"
-      />
+      <span className={spinnerClass} aria-hidden="true" />
       Connecting to {agentShortName}…
     </div>
   );
 }
 
-function BlockView({ block, live, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }: {
+function BlockView({ block, live, handlers }: {
   block: Block;
   live?: boolean;
-  onPermission: (t: string, p: string, a: boolean) => void;
-  onCopyUserMessage: (text: string) => void;
-  onResendUserMessage: (text: string) => void;
-  onOpenArtifact: (path: string) => void;
+  handlers: ReplyHandlers;
 }) {
   switch (block.kind) {
     case 'user':
-      return <UserTurnHead
-        block={block}
-        onCopy={onCopyUserMessage}
-        onSendEdit={onResendUserMessage}
-      />;
+      // Unreachable: groupTurns hoists every user block into turn.head, so
+      // none travels through renderReplyBlocks. Kept for exhaustiveness.
+      return null;
     case 'assistant':
-      return <AssistantBlock text={block.text} onOpenArtifact={onOpenArtifact} />;
+      return <AssistantBlock text={block.text} onOpenArtifact={handlers.onOpenArtifact} />;
     case 'thinking':
       return <ThinkingView text={block.text} active={live} />;
     case 'error':
@@ -707,11 +632,11 @@ function BlockView({ block, live, onPermission, onCopyUserMessage, onResendUserM
     case 'tool':
       // A tool block only reaches BlockView while it is awaiting approval;
       // completed/running tools are grouped into ToolActivityGroup.
-      return <PermissionCard block={block} onPermission={onPermission} />;
+      return <PermissionCard block={block} onPermission={handlers.onPermission} />;
   }
 }
 
-function ToolActivityGroup({ tools, live = false, onPermission, onOpenArtifact }: {
+function ToolActivityGroup({ tools, live = false, onOpenArtifact }: {
   tools: ToolBlock[];
   /** This group is the live tail of an active turn. Keep the liveness cue
    *  (dot + shimmer + "…") lit across the whole tool stretch, not only while
@@ -719,7 +644,6 @@ function ToolActivityGroup({ tools, live = false, onPermission, onOpenArtifact }
    *  would otherwise go dark and the generic "…is working" tail would jump
    *  onto its own line. */
   live?: boolean;
-  onPermission: (t: string, p: string, a: boolean) => void;
   onOpenArtifact: (path: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -833,19 +757,26 @@ export function turnReplyText(turn: Turn): string {
  * register). Muted, or danger on a failed step. */
 function ToolTypeIcon({ name, input, failed }: { name: string; input: Record<string, unknown>; failed?: boolean }) {
   const cls = cn('size-3.5 shrink-0', failed ? 'text-status-danger' : 'text-muted-foreground');
-  if (name === 'Bash') {
-    const action = commandActions(input)[0];
-    if (action?.type === 'read') return <FileGenericIcon className={cls} />;
-    if (action?.type === 'listFiles') return <FolderIcon className={cls} />;
-    if (action?.type === 'search') return <SearchIcon className={cls} />;
-    return <CodeIcon className={cls} />;
+  switch (classifyTool(name, input)) {
+    case 'read': return <FileGenericIcon className={cls} />;
+    case 'list': return <FolderIcon className={cls} />;
+    case 'search': return <SearchIcon className={cls} />;
+    case 'command': return <CodeIcon className={cls} />;
+    case 'write': return <NewFileIcon className={cls} />;
+    case 'edit': case 'file-change': return <EditIcon className={cls} />;
+    default: return <FileGenericIcon className={cls} />;
   }
-  if (/read_file$/i.test(name)) return <FileGenericIcon className={cls} />;
-  if (/write_file$/i.test(name)) return <NewFileIcon className={cls} />;
-  if (/edit_file$/i.test(name) || name === 'File change') return <EditIcon className={cls} />;
-  if (/list_directory$/i.test(name)) return <FolderIcon className={cls} />;
-  if (/search/i.test(name)) return <SearchIcon className={cls} />;
-  return <FileGenericIcon className={cls} />;
+}
+
+/** The payload a tool surface renders once, shared by ToolRow and
+ * PermissionCard so the fallback ladder cannot drift: a structured diff
+ * when the input is a file change, the raw command for Bash, the payload
+ * preview otherwise. */
+function ToolPayloadBody({ block }: { block: ToolBlock }) {
+  const diff = useMemo(() => buildDiff(block.name, block.input), [block.name, block.input]);
+  if (diff) return <DiffView diff={diff} />;
+  if (block.name === 'Bash') return <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>;
+  return <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>;
 }
 
 /** One tool inside an expanded activity group, Codex-style: a flat text
@@ -857,7 +788,6 @@ function ToolTypeIcon({ name, input, failed }: { name: string; input: Record<str
  * as their own card. */
 function ToolRow({ block }: { block: ToolBlock }) {
   const [open, setOpen] = useState(false);
-  const diff = useMemo(() => buildDiff(block.name, block.input), [block.name, block.input]);
   const { verb, target, mono } = toolRowParts(block.name, block.input);
   const running = block.status === 'running';
   const failed = block.status === 'error' || block.status === 'denied';
@@ -883,11 +813,9 @@ function ToolRow({ block }: { block: ToolBlock }) {
       </Button>
       {open && (
         <div className="pb-1 pl-6">
-          {diff && <DiffView diff={diff} />}
-          {!diff && block.name === 'Bash' && <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>}
-          {!diff && block.name !== 'Bash' && <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>}
+          <ToolPayloadBody block={block} />
           {block.result != null && block.result !== '' && (
-            <pre className={cn(toolPreClass, 'agent-tool-result', block.status === 'error' && 'err')}>{clip(block.result)}</pre>
+            <pre className={cn(toolPreClass, 'agent-tool-result', block.status === 'error' && 'err')}>{clipResult(block.result)}</pre>
           )}
         </div>
       )}
@@ -901,7 +829,6 @@ function ToolRow({ block }: { block: ToolBlock }) {
  * primary button is the only emphasis. Approval stays an explicit click. */
 function PermissionCard({ block, onPermission }: { block: ToolBlock; onPermission: (t: string, p: string, a: boolean) => void }) {
   const headRef = useRef<HTMLDivElement>(null);
-  const diff = useMemo(() => buildDiff(block.name, block.input), [block.name, block.input]);
   function replyPermission(allow: boolean) {
     onPermission(block.id, block.permId!, allow);
     // The buttons vanish once the Agent updates this block; keep keyboard
@@ -915,11 +842,9 @@ function PermissionCard({ block, onPermission }: { block: ToolBlock; onPermissio
       </div>
       {block.permId && (
         <div className="px-2.5 pb-2.5">
-          {diff && <DiffView diff={diff} />}
-          {!diff && block.name === 'Bash' && <pre className={toolPreClass}>{String(block.input.command ?? '')}</pre>}
-          {!diff && block.name !== 'Bash' && <pre className={toolPreClass}>{payloadPreview(block.input)}</pre>}
+          <ToolPayloadBody block={block} />
           <div className="mt-2.25 flex justify-end gap-2">
-            <Button className={ghostSmClass} onPress={() => replyPermission(false)}>Reject</Button>
+            <Button className={outlineSmClass} onPress={() => replyPermission(false)}>Reject</Button>
             <Button className={primarySmClass} onPress={() => replyPermission(true)}>Allow</Button>
           </div>
         </div>
@@ -949,128 +874,6 @@ function ArtifactCards({ changes, onOpen }: { changes: Array<{ path: string; kin
   ))}</div>;
 }
 
-function fileChanges(block: ToolBlock): Array<{ path: string; kind: string }> {
-  // MCP file mutations (write_file / edit_file) surface as artifacts too:
-  // "work leaves an openable result" is a system guarantee, not something
-  // the model must remember to link in prose.
-  if (/(?:write_file|edit_file)$/i.test(block.name)) {
-    const path = mcpArgs(block.input).path;
-    if (typeof path !== 'string' || !path) return [];
-    return [{ path, kind: /edit_file$/i.test(block.name) ? 'edited' : 'wrote' }];
-  }
-  if (block.name !== 'File change') return [];
-  const raw = Array.isArray(block.input.changes) ? block.input.changes : [];
-  return raw.flatMap((item) => {
-    if (!item || typeof item !== 'object') return [];
-    const change = item as Record<string, unknown>;
-    const path = [change.path, change.filePath, change.file_path].find((value): value is string => typeof value === 'string' && value.length > 0);
-    if (!path) return [];
-    const kind = typeof change.kind === 'string' ? change.kind : typeof change.type === 'string' ? change.type : 'Changed';
-    return [{ path, kind }];
-  });
-}
-
-function activityLabel(tool: ToolBlock): string {
-  if (tool.name === 'File change') return 'Editing files';
-  if (tool.name === 'Bash') return 'Verifying changes';
-  if (/search|read/i.test(tool.name)) return 'Reading library';
-  return tool.name;
-}
-
-type CommandAction = { type?: unknown; path?: unknown };
-
-function commandActions(input: Record<string, unknown>): CommandAction[] {
-  return Array.isArray(input.actions)
-    ? input.actions.filter((action): action is CommandAction => !!action && typeof action === 'object')
-    : [];
-}
-
-/** Question-form title for a pending approval — the card head carries the
- * ask, so the body needs no separate prompt line. */
-function askTitle(name: string): string {
-  if (name === 'Bash') return 'Run this command?';
-  if (name === 'File change') return 'Apply these changes?';
-  return `Allow ${name}?`;
-}
-
-/** Codex-style parts for an activity row: an action verb and, when there
- * is one, its object — a file name (rendered underlined, like a link) or
- * a command / query (rendered mono). The collapsed group summary uses its
- * own count-free rollup (activitySummary). */
-function toolRowParts(name: string, input: Record<string, unknown>): { verb: string; target?: string; mono?: boolean } {
-  if (name === 'Bash') {
-    const action = commandActions(input)[0];
-    if (action?.type === 'read' && typeof action.path === 'string') return { verb: 'Read', target: baseName(action.path) };
-    if (action?.type === 'listFiles') return { verb: 'Listed files' };
-    if (action?.type === 'search') return { verb: 'Searched files' };
-    return { verb: 'Ran', target: clipInline(String(input.command ?? ''), 120), mono: true };
-  }
-  if (/read_file$/i.test(name)) {
-    const path = mcpArgs(input).path ?? input.file_path;
-    return typeof path === 'string' ? { verb: 'Read', target: baseName(path) } : { verb: 'Read file' };
-  }
-  if (/write_file$/i.test(name)) {
-    const path = mcpArgs(input).path;
-    return typeof path === 'string' ? { verb: 'Wrote', target: baseName(path) } : { verb: 'Wrote file' };
-  }
-  if (/edit_file$/i.test(name)) {
-    const path = mcpArgs(input).path;
-    return typeof path === 'string' ? { verb: 'Edited', target: baseName(path) } : { verb: 'Edited file' };
-  }
-  if (/list_directory$/i.test(name)) return { verb: 'Listed files' };
-  if (/search/i.test(name)) {
-    const args = mcpArgs(input);
-    const q = args.query ?? args.pattern ?? input.query ?? input.pattern;
-    return typeof q === 'string' ? { verb: 'Searched', target: clipInline(q, 120), mono: true } : { verb: 'Searched' };
-  }
-  if (name === 'File change') return { verb: 'Changed files' };
-  return { verb: name };
-}
-
-/** A quiet, count-free description of a group's work (Codex register:
- * "Read files, ran a command"). It lists the categories present, each
- * phrased singular or plural to tell one from many — never an exact number,
- * and never different wording live vs done (which read as a glitch). An
- * active group appends "…". */
-function activitySummary(tools: ToolBlock[], active?: boolean): string {
-  let reads = 0;
-  let lists = 0;
-  let searches = 0;
-  let commands = 0;
-  let changes = 0;
-  let toolsUsed = 0;
-  for (const tool of tools) {
-    if (tool.name === 'Bash') {
-      const actions = commandActions(tool.input);
-      if (!actions.length) { commands++; continue; }
-      for (const action of actions) {
-        if (action.type === 'read') reads++;
-        else if (action.type === 'listFiles') lists++;
-        else if (action.type === 'search') searches++;
-        else commands++;
-      }
-    } else if (/read_file$/i.test(tool.name)) reads++;
-    else if (/(?:write_file|edit_file)$/i.test(tool.name)) changes++;
-    else if (/list_directory$/i.test(tool.name)) lists++;
-    else if (/search/i.test(tool.name)) searches++;
-    else if (tool.name === 'File change') changes++;
-    else toolsUsed++;
-  }
-  const labels = [
-    reads && `read ${reads === 1 ? 'a file' : 'files'}`,
-    lists && `listed ${lists === 1 ? 'a folder' : 'folders'}`,
-    searches && 'searched',
-    commands && `ran ${commands === 1 ? 'a command' : 'commands'}`,
-    changes && `edited ${changes === 1 ? 'a file' : 'files'}`,
-    toolsUsed && `used ${toolsUsed === 1 ? 'a tool' : 'tools'}`,
-  ].filter(Boolean);
-  const summary = labels.length ? labels.join(', ') : 'worked';
-  const capped = summary.charAt(0).toUpperCase() + summary.slice(1);
-  return active ? `${capped}…` : capped;
-}
-
-type DiffRow = { type: 'ctx' | 'del' | 'add'; text: string };
-
 function DiffView({ diff }: { diff: { file: string; rows: DiffRow[] } }) {
   return (
     <div className="agent-diff">
@@ -1087,86 +890,3 @@ function DiffView({ diff }: { diff: { file: string; rows: DiffRow[] } }) {
   );
 }
 
-function buildDiff(name: string, input: Record<string, unknown>): { file: string; rows: DiffRow[] } | null {
-  const file = String(input.file_path ?? input.path ?? '');
-  if (name === 'Edit') {
-    return { file, rows: lineDiff(String(input.old_string ?? ''), String(input.new_string ?? '')) };
-  }
-  if (name === 'MultiEdit' && Array.isArray(input.edits)) {
-    const rows: DiffRow[] = [];
-    for (const e of input.edits as Array<Record<string, unknown>>) {
-      rows.push(...lineDiff(String(e.old_string ?? ''), String(e.new_string ?? '')));
-    }
-    return { file, rows };
-  }
-  if (name === 'Write') {
-    return { file, rows: lineDiff('', String(input.content ?? '')) };
-  }
-  return null;
-}
-
-function lineDiff(oldStr: string, newStr: string): DiffRow[] {
-  const o = oldStr === '' ? [] : oldStr.split('\n');
-  const n = newStr === '' ? [] : newStr.split('\n');
-  let p = 0;
-  while (p < o.length && p < n.length && o[p] === n[p]) p++;
-  let s = 0;
-  while (s < o.length - p && s < n.length - p && o[o.length - 1 - s] === n[n.length - 1 - s]) s++;
-
-  const rows: DiffRow[] = [];
-  const ctx = 3;
-  const headStart = Math.max(0, p - ctx);
-  for (let i = headStart; i < p; i++) rows.push({ type: 'ctx', text: o[i] });
-  for (let i = p; i < o.length - s; i++) rows.push({ type: 'del', text: o[i] });
-  for (let i = p; i < n.length - s; i++) rows.push({ type: 'add', text: n[i] });
-  const tailEnd = Math.min(o.length, o.length - s + ctx);
-  for (let i = o.length - s; i < tailEnd; i++) rows.push({ type: 'ctx', text: o[i] });
-  return rows;
-}
-
-
-const baseName = (p: string) => p.split('/').pop() || p;
-const clipInline = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '…' : s);
-const clip = (s: string) => (s.length > 4000 ? s.slice(0, 4000) + '\n…(truncated)' : s);
-
-/** Tool payloads render for HUMANS deciding or inspecting, not for
- * machines: hoist MCP-style `arguments`, drop empty scaffolding fields
- * (`server: ""`), and print string values verbatim — real newlines,
- * clipped to a screenful — never a JSON-escaped dump of a whole
- * document. Falls back to pretty JSON when nothing survives the
- * filter. */
-const PAYLOAD_LINE_LIMIT = 14;
-const PAYLOAD_CHAR_LIMIT = 1200;
-
-function clipPayloadText(value: string): string {
-  let out = value.split('\n').slice(0, PAYLOAD_LINE_LIMIT).join('\n');
-  if (out.length > PAYLOAD_CHAR_LIMIT) out = out.slice(0, PAYLOAD_CHAR_LIMIT);
-  if (out.length < value.length) {
-    return `${out}\n… (+${(value.length - out.length).toLocaleString()} chars)`;
-  }
-  return out;
-}
-
-/** MCP wrappers nest the real payload under `arguments`; direct tools
- *  carry it at the top level. */
-function mcpArgs(input: Record<string, unknown>): Record<string, unknown> {
-  const nested = input.arguments;
-  return nested && typeof nested === 'object' && !Array.isArray(nested)
-    ? (nested as Record<string, unknown>)
-    : input;
-}
-
-function payloadPreview(input: Record<string, unknown>): string {
-  const args = mcpArgs(input);
-  const lines: string[] = [];
-  for (const [key, value] of Object.entries(args)) {
-    if (value == null || value === '') continue;
-    if (typeof value === 'string') {
-      const text = clipPayloadText(value);
-      lines.push(text.includes('\n') || text.length > 100 ? `${key}:\n${text}` : `${key}: ${text}`);
-    } else {
-      lines.push(`${key}: ${JSON.stringify(value, null, 2)}`);
-    }
-  }
-  return lines.length ? lines.join('\n\n') : JSON.stringify(input, null, 2);
-}

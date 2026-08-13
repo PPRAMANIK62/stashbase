@@ -133,3 +133,28 @@ test('production Claude replay joins SDK-selected active UUIDs to raw JSONL effo
     effort: 'max',
   });
 });
+
+test('scope=all merges the library bucket with every member folder, tagging member rows', async () => {
+  const { listAllSessions } = sharedRoutes;
+  const byCwd: Record<string, { id: string; lastModified: number }[]> = {
+    '/home/lib': [{ id: 'lib-1', lastModified: 300 }],
+    '/work/alpha': [{ id: 'a-1', lastModified: 500 }, { id: 'a-2', lastModified: 100 }],
+    '/work/beta': [{ id: 'b-1', lastModified: 400 }],
+  };
+  const history = {
+    list: async (cwd: string | null) => {
+      if (cwd === '/work/broken') throw new Error('unreadable bucket');
+      return byCwd[cwd ?? ''] ?? [];
+    },
+  };
+  const rows = await listAllSessions(history, '/home/lib', ['/work/alpha', '/work/beta', '/work/broken']) as
+    { id: string; folder?: string }[];
+  // Newest first across buckets; member rows tagged, library rows untagged;
+  // the broken bucket drops out without blanking the rest.
+  assert.deepEqual(rows.map((row) => [row.id, row.folder ?? null]), [
+    ['a-1', '/work/alpha'],
+    ['b-1', '/work/beta'],
+    ['lib-1', null],
+    ['a-2', '/work/alpha'],
+  ]);
+});

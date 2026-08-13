@@ -7,10 +7,8 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useReducer,
-  useRef,
   type ReactNode,
 } from 'react';
 import {
@@ -31,6 +29,7 @@ import type { AgentKind } from '../agentCatalog';
 import { rememberPreferredAgent } from '../agentPreference';
 import { requestAgentBootstrap } from '../agentBootstrap';
 import type { EditorHandle, FindController } from './actionTypes';
+import { useLatestRef } from '../hooks/useLatestRef';
 import { useFeedbackActions } from './useFeedbackActions';
 import { useFindActions } from './useFindActions';
 import { useActiveFolderWorkspace } from './useActiveFolderWorkspace';
@@ -123,8 +122,12 @@ export interface AppActions {
    *  `window.alert`. */
   alert: (message: string) => Promise<void>;
   /** Show a modal confirm and resolve to true (OK) / false (Cancel).
-   *  Replaces `window.confirm`. */
-  confirm: (message: string) => Promise<boolean>;
+   *  Replaces `window.confirm`. Options title the dialog and restyle the
+   *  action button; omitted, it renders the generic 'Confirm action'. */
+  confirm: (
+    message: string,
+    opts?: { title?: string; confirmLabel?: string; destructive?: boolean },
+  ) => Promise<boolean>;
   /** Settle the pending alert/confirm modal with the user's choice.
    *  Called by the rendered modal's buttons. */
   resolveModal: (value: boolean) => void;
@@ -200,47 +203,7 @@ export function canApplyExternalTextRefresh(
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const folderContextPathRef = useRef(state.folderPath);
-  folderContextPathRef.current = state.folderPath;
-
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveInFlight = useRef<Promise<boolean> | null>(null);
-  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editorRef = useRef<EditorHandle | null>(null);
-  // Race protection for manual sync: switching folders cancels the
-  // renderer ownership of the old sync so its `finally` can't clear a
-  // newer folder's spinner.
-  const syncGen = useRef(0);
-  // Opening folders is multi-step (server bind → files/order load →
-  // landing file). A newer open/home action invalidates older finishers.
-  const openGen = useRef(0);
-  const openingFolderGen = useRef<number | null>(null);
-  // Last `treeVersion` we saw from `/api/index-status`. Any bump means
-  // the watcher detected a disk change since last poll → refetch files.
-  const lastTreeVersion = useRef<number>(-1);
-  /** Recently imported convertible files awaiting server confirmation:
-   *  folder-relative path → grace deadline (ms). On import we include a
-   *  PDF/image/DOCX in search-readiness accounting immediately, but the server
-   *  only registers the conversion after responding. `refreshIndexState`
-   *  keeps these in `pendingConversions` until the server starts reporting
-   *  them (hand-off) or the grace expires. */
-  const importConversionGrace = useRef<Map<string, number>>(new Map());
-  /** Same idea for indexed (md/html) imports, which never enter
-   *  `pendingConversions`. The daemon serialises `status` behind the very
-   *  embeds it would report (`indexer.mfs.ts` status note), so a bare
-   *  poll right after a drop under-counts and lags. We optimistically
-   *  mark every imported note as pending and
-   *  keep it until the UI-visible pending set settles (the batch is done)
-   *  or the grace expires. Unlike conversions we do NOT hand off per-file
-   *  — mid-embed `pending` is unreliable, so the server sends a dedicated
-   *  `visibleIndexingSettled` signal for this renderer-only state. */
-  const importIndexGrace = useRef<Map<string, number>>(new Map());
-  /** Same optimistic hold after an API key is added. The server schedules
-   *  backfill asynchronously, so an immediate status poll can report no
-   *  semantic pending work before the sync has started. */
-  const keyBackfillGrace = useRef<Map<string, number>>(new Map());
+  const stateRef = useLatestRef(state);
   const {
     askCascadeForRename,
     askConfirm,
@@ -393,36 +356,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const workspace = useActiveFolderWorkspace(
-    {
-      state: stateRef,
-      folderContextPath: folderContextPathRef,
-      editor: editorRef,
-      saveTimer,
-      saveInFlight,
-      pollTimer,
-      syncGeneration: syncGen,
-      openGeneration: openGen,
-      openingFolderGeneration: openingFolderGen,
-      lastTreeVersion,
-      importConversionGrace,
-      importIndexGrace,
-      keyBackfillGrace,
-    },
-    {
-      state,
-      dispatch,
-      loadFiles,
-      loadFilesFromServer,
-      loadFileOrder,
-      setFolderOrder,
-      refreshActiveTabFromDisk,
-      askCascadeForRename,
-      askConfirm,
-      toast,
-      primeFind,
-    },
-  );
+  // The workspace owns all folder/document liveness bookkeeping internally;
+  // the shell hands over only the always-current state ref plus callbacks.
+  const workspace = useActiveFolderWorkspace(stateRef, {
+    state,
+    dispatch,
+    loadFiles,
+    loadFilesFromServer,
+    loadFileOrder,
+    setFolderOrder,
+    refreshActiveTabFromDisk,
+    askCascadeForRename,
+    askConfirm,
+    toast,
+    primeFind,
+  });
 
   const actions = useMemo<AppActions>(() => ({
     bootstrap: workspace.bootstrap, openFolder: workspace.openFolder, openFolderByName: workspace.openFolderByName,

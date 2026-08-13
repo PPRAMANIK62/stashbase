@@ -2,29 +2,40 @@
 
 StashBase is evolving toward three connected capabilities:
 
-> An Obsidian-like local file workspace, a VS Code-like Agent Panel, and
-> Cursor-like document indexing.
+> A VS Code-like Document Workbench, a Codex-like Agent Panel, and a local
+> RAG layer for document retrieval.
 
-## Local File Workspace
+## Document Workbench
 
-People work in ordinary folders. StashBase should make those folders pleasant
-to browse, read, edit, organize, and hand to an agent without replacing them
-with a database, block editor, or proprietary storage model.
+StashBase should provide a workbench for browsing, reading, editing, navigating,
+and organizing documents across ordinary local folders. Like a code workbench,
+it uses a file tree, persistent tabs, quick navigation, and format-appropriate
+surfaces, but it remains centered on documents rather than code. It works with
+the user's existing files without replacing them with a database, block editor,
+or proprietary storage model.
 
 ## Agent Panel
 
-The built-in Agent Panel belongs to the current folder. Before a document is
-opened, that same chat is the primary workspace; once a document appears, it
-adapts into a side panel alongside the source. It is a convenient client of
-StashBase context, not a separate AI workspace and not a replacement for
-external agent clients.
+The built-in Agent Panel works against an explicit library or folder scope.
+Before a document is opened, Chat is the primary working surface; once a
+document appears, the same Chat adapts into a side panel alongside the source.
+It is a convenient client of StashBase context, not a separate AI workspace
+and not a replacement for external Agent clients.
 
-## Document Indexing
+## Local RAG Layer
 
-Opened folders become searchable context. Retrieval should work by meaning and
-keyword, while hard-to-read formats are prepared behind the scenes. The product
-should explain readiness and failures clearly without becoming a search or
-vector-database administration console.
+Opened folders become retrievable context. The local RAG layer prepares
+difficult formats, supports exact and meaning-based retrieval, and delivers
+source-grounded evidence to Agents. It should explain readiness and failures
+clearly without becoming a search or vector-database administration console.
+
+Code repositories give Agents strong lexical structure through paths, symbols,
+imports, and stable identifiers, so iterative grep and file reads can often
+locate relevant code without a persistent semantic index. Document libraries
+are less predictable: a question may not share the wording of its sources, and
+evidence may span long-form files, OCR, or transcripts. StashBase therefore
+treats preparation, a persistent meaning-based index, and source-grounded
+retrieval as one first-class RAG layer instead of relying on exact terms alone.
 
 ### AI Index source and activation
 
@@ -65,7 +76,7 @@ The current direction favours contributions that improve:
 - Markdown authoring and preview fidelity.
 - The clarity and reliability of preparation, indexing, and retrieval.
 - The usability and safety of the Agent Panel.
-- The local-file workspace's everyday reading and maintenance workflows.
+- The Document Workbench's everyday reading and maintenance workflows.
 - Cross-platform reliability and an approachable contributor experience.
 
 These themes guide prioritisation; they are not release commitments. Area-level

@@ -6,8 +6,11 @@ Good places to start:
 
 - [Design docs guide and contribution areas](design-docs/README.md)
 - [Architecture](design-docs/architecture.md)
-- [Markdown design](design-docs/design/markdown.md)
+- [User journeys and coverage IDs](design-docs/user-journeys.md)
+- [Journey coverage evidence](code-review/journey-coverage.md)
+- [Document design](design-docs/design/documents.md)
 - [Agent panel design](design-docs/design/agent-panel.md)
+- [Code review contracts](code-review/README.md)
 
 ## Local Development
 
@@ -31,6 +34,7 @@ Run the same source checks used by CI:
 
 ```bash
 pnpm check
+pnpm test:docs
 ```
 
 The check builds the renderer before launching the real Electron lifecycle

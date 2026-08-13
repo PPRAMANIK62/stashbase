@@ -182,3 +182,29 @@ test('explicit readiness finds a version-manager Agent through the login shell',
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('the deferred startup pass probes the login shell; the boot pass never does', () => {
+  const probes: Array<{ probeLoginShell?: boolean } | undefined> = [];
+  let configured = 0;
+  const fake = fakeDependencies({
+    resolveExecutable: (_id, options) => {
+      probes.push(options);
+      // Only a login shell can resolve this runtime (nvm/homebrew paths).
+      return options?.probeLoginShell ? '/login-shell/codex' : null;
+    },
+    configureMcp: () => { configured += 1; },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+
+  // Synchronous boot pass: no probe, runtime invisible, no connect — boot
+  // must stay quick and never spawn a shell.
+  assert.equal(coordinator.connectIfInstalled('codex').phase, 'idle');
+  assert.deepEqual(probes.at(-1), undefined);
+  assert.equal(configured, 0);
+
+  // Deferred pass: probes the login shell, finds the runtime, connects —
+  // no waiting for the first New Chat.
+  assert.equal(coordinator.connectIfInstalled('codex', { probeLoginShell: true }).phase, 'ready');
+  assert.deepEqual(probes.at(-1), { probeLoginShell: true });
+  assert.equal(configured, 1);
+});

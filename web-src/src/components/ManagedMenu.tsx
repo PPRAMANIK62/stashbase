@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import { CheckIcon } from '../icons';
 import type { MenuProps } from './Menu';
 import {
   Menu as MenuRoot,
@@ -12,6 +13,7 @@ import {
 export default function ManagedMenu({
   anchor,
   items,
+  pinnedItems,
   onClose,
   minWidth,
 }: MenuProps) {
@@ -50,11 +52,45 @@ export default function ManagedMenu({
         >
           <MenuPopup
             finalFocus={() => returnFocusRef.current ? finalFocusRef.current : false}
+            /* Cap the popup both ways: a long untruncatable detail (an
+             * absolute path outside the home dir) truncates against the
+             * width bound, and a long list (the folder switcher on a big
+             * library) scrolls INSIDE the card instead of running the
+             * viewport. Only the body scrolls: `pinnedItems` (the
+             * switcher's add-folder actions, ending in the one hairline)
+             * stay put above it, so the escape-hatch actions never
+             * scroll away and the hairline reads as the scroll edge. */
+            className="flex max-h-[min(440px,70vh)] max-w-[min(400px,calc(100vw-24px))] flex-col"
             style={{ minWidth }}
           >
-            {items.map((item, index) => (
+            {pinnedItems && pinnedItems.length > 0 && (
+              <div className="flex-none">{renderMenuItems(pinnedItems, returnFocusRef)}</div>
+            )}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-quiet">
+              {renderMenuItems(items, returnFocusRef)}
+            </div>
+          </MenuPopup>
+        </MenuPositioner>
+      </MenuPortal>
+    </MenuRoot>
+  );
+}
+
+function renderMenuItems(
+  items: MenuProps['items'],
+  returnFocusRef: { current: boolean },
+) {
+  return items.map((item, index) => (
               item.separator
                 ? <MenuSeparator key={`separator-${index}`} />
+                : 'heading' in item && item.heading !== undefined
+                ? (
+                  /* Same quiet section-label recipe as the composer pill
+                   * menus (panelStyles.menuSectionClass). */
+                  <div key={`heading-${index}`} className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground" role="presentation">
+                    {item.heading}
+                  </div>
+                )
                 : (
                   <MenuPrimitiveItem
                     key={`${item.label}-${index}`}
@@ -62,7 +98,7 @@ export default function ManagedMenu({
                     disabled={item.disabled}
                     title={item.title}
                     className={item.danger
-                      ? 'text-danger data-highlighted:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]'
+                      ? 'text-danger data-highlighted:bg-destructive/10'
                       : undefined}
                     onClick={() => {
                       returnFocusRef.current = item.returnFocus !== false;
@@ -76,10 +112,17 @@ export default function ManagedMenu({
                             {item.icon}
                           </span>
                         )}
-                        <span>{item.label}</span>
+                        <span className="min-w-0 truncate">{item.label}</span>
+                        {item.attention && (
+                          <span
+                            className="size-1.5 shrink-0 rounded-full bg-status-danger/80"
+                            title="Needs attention"
+                            aria-label="Needs attention"
+                          />
+                        )}
                       </span>
                       {item.detail && (
-                        <span className={`text-xs text-muted-foreground ${item.icon ? 'pl-6' : ''}`}>
+                        <span className={`truncate text-xs text-muted-foreground ${item.icon ? 'pl-6' : ''}`}>
                           {item.detail}
                         </span>
                       )}
@@ -89,12 +132,10 @@ export default function ManagedMenu({
                         {item.shortcut}
                       </span>
                     )}
+                    {item.checked && (
+                      <CheckIcon className="ml-auto size-4 shrink-0 text-accent" aria-hidden="true" />
+                    )}
                   </MenuPrimitiveItem>
                 )
-            ))}
-          </MenuPopup>
-        </MenuPositioner>
-      </MenuPortal>
-    </MenuRoot>
-  );
+  ));
 }

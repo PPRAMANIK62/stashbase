@@ -1,4 +1,4 @@
-import { useCallback, type MutableRefObject } from 'react';
+import { useCallback, useMemo, type MutableRefObject } from 'react';
 import { api, ApiError } from '../api';
 import { rebindFolderIfStillInLibrary } from '../folderPath';
 import {
@@ -18,6 +18,29 @@ import { runIndexStatusRequest } from './indexStatusRequest';
 
 const POLL_PENDING_MS = 1500;
 const POLL_IDLE_MS = 8000;
+
+/** One pass over an optimistic import/backfill grace map: entries the
+ *  server now reports as its own (`serverOwns`) hand off and leave the
+ *  map, entries past their absolute deadline expire, and the rest stay
+ *  graced — returned so the caller can fold them into the optimistic
+ *  pending view. */
+function foldGraceMap(
+  map: Map<string, number>,
+  serverOwns: (name: string) => boolean,
+  now: number,
+): string[] {
+  const stillGracing: string[] = [];
+  for (const [name, deadline] of map) {
+    if (serverOwns(name)) {
+      map.delete(name); // server owns it now
+    } else if (now <= deadline) {
+      stillGracing.push(name);
+    } else {
+      map.delete(name); // grace expired
+    }
+  }
+  return stillGracing;
+}
 
 type Dispatch = (action: Action) => void;
 type Toast = (message: string, opts?: ToastOptions) => string;
@@ -42,6 +65,113 @@ interface SearchActionDependencies {
   ) => Promise<State['files'] | null>;
   refreshActiveTabFromDisk: (opts?: { force?: boolean }) => Promise<void>;
   toast: Toast;
+}
+
+/** Recovery ladder for a 412 index-status response: the server no longer
+ *  has a folder bound to this window. First try to re-bind (server
+ *  restart / dev reload with the folder still a library member); failing
+ *  that, hard-reset every folder-scoped indicator and — when a folder was
+ *  visibly open — the workspace itself.
+ *
+ *  Deliberately NOT built on `folderScopedResetActions` ('folder-lost'):
+ *  this ladder clears preparation indicators even when no folder is open,
+ *  resets the workspace only conditionally, and its dispatch order is
+ *  pinned by the store tests and e2e journeys. Returns `'rebound'` when
+ *  the folder was re-bound (a fast follow-up poll is already scheduled);
+ *  `'reset'` when the caller should schedule its own next poll. */
+async function recoverLostFolderContext({
+  folderPathAtStart,
+  openGenAtStart,
+  refs,
+  dispatch,
+  loadFilesFromServer,
+  schedulePoll,
+}: {
+  folderPathAtStart: string;
+  openGenAtStart: number;
+  refs: Pick<
+    SearchActionRefs,
+    'stateRef' | 'folderContextPath' | 'lastTreeVersion' | 'syncGeneration' | 'openGeneration'
+  >;
+  dispatch: Dispatch;
+  loadFilesFromServer: SearchActionDependencies['loadFilesFromServer'];
+  schedulePoll: (delay: number) => void;
+}): Promise<'rebound' | 'reset'> {
+  const { folderContextPath, lastTreeVersion, openGeneration, stateRef, syncGeneration } = refs;
+  let latestLibrary: Awaited<ReturnType<typeof api.getFolder>> | null = null;
+  if (folderPathAtStart && openGenAtStart === openGeneration.current) {
+    try {
+      // Server restart / dev tsx reload drops the in-memory
+      // window → folder binding while the renderer still has the
+      // right folder and possibly an unsaved editor buffer. Membership
+      // distinguishes that case from another window intentionally
+      // removing the folder from the library.
+      const recovery = await rebindFolderIfStillInLibrary(folderPathAtStart, {
+        getLibrary: api.getFolder,
+        openFolder: api.openFolder,
+      });
+      latestLibrary = recovery.library;
+      if (!recovery.opened) {
+        throw new Error('folder was removed from the library');
+      }
+      const opened = recovery.opened;
+      if (
+        stateRef.current.folderPath === folderPathAtStart
+        && opened.current?.path
+      ) {
+        folderContextPath.current = opened.current.path;
+        lastTreeVersion.current = -1;
+        dispatch({
+          type: 'FOLDER_CONTEXT',
+          folder: opened.current.name,
+          folderPath: opened.current.path,
+        });
+        void loadFilesFromServer(folderPathAtStart);
+        schedulePoll(POLL_PENDING_MS);
+        return 'rebound';
+      }
+    } catch {
+      // Folder was deleted/renamed, or the server is still not ready.
+      // Drop through to the hard reset below.
+    }
+  }
+  // No folder open. Clear every folder-scoped indicator so a stale
+  // banner from the previous folder doesn't bleed into the
+  // no-folder / next-folder view.
+  syncGeneration.current += 1;
+  openGeneration.current += 1;
+  folderContextPath.current = '';
+  dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
+  dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
+  dispatch({ type: 'BLOCKED_CONVERSIONS', paths: [] });
+  dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
+  dispatch({ type: 'CONVERSION_SCHEDULER_STATE', revision: 0, versions: {} });
+  dispatch({ type: 'INDEX_WARNING', warning: null });
+  dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
+  dispatch({ type: 'SYNC_RUNNING', running: false });
+  lastTreeVersion.current = -1;
+  if (stateRef.current.folderPath) {
+    // Another window may have deleted/closed the folder. The server
+    // has already cleared this window's current-folder context; make
+    // the renderer match instead of leaving a stale tree open.
+    dispatch({ type: 'TABS_RESET' });
+    dispatch({ type: 'CHAT_TABS_RESET' });
+    dispatch({ type: 'ACTIVE_FOLDER', path: '' });
+    dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
+    dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
+    if (latestLibrary) {
+      dispatch({
+        type: 'RECENT_LOADED',
+        recent: latestLibrary.recent ?? [],
+        homeDir: latestLibrary.homeDir,
+      });
+    } else {
+      void api.getFolder()
+        .then((j) => dispatch({ type: 'RECENT_LOADED', recent: j.recent ?? [], homeDir: j.homeDir }))
+        .catch(() => { /* the library list can stay stale until the next refresh */ });
+    }
+  }
+  return 'reset';
 }
 
 /** Owns index-status polling and sync progress state. (Search requests
@@ -127,17 +257,11 @@ export function useSearchActions(
       // to the upload). Hand off once the server tracks a path; expire
       // the grace otherwise so a never-converted file doesn't stick.
       if (importConversionGrace.current.size > 0) {
-        const now = Date.now();
-        const stillGracing: string[] = [];
-        for (const [name, deadline] of importConversionGrace.current) {
-          if (newConv.includes(name)) {
-            importConversionGrace.current.delete(name); // server owns it now
-          } else if (now <= deadline) {
-            stillGracing.push(name);
-          } else {
-            importConversionGrace.current.delete(name); // grace expired
-          }
-        }
+        const stillGracing = foldGraceMap(
+          importConversionGrace.current,
+          (name) => newConv.includes(name),
+          Date.now(),
+        );
         if (stillGracing.length) {
           newConv = [...new Set([...newConv, ...stillGracing])].sort();
         }
@@ -149,30 +273,24 @@ export function useSearchActions(
       // unreliably. Hold every graced import in `newPending` until the
       // UI-visible pending set settles (batch done) or the grace expires.
       if (semanticEnabled && importIndexGrace.current.size > 0) {
-        const now = Date.now();
-        for (const [name, deadline] of importIndexGrace.current) {
-          if (visibleIndexingSettled) {
-            importIndexGrace.current.delete(name); // batch fully indexed
-          } else if (now <= deadline) {
-            newPending.add(name);
-          } else {
-            importIndexGrace.current.delete(name); // grace expired
-          }
-        }
+        const stillGracing = foldGraceMap(
+          importIndexGrace.current,
+          () => visibleIndexingSettled, // batch fully indexed
+          Date.now(),
+        );
+        for (const name of stillGracing) newPending.add(name);
       } else if (!semanticEnabled && importIndexGrace.current.size > 0) {
         importIndexGrace.current.clear();
       }
+      // And for key-backfill marks: the daemon owns a name once it shows
+      // up in its own pending set.
       if (semanticEnabled && keyBackfillGrace.current.size > 0) {
-        const now = Date.now();
-        for (const [name, deadline] of keyBackfillGrace.current) {
-          if (newPending.has(name)) {
-            keyBackfillGrace.current.delete(name); // daemon owns it now
-          } else if (now <= deadline) {
-            newPending.add(name);
-          } else {
-            keyBackfillGrace.current.delete(name);
-          }
-        }
+        const stillGracing = foldGraceMap(
+          keyBackfillGrace.current,
+          (name) => newPending.has(name),
+          Date.now(),
+        );
+        for (const name of stillGracing) newPending.add(name);
       } else if (!semanticEnabled && keyBackfillGrace.current.size > 0) {
         keyBackfillGrace.current.clear();
       }
@@ -270,79 +388,21 @@ export function useSearchActions(
       nextDelay = busy ? POLL_PENDING_MS : POLL_IDLE_MS;
     } catch (err) {
       if (err instanceof ApiError && err.status === 412) {
-        let latestLibrary: Awaited<ReturnType<typeof api.getFolder>> | null = null;
-        if (folderPathAtStart && openGenAtStart === openGen.current) {
-          try {
-            // Server restart / dev tsx reload drops the in-memory
-            // window → folder binding while the renderer still has the
-            // right folder and possibly an unsaved editor buffer. Membership
-            // distinguishes that case from another window intentionally
-            // removing the folder from the library.
-            const recovery = await rebindFolderIfStillInLibrary(folderPathAtStart, {
-              getLibrary: api.getFolder,
-              openFolder: api.openFolder,
-            });
-            latestLibrary = recovery.library;
-            if (!recovery.opened) {
-              throw new Error('folder was removed from the library');
-            }
-            const opened = recovery.opened;
-            if (
-              stateRef.current.folderPath === folderPathAtStart
-              && opened.current?.path
-            ) {
-              folderContextPath.current = opened.current.path;
-              lastTreeVersion.current = -1;
-              dispatch({
-                type: 'FOLDER_CONTEXT',
-                folder: opened.current.name,
-                folderPath: opened.current.path,
-              });
-              void loadFilesFromServer(folderPathAtStart);
-              scheduleNextPoll(POLL_PENDING_MS);
-              return;
-            }
-          } catch {
-            // Folder was deleted/renamed, or the server is still not ready.
-            // Drop through to the hard reset below.
-          }
-        }
-        // No folder open. Clear every folder-scoped indicator so a stale
-        // banner from the previous folder doesn't bleed into the
-        // no-folder / next-folder view.
-        syncGen.current += 1;
-        openGen.current += 1;
-        folderContextPath.current = '';
-        dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
-        dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
-        dispatch({ type: 'BLOCKED_CONVERSIONS', paths: [] });
-        dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
-        dispatch({ type: 'CONVERSION_SCHEDULER_STATE', revision: 0, versions: {} });
-        dispatch({ type: 'INDEX_WARNING', warning: null });
-        dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
-        dispatch({ type: 'SYNC_RUNNING', running: false });
-        lastTreeVersion.current = -1;
-        if (stateRef.current.folderPath) {
-          // Another window may have deleted/closed the folder. The server
-          // has already cleared this window's current-folder context; make
-          // the renderer match instead of leaving a stale tree open.
-          dispatch({ type: 'TABS_RESET' });
-          dispatch({ type: 'CHAT_TABS_RESET' });
-          dispatch({ type: 'ACTIVE_FOLDER', path: '' });
-          dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
-          dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
-          if (latestLibrary) {
-            dispatch({
-              type: 'RECENT_LOADED',
-              recent: latestLibrary.recent ?? [],
-              homeDir: latestLibrary.homeDir,
-            });
-          } else {
-            void api.getFolder()
-              .then((j) => dispatch({ type: 'RECENT_LOADED', recent: j.recent ?? [], homeDir: j.homeDir }))
-              .catch(() => { /* the library list can stay stale until the next refresh */ });
-          }
-        }
+        const outcome = await recoverLostFolderContext({
+          folderPathAtStart,
+          openGenAtStart,
+          refs: {
+            stateRef,
+            folderContextPath,
+            lastTreeVersion,
+            syncGeneration: syncGen,
+            openGeneration: openGen,
+          },
+          dispatch,
+          loadFilesFromServer,
+          schedulePoll: scheduleNextPoll,
+        });
+        if (outcome === 'rebound') return;
       }
     }
     scheduleNextPoll(nextDelay);
@@ -387,11 +447,20 @@ export function useSearchActions(
     await refreshIndexState(folderAtStart);
   }, [refreshIndexState]);
 
-  return {
+  // One stable actions object: the workspace memo depends on this object,
+  // not on individually listed members, so a new action added here is
+  // tracked automatically.
+  return useMemo(() => ({
     decideSemanticIndexing,
     dismissIndexWarning,
     markVisibleFilesPendingForSearch,
     refreshIndexState,
     runSync,
-  };
+  }), [
+    decideSemanticIndexing,
+    dismissIndexWarning,
+    markVisibleFilesPendingForSearch,
+    refreshIndexState,
+    runSync,
+  ]);
 }

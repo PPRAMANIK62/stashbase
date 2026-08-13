@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 
-interface ImageLightboxProps {
+export function ImageLightbox({ src, alt = '', onClose }: {
   src: string;
   alt?: string;
   onClose: () => void;
-}
-
-export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
+}) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -107,7 +105,7 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
         onPointerCancel={onPointerUp}
       >
         <img
-          className="max-h-[calc(100vh-108px)] max-w-[calc(100vw-64px)] origin-center object-contain shadow-[0_16px_60px_rgba(var(--shadow-color),0.35)] transition-transform duration-[80ms] ease-out select-none"
+          className="max-h-[calc(100vh-108px)] max-w-[calc(100vw-64px)] origin-center object-contain shadow-[0_16px_60px_rgba(var(--shadow-color),0.35)] transition-transform duration-fast ease-out select-none"
           src={src}
           alt={alt}
           draggable={false}
@@ -138,12 +136,11 @@ export function ImageLightbox({ src, alt = '', onClose }: ImageLightboxProps) {
 }
 
 /* The lightbox is a deliberate always-dark stage, independent of the app
- * theme (light mode must not lighten it) — so these two dark layers are the
- * one place raw values are correct, since theme tokens would wrongly flip
- * them. Kept together and on a single neutral hue: the raised toolbar is a
- * lighter step of the same near-black as the scrim, so the two read as one
- * dark system rather than two unrelated darks. */
-const STAGE_SCRIM_CLASS = 'bg-[rgba(18,18,20,0.92)]';
+ * theme (light mode must not lighten it). The scrim uses the theme-static
+ * `bg-scrim` role (`--scrim` in globals.css); the raised toolbar is a raw
+ * lighter step of the same near-black, so the two read as one dark system
+ * rather than two unrelated darks. */
+const STAGE_SCRIM_CLASS = 'bg-scrim';
 const STAGE_TOOLBAR_CLASS = 'bg-[rgba(38,39,42,0.96)]';
 
 /** 38px circular white-on-dark control — always styled for the dark

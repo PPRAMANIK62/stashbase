@@ -17,24 +17,17 @@ import {
   type LibrarySearchScope,
   type LibrarySemanticHit,
 } from '../librarySearch';
-import {
-  Menu, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuTrigger,
-} from './ui/menu';
 import { Button } from './ui/button';
 import { SegmentedControl, SegmentedControlItem } from './ui/segmented-control';
 import { StatusMessage } from './ui/status';
-import { CheckIcon, ChevronDownIcon } from '../icons';
+import { basename } from '../lib/paths';
 import { cn } from '../lib/utils';
-import {
-  menuSectionClass, optActiveClass, pillChevronClass, pillClass,
-} from './agent/panelStyles';
+import { emptyStateClass } from './emptyState';
+import { useLatestRef } from '../hooks/useLatestRef';
+import { fileGlyphFormat } from './agent/attachments';
 import { folderMenuEntries } from './agent/folderState';
 import { ScopeMenu } from './ScopeMenu';
 import { FileTypeIcon } from './FileTree';
-import {
-  AUDIO_SOURCE_EXTENSIONS, DOCX_EXTENSIONS, HTML_NOTE_EXTENSIONS,
-  IMAGE_SOURCE_EXTENSIONS, PDF_EXTENSIONS,
-} from '../../../shared/file-formats.ts';
 import { SemanticIndexingNotice } from './SemanticIndexingNotice';
 import { PICKER_VEIL_CLASS, pickerPanelClass } from './pickerChrome';
 
@@ -83,23 +76,42 @@ interface RowProps {
   onMouseDown: (event: ReactMouseEvent) => void;
 }
 
+/** A folder's run of semantic hits; `index` is the row's position in the
+ *  flat keyboard-entry list. */
+interface SemanticGroup {
+  folder: string;
+  rows: { hit: LibrarySemanticHit; index: number }[];
+}
+
+/** One matched file with its listed matches; every `index` points into
+ *  the flat keyboard-entry list. */
+interface KeywordFileGroup {
+  file: LibraryKeywordFile;
+  index: number;
+  matches: { match: KeywordMatch; index: number }[];
+  hiddenCount: number;
+}
+
+interface KeywordFolderGroup {
+  folder: string;
+  files: KeywordFileGroup[];
+}
+
 /** Collect ranked results under their folder WITHOUT resorting them: a
  *  folder's group lands where its first (strongest) member would have, and
- *  members keep the order they arrived in. `index` is filled by the caller
- *  as it pushes keyboard entries, so nav order always matches render
- *  order. */
+ *  members keep the order they arrived in. */
 function groupByFolder<T>(items: readonly T[], folderOf: (item: T) => string) {
-  const groups: { folder: string; rows: { item: T; index: number }[] }[] = [];
+  const groups: { folder: string; items: T[] }[] = [];
   const byFolder = new Map<string, (typeof groups)[number]>();
   for (const item of items) {
     const folder = folderOf(item);
     let group = byFolder.get(folder);
     if (!group) {
-      group = { folder, rows: [] };
+      group = { folder, items: [] };
       byFolder.set(folder, group);
       groups.push(group);
     }
-    group.rows.push({ item, index: -1 });
+    group.items.push(item);
   }
   return groups;
 }
@@ -110,7 +122,7 @@ function groupByFolder<T>(items: readonly T[], folderOf: (item: T) => string) {
 const FOLDER_HEADER_CLASS =
   'sticky top-0 z-1 -mx-1.5 bg-card/95 px-4 pt-2 pb-1 text-xs font-medium text-muted-foreground backdrop-blur-sm';
 
-export default function LibrarySearchDialog({ prefill, onClose }: {
+export default function ManagedLibrarySearch({ prefill, onClose }: {
   prefill?: LibrarySearchPrefill | null;
   onClose: () => void;
 }) {
@@ -128,17 +140,16 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const generation = useRef(0);
-  const folderPathRef = useRef(state.folderPath);
-  folderPathRef.current = state.folderPath;
-  const folderRootsRef = useRef<string[]>([]);
-  folderRootsRef.current = useMemo(() => {
+  const folderPathRef = useLatestRef(state.folderPath);
+  const folderRoots = useMemo(() => {
     const roots = state.recent.map((entry) => entry.path);
     if (state.folderPath && !roots.some((root) => folderRefsEqual(root, state.folderPath))) {
       roots.push(state.folderPath);
     }
     return roots;
   }, [state.recent, state.folderPath]);
-  const hasLibrary = folderRootsRef.current.length > 0;
+  const folderRootsRef = useLatestRef(folderRoots);
+  const hasLibrary = folderRoots.length > 0;
 
   // Every state change lands in module memory so close/reopen — and any
   // folder switch while the popup is away — restore it exactly.
@@ -260,10 +271,12 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   }
 
   const activeFolderPath = state.folderPath;
-  const librarySpansFolders = folderRootsRef.current.length > 1;
+  const librarySpansFolders = folderRoots.length > 1;
 
   // One flat entry list drives keyboard navigation, aria ids, and click
-  // handling; the render below walks the same structures in the same order.
+  // handling; the render below walks the same grouped structures in the
+  // same order, and every `index` is the entry's position in that flat
+  // list — pushed and recorded in one loop so the two can never drift.
   const { entries, semanticView, keywordGroups } = useMemo(() => {
     const entries: ResultEntry[] = [];
     if (mode === 'semantic' && semanticHits) {
@@ -273,40 +286,43 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
       // them down the list, and relevance still drives both levels: a
       // group sits where its strongest hit would have, and hits stay in
       // rank order inside it.
-      const groups = groupByFolder(semanticHits, (hit) => hit.folder);
-      for (const group of groups) {
-        for (const row of group.rows) {
-          entries.push({ kind: 'semantic', hit: row.item });
-          row.index = entries.length - 1;
+      const groups: SemanticGroup[] = [];
+      for (const group of groupByFolder(semanticHits, (hit) => hit.folder)) {
+        const rows: SemanticGroup['rows'] = [];
+        for (const hit of group.items) {
+          entries.push({ kind: 'semantic', hit });
+          rows.push({ hit, index: entries.length - 1 });
         }
+        groups.push({ folder: group.folder, rows });
       }
       return {
         entries,
         semanticView: { groups, total: semanticHits.length },
-        keywordGroups: [],
+        keywordGroups: [] as KeywordFolderGroup[],
       };
     }
     if (mode === 'keyword' && keywordResult) {
       // Same folder grouping over the file groups: active-folder files
       // lead (orderKeywordFiles), so their folder leads too.
-      const groups = groupByFolder(
-        orderKeywordFiles(keywordResult.files, activeFolderPath),
-        (file) => file.folder,
-      ).map((group) => ({
-        folder: group.folder,
-        files: group.rows.map(({ item: file }) => {
+      const groups: KeywordFolderGroup[] = [];
+      const ordered = orderKeywordFiles(keywordResult.files, activeFolderPath);
+      for (const group of groupByFolder(ordered, (file) => file.folder)) {
+        const files: KeywordFileGroup[] = [];
+        for (const file of group.items) {
           entries.push({ kind: 'file', file });
           const fileIndex = entries.length - 1;
-          const matches = file.matches.map((match) => {
+          const matches: KeywordFileGroup['matches'] = [];
+          for (const match of file.matches) {
             entries.push({ kind: 'match', file, match });
-            return { match, index: entries.length - 1 };
-          });
-          return { file, index: fileIndex, matches, hiddenCount: file.totalMatches - file.matches.length };
-        }),
-      }));
+            matches.push({ match, index: entries.length - 1 });
+          }
+          files.push({ file, index: fileIndex, matches, hiddenCount: file.totalMatches - file.matches.length });
+        }
+        groups.push({ folder: group.folder, files });
+      }
       return { entries, semanticView: null, keywordGroups: groups };
     }
-    return { entries, semanticView: null, keywordGroups: [] };
+    return { entries, semanticView: null, keywordGroups: [] as KeywordFolderGroup[] };
   }, [mode, semanticHits, keywordResult, activeFolderPath]);
 
   useEffect(() => {
@@ -317,14 +333,12 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
     document.getElementById(`library-search-${active}`)?.scrollIntoView({ block: 'nearest' });
   }, [active]);
 
-  const close = onClose;
-
   /** Open one result WITHOUT switching the window's folder: same-folder
    *  hits go through normal selection, cross-folder hits open an
    *  out-of-folder read-only tab. Only the no-folder workspace binds the
    *  folder first — there is no context to preserve there. */
   function openTarget(folder: string, rel: string, hit: PendingHighlight) {
-    close();
+    onClose();
     const current = folderPathRef.current;
     if (!current) {
       void actions.openFolder(folder)
@@ -402,18 +416,135 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
   // composer's picker uses — the two menus must offer the same folders.
   const folderEntries = folderMenuEntries(state.recent, state.folderPath);
 
+  /** Muted centered notice filling the results area (loading, errors,
+   *  no matches); `flex-col items-center` keeps multi-line copy stacked. */
+  function renderEmpty(children: ReactNode) {
+    return <div className={cn(emptyStateClass, 'flex-col items-center')}>{children}</div>;
+  }
+
+  function renderKeywordResults(): ReactNode {
+    if (searching && !keywordResult) return renderEmpty('Searching…');
+    if (!keywordResult || keywordResult.files.length === 0) return renderEmpty('No matches');
+    return (
+      <div className={HIT_LIST_CLASS}>
+        {keywordGroups.map((folderGroup) => (
+          <div key={folderGroup.folder}>
+            {librarySpansFolders && (
+              <div className={FOLDER_HEADER_CLASS}>{folderBasename(folderGroup.folder)}</div>
+            )}
+            {folderGroup.files.map((group) => (
+              <div className="mb-1.5" key={`${group.file.folder}::${group.file.path}`}>
+                <div
+                  className={cn(
+                    'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 hover:bg-muted',
+                    group.index === active && 'bg-active',
+                  )}
+                  title={`${group.file.folder}/${group.file.path}`}
+                  {...rowProps(group.index)}
+                >
+                  {/* Same identity line as the semantic rows —
+                    * the folder now lives in the band above, so
+                    * only the match count keeps the right edge. */}
+                  <span className="inline-flex size-4 flex-none items-center justify-center [&_svg]:size-3.5">
+                    <FileTypeIcon format={fileGlyphFormat(group.file.path).format} />
+                  </span>
+                  <span className="min-w-0 truncate text-base font-medium text-foreground">
+                    {basename(group.file.path)}
+                  </span>
+                  <span className="ml-auto min-w-4 shrink-0 rounded-full bg-muted px-1.5 text-center text-2xs leading-4 text-muted-foreground">{group.file.totalMatches}</span>
+                </div>
+                {group.matches.map(({ match, index }) => (
+                  <div
+                    key={`${match.line}#${index}`}
+                    className={cn(
+                      'flex cursor-pointer items-baseline gap-2 rounded-md py-0.5 pr-2.5 pl-4 text-sm leading-normal hover:bg-muted',
+                      index === active && 'bg-active',
+                    )}
+                    title={`Line ${match.line}`}
+                    {...rowProps(index)}
+                  >
+                    <span className="min-w-6.5 shrink-0 text-right text-muted-foreground tabular-nums select-none">{match.line}</span>
+                    <span className="min-w-0 flex-1 truncate text-foreground [&_mark]:rounded-xs [&_mark]:bg-accent-amber/30 [&_mark]:px-px [&_mark]:text-inherit">
+                      {highlightRanges(match.text, match.ranges)}
+                    </span>
+                  </div>
+                ))}
+                {group.hiddenCount > 0 && (
+                  <div className="cursor-default py-0.5 pr-2.5 pl-4 text-xs text-muted-foreground">+ {group.hiddenCount} more in this file</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderSemanticResults(): ReactNode {
+    if (searching && !semanticHits) return renderEmpty('Searching…');
+    if (!semanticView || semanticView.total === 0) return renderEmpty('No matches');
+    return (
+      <div className={HIT_LIST_CLASS}>
+        {semanticView.groups.map((group) => (
+          <div key={group.folder}>
+            {librarySpansFolders && (
+              <div className={FOLDER_HEADER_CLASS}>{folderBasename(group.folder)}</div>
+            )}
+            {group.rows.map(({ hit, index }) => (
+              <SemanticHitRow
+                key={`${hit.fileName}#${hit.chunkIndex}#${index}`}
+                hit={hit}
+                isActive={index === active}
+                rowProps={rowProps(index)}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  /** The results-area body: readiness gates first, then the mode's list. */
+  function renderResults(): ReactNode {
+    if (!hasLibrary) {
+      return renderEmpty(
+        <>
+          <div>Your library has no folders yet.</div>
+          <div>Add a folder from the sidebar to make it searchable.</div>
+        </>,
+      );
+    }
+    if (!trimmedQuery) {
+      /* Nothing typed, nothing to say: the placeholder and the scope
+       * pill on the row above already name where a search will look,
+       * and a third line repeating it was the only thing in an
+       * otherwise empty panel. */
+      return null;
+    }
+    if (error === EMBEDDER_KEY_ERROR || (error && error.startsWith('AI Index is disabled'))) {
+      return renderEmpty(
+        <>
+          <div>Set up AI Index to search by meaning.</div>
+          <div>Exact text search works without AI Index.</div>
+        </>,
+      );
+    }
+    if (error) return renderEmpty(<>Search failed: {error}</>);
+    return isKeyword ? renderKeywordResults() : renderSemanticResults();
+  }
+
   return (
     <div
       className={`library-search-veil quick-open-blocking ${PICKER_VEIL_CLASS}`}
       role="presentation"
-      onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}
+      onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
       // Escape must dismiss from ANY focus inside the popup — the mode
       // toggles, scope pill, and banner buttons are all focusable.
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();
-          close();
+          onClose();
         }
       }}
     >
@@ -479,7 +610,7 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
             * keeps NORMAL weight — bold-on-white beside a 20px query line
             * read as the loudest thing in the popup. Surface and colour
             * carry the selection instead. */}
-          <SegmentedControl aria-label="Search mode" className="border-0 bg-muted/70 p-0.5" value={[mode]} onValueChange={(next) => {
+          <SegmentedControl aria-label="Search mode" className="border-0 bg-muted p-0.5" value={[mode]} onValueChange={(next) => {
             const picked = next[0] as LibrarySearchMode | undefined;
             if (picked && picked !== mode) setSearchMode(picked);
           }}>
@@ -498,125 +629,13 @@ export default function LibrarySearchDialog({ prefill, onClose }: {
           </SegmentedControl>
         </div>
         <SemanticIndexingNotice />
-        <SearchStatusBanner semanticMode={!isKeyword} onNavigateAway={close} />
+        <SearchStatusBanner semanticMode={!isKeyword} onNavigateAway={onClose} />
         <div id="library-search-results" role="listbox" aria-label="Search results" className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
-          {!hasLibrary ? (
-            <div className="empty-list">
-              <div>Your library has no folders yet.</div>
-              <div>Add a folder from the sidebar to make it searchable.</div>
-            </div>
-          ) : !trimmedQuery ? (
-            /* Nothing typed, nothing to say: the placeholder and the scope
-             * pill on the row above already name where a search will look,
-             * and a third line repeating it was the only thing in an
-             * otherwise empty panel. */
-            null
-          ) : error === EMBEDDER_KEY_ERROR || (error && error.startsWith('AI Index is disabled')) ? (
-            <div className="empty-list">
-              <div>Set up AI Index to search by meaning.</div>
-              <div>Exact text search works without AI Index.</div>
-            </div>
-          ) : error ? (
-            <div className="empty-list">Search failed: {error}</div>
-          ) : isKeyword ? (
-            searching && !keywordResult ? (
-              <div className="empty-list">Searching…</div>
-            ) : !keywordResult || keywordResult.files.length === 0 ? (
-              <div className="empty-list">No matches</div>
-            ) : (
-              <div className={HIT_LIST_CLASS}>
-                {keywordGroups.map((folderGroup) => (
-                  <div key={folderGroup.folder}>
-                    {librarySpansFolders && (
-                      <div className={FOLDER_HEADER_CLASS}>{folderBasename(folderGroup.folder)}</div>
-                    )}
-                    {folderGroup.files.map((group) => (
-                      <div className="mb-1.5" key={`${group.file.folder}::${group.file.path}`}>
-                        <div
-                          className={cn(
-                            'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 hover:bg-muted',
-                            group.index === active && 'bg-muted',
-                          )}
-                          title={`${group.file.folder}/${group.file.path}`}
-                          {...rowProps(group.index)}
-                        >
-                          {/* Same identity line as the semantic rows —
-                            * the folder now lives in the band above, so
-                            * only the match count keeps the right edge. */}
-                          <span className="inline-flex size-4 flex-none items-center justify-center [&_svg]:size-3.5">
-                            <FileTypeIcon format={searchHitFormat(group.file.path)} />
-                          </span>
-                          <span className="min-w-0 truncate text-base font-medium text-foreground">
-                            {group.file.path.split('/').pop() ?? group.file.path}
-                          </span>
-                          <span className="ml-auto min-w-4 shrink-0 rounded-lg bg-muted px-1.25 text-center text-2xs leading-4 text-muted-foreground">{group.file.totalMatches}</span>
-                        </div>
-                        {group.matches.map(({ match, index }) => (
-                          <div
-                            key={`${match.line}#${index}`}
-                            className={cn(
-                              'flex cursor-pointer items-baseline gap-2 rounded-sm py-0.5 pr-2.5 pl-4 text-sm leading-normal hover:bg-muted',
-                              index === active && 'bg-muted',
-                            )}
-                            title={`Line ${match.line}`}
-                            {...rowProps(index)}
-                          >
-                            <span className="min-w-6.5 shrink-0 text-right text-muted-foreground tabular-nums select-none">{match.line}</span>
-                            <span className="min-w-0 flex-1 truncate text-foreground [&_mark]:rounded-xs [&_mark]:bg-accent-amber/30 [&_mark]:px-px [&_mark]:text-inherit">
-                              {highlightRanges(match.text, match.ranges)}
-                            </span>
-                          </div>
-                        ))}
-                        {group.hiddenCount > 0 && (
-                          <div className="cursor-default py-0.5 pr-2.5 pl-4 text-xs text-muted-foreground">+ {group.hiddenCount} more in this file</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )
-          ) : searching && !semanticHits ? (
-            <div className="empty-list">Searching…</div>
-          ) : !semanticView || semanticView.total === 0 ? (
-            <div className="empty-list">No matches</div>
-          ) : (
-            <div className={HIT_LIST_CLASS}>
-              {semanticView.groups.map((group) => (
-                <div key={group.folder}>
-                  {librarySpansFolders && (
-                    <div className={FOLDER_HEADER_CLASS}>{folderBasename(group.folder)}</div>
-                  )}
-                  {group.rows.map(({ item: hit, index }) => (
-                    <SemanticHitRow
-                      key={`${hit.fileName}#${hit.chunkIndex}#${index}`}
-                      hit={hit}
-                      isActive={index === active}
-                      rowProps={rowProps(index)}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
+          {renderResults()}
         </div>
       </div>
     </div>
   );
-}
-
-/** The file-tree glyph for a hit, chosen from its extension — the search
- *  list and the tree name the same file with the same mark. Anything the
- *  viewer cannot classify falls back to the Markdown note glyph, which is
- *  what the index overwhelmingly holds. */
-function searchHitFormat(name: string): 'md' | 'html' | 'pdf' | 'image' | 'docx' | 'audio' {
-  const ext = name.toLowerCase().split('.').pop() ?? '';
-  if (PDF_EXTENSIONS.includes(ext as never)) return 'pdf';
-  if (HTML_NOTE_EXTENSIONS.includes(ext as never)) return 'html';
-  if (IMAGE_SOURCE_EXTENSIONS.includes(ext as never)) return 'image';
-  if (DOCX_EXTENSIONS.includes(ext as never)) return 'docx';
-  if (AUDIO_SOURCE_EXTENSIONS.includes(ext as never)) return 'audio';
-  return 'md';
 }
 
 function SemanticHitRow({ hit, isActive, rowProps }: {
@@ -624,7 +643,7 @@ function SemanticHitRow({ hit, isActive, rowProps }: {
   isActive: boolean;
   rowProps: RowProps;
 }) {
-  const fileBasename = hit.rel.split('/').pop() ?? hit.rel;
+  const fileBasename = basename(hit.rel);
   // No term highlighting on semantic snippets: a semantic hit isn't a literal
   // substring match, so marking the query words would mislead. Frontmatter
   // and Markdown syntax are stripped for DISPLAY only — `hit.content` stays
@@ -641,7 +660,7 @@ function SemanticHitRow({ hit, isActive, rowProps }: {
      * gives the list one scannable left column. Selection is the sidebar's
      * quiet tinted pill — no border, which read as a stack of boxes. */
     <div
-      className={cn('cursor-pointer rounded-md px-2.5 py-1.5 hover:bg-muted', isActive && 'bg-muted')}
+      className={cn('cursor-pointer rounded-md px-2.5 py-1.5 hover:bg-muted', isActive && 'bg-active')}
       title={hit.fileName}
       {...rowProps}
     >
@@ -652,7 +671,7 @@ function SemanticHitRow({ hit, isActive, rowProps }: {
         * repeated here: it heads the group this row sits in. */}
       <div className="flex items-baseline gap-2">
         <span className="inline-flex size-4 flex-none translate-y-0.5 items-center justify-center [&_svg]:size-3.5">
-          <FileTypeIcon format={searchHitFormat(fileBasename)} />
+          <FileTypeIcon format={fileGlyphFormat(fileBasename).format} />
         </span>
         <span className="min-w-0 truncate text-base font-medium text-foreground">{fileBasename}</span>
         {heading && (

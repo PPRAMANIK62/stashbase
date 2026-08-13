@@ -5,36 +5,46 @@ import { createAppFixture } from '../support/fixtures.ts';
 import {
   activeDocument,
   activeDocumentTab,
+  closeFolderSwitcher,
   dismissEmbeddingKeyPrompt,
   documentTab,
   fileTreeRow,
-  folderButton,
+  openFolderSwitcher,
+  openLibraryFolder,
   quickOpenDialog,
   quickOpenInput,
+  switcherFolderItem,
 } from '../support/locators.ts';
 import { seedJourneyWorkspaces } from '../fixtures/journey-workspaces.ts';
 import { primaryKey } from './journey-helpers.ts';
 
+// Intent preserved: switching the window's folder resets the workspace
+// (tabs and tree) while the whole library membership stays reachable —
+// now through the titlebar folder switcher instead of the retired
+// sidebar Library section rows.
 test('folder switching resets the workspace while library membership remains available', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   seedJourneyWorkspaces(fixture);
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
     await expect(activeDocument(app.page)).toContainText('Project Alpha');
     await expect(app.page.getByRole('tab', { name: 'Welcome.md' })).toHaveAttribute('aria-selected', 'true');
 
-    await app.page.getByRole('button', { name: 'Library', exact: true }).click();
-    await folderButton(app.page, 'project-beta').click();
+    await openLibraryFolder(app.page, 'project-beta');
     await expect(app.page).toHaveTitle('project-beta — StashBase');
     await dismissEmbeddingKeyPrompt(app.page);
     await expect(fileTreeRow(app.page, 'Notes.md')).toBeVisible();
     await expect(fileTreeRow(app.page, 'Second Note.md')).toHaveCount(0);
-    await expect(folderButton(app.page, 'project-alpha')).toBeVisible();
-    await expect(folderButton(app.page, 'project-beta')).toHaveCount(0);
+    // Membership remains available after the switch: the switcher menu
+    // lists both members (the current folder stays listed with a check).
+    await openFolderSwitcher(app.page);
+    await expect(switcherFolderItem(app.page, 'project-alpha')).toBeVisible();
+    await expect(switcherFolderItem(app.page, 'project-beta')).toBeVisible();
+    await closeFolderSwitcher(app.page);
     await expect(documentTab(app.page, 'Welcome.md')).toHaveCount(0);
     app.errors.assertNone();
   } finally {
@@ -43,12 +53,16 @@ test('folder switching resets the workspace while library membership remains ava
   }
 });
 
+// Intent preserved: document tabs persist, Quick Open and the Command
+// Palette stay keyboard-operable, and dismissing them restores focus.
+// Folder entry goes through the titlebar switcher; the flow inside the
+// workspace is unchanged.
 test('persistent document tabs and Quick Open remain keyboard-operable and restore focus', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await folderButton(app.page, 'project-alpha').click();
+    await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
     const welcome = fileTreeRow(app.page, 'Welcome.md');
     await welcome.click();
@@ -80,6 +94,39 @@ test('persistent document tabs and Quick Open remain keyboard-operable and resto
     await app.page.getByRole('button', { name: 'Close Welcome.md' }).click();
     await expect(documentTab(app.page, 'Welcome.md')).toHaveCount(0);
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Second Note.md');
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+// Intent: the AI Index offer follows the FOLDER, not the window — skipping
+// it in one folder must not silence it for the rest of the library, while
+// returning to a skipped folder stays quiet (in-place switching through
+// the titlebar switcher is the primary flow now).
+test('the AI Index prompt re-offers per folder and stays quiet on return', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'two-folders' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    const skip = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
+
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(skip).toBeVisible();
+    await skip.click();
+    await expect(skip).toBeHidden();
+
+    await openLibraryFolder(app.page, 'project-beta');
+    await expect(skip).toBeVisible();
+    await skip.click();
+    await expect(skip).toBeHidden();
+
+    // Returning to a folder skipped in this window does not re-nag.
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
+    await app.page.waitForTimeout(1500);
+    await expect(skip).toBeHidden();
     app.errors.assertNone();
   } finally {
     await app?.close();

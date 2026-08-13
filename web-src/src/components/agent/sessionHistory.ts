@@ -3,10 +3,11 @@
  * consume rule stay covered without a browser harness (mirrors
  * `folderState.ts`).
  *
- * History lives on the sidebar's scope headers (the active folder's
- * header row, and the Library section header), one menu per scope. Each
- * menu merges BOTH agents' sessions for that scope; a row remembers its
- * agent so rename/delete/resume route through the right runtime.
+ * History anchors on the active folder's header row (that folder's
+ * sessions) and the New Chat row (ALL sessions across the library).
+ * Each menu merges BOTH agents' sessions; a row remembers its agent so
+ * rename/delete/resume route through the right runtime, and under the
+ * all-scope listing its own member folder so actions bind its scope.
  *
  * Resume is a store handoff: the sidebar records a `PendingChatResume`
  * (CHAT_RESUME_REQUEST) and activates a suitable chat tab via the New
@@ -15,8 +16,38 @@
  * tab's AgentView consumes the request (CHAT_RESUME_CONSUMED) and
  * resumes the session within the request's scope.
  */
-import type { SessionInfo } from '../../api';
+import type { SessionInfo, SessionScopeParams } from '../../api';
 import type { AgentKind } from '../../agentCatalog';
+import { scopeRequestParams, type ChatScope } from './folderState';
+
+/** What a history menu can list: one chat scope, or every session across
+ *  the library ('all' — the New Chat row's global history). `all` exists
+ *  only for history; connect requests always bind a concrete ChatScope. */
+export type HistoryScope = ChatScope | { kind: 'all' };
+
+/** The New Chat row's global history scope. */
+export const ALL_HISTORY_SCOPE: HistoryScope = { kind: 'all' };
+
+/** The listing params a history scope resolves to. */
+export function historyRequestParams(scope: HistoryScope): SessionScopeParams {
+  if (scope.kind === 'all') return { scope: 'all' };
+  return scopeRequestParams(scope);
+}
+
+/** The scope one ROW belongs to — under `all` each row carries its own
+ *  member folder (absent = library), and row actions (resume / rename /
+ *  delete) must route through THAT scope, not the menu's. */
+export function rowScopeParams(scope: HistoryScope, row: SessionInfo): SessionScopeParams {
+  if (scope.kind !== 'all') return scopeRequestParams(scope);
+  return row.folder ? { folder: row.folder } : { scope: 'library' };
+}
+
+/** The pending-resume folder binding for a row (`null` = library scope). */
+export function rowResumeFolder(scope: HistoryScope, row: SessionInfo): string | null {
+  if (scope.kind === 'folder') return scope.path;
+  if (scope.kind === 'all') return row.folder ?? null;
+  return null;
+}
 
 /** One agent's listing result for a scope: its sessions, or `null` when
  * that agent's fetch failed. */

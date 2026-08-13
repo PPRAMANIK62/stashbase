@@ -13,12 +13,23 @@ export const iconGhostButtonClass = cn(
   'text-muted-foreground',
 );
 
+/** Small accent progress arc beside "Connecting to X…" copy — the one
+ * connecting-state spinner, shared by the transcript notice and the
+ * empty-chat greeting. The global reduced-motion policy zeroes the spin
+ * keyframe, leaving a static arc while the adjacent text still conveys
+ * the state. Render with `aria-hidden` — the text carries the meaning. */
+export const spinnerClass =
+  'size-3.5 shrink-0 animate-spin rounded-full border-2 border-accent/25 border-t-accent';
+
 /* Quiet pill trigger — the ONE "pick a value" trigger idiom, shared by the
  * composer's scope/model/mode pills and the search popup's scope pill so
  * "choose a scope" looks identical everywhere. Text-only label + small
  * chevron; state lives in the label, emphasis in none. */
+/* `min-w-0` lets a pill yield width in a tight composer bar instead of
+ * overflowing the row and clipping the send button — the truncate on each
+ * pill's label span does the actual shortening. */
 export const pillClass =
-  'inline-flex cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
+  'inline-flex min-w-0 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 py-0.75 text-xs whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:bg-muted enabled:hover:text-foreground disabled:cursor-default';
 export const pillLockedClass = 'cursor-default opacity-60';
 export const pillChevronClass = '-ml-px size-3 shrink-0 opacity-75';
 
@@ -39,7 +50,7 @@ export const optClass =
  * on button-level elements like the check). */
 export const optActiveClass =
   'bg-active hover:bg-active data-focused:bg-active data-highlighted:bg-active';
-export const optIconClass = 'mt-px size-4.5 shrink-0 text-muted-foreground';
+export const optIconClass = 'mt-px size-4 shrink-0 text-muted-foreground';
 export const optTextClass = 'flex min-w-0 flex-1 flex-col gap-0.5';
 export const optTitleClass = 'text-sm font-medium';
 export const optDescClass = 'text-xs leading-snug text-muted-foreground';
@@ -53,13 +64,13 @@ export const attachChipClass =
 
 /** Neutral rounded tile holding the muted file-type glyph inside the card. */
 export const attachIconTileClass =
-  'grid size-8 shrink-0 place-items-center rounded-md bg-background text-muted-foreground [&_svg]:size-4.5';
+  'grid size-8 shrink-0 place-items-center rounded-md bg-background text-muted-foreground [&_svg]:size-4';
 
 /** The stacked name + type-label column inside the card. */
 export const attachTextClass = 'flex min-w-0 flex-col gap-0.5 leading-tight';
 
 /** The secondary type label (e.g. "PDF") under the filename. */
-export const attachTypeClass = 'text-[0.6875rem] uppercase tracking-wide text-muted-foreground';
+export const attachTypeClass = 'text-xs uppercase tracking-wide text-muted-foreground';
 
 /** 64px image thumbnail chip (composer removable + transcript static). */
 export const attachImageChipClass =

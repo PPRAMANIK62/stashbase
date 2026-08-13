@@ -19,23 +19,27 @@ export function isEmbeddingAuthorized(state: EmbedderState | null | undefined): 
 /**
  * "Basic mode": the user was offered AI Index and declined for now.
  *
- * Deliberately session-scoped — held in memory for the life of THIS window,
- * not persisted — so opening a new window offers indexing again. The label
- * says "Skip for now", and this is what makes "for now" literal:
- * the skip quiets the prompt for the current window (folder switches inside it
- * do not re-nag) but never becomes a standing machine-wide opt-out. Browsing,
- * editing, preview, and keyword search all keep working meanwhile; the
- * Files-panel "Set up AI Index" entry is the calm route back.
+ * Deliberately in-memory and PER FOLDER within this window — not
+ * persisted — so "for now" stays literal on both axes: a relaunch or a
+ * new window offers indexing again, and with the titlebar switcher
+ * making in-place folder switching the primary flow, opening a
+ * DIFFERENT folder re-offers too (a window-wide skip silently became
+ * "skip forever" in a long-lived window). Only switching back to a
+ * folder already skipped in this window stays quiet. It never becomes
+ * a standing machine-wide opt-out; browsing, editing, preview, and
+ * keyword search all keep working meanwhile, and the Files-panel
+ * "Set up AI Index" entry is the calm route back.
  *
- * Cleared on successful activation, so removing the key later re-gates from a
- * clean state rather than silently staying skipped.
+ * Cleared on successful activation, so removing the key later re-gates
+ * from a clean state rather than silently staying skipped.
  */
-let skippedThisWindow = false;
+const skippedFolders = new Set<string>();
 
-export function hasSkippedAiIndexing(): boolean {
-  return skippedThisWindow;
+export function hasSkippedAiIndexing(folder: string): boolean {
+  return skippedFolders.has(folder);
 }
 
-export function setAiIndexingSkipped(skipped: boolean): void {
-  skippedThisWindow = skipped;
+export function setAiIndexingSkipped(skipped: boolean, folder: string): void {
+  if (skipped) skippedFolders.add(folder);
+  else skippedFolders.clear();
 }

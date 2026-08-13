@@ -13,6 +13,7 @@ import { KeyModal } from '../embedder/KeyModal';
 import { RemoveKeyModal } from '../embedder/RemoveKeyModal';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { SegmentedControl, SegmentedControlItem } from '../ui/segmented-control';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string; costHint: string }> = {
   openai: {
@@ -152,34 +153,25 @@ export function EmbeddingPanel() {
             Powers meaning-based search and Agent retrieval. The model stays fixed so the local index remains compatible.
           </div>
           {!showingAuthChoice && (
-          <div className="mt-0.5 mb-2 inline-flex max-w-full items-center overflow-hidden rounded-md border border-border bg-card" role="radiogroup" aria-label="Embedding provider">
-            {PROVIDER_ORDER.map((provider) => {
-              const option = PROVIDERS[provider];
-              const selectedOption = provider === selectedProvider;
-              return (
-                <button
-                  key={provider}
-                  type="button"
-                  className={
-                    'inline-flex min-h-[30px] cursor-pointer items-center gap-1.5 border-0 border-l border-border '
-                    + 'px-2.5 text-sm whitespace-nowrap text-foreground transition-colors duration-fast first:border-l-0 '
-                    + 'enabled:hover:bg-muted disabled:cursor-default disabled:opacity-60 '
-                    + (selectedOption ? 'bg-accent/10 font-semibold' : 'bg-transparent')
-                  }
-                  role="radio"
-                  aria-checked={selectedOption}
-                  disabled={addBusy}
-                  onClick={() => {
-                    setSelectedProvider(provider);
-                    setAddKey('');
-                    setAddError(null);
-                  }}
-                >
-                  <span className="font-medium">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          <SegmentedControl
+            aria-label="Embedding provider"
+            className="mt-0.5 mb-2 w-fit"
+            disabled={addBusy}
+            value={[selectedProvider]}
+            onValueChange={(next) => {
+              const picked = next[0] as EmbedderProvider | undefined;
+              if (!picked || picked === selectedProvider) return;
+              setSelectedProvider(picked);
+              setAddKey('');
+              setAddError(null);
+            }}
+          >
+            {PROVIDER_ORDER.map((provider) => (
+              <SegmentedControlItem key={provider} value={provider} className="min-w-24 text-sm">
+                {PROVIDERS[provider].label}
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControl>
           )}
           {!showingAuthChoice && (
           <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
@@ -194,12 +186,10 @@ export function EmbeddingPanel() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={() => setKeyEditOpen(true)}
                 >Change key…</Button>
                 <Button
                   variant="destructive-outline"
-                  size="sm"
                   onClick={() => setKeyRemoveOpen(true)}
                 >Remove key…</Button>
               </div>
@@ -222,7 +212,7 @@ export function EmbeddingPanel() {
               <div className="flex min-w-0 items-center gap-2">
                 <Input
                   type="password"
-                  className="flex-1 font-mono text-sm"
+                  className="h-8 flex-1 font-mono text-sm"
                   placeholder={selected.placeholder}
                   autoComplete="off"
                   spellCheck={false}
@@ -232,7 +222,6 @@ export function EmbeddingPanel() {
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addKeySubmit(); } }}
                 />
                 <Button
-                  size="sm"
                   onClick={() => { void addKeySubmit(); }}
                   disabled={addBusy || !addKey.trim()}
                 >{addBusy ? 'Validating…' : 'Add key'}</Button>

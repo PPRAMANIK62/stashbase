@@ -9,10 +9,7 @@
  */
 
 import links from '../../../shared/links.json';
-
-interface ExternalLinkBridge {
-  openExternal?: (url: string) => Promise<boolean>;
-}
+import { electronBridge } from '../electronBridge';
 
 /** The community server, linked from the sidebar's bottom row and the
  *  Help menu. Both sides read the same `shared/links.json`, so the main
@@ -20,7 +17,7 @@ interface ExternalLinkBridge {
 export const DISCORD_INVITE_URL = links.discord;
 
 export function openExternalUrl(url: string): void {
-  const bridge = (window as { electron?: ExternalLinkBridge }).electron;
+  const bridge = electronBridge();
   if (bridge?.openExternal) {
     void bridge.openExternal(url);
     return;

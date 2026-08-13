@@ -1,51 +1,100 @@
 # Design Docs
 
-These documents help builders understand what StashBase is trying to preserve,
-what is already useful, and where an open-source contribution can matter.
-They are a design reference and contribution map — not an implementation
-directory or a replacement for issues and source code.
+This directory is the committed source of truth for StashBase product intent.
+It explains the outcomes the product protects, the journeys it supports, and
+the boundaries contributors should preserve. The code remains the source of
+truth for the current implementation.
 
-## Start Here
+## Reading Paths
 
-1. Read [Overview](overview.md) for the product thesis.
-2. Read [Principles](principles.md) before proposing a change that affects the
-   product model or access to user data.
-3. Read [Architecture](architecture.md) for ownership, lifecycle, and trust
-   boundaries.
-4. Skim [Use Cases](use-cases.md) for the end-to-end journeys the product
-   areas combine into.
-5. Read [Visual Style](visual-style.md) before changing UI chrome, theming,
-   or component styling.
-6. Choose a product area below and use its contribution map to orient your
-   work. Then inspect the current code and open issues for implementation
-   details and active coordination.
+For product orientation:
 
-## Status Labels
+1. [Overview](overview.md) — what StashBase is and who it serves.
+2. [Principles](principles.md) — durable decision rules.
+3. [Product Direction](product-direction.md) — intended shape and investment
+   themes.
+4. [Product Scenarios](product-scenarios.md) — high-level reasons people use
+   the product.
 
-- **Current** — shipping experience or an accepted product contract.
-- **Next** — a meaningful direction for contribution, not a release promise.
-- **Coordinate first** — valuable but cross-cutting work that needs alignment
-  before implementation.
-- **Not planned** — intentionally outside the product shape for now.
+For a product change:
+
+1. Find the affected [product area](#product-areas).
+2. Check [User Journeys](user-journeys.md) for the observable end-to-end flow.
+3. Read [Architecture](architecture.md) when the change crosses ownership,
+   lifecycle, or trust boundaries.
+4. Read the matching maintainer contract in
+   [`code-review/`](../code-review/README.md) before changing code.
+
+For terminology and UI work, use [Glossary](glossary.md) and
+[Visual Style](visual-style.md).
+
+## Document Types
+
+| Type            | Purpose                                              | Changes when                                           |
+| --------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| Intent          | Overview, principles, and product direction          | Positioning, scope, or a durable decision rule changes |
+| Scenario        | High-level user motivation and desired outcome       | The product begins or stops supporting a class of work |
+| Journey         | Stable, observable shipping workflow with a `Jxx` ID | A user-visible step, outcome, or recovery path changes |
+| Area design     | Current experience and contribution direction        | Shipping behavior or area guidance changes             |
+| System contract | Cross-cutting ownership and trust boundaries         | A major runtime or data-flow contract changes          |
+
+Journeys are not test cases. They give automated and manual checks a stable
+product vocabulary; the test suite owns exact setup and assertions.
+
+## Capabilities and Product Areas
+
+StashBase has three product capabilities. The **Document Workbench** spans the
+Workspace and Documents areas; the **local RAG layer** spans Preparation and
+Search and Retrieval; the **Agent Panel** is both a capability and a product
+area. Product capabilities describe what StashBase is. Product areas divide
+design and contribution ownership.
 
 ## Product Areas
 
-| Area | What it covers | Good starting point |
-|---|---|---|
-| [Markdown](design/markdown.md) | Reading, writing, linking, and previewing Markdown | Authoring experience and preview fidelity |
-| [Local File Workspace](design/library.md) | Folders, file tree, tabs, and source-file workflows | Clearer everyday file operations |
-| [Preparation](design/preparation.md) | Format conversion and readiness | Recovery, diagnostics, and format support |
-| [Search and Retrieval](design/search.md) | Exact text, AI Index, and MCP retrieval | Search clarity and result quality |
-| [Agent Panel](design/agent-panel.md) | Built-in Claude/Codex side panel | Safe, compact agent collaboration |
-| [Bug Reporting & Privacy](design/bug-reporting.md) | Local, user-reviewed bug-report preparation | Privacy boundaries and recovery flow |
+| Area                 | User outcome                                                   | Design document                          |
+| -------------------- | -------------------------------------------------------------- | ---------------------------------------- |
+| Workspace            | Work directly in ordinary local folders                        | [Workspace](design/workspace.md)         |
+| Documents            | Read, edit, and navigate supported source files                | [Documents](design/documents.md)         |
+| Preparation          | Make difficult formats searchable without replacing the source | [Preparation](design/preparation.md)     |
+| Search and Retrieval | Find source evidence for people and Agents                     | [Search and Retrieval](design/search.md) |
+| Agent Panel          | Collaborate with Claude or Codex against an explicit scope     | [Agent Panel](design/agent-panel.md)     |
+| Bug Reporting        | Prepare a local, user-reviewed report without telemetry        | [Bug Reporting](design/bug-reporting.md) |
 
-## How To Maintain These Docs
+Each area document uses the same shape: user outcome, scope and non-goals,
+current experience, experience contract, cross-area seams, contribution
+direction, and related journeys/contracts.
 
-Keep documents concise and in English. Record durable intent, boundaries,
-trade-offs, and contributor guidance. Link between docs rather than repeating
-them. If a statement would become false merely because a file is renamed or a
-function moves, it belongs in code or tests instead.
+## Status Labels
 
-When user-visible behaviour, a product contract, or a contribution priority
-changes, update the affected document in the same change. Do not use these
-docs as a changelog or a full project-plan substitute.
+* **Current** — observed shipping experience.
+
+* **Experience contract** — required product behavior. If current code violates
+  it, add a plainly named Known Gap and link to the owning review contract.
+
+* **Next** — useful contribution direction, not a release promise.
+
+* **Coordinate first** — valuable cross-cutting work that needs alignment.
+
+* **Not planned** — intentionally outside the current product shape.
+
+Never combine Current and Direction in one bullet. A reader must be able to
+tell what the product does now without reconstructing code history.
+
+## Maintenance Rules
+
+* Keep these documents concise and in English.
+
+* Give each topic one home and cross-reference it elsewhere.
+
+* Update affected journeys and area design in the same change as shipping
+  behavior. Update intent documents only when the underlying intent changes.
+
+* Keep implementation inventories, state-machine detail, and validation
+  matrices in `code-review/`; keep exact assertions in tests.
+
+* Keep coverage ownership in
+  [`code-review/journey-coverage.md`](../code-review/journey-coverage.md); a
+  journey ID alone does not claim that the flow is automated.
+
+* Use issues and pull requests for schedules, owners, and implementation
+  chronology. These documents are not ticket trackers or changelogs.

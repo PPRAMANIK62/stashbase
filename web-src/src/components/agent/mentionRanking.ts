@@ -1,3 +1,4 @@
+import { basename } from '../../lib/paths';
 import type { FileMeta, FolderMeta } from '../../apiTypes';
 
 export type MentionSuggestion = { path: string; kind: 'file' | 'folder' };
@@ -18,7 +19,7 @@ export function rankMentionSuggestions(
     .map((suggestion) => ({ suggestion, score: mentionScore(suggestion.path, needle) }))
     .filter((candidate): candidate is { suggestion: MentionSuggestion; score: number } => candidate.score !== null)
     .sort((a, b) => a.score - b.score
-      || baseName(a.suggestion.path).length - baseName(b.suggestion.path).length
+      || basename(a.suggestion.path).length - basename(b.suggestion.path).length
       || comparePaths(a.suggestion.path, b.suggestion.path))
     .slice(0, limit)
     .map((candidate) => candidate.suggestion);
@@ -26,7 +27,7 @@ export function rankMentionSuggestions(
 
 function mentionScore(path: string, query: string): number | null {
   if (!query) return 5;
-  const fileName = normalizeMentionText(baseName(path));
+  const fileName = normalizeMentionText(basename(path));
   const lowerPath = normalizeMentionText(path);
   if (fileName === query) return 0;
   if (fileName.startsWith(query)) return 1;
@@ -34,10 +35,6 @@ function mentionScore(path: string, query: string): number | null {
   if (lowerPath.startsWith(query)) return 3;
   if (lowerPath.includes(query)) return 4;
   return null;
-}
-
-function baseName(path: string): string {
-  return path.split(/[\\/]/).pop() ?? path;
 }
 
 function comparePaths(a: string, b: string): number {
