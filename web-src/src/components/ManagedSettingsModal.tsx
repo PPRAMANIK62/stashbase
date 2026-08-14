@@ -4,7 +4,7 @@ import type { SettingsModalProps, SettingsSection } from './SettingsModal';
 import { AppearancePanel } from './settings/AppearancePanel';
 import { AgentRuntimePanel } from './settings/AgentRuntimePanel';
 import { EmbeddingPanel } from './settings/EmbeddingPanel';
-import { McpClientsPanel } from './settings/McpClientsPanel';
+import { McpAccessPanel } from './settings/McpAccessPanel';
 import { TranscriptionPanel } from './settings/TranscriptionPanel';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
@@ -14,7 +14,7 @@ const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[
   { id: 'agents', label: 'Agents', render: () => <AgentRuntimePanel /> },
   { id: 'embedding', label: 'AI Index', render: () => <EmbeddingPanel /> },
   { id: 'transcription', label: 'Transcription', render: () => <TranscriptionPanel /> },
-  { id: 'mcp', label: 'MCP', render: () => <McpClientsPanel /> },
+  { id: 'mcp', label: 'MCP', render: () => <McpAccessPanel /> },
 ];
 
 export default function ManagedSettingsModal({

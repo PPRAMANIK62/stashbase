@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type MutableRefObject } from 'react';
+import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import { api, ApiError } from '../api';
 import { folderRefsEqual } from '../folderPath';
@@ -55,14 +55,24 @@ export function useDocumentActions(
   dispatch: Dispatch,
 ) {
   const { editor, saveInFlight, saveTimer, state } = refs;
+  /** The last save the server accepted. `state` is a render-time mirror, so
+   *  a flush that starts between a previous run's dispatches and the React
+   *  commit still reads the pre-save file; this ref carries the accepted
+   *  baseline across that gap (see flushSave). `superseded` holds every
+   *  baseVersion this uncommitted save chain has replaced, so a reader
+   *  lagging more than one save still recognizes its version as stale. */
+  const lastAcceptedSave = useRef<{
+    name: string; content: string; version?: string; superseded: Set<string | undefined>;
+  } | null>(null);
   const { loadFiles, refreshIndexState, toast, primeFind } = dependencies;
   const scheduleAfter = dependencies.scheduleAfter ?? scheduleWithTimeout;
   const cancelScheduled = dependencies.cancelScheduled ?? cancelTimeout;
 
   const flushSave = useCallback(async () => {
-    const inFlight = saveInFlight.current;
-    if (inFlight) {
-      const ok = await inFlight;
+    // Loop, not a single await: while we waited, another caller may have
+    // started a fresh run (timer + close-tab + folder-switch can stack).
+    while (saveInFlight.current) {
+      const ok = await saveInFlight.current;
       if (!ok) return false;
     }
     if (saveTimer.current) {
@@ -74,6 +84,7 @@ export function useDocumentActions(
       const tabAtStart = getActiveTab(state.current);
       const currentFile = tabAtStart?.file ?? null;
       const tabId = tabAtStart?.id ?? null;
+      const folderPathAtSave = state.current.folderPath;
       const handle = editor.current;
       if (!currentFile || !handle) return true;
       // Out-of-folder tabs are read-only; a PUT would write a same-named
@@ -81,21 +92,31 @@ export function useDocumentActions(
       if (currentFile.folder) return true;
       if (!tabAtStart?.dirty) return true;
       const content = handle.getValue();
-      if (content === currentFile.content) {
+      // If the state mirror still shows the version the last accepted save
+      // replaced, its FILE_PATCH has not committed yet: compare and base the
+      // PUT on the accepted save instead, or this run would re-send with a
+      // stale baseVersion and trip the 409 force-overwrite path.
+      const accepted = lastAcceptedSave.current;
+      const staleAfterAccepted = accepted != null
+        && accepted.name === currentFile.name
+        && accepted.superseded.has(currentFile.version);
+      const baselineContent = staleAfterAccepted ? accepted.content : currentFile.content;
+      if (content === baselineContent) {
         dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
         return true;
       }
+      const baseVersion = staleAfterAccepted ? accepted.version : currentFile.version;
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
-      const saveContent = async (baseVersion?: string) => {
-        const result = await api.putFile(currentFile.name, content, baseVersion);
+      const saveContent = async (base?: string) => {
+        const result = await api.putFile(currentFile.name, content, base);
         if (result.indexWarning) toast(result.indexWarning, { level: 'warning' });
         return result;
       };
       try {
         let savedResult: Awaited<ReturnType<typeof saveContent>>;
         try {
-          savedResult = await saveContent(currentFile.version);
+          savedResult = await saveContent(baseVersion);
         } catch (err: unknown) {
           if (!(err instanceof ApiError && err.status === 409)) throw err;
           const latestTab = getActiveTab(state.current);
@@ -105,6 +126,14 @@ export function useDocumentActions(
           savedResult = await saveContent(undefined);
           toast('Saved over a newer disk copy from sync.', { level: 'info' });
         }
+        const superseded = staleAfterAccepted && accepted ? accepted.superseded : new Set<string | undefined>();
+        superseded.add(baseVersion);
+        lastAcceptedSave.current = {
+          name: currentFile.name,
+          content,
+          version: savedResult.version,
+          superseded,
+        };
         const latestTab = getActiveTab(state.current);
         const sameTab = latestTab?.id === tabId && latestTab.file?.name === currentFile.name;
         if (!sameTab) return true;
@@ -124,7 +153,9 @@ export function useDocumentActions(
             saveTimer.current = scheduleAfter(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
           }
         }
-        void loadFiles();
+        // Expected-folder guard: a slow listing response must not repopulate
+        // the tree after a folder switch (this save's folder may be gone).
+        void loadFiles(folderPathAtSave);
         return true;
       } catch (err: unknown) {
         const latestTab = getActiveTab(state.current);
@@ -176,7 +207,10 @@ export function useDocumentActions(
         const stat = await api.statFile(name, readOpts);
         body = { name, format: 'pdf' as const, content: '', version: stat.version };
       } catch (err: unknown) {
-        dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
+        // A failed open is navigation feedback, not the active document's
+        // save state — SAVE_STATUS would paint the error onto the tab the
+        // user is leaving (and is invisible outside edit mode).
+        toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
         return;
       }
     } else if (isDocxName(name)) {
@@ -184,7 +218,10 @@ export function useDocumentActions(
         const stat = await api.statFile(name, readOpts);
         body = { name, format: 'docx' as const, content: '', version: stat.version };
       } catch (err: unknown) {
-        dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
+        // A failed open is navigation feedback, not the active document's
+        // save state — SAVE_STATUS would paint the error onto the tab the
+        // user is leaving (and is invisible outside edit mode).
+        toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
         return;
       }
       const folder = opts.libraryFolder ?? opts.expectedFolder ?? state.current.folderPath;
@@ -198,7 +235,10 @@ export function useDocumentActions(
         const stat = await api.statFile(name, readOpts);
         body = { name, format: 'audio' as const, content: '', version: stat.version };
       } catch (err: unknown) {
-        dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
+        // A failed open is navigation feedback, not the active document's
+        // save state — SAVE_STATUS would paint the error onto the tab the
+        // user is leaving (and is invisible outside edit mode).
+        toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
         return;
       }
       const folder = opts.libraryFolder ?? opts.expectedFolder ?? state.current.folderPath;
@@ -212,14 +252,20 @@ export function useDocumentActions(
         const stat = await api.statFile(name, readOpts);
         body = { name, format: 'image' as const, content: '', version: stat.version };
       } catch (err: unknown) {
-        dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
+        // A failed open is navigation feedback, not the active document's
+        // save state — SAVE_STATUS would paint the error onto the tab the
+        // user is leaving (and is invisible outside edit mode).
+        toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
         return;
       }
     } else {
       try {
         body = await api.getFile(name, readOpts);
       } catch (err: unknown) {
-        dispatch({ type: 'SAVE_STATUS', status: { text: err instanceof Error ? err.message : String(err), cls: 'error' } });
+        // A failed open is navigation feedback, not the active document's
+        // save state — SAVE_STATUS would paint the error onto the tab the
+        // user is leaving (and is invisible outside edit mode).
+        toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
         return;
       }
     }
@@ -233,7 +279,7 @@ export function useDocumentActions(
       libraryFolder: opts.libraryFolder,
     });
     dispatch({ type: 'PENDING_SCROLL', anchor: opts.anchor ?? null });
-  }, [dispatch, editor, flushSave, refreshIndexState, state]);
+  }, [dispatch, editor, flushSave, refreshIndexState, state, toast]);
 
   // A sidebar single-click opens the file in its own persistent tab.
   // Already open → focus it; the active tab is a blank `+` tab → fill

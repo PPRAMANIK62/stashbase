@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import {
-  getAgentRuntimeDebugState,
+  consumeAgentSetupFailure,
   managedAgentExecutable,
   managedAgentRuntimeRoot,
   managedClaudeReleasesDir,
@@ -19,17 +19,28 @@ import {
   writeManagedClaudeManifest,
   type ManagedAgentId,
 } from './agent-runtime-paths.ts';
-import { configureMcpClient } from './routes/mcp.ts';
+import { ensureAgentMcp } from './agent-mcp.ts';
 import { resolveAgentCli, resolveAgentCliWithLoginShell } from './agent-cli.ts';
 import { terminateExtractorTree as terminateInstallerTree } from './extractor-process.ts';
 
 export type AgentBootstrapPhase = 'idle' | 'installing' | 'configuring' | 'ready' | 'failed';
+export type AgentBootstrapFailureStage = 'discovery' | 'installation' | 'mcp';
+export type AgentBootstrapFailureCode = 'simulated' | 'operation-failed' | 'runtime-unavailable';
+export type AgentBootstrapManualRecovery = 'install-command' | 'mcp-settings';
+
+export interface AgentBootstrapFailure {
+  stage: AgentBootstrapFailureStage;
+  code: AgentBootstrapFailureCode;
+  message: string;
+  retryable: boolean;
+  manualRecovery?: AgentBootstrapManualRecovery;
+}
 
 export interface AgentBootstrapStatus {
   phase: AgentBootstrapPhase;
   progress?: number;
   message?: string;
-  error?: string;
+  failure?: AgentBootstrapFailure;
 }
 
 type ProgressUpdate = Pick<AgentBootstrapStatus, 'progress' | 'message'>;
@@ -38,7 +49,7 @@ export interface AgentBootstrapDependencies {
   resolveExecutable(id: ManagedAgentId, options?: { probeLoginShell?: boolean }): string | null;
   installRuntime(id: ManagedAgentId, update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void>;
   configureMcp(id: ManagedAgentId): void;
-  debugState(): ReturnType<typeof getAgentRuntimeDebugState>;
+  consumeFailure(stage: 'installation' | 'mcp'): boolean;
 }
 
 const IDLE_STATUS: AgentBootstrapStatus = { phase: 'idle' };
@@ -56,16 +67,20 @@ export class AgentBootstrapCoordinator {
 
   begin(id: ManagedAgentId): AgentBootstrapStatus {
     if (this.runs.has(id)) return this.status(id);
-    const debug = this.dependencies.debugState();
-    const executable = this.dependencies.resolveExecutable(id, { probeLoginShell: true });
+    let executable: string | null;
+    try {
+      executable = this.dependencies.resolveExecutable(id, { probeLoginShell: true });
+    } catch (error) {
+      this.fail(id, 'discovery', 'operation-failed', error);
+      return this.status(id);
+    }
     if (executable) {
-      try {
-        if (debug.simulateMcpFailure) throw new Error('Simulated MCP configuration failure.');
-        this.dependencies.configureMcp(id);
-        this.statuses.set(id, { phase: 'ready', progress: 1, message: `${agentLabel(id)} is ready.` });
-      } catch (error) {
-        this.fail(id, error);
-      }
+      this.configure(id);
+      return this.status(id);
+    }
+
+    if (this.dependencies.consumeFailure('installation')) {
+      this.fail(id, 'installation', 'simulated', new Error('Simulated Agent installation failure.'));
       return this.status(id);
     }
 
@@ -77,28 +92,51 @@ export class AgentBootstrapCoordinator {
       // synchronous installer failure reaches the cleanup block.
       await Promise.resolve();
       try {
-        if (debug.simulateInstallFailure) throw new Error('Simulated Agent installation failure.');
         await this.dependencies.installRuntime(id, (next) => {
           this.statuses.set(id, { phase: 'installing', ...next });
         }, controller.signal);
-        if (!this.dependencies.resolveExecutable(id)) {
-          throw new Error(`${agentLabel(id)} installation finished without a usable executable.`);
-        }
-        this.statuses.set(id, { phase: 'configuring', progress: 1, message: 'Connecting StashBase MCP…' });
-        if (this.dependencies.debugState().simulateMcpFailure) {
-          throw new Error('Simulated MCP configuration failure.');
-        }
-        this.dependencies.configureMcp(id);
-        this.statuses.set(id, { phase: 'ready', progress: 1, message: `${agentLabel(id)} is ready.` });
       } catch (error) {
-        this.fail(id, error);
-      } finally {
-        this.controllers.delete(id);
-        this.runs.delete(id);
+        this.fail(id, 'installation', 'operation-failed', error, 'install-command');
+        return;
       }
-    })();
+      let installedExecutable: string | null;
+      try {
+        installedExecutable = this.dependencies.resolveExecutable(id);
+      } catch (error) {
+        this.fail(id, 'installation', 'operation-failed', error, 'install-command');
+        return;
+      }
+      if (!installedExecutable) {
+        this.fail(
+          id,
+          'installation',
+          'runtime-unavailable',
+          new Error(`${agentLabel(id)} installation finished without a usable executable.`),
+          'install-command',
+        );
+        return;
+      }
+      this.statuses.set(id, { phase: 'configuring', progress: 1, message: 'Connecting StashBase MCP…' });
+      this.configure(id);
+    })().finally(() => {
+      this.controllers.delete(id);
+      this.runs.delete(id);
+    });
     this.runs.set(id, run);
     return this.status(id);
+  }
+
+  private configure(id: ManagedAgentId, allowSimulation = true): void {
+    if (allowSimulation && this.dependencies.consumeFailure('mcp')) {
+      this.fail(id, 'mcp', 'simulated', new Error('Simulated MCP configuration failure.'));
+      return;
+    }
+    try {
+      this.dependencies.configureMcp(id);
+      this.statuses.set(id, { phase: 'ready', progress: 1, message: `${agentLabel(id)} is ready.` });
+    } catch (error) {
+      this.fail(id, 'mcp', 'operation-failed', error, 'mcp-settings');
+    }
   }
 
   /** App startup may repair MCP for runtimes it can already discover, but it
@@ -110,15 +148,17 @@ export class AgentBootstrapCoordinator {
    * first New Chat. */
   connectIfInstalled(id: ManagedAgentId, options?: { probeLoginShell?: boolean }): AgentBootstrapStatus {
     if (this.runs.has(id)) return this.status(id);
-    if (!this.dependencies.resolveExecutable(id, options)) return this.status(id);
-    const debug = this.dependencies.debugState();
+    let executable: string | null;
     try {
-      if (debug.simulateMcpFailure) throw new Error('Simulated MCP configuration failure.');
-      this.dependencies.configureMcp(id);
-      this.statuses.set(id, { phase: 'ready', progress: 1, message: `${agentLabel(id)} is ready.` });
+      executable = this.dependencies.resolveExecutable(id, options);
     } catch (error) {
-      this.fail(id, error);
+      this.fail(id, 'discovery', 'operation-failed', error);
+      return this.status(id);
     }
+    if (!executable) return this.status(id);
+    // Startup repair is background maintenance, not the explicit setup action
+    // targeted by the development `nextFailure` control.
+    this.configure(id, false);
     return this.status(id);
   }
 
@@ -140,22 +180,29 @@ export class AgentBootstrapCoordinator {
     return ids;
   }
 
-  private fail(id: ManagedAgentId, error: unknown): void {
+  private fail(
+    id: ManagedAgentId,
+    stage: AgentBootstrapFailureStage,
+    code: AgentBootstrapFailureCode,
+    error: unknown,
+    manualRecovery?: AgentBootstrapManualRecovery,
+  ): void {
     const message = error instanceof Error ? error.message : String(error);
     this.statuses.set(id, {
       phase: 'failed',
-      message: `Couldn’t prepare ${agentLabel(id)}.`,
-      error: message.slice(0, 1000),
+      failure: {
+        stage,
+        code,
+        message: message.slice(0, 1000),
+        retryable: true,
+        manualRecovery,
+      },
     });
   }
 }
 
 function agentLabel(id: ManagedAgentId): string {
   return id === 'codex' ? 'Codex' : 'Claude Code';
-}
-
-function mcpClientId(id: ManagedAgentId): 'codex-cli' | 'claude-code' {
-  return id === 'codex' ? 'codex-cli' : 'claude-code';
 }
 
 function resolveManagedOrSystemExecutable(
@@ -171,8 +218,8 @@ function resolveManagedOrSystemExecutable(
 export const agentBootstrapCoordinator = new AgentBootstrapCoordinator({
   resolveExecutable: resolveManagedOrSystemExecutable,
   installRuntime: installManagedRuntime,
-  configureMcp: (id) => { configureMcpClient(mcpClientId(id)); },
-  debugState: getAgentRuntimeDebugState,
+  configureMcp: (id) => { ensureAgentMcp(id); },
+  consumeFailure: consumeAgentSetupFailure,
 });
 
 export function agentBootstrapStatus(id: ManagedAgentId): AgentBootstrapStatus {

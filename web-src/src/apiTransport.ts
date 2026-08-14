@@ -119,10 +119,9 @@ export async function parseJsonOrThrow<T>(r: Response): Promise<T> {
       : undefined;
     throw new ApiError(msg, r.status, code);
   }
-  if (payload && typeof payload === 'object' && 'error' in payload && (payload as any).error) {
-    const code = typeof (payload as any).code === 'string' ? (payload as any).code as string : undefined;
-    throw new ApiError((payload as any).error as string, r.status, code);
-  }
+  // 2xx bodies pass through untouched even when they carry an `error`
+  // field: routes like /api/audio/transcript model failure as state
+  // (`{status:'failed', error}`) and the caller owns that branch.
   return payload as T;
 }
 

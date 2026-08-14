@@ -12,12 +12,14 @@ import { appDataRoot } from './local-data.ts';
 
 export type ManagedAgentId = 'claude' | 'codex';
 export type AgentDiscoveryPolicy = 'auto' | 'managed-only' | 'system-only';
+export type AgentSetupFailureSimulation = 'none' | 'installation' | 'mcp';
 
 export interface AgentRuntimeDebugState {
   enabled: boolean;
   discoveryPolicy: AgentDiscoveryPolicy;
-  simulateInstallFailure: boolean;
-  simulateMcpFailure: boolean;
+  /** Development-only, mutually exclusive failure for the next matching
+   * readiness stage. A consumed failure resets this field to `none`. */
+  nextFailure: AgentSetupFailureSimulation;
 }
 
 interface ManagedRuntimeManifest {
@@ -27,6 +29,7 @@ interface ManagedRuntimeManifest {
 }
 
 const DISCOVERY_POLICIES = new Set<AgentDiscoveryPolicy>(['auto', 'managed-only', 'system-only']);
+const SETUP_FAILURE_SIMULATIONS = new Set<AgentSetupFailureSimulation>(['none', 'installation', 'mcp']);
 
 export function initialAgentDiscoveryPolicy(
   env: NodeJS.ProcessEnv = process.env,
@@ -39,8 +42,7 @@ export function initialAgentDiscoveryPolicy(
 }
 
 let discoveryPolicy: AgentDiscoveryPolicy = initialAgentDiscoveryPolicy();
-let simulateInstallFailure = false;
-let simulateMcpFailure = false;
+let nextFailure: AgentSetupFailureSimulation = 'none';
 
 export function agentRuntimeDebugEnabled(): boolean {
   return process.env.STASHBASE_DEV_VITE === '1' || process.env.STASHBASE_AGENT_DEBUG === '1';
@@ -51,11 +53,10 @@ export function getAgentRuntimeDebugState(): AgentRuntimeDebugState {
     return {
       enabled: false,
       discoveryPolicy: 'auto',
-      simulateInstallFailure: false,
-      simulateMcpFailure: false,
+      nextFailure: 'none',
     };
   }
-  return { enabled: true, discoveryPolicy, simulateInstallFailure, simulateMcpFailure };
+  return { enabled: true, discoveryPolicy, nextFailure };
 }
 
 export function setAgentRuntimeDebugState(
@@ -70,13 +71,24 @@ export function setAgentRuntimeDebugState(
     }
     discoveryPolicy = patch.discoveryPolicy;
   }
-  if (patch.simulateInstallFailure !== undefined) {
-    simulateInstallFailure = patch.simulateInstallFailure === true;
-  }
-  if (patch.simulateMcpFailure !== undefined) {
-    simulateMcpFailure = patch.simulateMcpFailure === true;
+  if (patch.nextFailure !== undefined) {
+    if (!SETUP_FAILURE_SIMULATIONS.has(patch.nextFailure)) {
+      throw Object.assign(new Error('Invalid Agent setup failure simulation.'), { status: 400 });
+    }
+    nextFailure = patch.nextFailure;
   }
   return getAgentRuntimeDebugState();
+}
+
+/** Consume a development failure only when readiness reaches the selected
+ * stage. Installation simulations therefore remain pending when an existing
+ * runtime skips installation, while every injected failure is one-shot. */
+export function consumeAgentSetupFailure(
+  stage: Exclude<AgentSetupFailureSimulation, 'none'>,
+): boolean {
+  if (!agentRuntimeDebugEnabled() || nextFailure !== stage) return false;
+  nextFailure = 'none';
+  return true;
 }
 
 export function managedAgentRuntimeRoot(id: ManagedAgentId): string {

@@ -361,7 +361,7 @@ export function useSearchActions(
               console.warn('[files] refresh after tree change failed:', err);
             });
         } else {
-          void loadFiles();
+          void loadFiles(folderPathAtStart);
         }
       }
       // Tree changed = someone else wrote to disk (Claude Code in the

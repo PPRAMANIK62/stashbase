@@ -110,6 +110,9 @@ test('malformed PDF and DOCX remain visible source identities with explicit fail
     expectOnlyKnownViewerFailures(app, [
       /request: HEAD .*\/api\/files\/broken\.(?:pdf|docx): net::ERR_ABORTED/,
       /request: GET .*\/asset\/.*\/broken\.pdf.*: net::ERR_ABORTED/,
+      // React StrictMode cleans up the first direct-preview effect; the
+      // replacement request is the one whose visible fallback is asserted.
+      /request: GET .*\/asset\/.*\/broken\.docx.*: net::ERR_ABORTED/,
       /console: Failed to load resource: the server responded with a status of 409 \(Conflict\)/,
     ]);
   } finally {
@@ -128,17 +131,19 @@ test('valid DOCX renders its document and legacy derived notes never surface as 
     await dismissEmbeddingKeyPrompt(app.page);
 
     await expect(fileTreeRow(app.page, LEGACY_DERIVED_NOTE)).toHaveCount(0);
-    await app.page.keyboard.press(`${primaryKey}+O`);
-    const quickOpen = app.page.getByRole('dialog', { name: 'Quick Open' });
-    await quickOpen.getByRole('combobox').fill(LEGACY_DERIVED_NOTE);
-    await expect(quickOpen.getByRole('option', { name: new RegExp(LEGACY_DERIVED_NOTE.replaceAll('.', '\\.')) })).toHaveCount(0);
-    await quickOpen.getByRole('combobox').press('Escape');
-
     await fileTreeRow(app.page, JOURNEY_DOCX).click();
     const preview = app.page.locator('iframe[title="DOCX preview"]');
     await expect(preview).toBeVisible();
     await expect(preview.contentFrame().getByText('Valid DOCX journey surface')).toBeVisible();
     await expect(app.page.getByRole('button', { name: 'Switch to Live Editing' })).toHaveCount(0);
+
+    // A fresh launch starts in Chat; opening the source above deliberately
+    // activates the document surface before exercising its Quick Open command.
+    await app.page.keyboard.press(`${primaryKey}+O`);
+    const quickOpen = app.page.getByRole('dialog', { name: 'Quick Open' });
+    await quickOpen.getByRole('combobox').fill(LEGACY_DERIVED_NOTE);
+    await expect(quickOpen.getByRole('option', { name: new RegExp(LEGACY_DERIVED_NOTE.replaceAll('.', '\\.')) })).toHaveCount(0);
+    await quickOpen.getByRole('combobox').press('Escape');
 
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     const search = app.page.getByRole('dialog', { name: 'Search library' });
@@ -147,6 +152,9 @@ test('valid DOCX renders its document and legacy derived notes never surface as 
     await expect(search.getByText(LEGACY_DERIVED_NOTE, { exact: false })).toHaveCount(0);
     expectOnlyKnownViewerFailures(app, [
       /request: HEAD .*\/api\/files\/valid-document\.docx: net::ERR_ABORTED/,
+      // React StrictMode cancels the first direct-preview request before the
+      // replacement succeeds; the rendered DOCX assertion above owns success.
+      /request: GET .*\/asset\/.*\/valid-document\.docx.*: net::ERR_ABORTED/,
       /console: Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set\./,
     ]);
   } finally {

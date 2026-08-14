@@ -134,64 +134,119 @@
     color: var(--muted);
     font-size: 0.98rem;
   }
+
+  .scenarios {
+    margin-top: 2.8rem;
+  }
+  .scenarios h2 {
+    font-size: 1.35rem;
+    line-height: 1.25;
+    margin: 0 0 0.35rem;
+  }
+  .scenarios .intro {
+    margin: 0 0 1.1rem;
+    color: var(--muted);
+  }
+  .scenarios ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .scenarios li {
+    padding: 0.85rem 0;
+    border-top: 1px solid var(--rule);
+  }
+  .scenarios li:last-child {
+    border-bottom: 1px solid var(--rule);
+  }
+  .scenarios b {
+    display: block;
+    font-weight: 600;
+  }
+  .scenarios span {
+    color: var(--muted);
+  }
 </style>
 </head>
 <body>
   <main class="page">
     <header>
       <h1>What StashBase can do</h1>
-      <p class="sub">The short version &mdash; open any line for the detail.</p>
+      <p class="sub">The short version &mdash; open any capability for the detail.</p>
     </header>
 
     <div class="list">
       <details open>
-        <summary><span class="num">01</span><span class="title">Stash anything you see</span><span class="chev"></span></summary>
+        <summary><span class="num">01</span><span class="title">Work with local folders</span><span class="chev"></span></summary>
         <div class="body">
-          <p>Drag in files and folders, paste or drop images and PDFs, import a repo, or record your screen. Only what you choose to keep enters your memory &mdash; nothing is collected behind your back.</p>
-          <span class="note"><b>Good to know:</b> to bring in a repo, clone it yourself and import the folder.</span>
+          <p>Add an existing folder or create a new one. StashBase reads and updates the files in place, and you can remove a folder from the library without deleting it from disk.</p>
         </div>
       </details>
 
       <details>
-        <summary><span class="num">02</span><span class="title">It reads more than text</span><span class="chev"></span></summary>
+        <summary><span class="num">02</span><span class="title">Read more than plain text</span><span class="chev"></span></summary>
         <div class="body">
-          <p>PDFs are extracted, images are run through OCR, and screen recordings are turned into structured, searchable notes &mdash; with the original kept alongside.</p>
-          <span class="note"><b>Good to know:</b> screen recordings use Gemini (needs a key). Still images currently capture their text layer only.</span>
+          <p>Open Markdown, HTML, JSON, PDF, DOCX, images, audio, and video. StashBase can extract PDF and DOCX text, run image OCR, and transcribe supported audio and video with a local model.</p>
+          <span class="note"><b>Good to know:</b> prepared text stays in StashBase&rsquo;s application data. Your original file remains the visible source.</span>
         </div>
       </details>
 
       <details>
-        <summary><span class="num">03</span><span class="title">Find it by meaning or by word</span><span class="chev"></span></summary>
+        <summary><span class="num">03</span><span class="title">Search by word or meaning</span><span class="chev"></span></summary>
         <div class="body">
-          <p>AI Index combines meaning-based retrieval with exact text matching, so you find things whether or not you remember the wording.</p>
-          <span class="note"><b>Good to know:</b> AI Index needs an OpenAI or OpenRouter key. Exact text search still works without one.</span>
+          <p>Exact search works without setup across source text and any prepared text that is ready. AI Index adds meaning-based search across the whole library or one folder.</p>
+          <span class="note"><b>Good to know:</b> sign in to StashBase for free monthly AI Index usage, or use your own OpenAI or OpenRouter key. Exact search needs neither.</span>
         </div>
       </details>
 
       <details>
-        <summary><span class="num">04</span><span class="title">Open to every AI client</span><span class="chev"></span></summary>
+        <summary><span class="num">04</span><span class="title">Work with Claude Code or Codex</span><span class="chev"></span></summary>
         <div class="body">
-          <p>Your whole knowledge base is exposed over MCP, so Claude, ChatGPT, Codex and others can read it directly &mdash; even when the app is closed.</p>
+          <p>Start a Chat with Claude Code or Codex and choose Library or a single folder as its scope. Attach or mention files when you want them included, and approve sensitive actions explicitly.</p>
+          <span class="note"><b>Good to know:</b> StashBase uses a supported system runtime when available. If one is missing, installation starts only after you choose <b>Install and continue</b>.</span>
         </div>
       </details>
 
       <details>
-        <summary><span class="num">05</span><span class="title">Agents keep it tidy</span><span class="chev"></span></summary>
+        <summary><span class="num">05</span><span class="title">Connect other tools through MCP</span><span class="chev"></span></summary>
         <div class="body">
-          <p>Agents organize, link, and update your notes as a side effect of the work you ask them to do &mdash; not as a chore you schedule.</p>
-          <span class="note"><b>Good to know:</b> always under your direction. Nothing runs autonomously in the background.</span>
+          <p>StashBase gives compatible local clients bounded access to your authorized library through MCP. Built-in Claude Code and Codex setup is automatic; copy the configuration from Settings for other clients.</p>
+          <span class="note"><b>Good to know:</b> keep StashBase running while an MCP client is using it.</span>
         </div>
       </details>
 
       <details>
-        <summary><span class="num">06</span><span class="title">Yours, local, and portable</span><span class="chev"></span></summary>
+        <summary><span class="num">06</span><span class="title">Keep source and support data separate</span><span class="chev"></span></summary>
         <div class="body">
-          <p>Everything is plain files on your disk, in open formats, organized as folders. Search across the whole library or narrow the scope to one folder. Take it anywhere &mdash; it&rsquo;s never locked to us.</p>
+          <p>The Files sidebar shows your source files, not generated transcripts, OCR text, or index records. Those support files stay hidden and can be rebuilt from the source.</p>
         </div>
       </details>
     </div>
 
-    <p class="footer">Some of these need a key to switch on &mdash; you can add one anytime in Settings.</p>
+    <section class="scenarios">
+      <h2>Ways to use it</h2>
+      <p class="intro">Start with a folder you already have and a real question you want to answer.</p>
+      <ul>
+        <li>
+          <b>Take a project from requirements to delivery</b>
+          <span>Keep requirements, meeting notes, decisions, and implementation together so an Agent can retrieve constraints and record accepted outcomes.</span>
+        </li>
+        <li>
+          <b>Complete a course or research project</b>
+          <span>Combine papers, slides, recordings, experiments, and notes; find supporting evidence and keep conclusions in an ordinary document.</span>
+        </li>
+        <li>
+          <b>Reuse a personal archive</b>
+          <span>Make years of notes, PDFs, images, recordings, and earlier Agent output searchable without reorganizing the original folders.</span>
+        </li>
+        <li>
+          <b>Work with documents and project data together</b>
+          <span>Read, search, and explicitly edit prose and JSON without moving either into a separate workspace.</span>
+        </li>
+      </ul>
+    </section>
+
+    <p class="footer">Start by adding a folder. Enable AI Index, an Agent, or external MCP access only when you need it.</p>
   </main>
 </body>
 </html>

@@ -94,7 +94,7 @@ test('exact search remembers state, distinguishes duplicate paths, and resolves 
     await dialog.getByRole('combobox').press('Escape');
 
     await openLibraryFolder(app.page, 'project-beta');
-    await dismissEmbeddingKeyPrompt(app.page);
+    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     dialog = app.page.getByRole('dialog', { name: 'Search library' });
     await expect(dialog.getByRole('combobox')).toHaveValue(EXACT_SEARCH_PHRASE);

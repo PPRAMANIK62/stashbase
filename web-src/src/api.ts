@@ -297,14 +297,12 @@ export const api = {
     send<AgentsResponse>('POST', `/api/terminal/clis/${encodeURIComponent(agent)}/bootstrap`),
   setAgentRuntimeDebug: (patch: Partial<{
     discoveryPolicy: 'auto' | 'managed-only' | 'system-only';
-    simulateInstallFailure: boolean;
-    simulateMcpFailure: boolean;
+    nextFailure: 'none' | 'installation' | 'mcp';
   }>) => send<AgentsResponse>('PUT', '/api/terminal/debug', patch),
   resetManagedAgent: (agent: 'claude' | 'codex') =>
     send<AgentsResponse>('DELETE', `/api/terminal/clis/${encodeURIComponent(agent)}/managed`),
   mcpStatus: () =>
     getJson<{
-      clients: Record<string, boolean | { configured?: boolean; cliInstalled?: boolean; restartRequired?: boolean }>;
       command: string;
       config: unknown;
       http: McpHttpStatus;
@@ -315,24 +313,6 @@ export const api = {
     send<{ ok: true; http: McpHttpStatus }>('PUT', '/api/mcp/http/docker-access', { enabled }),
   setMcpDockerPort: (port: number) =>
     send<{ ok: true; http: McpHttpStatus }>('PUT', '/api/mcp/http/docker-port', { port }),
-  // `send` throws ApiError on any non-2xx, so a resolved value is always
-  // the success shape — no `error` field, `ok` is always true.
-  configureMcp: (client: string) =>
-    send<{
-      ok: true;
-      client?: string;
-      file?: string;
-      command?: string;
-      manual?: unknown;
-      mode?: 'file' | 'clipboard';
-    }>('POST', '/api/mcp/configure', { client }),
-  disconnectMcp: (client: string) =>
-    send<{
-      ok: true;
-      client?: string;
-      file?: string;
-      mode?: 'file' | 'clipboard';
-    }>('POST', '/api/mcp/disconnect', { client }),
   /** Set or rotate the active embedding provider key. */
   changeApiKey: (key: string, provider?: EmbedderProvider) =>
     send<ApiKeySaveResult>('PUT', '/api/embedder/key', { key, provider }),

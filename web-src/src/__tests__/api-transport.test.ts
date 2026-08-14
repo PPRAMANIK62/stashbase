@@ -48,6 +48,17 @@ test('window identity prefers the Electron main-process assignment', () => {
   }
 });
 
+test('2xx payloads that model failure as data resolve instead of throwing', async () => {
+  const response = new Response(
+    JSON.stringify({ status: 'failed', error: 'transcription failed' }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+
+  const payload = await parseJsonOrThrow<{ status: string; error: string }>(response);
+  assert.equal(payload.status, 'failed');
+  assert.equal(payload.error, 'transcription failed');
+});
+
 test('JSON transport errors preserve server message, status, and code', async () => {
   const response = new Response(
     JSON.stringify({ error: 'The file changed on disk.', code: 'STALE_VERSION' }),

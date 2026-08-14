@@ -17,7 +17,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { isCompatibleServerHealth } = require('./main-probe.cjs');
+const { createServerChildEnvironment, isCompatibleServerHealth } = require('./main-probe.cjs');
 const { createBugReportService } = require('./bug-report-service.cjs');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
 const { collectRedactedApplicationLog, readApplicationLogTail } = require('./bug-report-log.cjs');
@@ -415,12 +415,13 @@ async function startOrReuseServer() {
     cwd: serverCwd,
     // Port flows via the CLI arg above, not the env — keeps the server
     // entry's argv parser the single source of truth for port config.
-    env: {
-      ...process.env,
-      ...packagedEnv,
-      STASHBASE_SHUTDOWN_TOKEN: SERVER_SHUTDOWN_TOKEN,
-      STASHBASE_OAUTH_RETURN_TOKEN: OAUTH_RETURN_TOKEN,
-    },
+    env: createServerChildEnvironment({
+      baseEnv: process.env,
+      packaged: app.isPackaged,
+      packagedEnv,
+      shutdownToken: SERVER_SHUTDOWN_TOKEN,
+      oauthReturnToken: OAUTH_RETURN_TOKEN,
+    }),
     // stdin = 'ignore' is intentional: the server never reads from
     // stdin, and inheriting the parent's TTY made Node attach a real
     // TTY ReadStream to the child's fd 0. Any flake on that TTY

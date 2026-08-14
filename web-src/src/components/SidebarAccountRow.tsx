@@ -122,21 +122,23 @@ export function SidebarAccountRow() {
                   </div>
                 </>
               ) : (
-                <>
-                  <div className="px-4 py-3">
-                    <div className="text-sm font-semibold">Use StashBase AI Index</div>
-                    <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      Sign in for a free monthly embedding allowance. Local files and Exact search remain available without an account.
-                    </div>
-                    {signInError && <div className="mt-2 text-xs text-destructive">{signInError}</div>}
-                  </div>
-                  <MenuSeparator className="m-0" />
-                  <div className="p-1">
-                    <MenuItem label="Sign in to StashBase" disabled={signingIn} onClick={signIn}>
-                      <span className="flex items-center gap-2"><ExternalLinkIcon className="size-4" />{signingIn ? 'Waiting for browser…' : 'Sign in to StashBase'}</span>
-                    </MenuItem>
-                  </div>
-                </>
+                <div className="p-1">
+                  <MenuItem
+                    className="items-start py-2"
+                    label="Sign in to StashBase — Free monthly AI Index usage"
+                    disabled={signingIn}
+                    onClick={signIn}
+                  >
+                    <span className="flex min-w-0 items-start gap-2">
+                      <ExternalLinkIcon className="mt-0.5 size-4 flex-none" />
+                      <span className="grid min-w-0 gap-0.5">
+                        <span>{signingIn ? 'Waiting for browser…' : 'Sign in to StashBase'}</span>
+                        <span className="text-xs leading-snug text-muted-foreground">Free monthly AI Index usage</span>
+                      </span>
+                    </span>
+                  </MenuItem>
+                  {signInError && <div className="px-2 py-1.5 text-xs text-destructive">{signInError}</div>}
+                </div>
               )}
             </MenuPopup>
           </MenuPositioner>

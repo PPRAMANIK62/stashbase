@@ -9,6 +9,7 @@ import {
   useContext,
   useMemo,
   useReducer,
+  useRef,
   type ReactNode,
 } from 'react';
 import {
@@ -27,7 +28,6 @@ import {
 } from './state';
 import type { AgentKind } from '../agentCatalog';
 import { rememberPreferredAgent } from '../agentPreference';
-import { requestAgentBootstrap } from '../agentBootstrap';
 import type { EditorHandle, FindController } from './actionTypes';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { useFeedbackActions } from './useFeedbackActions';
@@ -204,6 +204,11 @@ export function canApplyExternalTextRefresh(
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useLatestRef(state);
+  // Folder transitions update this ref before React commits. Async tree/order
+  // refreshes use it as their ownership boundary so an old folder cannot
+  // repopulate the workspace during the render gap.
+  const folderContextPath = useRef(state.folderPath);
+  folderContextPath.current = state.folderPath;
   const {
     askCascadeForRename,
     askConfirm,
@@ -224,10 +229,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleFindWholeWord,
   } = useFindActions(stateRef, dispatch);
 
-  const loadFilesFromServer = useCallback(async (expectedFolderPath?: string) => {
+  const loadFilesFromServer = useCallback(async (
+    expectedFolderPath?: string,
+    ownsRequest?: () => boolean,
+  ) => {
     const j = await api.listFiles();
     const files = j.files ?? [];
-    if (expectedFolderPath !== undefined && stateRef.current.folderPath !== expectedFolderPath) return null;
+    const requestIsCurrent = ownsRequest
+      ? ownsRequest()
+      : expectedFolderPath === undefined || folderContextPath.current === expectedFolderPath;
+    if (!requestIsCurrent) return null;
     dispatch({
       type: 'FILES_LOADED',
       files,
@@ -239,11 +250,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return files;
   }, []);
 
-  const loadFiles = useCallback(async (expectedFolderPath?: string) => {
+  const loadFiles = useCallback(async (
+    expectedFolderPath?: string,
+    ownsRequest?: () => boolean,
+  ) => {
     try {
-      return (await loadFilesFromServer(expectedFolderPath)) ?? [];
+      return (await loadFilesFromServer(expectedFolderPath, ownsRequest)) ?? [];
     } catch (err: unknown) {
-      if (expectedFolderPath !== undefined && stateRef.current.folderPath !== expectedFolderPath) return [];
+      const requestIsCurrent = ownsRequest
+        ? ownsRequest()
+        : expectedFolderPath === undefined || folderContextPath.current === expectedFolderPath;
+      if (!requestIsCurrent) return [];
       const fallbackFolder = err instanceof ApiError && err.status === 412
         ? ''
         : stateRef.current.folder;
@@ -261,13 +278,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /** Fetch the per-folder manual ordering map. Called alongside
    *  `loadFiles` on folder switch and on bootstrap. Errors are
    *  swallowed — the tree falls back to default sort. */
-  const loadFileOrder = useCallback(async (expectedFolderPath?: string) => {
+  const loadFileOrder = useCallback(async (
+    expectedFolderPath?: string,
+    ownsRequest?: () => boolean,
+  ) => {
     try {
       const order = await api.getFileOrder();
-      if (expectedFolderPath !== undefined && stateRef.current.folderPath !== expectedFolderPath) return;
+      const requestIsCurrent = ownsRequest
+        ? ownsRequest()
+        : expectedFolderPath === undefined || folderContextPath.current === expectedFolderPath;
+      if (!requestIsCurrent) return;
       dispatch({ type: 'FILE_ORDER_LOADED', order });
     } catch {
-      if (expectedFolderPath !== undefined && stateRef.current.folderPath !== expectedFolderPath) return;
+      const requestIsCurrent = ownsRequest
+        ? ownsRequest()
+        : expectedFolderPath === undefined || folderContextPath.current === expectedFolderPath;
+      if (!requestIsCurrent) return;
       dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
     }
   }, []);
@@ -359,6 +385,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // The workspace owns all folder/document liveness bookkeeping internally;
   // the shell hands over only the always-current state ref plus callbacks.
   const workspace = useActiveFolderWorkspace(stateRef, {
+    folderContextPath,
     state,
     dispatch,
     loadFiles,
@@ -393,9 +420,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openAgent: (agent) => {
       rememberPreferredAgent(agent);
       const current = stateRef.current;
-      requestAgentBootstrap(agent, dispatch, (error) => {
-        toast(error instanceof Error ? error.message : String(error), { level: 'error' });
-      });
       const hasOpenTab = current.chatTabs.some((tab) => tab.agent === agent);
       dispatch({
         type: 'CHAT_AGENT_OPEN',

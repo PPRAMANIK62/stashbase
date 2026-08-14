@@ -34,9 +34,18 @@ export async function runIndexStatusRequest<T>({
     return { kind: 'skipped' };
   }
 
-  const isCurrent = () =>
-    openGenerationAtStart === getCurrentOpenGeneration()
-    && (scope === 'explicit' || targetFolderPath === getCurrentFolderPath());
+  // Explicit requests stay current while renderer state catches up from
+  // no-folder-open (''), but never once a DIFFERENT folder is committed:
+  // every consumer dispatches into active-folder-scoped state, so a
+  // cross-folder response (e.g. preparing a file opened out-of-folder)
+  // must land as stale instead of painting that folder's badges,
+  // conversions, and warnings onto the current workspace.
+  const isCurrent = () => {
+    if (openGenerationAtStart !== getCurrentOpenGeneration()) return false;
+    const currentFolderPath = getCurrentFolderPath();
+    if (scope === 'explicit' && currentFolderPath === '') return true;
+    return targetFolderPath === currentFolderPath;
+  };
 
   try {
     const status = await request(targetFolderPath);

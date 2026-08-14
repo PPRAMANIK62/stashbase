@@ -34,9 +34,9 @@ const MAX_RECENT = 50;
 
 export const WINDOW_ID_HEADER = 'x-stashbase-window-id';
 
-/** Folder name of the bundled product manual, seeded into the default
- *  folder home on first launch so the user never faces an empty app. Doubles as
- *  the disk directory name and the Welcome-screen recents label. */
+/** Folder name of the bundled product introduction, seeded into a brand-new
+ *  default folder home and added to library membership without selecting it.
+ *  Doubles as the disk directory name and the library label. */
 const BUILTIN_FOLDER_NAME = '👋 Start Here';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -310,17 +310,17 @@ function builtinFolderSource(): string | null {
   }
 }
 
-/** First-launch onboarding: copy the bundled product-manual folder into the
- *  default folder home and surface it in the Welcome screen's recents, so a
- *  new user opens the app to content instead of an empty shell.
+/** First-launch onboarding: copy the bundled product-introduction folder into
+ *  the default folder home and surface it in library membership. Window entry
+ *  remains unselected; the user chooses when to open the folder.
  *
  *  Two distinct jobs, in order:
  *
- *   1. **Surface** — if the manual is already on disk (`<root>/<name>`),
- *      make sure it's reachable from Welcome recents. This is independent
+ *   1. **Surface** — if the introduction is already on disk (`<root>/<name>`),
+ *      make sure it's reachable from library membership. This is independent
  *      of the `builtinSeeded` latch: surfacing isn't re-seeding. It
  *      covers the "config/recents wiped but the folder is still there"
- *      case (e.g. the user deletes `~/.stashbase`) — otherwise the manual
+ *      case (e.g. the user deletes `~/.stashbase`) — otherwise the folder
  *      exists but never shows. Only re-adds when it has fallen off recents,
  *      so a normal boot doesn't keep bumping it to the top.
  *
@@ -371,7 +371,7 @@ export function seedBuiltinFolder(): void {
   try {
     fs.mkdirSync(root, { recursive: true });
     copyDirectoryDereferenced(src, dest);
-    pushRecent(dest);          // show it on the Welcome screen
+    pushRecent(dest);          // add it to library membership
     latch();
     log.info(`seeded built-in folder at ${dest}`);
   } catch (err) {

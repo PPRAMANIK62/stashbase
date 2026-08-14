@@ -141,7 +141,7 @@ test('Favorites pin above recents and removing the active folder returns to Home
     await expect(app.page).toHaveTitle('project-alpha — StashBase');
     // The AI Index offer follows the folder: alpha was never skipped in
     // this window, so the switch re-offers before the header is usable.
-    await dismissEmbeddingKeyPrompt(app.page);
+    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
 
     await openFolderMenu(app, 'project-alpha');
     await app.page.getByRole('menuitem', { name: 'Remove from Library' }).click();
@@ -149,6 +149,9 @@ test('Favorites pin above recents and removing the active folder returns to Home
     await expect(app.page).toHaveTitle('StashBase');
     await expect(app.page.getByRole('button', { name: 'Select project-alpha folder root' })).toHaveCount(0);
     await expect(app.page.getByText('Pick a folder from the Library menu in the top bar.')).toBeVisible();
+    // Removing the active folder creates a new bare-window context, which
+    // makes its own AI Index offer before titlebar controls are interactive.
+    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
     // The removed folder is gone from the switcher menu; the remaining
     // member is still offered.
     await openFolderSwitcher(app.page);

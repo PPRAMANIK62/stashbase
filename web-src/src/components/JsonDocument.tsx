@@ -96,7 +96,7 @@ export function createJsonEditor(host: HTMLElement, opts: {
           '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono, ui-monospace, monospace)' },
           '.cm-content': { padding: '20px 0 72px', caretColor: 'var(--focus-ring)' },
           '.cm-line': { padding: '0 20px' },
-          '.cm-gutters': { backgroundColor: 'var(--pane)', color: 'var(--muted-fg)', border: '0' },
+          '.cm-gutters': { backgroundColor: 'var(--pane)', color: 'var(--muted)', border: '0' },
           '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--accent) 7%, transparent)' },
           '&.cm-focused': { outline: 'none' },
           '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'color-mix(in srgb, var(--accent) 28%, transparent)' },
@@ -122,9 +122,13 @@ export function createJsonEditor(host: HTMLElement, opts: {
       EditorState.readOnly.of(next), EditorView.editable.of(!next),
     ]) }),
     replaceFromDisk: (next) => {
-      if (view.state.doc.toString() === next) return;
+      // CodeMirror stores documents LF-normalized, so compare and insert in
+      // that space — raw CRLF disk content would never equal doc.toString()
+      // and every clean save would trigger a spurious whole-document replace.
+      const normalized = toJsonEditorText(next);
+      if (view.state.doc.toString() === normalized) return;
       applyingExternal = true;
-      try { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next } }); }
+      try { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: normalized } }); }
       finally { applyingExternal = false; }
     },
     destroy: () => view.destroy(),

@@ -94,23 +94,30 @@ export function makePdfFindController({
   onClose: () => void;
 }): { controller: FindController; dispose: () => void } {
   let cancelled = false;
+  let generation = 0;
   let matches: PdfFindMatch[] = [];
   let current = 0;
 
-  async function rebuild(query: string, opts: FindOptions): Promise<void> {
-    matches = [];
-    current = 0;
+  /** Scan into a local list and commit only if no newer setQuery started
+   *  meanwhile — concurrent rebuilds otherwise interleave pushes into the
+   *  shared array and the slower query's matches win. Returns null when
+   *  superseded so the caller neither commits nor jumps. */
+  async function rebuild(query: string, opts: FindOptions): Promise<PdfFindMatch[] | null> {
+    const gen = ++generation;
+    const found: PdfFindMatch[] = [];
     const needle = foldPdfText(query).trim();
-    if (!needle) return;
-    await scanPages(doc, numPages, (page, fp) => {
-      for (const hit of findFlatMatches(fp.flat, needle, opts)) {
-        matches.push({
-          page,
-          yRatio: yRatioForIndex(fp, hit.idx),
-          rects: highlightRectsForMatch(fp, hit.idx, hit.length),
-        });
-      }
-    }, () => cancelled);
+    if (needle) {
+      await scanPages(doc, numPages, (page, fp) => {
+        for (const hit of findFlatMatches(fp.flat, needle, opts)) {
+          found.push({
+            page,
+            yRatio: yRatioForIndex(fp, hit.idx),
+            rects: highlightRectsForMatch(fp, hit.idx, hit.length),
+          });
+        }
+      }, () => cancelled || gen !== generation);
+    }
+    return gen === generation ? found : null;
   }
 
   function jumpTo(index: number): MatchInfo {
@@ -121,7 +128,10 @@ export function makePdfFindController({
 
   const controller: FindController = {
     setQuery: async (query, opts) => {
-      await rebuild(query, opts);
+      const found = await rebuild(query, opts);
+      if (found === null) return { current: 0, total: 0 }; // superseded — the newer call owns the counter
+      matches = found;
+      current = 0;
       if (matches.length === 0) return { current: 0, total: 0 };
       return jumpTo(0);
     },
@@ -134,11 +144,12 @@ export function makePdfFindController({
       return jumpTo((current - 1 + matches.length) % matches.length);
     },
     close: () => {
+      generation++; // an in-flight rebuild must not repopulate a closed bar
       matches = [];
       current = 0;
       onClose();
     },
   };
 
-  return { controller, dispose: () => { cancelled = true; } };
+  return { controller, dispose: () => { cancelled = true; generation++; } };
 }

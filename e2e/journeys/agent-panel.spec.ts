@@ -72,7 +72,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
 
     await openLibraryFolder(app.page, 'project-beta');
     await expect(app.page).toHaveTitle('project-beta — StashBase');
-    await dismissEmbeddingKeyPrompt(app.page);
+    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
     const approvalTab = app.page.getByRole('tab', { name: /approval turn/i });
     await expect(approvalTab).toBeVisible();
     await expect(approvalTab).toHaveAttribute('aria-selected', 'false');
@@ -128,9 +128,10 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
 
     let panel = activeAgentPanel(app.page);
     let composer = panel.locator('[aria-label="Message agent"]');
+    await expect(composer).toHaveAttribute('contenteditable', 'true');
     await composer.fill('unsent alpha draft');
     await openLibraryFolder(app.page, 'project-beta');
-    await dismissEmbeddingKeyPrompt(app.page);
+    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount + 1);
     await chatTabs.getByRole('tab', { name: /^New Chat Close New Chat$/ }).click();
     panel = activeAgentPanel(app.page);
@@ -166,9 +167,12 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     const displayMath = panel.locator('.katex-display');
     await expect(displayMath).toBeVisible();
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Model: Fake Codex Model — fixed for this conversation' })).toBeVisible();
 
     await panel.getByRole('button', { name: 'Reply actions' }).click();
-    await app.page.getByRole('menuitem', { name: 'Copy Reply' }).click();
+    const copyReply = app.page.getByRole('menuitem', { name: 'Copy Reply' });
+    await expect(copyReply).toBeVisible();
+    await copyReply.click();
     const copied = await app.electron.evaluate(({ clipboard }) => clipboard.readText());
     expect(copied).toBe(HISTORY_MATH_REPLY);
 

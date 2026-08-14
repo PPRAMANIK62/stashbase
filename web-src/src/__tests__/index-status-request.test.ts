@@ -90,6 +90,20 @@ test('a same-generation explicit request remains current while renderer state ca
   });
 });
 
+test('an explicit request for a non-active folder lands stale once another folder is committed', async () => {
+  const outcome = await runIndexStatusRequest({
+    activeFolderPath: '/library-a',
+    activeFolderTransitionInProgress: false,
+    explicitFolderPath: '/library-b',
+    openGenerationAtStart: 7,
+    getCurrentFolderPath: () => '/library-a',
+    getCurrentOpenGeneration: () => 7,
+    request: async (folderPath) => ({ folderPath }),
+  });
+
+  assert.deepEqual(outcome, { kind: 'stale' });
+});
+
 test('implicit polling is skipped while a different active folder is opening', async () => {
   let calls = 0;
   const outcome = await runIndexStatusRequest({

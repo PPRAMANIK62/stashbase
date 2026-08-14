@@ -16,7 +16,11 @@ test('user can launch into the empty library workspace', async ({}, testInfo) =>
   const fixture = await createAppFixture({ membership: 'empty' });
   let app: LaunchedApp | undefined;
   try {
-    app = await launchApp(fixture, testInfo);
+    app = await launchApp(fixture, testInfo, { aiIndexSetup: 'preserve' });
+    const skipAiIndex = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
+    await expect(skipAiIndex).toBeVisible();
+    await skipAiIndex.click();
+    await expect(skipAiIndex).toBeHidden();
     await expect(app.page).toHaveTitle('StashBase');
     await expect(appShell(app.page)).toBeVisible();
     await expect(app.page.getByRole('button', { name: 'New Chat', exact: true })).toBeVisible();

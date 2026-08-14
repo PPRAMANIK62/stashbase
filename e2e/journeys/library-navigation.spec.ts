@@ -101,22 +101,34 @@ test('persistent document tabs and Quick Open remain keyboard-operable and resto
   }
 });
 
-// Intent: the AI Index offer follows the FOLDER, not the window — skipping
-// it in one folder must not silence it for the rest of the library, while
-// returning to a skipped folder stays quiet (in-place switching through
-// the titlebar switcher is the primary flow now).
-test('the AI Index prompt re-offers per folder and stays quiet on return', async ({}, testInfo) => {
+// Intent: J01 — a fresh window with neither a key nor a signed-in account
+// offers AI Index setup right away; the offer does not wait for a folder.
+// One launch is one offer: a bare-window skip covers the FIRST folder
+// opened afterwards. Past that the offer follows the FOLDER, not the
+// window — a different folder re-offers, while returning to a folder
+// skipped in this window stays quiet (in-place switching through the
+// titlebar switcher is the primary flow now).
+test('the AI Index prompt offers at launch, follows folders, and stays quiet on return', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   let app: LaunchedApp | undefined;
   try {
-    app = await launchApp(fixture, testInfo);
+    app = await launchApp(fixture, testInfo, { aiIndexSetup: 'preserve' });
     const skip = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
 
-    await openLibraryFolder(app.page, 'project-alpha');
+    // The fresh bare window makes the offer before any folder is chosen.
     await expect(skip).toBeVisible();
     await skip.click();
     await expect(skip).toBeHidden();
 
+    // The bare-window skip carries into the first folder — no double nag
+    // seconds after an explicit "not now".
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
+    await app.page.waitForTimeout(1500);
+    await expect(skip).toBeHidden();
+
+    // A DIFFERENT folder re-offers: skipping one folder must not silence
+    // the rest of the library.
     await openLibraryFolder(app.page, 'project-beta');
     await expect(skip).toBeVisible();
     await skip.click();

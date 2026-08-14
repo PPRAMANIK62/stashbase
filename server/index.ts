@@ -382,7 +382,7 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   });
   for (const { id, status } of connectInstalledAgentMcpOnStartup()) {
     if (status.phase === 'ready') log.info(`connected StashBase MCP for installed ${id} runtime`);
-    else if (status.phase === 'failed') log.warn(`could not connect StashBase MCP for ${id}: ${status.error ?? 'unknown error'}`);
+    else if (status.phase === 'failed') log.warn(`could not connect StashBase MCP for ${id}: ${status.failure?.message ?? 'unknown error'}`);
   }
   // Deferred second pass with the login-shell probe (spawns a shell, so it
   // stays off the listen path): system runtimes on nvm/homebrew-style

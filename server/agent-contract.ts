@@ -10,7 +10,7 @@ import { CLIS, launchCommandFor } from './terminal.ts';
 import { resolveAgentCli } from './agent-cli.ts';
 import { agentExecutableSource } from './agent-runtime-paths.ts';
 import { agentBootstrapStatus } from './agent-runtime-installer.ts';
-import { configureMcpClient } from './routes/mcp.ts';
+import { ensureAgentMcp } from './agent-mcp.ts';
 import { filesystemPath } from './filesystem-path.ts';
 
 export type AgentId = 'claude' | 'codex';
@@ -316,7 +316,7 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
     return;
   }
   try {
-    configureMcpClient(adapter.id === 'codex' ? 'codex-cli' : 'claude-code');
+    ensureAgentMcp(adapter.id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     ws.send(JSON.stringify({ t: 'error', message: `Could not connect StashBase MCP: ${message}` }));

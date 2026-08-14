@@ -59,6 +59,10 @@ export function TabStrip() {
   function onTabDrop(e: DragEvent<HTMLDivElement>, targetId: string) {
     if (!dragId) return;
     e.preventDefault();
+    // Without this the drop bubbles to onStripDrop, whose `dragId` closure
+    // still holds this render's value (setDragId(null) lands next render),
+    // so it would re-dispatch TABS_REORDER with beforeId:null (append).
+    e.stopPropagation();
     if (dragId === targetId) { onDragEnd(); return; }
     const tabs = state.tabs;
     const targetIdx = tabs.findIndex((t) => t.id === targetId);
@@ -86,8 +90,8 @@ export function TabStrip() {
   // in-strip reorder (a) is implemented here.
   function onStripDrop(e: DragEvent<HTMLDivElement>) {
     if (!dragId) return;
-    // If the user dropped on a child tab, that handler already ran and
-    // cleared `dragId`. This is the trailing-area fallback.
+    // Drops on a tab chip are handled (and stopPropagation'd) by onTabDrop;
+    // this only fires for the trailing empty area → append to the end.
     e.preventDefault();
     dispatch({ type: 'TABS_REORDER', id: dragId, beforeId: null });
     onDragEnd();

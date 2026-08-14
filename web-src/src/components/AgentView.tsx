@@ -50,7 +50,9 @@ import { closeAgentSocketIntentionally, terminalAgentState } from './agent/conne
 import { effortMenuLocked } from './agent/effortMenuState';
 import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from './agent/modelState';
 import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
+import { runtimeFailurePresentation } from './agent/runtimeFailurePresentation';
 import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
+import { openSettings } from './SettingsModal';
 
 /** Runtimes title sessions from the first message's RAW text, so a chat
  * opened with an @-mention would name its tab a bare relative path.
@@ -647,7 +649,7 @@ export function AgentView({
       return;
     }
     if (reloadWindowTree) {
-      await actions.loadFiles();
+      await actions.loadFiles(folder);
       // The reload awaited: the window may have switched folders meanwhile.
       // Re-check before touching index state — this second check is
       // deliberate, so a stale tab can never refresh another folder's
@@ -749,8 +751,14 @@ export function AgentView({
         break;
       case 'steer-result':
         setQueuedPromptStatus(ev.id, ev.ok ? 'steered' : 'waiting');
-        if (!ev.ok && ev.message) {
-          setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not steer Codex: ${ev.message}` }]);
+        if (!ev.ok) {
+          if (ev.message) {
+            setBlocks((bs) => [...bs, { kind: 'error', id: nextId(), text: `Could not steer Codex: ${ev.message}` }]);
+          }
+          // A steer that lost its turn (ended mid-flight) re-queues as
+          // 'waiting'; with no turn running nothing else would ever send
+          // it, so run the queue now.
+          if (!turnActiveRef.current) runNextQueuedPrompt();
         }
         break;
       case 'scope-changed': {
@@ -873,14 +881,20 @@ export function AgentView({
   function runNextQueuedPrompt() {
     let next: QueuedPrompt | undefined;
     mutateQueue((queue) => {
-      const waiting = queue.filter((p) => p.status === 'waiting');
-      next = waiting[0];
-      return waiting.slice(1);
+      // Keep in-flight steers: the turn may have ended under them, in which
+      // case their steer-result comes back failed and must still find the
+      // prompt here to demote it to 'waiting' — dropping it lost the user's
+      // text. Only consumed ('steered') prompts leave the queue.
+      const kept = queue.filter((p) => p.status === 'waiting' || p.status === 'steering');
+      next = kept.find((p) => p.status === 'waiting');
+      return kept.filter((p) => p !== next);
     });
-    if (!next) {
-      setTurnBusy(false);
-      return;
-    }
+    // Close the settled turn first even when handing off to a queued prompt:
+    // this records its "Worked for X" duration against the right turn instead
+    // of letting the final turn absorb the whole span. sendPromptNow re-arms
+    // the busy flag for the next turn.
+    setTurnBusy(false);
+    if (!next) return;
     void sendPromptNow({ ...next, appendBlock: true });
   }
 
@@ -1251,7 +1265,8 @@ export function AgentView({
           runtime={runtime}
           fallbackName={meta.name}
           onRetry={() => void startRuntimeBootstrap()}
-          onCopy={copyInstallHint}
+          onCopyInstall={copyInstallHint}
+          onOpenMcpSetup={() => openSettings('mcp')}
         />
       );
     }
@@ -1488,22 +1503,36 @@ function AgentRuntimeFailure({
   runtime,
   fallbackName,
   onRetry,
-  onCopy,
+  onCopyInstall,
+  onOpenMcpSetup,
 }: {
   runtime: Agent;
   fallbackName: string;
   onRetry: () => void;
-  onCopy: () => void;
+  onCopyInstall: () => void;
+  onOpenMcpSetup: () => void;
 }) {
   const name = runtime.label || fallbackName;
+  const presentation = runtimeFailurePresentation(runtime.bootstrap, name);
+  const manualAction = presentation.manualAction === 'copy-install-command'
+    ? onCopyInstall
+    : presentation.manualAction === 'open-mcp-settings'
+      ? onOpenMcpSetup
+      : null;
   return (
     <div className={runtimeCardWrapClass} role="alert">
       <div className={runtimeCardClass}>
-        <h2 className={runtimeCardTitleClass}>Couldn’t prepare {name}</h2>
-        <p className={runtimeCardCopyClass}>{runtime.bootstrap?.error ?? 'The runtime setup did not finish.'}</p>
+        <h2 className={runtimeCardTitleClass}>{presentation.title}</h2>
+        <p className={runtimeCardCopyClass}>{presentation.message}</p>
         <div className={runtimeCardActionsClass}>
-          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onCopy}>Copy manual command</Button>
-          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onRetry}>Retry</Button>
+          {manualAction && presentation.manualLabel && (
+            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={manualAction}>
+              {presentation.manualLabel}
+            </Button>
+          )}
+          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onRetry}>
+            {presentation.retryLabel}
+          </Button>
         </div>
       </div>
     </div>
@@ -1562,4 +1591,3 @@ function isSafeFolderRelativePath(path: string): boolean {
   if (!path || path.startsWith('/') || path.includes('\\')) return false;
   return path.split('/').every((part) => part.length > 0 && part !== '.' && part !== '..');
 }
-

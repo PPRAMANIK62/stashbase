@@ -25,8 +25,8 @@ interface FolderActionRefs {
 
 interface FolderActionDependencies {
   flushSave: () => Promise<boolean>;
-  loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
-  loadFileOrder: (expectedFolderPath?: string) => Promise<void>;
+  loadFiles: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<State['files']>;
+  loadFileOrder: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<void>;
   markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   toast: Toast;
@@ -168,9 +168,16 @@ export function useFolderActions(
     opts: { optimisticPendingOnOpen?: boolean } = {},
   ) => {
     const expectedFolderPath = expected.path;
+    // The synchronous refs move before React commits the new state. A stale
+    // listing can otherwise pass a rendered-state check in that small window
+    // and overwrite the newer folder after it has appeared on screen.
+    const ownsRequest = () => (
+      generation === openGeneration.current
+      && folderContextPath.current === expectedFolderPath
+    );
     const [files] = await Promise.all([
-      loadFiles(expectedFolderPath),
-      loadFileOrder(expectedFolderPath),
+      loadFiles(expectedFolderPath, ownsRequest),
+      loadFileOrder(expectedFolderPath, ownsRequest),
     ]);
     if (
       generation !== openGeneration.current

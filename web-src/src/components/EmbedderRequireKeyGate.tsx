@@ -4,19 +4,22 @@
  * `embedderHasKey` fact even in a bare window, which is what lets the standing
  * Files-panel callout (and its "Set up" action) work before any folder opens.
  *
- * The dialog AUTO-OPENS only while a folder is open and AI Index is neither
- * authorized nor skipped — it is a folder-context prompt. Setting up a source
- * is strongly recommended — an unindexed library has a degraded Agent — but
- * not forced: browsing, editing, preview, and keyword search are local
- * computations and stay available, so the dialog has a deliberate,
- * low-emphasis exit to "basic mode".
+ * The dialog AUTO-OPENS whenever AI Index is neither authorized nor skipped
+ * for the window's current context — including the bare window a fresh
+ * launch boots into (J01: a fresh window does not resume a folder), so the
+ * first open of a new window makes the offer without waiting for a folder.
+ * Setting up a source is strongly recommended — an unindexed library has a
+ * degraded Agent — but not forced: browsing, editing, preview, and keyword
+ * search are local computations and stay available, so the dialog has a
+ * deliberate, low-emphasis exit to "basic mode".
  *
  * Daily use is not tied to online auth (the check is a localhost call).
  * Activation persists (via the stored key) and clears only if the key is later
- * removed. The skip, by contrast, is per folder within this window (see
+ * removed. The skip, by contrast, is per context within this window (see
  * `embeddingAuth`): a fresh window or a different folder offers indexing
- * again rather than staying silently opted out; the skip clears on
- * activation, so removing a key re-gates cleanly.
+ * again rather than staying silently opted out, while a bare-window skip
+ * carries into the first folder opened so one launch is one offer; the skip
+ * clears on activation, so removing a key re-gates cleanly.
  *
  * The gate owns the dialog rather than the card, because the post-save work
  * is app-level: reducer state, the validation-warning toast, marking visible
@@ -67,12 +70,12 @@ export function EmbedderRequireKeyGate() {
         if (cancelled) return;
         setState(embedder);
         dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.authorized });
-        // Recommend, don't force. Auto-open only with a folder open — the
-        // dialog is a folder-context prompt; without one the standing callout
-        // carries the offer. The skip is per folder within the window (see
+        // Recommend, don't force. Auto-open in the bare window too — the
+        // first open of a new window makes the offer without waiting for a
+        // folder. The skip is per context within the window (see
         // embeddingAuth), so a different folder — or a fresh window —
         // re-offers rather than staying silently skipped.
-        setOpen(!!folder && !isEmbeddingAuthorized(embedder) && !hasSkippedAiIndexing(folder));
+        setOpen(!isEmbeddingAuthorized(embedder) && !hasSkippedAiIndexing(folder));
       })
       .catch(() => { /* startup race with server boot — silent */ });
     return () => { cancelled = true; };

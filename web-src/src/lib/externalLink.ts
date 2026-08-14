@@ -16,6 +16,10 @@ import { electronBridge } from '../electronBridge';
  *  process and the renderer cannot drift to different invites. */
 export const DISCORD_INVITE_URL = links.discord;
 
+/** Setup examples for external MCP clients (Claude Desktop, Cursor, …),
+ *  linked from Settings → MCP. */
+export const MCP_SETUP_EXAMPLES_URL = `${links.repository}/blob/main/docs/mcp-configuration.md`;
+
 export function openExternalUrl(url: string): void {
   const bridge = electronBridge();
   if (bridge?.openExternal) {

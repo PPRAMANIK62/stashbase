@@ -10,6 +10,8 @@ import {
   type AgentBootstrapDependencies,
 } from '../agent-runtime-installer.ts';
 import {
+  consumeAgentSetupFailure,
+  getAgentRuntimeDebugState,
   initialAgentDiscoveryPolicy,
   managedCodexBinDir,
   setAgentRuntimeDebugState,
@@ -26,12 +28,7 @@ function fakeDependencies(overrides: Partial<AgentBootstrapDependencies> = {}) {
       installed = true;
     },
     configureMcp: () => { configured += 1; },
-    debugState: () => ({
-      enabled: true,
-      discoveryPolicy: 'managed-only',
-      simulateInstallFailure: false,
-      simulateMcpFailure: false,
-    }),
+    consumeFailure: () => false,
     ...overrides,
   };
   return { dependencies, configured: () => configured };
@@ -82,25 +79,93 @@ test('startup connects MCP for discovered runtimes without installing missing on
   assert.equal(configured, 1);
 });
 
-test('debug failure controls produce recoverable failed states', async () => {
-  let failInstall = true;
+test('startup MCP repair does not consume the next explicit setup failure', () => {
+  let nextFailure: 'mcp' | null = 'mcp';
+  let configured = 0;
   const fake = fakeDependencies({
-    debugState: () => ({
-      enabled: true,
-      discoveryPolicy: 'managed-only',
-      simulateInstallFailure: failInstall,
-      simulateMcpFailure: false,
-    }),
+    resolveExecutable: () => '/system/codex',
+    configureMcp: () => { configured += 1; },
+    consumeFailure: (stage) => {
+      if (nextFailure !== stage) return false;
+      nextFailure = null;
+      return true;
+    },
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
-  coordinator.begin('codex');
-  const settled = await coordinator.wait('codex');
-  assert.equal(settled.phase, 'failed');
-  assert.match(settled.error ?? '', /Simulated Agent installation failure/);
 
-  failInstall = false;
+  assert.equal(coordinator.connectIfInstalled('codex').phase, 'ready');
+  assert.equal(configured, 1);
+  assert.equal(nextFailure, 'mcp');
+  assert.equal(coordinator.begin('codex').failure?.stage, 'mcp');
+  assert.equal(nextFailure, null);
+  assert.equal(configured, 1);
+});
+
+test('an injected installation failure is classified and consumed before retry', async () => {
+  let nextFailure: 'installation' | 'mcp' | null = 'installation';
+  const fake = fakeDependencies({
+    consumeFailure: (stage) => {
+      if (nextFailure !== stage) return false;
+      nextFailure = null;
+      return true;
+    },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+  const settled = coordinator.begin('codex');
+  assert.equal(settled.phase, 'failed');
+  assert.equal(settled.failure?.stage, 'installation');
+  assert.equal(settled.failure?.code, 'simulated');
+  assert.equal(settled.failure?.manualRecovery, undefined);
+  assert.match(settled.failure?.message ?? '', /Simulated Agent installation failure/);
+
   assert.equal(coordinator.begin('codex').phase, 'installing');
   assert.equal((await coordinator.wait('codex')).phase, 'ready');
+});
+
+test('an injected MCP failure retries only MCP when the runtime exists', () => {
+  let nextFailure: 'installation' | 'mcp' | null = 'mcp';
+  let installs = 0;
+  let configured = 0;
+  const fake = fakeDependencies({
+    resolveExecutable: () => '/system/codex',
+    installRuntime: async () => { installs += 1; },
+    configureMcp: () => { configured += 1; },
+    consumeFailure: (stage) => {
+      if (nextFailure !== stage) return false;
+      nextFailure = null;
+      return true;
+    },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+
+  const failed = coordinator.begin('codex');
+  assert.equal(failed.failure?.stage, 'mcp');
+  assert.equal(failed.failure?.code, 'simulated');
+  assert.equal(failed.failure?.manualRecovery, undefined);
+  assert.equal(installs, 0);
+  assert.equal(configured, 0);
+
+  assert.equal(coordinator.begin('codex').phase, 'ready');
+  assert.equal(installs, 0);
+  assert.equal(configured, 1);
+});
+
+test('real installation and MCP errors advertise only their relevant manual recovery', async () => {
+  const installFailure = new AgentBootstrapCoordinator(fakeDependencies({
+    installRuntime: async () => { throw new Error('download unavailable'); },
+  }).dependencies);
+  assert.equal(installFailure.begin('codex').phase, 'installing');
+  const failedInstall = await installFailure.wait('codex');
+  assert.equal(failedInstall.failure?.stage, 'installation');
+  assert.equal(failedInstall.failure?.manualRecovery, 'install-command');
+
+  const mcpFailure = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: () => '/system/codex',
+    configureMcp: () => { throw new Error('config is read-only'); },
+  }).dependencies);
+  const failedMcp = mcpFailure.begin('codex');
+  assert.equal(failedMcp.failure?.stage, 'mcp');
+  assert.equal(failedMcp.failure?.manualRecovery, 'mcp-settings');
 });
 
 test('Claude release platform mapping stays provider-shaped', () => {
@@ -122,6 +187,24 @@ test('development fixtures can isolate discovery from developer-installed Agents
     STASHBASE_AGENT_DEBUG: '1',
     STASHBASE_AGENT_DISCOVERY_POLICY: 'invalid',
   }), 'auto');
+});
+
+test('development failure injection is mutually exclusive and one-shot', () => {
+  const previousDebug = process.env.STASHBASE_AGENT_DEBUG;
+  process.env.STASHBASE_AGENT_DEBUG = '1';
+  try {
+    setAgentRuntimeDebugState({ nextFailure: 'mcp' });
+    assert.equal(getAgentRuntimeDebugState().nextFailure, 'mcp');
+    assert.equal(consumeAgentSetupFailure('installation'), false);
+    assert.equal(getAgentRuntimeDebugState().nextFailure, 'mcp');
+    assert.equal(consumeAgentSetupFailure('mcp'), true);
+    assert.equal(getAgentRuntimeDebugState().nextFailure, 'none');
+    assert.equal(consumeAgentSetupFailure('mcp'), false);
+  } finally {
+    setAgentRuntimeDebugState({ nextFailure: 'none' });
+    if (previousDebug === undefined) delete process.env.STASHBASE_AGENT_DEBUG;
+    else process.env.STASHBASE_AGENT_DEBUG = previousDebug;
+  }
 });
 
 test('managed-only discovery ignores the global Agent without uninstalling it', () => {
@@ -146,7 +229,7 @@ test('managed-only discovery ignores the global Agent without uninstalling it', 
     setAgentRuntimeDebugState({ discoveryPolicy: 'managed-only' });
     assert.equal(resolveAgentCli({ name: 'codex', envNames: ['STASHBASE_CODEX_BIN'], logLabel: 'Codex' }), executable);
   } finally {
-    setAgentRuntimeDebugState({ discoveryPolicy: 'auto', simulateInstallFailure: false, simulateMcpFailure: false });
+    setAgentRuntimeDebugState({ discoveryPolicy: 'auto', nextFailure: 'none' });
     if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
     else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
     if (previousDebug === undefined) delete process.env.STASHBASE_AGENT_DEBUG;

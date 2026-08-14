@@ -7,7 +7,6 @@ import express from 'express';
 import { discoverAgentRuntimes, stopAgentRuntime } from '../agent-contract.ts';
 import { sendError } from '../http.ts';
 import {
-  agentRuntimeDebugEnabled,
   getAgentRuntimeDebugState,
   removeManagedAgentRuntime,
   setAgentRuntimeDebugState,
@@ -55,14 +54,15 @@ export function mount(app: express.Express): void {
     }
   });
 
+  /** Uninstall the StashBase-managed runtime (Settings, and the dev-only
+   * first-run reset). Removes only the private install under AppData —
+   * `removeManagedAgentRuntime` path-guards that — and never a system
+   * executable, provider login, or native history. The next explicit New
+   * Chat re-runs readiness. */
   app.delete('/api/terminal/clis/:id/managed', async (req, res) => {
     const id = agentId(req.params.id);
     if (!id) {
       res.status(404).json({ error: 'Unsupported Agent runtime.' });
-      return;
-    }
-    if (!agentRuntimeDebugEnabled()) {
-      res.status(404).json({ error: 'Agent runtime test controls are available in development builds only.' });
       return;
     }
     try {

@@ -7,6 +7,7 @@ const {
   terminateChildProcessTree,
   waitForChildExit,
 } = require('./smoke-process.cjs');
+const { createServerChildEnvironment } = require('./main-probe.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
@@ -91,6 +92,34 @@ test('Electron smoke disables Chromium sandbox only on Linux CI hosts', () => {
     buildElectronSmokeArgs('win32', 'C:\\repo\\electron\\smoke.cjs', 43123),
     ['C:\\repo\\electron\\smoke.cjs', '--port=43123'],
   );
+});
+
+test('Electron-owned source server always receives the development runtime flag', () => {
+  const environment = createServerChildEnvironment({
+    baseEnv: { PATH: '/test/bin' },
+    packaged: false,
+    packagedEnv: { STASHBASE_APP_ROOT: '/repo' },
+    shutdownToken: 'shutdown-token',
+    oauthReturnToken: 'oauth-token',
+  });
+
+  assert.equal(environment.STASHBASE_DEV_VITE, '1');
+  assert.equal(environment.STASHBASE_APP_ROOT, '/repo');
+  assert.equal(environment.STASHBASE_SHUTDOWN_TOKEN, 'shutdown-token');
+  assert.equal(environment.STASHBASE_OAUTH_RETURN_TOKEN, 'oauth-token');
+});
+
+test('packaged server environment cannot inherit the Vite development flag', () => {
+  const environment = createServerChildEnvironment({
+    baseEnv: { STASHBASE_DEV_VITE: '1' },
+    packaged: true,
+    packagedEnv: { ELECTRON_RUN_AS_NODE: '1' },
+    shutdownToken: 'shutdown-token',
+    oauthReturnToken: 'oauth-token',
+  });
+
+  assert.equal(environment.STASHBASE_DEV_VITE, undefined);
+  assert.equal(environment.ELECTRON_RUN_AS_NODE, '1');
 });
 
 test('application menu exposes VS Code window commands on Windows and Linux', () => {

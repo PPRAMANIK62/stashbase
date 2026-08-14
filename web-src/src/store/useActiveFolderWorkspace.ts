@@ -66,10 +66,11 @@ export interface ActiveFolderWorkspace {
 
 interface WorkspaceDependencies {
   state: State;
+  folderContextPath: MutableRefObject<string>;
   dispatch: Dispatch;
-  loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
-  loadFilesFromServer: (expectedFolderPath?: string) => Promise<State['files'] | null>;
-  loadFileOrder: (expectedFolderPath?: string) => Promise<void>;
+  loadFiles: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<State['files']>;
+  loadFilesFromServer: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<State['files'] | null>;
+  loadFileOrder: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<void>;
   setFolderOrder: (parentPath: string, names: string[]) => Promise<void>;
   refreshActiveTabFromDisk: (opts?: { force?: boolean }) => Promise<void>;
   askCascadeForRename: (kind: 'file' | 'folder', oldPath: string, newPath: string) => Promise<boolean | null>;
@@ -90,16 +91,11 @@ export function useActiveFolderWorkspace(
   dependencies: WorkspaceDependencies,
 ): ActiveFolderWorkspace {
   const {
-    state: renderedState, dispatch, loadFiles, loadFilesFromServer, loadFileOrder,
+    state: renderedState, folderContextPath, dispatch, loadFiles, loadFilesFromServer, loadFileOrder,
     setFolderOrder, refreshActiveTabFromDisk, askCascadeForRename, askConfirm,
     toast, primeFind,
   } = dependencies;
 
-  // Mirrors the rendered folder path every render, but folder transitions
-  // update it eagerly (before React commits) so async finishers race-check
-  // against the newest folder context, not the last rendered one.
-  const folderContextPath = useRef(renderedState.folderPath);
-  folderContextPath.current = renderedState.folderPath;
   const editor = useRef<EditorHandle | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlight = useRef<Promise<boolean> | null>(null);

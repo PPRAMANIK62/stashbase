@@ -385,21 +385,32 @@ export interface Agent {
 }
 
 export type AgentBootstrapPhase = 'idle' | 'installing' | 'configuring' | 'ready' | 'failed';
+export type AgentBootstrapFailureStage = 'discovery' | 'installation' | 'mcp';
+export type AgentBootstrapFailureCode = 'simulated' | 'operation-failed' | 'runtime-unavailable';
+export type AgentBootstrapManualRecovery = 'install-command' | 'mcp-settings';
+
+export interface AgentBootstrapFailure {
+  stage: AgentBootstrapFailureStage;
+  code: AgentBootstrapFailureCode;
+  message: string;
+  retryable: boolean;
+  manualRecovery?: AgentBootstrapManualRecovery;
+}
 
 export interface AgentBootstrapStatus {
   phase: AgentBootstrapPhase;
   progress?: number;
   message?: string;
-  error?: string;
+  failure?: AgentBootstrapFailure;
 }
 
 export type AgentDiscoveryPolicy = 'auto' | 'managed-only' | 'system-only';
+export type AgentSetupFailureSimulation = 'none' | 'installation' | 'mcp';
 
 export interface AgentRuntimeDebugState {
   enabled: boolean;
   discoveryPolicy: AgentDiscoveryPolicy;
-  simulateInstallFailure: boolean;
-  simulateMcpFailure: boolean;
+  nextFailure: AgentSetupFailureSimulation;
 }
 
 export interface AgentsResponse {

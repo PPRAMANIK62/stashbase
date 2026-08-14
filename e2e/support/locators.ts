@@ -109,15 +109,18 @@ export function saveStatus(page: Page): Locator {
   return page.locator('main.main').getByText('Saved', { exact: true });
 }
 
-export async function dismissEmbeddingKeyPrompt(page: Page): Promise<void> {
+export async function dismissEmbeddingKeyPrompt(
+  page: Page,
+  options: { waitForOffer?: boolean } = {},
+): Promise<void> {
   // The AI Index prompt re-offers PER FOLDER within a window (the skip is
-  // folder-scoped), so this can no longer cache per page: dismiss the
-  // dialog whenever it shows, and no-op when this folder was already
-  // skipped in this window (the timeout path).
+  // folder-scoped), so this can no longer cache per page. The launch harness
+  // waits for the initial offer; later journey calls only dismiss a prompt
+  // that is already visible and otherwise return immediately.
   const skip = page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
-  try {
-    await skip.waitFor({ state: 'visible', timeout: 10_000 });
-  } catch {
+  if (options.waitForOffer) {
+    await skip.waitFor({ state: 'visible', timeout: 20_000 });
+  } else if (!(await skip.isVisible())) {
     return;
   }
   await skip.click();

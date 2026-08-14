@@ -149,6 +149,14 @@ test('real JSON CodeMirror session handles malformed source, editing, live Find 
     assert.equal(session.view.state.doc.toString(), diskReplacement.replace(/\r\n/g, '\n'));
     assert.deepEqual(findUpdates.at(-1), { current: 0, total: 0 });
 
+    // Re-delivering identical CRLF disk content must be a no-op: the guard
+    // compares in the editor's LF space, so no transaction is dispatched
+    // (previously this replaced the whole document on every clean save).
+    const stateBeforeIdenticalRefresh = session.view.state;
+    session.replaceFromDisk(diskReplacement);
+    await Promise.resolve();
+    assert.equal(session.view.state, stateBeforeIdenticalRefresh, 'identical disk content dispatches nothing');
+
     session.destroy();
     assert.equal(host.querySelector('.cm-editor'), null);
   } finally {

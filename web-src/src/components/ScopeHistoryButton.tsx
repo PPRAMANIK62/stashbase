@@ -1,10 +1,8 @@
 import { Suspense, useRef, useState } from 'react';
 import { HistoryIcon } from '../icons';
-import { requestAgentBootstrap } from '../agentBootstrap';
 import type { AgentKind } from '../agentCatalog';
 import { useApp } from '../store/AppContext';
-import { makeChatTab, type Action, type State } from '../store/state';
-import { newChatPlan } from './agent/folderState';
+import { activateChatTabForAgent } from './agent/chatActivation';
 import type { HistoryScope } from './agent/sessionHistory';
 import { lazyWithRetry } from './ErrorBoundary';
 import { Button } from './ui/button';
@@ -16,26 +14,7 @@ import { PopupLoadingStatus } from './ui/status';
 const SessionHistoryPopover = lazyWithRetry(() =>
   import('./agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
-/** Ensure the chat panel is open with a tab running `agent` active — the
- *  blank-tab reuse rule shared by New Chat, the History resume path, and
- *  the titlebar chat toggle (its open-with-no-tabs case):
- *  reuse the one COMPLETELY blank tab (switching its agent in place when
- *  it differs), else create a fresh tab; open the panel when hidden. */
-export function activateChatTabForAgent(
-  state: Pick<State, 'chatTabs' | 'chatOpen'>,
-  dispatch: (a: Action) => void,
-  agent: AgentKind,
-) {
-  requestAgentBootstrap(agent, dispatch);
-  const plan = newChatPlan(state.chatTabs, agent);
-  if (plan.kind === 'reuse') {
-    if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });
-    dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
-  } else {
-    dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, state.chatTabs) });
-  }
-  if (!state.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
-}
+export { activateChatTabForAgent } from './agent/chatActivation';
 
 /** History clock on a sidebar scope header: opens the merged
  *  session-history menu for that scope (both agents' sessions, newest

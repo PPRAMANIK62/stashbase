@@ -7,11 +7,16 @@ type Dispatch = (action: Action) => void;
 /** Owns the active document view's find controller. */
 export function useFindActions(stateRef: MutableRefObject<State>, dispatch: Dispatch) {
   const findControllerRef = useRef<FindController | null>(null);
+  const findRequestSeq = useRef(0);
 
   const applyMatchInfo = useCallback(async (
     pending: MatchInfo | Promise<MatchInfo>,
   ): Promise<void> => {
+    // Last call wins: async controllers (PDF) can resolve out of order, and
+    // a stale "N of M" landing after a newer one would stick in the FindBar.
+    const seq = ++findRequestSeq.current;
     const info = await Promise.resolve(pending);
+    if (seq !== findRequestSeq.current) return;
     dispatch({ type: 'FIND_SET', patch: { current: info.current, total: info.total } });
   }, [dispatch]);
 

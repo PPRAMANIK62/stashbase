@@ -113,6 +113,12 @@ test('removing the API key re-offers the AI Index dialog right away', async ({},
       }) });
     });
 
+    // The normal launch harness deliberately chooses basic mode for unrelated
+    // journeys. Reload after installing the keyed response so this test starts
+    // from the real persisted-key state instead of inheriting that choice.
+    await app.page.reload();
+    await app.page.waitForFunction(() => document.body.dataset.bootSettled === '1');
+
     const skip = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
     await openLibraryFolder(app.page, 'project-alpha');
     // Keyed: no prompt.
