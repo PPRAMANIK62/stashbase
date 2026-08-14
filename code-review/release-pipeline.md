@@ -37,13 +37,18 @@ or timed-out CI.
 - Packaging rejects missing/empty binaries, licenses, or notices; wrong binary
   formats; version/build-option drift; unacceptable FFmpeg licensing/features;
   and target ABI or minimum-OS drift.
+- Every unbundled local dependency loaded by the Electron main process must be
+  included in the electron-builder input. The package-input test scans relative
+  CommonJS dependencies that cross out of `electron/` so a source-only smoke
+  cannot hide a packaged startup failure.
 - Windows provisions the manifest-reading Node runtime and compiler tools inside
   MINGW64. Linux preserves the documented glibc/glibc++ baseline. macOS targets
   12.0 and retains the generic CPU fallback alongside supported acceleration.
 - Packaged smoke starts the server, exercises PDF/OCR/DOCX helpers, explicitly
-  downloads and verifies the Tiny speech model, transcodes media, runs local
-  inference, validates transcript output, and serves the compatible preview
-  before upload.
+  loads the Electron main-process dependency graph from app.asar, downloads and
+  verifies the Tiny speech model, transcodes media, runs local inference,
+  validates transcript output, and serves the compatible preview before
+  upload.
 
 ## macOS Unsigned Recovery
 
@@ -73,7 +78,7 @@ clipboard, and real-media seams; it does not repeat automated journeys.
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Packaging Module | `scripts/package-unsigned.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-unsigned.cjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs`, platform release verifiers, and macOS recovery verifier |
-| Focused evidence | `scripts/require-green-ci.test.mjs`, `scripts/macos-recovery-installer.test.mjs`, and the platform workflows |
+| Focused evidence | `scripts/package-inputs.test.mjs`, `scripts/require-green-ci.test.mjs`, `scripts/macos-recovery-installer.test.mjs`, and the platform workflows |
 
 ## Release Runbook
 
@@ -123,6 +128,7 @@ Run:
 
 ```bash
 pnpm test:release-gate
+pnpm test:package-inputs
 pnpm test:macos-recovery-installer
 pnpm typecheck
 ```
