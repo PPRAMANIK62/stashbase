@@ -68,7 +68,9 @@
   row but does not turn the whole summary into a terminal error.
 - Permission requests and recovery actions never enter collapsed activity.
 - User messages expose copy and edit-and-resend. Resend is a new prompt, never
-  transcript rewind or fork.
+  transcript rewind or fork. When another turn is active, enqueue the edited
+  prompt first, interrupt the old turn, and start the edit only through the
+  terminal queue handoff; ordinary composer follow-ups remain non-interrupting.
 - File-changing tools refresh source/index state but never select the output.
   Artifact and local-link actions use the folder-safe workspace path.
 

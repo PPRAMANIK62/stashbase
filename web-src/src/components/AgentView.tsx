@@ -322,7 +322,11 @@ export function AgentView({
       const key = currentTurnKey();
       if (key) {
         const durationMs = Date.now() - turnStartRef.current;
-        setTurnMeta((prev) => ({ ...prev, [key]: { durationMs, interrupted: interruptedKeyRef.current === key } }));
+        // Capture before clearing the ref below. React may execute this state
+        // updater after the current call stack; reading the ref inside it made
+        // an interrupted edit-and-resend turn render as ordinary "Worked".
+        const interrupted = interruptedKeyRef.current === key;
+        setTurnMeta((prev) => ({ ...prev, [key]: { durationMs, interrupted } }));
       }
       turnStartRef.current = null;
       interruptedKeyRef.current = null;
@@ -859,10 +863,6 @@ export function AgentView({
   }
 
   function send(text: string, skill?: string) {
-    // Deliberate: this reads the composer's CURRENT attachments, so
-    // edit-and-resend from history attaches whatever chips are in the
-    // composer now — resend is a brand-new prompt, not a replay of the
-    // original turn's context.
     const atts = attachments;
     const titleHint = capabilities?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
     if (turnActiveRef.current) {
@@ -871,6 +871,31 @@ export function AgentView({
       return;
     }
     void sendPromptNow({ text, attachments: atts, titleHint, skill, appendBlock: true, clearAttachments: true });
+  }
+
+  function resend(text: string) {
+    if (!turnActiveRef.current) {
+      send(text);
+      return;
+    }
+
+    // Use the composer's current attachment chips, not the original turn's
+    // historical attachments: resend is a new prompt, not a replay. While a
+    // turn is active, edit-and-resend means "replace what I just asked next",
+    // unlike a composer follow-up that deliberately waits behind the active
+    // turn.
+    // Put the edited prompt at the front before interrupting so even an
+    // already-populated queue cannot run a different follow-up first. The
+    // normal turn-end handoff owns the actual send, preserving the barrier
+    // that prevents abandoned output from crossing into the edited turn.
+    const atts = attachmentsRef.current;
+    const titleHint = capabilitiesRef.current?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
+    mutateQueue((queue) => [
+      { id: nextId(), text, attachments: atts, titleHint, status: 'waiting' },
+      ...queue,
+    ]);
+    setAttachments([]);
+    stop();
   }
 
   function refreshSkills() {
@@ -1342,7 +1367,7 @@ export function AgentView({
             onPermission={replyPermission}
             onSteerQueued={steerQueuedPrompt}
             onCopyUserMessage={copyUserMessage}
-            onResendUserMessage={send}
+            onResendUserMessage={resend}
             onRetry={reconnectAfterFatal}
             onOpenArtifact={(path) => {
               const action = resolveAssistantLink(path, {

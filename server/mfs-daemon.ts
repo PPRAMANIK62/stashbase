@@ -34,6 +34,7 @@ import { fileURLToPath } from 'node:url';
 import { logger } from './log.ts';
 import { globalVectorStoreDir } from './local-data.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import { isDevelopmentRuntime } from './development-runtime.ts';
 
 const log = logger('mfs');
 
@@ -44,6 +45,7 @@ const PROJECT_ROOT = process.env.STASHBASE_APP_ROOT
 const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
   ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
   : PROJECT_ROOT;
+const DEVELOPMENT_RUNTIME = isDevelopmentRuntime();
 
 interface Pending {
   resolve: (v: unknown) => void;
@@ -385,7 +387,7 @@ function resolvePythonBin(): string {
     // (e.g. copied in from another checkout) would shadow the dev
     // `python/.venv.nosync`. Skip the packaged candidates in dev — same
     // guard as resolveDaemonBinary. STASHBASE_PYTHON still wins.
-    if (!process.env.STASHBASE_DEV_VITE) {
+    if (!DEVELOPMENT_RUNTIME) {
       for (const candidate of pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime'))) {
         if (existsSync(candidate)) return candidate;
       }
@@ -463,7 +465,7 @@ function resolveDaemonBinary(): string | null {
   // Repo build dir carries `.nosync` so iCloud leaves it intact; inside the
   // packaged .app it's plain `sidecar` (Resources isn't synced).
   //
-  // In dev (`pnpm dev` sets STASHBASE_DEV_VITE) skip BOTH project-dir
+  // In a development runtime skip BOTH project-dir
   // bundled-binary candidates and run `python/stashbase_daemon.py` from
   // source. A leftover `python/sidecar*` build would otherwise silently
   // shadow the source — and in dev RESOURCES_ROOT falls back to
@@ -474,16 +476,16 @@ function resolveDaemonBinary(): string | null {
   // when set explicitly.
   const candidates = [
     process.env.STASHBASE_DAEMON_BIN,
-    process.env.STASHBASE_DEV_VITE
+    DEVELOPMENT_RUNTIME
       ? undefined
       : sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon'),
-    process.env.STASHBASE_DEV_VITE
+    DEVELOPMENT_RUNTIME
       ? undefined
       : sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-daemon', { direct: true }),
-    process.env.STASHBASE_DEV_VITE
+    DEVELOPMENT_RUNTIME
       ? undefined
       : sidecarExecutable(path.join(PROJECT_ROOT, 'python', 'sidecar.nosync'), 'stashbase-daemon'),
-    process.env.STASHBASE_DEV_VITE
+    DEVELOPMENT_RUNTIME
       ? undefined
       : sidecarExecutable(path.join(PROJECT_ROOT, 'python', 'sidecar.nosync'), 'stashbase-daemon', { direct: true }),
   ].filter(Boolean) as string[];

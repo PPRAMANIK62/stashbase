@@ -587,6 +587,25 @@ function runProcess(command, commandArgs, options = {}) {
   });
 }
 
+async function smokeElectronMainDependencies(electronBin, appRoot, resourcesPath) {
+  const entry = path.join(appRoot, 'electron', 'multi-window.cjs');
+  const probe = await runProcess(
+    electronBin,
+    ['-e', "require(process.argv[1])", entry],
+    {
+      cwd: resourcesPath,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      timeoutMs: 10_000,
+    },
+  );
+  if (probe.code !== 0) {
+    throw new Error(
+      `packaged Electron main dependency load failed: exit=${probe.code}\n${probe.output.slice(-4_000)}`,
+    );
+  }
+  console.log('[smoke] packaged Electron main dependencies load from app.asar');
+}
+
 async function smokeOcrExtractor(extractBin) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-smoke-ocr-'));
   try {
@@ -731,6 +750,7 @@ assertFile(rgPath, 'packaged ripgrep binary');
 assertFile(daemonBin, 'packaged Python daemon sidecar');
 if (requireExtract) assertFile(extractBin, 'packaged Python extractor sidecar');
 
+await smokeElectronMainDependencies(electronBin, appRoot, resourcesPath);
 await smokeDaemon(daemonBin);
 if (fs.existsSync(extractBin)) {
   const extractProbe = await runProcess(extractBin, [], { timeoutMs: 5_000 });

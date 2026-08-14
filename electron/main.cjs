@@ -17,7 +17,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { createServerChildEnvironment, isCompatibleServerHealth } = require('./main-probe.cjs');
+const {
+  createServerArguments,
+  createServerChildEnvironment,
+  isCompatibleServerHealth,
+} = require('./main-probe.cjs');
 const { createBugReportService } = require('./bug-report-service.cjs');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
 const { collectRedactedApplicationLog, readApplicationLogTail } = require('./bug-report-log.cjs');
@@ -301,9 +305,12 @@ async function startOrReuseServer() {
   // overriding the default so the server's argv parser sees the standard
   // CLI flag (matches the `npm start -- --port=...` workflow).
   const portArgs = SERVER_PORT === 8090 ? [] : [`--port=${SERVER_PORT}`];
-  const serverArgs = app.isPackaged
-    ? [SERVER_ENTRY, ...portArgs]
-    : ['watch', SERVER_ENTRY, ...portArgs];
+  const serverArgs = createServerArguments({
+    entry: SERVER_ENTRY,
+    portArgs,
+    packaged: app.isPackaged,
+    vite: process.env.STASHBASE_DEV_VITE === '1',
+  });
   // In packaged builds the Python sidecar lives under
   // `process.resourcesPath` (electron-builder `extraResources`). In dev
   // tsx finds python via the local venv, so we only override when

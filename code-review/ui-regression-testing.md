@@ -60,7 +60,15 @@ window close on macOS, where a windowless session otherwise remains alive.
 Harness lifecycle cases explicitly assert port release, including simultaneous
 isolated applications.
 The launcher records a trace, Electron output, renderer errors, and the server
-log when available.
+log when available. Trace bytes are staged in the fixture-owned artifacts
+directory before Playwright copies them into its managed test attachments;
+the managed output directory is never used as both source and destination. A
+failure before the first window may block Electron on a synchronous native
+error dialog, so the harness terminates only that fixture's known process tree;
+once a window exists, cleanup preserves the normal renderer-save and server
+shutdown handshake. Synthetic port blockers must also close their accepted
+connections before closing the listener so fixture-owned sockets cannot pin
+test teardown.
 
 ## Selectors and readiness
 

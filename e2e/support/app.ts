@@ -127,6 +127,7 @@ export async function launchApp(
   const readinessTimeoutMs = options.readinessTimeoutMs ?? 45_000;
   const output: string[] = [];
   let electronApplication: ElectronApplication | undefined;
+  let startupPage: Page | undefined;
   try {
     electronApplication = await _electron.launch({
       args: electronArgs(fixture),
@@ -141,6 +142,7 @@ export async function launchApp(
     const errors = new AppErrorCollector();
     electronApplication.on('window', (window) => errors.attach(window));
     const page = await electronApplication.firstWindow({ timeout: readinessTimeoutMs });
+    startupPage = page;
     errors.attach(page);
     await electronApplication.context().tracing.start({
       screenshots: true,
@@ -165,9 +167,11 @@ export async function launchApp(
       async close() {
         if (closed) return;
         closed = true;
-        const traceFile = testInfo
-          ? testInfo.outputPath(`electron-trace-${Date.now()}.zip`)
-          : path.join(fixture.artifacts, `electron-trace-${Date.now()}.zip`);
+        // Stage outside Playwright's managed output directory. Attaching a
+        // trace from another path copies it into that directory; writing the
+        // source there first can race Playwright's own output cleanup and
+        // leave testInfo.attach() with an ENOENT source.
+        const traceFile = path.join(fixture.artifacts, `electron-trace-${Date.now()}.zip`);
         try {
           await electronApplication!.context().tracing.stop({ path: traceFile });
           if (testInfo) {
@@ -195,8 +199,12 @@ export async function launchApp(
   } catch (error) {
     if (electronApplication) {
       const rootPid = electronApplication.process().pid;
-      try { await quitElectronApplication(electronApplication); } catch {
+      if (!startupPage) {
         if (rootPid !== undefined) terminateKnownProcessTree(rootPid);
+      } else {
+        try { await quitElectronApplication(electronApplication, startupPage); } catch {
+          if (rootPid !== undefined) terminateKnownProcessTree(rootPid);
+        }
       }
     }
     const serverLog = serverLogFile(fixture);

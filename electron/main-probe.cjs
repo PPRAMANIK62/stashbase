@@ -9,9 +9,10 @@ function isCompatibleServerHealth(body, expected) {
 }
 
 /** Build the environment for the Electron-owned server process. Source
- * launches are development launches even when the user starts `pnpm electron`
- * directly instead of winning the port race with `pnpm dev:server`.
- * Conversely, a packaged app must not inherit the Vite marker from its host. */
+ * launches need development runtime behavior even when they serve the built
+ * renderer. `STASHBASE_DEV_VITE` is narrower: preserve it only when the caller
+ * explicitly knows a Vite renderer is running. Packaged launches inherit
+ * neither development mode. */
 function createServerChildEnvironment({
   baseEnv,
   packaged,
@@ -25,12 +26,26 @@ function createServerChildEnvironment({
     STASHBASE_SHUTDOWN_TOKEN: shutdownToken,
     STASHBASE_OAUTH_RETURN_TOKEN: oauthReturnToken,
   };
-  if (packaged) delete environment.STASHBASE_DEV_VITE;
-  else environment.STASHBASE_DEV_VITE = '1';
+  if (packaged) {
+    delete environment.STASHBASE_DEV_RUNTIME;
+    delete environment.STASHBASE_DEV_VITE;
+  } else {
+    environment.STASHBASE_DEV_RUNTIME = '1';
+  }
   return environment;
 }
 
+/** Keep the Electron-owned process single-layered unless the caller is an
+ * explicit Vite development session. A watch wrapper can outlive or orphan
+ * its actual listener during Electron shutdown, while direct source and E2E
+ * launches need one child whose exit is the server lifecycle boundary. */
+function createServerArguments({ entry, portArgs, packaged, vite }) {
+  if (packaged) return [entry, ...portArgs];
+  return vite ? ['watch', entry, ...portArgs] : [entry, ...portArgs];
+}
+
 module.exports = {
+  createServerArguments,
   createServerChildEnvironment,
   isCompatibleServerHealth,
 };

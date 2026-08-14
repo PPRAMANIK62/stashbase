@@ -36,10 +36,14 @@ after readiness, a save failure or timeout keeps the window open.
   membership still contains the folder.
 - A single-flight initial-window operation plus the single-instance lock
   prevents startup races from creating duplicate windows.
-- An Electron-owned source server is always launched with the development
-  runtime marker, regardless of whether `pnpm dev:server` or Electron wins the
-  loopback-port race. Packaged launches explicitly remove that marker. This
-  keeps development-only controls available without exposing them in a build.
+- An Electron-owned source server is always launched with the general
+  development-runtime marker, which keeps live Python sources and development
+  controls available. The narrower Vite marker is present only when a Vite
+  renderer is actually running; a direct source launch and the lifecycle smoke
+  serve the built renderer instead of proxying to an absent process. Those
+  non-Vite launches use the actual server as Electron's one child so shutdown
+  cannot orphan a listener behind a watch wrapper. Packaged launches explicitly
+  remove both markers.
 - Browser-owned OAuth returns focus only through the packaged `stashbase://`
   handler, which accepts the exact data-free `oauth-complete` authority.
   Renderer polling updates account state without racing that browser-owned

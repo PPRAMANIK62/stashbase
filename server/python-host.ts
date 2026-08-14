@@ -12,6 +12,7 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDevelopmentRuntime } from './development-runtime.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,13 +23,14 @@ export const PROJECT_ROOT = process.env.STASHBASE_APP_ROOT
 const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
   ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
   : PROJECT_ROOT;
+const DEVELOPMENT_RUNTIME = isDevelopmentRuntime();
 
 /** Absolute path to the Python interpreter to spawn. Honours
  *  `STASHBASE_PYTHON`, then the packaged runtime, then the dev venv,
  *  then bare `python3`. */
 export function pythonBin(): string {
   if (process.env.STASHBASE_PYTHON) return process.env.STASHBASE_PYTHON;
-  const packagedCandidates = process.env.STASHBASE_DEV_VITE
+  const packagedCandidates = DEVELOPMENT_RUNTIME
     ? []
     : [
         ...pythonCandidates(path.join(RESOURCES_ROOT, 'python', 'runtime')),
@@ -95,7 +97,7 @@ function pythonCandidates(root: string): string[] {
 }
 
 function resolvePackagedExtractBin(): string | undefined {
-  if (process.env.STASHBASE_DEV_VITE) return undefined;
+  if (DEVELOPMENT_RUNTIME) return undefined;
   const name = 'stashbase-extract';
   const exe = process.platform === 'win32' ? `${name}.exe` : name;
   const candidates = [
@@ -108,7 +110,7 @@ function resolvePackagedExtractBin(): string | undefined {
 }
 
 function isPackagedRuntime(): boolean {
-  return !process.env.STASHBASE_DEV_VITE && RESOURCES_ROOT !== PROJECT_ROOT;
+  return !DEVELOPMENT_RUNTIME && RESOURCES_ROOT !== PROJECT_ROOT;
 }
 
 function isSystemPythonFallback(cmd: string): boolean {

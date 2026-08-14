@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import * as React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { AgentView } from '../components/AgentView';
@@ -70,7 +70,7 @@ function buttonNamed(root: ReactTestInstance, label: string): ReactTestInstance 
   return button;
 }
 
-test('mounted AgentView ready → raw close renders recovery and reconnects with transcript + resume', async (t) => {
+async function mountAgentView(t: TestContext) {
   const previousWebSocket = globalThis.WebSocket;
   const previousWindow = globalThis.window;
   const previousLocation = globalThis.location;
@@ -125,7 +125,7 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   (globalThis as { React?: typeof React }).React = React;
 
-  let renderer: ReactTestRenderer;
+  let renderer!: ReactTestRenderer;
   await act(async () => {
     renderer = create(React.createElement(
       AppContext.Provider,
@@ -149,7 +149,11 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
     (globalThis as { React?: typeof React }).React = previousReact;
   });
 
-  const first = LifecycleWebSocket.instances[0]!;
+  return { renderer, first: LifecycleWebSocket.instances[0]! };
+}
+
+test('mounted AgentView ready → raw close renders recovery and reconnects with transcript + resume', async (t) => {
+  const { renderer, first } = await mountAgentView(t);
   await act(async () => {
     first.event({ t: 'ready' });
     first.event({ t: 'session-id', id: 'thread-123' });
@@ -158,7 +162,7 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
     first.event({ t: 'text', delta: String.raw` + 1\).` });
     first.event({ t: 'turn-end', isError: false });
   });
-  assert.match(renderedText(renderer!), /Streamed formula:.*x\^2.*1/);
+  assert.match(renderedText(renderer), /Streamed formula:.*x\^2.*1/);
 
   await act(async () => {
     first.event({ t: 'turn-start' });
@@ -167,7 +171,7 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
   });
   await act(async () => { first.close(); });
 
-  let output = renderedText(renderer!);
+  let output = renderedText(renderer);
   assert.match(output, /"role":"log"/);
   assert.match(output, /"aria-label":"Agent conversation"/);
   assert.match(output, /Partial answer survives/);
@@ -175,14 +179,14 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
   assert.match(output, /Reconnect/);
   assert.doesNotMatch(output, /Codex is working/);
   assert.doesNotMatch(output, /Running/);
-  assert.equal(renderer!.root.findByType(AgentComposer).props.effort.locked, true);
+  assert.equal(renderer.root.findByType(AgentComposer).props.effort.locked, true);
 
-  buttonNamed(renderer!.root, 'Reconnect');
-  await act(async () => { renderer!.root.findByType(MessageList).props.onRetry(); });
+  buttonNamed(renderer.root, 'Reconnect');
+  await act(async () => { renderer.root.findByType(MessageList).props.onRetry(); });
 
   assert.equal(LifecycleWebSocket.instances.length, 2);
   assert.match(LifecycleWebSocket.instances[1]!.url, /[?&]resume=thread-123(?:&|$)/);
-  output = renderedText(renderer!);
+  output = renderedText(renderer);
   assert.match(output, /Partial answer survives/);
   assert.doesNotMatch(output, /Codex disconnected unexpectedly/);
 
@@ -191,8 +195,49 @@ test('mounted AgentView ready → raw close renders recovery and reconnects with
     LifecycleWebSocket.instances[1]!.event({ t: 'exit', message: 'Codex app-server exited with code 9.' });
     LifecycleWebSocket.instances[1]!.close();
   });
-  output = renderedText(renderer!);
+  output = renderedText(renderer);
   assert.match(output, /Codex app-server exited with code 9/);
   assert.equal((output.match(/Codex app-server exited with code 9/g) ?? []).length, 1);
   assert.match(output, /Reconnect/);
+});
+
+test('edit-and-resend interrupts an active turn before starting the edited prompt', async (t) => {
+  const { renderer, first } = await mountAgentView(t);
+  await act(async () => {
+    first.event({ t: 'ready' });
+    renderer.root.findByType(AgentComposer).props.onSend('Original prompt');
+    first.event({ t: 'turn-start' });
+    first.event({ t: 'thinking', delta: 'Working on the original prompt' });
+  });
+
+  const sentBeforeResend = first.sent.length;
+  await act(async () => {
+    renderer.root.findByType(MessageList).props.onResendUserMessage('Edited prompt');
+  });
+
+  const resendWire = first.sent.slice(sentBeforeResend).map((entry) => JSON.parse(entry));
+  assert.deepEqual(resendWire, [{ t: 'interrupt' }]);
+  assert.deepEqual(renderer.root.findByType(MessageList).props.queuedTurns.map((turn: { text: string }) => turn.text), [
+    'Edited prompt',
+  ]);
+
+  await act(async () => {
+    first.event({ t: 'turn-end', isError: false });
+  });
+
+  const messages = renderer.root.findByType(MessageList).props;
+  assert.equal(messages.queuedTurns.length, 0);
+  assert.equal(messages.blocks.at(-1)?.kind, 'user');
+  assert.equal(messages.blocks.at(-1)?.text, 'Edited prompt');
+  assert.equal(messages.turnActive, true);
+  assert.deepEqual(JSON.parse(first.sent.at(-1)!), { t: 'prompt', text: 'Edited prompt' });
+
+  const output = renderedText(renderer);
+  const editedPosition = output.indexOf('Edited prompt');
+  const workingPosition = output.indexOf(' is working');
+  assert.match(output, /You stopped/);
+  assert.ok(
+    editedPosition >= 0 && workingPosition >= 0 && editedPosition < workingPosition,
+    JSON.stringify({ editedPosition, workingPosition }),
+  );
 });

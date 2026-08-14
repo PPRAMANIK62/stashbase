@@ -46,6 +46,8 @@
   consumes it, and an installation injection stays pending when an existing
   runtime skips installation. Settings presents these controls inside a
   visually distinct development-only surface; production omits the surface.
+  Availability follows the general development-runtime marker and does not
+  depend on whether the renderer is served through Vite.
 - A discovery, installation, or MCP failure is visible and retryable but never
   blocks the workspace or silently substitutes another Agent.
 
