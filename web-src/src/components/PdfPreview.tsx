@@ -75,6 +75,7 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(activeTab?.pdfPage ?? 1);
+  const programmaticPageRef = useRef<number | null>(null);
   const [scale, setScale] = useState(1);
   const [autoFit, setAutoFit] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +153,10 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
     const target = root?.querySelector(`[data-page="${page}"]`) as HTMLElement | null;
     if (!root || !target) return false;
     if (highlight !== undefined) setPageHighlight(highlight);
+    // During a smooth jump the viewport still crosses the old page. Keep that
+    // transient geometry from overwriting the requested tab position before
+    // the animation reaches its destination (or the user switches tabs).
+    programmaticPageRef.current = behavior === 'smooth' ? page : null;
     setCurrentPage(page);
     root.scrollTo({
       top: Math.max(0, target.offsetTop + yRatio * target.offsetHeight - root.clientHeight * anchor),
@@ -291,18 +296,29 @@ export function PdfPreview({ name, showConversionBanner = true }: { name: string
           return [{ page, top: rect.top, bottom: rect.bottom }];
         }),
       });
+      const programmaticPage = programmaticPageRef.current;
+      if (programmaticPage !== null) {
+        if (bestPage !== programmaticPage) return;
+        programmaticPageRef.current = null;
+      }
       setCurrentPage((prev) => (prev === bestPage ? prev : bestPage));
     };
     const schedule = () => {
       if (frame) return;
       frame = window.requestAnimationFrame(updateCurrentPage);
     };
+    const finishProgrammaticScroll = () => {
+      programmaticPageRef.current = null;
+      schedule();
+    };
     updateCurrentPage();
     root.addEventListener('scroll', schedule, { passive: true });
+    root.addEventListener('scrollend', finishProgrammaticScroll, { passive: true });
     window.addEventListener('resize', schedule);
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       root.removeEventListener('scroll', schedule);
+      root.removeEventListener('scrollend', finishProgrammaticScroll);
       window.removeEventListener('resize', schedule);
     };
   }, [doc, numPages, scale]);

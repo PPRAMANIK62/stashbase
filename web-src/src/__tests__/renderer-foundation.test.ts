@@ -173,6 +173,8 @@ test('PDF load and Find registration are independent of changing action-bag iden
   assert.match(pdf, /\}, \[fileUrl\]\);/);
   assert.match(pdf, /\[doc, numPages, registerFindController\]/);
   assert.match(pdf, /function scrollToPage[\s\S]*updateTabPdfPage\(activeTab\.id, targetPage\)/);
+  assert.match(pdf, /programmaticPageRef\.current = behavior === 'smooth' \? page : null/);
+  assert.match(pdf, /bestPage !== programmaticPage\) return/);
   assert.doesNotMatch(pdf, /\[fileUrl, actions\]/);
 });
 

@@ -38,8 +38,10 @@ forwarding, and script confinement.
 
 ## Format-specific Behavior
 
-- PDF uses source bytes and retains page position across tab activation. Scale
-  is bounded; worker and asset URLs retain window/folder identity.
+- PDF uses source bytes and retains page position across tab activation. A
+  programmatic smooth jump owns its requested page until the viewport reaches
+  it, so intermediate animation frames cannot overwrite the saved position.
+  Scale is bounded; worker and asset URLs retain window/folder identity.
 - DOCX fetches source bytes, parses in a renderer Worker, sanitizes output, and
   falls back to durable prepared HTML after a `20 s` direct-preview deadline.
   Server preparation has its own `60 s` worker deadline.
