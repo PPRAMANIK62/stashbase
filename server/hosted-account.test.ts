@@ -16,6 +16,7 @@ test('OAuth callback renders a safe centered card with delayed app return and fa
     message: 'Ready & returning',
     autoReturn: true,
     returnStatusUrl: '/api/account/oauth/status?flow=safe-flow',
+    returnIntentUrl: '/api/account/oauth/return-intent?flow=safe-flow',
   });
 
   assert.match(html, /class="shell"/);
@@ -24,6 +25,7 @@ test('OAuth callback renders a safe centered card with delayed app return and fa
   assert.match(html, /window\.location\.href = 'stashbase:\/\/oauth-complete'/);
   assert.match(html, /window\.close\(\)/);
   assert.match(html, /fetch\(returnStatusUrl/);
+  assert.match(html, /fetch\(returnIntentUrl, \{ method: 'POST'/);
   assert.match(html, /result\.appReturned === true/);
   assert.doesNotMatch(html, /addEventListener\('blur'/);
   assert.match(html, /Didn’t return automatically\?/);
@@ -49,6 +51,7 @@ test('a failed callback can receive app-return proof through an opaque local sta
     const account = await import('./server/hosted-account.ts');
     const flowId = account.createFailedHostedOAuthFlow('Missing sign-in flow.');
     const before = account.hostedOAuthStatus(flowId);
+    account.noteHostedOAuthReturnIntent(flowId);
     const acknowledged = account.noteHostedOAuthAppReturn();
     const after = account.hostedOAuthStatus(flowId);
     process.stdout.write(JSON.stringify({ flowId, before, acknowledged, after }));
@@ -58,8 +61,26 @@ test('a failed callback can receive app-return proof through an opaque local sta
   assert.match(output.flowId, /^[A-Za-z0-9_-]+$/);
   assert.equal(output.before.state, 'error');
   assert.equal(output.before.appReturned, undefined);
-  assert.equal(output.acknowledged, true);
+  assert.deepEqual(output.acknowledged, { acknowledged: true });
   assert.equal(output.after.appReturned, true);
+});
+
+test('a data-free native return focuses the window attached to the browser return intent', () => {
+  const result = runIsolated(`
+    const account = await import('./server/hosted-account.ts');
+    const first = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'window-one');
+    const second = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'window-two');
+    account.failHostedOAuth(first.flowId, 'first stopped');
+    account.failHostedOAuth(second.flowId, 'second stopped');
+    account.noteHostedOAuthReturnIntent(first.flowId);
+    const acknowledged = account.noteHostedOAuthAppReturn();
+    process.stdout.write(JSON.stringify({ acknowledged, first: account.hostedOAuthStatus(first.flowId), second: account.hostedOAuthStatus(second.flowId) }));
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(output.acknowledged, { acknowledged: true, windowId: 'window-one' });
+  assert.equal(output.first.appReturned, true);
+  assert.equal(output.second.appReturned, undefined);
 });
 
 function runIsolated(source: string) {

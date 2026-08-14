@@ -68,9 +68,11 @@ export interface HostedOAuthStatus {
 interface PendingOAuthFlow {
   provider: HostedOAuthProvider;
   verifier: string;
+  windowId?: string;
   createdAt: number;
   state: 'pending' | 'exchanged' | 'complete' | 'error';
   error?: string;
+  returnRequestedAt?: number;
   appReturnedAt?: number;
 }
 
@@ -135,7 +137,11 @@ function assertLoopbackCallbackOrigin(callbackOrigin: string): URL {
   return parsed;
 }
 
-export function beginHostedOAuth(provider: HostedOAuthProvider, callbackOrigin: string): HostedOAuthStart {
+export function beginHostedOAuth(
+  provider: HostedOAuthProvider,
+  callbackOrigin: string,
+  windowId?: string,
+): HostedOAuthStart {
   pruneOAuthFlows();
   const origin = assertLoopbackCallbackOrigin(callbackOrigin);
   const flowId = base64Url(crypto.randomBytes(24));
@@ -147,6 +153,7 @@ export function beginHostedOAuth(provider: HostedOAuthProvider, callbackOrigin: 
   pendingOAuthFlows.set(flowId, {
     provider,
     verifier,
+    ...(windowId?.trim() ? { windowId: windowId.trim().slice(0, 128) } : {}),
     createdAt: Date.now(),
     state: 'pending',
   });
@@ -201,18 +208,37 @@ export function createFailedHostedOAuthFlow(message: string): string {
   return flowId;
 }
 
+export function noteHostedOAuthReturnIntent(flowId: string, now = Date.now()): boolean {
+  pruneOAuthFlows(now);
+  const flow = pendingOAuthFlows.get(flowId);
+  if (!flow || (flow.state !== 'complete' && flow.state !== 'error')) return false;
+  flow.returnRequestedAt = now;
+  return true;
+}
+
 /** Electron calls this only after accepting the exact data-free deep link.
  * Callback pages poll their own flow state and close only after this proof,
  * never merely because the browser lost focus. */
-export function noteHostedOAuthAppReturn(now = Date.now()): boolean {
+export function noteHostedOAuthAppReturn(now = Date.now()): {
+  acknowledged: boolean;
+  windowId?: string;
+} {
   pruneOAuthFlows(now);
-  let updated = false;
-  for (const flow of pendingOAuthFlows.values()) {
-    if (flow.state !== 'complete' && flow.state !== 'error') continue;
-    flow.appReturnedAt = now;
-    updated = true;
-  }
-  return updated;
+  const candidates = [...pendingOAuthFlows.values()]
+    .filter((flow) => (
+      (flow.state === 'complete' || flow.state === 'error')
+      && !flow.appReturnedAt
+    ))
+    .sort((left, right) => (
+      (right.returnRequestedAt ?? right.createdAt) - (left.returnRequestedAt ?? left.createdAt)
+    ));
+  const flow = candidates.find((candidate) => candidate.returnRequestedAt) ?? candidates[0];
+  if (!flow) return { acknowledged: false };
+  flow.appReturnedAt = now;
+  return {
+    acknowledged: true,
+    ...(flow.windowId ? { windowId: flow.windowId } : {}),
+  };
 }
 
 export function failHostedOAuth(flowId: string, message: string): void {

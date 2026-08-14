@@ -11,7 +11,7 @@ import { mount as mountAccountRoutes } from './routes/account.ts';
 
 test('OAuth app-return proof requires the Electron process-private token', async (t) => {
   const app = express();
-  const flow = beginHostedOAuth('google', 'http://127.0.0.1:8090');
+  const flow = beginHostedOAuth('google', 'http://127.0.0.1:8090', 'window-one');
   failHostedOAuth(flow.flowId, 'expected test failure');
   mountAccountRoutes(app, { appReturnToken: 'private-return-token' });
 
@@ -25,6 +25,12 @@ test('OAuth app-return proof requires the Electron process-private token', async
   assert.equal((await fetch(url, { method: 'POST' })).status, 403);
   assert.equal(hostedOAuthStatus(flow.flowId).appReturned, undefined);
 
+  const intent = await fetch(
+    `http://127.0.0.1:${address.port}/api/account/oauth/return-intent?flow=${flow.flowId}`,
+    { method: 'POST' },
+  );
+  assert.equal(intent.status, 200);
+
   assert.equal((await fetch(url, {
     method: 'POST',
     headers: { 'x-stashbase-oauth-return-token': 'wrong-token' },
@@ -36,6 +42,6 @@ test('OAuth app-return proof requires the Electron process-private token', async
     headers: { 'x-stashbase-oauth-return-token': 'private-return-token' },
   });
   assert.equal(accepted.status, 200);
-  assert.deepEqual(await accepted.json(), { acknowledged: true });
+  assert.deepEqual(await accepted.json(), { acknowledged: true, windowId: 'window-one' });
   assert.equal(hostedOAuthStatus(flow.flowId).appReturned, true);
 });

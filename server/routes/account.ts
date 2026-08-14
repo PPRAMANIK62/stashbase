@@ -12,6 +12,7 @@ import {
   hostedAccountState,
   hostedOAuthStatus,
   noteHostedOAuthAppReturn,
+  noteHostedOAuthReturnIntent,
   signOutHostedAccount,
   type HostedOAuthProvider,
 } from '../hosted-account.ts';
@@ -21,6 +22,7 @@ import { oauthResultPage } from '../oauth-result-page.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from '../state.ts';
 import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { processPrivateTokenMatches } from '../process-private-token.ts';
+import { currentWindowId } from '../folder.ts';
 
 const log = logger('routes/account');
 const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google']);
@@ -67,7 +69,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     try {
       const provider = oauthProvider(req.body?.provider ?? 'google');
       if (!provider) return res.status(400).json({ error: 'Unsupported sign-in provider.' });
-      res.json(beginHostedOAuth(provider, callbackOrigin(req)));
+      res.json(beginHostedOAuth(provider, callbackOrigin(req), currentWindowId()));
     } catch (error: unknown) {
       res.status(400).json({ error: errorMessage(error) });
     }
@@ -87,6 +89,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
         message,
         kind: 'error',
         returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(failedFlowId)}`,
+        returnIntentUrl: `/api/account/oauth/return-intent?flow=${encodeURIComponent(failedFlowId)}`,
       }));
     }
     if (providerError) {
@@ -94,6 +97,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       return res.status(400).type('html').send(oauthResultPage({
         title: 'Sign-in failed', message: providerError, kind: 'error',
         returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,
+        returnIntentUrl: `/api/account/oauth/return-intent?flow=${encodeURIComponent(flowId)}`,
       }));
     }
     try {
@@ -106,6 +110,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
         message: 'Your account is ready. This page will return you to the app automatically.',
         autoReturn: true,
         returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,
+        returnIntentUrl: `/api/account/oauth/return-intent?flow=${encodeURIComponent(flowId)}`,
       }));
     } catch (error: unknown) {
       const message = errorMessage(error);
@@ -113,6 +118,7 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       res.status(400).type('html').send(oauthResultPage({
         title: 'Sign-in failed', message, kind: 'error',
         returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,
+        returnIntentUrl: `/api/account/oauth/return-intent?flow=${encodeURIComponent(flowId)}`,
       }));
     }
   });
@@ -123,11 +129,19 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     res.json(hostedOAuthStatus(flowId));
   });
 
+  app.post('/api/account/oauth/return-intent', (req, res) => {
+    const flowId = typeof req.query.flow === 'string' ? req.query.flow : '';
+    if (!flowId || !noteHostedOAuthReturnIntent(flowId)) {
+      return res.status(404).json({ error: 'Sign-in flow is unavailable.' });
+    }
+    res.json({ accepted: true });
+  });
+
   app.post('/api/account/oauth/app-return', (req, res) => {
     if (!processPrivateTokenMatches(req.header(OAUTH_RETURN_TOKEN_HEADER), appReturnToken)) {
       return res.status(403).json({ error: 'forbidden' });
     }
-    res.json({ acknowledged: noteHostedOAuthAppReturn() });
+    res.json(noteHostedOAuthAppReturn());
   });
 
   app.put('/api/account/source', async (_req, res) => {

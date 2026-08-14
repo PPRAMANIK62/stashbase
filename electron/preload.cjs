@@ -72,8 +72,6 @@ contextBridge.exposeInMainWorld('electron', {
    *  be reliable, and the system browser already has user cookies. */
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   reportBug: () => ipcRenderer.invoke('bug-report:open'),
-  /** Restore and focus this window after a browser-owned OAuth flow. */
-  focusWindow: () => ipcRenderer.invoke('window:focus-self'),
   openFolderWindow: (name) => ipcRenderer.invoke('window:openFolder', name),
   /** Keep the main-process folder → BrowserWindow registry current so
    *  "Open in New Window" can focus an existing matching context. */

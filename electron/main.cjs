@@ -33,7 +33,6 @@ const {
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
-  focusAllowedSenderWindow,
   focusWindow,
   isOAuthReturnUrl,
   isStashBaseProtocolUrl,
@@ -1001,23 +1000,6 @@ ipcMain.handle('bug-report:open', async (event) => {
   return true;
 });
 
-// OAuth completion is observed by the initiating renderer through an opaque
-// local flow status. Let only that live main window bring itself back from the
-// system browser; this channel cannot focus arbitrary or auxiliary windows.
-ipcMain.handle('window:focus-self', (event) => {
-  const senderWindow = focusAllowedSenderWindow({
-    BrowserWindow,
-    sender: event.sender,
-    isAllowed: isLiveMainWindow,
-    beforeFocus: () => {
-      if (process.platform === 'darwin') app.focus({ steal: true });
-    },
-  });
-  if (!senderWindow) return false;
-  lastMainWindow = senderWindow;
-  return true;
-});
-
 ipcMain.handle('window:setFolder', (event, folder) => {
   if (folder !== null && (typeof folder !== 'string' || !folder.trim())) return false;
   const senderWindow = BrowserWindow.fromWebContents(event.sender);
@@ -1126,11 +1108,6 @@ const initialWindowFlight = createSingleFlight(() => app.whenReady().then(() => 
 
 function focusOAuthReturn() {
   void app.whenReady().then(async () => {
-    if (process.platform === 'darwin') app.focus({ steal: true });
-    if (!focusLastMainWindow()) {
-      await initialWindowFlight.run();
-      focusLastMainWindow();
-    }
     const acknowledged = await requestJson(SERVER_PORT, '/api/account/oauth/app-return', 1000, {
       method: 'POST',
       headers: {
@@ -1138,7 +1115,22 @@ function focusOAuthReturn() {
         'x-stashbase-oauth-return-token': OAUTH_RETURN_TOKEN,
       },
     });
-    if (!acknowledged.ok) console.warn('[electron] could not acknowledge OAuth return to the callback page');
+    if (!acknowledged.reachable || acknowledged.statusCode !== 200) {
+      console.warn('[electron] could not acknowledge OAuth return to the callback page');
+    }
+    if (process.platform === 'darwin') app.focus({ steal: true });
+    const targetId = typeof acknowledged.body?.windowId === 'string'
+      ? acknowledged.body.windowId
+      : null;
+    const target = targetId ? windowRegistry.windowForId(targetId) : null;
+    if (isLiveMainWindow(target) && focusWindow(target)) {
+      lastMainWindow = target;
+      return;
+    }
+    if (!focusLastMainWindow()) {
+      await initialWindowFlight.run();
+      focusLastMainWindow();
+    }
   });
 }
 

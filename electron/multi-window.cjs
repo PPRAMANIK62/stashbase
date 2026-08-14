@@ -155,6 +155,9 @@ function createWindowRegistry({ platform = process.platform } = {}) {
       }
       return null;
     },
+    windowForId(windowId) {
+      return records.get(windowId)?.win ?? null;
+    },
     setFolder(windowId, folder) {
       const record = records.get(windowId);
       if (!record) return false;
@@ -186,13 +189,6 @@ function focusWindow(win) {
   win.show();
   win.focus();
   return true;
-}
-
-function focusAllowedSenderWindow({ BrowserWindow, sender, isAllowed, beforeFocus }) {
-  const win = BrowserWindow.fromWebContents(sender);
-  if (!win || !isAllowed(win)) return null;
-  beforeFocus?.(win);
-  return focusWindow(win) ? win : null;
 }
 
 function isOAuthReturnUrl(value) {
@@ -371,7 +367,6 @@ module.exports = {
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
-  focusAllowedSenderWindow,
   focusWindow,
   isOAuthReturnUrl,
   isStashBaseProtocolUrl,

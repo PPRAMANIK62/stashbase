@@ -49,7 +49,10 @@ test('account Sign in immediately opens one Supabase Google OAuth flow without a
         null,
         createElement(AccountSignInForm, { onSignedIn: () => undefined }),
       ));
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        if (JSON.stringify(mounted.renderer?.toJSON()).includes('Test flow finished.')) break;
+      }
     });
 
     assert.equal(requests[0]?.url, '/api/account/oauth/start');
@@ -65,7 +68,6 @@ test('account Sign in immediately opens one Supabase Google OAuth flow without a
 });
 
 test('completed browser sign-in leaves native return to the authenticated callback deep link', async () => {
-  let focusRequests = 0;
   let signedInEmail: string | undefined;
   const originalWindow = globalThis.window;
   const originalFetch = globalThis.fetch;
@@ -76,12 +78,7 @@ test('completed browser sign-in leaves native return to the authenticated callba
       constructor(public type: string) {}
     },
     window: {
-      electron: {
-        focusWindow: async () => {
-          focusRequests += 1;
-          return true;
-        },
-      },
+      electron: {},
       sessionStorage: {
         getItem: () => null,
         setItem: () => undefined,
@@ -119,10 +116,11 @@ test('completed browser sign-in leaves native return to the authenticated callba
       renderer = create(createElement(AccountSignInForm, {
         onSignedIn: (account) => { signedInEmail = account.email; },
       }));
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      for (let attempt = 0; attempt < 10 && !signedInEmail; attempt += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
     });
 
-    assert.equal(focusRequests, 0);
     assert.equal(signedInEmail, 'person@example.com');
   } finally {
     if (renderer) await act(async () => renderer?.unmount());

@@ -12,16 +12,19 @@ export function oauthResultPage({
   kind = 'success',
   autoReturn = false,
   returnStatusUrl,
+  returnIntentUrl,
 }: {
   title: string;
   message: string;
   kind?: 'success' | 'error';
   autoReturn?: boolean;
   returnStatusUrl?: string;
+  returnIntentUrl?: string;
 }): string {
   const safeTitle = escapeHtml(title);
   const safeMessage = escapeHtml(message);
   const returnStatusJson = JSON.stringify(returnStatusUrl ?? '').replace(/</g, '\\u003c');
+  const returnIntentJson = JSON.stringify(returnIntentUrl ?? '').replace(/</g, '\\u003c');
   const isSuccess = kind === 'success';
   const icon = isSuccess
     ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.4 12.1 3 3L16.8 8.7"/></svg>'
@@ -84,6 +87,7 @@ export function oauthResultPage({
       const status = document.getElementById('return-status');
       const autoReturn = card.dataset.autoReturn === 'true';
       const returnStatusUrl = ${returnStatusJson};
+      const returnIntentUrl = ${returnIntentJson};
       let handedOff = false;
       let returnAttempted = false;
 
@@ -119,7 +123,19 @@ export function oauthResultPage({
         }, 1600);
       };
 
-      button.addEventListener('click', beginReturnAttempt);
+      const openStashBase = async () => {
+        beginReturnAttempt();
+        if (returnIntentUrl) {
+          try { await fetch(returnIntentUrl, { method: 'POST', cache: 'no-store' }); }
+          catch { /* the native fallback can still open the app */ }
+        }
+        window.location.href = '${APP_RETURN_URL}';
+      };
+
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        void openStashBase();
+      });
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') void pollAcknowledgement();
       });
@@ -127,8 +143,7 @@ export function oauthResultPage({
       if (!autoReturn) return;
       window.setTimeout(() => {
         if (!handedOff && document.visibilityState === 'visible' && document.hasFocus()) {
-          beginReturnAttempt();
-          window.location.href = '${APP_RETURN_URL}';
+          void openStashBase();
         }
       }, 1200);
       window.setTimeout(() => {
