@@ -34,7 +34,7 @@ function runConfigWrite(home: string) {
     {
       cwd: repoRoot,
       encoding: 'utf8',
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, USERPROFILE: home },
     },
   );
 }
@@ -61,7 +61,7 @@ function runConfigMutation(home: string, statement: string) {
     {
       cwd: repoRoot,
       encoding: 'utf8',
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, USERPROFILE: home },
     },
   );
 }

@@ -96,7 +96,7 @@ function runIsolated(source: string) {
     ], {
       cwd: repoRoot,
       encoding: 'utf8',
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, USERPROFILE: home },
       timeout: 15_000,
     });
   } finally {
