@@ -104,6 +104,11 @@ test('two isolated fixtures can run real Electron apps simultaneously', async ({
 test('a real server bind failure preserves diagnostics and leaves no Electron descendant', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'empty' });
   const blocker = net.createServer();
+  const blockerConnections = new Set<net.Socket>();
+  blocker.on('connection', (socket) => {
+    blockerConnections.add(socket);
+    socket.once('close', () => blockerConnections.delete(socket));
+  });
   await new Promise<void>((resolve, reject) => {
     blocker.once('error', reject);
     blocker.listen(fixture.port, '127.0.0.1', resolve);
@@ -112,6 +117,7 @@ test('a real server bind failure preserves diagnostics and leaves no Electron de
     await expect(launchApp(fixture, testInfo, { readinessTimeoutMs: 5_000 })).rejects.toThrow();
     expect(testInfo.attachments.map((attachment) => attachment.name)).toContain('electron-output');
   } finally {
+    for (const socket of blockerConnections) socket.destroy();
     await new Promise<void>((resolve, reject) => blocker.close((error) => error ? reject(error) : resolve()));
     await assertPortAvailable(fixture.port);
     await fixture.cleanup();
