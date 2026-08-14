@@ -5,7 +5,10 @@ import { Window } from 'happy-dom';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { createJsonEditor, jsonTreeHighlightPath, makeJsonTreeFindController, textMatches } from '../components/JsonDocument';
+import {
+  createJsonEditor, fromJsonEditorText, jsonTreeHighlightPath, makeJsonTreeFindController,
+  textMatches, toJsonEditorText,
+} from '../components/JsonDocument';
 import { analyzeJsonSource } from '../components/json/sourceModel';
 import { directTreeSearchPatch } from '../components/json/JsonTreeView';
 import { JsonDocument } from '../components/JsonDocument';
@@ -28,6 +31,14 @@ test('JSON Find supports case and whole-word matching without parsing source', (
     { from: 2, to: 7 },
     { from: 31, to: 36 },
   ]);
+});
+
+test('JSON tree/editor boundary preserves the source line-ending convention', () => {
+  const crlf = '\uFEFF{\r\n  "value": true\r\n}\r\n';
+  const editorText = toJsonEditorText(crlf);
+  assert.equal(editorText, '\uFEFF{\n  "value": true\n}\n');
+  assert.equal(fromJsonEditorText(editorText.replace('true', 'false'), 'crlf'), '\uFEFF{\r\n  "value": false\r\n}\r\n');
+  assert.equal(fromJsonEditorText(editorText.replace('true', 'false'), 'cr'), '\uFEFF{\r  "value": false\r}\r');
 });
 
 test('JSON Tree Find searches keys and scalar lexemes and exposes the selected path', () => {

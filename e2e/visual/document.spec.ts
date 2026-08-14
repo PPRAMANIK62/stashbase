@@ -39,8 +39,8 @@ test('Markdown reading, writing, and valid JSON keep distinct document surfaces'
     await setVisualViewport(page, 1280, 820);
     await openFixtureFile(page, 'data.json');
     const json = page.getByRole('region', { name: 'JSON document' });
-    await expect(json.locator('.cm-editor')).toBeVisible();
-    await expect(json.locator('.cm-content')).toContainText('"fixture": "alpha"');
+    await expect(json.getByRole('tree', { name: 'JSON values' })).toBeVisible();
+    await expect(json.getByRole('treeitem').filter({ hasText: '"fixture"' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Switch to Live Editing' })).toBeVisible();
     await expectLinuxScreenshot(page, 'json-reading-dark.png');
   } finally {

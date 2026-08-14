@@ -14,6 +14,22 @@ interface RetainedJsonSession { tree: JsonTreeSessionState; viewMode: 'tree' | '
 const retainedJsonSessions = new Map<string, RetainedJsonSession>();
 
 type LiveFindController = FindController & { refresh: () => MatchInfo };
+type JsonLineEnding = 'crlf' | 'cr' | 'lf';
+
+function jsonLineEndingFor(source: string): JsonLineEnding {
+  if (source.includes('\r\n')) return 'crlf';
+  return source.includes('\r') ? 'cr' : 'lf';
+}
+
+/** CodeMirror stores line breaks as LF; JSON source still saves in its input convention. */
+export function toJsonEditorText(source: string): string {
+  return source.replace(/\r\n?/gu, '\n');
+}
+
+export function fromJsonEditorText(source: string, lineEnding: JsonLineEnding): string {
+  if (lineEnding === 'lf') return source;
+  return source.replace(/\n/gu, lineEnding === 'crlf' ? '\r\n' : '\r');
+}
 
 export const stashbaseJsonHighlightStyle = HighlightStyle.define([
   { tag: tags.propertyName, class: 'cm-json-property' },
@@ -135,6 +151,7 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
   });
   const analysis = useMemo(() => analyzeJsonSource(source), [source]);
   const sourceRef = useRef(source);
+  const lineEndingRef = useRef(jsonLineEndingFor(content));
   const treeSessionRef = useRef(treeSession);
   sourceRef.current = source;
   treeSessionRef.current = treeSession;
@@ -146,7 +163,7 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
       content,
       readOnly,
       onUserChange: actions.scheduleSave,
-      onContentChange: setSource,
+      onContentChange: (next) => setSource(fromJsonEditorText(next, lineEndingRef.current)),
       onFindInfo: (info) => dispatch({ type: 'FIND_SET', patch: info }),
     });
     sessionRef.current = session;
@@ -166,7 +183,7 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
     session.setReadOnly(readOnly);
     if (!readOnly && active) {
       actions.registerEditor({
-        getValue: () => session.view.state.doc.toString(),
+        getValue: () => fromJsonEditorText(session.view.state.doc.toString(), lineEndingRef.current),
         focus: () => session.view.focus(),
       });
     } else {
@@ -176,6 +193,7 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
 
   useEffect(() => {
     if (activeTab?.dirty) return;
+    lineEndingRef.current = jsonLineEndingFor(content);
     sessionRef.current?.replaceFromDisk(content);
     setSource(content);
   }, [activeTab?.dirty, content]);
@@ -233,13 +251,13 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
     const view = sessionRef.current?.view;
     if (!view || next === source) return;
     const current = view.state.doc.toString();
-    const normalized = next.replace(/\r\n?/gu, '\n');
+    const editorText = toJsonEditorText(next);
     let from = 0;
-    while (from < current.length && from < normalized.length && current[from] === normalized[from]) from++;
+    while (from < current.length && from < editorText.length && current[from] === editorText[from]) from++;
     let currentTo = current.length;
-    let nextTo = normalized.length;
-    while (currentTo > from && nextTo > from && current[currentTo - 1] === normalized[nextTo - 1]) { currentTo--; nextTo--; }
-    view.dispatch({ changes: { from, to: currentTo, insert: normalized.slice(from, nextTo) } });
+    let nextTo = editorText.length;
+    while (currentTo > from && nextTo > from && current[currentTo - 1] === editorText[nextTo - 1]) { currentTo--; nextTo--; }
+    view.dispatch({ changes: { from, to: currentTo, insert: editorText.slice(from, nextTo) } });
   };
 
   return <div className="json-document min-h-0 overflow-hidden" data-tab-id={tabId} role="region" aria-label="JSON document" hidden={!active}>
