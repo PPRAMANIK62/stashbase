@@ -10,6 +10,10 @@ import type {
   ApiKeySaveResult,
   EmbedderState,
   EmbedderProvider,
+  HostedAccountState,
+  HostedOAuthProvider,
+  HostedOAuthStart,
+  HostedOAuthStatus,
   FileBody,
   FilesPayload,
   FolderState,
@@ -274,6 +278,15 @@ export const api = {
     send<{ ok: true }>('DELETE', `/api/transcription/models/${encodeURIComponent(id)}`),
   // Embedder ----------------------------------------------------
   getEmbedder: () => getJson<EmbedderState>('/api/embedder'),
+  useApiKeySource: (provider: EmbedderProvider) =>
+    send<EmbedderState>('PUT', '/api/embedder/source', { provider }),
+  getAccount: (refresh = false) => getJson<HostedAccountState>(`/api/account${refresh ? '?refresh=1' : ''}`),
+  startAccountOAuth: (provider: HostedOAuthProvider = 'google') =>
+    send<HostedOAuthStart>('POST', '/api/account/oauth/start', { provider }),
+  getAccountOAuthStatus: (flowId: string) =>
+    getJson<HostedOAuthStatus>(`/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`),
+  useAccountAllowance: () => send<HostedAccountState>('PUT', '/api/account/source'),
+  signOutAccount: () => send<HostedAccountState>('DELETE', '/api/account'),
 
   // Agents (chat-panel CLIs) -----------------------------------
   // Server routes stay under `/api/terminal/*` for historical reasons;

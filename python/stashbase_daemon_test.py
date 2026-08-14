@@ -252,6 +252,44 @@ class StashbaseDaemonTests(unittest.TestCase):
             },
         )
 
+    def test_stashbase_embedder_marks_query_purpose_for_loopback_broker(self) -> None:
+        captured = {}
+
+        class FakeEmbeddings:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                return types.SimpleNamespace(data=[types.SimpleNamespace(embedding=[1.0, 0.0])])
+
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                captured["client"] = kwargs
+                self.embeddings = FakeEmbeddings()
+
+        fake_openai = types.SimpleNamespace(
+            OpenAI=FakeOpenAIClient,
+            APITimeoutError=type("APITimeoutError", (Exception,), {}),
+            APIConnectionError=type("APIConnectionError", (Exception,), {}),
+            RateLimitError=type("RateLimitError", (Exception,), {}),
+            InternalServerError=type("InternalServerError", (Exception,), {}),
+        )
+        previous = sys.modules.get("openai")
+        sys.modules["openai"] = fake_openai
+        try:
+            embedder = stashbase_daemon.make_embedder(
+                "stashbase",
+                api_key="loopback-secret",
+                base_url="http://127.0.0.1:1234/v1",
+            )
+            self.assertEqual(embedder.embed(["query"], purpose="query"), [[1.0, 0.0]])
+        finally:
+            if previous is None:
+                sys.modules.pop("openai", None)
+            else:
+                sys.modules["openai"] = previous
+
+        self.assertEqual(captured["client"]["api_key"], "loopback-secret")
+        self.assertEqual(captured["extra_headers"], {"X-StashBase-Purpose": "query"})
+
     def test_index_listing_pages_past_1000_rows_without_primary_key_order(self) -> None:
         try:
             import milvus_lite  # noqa: F401

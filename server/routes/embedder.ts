@@ -11,13 +11,21 @@ import express from 'express';
 import { logger, errorMessage } from '../log.ts';
 import { getCurrentFolder } from '../folder.ts';
 import {
+  getEmbeddingSource,
   getEmbedderConfig,
+  isEmbeddingConfigured,
   isEmbedderProvider,
   setApiKey,
+  setEmbeddingSource,
 } from '../app-config.ts';
 import type { EmbedderProvider } from '../app-config.ts';
+import {
+  isEmbeddingAvailable,
+  shouldReconcileAfterEmbeddingSourceChange,
+} from '../embedding-availability.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from '../state.ts';
 import { sendError, validateEmbedderKey } from '../http.ts';
+import { hostedAccountState } from '../hosted-account.ts';
 
 const log = logger('routes/embedder');
 
@@ -32,12 +40,17 @@ function providerLabel(provider: EmbedderProvider): string {
 
 export function mount(app: express.Express): void {
   // Embedder status: active provider + whether a key is configured.
-  app.get('/api/embedder', (_req, res) => {
+  app.get('/api/embedder', async (_req, res) => {
     const cfg = getEmbedderConfig();
+    const source = getEmbeddingSource();
+    const account = await hostedAccountState(source === 'stashbase-account');
     res.json({
       provider: cfg.provider,
       hasKey: !!cfg.apiKey,
+      authorized: isEmbeddingConfigured(),
+      source,
       model: cfg.model,
+      account,
     });
   });
 
@@ -59,7 +72,12 @@ export function mount(app: express.Express): void {
     const check = await validateEmbedderKey(provider, key);
     const warning = check.ok ? undefined : check.error;
     if (!check.ok && check.status < 500) return res.status(check.status).json({ error: check.error });
-    const shouldBackfill = !current.apiKey;
+    const previousSource = getEmbeddingSource();
+    const shouldBackfill = shouldReconcileAfterEmbeddingSourceChange(
+      previousSource,
+      provider,
+      isEmbeddingAvailable(),
+    );
     try {
       setApiKey(key, provider);
     } catch (err: unknown) {
@@ -85,11 +103,41 @@ export function mount(app: express.Express): void {
     const saved = getEmbedderConfig();
     res.json({
       hasKey: true,
+      authorized: true,
+      source: saved.provider,
       provider: saved.provider,
       model: saved.model,
       backfillStarted: shouldBackfill,
       ...(warning ? { warning } : {}),
     });
+  });
+
+  app.put('/api/embedder/source', async (req, res) => {
+    const cfg = getEmbedderConfig();
+    const provider = parseProvider(req.body?.provider, cfg.provider);
+    if (!provider) return res.status(400).json({ error: 'unknown embedder provider' });
+    if (!cfg.apiKey || cfg.provider !== provider) {
+      return res.status(400).json({ error: `Add a ${providerLabel(provider)} key before selecting it.` });
+    }
+    try {
+      setEmbeddingSource(provider);
+      await resetIndexerRuntime({ forgetBindings: true });
+      await bootBindAllFolders();
+      void reconcileLibraryFolders(`${providerLabel(provider)} source selected`)
+        .catch((err: unknown) => {
+          log.warn(`source selected: semantic reconcile failed: ${errorMessage(err)}`);
+        });
+      res.json({
+        provider,
+        hasKey: true,
+        authorized: true,
+        source: provider,
+        model: getEmbedderConfig().model,
+        account: await hostedAccountState(false),
+      });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
   });
 
   // Wipe the active embedding key. New embed / search calls will no-op
@@ -108,6 +156,13 @@ export function mount(app: express.Express): void {
       log.warn(`key delete: runtime reset failed: ${errorMessage(err)}`);
     }
     const cfg = getEmbedderConfig();
-    res.json({ hasKey: false, provider: cfg.provider, model: cfg.model });
+    res.json({
+      hasKey: false,
+      authorized: isEmbeddingConfigured(),
+      source: getEmbeddingSource(),
+      provider: cfg.provider,
+      model: cfg.model,
+      account: await hostedAccountState(false),
+    });
   });
 }

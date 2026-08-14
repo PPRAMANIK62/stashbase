@@ -73,7 +73,7 @@ const CALL_TIMEOUT_MS = 10 * 60_000;
 const READY_TIMEOUT_MS = 90_000;
 
 export interface BindFolderArgs {
-  provider: 'openai' | 'openrouter';
+  provider: 'openai' | 'openrouter' | 'stashbase';
   apiKey?: string;
   model?: string;
   dimension?: number;

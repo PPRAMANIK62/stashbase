@@ -76,16 +76,23 @@ current truth.
 the visible source.
 
 1. Open library search and enter a query.
-2. Use exact text without AI Index, or meaning-based search when configured.
-3. Optionally narrow to one member folder.
-4. Review grouped evidence and readiness guidance. Whole-token search does not
+2. Use exact text without AI Index, or configure meaning-based search by
+   signing in through Supabase with Google for the included allowance, or
+   supplying an OpenAI/OpenRouter key. A completed browser sign-in returns to
+   the initiating StashBase window automatically when the OS permits it; the
+   callback card offers **Open StashBase** when automatic return is blocked.
+3. When using the hosted allowance, inspect its remaining percentage and reset
+   date from the account menu; indexing and queries share that allowance.
+4. Optionally narrow to one member folder.
+5. Review grouped evidence and readiness guidance. Whole-token search does not
    hide a later eligible result merely because a file contains earlier
    substring-only hits.
-5. Open the result without exposing a hidden derived artifact or unexpectedly
+6. Open the result without exposing a hidden derived artifact or unexpectedly
    replacing the window's active folder.
 
-Important recovery: partial preparation, stale index state, and provider
-failure are distinguishable from an empty result.
+Important recovery: partial preparation, stale index state, provider failure,
+and hosted quota exhaustion are distinguishable from an empty result. Exact
+search remains available when hosted semantic work cannot continue.
 
 ## J06: Start and continue an Agent chat
 

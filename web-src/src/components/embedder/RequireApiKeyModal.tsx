@@ -35,6 +35,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { SegmentedControl, SegmentedControlItem } from '../ui/segmented-control';
 import { StatusMessage } from '../ui/status';
+import { AccountSignInForm } from '../account/AccountSignInForm';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string }> = {
   openai: {
@@ -51,10 +52,11 @@ const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeh
 
 const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
 
-type View = 'choice' | 'key';
+type View = 'choice' | 'signin' | 'key';
 
 const TITLES: Record<View, string> = {
   choice: 'Set up AI Index',
+  signin: 'Sign in to StashBase',
   key: 'Add your API key',
 };
 
@@ -64,6 +66,7 @@ const TITLES: Record<View, string> = {
  * of this screen running two lines deep. */
 const DESCRIPTIONS: Record<View, string> = {
   choice: 'Help Agents find context across your files.',
+  signin: 'Use your free monthly AI Index allowance.',
   key: 'Paste an OpenAI or OpenRouter key.',
 };
 
@@ -71,11 +74,13 @@ export function RequireApiKeyModal({
   initialProvider = 'openai',
   isTopmost,
   onSaved,
+  onSignedIn,
   onSkip,
 }: {
   initialProvider?: EmbedderProvider;
   isTopmost: boolean;
   onSaved: (provider: EmbedderProvider, model: string, backfillStarted?: boolean, warning?: string) => void;
+  onSignedIn: (backfillStarted?: boolean) => void;
   onSkip: () => void;
 }) {
   const [provider, setProvider] = useState<EmbedderProvider>(initialProvider);
@@ -133,8 +138,18 @@ export function RequireApiKeyModal({
       {view === 'choice' && (
         <div ref={choiceRef} tabIndex={-1} className="outline-none">
           <EmbeddingAuthChoice
+            onSignIn={() => setView('signin')}
             onUseOwnKey={() => setView('key')}
             onSkip={onSkip}
+          />
+        </div>
+      )}
+
+      {view === 'signin' && (
+        <div ref={choiceRef} tabIndex={-1} className="outline-none">
+          <AccountSignInForm
+            onBack={() => setView('choice')}
+            onSignedIn={(account) => onSignedIn(account.backfillStarted)}
           />
         </div>
       )}

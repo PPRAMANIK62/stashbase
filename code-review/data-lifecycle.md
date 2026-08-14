@@ -74,6 +74,16 @@ For one folder it must:
 No-op reconcile spends no embedding work. Without an embedding source it still
 maintains prepared text and exact retrieval.
 
+Adding or removing a BYOK key, signing in or out, or explicitly switching the
+embedding source resets and rebinds the single daemon so stale runtime
+credentials cannot survive. Compatible vectors remain reusable. Hosted index
+and query calls carry distinct purpose labels but consume one quota ledger;
+quota exhaustion disables only hosted semantic work and never exact retrieval.
+The availability gate is checked before and between embedding calls so one
+quota response stops the remainder of a batch. Pending work remains
+reconcilable and resumes after a quota refresh/reset or an available source
+switch.
+
 Large semantic workloads use the same authoritative content-hash diff. Known
 stale rows become unavailable before a durable awaiting/paused decision is
 published. A pause never delays browsing, preparation, editing, or exact

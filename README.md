@@ -76,7 +76,7 @@ For a portable build, download `StashBase-*-linux-*.AppImage`, make it executabl
 When you open StashBase for the first time:
 
 1. **Open a folder**: Click the folder icon to choose a local folder containing files you want to search
-2. **(Optional) Set up AI Index**: To search by meaning and give Agents better retrieval, add an OpenAI or OpenRouter API key in **Settings → AI Index**. An OpenAI restricted key needs access only to embeddings with `text-embedding-3-small`; model-list access is not required.
+2. **(Optional) Set up AI Index**: To search by meaning and give Agents better retrieval, sign in through Supabase with Google for the included monthly allowance, or add an OpenAI/OpenRouter key in **Settings → AI Index**. An OpenAI restricted key needs access only to embeddings with `text-embedding-3-small`; model-list access is not required.
 3. **(Optional) Set up transcription**: To transcribe audio or video, download a speech model from **Settings → Transcription**. Small (465 MiB) is the default; Tiny (74 MiB) and Base (141 MiB) are lighter options. Transcription runs entirely on your machine, with no API cost, and you can cancel or rerun it while viewing the file
 4. **(Optional) Connect to Claude/Codex**: From **Settings → MCP**, connect external AI tools to access your searchable library
 5. **Start in Chat**: Chat is already open with one reusable blank session.
@@ -87,7 +87,7 @@ When you open StashBase for the first time:
 
 Your library is **opt-in**: only folders you open in StashBase are indexed. You can remove a folder at any time; StashBase clears its index but never deletes your files from disk.
 
-> Haven't set up AI Index? In-app exact text search still works. Join our [Discord](https://discord.gg/zsRZH4PTq9) to ask about evaluation access.
+> Haven't set up AI Index, or used the hosted allowance? In-app exact text search still works.
 
 ### Updating and Uninstalling
 
@@ -164,6 +164,10 @@ StashBase builds its AI Index and exact text search over:
 - timestamped transcripts from audio and video
 
 Search results point back to the user-visible source file, not hidden app data.
+
+Hosted indexing and meaning-based queries share one monthly token allowance.
+The avatar menu shows the remaining percentage and reset date. If the hosted
+allowance runs out, Exact search and all local file workflows keep working.
 
 Background preparation is intentionally quiet. Browsing a folder should feel like browsing files, not watching an indexing job. If preparation fails, StashBase shows a lightweight failure marker and lets you retry. Readiness matters most when you search, so that is where StashBase shows how much of your content is ready.
 

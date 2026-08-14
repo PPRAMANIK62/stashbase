@@ -36,6 +36,18 @@ after readiness, a save failure or timeout keeps the window open.
   membership still contains the folder.
 - A single-flight initial-window operation plus the single-instance lock
   prevents startup races from creating duplicate windows.
+- Browser-owned OAuth returns focus only through the packaged `stashbase://`
+  handler, which accepts the exact data-free `oauth-complete` authority.
+  Renderer polling updates account state without racing that browser-owned
+  handoff. Node retains the initiating window identity on the opaque flow, and
+  the callback records return intent before opening the fixed deep link so
+  Electron can restore that live window rather than whichever window was
+  focused most recently. macOS `open-url`, Windows/Linux second instances, and
+  cold-start arguments converge on the same bounded focus path; all other
+  protocol URLs are inert and a cold invalid launch exits without creating a
+  window. Electron authenticates its loopback acknowledgement with a random
+  per-launch child-process token so the browser page closes only on evidence
+  from the exact native handler.
 - macOS may remain alive without a window and recreate one on activation.
   Windows and Linux quit after the final window closes. Platform window
   accelerators never masquerade as document-tab commands.

@@ -19,7 +19,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { discoverConvertibleSources, indexFreshConvertibleSource } from './conversion-dispatch.ts';
-import { getApiKey } from './app-config.ts';
+import { isEmbeddingConfigured } from './app-config.ts';
+import { isEmbeddingAvailable } from './embedding-availability.ts';
 import type { Indexer } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
 import { hasNoExtractableText, indexableFileSizeError, shouldIndexFilePath } from './indexable.ts';
@@ -117,6 +118,9 @@ export interface SyncOptions {
   commitEmbedding?: () => boolean;
   /** Test seam; production derives this exclusively from Settings. */
   semanticEnabled?: boolean;
+  /** Live gate checked before and between embedding calls. Production uses
+   * the hosted allowance cache so a 402 stops the remainder of the batch. */
+  embeddingAvailable?: () => boolean;
 }
 
 /** Transactional pause transition. Known-stale rows are invalidated before
@@ -152,6 +156,12 @@ function emptyResult(cancelled = false): SyncResult {
 
 function shouldStop(opts: SyncOptions | undefined): boolean {
   return opts?.shouldContinue ? !opts.shouldContinue() : false;
+}
+
+function canEmbed(opts: SyncOptions): boolean {
+  if (opts.embeddingAvailable) return opts.embeddingAvailable();
+  if (opts.semanticEnabled !== undefined) return opts.semanticEnabled;
+  return isEmbeddingAvailable();
 }
 
 function toFolderRelList(root: string, paths: string[]): string[] {
@@ -247,17 +257,24 @@ async function cleanupConvertedRename(
 export async function syncIndex(indexer: Indexer, root: string, opts: SyncOptions = {}): Promise<SyncResult> {
   if (shouldStop(opts)) return emptyResult(true);
 
-  // No embedding key → semantic indexing is disabled by design (§5.3): the
+  // No active embedding source → semantic indexing is disabled by design (§5.3): the
   // daemon has no embedder/store, so every upsert would throw "no bound
-  // root … set an embedding API key" and a whole-folder import would flood
+  // root … set an embedding source" and a whole-folder import would flood
   // the log with one failure per file. Conversion discovery still
   // runs so PDFs/images can produce AppData derived text for keyword search
     // and future reindex.
-  if (!(opts.semanticEnabled ?? !!getApiKey())) {
+  if (!(opts.semanticEnabled ?? isEmbeddingConfigured())) {
     cleanupMissingConvertedSources(root);
     discoverConvertedSources(root);
-    log.info(`no embedding key — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
+    log.info(`no embedding source — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
     return emptyResult();
+  }
+
+  if (!canEmbed(opts)) {
+    cleanupMissingConvertedSources(root);
+    discoverConvertedSources(root);
+    log.info(`semantic embedding is paused for "${root}" (conversion + keyword search unaffected)`);
+    return { ...emptyResult(), semanticPaused: true };
   }
 
   if (shouldStop(opts)) return emptyResult(true);
@@ -334,18 +351,23 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   }
 
   const removedDone: string[] = [...excludedRemoved];
+  const currentResult = (
+    added: string[] = [],
+    modified: string[] = [],
+    outcome: { cancelled?: true; semanticPaused?: true } = {},
+  ): SyncResult => ({
+    added: toFolderRelList(root, added),
+    modified: toFolderRelList(root, modified),
+    removed: toFolderRelList(root, removedDone),
+    renamed: toFolderRelList(root, renamedDone),
+    failed: toFolderRelFailures(root, failed),
+    ...outcome,
+  });
   if (deletedCandidates.length) {
     log.info(`removing ${deletedCandidates.length} stale file(s) from index`);
     for (const sourcePath of deletedCandidates) {
       if (shouldStop(opts)) {
-        return {
-          added: [],
-          modified: [],
-          removed: toFolderRelList(root, removedDone),
-          renamed: toFolderRelList(root, renamedDone),
-          failed: toFolderRelFailures(root, failed),
-          cancelled: true,
-        };
+        return currentResult([], [], { cancelled: true });
       }
       try {
         cleanupRemovedSource(sourcePath);
@@ -369,43 +391,29 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
       indexer, root, diff.modified, workload, failed, opts.publishPaused,
     );
     if (published) {
-      return {
-        added: [], modified: [], removed: toFolderRelList(root, removedDone),
-        renamed: toFolderRelList(root, renamedDone),
-        failed: toFolderRelFailures(root, failed), semanticPaused: true,
-      };
+      return currentResult([], [], { semanticPaused: true });
     }
   }
   if (!pauseRequested && opts.commitEmbedding && !opts.commitEmbedding()) {
     log.warn(`semantic decision could not be cleared for "${root}"; leaving indexing paused`);
-    return {
-      added: [], modified: [], removed: toFolderRelList(root, removedDone),
-      renamed: toFolderRelList(root, renamedDone),
-      failed: toFolderRelFailures(root, failed), semanticPaused: true,
-    };
+    return currentResult([], [], { semanticPaused: true });
   }
 
   const convertedAddedDone = await indexFreshConvertedSources(indexer, root, diff.added, failed, opts);
-  if (convertedAddedDone.cancelled) {
-    return {
-      added: toFolderRelList(root, convertedAddedDone.done),
-      modified: [],
-      removed: toFolderRelList(root, removedDone),
-      renamed: toFolderRelList(root, renamedDone),
-      failed: toFolderRelFailures(root, failed),
-      cancelled: true,
-    };
+  if (convertedAddedDone.cancelled || convertedAddedDone.semanticPaused) {
+    return currentResult(
+      convertedAddedDone.done,
+      [],
+      convertedAddedDone.cancelled ? { cancelled: true } : { semanticPaused: true },
+    );
   }
   const convertedModifiedDone = await indexFreshConvertedSources(indexer, root, diff.modified, failed, opts);
-  if (convertedModifiedDone.cancelled) {
-    return {
-      added: toFolderRelList(root, convertedAddedDone.done),
-      modified: toFolderRelList(root, convertedModifiedDone.done),
-      removed: toFolderRelList(root, removedDone),
-      renamed: toFolderRelList(root, renamedDone),
-      failed: toFolderRelFailures(root, failed),
-      cancelled: true,
-    };
+  if (convertedModifiedDone.cancelled || convertedModifiedDone.semanticPaused) {
+    return currentResult(
+      convertedAddedDone.done,
+      convertedModifiedDone.done,
+      convertedModifiedDone.cancelled ? { cancelled: true } : { semanticPaused: true },
+    );
   }
 
   const addedCandidates = syncIndexCandidates(root, diff.added);
@@ -421,31 +429,27 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   const modifiedDone: string[] = [...convertedModifiedDone.done];
   for (const sourcePath of addedCandidates) {
     if (shouldStop(opts)) {
-      return {
-        added: toFolderRelList(root, addedDone),
-        modified: [],
-        removed: toFolderRelList(root, removedDone),
-        renamed: toFolderRelList(root, renamedDone),
-        failed: toFolderRelFailures(root, failed),
-        cancelled: true,
-      };
+      return currentResult(addedDone, [], { cancelled: true });
+    }
+    if (!canEmbed(opts)) {
+      return currentResult(addedDone, [], { semanticPaused: true });
     }
     const chunks = await indexOne(indexer, root, sourcePath, failed);
     if (chunks > 0) addedDone.push(sourcePath);
   }
   for (const sourcePath of modifiedCandidates) {
     if (shouldStop(opts)) {
-      return {
-        added: toFolderRelList(root, addedDone),
-        modified: toFolderRelList(root, modifiedDone),
-        removed: toFolderRelList(root, removedDone),
-        renamed: toFolderRelList(root, renamedDone),
-        failed: toFolderRelFailures(root, failed),
-        cancelled: true,
-      };
+      return currentResult(addedDone, modifiedDone, { cancelled: true });
+    }
+    if (!canEmbed(opts)) {
+      return currentResult(addedDone, modifiedDone, { semanticPaused: true });
     }
     const chunks = await indexOne(indexer, root, sourcePath, failed);
     if (chunks > 0) modifiedDone.push(sourcePath);
+  }
+
+  if (!canEmbed(opts)) {
+    return currentResult(addedDone, modifiedDone, { semanticPaused: true });
   }
 
   log.info(
@@ -455,13 +459,7 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
       `removed=${removedDone.length}/${deletedCandidates.length + excludedRemoved.length} failed=${failed.length}`,
   );
   await assertSyncConverged(indexer, root, [...addedDone, ...modifiedDone, ...renamedDone]);
-  return {
-    added: toFolderRelList(root, addedDone),
-    modified: toFolderRelList(root, modifiedDone),
-    removed: toFolderRelList(root, removedDone),
-    renamed: toFolderRelList(root, renamedDone),
-    failed: toFolderRelFailures(root, failed),
-  };
+  return currentResult(addedDone, modifiedDone);
 }
 
 async function indexFreshConvertedSources(
@@ -470,10 +468,11 @@ async function indexFreshConvertedSources(
   paths: string[],
   failed: { name: string; error: string }[],
   opts: SyncOptions,
-): Promise<{ done: string[]; cancelled: boolean }> {
+): Promise<{ done: string[]; cancelled: boolean; semanticPaused?: boolean }> {
   const done: string[] = [];
   for (const sourcePath of paths) {
     if (shouldStop(opts)) return { done, cancelled: true };
+    if (!canEmbed(opts)) return { done, cancelled: false, semanticPaused: true };
     const folderRel = folderRelOf(root, sourcePath);
     if (folderRel == null || !isConvertibleSource(folderRel)) continue;
     try {
@@ -483,6 +482,7 @@ async function indexFreshConvertedSources(
       failed.push({ name: sourcePath, error: errorMessage(err) });
     }
   }
+  if (!canEmbed(opts)) return { done, cancelled: false, semanticPaused: true };
   return { done, cancelled: false };
 }
 

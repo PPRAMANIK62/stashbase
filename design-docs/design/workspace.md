@@ -26,6 +26,10 @@ manager, or a primary graph-navigation tool.
   the account utilities at the bottom. A no-folder window shows the
   zero-folder card when the library is empty, or a quiet pointer at the
   titlebar switcher when members exist.
+- The account row reads **Anonymous** without restricting local work. Its menu
+  routes signed-out users to AI Index setup and shows signed-in identity,
+  hosted-usage percentage, reset date, Learn more, and Sign out. AI Index
+  source selection remains in Settings rather than persistent sidebar chrome.
 - Users can open or create a local folder, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
   A created folder is an ordinary directory. Removing membership clears only

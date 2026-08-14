@@ -61,6 +61,10 @@ test('compact document layout preserves the active reading surface', async ({}, 
     await expect(page.getByRole('tab', { name: 'Welcome.md' })).toHaveAttribute('aria-selected', 'true');
     await expect(document.getByRole('heading', { name: 'Welcome to Project Alpha' })).toBeVisible();
     await expect(page.locator('.chat-pane-shell')).toHaveAttribute('aria-hidden', 'true');
+    await expect(
+      page.getByRole('navigation', { name: 'Document outline' })
+        .getByRole('button', { name: 'Heading level 1: Welcome to Project Alpha' }),
+    ).toBeVisible();
 
     await expectLinuxScreenshot(page, 'compact-document.png');
   } finally {

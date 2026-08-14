@@ -10,12 +10,15 @@ const {
 const {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
+  classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,
+  isOAuthReturnUrl,
+  isStashBaseProtocolUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -258,6 +261,8 @@ test('folder registry finds an existing context, excludes the sender, and retire
   registry.add('window-2', second);
   registry.setFolder('window-1', 'C:\\Users\\Ada\\Notes');
 
+  assert.equal(registry.windowForId('window-1'), first);
+  assert.equal(registry.windowForId('missing'), null);
   assert.equal(registry.findByFolder('c:/users/ada/notes'), first);
   assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes', { excludeWindowId: 'window-1' }), null);
 
@@ -277,6 +282,30 @@ test('focusing an existing folder window restores it before bringing it forward'
 
   assert.equal(focusWindow(win), true);
   assert.deepEqual(calls, ['restore', 'show', 'focus']);
+});
+
+test('OAuth return deep links have one exact, data-free authority', () => {
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete'), true);
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete/'), true);
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete?token=secret'), false);
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete#flow'), false);
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete:123'), false);
+  assert.equal(isOAuthReturnUrl('stashbase://user@oauth-complete'), false);
+  assert.equal(isOAuthReturnUrl('stashbase://other-action'), false);
+  assert.equal(isOAuthReturnUrl('https://oauth-complete'), false);
+  assert.equal(isOAuthReturnUrl('not a URL'), false);
+  assert.equal(isStashBaseProtocolUrl('stashbase://other-action'), true);
+  assert.equal(isStashBaseProtocolUrl('stashbase:not-a-return'), true);
+  assert.equal(isStashBaseProtocolUrl('https://oauth-complete'), false);
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase', 'stashbase://oauth-complete']), 'oauth-return');
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase', 'stashbase://other-action']), 'inert');
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase']), 'ordinary');
+
+  const packageJson = require('../package.json');
+  assert.deepEqual(packageJson.build.protocols, [{
+    name: 'StashBase OAuth Return',
+    schemes: ['stashbase'],
+  }]);
 });
 
 test('folder action follows the user flow: focus another matching window or open a new one', async () => {

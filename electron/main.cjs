@@ -27,12 +27,15 @@ const { registerBugReportReviewIpc } = require('./bug-report-review-ipc.cjs');
 const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
+  classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,
+  isOAuthReturnUrl,
+  isStashBaseProtocolUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -114,6 +117,7 @@ const SERVER_HOST = '127.0.0.1';
 const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
 const SERVER_PROTOCOL_VERSION = 1;
 const SERVER_SHUTDOWN_TOKEN = crypto.randomBytes(32).toString('hex');
+const OAUTH_RETURN_TOKEN = crypto.randomBytes(32).toString('hex');
 const PROJECT_ROOT = app.isPackaged ? app.getAppPath() : path.resolve(__dirname, '..');
 const SERVER_ENTRY = app.isPackaged
   ? path.join(PROJECT_ROOT, 'dist', 'server', 'index.mjs')
@@ -415,6 +419,7 @@ async function startOrReuseServer() {
       ...process.env,
       ...packagedEnv,
       STASHBASE_SHUTDOWN_TOKEN: SERVER_SHUTDOWN_TOKEN,
+      STASHBASE_OAUTH_RETURN_TOKEN: OAUTH_RETURN_TOKEN,
     },
     // stdin = 'ignore' is intentional: the server never reads from
     // stdin, and inheriting the parent's TTY made Node attach a real
@@ -995,7 +1000,6 @@ ipcMain.handle('bug-report:open', async (event) => {
   return true;
 });
 
-
 ipcMain.handle('window:setFolder', (event, folder) => {
   if (folder !== null && (typeof folder !== 'string' || !folder.trim())) return false;
   const senderWindow = BrowserWindow.fromWebContents(event.sender);
@@ -1101,17 +1105,75 @@ ipcMain.on('clipboard:setAgentComposerFocused', (event, focused) => {
 });
 
 const initialWindowFlight = createSingleFlight(() => app.whenReady().then(() => createWindow()));
+
+function focusOAuthReturn() {
+  void app.whenReady().then(async () => {
+    const acknowledged = await requestJson(SERVER_PORT, '/api/account/oauth/app-return', 1000, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-stashbase-oauth-return-token': OAUTH_RETURN_TOKEN,
+      },
+    });
+    if (!acknowledged.reachable || acknowledged.statusCode !== 200) {
+      console.warn('[electron] could not acknowledge OAuth return to the callback page');
+    }
+    if (process.platform === 'darwin') app.focus({ steal: true });
+    const targetId = typeof acknowledged.body?.windowId === 'string'
+      ? acknowledged.body.windowId
+      : null;
+    const target = targetId ? windowRegistry.windowForId(targetId) : null;
+    if (isLiveMainWindow(target) && focusWindow(target)) {
+      lastMainWindow = target;
+      return;
+    }
+    if (!focusLastMainWindow()) {
+      await initialWindowFlight.run();
+      focusLastMainWindow();
+    }
+  });
+}
+
+function registerOAuthReturnProtocol() {
+  const registered = process.defaultApp && process.argv[1]
+    ? app.setAsDefaultProtocolClient('stashbase', process.execPath, [path.resolve(process.argv[1])])
+    : app.setAsDefaultProtocolClient('stashbase');
+  if (!registered) console.warn('[electron] could not register the stashbase:// return protocol');
+}
+
+app.on('open-url', (event, url) => {
+  if (isStashBaseProtocolUrl(url)) event.preventDefault();
+  if (!isOAuthReturnUrl(url)) return;
+  focusOAuthReturn();
+});
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const initialProtocolLaunch = classifyProtocolLaunch(process.argv);
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    const protocolLaunch = classifyProtocolLaunch(argv);
+    if (protocolLaunch === 'oauth-return') {
+      focusOAuthReturn();
+      return;
+    }
+    // A malformed or unsupported stashbase: URL must not fall through to the
+    // ordinary second-launch focus/create behavior.
+    if (protocolLaunch === 'inert') return;
     if (!focusLastMainWindow()) {
       void initialWindowFlight.run().then(() => { focusLastMainWindow(); });
     }
   });
 
   app.whenReady().then(async () => {
+    registerOAuthReturnProtocol();
+    // A cold unsupported stashbase: URL is just as inert as the same URL sent
+    // to an existing instance: do not start the server or create a window.
+    if (initialProtocolLaunch === 'inert') {
+      app.quit();
+      return;
+    }
     try {
       await bugReportHandoff.initializeSession();
     } catch {
@@ -1132,6 +1194,7 @@ if (!hasSingleInstanceLock) {
     }
     installApplicationMenu();
     await initialWindowFlight.run();
+    if (initialProtocolLaunch === 'oauth-return') focusOAuthReturn();
   });
 
   app.on('activate', () => {

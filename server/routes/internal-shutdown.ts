@@ -1,16 +1,9 @@
-import crypto from 'node:crypto';
 import express from 'express';
+import { processPrivateTokenMatches } from '../process-private-token.ts';
 
 interface InternalShutdownOptions {
   token: string;
   shutdown: () => void;
-}
-
-function tokenMatches(actual: string | undefined, expected: string): boolean {
-  if (!actual || !expected) return false;
-  const left = Buffer.from(actual);
-  const right = Buffer.from(expected);
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
 /** Process-private graceful-shutdown handshake for the Electron owner.
@@ -21,7 +14,7 @@ export function mountInternalShutdownRoute(
   { token, shutdown }: InternalShutdownOptions,
 ): void {
   app.post('/api/internal/shutdown', (req, res) => {
-    if (!tokenMatches(req.header('x-stashbase-shutdown-token'), token)) {
+    if (!processPrivateTokenMatches(req.header('x-stashbase-shutdown-token'), token)) {
       return res.status(403).json({ error: 'forbidden' });
     }
     res.status(202).json({ ok: true });

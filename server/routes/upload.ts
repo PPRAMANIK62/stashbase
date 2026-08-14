@@ -24,7 +24,7 @@ import {
   sanitizeFilename,
 } from '../files.ts';
 import { isConvertibleSource, isNoteName } from '../format.ts';
-import { getApiKey } from '../app-config.ts';
+import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { normalizeFolderRelativePath } from '../folder-relative-path.ts';
 import { errorMessage, logger } from '../log.ts';
 import {
@@ -301,7 +301,7 @@ async function processUploadedFiles(
   if (out.some((x) => !x.error)) noteTreeChanged();
   res.json({ files: out });
   // Background indexing — don't await; the response has already been sent.
-  if (getApiKey()) {
+  if (isEmbeddingAvailable()) {
     (async () => {
       for (const { name, sourcePath, text } of toIndex) {
         try {
@@ -312,7 +312,7 @@ async function processUploadedFiles(
       }
     })();
   } else if (toIndex.length) {
-    log.info(`upload: skipped indexing ${toIndex.length} file(s) because no embedding key is configured`);
+    log.info(`upload: skipped indexing ${toIndex.length} file(s) because semantic embedding is unavailable`);
   }
   // Kick off conversions fire-and-forget. They handle their own async
   // failures internally; guard only against a synchronous throw at

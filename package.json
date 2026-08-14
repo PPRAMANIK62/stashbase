@@ -48,7 +48,7 @@
     "build:desktop": "pnpm build && pnpm build:python-sidecar && pnpm build:transcription-sidecar",
     "setup:python": "node scripts/setup-python.mjs",
     "test:python": "node scripts/test-python.mjs",
-    "test:config": "node --import tsx --test server/app-config.test.ts",
+    "test:config": "node --import tsx --test server/app-config.test.ts server/embedding-availability.test.ts server/hosted-account.test.ts server/account-route.test.ts",
     "test:renderer": "node --import tsx --test web-src/src/__tests__/*.test.ts web-src/src/milkdown/__tests__/*.test.ts web-src/src/store/__tests__/*.test.ts",
     "test:electron": "node --test --test-reporter=spec electron/multi-window.test.cjs electron/bug-report-service.test.cjs electron/bug-report-redaction.test.cjs electron/bug-report-collection.test.cjs electron/bug-report-handoff.test.cjs electron/bug-report-review.test.cjs",
     "test:electron:smoke": "node electron/multi-window-smoke-runner.cjs",
@@ -92,6 +92,14 @@
   "build": {
     "appId": "com.stashbase.app",
     "productName": "StashBase",
+    "protocols": [
+      {
+        "name": "StashBase OAuth Return",
+        "schemes": [
+          "stashbase"
+        ]
+      }
+    ],
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "icon": "build/icon",
     "electronDist": "node_modules/electron/dist",

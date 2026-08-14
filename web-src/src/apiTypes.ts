@@ -142,6 +142,8 @@ export interface IndexStatus {
   upToDate: boolean;
   /** False when semantic indexing/retrieval is unavailable, e.g. no embedding key. */
   semanticEnabled?: boolean;
+  /** False while a configured hosted source is blocked by its shared quota. */
+  semanticAvailable?: boolean;
   /** Human-readable reason when semantic indexing/retrieval is disabled. */
   semanticDisabledReason?: string;
   /** True when no UI-visible file is waiting for embedding. Unlike
@@ -149,7 +151,7 @@ export interface IndexStatus {
    *  relevant to search-readiness accounting. */
   visibleIndexingSettled?: boolean;
   semanticIndexing?: {
-    state: 'disabled' | 'awaiting-decision' | 'paused' | 'partial-paused' | 'indexing' | 'partial-indexing' | 'ready' | 'failed';
+    state: 'disabled' | 'quota-exhausted' | 'partial-quota-exhausted' | 'awaiting-decision' | 'paused' | 'partial-paused' | 'indexing' | 'partial-indexing' | 'ready' | 'failed';
     sourceCount?: number;
     estimatedBytes?: number;
   };
@@ -292,11 +294,48 @@ export interface LibraryKeywordSearchResult {
 }
 
 export type EmbedderProvider = 'openai' | 'openrouter';
+export type EmbeddingSource = EmbedderProvider | 'stashbase-account';
+
+export interface HostedQuota {
+  plan: string;
+  grantedTokens: number;
+  usedTokens: number;
+  reservedTokens: number;
+  remainingTokens: number;
+  periodStartedAt: string | null;
+  periodEndsAt: string | null;
+}
+
+export interface HostedAccountState {
+  signedIn: boolean;
+  active: boolean;
+  email?: string;
+  quota?: HostedQuota;
+  quotaUnavailable?: boolean;
+  backfillStarted?: boolean;
+}
+
+export type HostedOAuthProvider = 'google';
+
+export interface HostedOAuthStart {
+  flowId: string;
+  provider: HostedOAuthProvider;
+  url: string;
+}
+
+export interface HostedOAuthStatus {
+  state: 'pending' | 'complete' | 'error';
+  error?: string;
+  appReturned?: boolean;
+}
 
 export interface EmbedderState {
   provider: EmbedderProvider;
   hasKey: boolean;
+  authorized: boolean;
+  source: EmbeddingSource;
   model: string;
+  account: HostedAccountState;
 }
 
 export interface McpHttpStatus {

@@ -5,7 +5,7 @@
  * one flat evidence model keyed by the visible, absolute source path; prepared
  * representations never cross this seam.
  */
-import { getApiKey } from '../app-config.ts';
+import { embeddingAvailability, isEmbeddingAvailable } from '../embedding-availability.ts';
 import { searchExtensionsForTypes } from '../format.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { runKeywordSearch, type KeywordSearchOpts } from '../keyword-search.ts';
@@ -21,7 +21,7 @@ export type RetrievalMode = SearchMode;
 export type RetrievalAvailability =
   | { state: 'ready' }
   | { state: 'partial'; reason: 'truncated' }
-  | { state: 'unavailable'; reason: 'embedding-key-required' };
+  | { state: 'unavailable'; reason: 'embedding-key-required' | 'hosted-quota-exhausted' };
 
 export interface RetrievalQuery {
   mode: RetrievalMode;
@@ -42,12 +42,19 @@ export interface RetrievalResult {
 
 export interface RetrievalDependencies {
   hasEmbeddingKey: () => boolean;
+  embeddingUnavailableReason: () => 'embedding-key-required' | 'hosted-quota-exhausted';
   vectorSearch: (query: string, topK: number, folderRoot?: string, pathPrefix?: string, extensions?: string[]) => Promise<SearchHit[]>;
   keywordSearch: (query: string, folderRoot: string, opts: KeywordSearchOpts) => Promise<{ files: import('../search-display.ts').KeywordHitFile[]; truncated: boolean }>;
 }
 
 const productionDependencies: RetrievalDependencies = {
-  hasEmbeddingKey: () => Boolean(getApiKey()),
+  hasEmbeddingKey: isEmbeddingAvailable,
+  embeddingUnavailableReason: () => {
+    const availability = embeddingAvailability();
+    return !availability.available && availability.reason === 'hosted-quota-exhausted'
+      ? 'hosted-quota-exhausted'
+      : 'embedding-key-required';
+  },
   vectorSearch: (query, topK, folderRoot, pathPrefix, extensions) =>
     indexer.search(query, topK, folderRoot, pathPrefix, extensions),
   keywordSearch: runKeywordSearch,
@@ -66,7 +73,11 @@ export function createRetrieval(overrides: Partial<RetrievalDependencies> = {}):
       if (!text) throw new Error('query required');
       if (query.mode === 'semantic') {
         if (!deps.hasEmbeddingKey()) {
-          return { evidence: [], availability: { state: 'unavailable', reason: 'embedding-key-required' }, truncated: false };
+          return {
+            evidence: [],
+            availability: { state: 'unavailable', reason: deps.embeddingUnavailableReason() },
+            truncated: false,
+          };
         }
         const hits = await deps.vectorSearch(
           text,
