@@ -107,8 +107,7 @@ test('review IPC rejects unbound senders and cannot be redirected with renderer-
   assert.equal(handlers.getArtifactPreview({ sender: { id: 30 } }, artifact.id).error.code, 'FORBIDDEN');
   assert.equal(handlers.getArtifactPreview({ sender: { id: 29 } }, 'C:\\private.log').error.code, 'INVALID_ARTIFACT');
   assert.equal(handlers.updateDescription({ sender: { id: 29 } }, {
-    happened: '',
-    expected: '',
+    problem: '',
     reproduction: '',
     draftId: 'another-draft',
   }).error.code, 'INVALID_DESCRIPTION');
@@ -137,8 +136,7 @@ test('Prepare Report hands the main-owned approved snapshot to the handoff and r
   const log = initial.artifacts.find((item) => item.kind === 'log');
 
   assert.equal(handlers.updateDescription(event, {
-    happened: 'It stopped responding.',
-    expected: 'The document should open.',
+    problem: 'The document stopped responding instead of opening.',
     reproduction: 'Open the document twice.',
   }).ok, true);
   assert.equal(handlers.excludeArtifact(event, screenshot.id).ok, true);
@@ -148,8 +146,7 @@ test('Prepare Report hands the main-owned approved snapshot to the handoff and r
 
   assert.equal(approved.ok, true);
   assert.deepEqual(approved.report.description, {
-    happened: 'It stopped responding.',
-    expected: 'The document should open.',
+    problem: 'The document stopped responding instead of opening.',
     reproduction: 'Open the document twice.',
   });
   assert.equal(approved.report.artifacts.some((item) => item.kind === 'screenshot'), false);
@@ -169,7 +166,48 @@ test('Prepare Report hands the main-owned approved snapshot to the handoff and r
   assert.equal(savedReports, 1);
 });
 
-test('review IPC registers only the nine explicit review and handoff operations', () => {
+test('Back reopens the approved review and a later prepare claims a fresh snapshot', async () => {
+  const service = createReviewService();
+  const created = await service.createDraft({ webContentsId: 17, windowId: 'window-a' });
+  assert.equal(service.bindReviewWindow(created.draft.id, 29).ok, true);
+  const snapshots = [];
+  const handlers = createBugReportReviewIpcHandlers({
+    bugReports: service,
+    draftIdForSender: () => created.draft.id,
+    prepareApprovedReport: async (snapshot) => {
+      snapshots.push(snapshot);
+      return { ok: true, prepared: { artifactCount: snapshot.artifacts.length } };
+    },
+    openPreparedReport: async () => ({ ok: true }),
+    savePreparedReport: async () => ({ ok: true }),
+  });
+  const event = { sender: { id: 29 } };
+  const screenshot = handlers.get(event).draft.artifacts.find((item) => item.kind === 'screenshot');
+
+  assert.equal(handlers.excludeArtifact(event, screenshot.id).ok, true);
+  assert.equal((await handlers.prepare(event)).ok, true);
+  assert.equal(snapshots[0].artifacts.some((item) => item.kind === 'screenshot'), false);
+
+  const reopened = handlers.reopen(event);
+  assert.equal(reopened.ok, true);
+  assert.equal(reopened.draft.state, 'reviewing');
+  const restored = reopened.draft.artifacts.find((item) => item.kind === 'screenshot');
+  assert.equal(restored.available, true);
+  assert.equal(restored.included, false);
+  assert.equal(reopened.draft.approval, null);
+
+  // The discarded approval cannot back a handoff action; a new approval must.
+  assert.equal((await handlers.openGitHub(event)).error.code, 'INVALID_STATE');
+  assert.equal(handlers.reopen(event).error.code, 'INVALID_STATE');
+  assert.equal(handlers.updateDescription(event, { problem: 'Second pass.', reproduction: '' }).ok, true);
+  assert.equal(handlers.includeArtifact(event, restored.id).ok, true);
+  assert.equal((await handlers.prepare(event)).ok, true);
+  assert.equal(snapshots[1].artifacts.some((item) => item.kind === 'screenshot'), true);
+  assert.equal(snapshots[1].description.problem, 'Second pass.');
+  assert.equal((await handlers.openGitHub(event)).ok, true);
+});
+
+test('review IPC registers only the ten explicit review and handoff operations', () => {
   const registered = new Map();
   const ipcMain = { handle: (channel, handler) => registered.set(channel, handler) };
   const service = createReviewService();
@@ -182,7 +220,7 @@ test('review IPC registers only the nine explicit review and handoff operations'
     savePreparedReport: async () => ({ ok: true }),
   });
 
-  assert.equal(Object.values(CHANNEL).length, 9);
+  assert.equal(Object.values(CHANNEL).length, 10);
   assert.deepEqual([...registered.keys()].sort(), Object.values(CHANNEL).sort());
   assert.equal([...registered.keys()].some((channel) => /file|path|screen/i.test(channel)), false);
 });
@@ -203,6 +241,8 @@ test('review window is isolated, local-only, and denies popup or arbitrary navig
     }
 
     setMenuBarVisibility(value) { this.menuVisible = value; }
+    setAlwaysOnTop(flag, level) { this.alwaysOnTop = { flag, level }; }
+    setVisibleOnAllWorkspaces(visible, options) { this.allWorkspaces = { visible, options }; }
     isDestroyed() { return this.destroyed; }
     show() { this.shown = true; }
     loadFile(file) { this.loadedFile = file; return Promise.resolve(); }
@@ -214,6 +254,9 @@ test('review window is isolated, local-only, and denies popup or arbitrary navig
 
   assert.equal(win.options.parent, undefined);
   assert.equal(win.options.modal, undefined);
+  assert.equal(win.options.fullscreenable, false);
+  assert.equal(win.alwaysOnTop, undefined);
+  assert.equal(win.allWorkspaces, undefined);
   assert.equal(win.options.webPreferences.preload, preloadPath);
   assert.equal(win.options.webPreferences.contextIsolation, true);
   assert.equal(win.options.webPreferences.nodeIntegration, false);
@@ -232,6 +275,49 @@ test('review window is isolated, local-only, and denies popup or arbitrary navig
   assert.equal(win.loadedFile, htmlPath);
 });
 
+test('review opened from a full-screen source presents in that space instead of a separate desktop', () => {
+  const instances = [];
+  class FakeBrowserWindow extends EventEmitter {
+    constructor(options) {
+      super();
+      this.options = options;
+      this.webContents = new EventEmitter();
+      this.webContents.id = 31;
+      this.webContents.setWindowOpenHandler = () => {};
+      instances.push(this);
+    }
+
+    setMenuBarVisibility() {}
+    setAlwaysOnTop(flag, level) { this.alwaysOnTop = { flag, level }; }
+    setVisibleOnAllWorkspaces(visible, options) { this.allWorkspaces = { visible, options }; }
+    isDestroyed() { return false; }
+    loadFile() { return Promise.resolve(); }
+  }
+  const deps = {
+    BrowserWindow: FakeBrowserWindow,
+    htmlPath: path.join(__dirname, 'bug-report-review.html'),
+    preloadPath: path.join(__dirname, 'bug-report-review-preload.cjs'),
+  };
+
+  createBugReportReviewWindow({ ...deps, sourceWindow: { isDestroyed: () => false, isFullScreen: () => true } });
+  assert.deepEqual(instances[0].alwaysOnTop, { flag: true, level: 'floating' });
+  assert.deepEqual(instances[0].allWorkspaces, {
+    visible: true,
+    options: { visibleOnFullScreen: true, skipTransformProcessType: true },
+  });
+  // The review window stays an independent dialog: never a child, never full screen itself.
+  assert.equal(instances[0].options.parent, undefined);
+  assert.equal(instances[0].options.fullscreenable, false);
+
+  createBugReportReviewWindow({ ...deps, sourceWindow: { isDestroyed: () => false, isFullScreen: () => false } });
+  assert.equal(instances[1].alwaysOnTop, undefined);
+  assert.equal(instances[1].allWorkspaces, undefined);
+
+  createBugReportReviewWindow({ ...deps, sourceWindow: { isDestroyed: () => true, isFullScreen: () => true } });
+  assert.equal(instances[2].alwaysOnTop, undefined);
+  assert.equal(instances[2].allWorkspaces, undefined);
+});
+
 test('dedicated review preload contains no generic filesystem or source-selection bridge', () => {
   const preload = fs.readFileSync(path.join(__dirname, 'bug-report-review-preload.cjs'), 'utf8');
   assert.equal(/readFile|deleteFile|openFile|capturePage|desktopCapturer|sourceWindow|draftId/.test(preload), false);
@@ -240,6 +326,7 @@ test('dedicated review preload contains no generic filesystem or source-selectio
   assert.match(preload, /includeArtifact/);
   assert.match(preload, /excludeArtifact/);
   assert.match(preload, /prepare/);
+  assert.match(preload, /reopen/);
   assert.match(preload, /openGitHub/);
   assert.match(preload, /saveArtifacts/);
   assert.match(preload, /discard/);
@@ -252,35 +339,48 @@ test('review page has a local-only CSP and all required review controls', () => 
   const css = fs.readFileSync(path.join(__dirname, 'bug-report-review.css'), 'utf8');
   assert.match(html, /default-src 'none'/);
   assert.match(html, /connect-src 'none'/);
-  assert.match(html, /What happened\?/);
-  assert.match(html, /What did you expect to happen\?/);
+  assert.match(html, /What went wrong\?/);
+  assert.match(html, /Include what you expected if it isn.t obvious/);
+  assert.match(html, /<details id="reproduction-disclosure" class="reproduction-disclosure">/);
+  assert.match(html, /Add steps to reproduce/);
+  assert.match(html, /optional/i);
   assert.match(html, /Steps to reproduce/);
+  assert.equal((html.match(/<textarea\b/g) || []).length, 2);
+  assert.equal(/What did you expect to happen\?/.test(html), false);
+  assert.match(html, /Nothing is sent automatically/);
+  assert.match(html, /Attachments/);
   assert.match(html, /Prepare Report/);
   assert.match(html, /id="report-ready"[\s\S]*Report ready/);
-  assert.match(html, /temporary prepared files will be cleared the next time StashBase starts/i);
-  assert.match(html, /File Explorer will open with your prepared artifacts/);
+  assert.match(html, /saved to your Downloads folder, and a prefilled GitHub issue will open/);
   assert.match(html, /Open GitHub/);
-  assert.match(html, /Save Selected Artifacts/);
+  assert.match(html, /<button id="save-artifacts"[^>]*>Download<\/button>/);
+  assert.match(html, /<button id="back"[^>]*hidden>Back<\/button>/);
   assert.equal(/Approve report/i.test(html), false);
-  assert.match(html, /id="artifact-summary"/);
-  assert.match(html, /id="artifact-summary-groups"/);
   assert.equal(/https?:\/\//.test(html), false);
-  assert.match(renderer, /artifact-selection/);
+  // The form stays terse: no collection or processing narration in user-facing copy.
+  assert.equal(/lossless PNG|recompress|format conversion|privacy checks/i.test(html + renderer), false);
+  assert.match(renderer, /problem: document\.getElementById\('problem'\)/);
+  assert.equal(/expected: document\.getElementById\('expected'\)/.test(renderer), false);
+  assert.match(renderer, /reproductionDisclosure\.open = true/);
+  assert.match(renderer, /checkbox\.type = 'checkbox'/);
+  assert.match(renderer, /Include \$\{title\} in the report/);
+  assert.match(renderer, /api\.includeArtifact\(artifact\.id\)/);
+  assert.match(renderer, /api\.excludeArtifact\(artifact\.id\)/);
   assert.match(renderer, /reviewFlow\.hidden = true/);
   assert.match(renderer, /reportReady\.hidden = false/);
   assert.match(renderer, /api\.openGitHub\(\)/);
   assert.match(renderer, /api\.saveArtifacts\(\)/);
-  assert.match(renderer, /Captured and prepared as a lossless PNG/);
-  assert.match(renderer, /does not resize, recompress, or convert it/);
-  assert.match(renderer, /Exact captured PNG eligible for attachment, without format conversion/);
-  assert.match(renderer, /artifact\.included \? 'Included' : 'Include'/);
-  assert.match(renderer, /artifact\.included \? 'Exclude' : 'Excluded'/);
-  assert.match(renderer, /aria-pressed/);
-  assert.match(renderer, /model\.artifacts\.filter\(\(artifact\) => artifact\.included\)/);
-  assert.match(renderer, /model\.artifacts\.filter\(\(artifact\) => !artifact\.included\)/);
-  assert.match(renderer, /renderArtifactSummaryGroup\('Included', included, '✓', 'included'\)/);
-  assert.match(renderer, /renderArtifactSummaryGroup\('Excluded', excluded, '×', 'excluded'\)/);
-  assert.match(renderer, /renderArtifacts\(\)[\s\S]*renderArtifactSummary\(\)/);
+  assert.match(renderer, /api\.reopen\(\)/);
+  assert.match(renderer, /reportReady\.hidden = true/);
+  assert.equal(/Save canceled/.test(renderer), false);
+  // Size, truncation, redaction-count, and availability metadata stay visible per row.
+  assert.match(renderer, /most recent entries/);
+  assert.match(renderer, /redaction/);
+  assert.match(renderer, /Unavailable for this report/);
+  assert.match(renderer, /formatBytes/);
+  // Previews are collapsed by default and expanding survives re-renders.
+  assert.equal(/details\.open = true/.test(renderer), false);
+  assert.match(renderer, /details\.open = openPreviews\.has\(artifact\.id\)/);
   assert.match(renderer, /document\.createElement\('details'\)/);
   assert.match(renderer, /log-preview/);
   assert.match(renderer, /View full size/);
@@ -298,12 +398,11 @@ test('review page has a local-only CSP and all required review controls', () => 
   assert.match(renderer, /applyZoom\(1\)/);
   assert.match(renderer, /fitScale = calculateFitScale\(\)[\s\S]*applyZoom\(1\)/);
   assert.match(renderer, /new ResizeObserver\([\s\S]*zoomFromFit <= 1\.001[\s\S]*fitToView\(\)/);
-  assert.match(css, /\.selection-option\.include\.is-selected/);
-  assert.match(css, /\.selection-option\.exclude\.is-selected/);
-  assert.match(css, /\.selection-option:not\(\.is-selected\)[\s\S]*color:\s*#4f4d47/);
-  assert.match(css, /\.artifact-summary-group\.included \.artifact-summary-marker/);
-  assert.match(css, /\.artifact-summary-group\.excluded \.artifact-summary-marker/);
-  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*\.selection-option:not\(\.is-selected\)/);
+  assert.match(css, /\.reproduction-disclosure/);
+  assert.match(css, /\.artifact-row/);
+  assert.match(css, /\.artifact-check input[\s\S]*accent-color/);
+  assert.match(css, /\.artifact-check input:disabled/);
+  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*\.artifacts/);
   assert.match(css, /\.log-preview[\s\S]*overflow:\s*auto/);
   assert.match(css, /\.screenshot-frame\.is-zoomed/);
   assert.match(css, /\.screenshot-frame[\s\S]*overflow:\s*auto/);
@@ -333,10 +432,9 @@ test('native menu action is wired to the real review flow rather than a placehol
   assert.equal(main.includes('Bug report draft created.'), false);
 });
 
-test('Save Selected Artifacts uses a native main-process directory picker', () => {
+test('Download saves to the Downloads folder without a picker dialog', () => {
   const main = fs.readFileSync(path.join(__dirname, 'main.cjs'), 'utf8');
-  assert.match(main, /title: 'Save Selected Artifacts'/);
-  assert.match(main, /properties: \['openDirectory', 'createDirectory'\]/);
-  assert.match(main, /dialog\.showOpenDialog/);
-  assert.match(main, /bugReportHandoff\.saveArtifacts\(snapshot, result\.filePaths\[0\]\)/);
+  assert.match(main, /savePreparedReport: \(snapshot\) => bugReportHandoff\.saveToDownloads\(snapshot\)/);
+  assert.match(main, /downloadsDirectory: async \(\) => app\.getPath\('downloads'\)/);
+  assert.equal(/Save Report Files|Save Selected Artifacts/.test(main), false);
 });

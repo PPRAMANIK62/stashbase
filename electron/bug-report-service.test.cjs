@@ -194,27 +194,26 @@ test('validated user fields are redacted and persist in the authoritative draft'
   const service = createService();
   const draft = await createReviewingDraft(service);
   const updated = service.updateDescription(draft.id, draft.reviewWebContentsId, {
-    happened: 'Request failed with MCP_BEARER_TOKEN=top-secret',
-    expected: 'The request should complete.',
+    problem: 'Request failed with MCP_BEARER_TOKEN=top-secret instead of completing.',
     reproduction: '1. Start StashBase\n2. Retry',
   });
 
   assert.equal(updated.ok, true);
-  assert.equal(updated.draft.description.happened.includes('top-secret'), false);
-  assert.match(updated.draft.description.happened, /\[REDACTED\]/);
+  assert.equal(updated.draft.description.problem.includes('top-secret'), false);
+  assert.match(updated.draft.description.problem, /\[REDACTED\]/);
   assert.deepEqual(service.getReview(draft.id, draft.reviewWebContentsId).draft.description, updated.draft.description);
 });
 
 test('description updates reject extra keys, non-string fields, and size violations', async () => {
   const service = createService();
   const draft = await createReviewingDraft(service);
-  const valid = { happened: '', expected: '', reproduction: '' };
+  const valid = { problem: '', reproduction: '' };
 
   assert.equal(service.updateDescription(draft.id, draft.reviewWebContentsId, { ...valid, extra: true }).error.code, 'INVALID_DESCRIPTION');
-  assert.equal(service.updateDescription(draft.id, draft.reviewWebContentsId, { ...valid, happened: null }).error.code, 'INVALID_DESCRIPTION');
+  assert.equal(service.updateDescription(draft.id, draft.reviewWebContentsId, { ...valid, problem: null }).error.code, 'INVALID_DESCRIPTION');
   assert.equal(service.updateDescription(draft.id, draft.reviewWebContentsId, {
     ...valid,
-    happened: 'x'.repeat(MAX_REPORT_FIELD_LENGTH + 1),
+    problem: 'x'.repeat(MAX_REPORT_FIELD_LENGTH + 1),
   }).error.code, 'INVALID_DESCRIPTION');
 });
 
@@ -292,7 +291,7 @@ test('approval requires review authority and is idempotent after explicit approv
   assert.equal(repeated.alreadyApproved, true);
   assert.deepEqual(repeated.report, first.report);
   assert.equal(service.updateDescription(created.draft.id, 29, {
-    happened: 'changed', expected: '', reproduction: '',
+    problem: 'changed', reproduction: '',
   }).error.code, 'INVALID_STATE');
 });
 

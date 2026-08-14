@@ -23,7 +23,7 @@ const ARTIFACT_KIND = Object.freeze({
   DIAGNOSTICS: 'diagnostics',
 });
 
-const REPORT_FIELDS = Object.freeze(['happened', 'expected', 'reproduction']);
+const REPORT_FIELDS = Object.freeze(['problem', 'reproduction']);
 const MAX_REPORT_FIELD_LENGTH = 12_000;
 const MAX_REPORT_TEXT_LENGTH = 24_000;
 const MAX_LOG_PREVIEW_BYTES = 64 * 1024;
@@ -274,7 +274,9 @@ function createBugReportService({
   function retireDraft(draft) {
     if (!draft || drafts.get(draft.id) !== draft) return false;
     drafts.delete(draft.id);
-    for (const artifact of draft.artifacts) artifactIds.delete(artifact.id);
+    // reviewArtifacts is the superset while a draft is approved; artifacts set
+    // aside at approval must retire with the draft, not leak their ids.
+    for (const artifact of draft.reviewArtifacts ?? draft.artifacts) artifactIds.delete(artifact.id);
     return true;
   }
 
@@ -481,11 +483,11 @@ function createBugReportService({
           },
           reviewWebContentsId: null,
           description: {
-            happened: '',
-            expected: '',
+            problem: '',
             reproduction: '',
           },
           artifacts: [],
+          reviewArtifacts: null,
           approvedReport: null,
           approvedHandoff: null,
         };
@@ -545,8 +547,7 @@ function createBugReportService({
         description[field] = prepared.text;
       }
       found.draft.description = {
-        happened: description.happened,
-        expected: description.expected,
+        problem: description.problem,
         reproduction: description.reproduction,
       };
       found.draft.updatedAt = toIso(now);
@@ -580,13 +581,29 @@ function createBugReportService({
           resource: artifact.resource,
         }))),
       });
-      for (const artifact of found.draft.artifacts) {
-        if (!selectedArtifacts.includes(artifact)) artifactIds.delete(artifact.id);
-      }
+      // Deselected artifacts leave every approved view but stay set aside so
+      // an explicit reopen can restore the full checklist; they retire with
+      // the draft.
+      found.draft.reviewArtifacts = found.draft.artifacts;
       found.draft.artifacts = selectedArtifacts;
       found.draft.state = DRAFT_STATE.APPROVED;
       found.draft.updatedAt = approvedAt;
       return { ok: true, report: safeApprovedReport(found.draft), alreadyApproved: false };
+    },
+
+    reopenReview(id, senderWebContentsId) {
+      const found = findReviewDraft(id, senderWebContentsId);
+      if (!found.ok) return found;
+      if (found.draft.state !== DRAFT_STATE.APPROVED) return fail(ERROR.INVALID_STATE);
+      if (found.draft.reviewArtifacts !== null) {
+        found.draft.artifacts = found.draft.reviewArtifacts;
+        found.draft.reviewArtifacts = null;
+      }
+      found.draft.approvedReport = null;
+      found.draft.approvedHandoff = null;
+      found.draft.state = DRAFT_STATE.REVIEWING;
+      found.draft.updatedAt = toIso(now);
+      return { ok: true, draft: safeReviewModel(found.draft) };
     },
 
     claimApprovedReport(id, senderWebContentsId) {

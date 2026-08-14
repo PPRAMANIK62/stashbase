@@ -55,13 +55,20 @@ Windows signal behavior is not a graceful child shutdown contract.
 The Electron main process solely owns in-memory bug-report drafts. The native
 Help menu creates a draft from the source window; the dedicated review window
 is bound to that draft through its `webContents`, never a renderer-supplied
-draft ID. Its preload accepts only narrow review operations and validates an
-opaque artifact reference against the sender-bound draft. References, paths,
-destinations, URLs, raw diagnostics, screenshot buffers, and unredacted logs
-are never authority or renderer data.
+draft ID. The review window is an independent dialog-sized window — never a
+child or modal of its source, so an open review survives the source closing —
+and it cannot enter full screen itself. When its source window is full screen
+at creation, it presents as a floating dialog in that space instead of
+switching macOS to a separate desktop. Its preload accepts only narrow review operations; description
+updates carry the exact `problem` and optional `reproduction` string fields,
+and artifact operations validate an opaque reference against the sender-bound
+draft. References, paths, destinations, URLs, raw diagnostics, screenshot
+buffers, and unredacted logs are never authority or renderer data.
 
 Drafts move from collection to a bound review and then an immutable approved
-snapshot. Closing the source drops only an unbound draft; closing, cancelling,
+snapshot. An explicit reopen returns an approved draft to review by discarding
+its snapshot and pending handoff — snapshots are never mutated in place.
+Closing the source drops only an unbound draft; closing, cancelling,
 or failing the review retires the bound draft and its references. Collection is
 best effort. Text is redacted and independently scanned fail-closed before it
 is available, and selected resources are scanned again before an atomic

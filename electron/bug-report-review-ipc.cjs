@@ -7,6 +7,7 @@ const CHANNEL = Object.freeze({
   INCLUDE_ARTIFACT: 'bug-report-review:include-artifact',
   EXCLUDE_ARTIFACT: 'bug-report-review:exclude-artifact',
   PREPARE: 'bug-report-review:prepare',
+  REOPEN: 'bug-report-review:reopen',
   OPEN_GITHUB: 'bug-report-review:open-github',
   SAVE_ARTIFACTS: 'bug-report-review:save-artifacts',
   DISCARD: 'bug-report-review:discard',
@@ -80,6 +81,9 @@ function createBugReportReviewIpcHandlers({
         ? { ok: true, report: claimed.report, prepared: handoff.prepared }
         : { ...handoff, report: claimed.report };
     }),
+    reopen: (event) => withAuthorization(event, (draftId, senderId) => (
+      bugReports.reopenReview(draftId, senderId)
+    )),
     openGitHub: (event) => withAuthorization(event, (draftId, senderId) => {
       const claimed = bugReports.claimApprovedReport(draftId, senderId);
       return claimed.ok ? openPreparedReport(claimed.snapshot) : claimed;
@@ -118,6 +122,7 @@ function registerBugReportReviewIpc({
   ipcMain.handle(CHANNEL.INCLUDE_ARTIFACT, handlers.includeArtifact);
   ipcMain.handle(CHANNEL.EXCLUDE_ARTIFACT, handlers.excludeArtifact);
   ipcMain.handle(CHANNEL.PREPARE, handlers.prepare);
+  ipcMain.handle(CHANNEL.REOPEN, handlers.reopen);
   ipcMain.handle(CHANNEL.OPEN_GITHUB, handlers.openGitHub);
   ipcMain.handle(CHANNEL.SAVE_ARTIFACTS, handlers.saveArtifacts);
   ipcMain.handle(CHANNEL.DISCARD, handlers.discard);

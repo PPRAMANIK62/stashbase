@@ -149,10 +149,7 @@ const bugReports = createBugReportService({
 });
 const bugReportHandoff = createBugReportHandoff({
   baseTemporaryDirectory: path.join(app.getPath('temp'), 'stashbase', 'bug-reports'),
-  revealDirectory: async (directory) => {
-    const error = await shell.openPath(directory);
-    if (error) throw new Error('The prepared report directory could not be opened.');
-  },
+  downloadsDirectory: async () => app.getPath('downloads'),
   openExternal: (url) => shell.openExternal(url),
 });
 registerBugReportReviewIpc({
@@ -163,29 +160,7 @@ registerBugReportReviewIpc({
   ),
   prepareApprovedReport: (snapshot) => bugReportHandoff.prepare(snapshot),
   openPreparedReport: (snapshot) => bugReportHandoff.openGitHub(snapshot),
-  savePreparedReport: async (snapshot, event) => {
-    try {
-      const senderWindow = BrowserWindow.fromWebContents(event.sender);
-      const options = {
-        title: 'Save Selected Artifacts',
-        buttonLabel: 'Save Here',
-        properties: ['openDirectory', 'createDirectory'],
-      };
-      const result = senderWindow && !senderWindow.isDestroyed()
-        ? await dialog.showOpenDialog(senderWindow, options)
-        : await dialog.showOpenDialog(options);
-      if (result.canceled || result.filePaths.length === 0) return { ok: true, canceled: true };
-      return bugReportHandoff.saveArtifacts(snapshot, result.filePaths[0]);
-    } catch {
-      return {
-        ok: false,
-        error: {
-          code: 'SAVE_FAILED',
-          message: 'StashBase could not save the selected report files. Please try again.',
-        },
-      };
-    }
-  },
+  savePreparedReport: (snapshot) => bugReportHandoff.saveToDownloads(snapshot),
 });
 
 const APP_CONFIG_FILE = path.join(os.homedir(), '.stashbase', 'config.json');
@@ -653,6 +628,7 @@ async function openBugReportReview(win) {
       BrowserWindow,
       preloadPath: path.join(__dirname, 'bug-report-review-preload.cjs'),
       htmlPath: path.join(__dirname, 'bug-report-review.html'),
+      sourceWindow: isLiveMainWindow(win) ? win : null,
     });
   } catch {
     bugReports.discardDraft(created.draft.id, source.webContentsId);
@@ -1007,6 +983,7 @@ ipcMain.handle('dialog:openFolder', async (event, opts = {}) => {
 ipcMain.handle('shell:openExternal', async (_e, url) => {
   return openHttpExternal(url, 'renderer external URL');
 });
+
 
 ipcMain.handle('window:setFolder', (event, folder) => {
   if (folder !== null && (typeof folder !== 'string' || !folder.trim())) return false;

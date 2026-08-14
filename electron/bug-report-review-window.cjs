@@ -2,19 +2,20 @@
 
 const { pathToFileURL } = require('node:url');
 
-function createBugReportReviewWindow({ BrowserWindow, preloadPath, htmlPath }) {
+function createBugReportReviewWindow({ BrowserWindow, preloadPath, htmlPath, sourceWindow = null }) {
   if (typeof BrowserWindow !== 'function' || typeof preloadPath !== 'string' || typeof htmlPath !== 'string') {
     throw new TypeError('Review window dependencies are required.');
   }
   const win = new BrowserWindow({
-    width: 900,
-    height: 780,
-    minWidth: 680,
-    minHeight: 600,
+    width: 720,
+    height: 728,
+    minWidth: 600,
+    minHeight: 520,
     show: false,
     title: 'Report a Bug',
-    backgroundColor: '#f7f7f5',
+    backgroundColor: '#f5f6f8',
     autoHideMenuBar: true,
+    fullscreenable: false,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -25,6 +26,21 @@ function createBugReportReviewWindow({ BrowserWindow, preloadPath, htmlPath }) {
     },
   });
   if (typeof win.setMenuBarVisibility === 'function') win.setMenuBarVisibility(false);
+  // Not a child or modal of the source: an open review must survive the
+  // source closing. A full-screen source still needs the review presented in
+  // its own space; otherwise macOS switches to a separate desktop.
+  const sourceIsFullScreen = Boolean(
+    sourceWindow
+    && (typeof sourceWindow.isDestroyed !== 'function' || !sourceWindow.isDestroyed())
+    && typeof sourceWindow.isFullScreen === 'function'
+    && sourceWindow.isFullScreen(),
+  );
+  if (sourceIsFullScreen) {
+    if (typeof win.setAlwaysOnTop === 'function') win.setAlwaysOnTop(true, 'floating');
+    if (typeof win.setVisibleOnAllWorkspaces === 'function') {
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+    }
+  }
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   const allowedUrl = pathToFileURL(htmlPath).toString();
   win.webContents.on('will-navigate', (event, url) => {
