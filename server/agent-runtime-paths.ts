@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { appDataRoot } from './local-data.ts';
+import { isDevelopmentRuntime } from './development-runtime.ts';
 
 export type ManagedAgentId = 'claude' | 'codex';
 export type AgentDiscoveryPolicy = 'auto' | 'managed-only' | 'system-only';
@@ -35,7 +36,7 @@ export function initialAgentDiscoveryPolicy(
   env: NodeJS.ProcessEnv = process.env,
 ): AgentDiscoveryPolicy {
   const value = env.STASHBASE_AGENT_DISCOVERY_POLICY;
-  const debugEnabled = env.STASHBASE_DEV_VITE === '1' || env.STASHBASE_AGENT_DEBUG === '1';
+  const debugEnabled = isDevelopmentRuntime(env) || env.STASHBASE_AGENT_DEBUG === '1';
   return debugEnabled && DISCOVERY_POLICIES.has(value as AgentDiscoveryPolicy)
     ? value as AgentDiscoveryPolicy
     : 'auto';
@@ -45,7 +46,7 @@ let discoveryPolicy: AgentDiscoveryPolicy = initialAgentDiscoveryPolicy();
 let nextFailure: AgentSetupFailureSimulation = 'none';
 
 export function agentRuntimeDebugEnabled(): boolean {
-  return process.env.STASHBASE_DEV_VITE === '1' || process.env.STASHBASE_AGENT_DEBUG === '1';
+  return isDevelopmentRuntime() || process.env.STASHBASE_AGENT_DEBUG === '1';
 }
 
 export function getAgentRuntimeDebugState(): AgentRuntimeDebugState {

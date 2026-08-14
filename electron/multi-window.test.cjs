@@ -7,7 +7,7 @@ const {
   terminateChildProcessTree,
   waitForChildExit,
 } = require('./smoke-process.cjs');
-const { createServerChildEnvironment } = require('./main-probe.cjs');
+const { createServerArguments, createServerChildEnvironment } = require('./main-probe.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
@@ -94,7 +94,7 @@ test('Electron smoke disables Chromium sandbox only on Linux CI hosts', () => {
   );
 });
 
-test('Electron-owned source server always receives the development runtime flag', () => {
+test('Electron-owned source server does not enable the Vite proxy without an inherited Vite marker', () => {
   const environment = createServerChildEnvironment({
     baseEnv: { PATH: '/test/bin' },
     packaged: false,
@@ -103,23 +103,66 @@ test('Electron-owned source server always receives the development runtime flag'
     oauthReturnToken: 'oauth-token',
   });
 
-  assert.equal(environment.STASHBASE_DEV_VITE, '1');
+  assert.equal(environment.STASHBASE_DEV_RUNTIME, '1');
+  assert.equal(environment.STASHBASE_DEV_VITE, undefined);
   assert.equal(environment.STASHBASE_APP_ROOT, '/repo');
   assert.equal(environment.STASHBASE_SHUTDOWN_TOKEN, 'shutdown-token');
   assert.equal(environment.STASHBASE_OAUTH_RETURN_TOKEN, 'oauth-token');
 });
 
-test('packaged server environment cannot inherit the Vite development flag', () => {
+test('Electron-owned source server preserves an explicit Vite proxy marker', () => {
   const environment = createServerChildEnvironment({
     baseEnv: { STASHBASE_DEV_VITE: '1' },
+    packaged: false,
+    packagedEnv: { STASHBASE_APP_ROOT: '/repo' },
+    shutdownToken: 'shutdown-token',
+    oauthReturnToken: 'oauth-token',
+  });
+
+  assert.equal(environment.STASHBASE_DEV_RUNTIME, '1');
+  assert.equal(environment.STASHBASE_DEV_VITE, '1');
+});
+
+test('packaged server environment cannot inherit development runtime flags', () => {
+  const environment = createServerChildEnvironment({
+    baseEnv: {
+      STASHBASE_DEV_RUNTIME: '1',
+      STASHBASE_DEV_VITE: '1',
+    },
     packaged: true,
     packagedEnv: { ELECTRON_RUN_AS_NODE: '1' },
     shutdownToken: 'shutdown-token',
     oauthReturnToken: 'oauth-token',
   });
 
+  assert.equal(environment.STASHBASE_DEV_RUNTIME, undefined);
   assert.equal(environment.STASHBASE_DEV_VITE, undefined);
   assert.equal(environment.ELECTRON_RUN_AS_NODE, '1');
+});
+
+test('Electron-owned server uses a single process unless Vite explicitly needs watch mode', () => {
+  const direct = createServerArguments({
+    entry: '/repo/server/index.ts',
+    portArgs: ['--port=4200'],
+    packaged: false,
+    vite: false,
+  });
+  const vite = createServerArguments({
+    entry: '/repo/server/index.ts',
+    portArgs: ['--port=4200'],
+    packaged: false,
+    vite: true,
+  });
+  const packaged = createServerArguments({
+    entry: '/app/dist/server/index.mjs',
+    portArgs: [],
+    packaged: true,
+    vite: false,
+  });
+
+  assert.deepEqual(direct, ['/repo/server/index.ts', '--port=4200']);
+  assert.deepEqual(vite, ['watch', '/repo/server/index.ts', '--port=4200']);
+  assert.deepEqual(packaged, ['/app/dist/server/index.mjs']);
 });
 
 test('application menu exposes VS Code window commands on Windows and Linux', () => {

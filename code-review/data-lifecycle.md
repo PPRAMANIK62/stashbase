@@ -129,6 +129,9 @@ search; only explicit Start clears it.
   playback preview.
 - A missing native helper, model, or optional state store degrades to warning,
   blocked, or retryable status. It never blocks source browsing.
+- A source development runtime prefers the repository's live Python environment
+  and helper scripts even when Electron serves a built renderer without Vite.
+  Packaged launches instead resolve only their explicit bundled runtime paths.
 - Startup recovery runs only after the process owns the server port, preventing
   a losing startup contender from deleting the active owner's temporary work.
 

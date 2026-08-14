@@ -180,6 +180,14 @@ test('development fixtures can isolate discovery from developer-installed Agents
   assert.equal(initialAgentDiscoveryPolicy({}), 'auto');
   assert.equal(initialAgentDiscoveryPolicy({ STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only' }), 'auto');
   assert.equal(initialAgentDiscoveryPolicy({
+    STASHBASE_DEV_RUNTIME: '1',
+    STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only',
+  }), 'managed-only');
+  assert.equal(initialAgentDiscoveryPolicy({
+    STASHBASE_DEV_VITE: '1',
+    STASHBASE_AGENT_DISCOVERY_POLICY: 'system-only',
+  }), 'system-only');
+  assert.equal(initialAgentDiscoveryPolicy({
     STASHBASE_AGENT_DEBUG: '1',
     STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only',
   }), 'managed-only');
