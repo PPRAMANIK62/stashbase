@@ -383,7 +383,7 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     assert.equal(control.current!.state.current.activeTabId, secondTabId);
     assert.equal(
       control.current!.state.current.tabs.find((tab) => tab.id === firstTabId)?.file?.content,
-      firstTabSourceBeforeSwitch,
+      fromJsonEditorText(firstTabSourceBeforeSwitch, 'crlf'),
       'a successful save retains the submitted source for later tab reactivation',
     );
     await act(async () => { await control.current!.actions.activateTab(firstTabId); });
