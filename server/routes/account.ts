@@ -5,6 +5,7 @@ import {
 } from '../app-config.ts';
 import {
   beginHostedOAuth,
+  createFailedHostedOAuthFlow,
   exchangeHostedOAuthCode,
   failHostedOAuth,
   finishHostedOAuth,
@@ -19,9 +20,15 @@ import { errorMessage, logger } from '../log.ts';
 import { oauthResultPage } from '../oauth-result-page.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from '../state.ts';
 import { isEmbeddingAvailable } from '../embedding-availability.ts';
+import { processPrivateTokenMatches } from '../process-private-token.ts';
 
 const log = logger('routes/account');
 const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google']);
+const OAUTH_RETURN_TOKEN_HEADER = 'x-stashbase-oauth-return-token';
+
+interface AccountRouteOptions {
+  appReturnToken: string;
+}
 
 function oauthProvider(value: unknown): HostedOAuthProvider | null {
   return typeof value === 'string' && OAUTH_PROVIDERS.has(value as HostedOAuthProvider)
@@ -50,7 +57,7 @@ async function activateHostedSource(reason: string): Promise<boolean> {
   return isEmbeddingAvailable();
 }
 
-export function mount(app: express.Express): void {
+export function mount(app: express.Express, { appReturnToken }: AccountRouteOptions): void {
   app.get('/api/account', async (req, res) => {
     const refresh = req.query.refresh === '1';
     res.json(await hostedAccountState(refresh));
@@ -73,10 +80,13 @@ export function mount(app: express.Express): void {
       ? req.query.error_description
       : typeof req.query.error === 'string' ? req.query.error : '';
     if (!flowId) {
+      const message = 'The sign-in request is missing or expired. Return to StashBase and try again.';
+      const failedFlowId = createFailedHostedOAuthFlow(message);
       return res.status(400).type('html').send(oauthResultPage({
         title: 'Sign-in failed',
-        message: 'The sign-in request is missing or expired. Return to StashBase and try again.',
+        message,
         kind: 'error',
+        returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(failedFlowId)}`,
       }));
     }
     if (providerError) {
@@ -113,7 +123,10 @@ export function mount(app: express.Express): void {
     res.json(hostedOAuthStatus(flowId));
   });
 
-  app.post('/api/account/oauth/app-return', (_req, res) => {
+  app.post('/api/account/oauth/app-return', (req, res) => {
+    if (!processPrivateTokenMatches(req.header(OAUTH_RETURN_TOKEN_HEADER), appReturnToken)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     res.json({ acknowledged: noteHostedOAuthAppReturn() });
   });
 

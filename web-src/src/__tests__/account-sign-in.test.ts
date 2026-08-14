@@ -64,7 +64,7 @@ test('account Sign in immediately opens one Supabase Google OAuth flow without a
   }
 });
 
-test('completed browser sign-in returns focus to the initiating StashBase window', async () => {
+test('completed browser sign-in leaves native return to the authenticated callback deep link', async () => {
   let focusRequests = 0;
   let signedInEmail: string | undefined;
   const originalWindow = globalThis.window;
@@ -122,7 +122,7 @@ test('completed browser sign-in returns focus to the initiating StashBase window
       await new Promise<void>((resolve) => setImmediate(resolve));
     });
 
-    assert.equal(focusRequests, 1);
+    assert.equal(focusRequests, 0);
     assert.equal(signedInEmail, 'person@example.com');
   } finally {
     if (renderer) await act(async () => renderer?.unmount());

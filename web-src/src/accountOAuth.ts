@@ -1,6 +1,5 @@
 import { api, type HostedAccountState, type HostedOAuthProvider } from './api';
 import { notifyAccountChanged } from './accountEvents';
-import { electronBridge } from './electronBridge';
 import { openExternalUrl } from './lib/externalLink';
 
 const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
@@ -36,12 +35,9 @@ async function runSignIn(
     if (status.state !== 'complete') continue;
     const account = await api.getAccount(true);
     if (!account.signedIn) throw new Error('Sign-in completed, but the local session is unavailable.');
-    try {
-      await electronBridge()?.focusWindow?.();
-    } catch {
-      // The browser callback page remains the fallback when native focus is
-      // unavailable (browser dev shell, a closing window, or OS refusal).
-    }
+    // The authenticated callback deep link owns native focus and sends the
+    // acknowledgement that lets its browser tab close. Renderer polling only
+    // updates account state; focusing here races that handoff.
     notifyAccountChanged();
     return account;
   }

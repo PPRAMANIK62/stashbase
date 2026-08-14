@@ -185,6 +185,22 @@ export function finishHostedOAuth(flowId: string): void {
   if (flow?.state === 'exchanged') flow.state = 'complete';
 }
 
+/** Give a callback that arrived without a usable OAuth flow its own bounded
+ * status ticket. The fixed deep link still carries no data, while the browser
+ * can prove a successful app return before closing. */
+export function createFailedHostedOAuthFlow(message: string): string {
+  pruneOAuthFlows();
+  const flowId = base64Url(crypto.randomBytes(24));
+  pendingOAuthFlows.set(flowId, {
+    provider: 'google',
+    verifier: base64Url(crypto.randomBytes(48)),
+    createdAt: Date.now(),
+    state: 'error',
+    error: message,
+  });
+  return flowId;
+}
+
 /** Electron calls this only after accepting the exact data-free deep link.
  * Callback pages poll their own flow state and close only after this proof,
  * never merely because the browser lost focus. */

@@ -118,6 +118,7 @@ const SERVER_HOST = '127.0.0.1';
 const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
 const SERVER_PROTOCOL_VERSION = 1;
 const SERVER_SHUTDOWN_TOKEN = crypto.randomBytes(32).toString('hex');
+const OAUTH_RETURN_TOKEN = crypto.randomBytes(32).toString('hex');
 const PROJECT_ROOT = app.isPackaged ? app.getAppPath() : path.resolve(__dirname, '..');
 const SERVER_ENTRY = app.isPackaged
   ? path.join(PROJECT_ROOT, 'dist', 'server', 'index.mjs')
@@ -419,6 +420,7 @@ async function startOrReuseServer() {
       ...process.env,
       ...packagedEnv,
       STASHBASE_SHUTDOWN_TOKEN: SERVER_SHUTDOWN_TOKEN,
+      STASHBASE_OAUTH_RETURN_TOKEN: OAUTH_RETURN_TOKEN,
     },
     // stdin = 'ignore' is intentional: the server never reads from
     // stdin, and inheriting the parent's TTY made Node attach a real
@@ -1131,7 +1133,10 @@ function focusOAuthReturn() {
     }
     const acknowledged = await requestJson(SERVER_PORT, '/api/account/oauth/app-return', 1000, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-stashbase-oauth-return-token': OAUTH_RETURN_TOKEN,
+      },
     });
     if (!acknowledged.ok) console.warn('[electron] could not acknowledge OAuth return to the callback page');
   });
@@ -1151,6 +1156,7 @@ app.on('open-url', (event, url) => {
 });
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const initialProtocolLaunch = classifyProtocolLaunch(process.argv);
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
@@ -1170,6 +1176,12 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     registerOAuthReturnProtocol();
+    // A cold unsupported stashbase: URL is just as inert as the same URL sent
+    // to an existing instance: do not start the server or create a window.
+    if (initialProtocolLaunch === 'inert') {
+      app.quit();
+      return;
+    }
     try {
       await bugReportHandoff.initializeSession();
     } catch {
@@ -1190,7 +1202,7 @@ if (!hasSingleInstanceLock) {
     }
     installApplicationMenu();
     await initialWindowFlight.run();
-    if (process.argv.some(isOAuthReturnUrl)) focusOAuthReturn();
+    if (initialProtocolLaunch === 'oauth-return') focusOAuthReturn();
   });
 
   app.on('activate', () => {

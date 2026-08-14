@@ -44,6 +44,24 @@ test('failed OAuth callback keeps the return button visible without automatic la
   assert.doesNotMatch(html, /href="stashbase:\/\/oauth-complete" hidden/);
 });
 
+test('a failed callback can receive app-return proof through an opaque local status ticket', () => {
+  const result = runIsolated(`
+    const account = await import('./server/hosted-account.ts');
+    const flowId = account.createFailedHostedOAuthFlow('Missing sign-in flow.');
+    const before = account.hostedOAuthStatus(flowId);
+    const acknowledged = account.noteHostedOAuthAppReturn();
+    const after = account.hostedOAuthStatus(flowId);
+    process.stdout.write(JSON.stringify({ flowId, before, acknowledged, after }));
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.match(output.flowId, /^[A-Za-z0-9_-]+$/);
+  assert.equal(output.before.state, 'error');
+  assert.equal(output.before.appReturned, undefined);
+  assert.equal(output.acknowledged, true);
+  assert.equal(output.after.appReturned, true);
+});
+
 function runIsolated(source: string) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-hosted-account-test-'));
   try {

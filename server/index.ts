@@ -323,7 +323,9 @@ app.use([
 
 // ----- mount routes -------------------------------------------------------
 mountAppearanceRoutes(app);
-mountAccountRoutes(app);
+mountAccountRoutes(app, {
+  appReturnToken: process.env.STASHBASE_OAUTH_RETURN_TOKEN ?? '',
+});
 mountEmbedderRoutes(app);
 mountTranscriptionRoutes(app);
 // Register exact `/api/files/prepare` and `/api/files/reprocess` endpoints
