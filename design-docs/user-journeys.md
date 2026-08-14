@@ -84,7 +84,9 @@ the visible source.
 3. When using the hosted allowance, inspect its remaining percentage and reset
    date from the account menu; indexing and queries share that allowance.
 4. Optionally narrow to one member folder.
-5. Review grouped evidence and readiness guidance.
+5. Review grouped evidence and readiness guidance. Whole-token search does not
+   hide a later eligible result merely because a file contains earlier
+   substring-only hits.
 6. Open the result without exposing a hidden derived artifact or unexpectedly
    replacing the window's active folder.
 

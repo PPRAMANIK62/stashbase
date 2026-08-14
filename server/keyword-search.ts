@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { rgPath } from '@vscode/ripgrep';
@@ -69,9 +69,13 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
       '--json',
       opts.caseStrict ? '--case-sensitive' : '--smart-case',
       '--fixed-strings',
-      '--max-count', String(RG_PER_FILE_CAP),
       '--max-filesize', '5M',
     ];
+    // `--max-count` budgets ripgrep's own hits, which are still unfiltered.
+    // Whole-token filtering runs app-side, so a file whose first
+    // RG_PER_FILE_CAP hits are all substring-only would report nothing while
+    // real whole-token matches sit further down. Cap after filtering instead.
+    if (!opts.wholeWord) args.push('--max-count', String(RG_PER_FILE_CAP));
     const selected = searchExtensionsForTypes(opts.types ?? []);
     const directExtensions = selected == null
       ? DIRECT_TEXT_EXTENSIONS.map((extension) => `.${extension}`)
@@ -80,55 +84,80 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
         );
     for (const extension of directExtensions) args.push('--iglob', `*${extension}`);
     args.push('-e', query, opts.pathPrefix ? `./${opts.pathPrefix}` : '.');
-    execFile(RESOLVED_RG_PATH, args, {
+    const child = spawn(RESOLVED_RG_PATH, args, {
       cwd,
-      maxBuffer: 32 * 1024 * 1024,
-      timeout: RG_TIMEOUT_MS,
-    }, (err, stdout) => {
-      if (err) {
-        const code = (err as NodeJS.ErrnoException & { code?: number | string }).code;
-        const codeStr = String(code ?? '');
-        if (codeStr !== '1') {
-          if (codeStr === '2') {
-            return reject(new Error(`invalid query: ${query}`));
-          }
-          return reject(new Error(`ripgrep failed (code ${codeStr}): ${err.message}`));
-        }
-      }
-      const byFile = new Map<string, KeywordHitFile>();
-      let total = 0;
-      let truncated = false;
-      for (const line of stdout.split('\n')) {
-        if (!line) continue;
-        let evt: any;
-        try { evt = JSON.parse(line); } catch { continue; }
-        if (evt.type !== 'match') continue;
-        const dataPath = evt.data?.path?.text;
-        const lineNum = evt.data?.line_number;
-        const rawText = evt.data?.lines?.text;
-        if (typeof dataPath !== 'string' || typeof lineNum !== 'number' || typeof rawText !== 'string') continue;
-        const relPath = normalizeRipgrepPath(dataPath);
-        const stripped = rawText.replace(/\r?\n$/, '');
-        const subs = Array.isArray(evt.data?.submatches) ? evt.data.submatches : [];
-        const matchRanges = normalizeRipgrepSubmatches(stripped, subs)
-          .filter(([start, end]) => !opts.wholeWord || hasWholeTokenBoundaries(stripped, start, end));
-        if (matchRanges.length === 0) continue;
-        const snippet = snippetForLine(stripped, matchRanges);
-        let bucket = byFile.get(relPath);
-        if (!bucket) {
-          bucket = { path: relPath, matches: [], totalMatches: 0 };
-          byFile.set(relPath, bucket);
-        }
-        bucket.totalMatches += matchRanges.length;
-        if (total < RG_TOTAL_CAP) {
-          bucket.matches.push({ line: lineNum, text: snippet.text, ranges: snippet.ranges });
-          total += matchRanges.length;
-        } else {
-          truncated = true;
-        }
+    });
+    const byFile = new Map<string, KeywordHitFile>();
+    let total = 0;
+    let truncated = false;
+    let stdoutRemainder = '';
+    let settled = false;
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, RG_TIMEOUT_MS);
+
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) {
+        reject(error);
+        return;
       }
       const files = Array.from(byFile.values()).sort((a, b) => a.path.localeCompare(b.path));
       resolve({ files, totalMatches: total, truncated });
+    };
+    const consumeLine = (line: string) => {
+      if (!line) return;
+      let evt: any;
+      try { evt = JSON.parse(line); } catch { return; }
+      if (evt.type !== 'match') return;
+      const dataPath = evt.data?.path?.text;
+      const lineNum = evt.data?.line_number;
+      const rawText = evt.data?.lines?.text;
+      if (typeof dataPath !== 'string' || typeof lineNum !== 'number' || typeof rawText !== 'string') return;
+      const relPath = normalizeRipgrepPath(dataPath);
+      const stripped = rawText.replace(/\r?\n$/, '');
+      const subs = Array.isArray(evt.data?.submatches) ? evt.data.submatches : [];
+      const filteredRanges = normalizeRipgrepSubmatches(stripped, subs)
+        .filter(([start, end]) => !opts.wholeWord || hasWholeTokenBoundaries(stripped, start, end));
+      if (filteredRanges.length === 0) return;
+      let bucket = byFile.get(relPath);
+      if (!bucket) {
+        bucket = { path: relPath, matches: [], totalMatches: 0 };
+        byFile.set(relPath, bucket);
+      }
+      const remainingInFile = opts.wholeWord ? RG_PER_FILE_CAP - bucket.totalMatches : Infinity;
+      const matchRanges = filteredRanges.slice(0, Math.max(0, remainingInFile));
+      if (matchRanges.length < filteredRanges.length) truncated = true;
+      if (matchRanges.length === 0) return;
+      const snippet = snippetForLine(stripped, matchRanges);
+      bucket.totalMatches += matchRanges.length;
+      if (total < RG_TOTAL_CAP) {
+        bucket.matches.push({ line: lineNum, text: snippet.text, ranges: snippet.ranges });
+        total += matchRanges.length;
+      } else {
+        truncated = true;
+      }
+    };
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      stdoutRemainder += chunk;
+      const lines = stdoutRemainder.split('\n');
+      stdoutRemainder = lines.pop() ?? '';
+      lines.forEach(consumeLine);
+    });
+    child.stderr.resume();
+    child.on('error', (err) => finish(new Error(`ripgrep failed: ${err.message}`)));
+    child.on('close', (code) => {
+      if (stdoutRemainder) consumeLine(stdoutRemainder);
+      if (timedOut) return finish(new Error(`ripgrep failed (timeout after ${RG_TIMEOUT_MS}ms)`));
+      if (code === 0 || code === 1) return finish();
+      if (code === 2) return finish(new Error(`invalid query: ${query}`));
+      return finish(new Error(`ripgrep failed (code ${String(code ?? '')})`));
     });
   });
 }
