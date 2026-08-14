@@ -80,8 +80,14 @@ export interface BindFolderArgs {
   baseUrl?: string;
 }
 
+export interface DaemonCommand {
+  command: string;
+  args: string[];
+  cwd: string;
+}
+
 /** Singleton-ish handle. Use `getDaemon()` to access. */
-class MfsDaemon extends EventEmitter {
+export class MfsDaemon extends EventEmitter {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private pending = new Map<number, Pending>();
   private nextId = 1;
@@ -95,11 +101,46 @@ class MfsDaemon extends EventEmitter {
    *  identity while retaining the first source spelling for daemon replay. */
   private bindings = new Map<string, { folder: string; cfg: BindFolderArgs }>();
 
-  /** Spawn (idempotent) and resolve once the daemon emits `ready`. */
+  constructor(private readonly commandResolver: () => DaemonCommand = resolveDaemonCommand) {
+    super();
+  }
+
+  /** Spawn (idempotent) and resolve only after the daemon has accepted the
+   * current rules and every retained folder binding. Public operations never
+   * race the bootstrap handshake. */
   async ensureReady(): Promise<void> {
     if (this.readyP) return this.readyP;
-    this.readyP = this.spawnAndWait();
-    return this.readyP;
+    const attempt = this.spawnAndConfigure();
+    this.readyP = attempt;
+    try {
+      await attempt;
+    } catch (err) {
+      if (this.readyP === attempt) {
+        this.readyP = null;
+        await this.close();
+      }
+      throw err;
+    }
+  }
+
+  private async spawnAndConfigure(): Promise<void> {
+    await this.spawnAndWait();
+    await this.callReadyProcess('set_rules', {
+      excluded_dirs: [...INDEX_EXCLUDED_DIRS],
+      max_indexable_bytes: MAX_INDEXABLE_BYTES,
+      include_extensions: [
+        ...DIRECT_TEXT_EXTENSIONS.map((extension) => `.${extension}`),
+        ...CONVERTIBLE_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
+      ],
+      note_extensions: NOTE_EXTS.map((extension) => `.${extension}`),
+      legacy_derived_source_extensions:
+        LEGACY_DERIVED_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
+      legacy_extensionless_derived_source_extensions:
+        LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
+    });
+    for (const { folder, cfg } of this.bindings.values()) {
+      await this.callReadyProcess('bind_folder', bindFolderPayload(folder, cfg));
+    }
   }
 
   /** Opaque token identifying the current Python process. Increments on
@@ -156,7 +197,7 @@ class MfsDaemon extends EventEmitter {
 
   private spawnAndWait(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const daemon = resolveDaemonCommand();
+      const daemon = this.commandResolver();
       log.info(`spawning ${daemon.command} ${daemon.args.join(' ')}`);
       const proc = spawn(daemon.command, daemon.args, {
         cwd: daemon.cwd,
@@ -237,51 +278,6 @@ class MfsDaemon extends EventEmitter {
       this.emit(`daemon:${msg.event}`, msg);
       if (msg.event === 'ready') {
         log.info(`daemon ready: store=${msg.db}`);
-        // Push the indexing rules before anything else: Node is the
-        // single source of truth for admission knowledge
-        // (server/indexable.ts / format.ts) — the daemon's built-in
-        // copies are only fallbacks, and silent drift between the two
-        // produces permanent pending or delete/re-embed oscillation.
-        // An old PyInstaller binary that doesn't
-        // know the op gets a loud warning instead of silent drift.
-        this.call('set_rules', {
-          excluded_dirs: [...INDEX_EXCLUDED_DIRS],
-          max_indexable_bytes: MAX_INDEXABLE_BYTES,
-          include_extensions: [
-            ...DIRECT_TEXT_EXTENSIONS.map((e) => `.${e}`),
-            // Convertible sources (PDF/image/DOCX/audio) are TRACKED by the disk walk so
-            // their index entry — whose content is the app-data derived note,
-            // indexed under the source path — isn't orphan-deleted, and so
-            // scan_diff detects source changes. The daemon only lists/hashes
-            // them; the markdown content is pushed by the conversion path.
-            ...CONVERTIBLE_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
-          ],
-          note_extensions: NOTE_EXTS.map((extension) => `.${extension}`),
-          legacy_derived_source_extensions:
-            LEGACY_DERIVED_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
-          legacy_extensionless_derived_source_extensions:
-            LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
-        }).catch((err) => log.warn(
-          `set_rules failed — daemon binary may predate rule push, indexing rules can drift ` +
-            `(rebuild with: pnpm build:python-sidecar): ${(err as Error).message}`,
-        ));
-        // Replay every folder binding the renderer has seen so far so a
-        // crash + respawn doesn't strand the daemon empty-handed. Fire-
-        // and-forget; if any individual rebind fails, the next user op
-        // for that folder surfaces the error.
-        if (this.bindings.size > 0) {
-          for (const { folder, cfg } of this.bindings.values()) {
-            this.call('bind_folder', {
-              folder,
-              folder_identity: filesystemPath.identity(folder),
-              provider: cfg.provider,
-              ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
-              ...(cfg.model ? { model: cfg.model } : {}),
-              ...(cfg.dimension ? { dimension: cfg.dimension } : {}),
-              ...(cfg.baseUrl ? { base_url: cfg.baseUrl } : {}),
-            }).catch((err) => log.warn(`rebind ${folder} after respawn failed: ${(err as Error).message}`));
-          }
-        }
         readyResolve();
       } else if (msg.event === 'starting') {
         log.info(`daemon starting, pid=${msg.pid}`);
@@ -307,6 +303,12 @@ class MfsDaemon extends EventEmitter {
   /** Send one op and await the matching reply. Awaits `ensureReady` first. */
   async call<T = unknown>(op: string, args: Record<string, unknown>): Promise<T> {
     await this.ensureReady();
+    return this.callReadyProcess<T>(op, args);
+  }
+
+  /** Send one op after the raw process-ready event. Bootstrap uses this
+   * directly to avoid awaiting its own configured-ready promise. */
+  private async callReadyProcess<T = unknown>(op: string, args: Record<string, unknown>): Promise<T> {
     if (!this.proc) throw new Error('MFS daemon not running');
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
@@ -349,16 +351,22 @@ class MfsDaemon extends EventEmitter {
     // up so the next bind doesn't trip on a stale flock.
     await new Promise<void>((resolve) => {
       let exited = false;
-      proc.once('exit', () => { exited = true; resolve(); });
-      setTimeout(() => {
+      const termTimer = setTimeout(() => {
         if (exited) return;
         try { proc.kill('SIGTERM'); } catch { /* already gone */ }
       }, 1500);
-      setTimeout(() => {
+      const killTimer = setTimeout(() => {
         if (exited) return;
         try { proc.kill('SIGKILL'); } catch { /* already gone */ }
-        setTimeout(() => { if (!exited) resolve(); }, 500);
+        const finalTimer = setTimeout(() => { if (!exited) resolve(); }, 500);
+        finalTimer.unref();
       }, 3000);
+      proc.once('exit', () => {
+        exited = true;
+        clearTimeout(termTimer);
+        clearTimeout(killTimer);
+        resolve();
+      });
     });
   }
 }
@@ -426,7 +434,7 @@ function pythonCandidates(root: string): string[] {
       ];
 }
 
-function resolveDaemonCommand(): { command: string; args: string[]; cwd: string } {
+function resolveDaemonCommand(): DaemonCommand {
   const binary = resolveDaemonBinary();
   const storeArgs = ['--store-root', globalVectorStoreDir()];
   if (binary) {
@@ -435,6 +443,18 @@ function resolveDaemonCommand(): { command: string; args: string[]; cwd: string 
   const pythonBin = resolvePythonBin();
   const script = resolvePythonDaemonScript();
   return { command: pythonBin, args: ['-u', script, ...storeArgs], cwd: PROJECT_ROOT };
+}
+
+function bindFolderPayload(folder: string, cfg: BindFolderArgs): Record<string, unknown> {
+  return {
+    folder,
+    folder_identity: filesystemPath.identity(folder),
+    provider: cfg.provider,
+    ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
+    ...(cfg.model ? { model: cfg.model } : {}),
+    ...(cfg.dimension ? { dimension: cfg.dimension } : {}),
+    ...(cfg.baseUrl ? { base_url: cfg.baseUrl } : {}),
+  };
 }
 
 function resolveDaemonBinary(): string | null {

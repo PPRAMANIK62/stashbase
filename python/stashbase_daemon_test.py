@@ -214,6 +214,23 @@ class StashbaseDaemonTests(unittest.TestCase):
             finally:
                 svc.close_all()
 
+            cleanup = stashbase_daemon.StashbaseStore(str(store_root))
+            try:
+                cleanup.bind_root(
+                    root.as_posix(),
+                    "openai",
+                    root_identity=root.as_posix(),
+                    dimension=3,
+                )
+                self.assertIsNone(cleanup._embedder)
+                stashbase_daemon.op_delete(cleanup, {"path": renamed.as_posix()})
+                self.assertNotIn(
+                    renamed.as_posix(),
+                    stashbase_daemon.op_list(cleanup, {"folder": root.as_posix()})["files"],
+                )
+            finally:
+                cleanup.close_all()
+
     def test_openrouter_embedder_uses_openai_compatible_endpoint(self) -> None:
         class FakeOpenAIClient:
             def __init__(self, **kwargs):
@@ -400,6 +417,32 @@ class StashbaseDaemonTests(unittest.TestCase):
             store.close.assert_called_once_with()
             connection_manager.close_all.assert_called_once_with()
             release_server.assert_called_once_with(str(svc._db_path))
+
+    def test_no_key_bind_reopens_an_existing_store_for_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            svc = stashbase_daemon.StashbaseStore(tmp)
+            svc._db_path.touch()
+            with mock.patch.object(svc, "_ensure_store_for_dimension") as ensure:
+                svc.bind_root(
+                    "/library",
+                    "openai",
+                    root_identity="/library",
+                    dimension=1536,
+                )
+            ensure.assert_called_once_with(1536)
+
+    def test_delete_acknowledgements_propagate_store_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            svc = stashbase_daemon.StashbaseStore(tmp)
+            store = mock.Mock()
+            store.delete_by_source.side_effect = RuntimeError("delete failed")
+            store.delete_by_prefix.side_effect = RuntimeError("prefix delete failed")
+            svc._store = store
+            svc._dim = 1536
+            with self.assertRaisesRegex(RuntimeError, "delete failed"):
+                stashbase_daemon.op_delete(svc, {"path": "/library/note.md"})
+            with self.assertRaisesRegex(RuntimeError, "prefix delete failed"):
+                stashbase_daemon.op_delete_prefix(svc, {"prefix": "/library/folder"})
 
     def test_filesystem_roots_keep_root_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

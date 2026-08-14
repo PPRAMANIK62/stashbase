@@ -639,11 +639,11 @@ class StashbaseStore:
     Lifecycle:
         1. ``__init__`` records the resolved global ``milvus.db`` path.
            No daemon-side I/O yet.
-        2. ``bind_root(root, ...)`` — first bind carrying an API key
-           creates the embedder + collection; later binds reuse them and
-           just register the folder root. Roots still get bound so the
-           "must bind before writing" contract holds and ``scan_diff`` /
-           ``status`` know which folders exist.
+        2. ``bind_root(root, ...)`` — first bind carrying an API key creates
+           the embedder + collection. A no-key bind may reopen an existing
+           collection for list/delete cleanup, but never creates a new one.
+           Later binds reuse the process-owned store and register the folder
+           root so ``scan_diff`` / ``status`` know which folders exist.
         3. ``store_for_path(path)`` / ``stores()`` — return the one
            ``(embedder, store)``; raise if nothing's bound yet.
 
@@ -672,12 +672,22 @@ class StashbaseStore:
     def _ensure_store(self, embedder):
         """Open the single Milvus collection. Idempotent: reuses the
         cached store once created."""
+        return self._ensure_store_for_dimension(embedder.dimension, embedder)
+
+    def _ensure_store_for_dimension(self, dim: int, embedder=None):
+        """Open the collection for reads/deletes, optionally attaching an
+        embedder. An existing database must remain cleanable after the user
+        removes credentials; cleanup operations do not require embeddings."""
         if self._store is not None:
+            if embedder is not None:
+                if self._dim != dim:
+                    self.close_all(clear_bindings=False)
+                    return self._ensure_store_for_dimension(dim, embedder)
+                self._embedder = embedder
             return self._store
         from mfs.store import MilvusStore
         from mfs.config import MilvusConfig
         os.environ["MFS_HOME"] = str(self._db_path.parent)
-        dim = embedder.dimension
         config = MilvusConfig(uri=str(self._db_path), collection_name=_collection_name(dim))
         store = MilvusStore(config, dim)
         _patch_inverted_index_skip()
@@ -735,11 +745,10 @@ class StashbaseStore:
         dimension=None,
         base_url=None,
     ) -> dict:
-        # First bind with a key builds the embedder + collection; later
-        # binds reuse them. Without a key the root is still registered
-        # but the collection isn't created — indexing stays disabled until
-        # the user supplies an embedding key (graceful no-key degrade).
-        if self._store is None and api_key:
+        # A keyed bind attaches the embedder. A no-key bind still reopens an
+        # existing collection for delete/list/status cleanup; it never creates
+        # a new database merely because semantic indexing is disabled.
+        if api_key and self._embedder is None:
             embedder = make_embedder(
                 provider,
                 model=model,
@@ -748,6 +757,8 @@ class StashbaseStore:
                 base_url=base_url,
             )
             self._ensure_store(embedder)
+        elif self._store is None and self._db_path.exists():
+            self._ensure_store_for_dimension(dimension or 1536)
         requested = _norm_root(root)
         identity = root_identity or requested
         root = self._bound.setdefault(identity, requested)
@@ -784,7 +795,11 @@ class StashbaseStore:
         """Return ``(embedder, store)`` for ``path`` (absolute POSIX).
         Every folder shares the one collection; the path still has to
         live under a bound root."""
-        if self.root_for_path(path, path_identity=path_identity) is None or self._store is None:
+        if (
+            self.root_for_path(path, path_identity=path_identity) is None
+            or self._store is None
+            or self._embedder is None
+        ):
             raise RuntimeError(
                 f"no bound root matches path '{path}'; call bind_root first "
                 "(or set an embedding API key)",
@@ -807,7 +822,7 @@ class StashbaseStore:
     def require_current(self):
         """Return ``(embedder, store, dim)``; raise if no embedder is
         bound yet (e.g. no embedding key set)."""
-        if self._store is None:
+        if self._store is None or self._embedder is None:
             raise RuntimeError(
                 "no embedder bound; call bind_folder with an embedding API key first",
             )
@@ -977,13 +992,10 @@ def op_delete(svc: StashbaseStore, args: dict) -> dict:
     path = args["path"]
     n = 0
     for _pk, _emb, store in svc.stores():
-        try:
-            removed = int(store.delete_by_source(path))
-            if removed:
-                _flush_store(store)
-            n += removed
-        except Exception:
-            pass
+        removed = int(store.delete_by_source(path))
+        if removed:
+            _flush_store(store)
+        n += removed
     return {"removed": n}
 
 
@@ -1220,13 +1232,10 @@ def op_delete_prefix(svc: StashbaseStore, args: dict) -> dict:
     prefix = _source_child_prefix(args["prefix"])
     removed = 0
     for _pk, _emb, store in svc.stores():
-        try:
-            store_removed = int(store.delete_by_prefix(prefix))
-            if store_removed:
-                _flush_store(store)
-            removed += store_removed
-        except Exception:
-            pass
+        store_removed = int(store.delete_by_prefix(prefix))
+        if store_removed:
+            _flush_store(store)
+        removed += store_removed
     return {"removed": removed}
 
 
