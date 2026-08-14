@@ -188,6 +188,30 @@ function focusWindow(win) {
   return true;
 }
 
+function focusAllowedSenderWindow({ BrowserWindow, sender, isAllowed, beforeFocus }) {
+  const win = BrowserWindow.fromWebContents(sender);
+  if (!win || !isAllowed(win)) return null;
+  beforeFocus?.(win);
+  return focusWindow(win) ? win : null;
+}
+
+function isOAuthReturnUrl(value) {
+  if (typeof value !== 'string' || value.length > 256) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'stashbase:'
+      && url.hostname === 'oauth-complete'
+      && (url.pathname === '' || url.pathname === '/')
+      && url.search === ''
+      && url.hash === ''
+      && url.username === ''
+      && url.password === ''
+      && url.port === '';
+  } catch {
+    return false;
+  }
+}
+
 async function openOrFocusFolder({
   registry,
   folder,
@@ -334,7 +358,9 @@ module.exports = {
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
+  focusAllowedSenderWindow,
   focusWindow,
+  isOAuthReturnUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,

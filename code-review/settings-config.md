@@ -25,7 +25,9 @@ their clients and are updated only through explicit MCP setup actions.
 - The app never changes user-managed filesystem ownership, flags, or ACLs to
   repair an unwritable config directory. Errors name the user-actionable config
   location without leaking atomic temporary paths.
-- Credentials are accepted and persisted only through Settings. Environment
+- BYOK credentials are accepted and persisted only through Settings. Account
+  OAuth may start from explicit setup, Settings, or account-menu Sign in
+  actions, but only the Node server persists its session. Environment
   variables may isolate automated tests or select runtime plumbing, but are
   never the product credential source of truth.
 - BYOK credentials, the refreshable Supabase account session, and the active
@@ -34,6 +36,14 @@ their clients and are updated only through explicit MCP setup actions.
 - Account access and refresh tokens are Node-only configuration. They never
   cross renderer HTTP responses or the Node/Python boundary; Python receives a
   random per-process loopback bearer credential instead.
+- Browser provider login uses PKCE. Node generates and retains the verifier,
+  accepts the short-lived authorization code only on a loopback callback, and
+  exposes an opaque flow id plus pending/complete/error state to the renderer.
+  After observing `complete`, the renderer may request native focus through a
+  narrow IPC channel; no provider code or account token crosses that channel,
+  and the browser callback page remains the fallback. Its app-return deep link
+  is a fixed, data-free action and never carries a flow id, provider code, or
+  account token.
 - Read-modify-write helpers preserve unrelated config domains. Concurrent MCP
   listener transitions serialize and roll active exposure back if persistence
   fails.

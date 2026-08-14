@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '../icons';
-import { api, type HostedAccountState } from '../api';
+import { api, errorMessage, type HostedAccountState } from '../api';
 import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '../accountEvents';
+import { signInWithStashBase } from '../accountOAuth';
 import { DISCORD_INVITE_URL, openExternalUrl } from '../lib/externalLink';
 import { openSettings } from './SettingsModal';
 import { Button } from './ui/button';
@@ -22,6 +23,8 @@ import {
  */
 export function SidebarAccountRow() {
   const [account, setAccount] = useState<HostedAccountState | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   function refresh(refreshUsage = false) {
     api.getAccount(refreshUsage).then(setAccount).catch(() => { /* local server startup race */ });
@@ -49,6 +52,15 @@ export function SidebarAccountRow() {
         refresh(false);
       })
       .catch(() => { /* Settings remains the recovery surface */ });
+  }
+
+  function signIn() {
+    setSigningIn(true);
+    setSignInError(null);
+    void signInWithStashBase('google')
+      .then(setAccount)
+      .catch((error: unknown) => setSignInError(errorMessage(error)))
+      .finally(() => setSigningIn(false));
   }
 
   return (
@@ -116,11 +128,12 @@ export function SidebarAccountRow() {
                     <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
                       Sign in for a free monthly embedding allowance. Local files and Exact search remain available without an account.
                     </div>
+                    {signInError && <div className="mt-2 text-xs text-destructive">{signInError}</div>}
                   </div>
                   <MenuSeparator className="m-0" />
                   <div className="p-1">
-                    <MenuItem label="Sign in to StashBase" onClick={() => openSettings('embedding')}>
-                      <span className="flex items-center gap-2"><ExternalLinkIcon className="size-4" />Sign in to StashBase</span>
+                    <MenuItem label="Sign in to StashBase" disabled={signingIn} onClick={signIn}>
+                      <span className="flex items-center gap-2"><ExternalLinkIcon className="size-4" />{signingIn ? 'Waiting for browser…' : 'Sign in to StashBase'}</span>
                     </MenuItem>
                   </div>
                 </>

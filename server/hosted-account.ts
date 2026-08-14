@@ -1,4 +1,5 @@
 import packageJson from '../package.json' with { type: 'json' };
+import crypto from 'node:crypto';
 import {
   getEmbeddingSource,
   getHostedAccountSession,
@@ -51,6 +52,30 @@ interface ErrorPayload {
   msg?: string;
 }
 
+export type HostedOAuthProvider = 'google' | 'github';
+
+export interface HostedOAuthStart {
+  flowId: string;
+  provider: HostedOAuthProvider;
+  url: string;
+}
+
+export interface HostedOAuthStatus {
+  state: 'pending' | 'complete' | 'error';
+  error?: string;
+}
+
+interface PendingOAuthFlow {
+  provider: HostedOAuthProvider;
+  verifier: string;
+  createdAt: number;
+  state: 'pending' | 'exchanged' | 'complete' | 'error';
+  error?: string;
+}
+
+const OAUTH_FLOW_TTL_MS = 10 * 60 * 1000;
+const pendingOAuthFlows = new Map<string, PendingOAuthFlow>();
+
 function messageOf(value: ErrorPayload | null, fallback: string): string {
   return value?.message ?? value?.error_description ?? value?.msg ?? value?.error ?? fallback;
 }
@@ -86,25 +111,88 @@ async function supabaseAuth(path: string, body: Record<string, unknown>, accessT
   return payload ?? {};
 }
 
-export async function requestEmailOtp(email: string): Promise<void> {
-  const normalized = email.trim().toLowerCase();
-  if (!/^\S+@\S+\.\S+$/.test(normalized)) throw new Error('Enter a valid email address.');
-  await supabaseAuth('/otp', { email: normalized, create_user: true });
+function base64Url(bytes: Buffer): string {
+  return bytes.toString('base64url');
 }
 
-export async function verifyEmailOtp(email: string, token: string): Promise<HostedAccountSession> {
-  const normalizedEmail = email.trim().toLowerCase();
-  const normalizedToken = token.replace(/\s+/g, '');
-  if (!normalizedToken) throw new Error('Enter the verification code from your email.');
-  const payload = await supabaseAuth('/verify', {
-    email: normalizedEmail,
-    token: normalizedToken,
-    type: 'email',
+function pruneOAuthFlows(now = Date.now()): void {
+  for (const [flowId, flow] of pendingOAuthFlows) {
+    if (now - flow.createdAt > OAUTH_FLOW_TTL_MS) pendingOAuthFlows.delete(flowId);
+  }
+}
+
+function assertLoopbackCallbackOrigin(callbackOrigin: string): URL {
+  const parsed = new URL(callbackOrigin);
+  if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)) {
+    throw new Error('OAuth callback must use the local StashBase server.');
+  }
+  return parsed;
+}
+
+export function beginHostedOAuth(provider: HostedOAuthProvider, callbackOrigin: string): HostedOAuthStart {
+  pruneOAuthFlows();
+  const origin = assertLoopbackCallbackOrigin(callbackOrigin);
+  const flowId = base64Url(crypto.randomBytes(24));
+  const verifier = base64Url(crypto.randomBytes(48));
+  const challenge = base64Url(crypto.createHash('sha256').update(verifier).digest());
+  const callback = new URL('/api/account/oauth/callback', origin);
+  callback.searchParams.set('flow', flowId);
+
+  pendingOAuthFlows.set(flowId, {
+    provider,
+    verifier,
+    createdAt: Date.now(),
+    state: 'pending',
   });
-  const session = sessionFrom(payload);
-  lastQuota = undefined;
-  setHostedAccountSession(session);
-  return session;
+
+  const authorize = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
+  authorize.searchParams.set('provider', provider);
+  authorize.searchParams.set('redirect_to', callback.toString());
+  authorize.searchParams.set('code_challenge', challenge);
+  authorize.searchParams.set('code_challenge_method', 's256');
+  return { flowId, provider, url: authorize.toString() };
+}
+
+export async function exchangeHostedOAuthCode(flowId: string, authCode: string): Promise<HostedAccountSession> {
+  pruneOAuthFlows();
+  const flow = pendingOAuthFlows.get(flowId);
+  if (!flow || flow.state !== 'pending') throw new Error('This sign-in request expired. Start again from StashBase.');
+  if (!authCode.trim()) throw new Error('Supabase did not return an authorization code.');
+  try {
+    const payload = await supabaseAuth('/token?grant_type=pkce', {
+      auth_code: authCode,
+      code_verifier: flow.verifier,
+    });
+    const session = sessionFrom(payload);
+    lastQuota = undefined;
+    setHostedAccountSession(session);
+    flow.state = 'exchanged';
+    return session;
+  } catch (error: unknown) {
+    failHostedOAuth(flowId, error instanceof Error ? error.message : String(error));
+    throw error;
+  }
+}
+
+export function finishHostedOAuth(flowId: string): void {
+  const flow = pendingOAuthFlows.get(flowId);
+  if (flow?.state === 'exchanged') flow.state = 'complete';
+}
+
+export function failHostedOAuth(flowId: string, message: string): void {
+  const flow = pendingOAuthFlows.get(flowId);
+  if (!flow) return;
+  flow.state = 'error';
+  flow.error = message;
+}
+
+export function hostedOAuthStatus(flowId: string): HostedOAuthStatus {
+  pruneOAuthFlows();
+  const flow = pendingOAuthFlows.get(flowId);
+  if (!flow) return { state: 'error', error: 'This sign-in request expired. Start again.' };
+  if (flow.state === 'complete') return { state: 'complete' };
+  if (flow.state === 'error') return { state: 'error', error: flow.error ?? 'Sign-in failed.' };
+  return { state: 'pending' };
 }
 
 export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}): Promise<string> {

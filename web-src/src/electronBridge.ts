@@ -14,6 +14,7 @@ export interface ElectronBridge {
     allowCreateDirectory?: boolean;
   }) => Promise<string | null>;
   openExternal?: (url: string) => Promise<boolean>;
+  focusWindow?: () => Promise<boolean>;
   openFolderWindow?: (folder: string) => Promise<boolean>;
   setWindowFolder?: (folder: string | null) => Promise<boolean>;
   onPrepareContextRelease?: (handler: (reason: string) => Promise<boolean>) => (() => void);
