@@ -1,10 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { EmbedderState } from '../api';
 import {
   hasSkippedAiIndexing,
   isEmbeddingAuthorized,
   setAiIndexingSkipped,
 } from '../components/embedder/embeddingAuth';
+
+function state(patch: Partial<EmbedderState>): EmbedderState {
+  return {
+    provider: 'openai',
+    hasKey: false,
+    authorized: false,
+    source: 'openai',
+    model: 'text-embedding-3-small',
+    account: { signedIn: false, active: false },
+    ...patch,
+  };
+}
 
 test('the AI Index skip is per folder: another folder re-offers, activation clears all', () => {
   assert.equal(hasSkippedAiIndexing('/work/alpha'), false);
@@ -28,8 +41,9 @@ test('the AI Index skip is per folder: another folder re-offers, activation clea
   assert.equal(hasSkippedAiIndexing('/work/beta'), false);
 });
 
-test('authorization is the stored key, not login state', () => {
+test('AI Index authorization accepts either hosted account or BYOK source', () => {
   assert.equal(isEmbeddingAuthorized(null), false);
-  assert.equal(isEmbeddingAuthorized({ hasKey: false } as never), false);
-  assert.equal(isEmbeddingAuthorized({ hasKey: true } as never), true);
+  assert.equal(isEmbeddingAuthorized(state({ authorized: true, source: 'stashbase-account' })), true);
+  assert.equal(isEmbeddingAuthorized(state({ authorized: true, source: 'openrouter', hasKey: true })), true);
+  assert.equal(isEmbeddingAuthorized(state({ authorized: false, source: 'stashbase-account' })), false);
 });

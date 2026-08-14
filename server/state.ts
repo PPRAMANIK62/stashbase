@@ -16,7 +16,8 @@ import { MfsIndexer } from './indexer.mfs.ts';
 import type { Indexer, EmbedderRuntimeConfig } from './indexer.ts';
 import { getCurrentFolder, getRecentFolders, onClose, onSwitch, runWithWindowId } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { getEmbedderConfig } from './app-config.ts';
+import { getEmbeddingSource, getEmbedderConfig } from './app-config.ts';
+import { hostedEmbeddingRuntime } from './hosted-embedding-broker.ts';
 import { syncIndex, type SyncResult } from './sync.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { clearStaleMilvusLock } from './stale-lock.ts';
@@ -120,11 +121,12 @@ export function semanticSyncPolicy(folderRoot: string, forceEmbedding = false): 
   };
 }
 
-/** Resolve the runtime embedder config. Returns null
- *  when no API key is set — the caller still binds the folder (so it's
+/** Resolve the active runtime embedder config. Returns null
+ *  when neither account allowance nor BYOK is active — the caller still binds the folder (so it's
  *  registered) but indexing stays disabled until the user adds a key
  *  (graceful no-key degrade). */
 function resolveEmbedder(): EmbedderRuntimeConfig | null {
+  if (getEmbeddingSource() === 'stashbase-account') return hostedEmbeddingRuntime();
   const cfg = getEmbedderConfig();
   if (!cfg.apiKey) return null;
   return {
@@ -138,8 +140,8 @@ function resolveEmbedder(): EmbedderRuntimeConfig | null {
 
 /** Configure + spawn the daemon, then bind every folder in Your Folders.
  *  Idempotent on the bind side; safe to call once at server
- *  startup. With no API key, folders are still bound (registered) but the
- *  collection isn't created until a key is supplied — search just
+ *  startup. With no embedding source, folders are still bound (registered) but the
+ *  collection isn't created until one is supplied — semantic search just
  *  returns nothing until then. */
 function libraryFolderRoots(): string[] {
   // Membership = "Your Folders" (the recents list), which can live anywhere
@@ -162,7 +164,9 @@ export async function bootBindAllFolders(): Promise<void> {
     return;
   }
   log.info(`boot bind: ${roots.length} folder(s)`);
-  const cfg = resolveEmbedder() ?? { provider: getEmbedderConfig().provider };
+  const cfg = resolveEmbedder() ?? {
+    provider: getEmbeddingSource() === 'stashbase-account' ? 'stashbase' : getEmbedderConfig().provider,
+  };
   for (const root of roots) {
     try {
       await indexer.bindFolder(root, cfg);
@@ -210,7 +214,7 @@ function claimStaleLockSweep(storeRoot: string): boolean {
 
 /** Bind the indexer to a folder using the configured embedder. Called on
  *  every folder switch (idempotent). Doesn't trigger sync — caller's
- *  responsibility via `scheduleIndexerSync`. With no key the folder is
+ *  responsibility via `scheduleIndexerSync`. With no active source the folder is
  *  still bound but indexing is disabled. */
 export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
   // Before the first bind of this process, sweep any stashbase daemon
@@ -227,9 +231,11 @@ export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
     }
   }
   const cfg = resolveEmbedder();
-  const runtime = cfg ?? { provider: getEmbedderConfig().provider };
+  const runtime = cfg ?? {
+    provider: getEmbeddingSource() === 'stashbase-account' ? 'stashbase' : getEmbedderConfig().provider,
+  };
   if (!cfg) {
-    log.warn(`embedder: no embedding key set — ${folderAbs} bound but indexing/search disabled until a key is added`);
+    log.warn(`embedder: no embedding source active — ${folderAbs} bound but AI Index is disabled until an account or key is selected`);
   }
   await indexer.bindFolder(filesystemPath.absolute(folderAbs), runtime);
 }

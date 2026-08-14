@@ -22,6 +22,10 @@ user-managed results.
 - AI Index provides meaning-based retrieval when an embedding source is
   configured. Product copy says **AI Index**; engineering terms such as
   semantic indexing and embeddings appear only where technically necessary.
+- Setup offers a verified-email StashBase account with an included monthly
+  allowance as the primary path and OpenAI/OpenRouter keys as the advanced
+  path. The active source is explicit, while inactive account and key
+  credentials remain available for later switching.
 - The search popup searches the whole library by default and can narrow to one
   member folder. It remembers query, mode, options, scope, and results across
   close, reopen, and folder switches, then refreshes against current content.
@@ -40,6 +44,10 @@ user-managed results.
 - AI Index setup is strongly recommended but not a gate for local browsing,
   editing, preview, or exact search. Activation persists; “Skip for now” is a
   per-window choice and remains reversible from Files or Settings.
+- Hosted indexing and meaning-based queries draw from one token allowance.
+  The account menu shows identity, remaining percentage, and reset date. When
+  the allowance is exhausted, hosted semantic work stops while Exact search
+  and every local-file workflow remain available.
 - In-app and MCP retrieval share source identity and access rules. MCP also
   supports validated source-type categories.
 
@@ -53,6 +61,9 @@ user-managed results.
   product boundary.
 - Credentials are managed through Settings. Browsing local files and serving
   an existing local index never depends on online authentication.
+- Account sessions remain Node-owned. Renderer responses contain only account
+  display/quota state, and the Python daemon receives only an ephemeral
+  loopback credential rather than Supabase access or refresh tokens.
 - A credential save fails with an actionable error when the app-owned settings
   path is not writable. StashBase does not change filesystem ownership, flags,
   or access-control entries to make the save succeed.

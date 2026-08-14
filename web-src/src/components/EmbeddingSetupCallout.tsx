@@ -25,9 +25,11 @@ import { useEffect, useState } from 'react';
 import { api, type EmbedderState } from '../api';
 import { openEmbeddingSetup } from './EmbedderRequireKeyGate';
 import { isEmbeddingAuthorized } from './embedder/embeddingAuth';
+import { ACCOUNT_CHANGED_EVENT } from '../accountEvents';
 
 export default function EmbeddingSetupCallout() {
   const [embedder, setEmbedder] = useState<EmbedderState | null>(null);
+  const [authRevision, setAuthRevision] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +37,12 @@ export default function EmbeddingSetupCallout() {
       .then((state) => { if (!cancelled) setEmbedder(state); })
       .catch(() => { /* startup race with server boot — stay hidden */ });
     return () => { cancelled = true; };
+  }, [authRevision]);
+
+  useEffect(() => {
+    const onChanged = () => setAuthRevision((value) => value + 1);
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
   }, []);
 
   if (isEmbeddingAuthorized(embedder)) return null;

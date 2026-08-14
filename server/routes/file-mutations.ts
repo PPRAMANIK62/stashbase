@@ -1,5 +1,5 @@
 import express from 'express';
-import { getApiKey } from '../app-config.ts';
+import { isEmbeddingConfigured } from '../app-config.ts';
 import { queueConvertibleSource } from '../conversion-dispatch.ts';
 import { clearRecord } from '../conversion-status.ts';
 import { deleteDerivedForSource } from '../derived-store.ts';
@@ -103,10 +103,10 @@ export function mountFileMutationRoutes(app: express.Express): void {
               log.warn(`rename: failed to remove legacy derived index row ${rel}: ${errorMessage(err)}`);
             });
           }
-          if (getApiKey()) await reindexUpdatedLinks();
+          if (isEmbeddingConfigured()) await reindexUpdatedLinks();
           return 'Searchable text is being regenerated in the background.';
         }
-        if (!getApiKey()) {
+        if (!isEmbeddingConfigured()) {
           log.info(`rename: skipped index update for ${oldName} -> ${newName} because no embedding key is configured`);
           return 'AI Index was not updated because it is not set up.';
         }
@@ -138,7 +138,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
       try { remapFileOrderPath(oldName, newName, 'file'); }
       catch (err: unknown) { log.warn(`file-order remap failed for ${oldName} -> ${newName}: ${errorMessage(err)}`); }
       const warning = viewerOnly ? null : contentSizeError(content ?? '');
-      const noKey = !getApiKey();
+      const noKey = !isEmbeddingConfigured();
       res.json({
         name: newName,
         linksUpdated: linkPlan.length,

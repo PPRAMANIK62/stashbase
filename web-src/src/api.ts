@@ -10,6 +10,7 @@ import type {
   ApiKeySaveResult,
   EmbedderState,
   EmbedderProvider,
+  HostedAccountState,
   FileBody,
   FilesPayload,
   FolderState,
@@ -274,6 +275,14 @@ export const api = {
     send<{ ok: true }>('DELETE', `/api/transcription/models/${encodeURIComponent(id)}`),
   // Embedder ----------------------------------------------------
   getEmbedder: () => getJson<EmbedderState>('/api/embedder'),
+  useApiKeySource: (provider: EmbedderProvider) =>
+    send<EmbedderState>('PUT', '/api/embedder/source', { provider }),
+  getAccount: (refresh = false) => getJson<HostedAccountState>(`/api/account${refresh ? '?refresh=1' : ''}`),
+  requestAccountOtp: (email: string) => send<{ ok: true }>('POST', '/api/account/otp', { email }),
+  verifyAccountOtp: (email: string, token: string) =>
+    send<HostedAccountState>('POST', '/api/account/verify', { email, token }),
+  useAccountAllowance: () => send<HostedAccountState>('PUT', '/api/account/source'),
+  signOutAccount: () => send<HostedAccountState>('DELETE', '/api/account'),
 
   // Agents (chat-panel CLIs) -----------------------------------
   // Server routes stay under `/api/terminal/*` for historical reasons;

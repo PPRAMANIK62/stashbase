@@ -8,7 +8,6 @@ import {
   PlusIcon,
   StarIcon,
 } from '../icons';
-import { SidebarAccountRow } from './SidebarAccountRow';
 import { useApp } from '../store/AppContext';
 import { folderScope } from './agent/folderState';
 import { ALL_HISTORY_SCOPE } from './agent/sessionHistory';
@@ -40,6 +39,10 @@ import { Suspense, useCallback, useEffect, useRef, useState, type DragEvent } fr
  *  `ScopeHistoryButton.tsx`; re-exported here because the titlebar chat
  *  toggle imports it from this module. */
 export { activateChatTabForAgent } from './ScopeHistoryButton';
+
+const SidebarAccountRow = lazyWithRetry(() =>
+  import('./SidebarAccountRow').then((mod) => ({ default: mod.SidebarAccountRow })),
+);
 
 const DocumentOutline = lazyWithRetry(() =>
   import('./DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
@@ -214,7 +217,9 @@ function FilesPanel() {
       )}
       {/* No mt-auto here: a dock block above always carries the bottom
         * anchor, and this row simply sits under it. */}
-      <SidebarAccountRow />
+      <Suspense fallback={<div className="h-[45px] flex-none border-t border-border" aria-hidden="true" />}>
+        <SidebarAccountRow />
+      </Suspense>
     </div>
   );
 }

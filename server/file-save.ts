@@ -1,4 +1,4 @@
-import { getApiKey } from './app-config.ts';
+import { isEmbeddingConfigured } from './app-config.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { toSourcePath } from './folder.ts';
 import { detectFormat, isDerivedNoteName } from './format.ts';
@@ -34,7 +34,7 @@ export function validateEditableFileWrite(name: string): void {
 }
 
 export async function upsertSavedFile(name: string, content: string): Promise<string | undefined> {
-  if (!getApiKey()) {
+  if (!isEmbeddingConfigured()) {
     log.info(`save: skipped index update for ${name} because no embedding key is configured`);
     return undefined;
   }

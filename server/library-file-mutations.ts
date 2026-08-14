@@ -1,4 +1,4 @@
-import { getApiKey } from './app-config.ts';
+import { isEmbeddingConfigured } from './app-config.ts';
 import { queueConvertibleSource } from './conversion-dispatch.ts';
 import { clearRecord } from './conversion-status.ts';
 import { deleteDerivedForSource } from './derived-store.ts';
@@ -163,7 +163,7 @@ export async function moveLibraryFile(
           log.warn(`library move: conversion kickoff failed for ${newTarget.abs}: ${errorMessage(err)}`);
         }
         indexWarning = 'Searchable text is being regenerated in the background.';
-      } else if (!getApiKey()) {
+      } else if (!isEmbeddingConfigured()) {
         indexWarning = 'AI Index was not updated because it is not set up.';
       } else {
         const movedContent = readText(newTarget.folderRel) ?? content ?? '';
@@ -178,7 +178,7 @@ export async function moveLibraryFile(
         }
       }
       for (const updated of applied?.updated ?? []) {
-        if (!getApiKey()) break;
+        if (!isEmbeddingConfigured()) break;
         if (updated.name === newTarget.folderRel) continue;
         const body = readText(updated.name);
         if (body != null) await indexer.upsertFile(filesystemPath.join(oldTarget.folderRoot, updated.name), body);
@@ -207,7 +207,7 @@ export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: strin
     catch (err: unknown) { log.warn(`library delete: derived cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
     try { clearRecord(target.abs); }
     catch (err: unknown) { log.warn(`library delete: preparation status cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
-    if (removed && getApiKey()) {
+    if (removed && isEmbeddingConfigured()) {
       for (const rel of [target.folderRel, ...derivedArtifacts.notes]) {
         const sourcePath = filesystemPath.join(target.folderRoot, rel);
         indexer.deleteFile(sourcePath).catch((err) => {

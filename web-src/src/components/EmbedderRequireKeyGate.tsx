@@ -34,6 +34,7 @@ import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } fro
 import { lazyWithRetry } from './ErrorBoundary';
 import { useOverlayLayer } from './OverlayStack';
 import { ModalLoadingStatus } from './ui/status';
+import { ACCOUNT_CHANGED_EVENT } from '../accountEvents';
 
 const RequireApiKeyModal = lazyWithRetry(() =>
   import('./embedder/RequireApiKeyModal').then((mod) => ({ default: mod.RequireApiKeyModal })),
@@ -53,6 +54,7 @@ export function EmbedderRequireKeyGate() {
   const folder = appState.folder;
   const [state, setState] = useState<EmbedderState | null>(null);
   const [open, setOpen] = useState(false);
+  const [authRevision, setAuthRevision] = useState(0);
   const layer = useOverlayLayer(open);
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export function EmbedderRequireKeyGate() {
       .then((embedder) => {
         if (cancelled) return;
         setState(embedder);
-        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.hasKey });
+        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.authorized });
         // Recommend, don't force. Auto-open only with a folder open — the
         // dialog is a folder-context prompt; without one the standing callout
         // carries the offer. The skip is per folder within the window (see
@@ -77,7 +79,13 @@ export function EmbedderRequireKeyGate() {
     // embedderHasKey: removing the key in Settings must re-gate right away
     // ("removing a key later re-gates cleanly"), not wait for the next
     // folder switch to refire this effect.
-  }, [folder, appState.embedderHasKey]);
+  }, [folder, appState.embedderHasKey, authRevision]);
+
+  useEffect(() => {
+    const onChanged = () => setAuthRevision((value) => value + 1);
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
+  }, []);
 
   useEffect(() => {
     function onOpen() { setOpen(true); }
@@ -93,13 +101,26 @@ export function EmbedderRequireKeyGate() {
         initialProvider={state?.provider}
         isTopmost={layer.isTopmost}
         onSaved={(provider, model, backfillStarted, warning) => {
-          setState((s) => (s ? { ...s, provider, model, hasKey: true } : s));
+          setState((s) => (s ? { ...s, provider, model, hasKey: true, authorized: true, source: provider } : s));
           dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
           // Activated: clear any prior basic-mode choice so a future key
           // removal re-gates from a clean state instead of staying skipped.
           setAiIndexingSkipped(false, folder);
           setOpen(false);
           if (warning) actions.toast(`API key saved, but validation could not reach the provider: ${warning}`, { level: 'warning' });
+          if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
+          void actions.refreshIndexState();
+        }}
+        onSignedIn={(backfillStarted) => {
+          setState((s) => (s ? {
+            ...s,
+            authorized: true,
+            source: 'stashbase-account',
+            account: { ...s.account, signedIn: true, active: true },
+          } : s));
+          dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
+          setAiIndexingSkipped(false, folder);
+          setOpen(false);
           if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
           void actions.refreshIndexState();
         }}

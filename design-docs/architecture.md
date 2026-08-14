@@ -32,6 +32,12 @@ library per installation.
 | Bug-report drafts | StashBase desktop application | They are ephemeral application state; renderers receive only opaque references and safe display metadata. |
 | Credentials and user settings | StashBase settings | They are managed through Settings, not environment variables. Appearance is user-wide, updates every open window immediately, and is limited to theme plus UI and reading-size presets. |
 
+The optional StashBase account session is owned by the local Node service and
+stored with the same owner-only configuration as bring-your-own-key
+credentials. The Python indexing daemon never receives the Supabase access or
+refresh token. It calls an ephemeral loopback broker credential; Node refreshes
+the account session and forwards only extracted text to the hosted API.
+
 Derived artifacts must not appear as ordinary files in the workspace. When
 search finds derived evidence, the result still identifies and opens the
 user-visible source file.
@@ -79,6 +85,12 @@ user-visible source file.
   available to keyword retrieval before semantic indexing is ready.
 - Semantic retrieval is optional. Without embedding configuration, browsing,
   editing, and keyword retrieval remain available.
+- AI Index can use either a signed-in StashBase account allowance or a user
+  supplied OpenAI/OpenRouter key. The active source is explicit; switching
+  rebinds the single local daemon without rebuilding compatible vectors.
+- Hosted indexing and meaning-based queries share one token allowance. When it
+  is exhausted, hosted semantic work stops while exact text retrieval and all
+  other local workflows remain available.
 - Incomplete, stale, or partial derived output is never current truth.
 - Reconcile and reindex bring external file changes back into the library.
 - Reconcile estimates new or changed semantic work before embedding. Large

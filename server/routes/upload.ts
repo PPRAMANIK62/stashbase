@@ -24,7 +24,7 @@ import {
   sanitizeFilename,
 } from '../files.ts';
 import { isConvertibleSource, isNoteName } from '../format.ts';
-import { getApiKey } from '../app-config.ts';
+import { isEmbeddingConfigured } from '../app-config.ts';
 import { normalizeFolderRelativePath } from '../folder-relative-path.ts';
 import { errorMessage, logger } from '../log.ts';
 import {
@@ -301,7 +301,7 @@ async function processUploadedFiles(
   if (out.some((x) => !x.error)) noteTreeChanged();
   res.json({ files: out });
   // Background indexing — don't await; the response has already been sent.
-  if (getApiKey()) {
+  if (isEmbeddingConfigured()) {
     (async () => {
       for (const { name, sourcePath, text } of toIndex) {
         try {

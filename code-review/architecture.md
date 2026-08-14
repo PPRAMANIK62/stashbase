@@ -13,10 +13,14 @@ Electron renderer windows
 Node application server
   ├─ local file operations and preparation orchestration
   ├─ built-in Agent bridge
-  └─ MCP transports and library operations
+  ├─ MCP transports and library operations
+  └─ Supabase session and loopback embedding broker
         │
         ▼
 Python indexing daemon → one local Milvus Lite store
+        │ hosted source only: process-ephemeral localhost credential
+        ▼
+StashBase hosted embedding API
 ```
 
 One application session may own several renderer windows. They share the Node
@@ -31,7 +35,11 @@ presentation, and Agent tabs.
   reconcile orchestration, Settings writes, MCP, and Agent adapters.
 - The Python daemon owns chunking, embeddings, vector storage, and semantic
   retrieval. It receives text and source identity; it never decides how a
-  source format is converted.
+  source format is converted. For hosted embeddings it calls a Node-owned
+  OpenAI-compatible loopback broker and never receives Supabase tokens.
+- The Node server alone stores and refreshes the optional account session. It
+  assigns hosted request idempotency keys, labels index versus query purpose,
+  and exposes only display/quota state to renderer windows.
 - Renderer state is presentation and request coordination, not durable data
   truth. It cannot define preparation completion, index currency, file
   versions, or library membership.
@@ -87,6 +95,9 @@ surface.
   context.
 - Application quit is an authenticated owner-to-server shutdown handshake.
   Signals are timeout fallbacks, not the normal cleanup path.
+- The shutdown ladder closes hosted-broker listening, active, and idle sockets
+  independently of MCP, Agent-install, conversion, database, and indexer
+  cleanup failures.
 - Static renderer serving must bypass every API and asset route before serving
   the web bundle.
 
@@ -121,7 +132,7 @@ The main ownership seams are intentionally narrower than this map:
 | Data lifecycle Interfaces | `server/conversion-dispatch.ts`, `server/conversion-scheduler.ts`, `server/indexer.ts`, `server/mfs-daemon.ts` |
 | Library/MCP Interface | `LibraryOperations` in `server/library-operations/index.ts` |
 | Agent Interface | `AgentAdapter` and normalized events in `server/agent-contract.ts` |
-| Process Adapters | Electron preload/HTTP, MCP stdio/HTTP, Agent native protocols, and the Python daemon protocol |
+| Process Adapters | Electron preload/HTTP, MCP stdio/HTTP, Agent native protocols, the Python daemon protocol, and the hosted embedding loopback broker |
 
 This map names ownership Seams, not every runtime file. Follow the focused
 contract before reading an owner Module's internals.

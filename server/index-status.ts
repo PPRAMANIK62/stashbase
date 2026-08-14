@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { getApiKey } from './app-config.ts';
+import { isEmbeddingConfigured } from './app-config.ts';
 import { getConversionSchedulerSnapshot, getInFlightConversions } from './conversion.ts';
 import { clearRecord, listPreparationProblems, readProgress, type ConversionProgress } from './conversion-status.ts';
 import { blockedAudioSourcesForFolder } from './audio-transcription.ts';
@@ -37,7 +37,7 @@ export async function buildIndexStatus(folderRoot: string): Promise<Record<strin
   const curRoot = filesystemPath.absolute(folderRoot);
   const status = await indexer.status(curRoot);
   const treeVersion = getFsChangeCounter();
-  const semanticEnabled = !!getApiKey();
+  const semanticEnabled = isEmbeddingConfigured();
   const pending = semanticEnabled ? pendingVisibleFiles(status.pending, curRoot, folderRoot) : [];
   const orphaned = status.orphaned
     .map((p) => filesystemPath.relative(curRoot, p))
