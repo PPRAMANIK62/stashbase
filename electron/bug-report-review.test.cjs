@@ -432,6 +432,14 @@ test('native menu action is wired to the real review flow rather than a placehol
   assert.equal(main.includes('Bug report draft created.'), false);
 });
 
+test('renderer Report Bug entry derives its source window from the IPC sender', () => {
+  const main = fs.readFileSync(path.join(__dirname, 'main.cjs'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, 'preload.cjs'), 'utf8');
+  assert.match(main, /ipcMain\.handle\('bug-report:open'[\s\S]{0,300}fromWebContents\(event\.sender\)[\s\S]{0,300}openBugReportReview\(senderWindow\)/);
+  assert.match(main, /ipcMain\.handle\('bug-report:open'[\s\S]{0,200}isLiveMainWindow\(senderWindow\)/);
+  assert.match(preload, /reportBug: \(\) => ipcRenderer\.invoke\('bug-report:open'\)/);
+});
+
 test('Download saves to the Downloads folder without a picker dialog', () => {
   const main = fs.readFileSync(path.join(__dirname, 'main.cjs'), 'utf8');
   assert.match(main, /savePreparedReport: \(snapshot\) => bugReportHandoff\.saveToDownloads\(snapshot\)/);

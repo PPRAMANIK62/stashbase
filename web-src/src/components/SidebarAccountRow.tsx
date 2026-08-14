@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { electronBridge } from '../electronBridge';
 import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '../icons';
 import { DISCORD_INVITE_URL, openExternalUrl } from '../lib/externalLink';
 import { Menu, type MenuItem } from './Menu';
@@ -160,15 +161,18 @@ export function SidebarAccountRow() {
       >
         <DiscordIcon className="size-4" />
       </Button>
-      {/* Report Bug — PLACEHOLDER: disabled and dimmed until the report flow
-        * exists; only then does it get a click handler and hover states. */}
+      {/* Report Bug — opens the desktop app's local review window, the same
+        * deliberate entry as Help → Report a Bug…. The flow lives in the
+        * Electron main process, so the browser dev shell keeps the dimmed
+        * placeholder. */}
       <Button
         variant="ghost"
         size="icon-sm"
-        disabled
-        aria-label="Report a bug (coming soon)"
-        title="Report a bug (coming soon)"
+        disabled={!electronBridge()?.reportBug}
+        aria-label={electronBridge()?.reportBug ? 'Report a bug' : 'Report a bug (desktop app only)'}
+        title={electronBridge()?.reportBug ? 'Report a bug' : 'Report a bug (desktop app only)'}
         className="flex-none text-muted-foreground"
+        onClick={() => { void electronBridge()?.reportBug?.(); }}
       >
         <BugIcon className="size-4" />
       </Button>

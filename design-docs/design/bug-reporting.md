@@ -7,9 +7,9 @@ the application.
 
 ## Product Contract
 
-* Reporting begins from a deliberate user action, including the native
-  **Help → Report a Bug…** entry that remains reachable when the main workspace
-  renderer is unhealthy.
+* Reporting begins from a deliberate user action: the sidebar's Report Bug
+  button, or the native **Help → Report a Bug…** entry that remains reachable
+  when the main workspace renderer is unhealthy.
 
 * Report preparation is local. It does not require a GitHub account, OAuth,
   a GitHub token, a hosted service, or automatic network submission.
@@ -173,8 +173,9 @@ current draft from the IPC sender:
 | Discard                     | Success or a structured safe error                                                                   | Cleanup implementation details                                               |
 
 Snapshots are copies, not mutable views of the main-process record. A draft
-is created directly from the native menu using a main-process-derived source
-identity. When the dedicated review window is bound, access belongs only to
+is created from the native menu or from the sidebar button's renderer
+request; either way the source identity is derived in the main process from
+the acting window, never supplied by a renderer. When the dedicated review window is bound, access belongs only to
 that review window. Opaque artifact references are validated against both that
 sender and its current draft; a reference is never authorization by itself.
 

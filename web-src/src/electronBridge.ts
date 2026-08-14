@@ -14,6 +14,8 @@ export interface ElectronBridge {
     allowCreateDirectory?: boolean;
   }) => Promise<string | null>;
   openExternal?: (url: string) => Promise<boolean>;
+  /** Opens the main-process bug-report review for the sender's window. */
+  reportBug?: () => Promise<boolean>;
   openFolderWindow?: (folder: string) => Promise<boolean>;
   setWindowFolder?: (folder: string | null) => Promise<boolean>;
   onPrepareContextRelease?: (handler: (reason: string) => Promise<boolean>) => (() => void);

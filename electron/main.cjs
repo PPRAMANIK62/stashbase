@@ -984,6 +984,17 @@ ipcMain.handle('shell:openExternal', async (_e, url) => {
   return openHttpExternal(url, 'renderer external URL');
 });
 
+// Renderer-initiated bug reporting: the sidebar button is the same deliberate
+// entry as Help → Report a Bug…. The source window is derived from the IPC
+// sender, never from renderer-supplied identity, and only a live main window
+// may start a report.
+ipcMain.handle('bug-report:open', async (event) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return false;
+  await openBugReportReview(senderWindow);
+  return true;
+});
+
 
 ipcMain.handle('window:setFolder', (event, folder) => {
   if (folder !== null && (typeof folder !== 'string' || !folder.trim())) return false;
