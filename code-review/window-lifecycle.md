@@ -50,6 +50,31 @@ MCP listeners, conversions/native children, state storage, and index closure so
 one failure cannot skip later owners. OS signals are bounded fallbacks because
 Windows signal behavior is not a graceful child shutdown contract.
 
+## Bug-report review windows
+
+The Electron main process solely owns in-memory bug-report drafts. The native
+Help menu creates a draft from the source window; the dedicated review window
+is bound to that draft through its `webContents`, never a renderer-supplied
+draft ID. The review window is an independent dialog-sized window — never a
+child or modal of its source, so an open review survives the source closing —
+and it cannot enter full screen itself. When its source window is full screen
+at creation, it presents as a floating dialog in that space instead of
+switching macOS to a separate desktop. Its preload accepts only narrow review operations; description
+updates carry the exact `problem` and optional `reproduction` string fields,
+and artifact operations validate an opaque reference against the sender-bound
+draft. References, paths, destinations, URLs, raw diagnostics, screenshot
+buffers, and unredacted logs are never authority or renderer data.
+
+Drafts move from collection to a bound review and then an immutable approved
+snapshot. An explicit reopen returns an approved draft to review by discarding
+its snapshot and pending handoff — snapshots are never mutated in place.
+Closing the source drops only an unbound draft; closing, cancelling,
+or failing the review retires the bound draft and its references. Collection is
+best effort. Text is redacted and independently scanned fail-closed before it
+is available, and selected resources are scanned again before an atomic
+handoff write. Preparation is local: opening GitHub or saving selected output
+requires a separate explicit user action and no private path crosses IPC.
+
 ## Failure and Recovery
 
 - Save error or timeout: leave the native window open and surface the failure.
@@ -69,6 +94,7 @@ Windows signal behavior is not a graceful child shutdown contract.
 | Server context Interface | window-scoped registry and retirement in `server/folder.ts` |
 | HTTP Adapters | `server/routes/window-context.ts`, `server/routes/internal-shutdown.ts` |
 | Cleanup Interface | `server/shutdown-cleanup.ts` |
+| Bug-report review owner | `electron/bug-report-service.cjs`, `electron/bug-report-review-window.cjs`, `electron/bug-report-review-ipc.cjs` |
 | Focused evidence | `electron/multi-window.test.cjs`, `electron/multi-window-smoke.cjs`, `server/folder-window.test.ts`, `server/window-context-route.test.ts`, `server/internal-shutdown-route.test.ts`, `server/__tests__/shutdown-cleanup.test.ts` |
 
 ## Validation

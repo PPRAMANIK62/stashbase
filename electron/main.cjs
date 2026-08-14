@@ -9,6 +9,7 @@
  * The renderer is sandboxed; all main → renderer surfaces are exposed
  * through the narrow IPC bridge in preload.cjs.
  */
+
 const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -17,6 +18,13 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { isCompatibleServerHealth } = require('./main-probe.cjs');
+const { createBugReportService } = require('./bug-report-service.cjs');
+const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
+const { collectRedactedApplicationLog, readApplicationLogTail } = require('./bug-report-log.cjs');
+const { captureWindowScreenshot } = require('./bug-report-screenshot.cjs');
+const { createBugReportHandoff } = require('./bug-report-handoff.cjs');
+const { registerBugReportReviewIpc } = require('./bug-report-review-ipc.cjs');
+const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
   createApplicationMenuTemplate,
@@ -44,13 +52,13 @@ const SERVER_PORT = parsePortArg(process.argv.slice(1), 8090);
 function pythonCandidates(root) {
   return process.platform === 'win32'
     ? [
-        path.join(root, 'Scripts', 'python.exe'),
-        path.join(root, 'bin', 'python'),
-      ]
+      path.join(root, 'Scripts', 'python.exe'),
+      path.join(root, 'bin', 'python'),
+    ]
     : [
-        path.join(root, 'bin', 'python'),
-        path.join(root, 'Scripts', 'python.exe'),
-      ];
+      path.join(root, 'bin', 'python'),
+      path.join(root, 'Scripts', 'python.exe'),
+    ];
 }
 
 function sidecarExecutable(root, name, opts = {}) {
@@ -62,27 +70,28 @@ function statIsFile(file) {
   try { return fs.statSync(file).isFile(); } catch { return false; }
 }
 
-function readFileTail(file, maxBytes = 5000) {
+let serverLogPath = null;
+
+function getServerLogPath() {
+  if (serverLogPath) return serverLogPath;
   try {
-    const st = fs.statSync(file);
-    const size = Math.min(st.size, maxBytes);
-    const fd = fs.openSync(file, 'r');
-    try {
-      const buf = Buffer.alloc(size);
-      fs.readSync(fd, buf, 0, size, Math.max(0, st.size - size));
-      return buf.toString('utf8');
-    } finally {
-      fs.closeSync(fd);
-    }
+    // Electron chooses the platform-correct application log directory. This
+    // must not fall back to a handwritten macOS-only location.
+    app.setAppLogsPath();
+    const logDir = app.getPath('logs');
+    if (typeof logDir !== 'string' || !logDir) return null;
+    serverLogPath = path.join(logDir, 'server.log');
+    return serverLogPath;
   } catch {
-    return '';
+    return null;
   }
 }
 
 function appendServerLogHint(message) {
-  const tail = readFileTail(SERVER_LOG_PATH);
-  return tail
-    ? `${message}\n\nRecent server log:\n${tail}`
+  const logPath = getServerLogPath();
+  const tail = logPath ? readApplicationLogTail({ filePath: logPath, maxBytes: 5000 }) : null;
+  return tail?.text
+    ? `${message}\n\nRecent server log:\n${tail.text}`
     : message;
 }
 
@@ -97,12 +106,6 @@ function stopSpawnedServer() {
   }, 1500).unref();
 }
 
-// Capture server stdout/stderr to a file the user can `cat` after a
-// failed launch. Dock-launched packaged apps inherit Electron's stderr
-// which goes to /dev/null, so without this every server crash is
-// invisible. Path is shown in the failure dialog.
-const SERVER_LOG_DIR = path.join(os.homedir(), 'Library', 'Logs', 'StashBase');
-const SERVER_LOG_PATH = path.join(SERVER_LOG_DIR, 'server.log');
 // Use the IPv4 loopback address explicitly. The server binds to
 // 127.0.0.1, and `localhost` may resolve to ::1 first on dual-stack
 // systems — pointing the renderer at 127.0.0.1 sidesteps the silent
@@ -123,12 +126,42 @@ const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 let serverProc = null;
 let serverStartPromise = null;
 const mainWindows = new Set();
+const bugReportReviewWindows = new Set();
+const bugReportReviewDraftBySender = new Map();
 const windowRegistry = createWindowRegistry({ platform: process.platform });
 const rendererFlush = createRendererFlushCoordinator();
 const rendererFlushReadinessByWebContents = new Map();
 const approvedWindowCloses = new WeakSet();
 const pendingWindowCloses = new WeakSet();
 let lastMainWindow = null;
+const bugReports = createBugReportService({
+  captureScreenshot: async ({ webContentsId }) => {
+    const sourceWindow = [...mainWindows].find((win) => (
+      isLiveMainWindow(win) && win.webContents.id === webContentsId
+    ));
+    return sourceWindow ? captureWindowScreenshot(sourceWindow.webContents) : null;
+  },
+  collectDiagnostics: () => collectBugReportDiagnostics({ app }),
+  collectLog: () => {
+    const logPath = getServerLogPath();
+    return logPath ? collectRedactedApplicationLog({ filePath: logPath }) : null;
+  },
+});
+const bugReportHandoff = createBugReportHandoff({
+  baseTemporaryDirectory: path.join(app.getPath('temp'), 'stashbase', 'bug-reports'),
+  downloadsDirectory: async () => app.getPath('downloads'),
+  openExternal: (url) => shell.openExternal(url),
+});
+registerBugReportReviewIpc({
+  ipcMain,
+  bugReports,
+  draftIdForSender: (senderWebContentsId) => (
+    bugReportReviewDraftBySender.get(senderWebContentsId) ?? null
+  ),
+  prepareApprovedReport: (snapshot) => bugReportHandoff.prepare(snapshot),
+  openPreparedReport: (snapshot) => bugReportHandoff.openGitHub(snapshot),
+  savePreparedReport: (snapshot) => bugReportHandoff.saveToDownloads(snapshot),
+});
 
 const APP_CONFIG_FILE = path.join(os.homedir(), '.stashbase', 'config.json');
 
@@ -187,34 +220,34 @@ function writeMcpWrapper() {
   const resourcesPath = RESOURCES_ROOT;
   const content = process.platform === 'win32'
     ? [
-        '@echo off',
-        `set "STASHBASE_APP_ROOT=${cmdValue(PROJECT_ROOT)}"`,
-        `set "STASHBASE_RESOURCES_PATH=${cmdValue(resourcesPath)}"`,
-        ...(app.isPackaged
-          ? [
-              'set "ELECTRON_RUN_AS_NODE=1"',
-              `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %*`,
-            ]
-          : [
-              `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %*`,
-            ]),
-        '',
-      ].join('\r\n')
+      '@echo off',
+      `set "STASHBASE_APP_ROOT=${cmdValue(PROJECT_ROOT)}"`,
+      `set "STASHBASE_RESOURCES_PATH=${cmdValue(resourcesPath)}"`,
+      ...(app.isPackaged
+        ? [
+          'set "ELECTRON_RUN_AS_NODE=1"',
+          `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %*`,
+        ]
+        : [
+          `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %*`,
+        ]),
+      '',
+    ].join('\r\n')
     : [
-        '#!/bin/sh',
-        'set -eu',
-        `export STASHBASE_APP_ROOT=${shellQuote(PROJECT_ROOT)}`,
-        `export STASHBASE_RESOURCES_PATH=${shellQuote(resourcesPath)}`,
-        ...(app.isPackaged
-          ? [
-              'export ELECTRON_RUN_AS_NODE=1',
-              `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
-            ]
-          : [
-              `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
-            ]),
-        '',
-      ].join('\n');
+      '#!/bin/sh',
+      'set -eu',
+      `export STASHBASE_APP_ROOT=${shellQuote(PROJECT_ROOT)}`,
+      `export STASHBASE_RESOURCES_PATH=${shellQuote(resourcesPath)}`,
+      ...(app.isPackaged
+        ? [
+          'export ELECTRON_RUN_AS_NODE=1',
+          `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
+        ]
+        : [
+          `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
+        ]),
+      '',
+    ].join('\n');
   writeFileAtomic(wrapper, content, { mode: 0o755 });
   return wrapper;
 }
@@ -325,13 +358,13 @@ async function startOrReuseServer() {
   }
   const packagedEnv = app.isPackaged
     ? {
-        ELECTRON_RUN_AS_NODE: '1',
-        STASHBASE_APP_ROOT: PROJECT_ROOT,
-        STASHBASE_RESOURCES_PATH: RESOURCES_ROOT,
-        ...(hasPackagedDaemon ? { STASHBASE_DAEMON_BIN: packagedDaemon } : {}),
-        ...(hasPackagedExtract ? { STASHBASE_EXTRACT_BIN: packagedExtract } : {}),
-        ...(packagedPython ? { STASHBASE_PYTHON: packagedPython } : {}),
-      }
+      ELECTRON_RUN_AS_NODE: '1',
+      STASHBASE_APP_ROOT: PROJECT_ROOT,
+      STASHBASE_RESOURCES_PATH: RESOURCES_ROOT,
+      ...(hasPackagedDaemon ? { STASHBASE_DAEMON_BIN: packagedDaemon } : {}),
+      ...(hasPackagedExtract ? { STASHBASE_EXTRACT_BIN: packagedExtract } : {}),
+      ...(packagedPython ? { STASHBASE_PYTHON: packagedPython } : {}),
+    }
     : { STASHBASE_APP_ROOT: PROJECT_ROOT };
   // In packaged+asar mode PROJECT_ROOT is `.../Resources/app.asar` —
   // a FILE, not a directory. spawn(cwd) hits the OS syscall (no
@@ -342,24 +375,36 @@ async function startOrReuseServer() {
   // so a packaged Dock launch is debuggable, AND to the parent stdio so
   // `pnpm electron` from a terminal still shows live logs. The file is
   // truncated each launch — old crashes would only confuse the user.
-  fs.mkdirSync(SERVER_LOG_DIR, { recursive: true });
-  const logFd = fs.openSync(SERVER_LOG_PATH, 'w');
-  fs.writeSync(
-    logFd,
-    `--- StashBase server launch ${new Date().toISOString()} (pid=${process.pid}, packaged=${app.isPackaged}) ---\n`,
-  );
-  fs.writeSync(logFd, `server entry: ${SERVER_ENTRY}\n`);
-  fs.writeSync(logFd, `server cwd: ${serverCwd}\n`);
-  if (app.isPackaged) {
-    fs.writeSync(logFd, `resources: ${RESOURCES_ROOT}\n`);
-    fs.writeSync(logFd, `daemon: ${packagedDaemon || '(missing; using Python script fallback if available)'}\n`);
-    fs.writeSync(logFd, `extractor: ${packagedExtract || '(missing; using Python script fallback if available)'}\n`);
-    fs.writeSync(logFd, `python: ${packagedPython || '(missing)'}\n`);
-    if (!hasPackagedExtract && !(packagedPython && statIsFile(packagedPdfScript) && statIsFile(packagedOcrScript))) {
+  const currentServerLogPath = getServerLogPath();
+  let logFd = null;
+  if (currentServerLogPath) {
+    try {
+      fs.mkdirSync(path.dirname(currentServerLogPath), { recursive: true });
+      logFd = fs.openSync(currentServerLogPath, 'w');
       fs.writeSync(
         logFd,
-        'warning: packaged extractor resources are missing; PDF/image text extraction will fail until the package is rebuilt\n',
+        `--- StashBase server launch ${new Date().toISOString()} (pid=${process.pid}, packaged=${app.isPackaged}) ---\n`,
       );
+      fs.writeSync(logFd, `server entry: ${SERVER_ENTRY}\n`);
+      fs.writeSync(logFd, `server cwd: ${serverCwd}\n`);
+      if (app.isPackaged) {
+        fs.writeSync(logFd, `resources: ${RESOURCES_ROOT}\n`);
+        fs.writeSync(logFd, `daemon: ${packagedDaemon || '(missing; using Python script fallback if available)'}\n`);
+        fs.writeSync(logFd, `extractor: ${packagedExtract || '(missing; using Python script fallback if available)'}\n`);
+        fs.writeSync(logFd, `python: ${packagedPython || '(missing)'}\n`);
+        if (!hasPackagedExtract && !(packagedPython && statIsFile(packagedPdfScript) && statIsFile(packagedOcrScript))) {
+          fs.writeSync(
+            logFd,
+            'warning: packaged extractor resources are missing; PDF/image text extraction will fail until the package is rebuilt\n',
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(`[electron] application log unavailable: ${err?.message ?? err}`);
+      if (logFd !== null) {
+        try { fs.closeSync(logFd); } catch { /* nothing left to close */ }
+      }
+      logFd = null;
     }
   }
   serverProc = spawn(serverBin, serverArgs, {
@@ -379,12 +424,15 @@ async function startOrReuseServer() {
     // unread stream which had no listener → unhandled 'error'
     // event, killed the whole electron process. Closing stdin
     // entirely sidesteps the class of bug.
-    // stdout + stderr go to the per-launch log file so dock launches
-    // are debuggable; terminal launches can `tail -f` the same file.
-    stdio: ['ignore', logFd, logFd],
+    // Logging is optional: an unavailable log directory must not prevent
+    // StashBase from starting. Bug-report collection only reads the
+    // Electron-managed file, never an arbitrary renderer-provided path.
+    stdio: logFd === null ? ['ignore', 'inherit', 'inherit'] : ['ignore', logFd, logFd],
     shell: needsCmdShell(serverBin),
   });
-  try { fs.closeSync(logFd); } catch { /* child owns its dup */ }
+  if (logFd !== null) {
+    try { fs.closeSync(logFd); } catch { /* child owns its duplicate */ }
+  }
   // `spawn` can fail asynchronously (ENOENT when tsx isn't installed,
   // permission errors, etc.). Without an explicit listener Node treats
   // the 'error' event as fatal and the whole Electron process crashes
@@ -540,6 +588,83 @@ function isLiveMainWindow(win) {
   return !!(win && mainWindows.has(win) && !win.isDestroyed());
 }
 
+function bugReportSourceForWindow(win) {
+  if (!isLiveMainWindow(win)) return null;
+  const windowId = windowRegistry.idForWindow(win);
+  const webContentsId = win.webContents?.id;
+  if (!windowId || !Number.isSafeInteger(webContentsId) || webContentsId <= 0) return null;
+  return { windowId, webContentsId };
+}
+
+async function showBugReportError(win, message) {
+  const options = {
+    type: 'error',
+    title: 'Report a Bug',
+    message,
+  };
+  try {
+    if (isLiveMainWindow(win)) await dialog.showMessageBox(win, options);
+    else await dialog.showMessageBox(options);
+  } catch {
+    // A native error dialog is best effort and must not affect cleanup.
+  }
+}
+
+async function openBugReportReview(win) {
+  const source = bugReportSourceForWindow(win);
+  if (!source) {
+    await showBugReportError(win, 'StashBase could not start a bug report for this window.');
+    return;
+  }
+  const created = await bugReports.createDraft(source);
+  if (!created.ok) {
+    await showBugReportError(win, 'StashBase could not start a bug report.');
+    return;
+  }
+
+  let review;
+  try {
+    review = createBugReportReviewWindow({
+      BrowserWindow,
+      preloadPath: path.join(__dirname, 'bug-report-review-preload.cjs'),
+      htmlPath: path.join(__dirname, 'bug-report-review.html'),
+      sourceWindow: isLiveMainWindow(win) ? win : null,
+    });
+  } catch {
+    bugReports.discardDraft(created.draft.id, source.webContentsId);
+    await showBugReportError(win, 'StashBase could not open the bug report review.');
+    return;
+  }
+
+  const reviewWindow = review.window;
+  const reviewWebContentsId = reviewWindow.webContents.id;
+  bugReportReviewWindows.add(reviewWindow);
+  bugReportReviewDraftBySender.set(reviewWebContentsId, created.draft.id);
+  reviewWindow.once('closed', () => {
+    bugReportReviewDraftBySender.delete(reviewWebContentsId);
+    bugReportReviewWindows.delete(reviewWindow);
+    bugReports.discardDraftsForReviewWindow(reviewWebContentsId);
+    if (mainWindows.size === 0 && bugReportReviewWindows.size === 0 && shouldQuitAfterLastWindow(process.platform)) {
+      app.quit();
+    }
+  });
+
+  const bound = bugReports.bindReviewWindow(created.draft.id, reviewWebContentsId);
+  if (!bound.ok) {
+    reviewWindow.destroy();
+    bugReports.discardDraft(created.draft.id, source.webContentsId);
+    await showBugReportError(win, 'StashBase could not authorize the bug report review.');
+    return;
+  }
+
+  try {
+    await review.loaded;
+  } catch {
+    if (!reviewWindow.isDestroyed()) reviewWindow.destroy();
+    await showBugReportError(win, 'StashBase could not load the bug report review.');
+  }
+}
+
 // --- Clipboard image offer ---------------------------------------------
 // When a main window regains focus we peek at the clipboard: if it holds
 // an image we haven't offered yet (e.g. the user just took a screenshot
@@ -644,7 +769,7 @@ async function createWindow(initialFolder) {
   } catch (err) {
     dialog.showErrorBox(
       'StashBase failed to start',
-      `${String(err?.message ?? err)}\n\nServer log: ${SERVER_LOG_PATH}`,
+      `${String(err?.message ?? err)}${getServerLogPath() ? '\n\nServer log: available in the application log directory.' : ''}`,
     );
     if (mainWindows.size === 0) app.quit();
     return;
@@ -708,13 +833,14 @@ async function createWindow(initialFolder) {
     agentComposerFocusedContents.delete(webContentsId);
     rendererFlush.cancel(webContentsId);
     rendererFlushReadinessByWebContents.delete(webContentsId);
+    bugReports.discardUnreviewedDraftsForSource(webContentsId);
     mainWindows.delete(win);
     windowRegistry.remove(windowId);
     releaseWindowContext(windowId);
     if (lastMainWindow === win) {
       lastMainWindow = [...mainWindows].find((candidate) => isLiveMainWindow(candidate)) ?? null;
     }
-    if (mainWindows.size === 0) {
+    if (mainWindows.size === 0 && bugReportReviewWindows.size === 0) {
       if (shouldQuitAfterLastWindow(process.platform)) app.quit();
     }
   });
@@ -818,6 +944,10 @@ function installApplicationMenu() {
       if (isLiveMainWindow(target)) target.close();
     },
     onOpenExternal: (url) => { void shell.openExternal(url); },
+    onReportBug: () => {
+      const target = BrowserWindow.getFocusedWindow();
+      void openBugReportReview(isLiveMainWindow(target) ? target : lastMainWindow);
+    },
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -853,6 +983,18 @@ ipcMain.handle('dialog:openFolder', async (event, opts = {}) => {
 ipcMain.handle('shell:openExternal', async (_e, url) => {
   return openHttpExternal(url, 'renderer external URL');
 });
+
+// Renderer-initiated bug reporting: the sidebar button is the same deliberate
+// entry as Help → Report a Bug…. The source window is derived from the IPC
+// sender, never from renderer-supplied identity, and only a live main window
+// may start a report.
+ipcMain.handle('bug-report:open', async (event) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return false;
+  await openBugReportReview(senderWindow);
+  return true;
+});
+
 
 ipcMain.handle('window:setFolder', (event, folder) => {
   if (folder !== null && (typeof folder !== 'string' || !folder.trim())) return false;
@@ -970,6 +1112,11 @@ if (!hasSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
+    try {
+      await bugReportHandoff.initializeSession();
+    } catch {
+      console.warn('[electron] bug-report temporary session initialization failed');
+    }
     // Refresh the MCP wrapper on every launch so the most recently-opened
     // app owns it. Without this, a wrapper written by an earlier `pnpm
     // dev` run still points at a vanished `node_modules/.bin/tsx`, and

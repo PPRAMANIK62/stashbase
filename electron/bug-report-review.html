@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Report a Bug</title>
+    <link rel="stylesheet" href="./bug-report-review.css">
+  </head>
+  <body>
+    <main class="page">
+      <div id="review-flow">
+        <header class="hero">
+          <h1>Report a Bug</h1>
+          <p>Nothing is sent automatically. Review what to include, then share it yourself.</p>
+        </header>
+
+        <section class="form-section" aria-labelledby="problem-label">
+          <label id="problem-label" for="problem">What went wrong?</label>
+          <textarea id="problem" maxlength="12000" rows="6" placeholder="Describe what happened. Include what you expected if it isn’t obvious."></textarea>
+          <details id="reproduction-disclosure" class="reproduction-disclosure">
+            <summary>Add steps to reproduce <span>(optional)</span></summary>
+            <div class="reproduction-field">
+              <label for="reproduction">Steps to reproduce</label>
+              <textarea id="reproduction" maxlength="12000" rows="4" placeholder="1. …&#10;2. …&#10;3. …"></textarea>
+            </div>
+          </details>
+        </section>
+
+        <section class="form-section" aria-labelledby="attachments-heading">
+          <h2 id="attachments-heading" class="section-label">Attachments</h2>
+          <div id="artifacts" class="artifacts" aria-live="polite"></div>
+        </section>
+      </div>
+
+      <section id="report-ready" class="report-ready" aria-labelledby="report-ready-heading" hidden>
+        <header class="hero">
+          <h1 id="report-ready-heading" tabindex="-1">Report ready</h1>
+          <p>Your selected attachments were prepared locally.</p>
+        </header>
+
+        <div class="handoff-actions">
+          <div class="handoff-action">
+            <p>The report files will be saved to your Downloads folder, and a prefilled GitHub issue will open. Attach the files to the issue.</p>
+            <button id="open-github" class="button primary" type="button">Open GitHub</button>
+          </div>
+          <div class="handoff-action">
+            <p>Save the report files to your Downloads folder without opening GitHub.</p>
+            <button id="save-artifacts" class="button secondary" type="button">Download</button>
+          </div>
+        </div>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <footer class="actions">
+        <button id="back" class="button secondary" type="button" hidden>Back</button>
+        <button id="cancel" class="button secondary" type="button">Cancel</button>
+        <button id="approve" class="button primary" type="button">Prepare Report</button>
+      </footer>
+    </main>
+    <script src="./bug-report-review-renderer.js"></script>
+  </body>
+</html>

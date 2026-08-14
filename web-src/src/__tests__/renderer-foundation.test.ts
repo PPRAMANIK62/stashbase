@@ -179,7 +179,7 @@ test('PDF load and Find registration are independent of changing action-bag iden
 test('JSON Find registration is independent of changing action-bag identity', () => {
   const json = read('web-src/src/components/JsonDocument.tsx');
   assert.match(json, /const registerFindController = actions\.registerFindController/);
-  assert.match(json, /\[registerFindController, active\]/);
+  assert.match(json, /\[registerFindController, active, viewMode\]/);
   assert.doesNotMatch(json, /\[actions, active\]/);
 });
 

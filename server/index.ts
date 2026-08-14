@@ -74,6 +74,7 @@ import {
   connectInstalledAgentMcpAfterBoot,
   connectInstalledAgentMcpOnStartup,
 } from './agent-runtime-installer.ts';
+import { createClientErrorHandler } from './client-error.ts';
 
 const log = logger('server');
 
@@ -326,20 +327,7 @@ mountAgentSessionsRoutes(app); // shared contract history surface for the built-
 // already monitor (next to fs / sync warnings) — no need to open
 // devtools to see why the user's session blanked.
 const clientErrLog = log;
-app.post('/api/log/client-error', (req, res) => {
-  const b = req.body ?? {};
-  const message = typeof b.message === 'string' ? b.message : '(no message)';
-  const at = typeof b.at === 'string' ? b.at : new Date().toISOString();
-  const stack = typeof b.stack === 'string' ? b.stack : '';
-  const componentStack = typeof b.componentStack === 'string' ? b.componentStack : '';
-  const url = typeof b.url === 'string' ? b.url : '';
-  clientErrLog.warn(
-    `client render error @ ${at} (${url}): ${message}` +
-      (stack ? `\n${stack}` : '') +
-      (componentStack ? `\nComponent stack:${componentStack}` : ''),
-  );
-  res.json({ ok: true });
-});
+app.post('/api/log/client-error', createClientErrorHandler(clientErrLog));
 
 // Dev-only fallthrough: any request that didn't match an `/api/*` or
 // `/asset/*` route gets proxied to Vite. Must be the LAST middleware
