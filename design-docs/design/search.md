@@ -18,7 +18,8 @@ user-managed results.
 ## Current Experience
 
 - Exact text search works without AI Index, including raw JSON and current
-  prepared text.
+  prepared text. Whole-token search applies its result cap after token
+  filtering, so substring-heavy files do not hide later eligible evidence.
 - AI Index provides meaning-based retrieval when an embedding source is
   configured. Product copy says **AI Index**; engineering terms such as
   semantic indexing and embeddings appear only where technically necessary.
