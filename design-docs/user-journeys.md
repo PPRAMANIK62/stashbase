@@ -78,7 +78,9 @@ the visible source.
 1. Open library search and enter a query.
 2. Use exact text without AI Index, or meaning-based search when configured.
 3. Optionally narrow to one member folder.
-4. Review grouped evidence and readiness guidance.
+4. Review grouped evidence and readiness guidance. Whole-token search does not
+   hide a later eligible result merely because a file contains earlier
+   substring-only hits.
 5. Open the result without exposing a hidden derived artifact or unexpectedly
    replacing the window's active folder.
 

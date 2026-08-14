@@ -89,6 +89,8 @@ search; only explicit Start clears it.
   delete or move, immediate status/search cannot observe rows reported removed.
 - Retrieval filters unavailable sources and always remaps evidence to a live
   visible source before it crosses HTTP or MCP.
+- Exact retrieval applies whole-token filtering before its per-file result cap;
+  raw substring density cannot hide later eligible evidence.
 - Local Milvus collect-all reads use a complete scalar snapshot. Segment order
   cannot be treated as a globally ordered primary-key cursor.
 - Closing or failing to open the store releases the client, shared pymilvus

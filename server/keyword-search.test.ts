@@ -52,6 +52,20 @@ test('whole-word keyword search finds a match past the per-file substring cap', 
   }
 });
 
+test('whole-word keyword search streams substring-heavy files before filtering', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-whole-word-stream-'));
+  try {
+    fs.writeFileSync(path.join(root, 'note.md'), `${'agents\n'.repeat(250_000)}agent\n`);
+
+    const result = await runKeywordSearch('agent', root, { caseStrict: false, wholeWord: true });
+
+    assert.deepEqual(result.files.map((file) => file.path), ['note.md']);
+    assert.deepEqual(result.files[0].matches.map((match) => match.line), [250_001]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('whole-word keyword search caps matches per file and reports the truncation', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-whole-word-truncated-'));
   try {
@@ -61,6 +75,21 @@ test('whole-word keyword search caps matches per file and reports the truncation
     const result = await runKeywordSearch('agent', root, { caseStrict: false, wholeWord: true });
 
     assert.equal(result.files[0].matches.length, 50);
+    assert.equal(result.truncated, true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('whole-word keyword search caps ranges within one matching line', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-whole-word-range-cap-'));
+  try {
+    fs.writeFileSync(path.join(root, 'note.md'), `${Array.from({ length: 60 }, () => 'agent').join(' ')}\n`);
+
+    const result = await runKeywordSearch('agent', root, { caseStrict: false, wholeWord: true });
+
+    assert.equal(result.files[0].totalMatches, 50);
+    assert.equal(result.files[0].matches.length, 1);
     assert.equal(result.truncated, true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
