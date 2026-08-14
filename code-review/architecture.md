@@ -43,9 +43,11 @@ presentation, and Agent tabs.
 - Renderer state is presentation and request coordination, not durable data
   truth. It cannot define preparation completion, index currency, file
   versions, or library membership.
-- Settings is the only product surface for credentials. Environment variables
-  may select isolated test/runtime seams but are never the user's credential
-  source of truth.
+- Settings is the only product surface for BYOK credentials. Account OAuth may
+  start from explicit setup, Settings, or account-menu Sign in actions; its
+  refreshable session remains Node-owned. Environment variables may select
+  isolated test/runtime seams but are never the user's credential source of
+  truth.
 - Settings persistence remains atomic and fails closed when its path is not
   writable. The application reports the failure but never repairs filesystem
   ownership, flags, or ACLs on the user's behalf.

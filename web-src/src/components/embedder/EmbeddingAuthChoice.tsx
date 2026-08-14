@@ -15,7 +15,8 @@
  *     neutral border as its sibling: tint plus a brand-toned border read as
  *     "already selected" rather than "recommended", which is the one thing
  *     this screen must not say — nothing is chosen until the user clicks.
- *     The account system uses verified email OTP and the shared hosted quota.
+ *     Supabase OAuth opens Google in the system browser; the local Node
+ *     service owns PKCE and the shared hosted quota session.
  *     Deployments may still disable the card explicitly; the quiet corner
  *     mark keeps that state distinguishable from a broken control.
  *   • Use your own API key — OpenAI or OpenRouter, for advanced users;

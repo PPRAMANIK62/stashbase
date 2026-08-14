@@ -1,12 +1,44 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { oauthResultPage } from './oauth-result-page.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+test('OAuth callback renders a safe centered card with delayed app return and fallback button', () => {
+  const html = oauthResultPage({
+    title: 'Signed in <now>',
+    message: 'Ready & returning',
+    autoReturn: true,
+  });
+
+  assert.match(html, /class="shell"/);
+  assert.match(html, /class="card" data-auto-return="true"/);
+  assert.match(html, /href="stashbase:\/\/oauth-complete" hidden/);
+  assert.match(html, /window\.location\.href = 'stashbase:\/\/oauth-complete'/);
+  assert.match(html, /window\.close\(\)/);
+  assert.match(html, /Didn’t return automatically\?/);
+  assert.match(html, /Signed in &lt;now&gt;/);
+  assert.match(html, /Ready &amp; returning/);
+  assert.doesNotMatch(html, /Signed in <now>/);
+});
+
+test('failed OAuth callback keeps the return button visible without automatic launch', () => {
+  const html = oauthResultPage({
+    title: 'Sign-in failed',
+    message: 'Try again.',
+    kind: 'error',
+  });
+
+  assert.match(html, /data-auto-return="false"/);
+  assert.match(html, /href="stashbase:\/\/oauth-complete">/);
+  assert.doesNotMatch(html, /href="stashbase:\/\/oauth-complete" hidden/);
+});
 
 function runIsolated(source: string) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-hosted-account-test-'));
@@ -29,13 +61,12 @@ function runIsolated(source: string) {
   }
 }
 
-test('email OTP session persists locally and authenticates quota requests', () => {
+test('OAuth PKCE session persists locally and authenticates quota requests', () => {
   const result = runIsolated(`
     const calls = [];
     globalThis.fetch = async (url, init = {}) => {
       calls.push({ url: String(url), body: init.body ? JSON.parse(String(init.body)) : null, authorization: new Headers(init.headers).get('authorization') });
-      if (String(url).endsWith('/auth/v1/otp')) return new Response('{}', { status: 200 });
-      if (String(url).endsWith('/auth/v1/verify')) return Response.json({
+      if (String(url).endsWith('/auth/v1/token?grant_type=pkce')) return Response.json({
         access_token: 'access-1', refresh_token: 'refresh-1', expires_at: 4102444800,
         user: { id: 'user-1', email: 'person@example.com' },
       });
@@ -47,17 +78,26 @@ test('email OTP session persists locally and authenticates quota requests', () =
     };
     const account = await import('./server/hosted-account.ts');
     const config = await import('./server/app-config.ts');
-    await account.requestEmailOtp('Person@Example.com');
-    await account.verifyEmailOtp('Person@Example.com', '123456');
+    const started = account.beginHostedOAuth('google', 'http://127.0.0.1:8090');
+    await account.exchangeHostedOAuthCode(started.flowId, 'auth-code-1');
+    account.finishHostedOAuth(started.flowId);
     config.setEmbeddingSource('stashbase-account');
     const quota = await account.fetchHostedQuota();
-    process.stdout.write(JSON.stringify({ calls, quota, session: config.getHostedAccountSession(), source: config.getEmbeddingSource() }));
+    process.stdout.write(JSON.stringify({ started, status: account.hostedOAuthStatus(started.flowId), calls, quota, session: config.getHostedAccountSession(), source: config.getEmbeddingSource() }));
   `);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.calls[0].body.email, 'person@example.com');
-  assert.equal(output.calls[1].body.type, 'email');
-  assert.equal(output.calls[2].authorization, 'Bearer access-1');
+  const authorize = new URL(output.started.url);
+  assert.equal(authorize.pathname, '/auth/v1/authorize');
+  assert.equal(authorize.searchParams.get('provider'), 'google');
+  const redirectTo = authorize.searchParams.get('redirect_to');
+  assert.ok(redirectTo);
+  assert.equal(new URL(redirectTo).searchParams.get('flow'), output.started.flowId);
+  assert.equal(output.calls[0].body.auth_code, 'auth-code-1');
+  const expectedChallenge = crypto.createHash('sha256').update(output.calls[0].body.code_verifier).digest('base64url');
+  assert.equal(authorize.searchParams.get('code_challenge'), expectedChallenge);
+  assert.equal(output.status.state, 'complete');
+  assert.equal(output.calls[1].authorization, 'Bearer access-1');
   assert.equal(output.quota.remainingTokens, 999_988);
   assert.equal(output.session.refreshToken, 'refresh-1');
   assert.equal(output.source, 'stashbase-account');

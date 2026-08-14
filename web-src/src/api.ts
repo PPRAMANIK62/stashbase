@@ -11,6 +11,9 @@ import type {
   EmbedderState,
   EmbedderProvider,
   HostedAccountState,
+  HostedOAuthProvider,
+  HostedOAuthStart,
+  HostedOAuthStatus,
   FileBody,
   FilesPayload,
   FolderState,
@@ -278,9 +281,10 @@ export const api = {
   useApiKeySource: (provider: EmbedderProvider) =>
     send<EmbedderState>('PUT', '/api/embedder/source', { provider }),
   getAccount: (refresh = false) => getJson<HostedAccountState>(`/api/account${refresh ? '?refresh=1' : ''}`),
-  requestAccountOtp: (email: string) => send<{ ok: true }>('POST', '/api/account/otp', { email }),
-  verifyAccountOtp: (email: string, token: string) =>
-    send<HostedAccountState>('POST', '/api/account/verify', { email, token }),
+  startAccountOAuth: (provider: HostedOAuthProvider = 'google') =>
+    send<HostedOAuthStart>('POST', '/api/account/oauth/start', { provider }),
+  getAccountOAuthStatus: (flowId: string) =>
+    getJson<HostedOAuthStatus>(`/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`),
   useAccountAllowance: () => send<HostedAccountState>('PUT', '/api/account/source'),
   signOutAccount: () => send<HostedAccountState>('DELETE', '/api/account'),
 

@@ -5,16 +5,32 @@ import {
   setEmbeddingSource,
 } from '../app-config.ts';
 import {
+  beginHostedOAuth,
+  exchangeHostedOAuthCode,
+  failHostedOAuth,
+  finishHostedOAuth,
   hostedAccountState,
-  requestEmailOtp,
+  hostedOAuthStatus,
   signOutHostedAccount,
-  verifyEmailOtp,
+  type HostedOAuthProvider,
 } from '../hosted-account.ts';
 import { startHostedEmbeddingBroker } from '../hosted-embedding-broker.ts';
 import { errorMessage, logger } from '../log.ts';
+import { oauthResultPage } from '../oauth-result-page.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from '../state.ts';
 
 const log = logger('routes/account');
+const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google', 'github']);
+
+function oauthProvider(value: unknown): HostedOAuthProvider | null {
+  return typeof value === 'string' && OAUTH_PROVIDERS.has(value as HostedOAuthProvider)
+    ? value as HostedOAuthProvider
+    : null;
+}
+
+function callbackOrigin(req: express.Request): string {
+  return new URL(`http://${req.get('host') ?? ''}`).origin;
+}
 
 async function activateHostedSource(reason: string): Promise<boolean> {
   await startHostedEmbeddingBroker();
@@ -38,25 +54,58 @@ export function mount(app: express.Express): void {
     res.json(await hostedAccountState(refresh));
   });
 
-  app.post('/api/account/otp', async (req, res) => {
+  app.post('/api/account/oauth/start', (req, res) => {
     try {
-      await requestEmailOtp(typeof req.body?.email === 'string' ? req.body.email : '');
-      res.json({ ok: true });
+      const provider = oauthProvider(req.body?.provider ?? 'google');
+      if (!provider) return res.status(400).json({ error: 'Unsupported sign-in provider.' });
+      res.json(beginHostedOAuth(provider, callbackOrigin(req)));
     } catch (error: unknown) {
       res.status(400).json({ error: errorMessage(error) });
     }
   });
 
-  app.post('/api/account/verify', async (req, res) => {
-    try {
-      const email = typeof req.body?.email === 'string' ? req.body.email : '';
-      const token = typeof req.body?.token === 'string' ? req.body.token : '';
-      await verifyEmailOtp(email, token);
-      const backfillStarted = await activateHostedSource('StashBase account activated');
-      res.json({ ...(await hostedAccountState(true)), backfillStarted });
-    } catch (error: unknown) {
-      res.status(400).json({ error: errorMessage(error) });
+  app.get('/api/account/oauth/callback', async (req, res) => {
+    const flowId = typeof req.query.flow === 'string' ? req.query.flow : '';
+    const authCode = typeof req.query.code === 'string' ? req.query.code : '';
+    const providerError = typeof req.query.error_description === 'string'
+      ? req.query.error_description
+      : typeof req.query.error === 'string' ? req.query.error : '';
+    if (!flowId) {
+      return res.status(400).type('html').send(oauthResultPage({
+        title: 'Sign-in failed',
+        message: 'The sign-in request is missing or expired. Return to StashBase and try again.',
+        kind: 'error',
+      }));
     }
+    if (providerError) {
+      failHostedOAuth(flowId, providerError);
+      return res.status(400).type('html').send(oauthResultPage({
+        title: 'Sign-in failed', message: providerError, kind: 'error',
+      }));
+    }
+    try {
+      await exchangeHostedOAuthCode(flowId, authCode);
+      const backfillStarted = await activateHostedSource('StashBase account activated');
+      finishHostedOAuth(flowId);
+      log.info(`OAuth sign-in completed${backfillStarted ? '; semantic backfill started' : ''}`);
+      res.type('html').send(oauthResultPage({
+        title: 'Signed in to StashBase',
+        message: 'Your account is ready. This page will return you to the app automatically.',
+        autoReturn: true,
+      }));
+    } catch (error: unknown) {
+      const message = errorMessage(error);
+      failHostedOAuth(flowId, message);
+      res.status(400).type('html').send(oauthResultPage({
+        title: 'Sign-in failed', message, kind: 'error',
+      }));
+    }
+  });
+
+  app.get('/api/account/oauth/status', (req, res) => {
+    const flowId = typeof req.query.flow === 'string' ? req.query.flow : '';
+    if (!flowId) return res.status(400).json({ error: 'Missing sign-in flow.' });
+    res.json(hostedOAuthStatus(flowId));
   });
 
   app.put('/api/account/source', async (_req, res) => {

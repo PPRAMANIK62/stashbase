@@ -77,8 +77,10 @@ the visible source.
 
 1. Open library search and enter a query.
 2. Use exact text without AI Index, or configure meaning-based search by
-   verifying an email for the included allowance or supplying an
-   OpenAI/OpenRouter key.
+   signing in through Supabase with Google for the included allowance, or
+   supplying an OpenAI/OpenRouter key. A completed browser sign-in returns to
+   the initiating StashBase window automatically when the OS permits it; the
+   callback card offers **Open StashBase** when automatic return is blocked.
 3. When using the hosted allowance, inspect its remaining percentage and reset
    date from the account menu; indexing and queries share that allowance.
 4. Optionally narrow to one member folder.

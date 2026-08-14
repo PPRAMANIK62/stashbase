@@ -314,6 +314,19 @@ export interface HostedAccountState {
   backfillStarted?: boolean;
 }
 
+export type HostedOAuthProvider = 'google' | 'github';
+
+export interface HostedOAuthStart {
+  flowId: string;
+  provider: HostedOAuthProvider;
+  url: string;
+}
+
+export interface HostedOAuthStatus {
+  state: 'pending' | 'complete' | 'error';
+  error?: string;
+}
+
 export interface EmbedderState {
   provider: EmbedderProvider;
   hasKey: boolean;

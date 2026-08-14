@@ -32,7 +32,9 @@ const {
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
+  focusAllowedSenderWindow,
   focusWindow,
+  isOAuthReturnUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -995,6 +997,22 @@ ipcMain.handle('bug-report:open', async (event) => {
   return true;
 });
 
+// OAuth completion is observed by the initiating renderer through an opaque
+// local flow status. Let only that live main window bring itself back from the
+// system browser; this channel cannot focus arbitrary or auxiliary windows.
+ipcMain.handle('window:focus-self', (event) => {
+  const senderWindow = focusAllowedSenderWindow({
+    BrowserWindow,
+    sender: event.sender,
+    isAllowed: isLiveMainWindow,
+    beforeFocus: () => {
+      if (process.platform === 'darwin') app.focus({ steal: true });
+    },
+  });
+  if (!senderWindow) return false;
+  lastMainWindow = senderWindow;
+  return true;
+});
 
 ipcMain.handle('window:setFolder', (event, folder) => {
   if (folder !== null && (typeof folder !== 'string' || !folder.trim())) return false;
@@ -1101,17 +1119,45 @@ ipcMain.on('clipboard:setAgentComposerFocused', (event, focused) => {
 });
 
 const initialWindowFlight = createSingleFlight(() => app.whenReady().then(() => createWindow()));
+
+function focusOAuthReturn() {
+  void app.whenReady().then(async () => {
+    if (process.platform === 'darwin') app.focus({ steal: true });
+    if (focusLastMainWindow()) return;
+    await initialWindowFlight.run();
+    focusLastMainWindow();
+  });
+}
+
+function registerOAuthReturnProtocol() {
+  const registered = process.defaultApp && process.argv[1]
+    ? app.setAsDefaultProtocolClient('stashbase', process.execPath, [path.resolve(process.argv[1])])
+    : app.setAsDefaultProtocolClient('stashbase');
+  if (!registered) console.warn('[electron] could not register the stashbase:// return protocol');
+}
+
+app.on('open-url', (event, url) => {
+  if (!isOAuthReturnUrl(url)) return;
+  event.preventDefault();
+  focusOAuthReturn();
+});
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    if (argv.some(isOAuthReturnUrl)) {
+      focusOAuthReturn();
+      return;
+    }
     if (!focusLastMainWindow()) {
       void initialWindowFlight.run().then(() => { focusLastMainWindow(); });
     }
   });
 
   app.whenReady().then(async () => {
+    registerOAuthReturnProtocol();
     try {
       await bugReportHandoff.initializeSession();
     } catch {
@@ -1132,6 +1178,7 @@ if (!hasSingleInstanceLock) {
     }
     installApplicationMenu();
     await initialWindowFlight.run();
+    if (process.argv.some(isOAuthReturnUrl)) focusOAuthReturn();
   });
 
   app.on('activate', () => {

@@ -22,10 +22,13 @@ user-managed results.
 - AI Index provides meaning-based retrieval when an embedding source is
   configured. Product copy says **AI Index**; engineering terms such as
   semantic indexing and embeddings appear only where technically necessary.
-- Setup offers a verified-email StashBase account with an included monthly
-  allowance as the primary path and OpenAI/OpenRouter keys as the advanced
+- Setup offers a Supabase browser sign-in with Google and an included monthly
+  allowance as the primary path, with OpenAI/OpenRouter keys as the advanced
   path. The active source is explicit, while inactive account and key
-  credentials remain available for later switching.
+  credentials remain available for later switching. After browser sign-in,
+  the initiating desktop window returns to the foreground and the centered
+  callback card attempts to close. If the OS or browser blocks the automatic
+  handoff, the card offers an explicit **Open StashBase** action.
 - The search popup searches the whole library by default and can narrow to one
   member folder. It remembers query, mode, options, scope, and results across
   close, reopen, and folder switches, then refreshes against current content.
@@ -59,8 +62,10 @@ user-managed results.
   is presented. Current indexed files may still provide partial results.
 - Result scope never widens silently, and a derived path never crosses the
   product boundary.
-- Credentials are managed through Settings. Browsing local files and serving
-  an existing local index never depends on online authentication.
+- BYOK credentials are managed through Settings. Account login starts only
+  from an explicit Sign in action in setup, Settings, or the account menu.
+  Browsing local files and serving an existing local index never depends on
+  online authentication.
 - Account sessions remain Node-owned. Renderer responses contain only account
   display/quota state, and the Python daemon receives only an ephemeral
   loopback credential rather than Supabase access or refresh tokens.

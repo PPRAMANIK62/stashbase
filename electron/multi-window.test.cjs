@@ -15,7 +15,9 @@ const {
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
+  focusAllowedSenderWindow,
   focusWindow,
+  isOAuthReturnUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -277,6 +279,56 @@ test('focusing an existing folder window restores it before bringing it forward'
 
   assert.equal(focusWindow(win), true);
   assert.deepEqual(calls, ['restore', 'show', 'focus']);
+});
+
+test('a live renderer may focus only its own allowed main window', () => {
+  const calls = [];
+  const sender = { id: 17 };
+  const win = {
+    isDestroyed: () => false,
+    isMinimized: () => true,
+    restore: () => calls.push('restore'),
+    show: () => calls.push('show'),
+    focus: () => calls.push('focus'),
+  };
+  const BrowserWindow = {
+    fromWebContents: (candidate) => candidate === sender ? win : null,
+  };
+
+  assert.equal(focusAllowedSenderWindow({
+    BrowserWindow,
+    sender,
+    isAllowed: (candidate) => candidate === win,
+    beforeFocus: () => calls.push('activate-app'),
+  }), win);
+  assert.deepEqual(calls, ['activate-app', 'restore', 'show', 'focus']);
+
+  calls.length = 0;
+  assert.equal(focusAllowedSenderWindow({
+    BrowserWindow,
+    sender,
+    isAllowed: () => false,
+    beforeFocus: () => calls.push('activate-app'),
+  }), null);
+  assert.deepEqual(calls, []);
+});
+
+test('OAuth return deep links have one exact, data-free authority', () => {
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete'), true);
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete/'), true);
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete?token=secret'), false);
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete#flow'), false);
+  assert.equal(isOAuthReturnUrl('stashbase://oauth-complete:123'), false);
+  assert.equal(isOAuthReturnUrl('stashbase://user@oauth-complete'), false);
+  assert.equal(isOAuthReturnUrl('stashbase://other-action'), false);
+  assert.equal(isOAuthReturnUrl('https://oauth-complete'), false);
+  assert.equal(isOAuthReturnUrl('not a URL'), false);
+
+  const packageJson = require('../package.json');
+  assert.deepEqual(packageJson.build.protocols, [{
+    name: 'StashBase OAuth Return',
+    schemes: ['stashbase'],
+  }]);
 });
 
 test('folder action follows the user flow: focus another matching window or open a new one', async () => {
