@@ -83,6 +83,7 @@ let lastQuota: HostedQuota | undefined;
 let quotaRefreshTimer: NodeJS.Timeout | null = null;
 let onQuotaAvailable: (() => void | Promise<void>) | null = null;
 let quotaAvailabilityRecovery: Promise<void> = Promise.resolve();
+let tokenRefresh: { sessionKey: string; promise: Promise<string> } | null = null;
 
 function messageOf(value: ErrorPayload | null, fallback: string): string {
   return value?.message ?? value?.error_description ?? value?.msg ?? value?.error ?? fallback;
@@ -268,15 +269,34 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
   const session = getHostedAccountSession();
   if (!session) throw new Error('Sign in to StashBase to use the hosted allowance.');
   if (!options.forceRefresh && session.expiresAt > Math.floor(Date.now() / 1000) + 60) return session.accessToken;
+  const sessionKey = `${session.userId}\0${session.refreshToken}\0${session.accessToken}`;
+  if (tokenRefresh?.sessionKey === sessionKey) return tokenRefresh.promise;
+
+  const promise = (async () => {
+    try {
+      const payload = await supabaseAuth('/token?grant_type=refresh_token', { refresh_token: session.refreshToken });
+      const current = getHostedAccountSession();
+      if (!current || `${current.userId}\0${current.refreshToken}\0${current.accessToken}` !== sessionKey) {
+        if (current) return current.accessToken;
+        throw new Error('The hosted account changed while its token was refreshing.');
+      }
+      const refreshed = sessionFrom(payload, session);
+      setHostedAccountSession(refreshed);
+      return refreshed.accessToken;
+    } catch (error) {
+      const current = getHostedAccountSession();
+      if (current && `${current.userId}\0${current.refreshToken}\0${current.accessToken}` === sessionKey) {
+        setHostedAccountSession(undefined);
+        clearHostedQuota();
+      }
+      throw error;
+    }
+  })();
+  tokenRefresh = { sessionKey, promise };
   try {
-    const payload = await supabaseAuth('/token?grant_type=refresh_token', { refresh_token: session.refreshToken });
-    const refreshed = sessionFrom(payload, session);
-    setHostedAccountSession(refreshed);
-    return refreshed.accessToken;
-  } catch (error) {
-    setHostedAccountSession(undefined);
-    clearHostedQuota();
-    throw error;
+    return await promise;
+  } finally {
+    if (tokenRefresh?.promise === promise) tokenRefresh = null;
   }
 }
 

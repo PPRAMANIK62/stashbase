@@ -249,3 +249,46 @@ test('broker caches a quota response and does not retry later hosted requests', 
     exhausted: true,
   });
 });
+
+test('concurrent hosted token refreshes share one request', () => {
+  const result = runIsolated(`
+    let refreshCalls = 0;
+    globalThis.fetch = async (url) => {
+      if (!String(url).endsWith('/auth/v1/token?grant_type=refresh_token')) throw new Error('unexpected URL ' + url);
+      refreshCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return Response.json({
+        access_token: 'access-new', refresh_token: 'refresh-new', expires_at: 4102444800,
+        user: { id: 'user', email: 'person@example.com' },
+      });
+    };
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    config.setHostedAccountSession({ accessToken: 'access-old', refreshToken: 'refresh-old', expiresAt: 1, userId: 'user', email: 'person@example.com' });
+    const tokens = await Promise.all([account.hostedAccessToken(), account.hostedAccessToken(), account.hostedAccessToken({ forceRefresh: true })]);
+    process.stdout.write(JSON.stringify({ refreshCalls, tokens, session: config.getHostedAccountSession() }));
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.refreshCalls, 1);
+  assert.deepEqual(output.tokens, ['access-new', 'access-new', 'access-new']);
+  assert.equal(output.session.refreshToken, 'refresh-new');
+});
+
+test('a stale failed refresh cannot clear a newer hosted session', () => {
+  const result = runIsolated(`
+    let rejectRefresh;
+    globalThis.fetch = async () => new Promise((_resolve, reject) => { rejectRefresh = reject; });
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    config.setHostedAccountSession({ accessToken: 'access-old', refreshToken: 'refresh-old', expiresAt: 1, userId: 'user-old', email: 'old@example.com' });
+    const pending = account.hostedAccessToken().catch((error) => error.message);
+    await new Promise((resolve) => setImmediate(resolve));
+    config.setHostedAccountSession({ accessToken: 'access-new', refreshToken: 'refresh-new', expiresAt: 4102444800, userId: 'user-new', email: 'new@example.com' });
+    rejectRefresh(new Error('old refresh failed'));
+    await pending;
+    process.stdout.write(JSON.stringify(config.getHostedAccountSession()));
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).refreshToken, 'refresh-new');
+});

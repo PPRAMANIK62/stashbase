@@ -40,6 +40,9 @@ access surface external clients copy from.
 - Account access and refresh tokens are Node-only configuration. They never
   cross renderer HTTP responses or the Node/Python boundary; Python receives a
   random per-process loopback bearer credential instead.
+- Refresh demand for one account session is single-flight. A refresh may
+  update or clear only the exact session it started from; a stale completion
+  cannot overwrite or sign out a newer session.
 - Browser provider login uses PKCE. Node generates and retains the verifier,
   accepts the short-lived authorization code only on a loopback callback, and
   exposes an opaque flow id plus pending/complete/error state to the renderer.
