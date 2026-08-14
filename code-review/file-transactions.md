@@ -37,6 +37,10 @@
 - A byte-identical save is a no-op and retains the current version.
 - Markdown and JSON persistence preserves supported BOM and line-ending
   conventions without manufacturing unrelated source changes.
+- JSON Tree operations enter this same save path as minimal source patches.
+  They preserve untouched whitespace, property order, escape spelling, numeric
+  lexemes, and trailing-newline state; no whole-document serializer is a save
+  authority.
 - A `FILE_CHANGED` conflict must never automatically retry without
   `baseVersion`. The dirty editor buffer and newer disk source both remain
   recoverable until an explicit reload, merge, or overwrite decision.

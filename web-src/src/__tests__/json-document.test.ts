@@ -5,7 +5,12 @@ import { Window } from 'happy-dom';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { jsonLanguage } from '@codemirror/lang-json';
-import { createJsonEditor, textMatches } from '../components/JsonDocument';
+import {
+  createJsonEditor, fromJsonEditorText, jsonTreeHighlightPath, makeJsonTreeFindController,
+  textMatches, toJsonEditorText,
+} from '../components/JsonDocument';
+import { analyzeJsonSource } from '../components/json/sourceModel';
+import { directTreeSearchPatch } from '../components/json/JsonTreeView';
 import { JsonDocument } from '../components/JsonDocument';
 import { AppContext, canApplyExternalTextRefresh, type AppActions } from '../store/AppContext';
 import { initialState, makeTab, reducer, type Action, type State } from '../store/state';
@@ -26,6 +31,40 @@ test('JSON Find supports case and whole-word matching without parsing source', (
     { from: 2, to: 7 },
     { from: 31, to: 36 },
   ]);
+});
+
+test('JSON tree/editor boundary preserves the source line-ending convention', () => {
+  const crlf = '\uFEFF{\r\n  "value": true\r\n}\r\n';
+  const editorText = toJsonEditorText(crlf);
+  assert.equal(editorText, '\uFEFF{\n  "value": true\n}\n');
+  assert.equal(fromJsonEditorText(editorText.replace('true', 'false'), 'crlf'), '\uFEFF{\r\n  "value": false\r\n}\r\n');
+  assert.equal(fromJsonEditorText(editorText.replace('true', 'false'), 'cr'), '\uFEFF{\r  "value": false\r}\r');
+});
+
+test('JSON Tree Find searches keys and scalar lexemes and exposes the selected path', () => {
+  let source = '{"users":[{"name":"Ada"},{"name":"Grace"}],"count":2}';
+  let session = { expanded: new Set(['$']), selectedPath: '$' as string | null, search: '', searchOptions: { wholeWord: false, caseSensitive: false } };
+  const controller = makeJsonTreeFindController(() => source, () => session, (next) => { session = next; });
+  assert.deepEqual(controller.setQuery('grace', { caseSensitive: false, wholeWord: true }), { current: 1, total: 1 });
+  assert.equal(session.selectedPath, '$.users[1].name');
+  assert.deepEqual(session.searchOptions, { caseSensitive: false, wholeWord: true });
+  assert.ok(session.expanded.has('$.users[1]'));
+  source = '{"users":[{"name":"Ada"}],"count":2}';
+  assert.deepEqual(controller.next(), { current: 0, total: 0 }, 'Find never retains a path removed by a source edit');
+  controller.close();
+  assert.equal(session.search, '');
+});
+
+test('typing in visible Tree search clears hidden global Find modes', () => {
+  assert.deepEqual(directTreeSearchPatch(' Alpha '), {
+    search: ' Alpha ', selectedPath: null, searchOptions: { caseSensitive: false, wholeWord: false },
+  });
+});
+
+test('JSON search-result highlights resolve to visible tree paths or request Source fallback', () => {
+  const analysis = analyzeJsonSource('{"nested":{"message":"visible highlight"}}');
+  assert.equal(jsonTreeHighlightPath(analysis, 'visible highlight'), '$.nested.message');
+  assert.equal(jsonTreeHighlightPath(analysis, 'spans unrelated syntax'), null);
 });
 
 test('real JSON CodeMirror session handles malformed source, editing, live Find remapping, external refresh, and teardown', async () => {
@@ -344,7 +383,7 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     assert.equal(control.current!.state.current.activeTabId, secondTabId);
     assert.equal(
       control.current!.state.current.tabs.find((tab) => tab.id === firstTabId)?.file?.content,
-      firstTabSourceBeforeSwitch,
+      fromJsonEditorText(firstTabSourceBeforeSwitch, 'crlf'),
       'a successful save retains the submitted source for later tab reactivation',
     );
     await act(async () => { await control.current!.actions.activateTab(firstTabId); });
