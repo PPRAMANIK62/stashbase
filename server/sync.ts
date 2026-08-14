@@ -351,18 +351,23 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   }
 
   const removedDone: string[] = [...excludedRemoved];
+  const currentResult = (
+    added: string[] = [],
+    modified: string[] = [],
+    outcome: { cancelled?: true; semanticPaused?: true } = {},
+  ): SyncResult => ({
+    added: toFolderRelList(root, added),
+    modified: toFolderRelList(root, modified),
+    removed: toFolderRelList(root, removedDone),
+    renamed: toFolderRelList(root, renamedDone),
+    failed: toFolderRelFailures(root, failed),
+    ...outcome,
+  });
   if (deletedCandidates.length) {
     log.info(`removing ${deletedCandidates.length} stale file(s) from index`);
     for (const sourcePath of deletedCandidates) {
       if (shouldStop(opts)) {
-        return {
-          added: [],
-          modified: [],
-          removed: toFolderRelList(root, removedDone),
-          renamed: toFolderRelList(root, renamedDone),
-          failed: toFolderRelFailures(root, failed),
-          cancelled: true,
-        };
+        return currentResult([], [], { cancelled: true });
       }
       try {
         cleanupRemovedSource(sourcePath);
@@ -386,43 +391,29 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
       indexer, root, diff.modified, workload, failed, opts.publishPaused,
     );
     if (published) {
-      return {
-        added: [], modified: [], removed: toFolderRelList(root, removedDone),
-        renamed: toFolderRelList(root, renamedDone),
-        failed: toFolderRelFailures(root, failed), semanticPaused: true,
-      };
+      return currentResult([], [], { semanticPaused: true });
     }
   }
   if (!pauseRequested && opts.commitEmbedding && !opts.commitEmbedding()) {
     log.warn(`semantic decision could not be cleared for "${root}"; leaving indexing paused`);
-    return {
-      added: [], modified: [], removed: toFolderRelList(root, removedDone),
-      renamed: toFolderRelList(root, renamedDone),
-      failed: toFolderRelFailures(root, failed), semanticPaused: true,
-    };
+    return currentResult([], [], { semanticPaused: true });
   }
 
   const convertedAddedDone = await indexFreshConvertedSources(indexer, root, diff.added, failed, opts);
   if (convertedAddedDone.cancelled || convertedAddedDone.semanticPaused) {
-    return {
-      added: toFolderRelList(root, convertedAddedDone.done),
-      modified: [],
-      removed: toFolderRelList(root, removedDone),
-      renamed: toFolderRelList(root, renamedDone),
-      failed: toFolderRelFailures(root, failed),
-      ...(convertedAddedDone.cancelled ? { cancelled: true } : { semanticPaused: true }),
-    };
+    return currentResult(
+      convertedAddedDone.done,
+      [],
+      convertedAddedDone.cancelled ? { cancelled: true } : { semanticPaused: true },
+    );
   }
   const convertedModifiedDone = await indexFreshConvertedSources(indexer, root, diff.modified, failed, opts);
   if (convertedModifiedDone.cancelled || convertedModifiedDone.semanticPaused) {
-    return {
-      added: toFolderRelList(root, convertedAddedDone.done),
-      modified: toFolderRelList(root, convertedModifiedDone.done),
-      removed: toFolderRelList(root, removedDone),
-      renamed: toFolderRelList(root, renamedDone),
-      failed: toFolderRelFailures(root, failed),
-      ...(convertedModifiedDone.cancelled ? { cancelled: true } : { semanticPaused: true }),
-    };
+    return currentResult(
+      convertedAddedDone.done,
+      convertedModifiedDone.done,
+      convertedModifiedDone.cancelled ? { cancelled: true } : { semanticPaused: true },
+    );
   }
 
   const addedCandidates = syncIndexCandidates(root, diff.added);
@@ -438,53 +429,27 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   const modifiedDone: string[] = [...convertedModifiedDone.done];
   for (const sourcePath of addedCandidates) {
     if (shouldStop(opts)) {
-      return {
-        added: toFolderRelList(root, addedDone),
-        modified: [],
-        removed: toFolderRelList(root, removedDone),
-        renamed: toFolderRelList(root, renamedDone),
-        failed: toFolderRelFailures(root, failed),
-        cancelled: true,
-      };
+      return currentResult(addedDone, [], { cancelled: true });
     }
     if (!canEmbed(opts)) {
-      return {
-        added: toFolderRelList(root, addedDone), modified: [],
-        removed: toFolderRelList(root, removedDone), renamed: toFolderRelList(root, renamedDone),
-        failed: toFolderRelFailures(root, failed), semanticPaused: true,
-      };
+      return currentResult(addedDone, [], { semanticPaused: true });
     }
     const chunks = await indexOne(indexer, root, sourcePath, failed);
     if (chunks > 0) addedDone.push(sourcePath);
   }
   for (const sourcePath of modifiedCandidates) {
     if (shouldStop(opts)) {
-      return {
-        added: toFolderRelList(root, addedDone),
-        modified: toFolderRelList(root, modifiedDone),
-        removed: toFolderRelList(root, removedDone),
-        renamed: toFolderRelList(root, renamedDone),
-        failed: toFolderRelFailures(root, failed),
-        cancelled: true,
-      };
+      return currentResult(addedDone, modifiedDone, { cancelled: true });
     }
     if (!canEmbed(opts)) {
-      return {
-        added: toFolderRelList(root, addedDone), modified: toFolderRelList(root, modifiedDone),
-        removed: toFolderRelList(root, removedDone), renamed: toFolderRelList(root, renamedDone),
-        failed: toFolderRelFailures(root, failed), semanticPaused: true,
-      };
+      return currentResult(addedDone, modifiedDone, { semanticPaused: true });
     }
     const chunks = await indexOne(indexer, root, sourcePath, failed);
     if (chunks > 0) modifiedDone.push(sourcePath);
   }
 
   if (!canEmbed(opts)) {
-    return {
-      added: toFolderRelList(root, addedDone), modified: toFolderRelList(root, modifiedDone),
-      removed: toFolderRelList(root, removedDone), renamed: toFolderRelList(root, renamedDone),
-      failed: toFolderRelFailures(root, failed), semanticPaused: true,
-    };
+    return currentResult(addedDone, modifiedDone, { semanticPaused: true });
   }
 
   log.info(
@@ -494,13 +459,7 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
       `removed=${removedDone.length}/${deletedCandidates.length + excludedRemoved.length} failed=${failed.length}`,
   );
   await assertSyncConverged(indexer, root, [...addedDone, ...modifiedDone, ...renamedDone]);
-  return {
-    added: toFolderRelList(root, addedDone),
-    modified: toFolderRelList(root, modifiedDone),
-    removed: toFolderRelList(root, removedDone),
-    renamed: toFolderRelList(root, renamedDone),
-    failed: toFolderRelFailures(root, failed),
-  };
+  return currentResult(addedDone, modifiedDone);
 }
 
 async function indexFreshConvertedSources(
