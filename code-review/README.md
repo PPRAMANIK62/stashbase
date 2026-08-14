@@ -6,6 +6,12 @@ Interface, inspect the small implementation map, then read the changed code and
 focused tests. Code and tests remain the source of truth for current behavior
 and exact assertions.
 
+The contract set is an index over deep Modules, not a compressed source-tree
+inventory. Select the smallest set of Seams that owns the change; do not load
+every contract or expand an Implementation Map unless the change crosses the
+named Interface. This is the engineering half of the
+[coarse-to-fine documentation route](../design-docs/README.md#coarse-to-fine-route).
+
 ## Review Route
 
 ```text
@@ -31,6 +37,7 @@ product area → user journey → review contract
 |---|---|
 | Runtime ownership or cross-process flow | [Architecture](architecture.md) |
 | Native windows, save-on-close, app shutdown | [Window Lifecycle](window-lifecycle.md) |
+| Bug-report collection, review, approval, handoff, privacy | [Bug Reporting](bug-reporting.md) |
 | Renderer folder, tab, search, or overlay coordination | [Renderer Workspace](renderer-workspace.md) |
 | Conversion, indexing, reconcile, cleanup | [Data Lifecycle](data-lifecycle.md) |
 | Import, save, rename, move, delete, conflicts | [File Transactions](file-transactions.md) |

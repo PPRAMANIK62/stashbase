@@ -1,8 +1,9 @@
-# Advanced MCP Configuration
+# MCP Configuration
 
-The normal setup path is **Settings -> MCP**. StashBase can write the MCP
-configuration for supported clients or copy a snippet for clients that manage
-their own configuration.
+StashBase's built-in Chat agents (Claude Code, Codex) connect automatically —
+nothing to configure. Every other MCP-compatible client is configured by you:
+copy the standard configuration or the URL access details from
+**Settings -> MCP** and register them in the client, as in the examples below.
 
 ## Manual stdio Setup
 
@@ -51,7 +52,8 @@ Restart the client after changing its MCP configuration.
 ## URL-based Clients
 
 Server-side clients that cannot spawn a local process can use Streamable HTTP.
-Open **Settings -> MCP -> URL access** to copy the current URL and bearer token.
+Open **Settings -> MCP -> Server connection** to copy the current URL and
+bearer token.
 Requests send:
 
 ```text

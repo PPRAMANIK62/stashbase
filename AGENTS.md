@@ -62,6 +62,8 @@ Start engineering review with
 
 - `architecture.md` — cross-process ownership and system flow;
 - `window-lifecycle.md` — native windows, save barriers, retirement, shutdown;
+- `bug-reporting.md` — local report collection, review authorization, approval,
+  artifact handoff, and privacy;
 - `renderer-workspace.md` — folder/tab/search transitions and renderer liveness;
 - `data-lifecycle.md` — preparation, indexing, reconcile, queues, cleanup;
 - `file-transactions.md` — paths, import, save, conflicts, mutations;

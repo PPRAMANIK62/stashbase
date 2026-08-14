@@ -47,6 +47,12 @@ reason when a platform cannot exercise it.
 - [ ] **J06** — Paste one non-sensitive clipboard image into the Agent composer. Confirm
   the attachment preview appears, accompanying text remains, and the competing
   clipboard library-import offer does not appear.
+- [ ] **J09** — Open **Report a Bug…** from the native Help menu. Review the bounded
+  screenshot/log previews, exclude one available artifact, prepare the report,
+  and use Download. Confirm only the selected files appear in one new Downloads
+  folder and nothing is submitted automatically. When browser access is safe,
+  also confirm **Open GitHub** opens the prefilled issue without placing logs or
+  local paths in the URL.
 - [ ] **J03 / J04** — Open representative real PDF, DOCX, image, and audio fixtures in the
   packaged app on platforms where those formats ship. The automated journey
   uses synthetic/minimal fixtures; here confirm production rendering and, for

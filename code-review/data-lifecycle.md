@@ -152,7 +152,7 @@ of the resource tradeoff.
 | Daemon Adapter | `server/mfs-daemon.ts` ↔ `python/stashbase_daemon.py` |
 | Retrieval Interface | `server/retrieval/index.ts`, with keyword, semantic, and evidence Modules beside it |
 | Format owners | PDF, OCR, DOCX, and audio Modules under `server/` plus their native/Python Adapters |
-| Focused evidence | `server/conversion-scheduler.test.ts`, `conversion.test.ts`, `conversion-status.test.ts`, `semantic-workload.test.ts`, `index-status.test.ts`, `audioTranscription.test.ts`, `server/retrieval/index.test.ts`, and `python/stashbase_daemon_test.py` |
+| Focused evidence | `server/conversion-scheduler.test.ts`, `server/conversion.test.ts`, `server/conversion-status.test.ts`, `server/semantic-workload.test.ts`, `server/index-status.test.ts`, `server/audio-transcription.test.ts`, `server/retrieval/index.test.ts`, and `python/stashbase_daemon_test.py` |
 
 ## Review Checklist
 

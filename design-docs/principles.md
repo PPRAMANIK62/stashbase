@@ -1,5 +1,4 @@
 # Principles
-
 These are the stable rules used to evaluate product and technical decisions.
 
 1. **Agent-native** — StashBase exists to make local files stable context that

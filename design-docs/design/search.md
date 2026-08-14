@@ -46,8 +46,12 @@ user-managed results.
   ready states. Exact search remains usable while AI Index is absent or
   deferred.
 - AI Index setup is strongly recommended but not a gate for local browsing,
-  editing, preview, or exact search. Activation persists; “Skip for now” is a
-  per-window choice and remains reversible from Files or Settings.
+  editing, preview, or exact search. A fresh blank window offers setup before a
+  folder is selected. Activation persists; “Skip for now” is retained only in
+  the current window. A blank-window skip carries into the first folder opened
+  so one launch makes one offer. Returning to a skipped folder stays quiet;
+  another folder or a fresh window re-offers setup. The choice remains
+  reversible from Files or Settings.
 - Hosted indexing and meaning-based queries draw from one token allowance.
   The account menu shows identity, remaining percentage, and reset date. When
   the allowance is exhausted, hosted semantic work stops while Exact search

@@ -128,9 +128,11 @@ Extend it when the contract grows; never weaken it to land a change.
   styling onto them.
 
 Small still-unmigrated stragglers (`.transcription-model-*`,
-`.clipboard-offer-preview`, preparation icons) are pending, not exempt —
-migrate them when touching their components, deleting the rules in the
-same change.
+`.clipboard-offer-preview`, preparation icons, and the JSON viewer chrome
+block `.json-document`/`.json-view-mode`/`.json-tree-*` in globals.css —
+its tokens are correct but the rules belong in JSX utilities) are pending,
+not exempt — migrate them when touching their components, deleting the
+rules in the same change.
 
 ## Implementation Map
 

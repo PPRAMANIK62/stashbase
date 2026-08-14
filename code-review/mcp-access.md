@@ -54,10 +54,17 @@ clients and are not a general host-filesystem API.
 
 ## Client Configuration
 
-One-click setup writes the supported client's own config and regenerates the
-platform MCP launcher. StashBase config does not mirror client config. Manual
-and URL setup are documented in
-[docs/mcp-configuration.md](../docs/mcp-configuration.md).
+StashBase writes MCP client configuration only for the built-in Chat agents:
+Agent readiness calls `ensureAgentMcp` (Claude Code, Codex), which regenerates
+the platform MCP launcher and idempotently rewrites that agent's own config.
+StashBase config does not mirror client config. Every external client —
+including Claude Desktop — is configured by the user from the read-only
+Settings → MCP page (standard stdio config, URL access, token, Docker
+opt-in); manual and URL setup are documented in
+[docs/mcp-configuration.md](../docs/mcp-configuration.md). No route connects
+or disconnects a third-party client. A built-in Agent's MCP failure may link to
+this page as a manual recovery reference, but retry remains owned by Agent
+readiness.
 
 ## Permission Boundary
 
@@ -75,7 +82,8 @@ sandbox changes, and broader access remain explicit approval decisions.
 | Stdio Adapter | `mcp/library-server.ts` and `mcp/server.ts` |
 | HTTP client Adapter | `mcp/library-operations-http.ts` |
 | HTTP server Adapter | `server/routes/mcp-http.ts` and `server/mcp-http-service.ts` |
-| Settings Interface | `server/mcp-http-settings.ts` and the narrow routes in `server/routes/mcp.ts` |
+| Settings Interface | `server/mcp-http-settings.ts` and the narrow read/HTTP routes in `server/routes/mcp.ts` |
+| Launcher and built-in agent wiring | `ensureAgentMcp` and `ensureMcpLauncher` in `server/agent-mcp.ts` |
 | Focused evidence | `server/library-operations/index.test.ts`, `server/routes/library-files.test.ts`, and `server/__tests__/mcp-http-*.test.ts` |
 
 ## Validation

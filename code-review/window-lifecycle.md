@@ -36,6 +36,10 @@ after readiness, a save failure or timeout keeps the window open.
   membership still contains the folder.
 - A single-flight initial-window operation plus the single-instance lock
   prevents startup races from creating duplicate windows.
+- An Electron-owned source server is always launched with the development
+  runtime marker, regardless of whether `pnpm dev:server` or Electron wins the
+  loopback-port race. Packaged launches explicitly remove that marker. This
+  keeps development-only controls available without exposing them in a build.
 - Browser-owned OAuth returns focus only through the packaged `stashbase://`
   handler, which accepts the exact data-free `oauth-complete` authority.
   Renderer polling updates account state without racing that browser-owned
@@ -64,28 +68,15 @@ Windows signal behavior is not a graceful child shutdown contract.
 
 ## Bug-report review windows
 
-The Electron main process solely owns in-memory bug-report drafts. The native
-Help menu creates a draft from the source window; the dedicated review window
-is bound to that draft through its `webContents`, never a renderer-supplied
-draft ID. The review window is an independent dialog-sized window — never a
-child or modal of its source, so an open review survives the source closing —
-and it cannot enter full screen itself. When its source window is full screen
-at creation, it presents as a floating dialog in that space instead of
-switching macOS to a separate desktop. Its preload accepts only narrow review operations; description
-updates carry the exact `problem` and optional `reproduction` string fields,
-and artifact operations validate an opaque reference against the sender-bound
-draft. References, paths, destinations, URLs, raw diagnostics, screenshot
-buffers, and unredacted logs are never authority or renderer data.
+The review is an independent dialog-sized window, never a child or modal of its
+source, so an open review survives the source closing. It cannot enter full
+screen. When created from a full-screen source, it floats in that space instead
+of switching macOS to a separate desktop. Closing the review retires its native
+identity and tells the owning Bug Reporting Module to discard the bound draft.
 
-Drafts move from collection to a bound review and then an immutable approved
-snapshot. An explicit reopen returns an approved draft to review by discarding
-its snapshot and pending handoff — snapshots are never mutated in place.
-Closing the source drops only an unbound draft; closing, cancelling,
-or failing the review retires the bound draft and its references. Collection is
-best effort. Text is redacted and independently scanned fail-closed before it
-is available, and selected resources are scanned again before an atomic
-handoff write. Preparation is local: opening GitHub or saving selected output
-requires a separate explicit user action and no private path crosses IPC.
+Draft authority, preload/IPC scope, privacy, approval, and handoff are owned by
+[Bug Reporting](bug-reporting.md); this contract owns only the native window's
+creation, presentation, survival, and retirement.
 
 ## Failure and Recovery
 
@@ -101,12 +92,12 @@ requires a separate explicit user action and no private path crosses IPC.
 | Role | Stable entry points |
 |---|---|
 | Native window Module | `electron/multi-window.cjs` |
-| Process owner Adapter | `electron/main.cjs` |
+| Process owner Adapter | `electron/main.cjs`; child-environment construction in `electron/main-probe.cjs` |
 | Renderer bridge Adapter | `electron/preload.cjs` and `useActiveFolderWorkspace.ts` |
 | Server context Interface | window-scoped registry and retirement in `server/folder.ts` |
 | HTTP Adapters | `server/routes/window-context.ts`, `server/routes/internal-shutdown.ts` |
 | Cleanup Interface | `server/shutdown-cleanup.ts` |
-| Bug-report review owner | `electron/bug-report-service.cjs`, `electron/bug-report-review-window.cjs`, `electron/bug-report-review-ipc.cjs` |
+| Bug-report window Adapter | `electron/bug-report-review-window.cjs`; draft authority lives in [Bug Reporting](bug-reporting.md) |
 | Focused evidence | `electron/multi-window.test.cjs`, `electron/multi-window-smoke.cjs`, `server/folder-window.test.ts`, `server/window-context-route.test.ts`, `server/internal-shutdown-route.test.ts`, `server/__tests__/shutdown-cleanup.test.ts` |
 
 ## Validation

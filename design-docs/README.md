@@ -1,9 +1,27 @@
 # Design Docs
-
 This directory is the committed source of truth for StashBase product intent.
 It explains the outcomes the product protects, the journeys it supports, and
 the boundaries contributors should preserve. The code remains the source of
 truth for the current implementation.
+
+The documentation is deliberately organized for bounded review context. Start
+coarse, descend only through the affected product area and engineering Seam,
+and stop when the current question is answered. A reader should not need to
+load every document or inspect the whole source tree before making a focused
+change.
+
+## Coarse-to-fine Route
+
+| Level            | Question                                                     | Read                                                   |
+| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
+| Product identity | What is StashBase, and which durable rules constrain it?     | Overview, Principles, Product Direction                |
+| User outcome     | Why does this work matter, and what does the user observe?   | One scenario, area design, and journey                 |
+| Engineering Seam | Which Interface owns the behavior and what must remain true? | One or more focused `code-review/` contracts           |
+| Implementation   | Where does the behavior live?                                | The contract's Interface, owner Modules, and Adapters  |
+| Evidence         | What proves the behavior without reading unrelated code?     | The contract's focused validation and Journey Coverage |
+
+Move downward only as needed. Move sideways only when a named cross-area Seam
+requires another contract.
 
 ## Reading Paths
 
@@ -24,6 +42,8 @@ For a product change:
    lifecycle, or trust boundaries.
 4. Read the matching maintainer contract in
    [`code-review/`](../code-review/README.md) before changing code.
+5. Follow that contract's Implementation Map and focused validation instead of
+   inventorying the repository.
 
 For terminology and UI work, use [Glossary](glossary.md) and
 [Visual Style](visual-style.md).

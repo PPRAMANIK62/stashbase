@@ -6,7 +6,7 @@ maintainer contracts, or release checklists.
 
 Current guides:
 
-- [Advanced MCP Configuration](mcp-configuration.md) — manual stdio setup,
+- [MCP Configuration](mcp-configuration.md) — client setup examples,
   Streamable HTTP, Docker access, credentials, and transport boundaries.
 
 Add a guide here when a user or operator needs durable steps that would make

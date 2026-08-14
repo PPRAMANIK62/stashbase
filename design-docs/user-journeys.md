@@ -12,10 +12,12 @@ optional preparation or Agent runtime work completes.
 
 1. Launch StashBase.
 2. See the Files sidebar and an expanded, reusable blank Chat in the
-   document-free workspace.
+   document-free workspace. If AI Index is not authorized, accept its setup
+   offer or skip it for this window context without losing local functionality.
 3. If the library is empty, use the visible Add Folder action. Otherwise,
    choose a library folder explicitly; a fresh window does not silently resume
-   a folder.
+   a folder. A skip made in the blank window carries into this first folder so
+   the same launch does not immediately repeat the offer.
 4. Browse local files even when AI Index, transcription, or an Agent runtime is
    unavailable.
 
@@ -103,16 +105,19 @@ clear library or folder scope.
    install a runtime.
 2. Reuse a completely blank chat or create a fresh tab without hijacking
    existing work.
-3. Prepare the selected runtime on first explicit use, connect StashBase MCP,
-   and send a prompt.
+3. Review runtime readiness. If the selected runtime is missing, explicitly
+   choose **Install and continue**; then connect StashBase MCP and send a
+   prompt.
 4. Inspect streaming output, tool activity, permission requests, attachments,
    failures, and recovery.
 5. Open a source: the same mounted chat docks beside it. Close the last source:
    an open chat expands again.
 6. Switch folders without silently rebinding a started chat.
 
-Important recovery: disconnects and ambiguous turn starts fail visibly while
-preserving the transcript and preventing late output from crossing sessions.
+Important recovery: runtime installation and MCP connection failures are
+distinguished and offer only relevant actions; disconnects and ambiguous turn
+starts fail visibly while preserving the transcript and preventing late output
+from crossing sessions.
 
 ## J07: Converge chat into a document
 
@@ -134,8 +139,9 @@ the transcript as the document.
 **Outcome:** An MCP-capable client uses the same authorized library and source
 identity as the built-in Agent.
 
-1. Configure a supported client in Settings or use the documented manual
-   connection path.
+1. Copy the standard configuration or URL access details from Settings and
+   register them in the client, following the documented setup examples.
+   Built-in Chat agents connect automatically and are not configured here.
 2. Orient with library information, then search or read authorized files.
 3. Use bounded mutations when the client needs to write back.
 4. Reindex external changes when required.
@@ -144,3 +150,26 @@ identity as the built-in Agent.
 
 Important recovery: configuration or transport failure does not broaden
 filesystem access or block ordinary app use.
+
+## J09: Prepare and hand off a bug report
+
+**Outcome:** The user prepares an actionable local report, reviews exactly
+what may be shared, and remains the only party who submits it.
+
+1. Start from the sidebar **Report Bug** action or native
+   **Help → Report a Bug…**.
+2. Describe the problem and optionally add reproduction steps in the dedicated
+   review window.
+3. Inspect the safe previews and explicitly include or exclude each available
+   screenshot, diagnostic summary, or bounded log excerpt.
+4. Choose **Prepare Report** to freeze the reviewed text and selected
+   artifacts locally. Nothing is uploaded or submitted.
+5. Open the prefilled GitHub issue after the files are copied to Downloads, or
+   download the same files without opening GitHub, then complete any sharing
+   action personally.
+6. Go Back to revise and approve a fresh snapshot, or close the review to
+   discard its session state.
+
+Important recovery: one failed or unsafe artifact remains unavailable without
+exposing private content or invalidating the rest of the draft; a late result
+cannot revive a closed review.

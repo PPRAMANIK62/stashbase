@@ -47,6 +47,9 @@ Launch is ready only after the first window exists and
 `body[data-boot-settled="1"]` is set. From there, wait for semantic UI state
 with Playwright assertions. Do not use fixed sleeps or `networkidle`: indexing,
 editor save, and process shutdown are independent asynchronous boundaries.
+The application launcher explicitly skips the AI Index offer for journeys
+that do not own onboarding. First-launch coverage opts out of that harness
+default, observes the real offer, and makes the choice through shipping UI.
 Close through one application-level quit so Electron drives each window's
 renderer-save handshake before the server cleanup ladder, then delete only the
 fixture's validated scratch root. Do not separately close windows and request
@@ -103,27 +106,33 @@ while persisting theme and interface size.
 
 The functional project is the set of specs under `e2e/journeys/`. It covers:
 
-- deterministic Codex new-chat discovery, a folder-bound turn, command
-  approval, streamed transcript, stop/interruption, and preservation of the
-  same chat while the window switches folders;
+- deterministic Codex new-chat discovery, blank-chat reuse, scope freezing,
+  history resume, a folder-bound turn, command approval, streamed transcript,
+  stop/interruption, and preservation of the same chat while the window
+  switches folders;
 - dedicated read-only HTML, image, and audio viewers; valid tiny-PDF page
-  navigation and page retention across a tab switch; and explicit failure UI
-  that keeps malformed PDF and DOCX source identities visible;
+  navigation and page retention across a tab switch; valid DOCX rendering with
+  hidden legacy-derived notes; and explicit failure UI that keeps malformed
+  PDF and DOCX source identities visible;
 - file/folder create, rename, delete cancel/confirm, Favorites persistence,
-  library removal without disk deletion, and visible Sync Folder reconciliation
-  of an external mutation;
-- folder switching and library membership, persistent tabs, Quick Open,
-  Command Palette, and keyboard focus restoration;
+  library removal without disk deletion, pointer drag reorder/move, visible
+  Sync Folder reconciliation of an external mutation, and failed-save barriers
+  for document navigation and native window close;
+- folder switching and library membership, the titlebar Library switcher,
+  launch-time and per-folder AI Index prompting, blank-window skip carryover,
+  persistent tabs, Quick Open, Command Palette, and keyboard focus restoration;
 - Markdown frontmatter/edit/save, safe local and remote images and links,
   outline disclosure, and Find in both editing and reading modes without
   source mutation;
-- JSON read-only/live-edit transitions;
-- document Find handoff to active-folder exact search, cross-folder exact
-  search identity, and the native folder-picker success/cancel/error contract
-  through a main-process stub; and
-- deterministic semantic-search loading, grouped-results, empty, and error UI;
-  and keyboard-updated splitter ARIA values plus compact-resize preservation
-  of the active document.
+- source-preserving JSON Tree/Source navigation, keyboard semantics,
+  structured scalar editing, raw malformed-source recovery, and saving;
+- document Find handoff to active-folder exact search, remembered and
+  duplicate-path-aware cross-folder exact search, and the native folder-picker
+  success/cancel/error contract through a main-process stub;
+- deterministic semantic-search loading, grouped-results, empty, and error UI,
+  plus immediate AI Index re-prompting after key removal; and
+- keyboard-updated splitter ARIA values plus compact-resize preservation of
+  the active document.
 
 `pnpm test:e2e:functional` first runs the standalone fake Codex app-server
 contract, then the `electron-functional` Playwright project. The executable

@@ -1,5 +1,4 @@
 # Visual Style
-
 StashBase is a workbench people stay in for hours while their own files remain
 the subject. The visual language is therefore **a quiet, professional
 workspace**: structured like a code workbench, reading like a focused writing

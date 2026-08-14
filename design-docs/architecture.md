@@ -131,7 +131,9 @@ user-visible source file.
   explicit approval decisions in the Agent Panel.
 - Bug-report draft lifecycle and any future report artifacts are owned by the
   desktop application. Renderer views can present safe draft metadata but do
-  not own artifacts, filesystem access, or privileged actions.
+  not own artifacts, filesystem access, or privileged actions. The focused
+  engineering Interface lives in
+  [Bug Reporting](../code-review/bug-reporting.md).
 
 ## Documentation Boundary
 

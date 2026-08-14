@@ -109,6 +109,8 @@ The main ownership seams are intentionally narrower than this map:
 
 - [Window Lifecycle](window-lifecycle.md) — renderer readiness, save barriers,
   identity retirement, multi-window behavior, and shutdown.
+- [Bug Reporting](bug-reporting.md) — local collection, sender-bound review,
+  immutable approval, artifact handoff, and privacy.
 - [Renderer Workspace](renderer-workspace.md) — per-window folder, document,
   retrieval, and shell transition ownership.
 - [Data Lifecycle](data-lifecycle.md) — preparation, indexing, reconcile,

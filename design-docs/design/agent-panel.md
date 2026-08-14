@@ -24,10 +24,15 @@ a transcript-centered file manager.
 - The sidebar New Chat split button is the only creation entry. Its main action
   uses the remembered Agent; its chevron changes the default without starting
   a chat. A completely blank chat is reused instead of stacked.
-- Opening the app or a folder creates presentation state only. The first
-  explicit New Chat action prepares the selected Agent, preferring a supported
-  system CLI and otherwise installing its official managed runtime in AppData,
-  then connects StashBase MCP.
+- Opening the app or a folder creates presentation state only. New Chat opens
+  the selected Agent's readiness gate. A supported system or managed runtime
+  continues normally; a missing runtime waits for the explicit **Install and
+  continue** action before StashBase downloads the official managed runtime in
+  AppData and connects StashBase MCP.
+- Preparation failures identify the stage that needs recovery. Installation
+  failure offers retry and, when useful, the provider's install command; MCP
+  failure offers connection retry and the manual MCP access guide. A failed
+  MCP write never presents an installation command.
 - Every chat is pinned to either Library or one member folder. A blank chat can
   follow the window default; content, a draft, attachments, or resumed history
   freezes the scope. Folder switches preserve started chats and running work.
@@ -66,8 +71,11 @@ a transcript-centered file manager.
   width survive the transition.
 - Respect explicit visibility. Initialization opens Chat; later automatic
   layout changes do not override a user hide or reveal.
+- Opening, switching, or resuming an Agent tab is not installation consent.
+  Each missing runtime waits for its own explicit setup action.
 - A runtime, transport, or turn failure leaves one persistent explanation and
-  a truthful recovery path. Late output from an abandoned generation cannot
+  a truthful, stage-specific recovery path. Retrying preparation resumes from
+  the first incomplete stage. Late output from an abandoned generation cannot
   enter a newer turn.
 - Permission, deletion, command, network, and broader filesystem decisions
   remain explicit. Tool payloads render in a human-readable form.

@@ -11,8 +11,10 @@ appearance, onboarding, embedding, transcription, and MCP transport settings.
 Renderer panels are Adapters over those routes; they do not own durable truth.
 
 Managed Agent runtimes, models, derived data, and caches live under AppData and
-are not app-config fields. Supported client configuration files are owned by
-their clients and are updated only through explicit MCP setup actions.
+are not app-config fields. The built-in Chat agents' own configuration files
+are rewritten only by Agent readiness (`ensureAgentMcp`); StashBase never
+writes any other client's configuration — the MCP Settings page is a read-only
+access surface external clients copy from.
 
 ## Persistence Invariants
 
@@ -65,7 +67,7 @@ their clients and are updated only through explicit MCP setup actions.
 | Persistent Interface | strict/fallback read and write plus domain getters/setters in `server/app-config.ts` |
 | Domain owners | `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-embedding-broker.ts`, embedding and transcription configuration Modules |
 | HTTP Adapters | `server/routes/appearance.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
-| Renderer Adapters | `web-src/src/components/SettingsModal.tsx`, `components/settings/AppearancePanel.tsx`, `EmbeddingPanel.tsx`, `TranscriptionPanel.tsx`, `McpClientsPanel.tsx`, `AgentRuntimePanel.tsx` |
+| Renderer Adapters | `web-src/src/components/SettingsModal.tsx`, `components/settings/AppearancePanel.tsx`, `EmbeddingPanel.tsx`, `TranscriptionPanel.tsx`, `McpAccessPanel.tsx`, `AgentRuntimePanel.tsx` |
 | Appearance Adapter | `web-src/src/appearance.ts` |
 | Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `web-src/src/__tests__/appearance.test.ts`, `web-src/src/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts` |
 

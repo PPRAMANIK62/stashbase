@@ -41,11 +41,9 @@ retrieval as one first-class RAG layer instead of relying on exact terms alone.
 
 AI Index needs a source of embedding capacity, and StashBase strongly steers
 every user to set one up at first run — an unindexed library has a degraded
-Agent — while stopping short of forcing it. Two sources are intended: a hosted
+Agent — while stopping short of forcing it. Two sources are available: a hosted
 StashBase account with free monthly usage as the low-friction default for most
-people, and a bring-your-own OpenAI/OpenRouter key for advanced users. The
-hosted account is not built yet; until it ships, the key path is the only one
-that activates.
+people, and a bring-your-own OpenAI/OpenRouter key for advanced users.
 
 Recommend, don't lock. Signing in should unlock StashBase's hosted service, not
 unlock computation the user's own machine can already do — so browsing, editing,
@@ -53,17 +51,21 @@ preview, and keyword search must never be gated behind a remote login. The setup
 dialog leads hard toward enabling indexing and has no casual dismiss, but it
 offers a deliberate, low-emphasis exit ("Skip AI Index for now") to a
 "basic mode". No-index mode is a real, supported state, not a peer presented
-with equal weight — so the exit is a plain, low-key link, a per-window "for
-now" rather than a permanent opt-out (a fresh window re-offers indexing), and
-the surviving local abilities are not advertised as a competing feature; the
-default guides everyone to enable.
+with equal weight — so the exit is a plain, low-key link, a window-local "for
+now" rather than a permanent opt-out. A fresh blank window makes the offer
+before a folder is selected. Skipping there covers the first folder opened so
+the same launch does not immediately ask twice; after that, the choice is
+remembered per folder in that window. Returning to a skipped folder stays
+quiet, while another folder or a fresh window re-offers indexing. The surviving
+local abilities are not advertised as a competing feature; the default guides
+everyone to enable.
 
 Activation must not turn local files into something that needs the cloud to
 open. The governing rule: first use should choose an indexing source, but daily
 use must never depend on online auth to reach local files. Activation persists
-locally, while a skip applies only to the current window; the app opens and
-serves its existing index offline; a network or service error never forces
-re-authentication; and when hosted free usage is exhausted, new AI Index
+locally, while a skip follows the window-local context rule above; the app
+opens and serves its existing index offline; a network or service error never
+forces re-authentication; and when hosted free usage is exhausted, new AI Index
 updates pause while the existing index and Agent retrieval keep working. In
 basic mode the Agent still connects but flags, on first use or a failed
 retrieval, that indexing is off. Signing out or removing the key returns the

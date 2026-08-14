@@ -8,20 +8,46 @@
 - App boot and folder navigation perform only cheap discovery and idempotent
   MCP repair for already installed runtimes. They never install an Agent or run
   a login-shell probe.
-- The first explicit New Chat action owns readiness for the selected Agent.
-  Discovery prefers a supported system executable, then a managed executable
-  under AppData. If neither exists, only that Agent's official runtime is
-  installed.
+- New Chat opens readiness for the selected Agent but does not itself authorize
+  a download. Discovery prefers a supported system executable, then a managed
+  executable under AppData. If neither exists, the Agent gate waits for
+  **Install and continue** (or the explicit Settings install action) before
+  installing only that Agent's official runtime. Opening, switching, or
+  resuming a tab never installs another runtime as a side effect.
 - Managed runtimes never modify `PATH` and continue using the provider's normal
   account and history home. Resetting a managed executable never clears login
   or native history.
+- Settings offers Uninstall only for a StashBase-managed runtime, never for a
+  system executable. It stops that agent's sessions, resets preparation state,
+  and removes only the private install under AppData (the removal path-guards
+  to that root). Uninstall is disk reclamation, not deactivation: the next
+  explicit New Chat re-runs readiness.
 - Codex uses its official standalone installer in a private target. Claude uses
   its official release manifest, verifies size and SHA-256, and publishes
   atomically. Shutdown cancels preparation.
-- Readiness configures the matching CLI's StashBase MCP entry. Native attach
-  repeats that idempotent write immediately before process start.
-- A discovery, installation, or config failure is visible and retryable but
-  never blocks the workspace or silently substitutes another Agent.
+- Readiness configures the matching CLI's StashBase MCP entry through
+  `ensureAgentMcp`, the only writer of the built-in agents' own config files.
+  Native attach repeats that idempotent write immediately before process
+  start. There is no user-facing connect/disconnect for built-in agents; MCP
+  is part of readiness, and Settings surfaces a repair action only on
+  failure.
+- Preparation is one staged Interface: discover, install only when missing,
+  then configure MCP. Its failure contract names `stage`, `code`, a bounded
+  message, retryability, and an optional manual recovery. Renderer code must
+  not classify failures by parsing messages. Installation failure may expose
+  the provider install command; MCP failure may expose the read-only manual MCP
+  setup, never an install command.
+- Retry calls the same preparation Interface. Fresh discovery skips a completed
+  installation, so an MCP retry rewrites only the idempotent MCP configuration;
+  no parallel repair state machine exists.
+- Development failure injection is one mutually exclusive, in-memory
+  `nextFailure` value. It is consumed only when explicit readiness reaches that
+  stage and immediately resets to normal; background startup repair never
+  consumes it, and an installation injection stays pending when an existing
+  runtime skips installation. Settings presents these controls inside a
+  visually distinct development-only surface; production omits the surface.
+- A discovery, installation, or MCP failure is visible and retryable but never
+  blocks the workspace or silently substitutes another Agent.
 
 ## Session Scope and Lifetime
 
@@ -82,11 +108,12 @@ assumed CLI versions.
 |---|---|
 | Agent Interface | `AgentAdapter`, normalized client/server events, scope resolution, attach, and stop in `server/agent-contract.ts` |
 | Adapter registry | `server/agent-adapters.ts` |
-| Preparation Interface | `AgentBootstrapCoordinator` in `server/agent-runtime-installer.ts` plus discovery paths in `server/agent-cli.ts` |
+| Preparation Interface | `AgentBootstrapCoordinator` and its structured failure contract in `server/agent-runtime-installer.ts`; discovery and one-shot debug controls in `server/agent-cli.ts` and `server/agent-runtime-paths.ts` |
+| MCP wiring | `ensureAgentMcp` and the launcher writer in `server/agent-mcp.ts` |
 | Claude Adapter | `server/agent.ts` and its SDK/native-process helpers |
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
-| Renderer Adapter | `web-src/src/agentBootstrap.ts`, `agentCatalog.tsx`, and [Agent Panel](agent-panel.md) |
+| Renderer Adapter | `web-src/src/agentCatalog.tsx`, `components/agent/chatActivation.ts`, `components/agent/runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
 | Focused evidence | `server/__tests__/agent-contract.test.ts`, `agent-runtime-installer.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs` |
 
 ## Validation

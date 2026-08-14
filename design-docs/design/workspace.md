@@ -21,15 +21,20 @@ manager, or a primary graph-navigation tool.
 - A new window opens directly into the workspace with no folder selected and
   one expanded, reusable blank library Chat. It never silently restores a
   folder or installs an Agent runtime.
+- On first launch with a brand-new empty default folder home, StashBase seeds
+  the ordinary local **👋 Start Here** folder and adds it to the library
+  without automatically opening it. An existing folder home is never modified,
+  and deleting the seeded folder does not recreate it.
 - The Files sidebar keeps New Chat at the top (with the all-sessions chat
   history beside it), the active folder and its tree in the main zone, and
   the account utilities at the bottom. A no-folder window shows the
   zero-folder card when the library is empty, or a quiet pointer at the
   titlebar switcher when members exist.
 - The account row reads **Anonymous** without restricting local work. Its menu
-  routes signed-out users to AI Index setup and shows signed-in identity,
-  hosted-usage percentage, reset date, Learn more, and Sign out. AI Index
-  source selection remains in Settings rather than persistent sidebar chrome.
+  offers signed-out users StashBase sign-in with free monthly AI Index usage,
+  and shows signed-in identity, hosted-usage percentage, reset date, Learn
+  more, and Sign out. AI Index source selection remains in Settings rather
+  than persistent sidebar chrome.
 - Users can open or create a local folder, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
   A created folder is an ordinary directory. Removing membership clears only

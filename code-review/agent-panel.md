@@ -16,6 +16,14 @@
   the scope visible to the user; content and resumed history remain pinned.
 - A scope-specific History selection records one pending handoff. The active
   suitable blank tab consumes it exactly once before reconnecting.
+- Runtime readiness gates Chat before transport connection. Failed gates use
+  the structured preparation failure stage and advertised manual recovery:
+  installation can copy an install command, MCP can open manual setup, and
+  simulated failures can remain retry-only. Error prose never selects an
+  action.
+- Tab activation and history resume only select renderer state. A missing
+  runtime remains on the setup gate until **Install and continue**; activation
+  code must not call the preparation endpoint speculatively.
 
 ## Layout and Visibility
 
@@ -94,8 +102,8 @@
 |---|---|
 | Panel boundary | `web-src/src/components/ChatPane.tsx` and `AgentView.tsx` |
 | Transcript/composer Modules | `web-src/src/components/agent/AgentMessages.tsx`, `AgentComposer.tsx`, `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` |
-| State Interfaces | Chat tab state/actions in `web-src/src/store/state.ts` and `stateReducer.ts`; focused pure state Modules under `components/agent/` |
-| Runtime transport Adapter | connection URL/lifecycle Modules under `components/agent/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
+| State Interfaces | Chat tab state/actions in `web-src/src/store/state.ts` and `stateReducer.ts`; activation consent in `components/agent/chatActivation.ts`; focused pure state Modules under `components/agent/` |
+| Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `components/agent/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
 | Markdown Adapter | `web-src/src/components/agent/AgentMarkdown.tsx` |
 | Focused evidence | `web-src/src/__tests__/agent-*.test.ts`, `e2e/fixtures/fake-codex-app-server.test.mjs`, and `e2e/journeys/agent-panel.spec.ts` |
 

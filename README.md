@@ -1,6 +1,6 @@
 # StashBase
 
-**Turn local files into searchable context for Agents.**
+**Turn local files into Agent-ready context.**
 
 [![Website](https://img.shields.io/badge/website-stashbase.ai-0a66c2.svg)](https://stashbase.ai)
 [![Release](https://img.shields.io/github/v/release/liliu-z/stashbase?label=release)](https://github.com/liliu-z/stashbase/releases/latest)
@@ -8,18 +8,20 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-support%20%26%20chat-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/zsRZH4PTq9)
 
-Much of your best context lives in local files that Agents can't easily search — papers, contracts, scanned documents, recordings. 📂 Open a folder in StashBase and its supported contents become searchable:
+Much of your best context already lives in local files: notes, papers,
+contracts, project data, scanned documents, and recordings. Open a folder in
+StashBase and work with that material in place:
 
-- 📄 **Prepare:** extract searchable text from PDFs, DOCX files, images, audio, and video.
-- 🔎 **Search:** find relevant context by meaning, not just keywords.
-- 🤖 **Connect:** share searchable context across Claude, Codex, and other MCP clients.
+- 📂 **Work in place:** browse, read, and edit supported files without moving them into a proprietary workspace.
+- 🔎 **Prepare and search:** extract difficult formats, search exact text immediately, and optionally add meaning-based retrieval with AI Index.
+- 🤖 **Use with Agents:** run Claude Code or Codex in the built-in Chat, or share the same authorized library with other MCP clients.
 
 Your folders remain the source of truth; StashBase adds a search index that can be rebuilt from them.
 
 The core idea:
 
 ```text
-Local files -> prepared text -> search index -> MCP -> Agents
+Local files -> prepared evidence -> retrieval -> Agents
 ```
 
 ---
@@ -73,21 +75,30 @@ For a portable build, download `StashBase-*-linux-*.AppImage`, make it executabl
 
 ### First Launch
 
-When you open StashBase for the first time:
+The first window opens with no folder selected and one reusable blank Chat.
 
-1. **Open a folder**: Click the folder icon to choose a local folder containing files you want to search
-2. **(Optional) Set up AI Index**: To search by meaning and give Agents better retrieval, sign in through Supabase with Google for the included monthly allowance, or add an OpenAI/OpenRouter key in **Settings → AI Index**. An OpenAI restricted key needs access only to embeddings with `text-embedding-3-small`; model-list access is not required.
-3. **(Optional) Set up transcription**: To transcribe audio or video, download a speech model from **Settings → Transcription**. Small (465 MiB) is the default; Tiny (74 MiB) and Base (141 MiB) are lighter options. Transcription runs entirely on your machine, with no API cost, and you can cancel or rerun it while viewing the file
-4. **(Optional) Connect to Claude/Codex**: From **Settings → MCP**, connect external AI tools to access your searchable library
-5. **Start in Chat**: Chat is already open with one reusable blank session.
-   Opening the app or a folder does not install an Agent; the first explicit
-   **New Chat** prepares the selected runtime. Codex is the initial default,
-   and StashBase remembers later Claude or Codex choices. Selecting a source
-   file brings the document alongside the same conversation.
+1. **Enable AI Index**: Sign in to StashBase for free monthly AI Index usage,
+   or use your own OpenAI/OpenRouter key. To continue without it, choose **Skip
+   AI Index for now**; exact text search and local file work remain available.
+2. **Ask how StashBase works**: In the Chat that is already open, ask **“How do
+   I use StashBase?”** It starts against the whole Library, including Start
+   Here. StashBase uses a supported system Claude Code or Codex runtime when
+   available; if it is missing, installation waits for **Install and
+   continue**. Agent provider login is separate from StashBase sign-in and AI
+   Index configuration.
+3. **Open source files when you need them**: On a brand-new empty default
+   folder home, StashBase adds **👋 Start Here** to the Library without opening
+   it automatically. Open it from the titlebar's **Library** menu, or use **Add
+   Folder…** to work with one of your own local folders. Selecting a source
+   brings it alongside the same conversation.
 
-Your library is **opt-in**: only folders you open in StashBase are indexed. You can remove a folder at any time; StashBase clears its index but never deletes your files from disk.
+StashBase processes only folders in its Library. Apart from the bundled Start
+Here introduction, folders join only when you explicitly add or open them. You
+can remove a folder at any time; StashBase clears its app-owned state but never
+deletes your files from disk.
 
-> Haven't set up AI Index, or used the hosted allowance? In-app exact text search still works.
+Transcription and external MCP access can be configured later when you need
+them. Neither is required to begin browsing local files.
 
 ### Updating and Uninstalling
 
@@ -121,7 +132,11 @@ Your library is **opt-in**: only folders you open in StashBase are indexed. You 
 
 ---
 
-## Usage Tips
+## Document Workbench
+
+StashBase works directly with ordinary local folders. The Files sidebar,
+persistent tabs, Quick Open, and format-specific viewers keep source work in
+the same workspace as Chat.
 
 Use **File → New Window** or Cmd/Ctrl+Shift+N to keep different folders and
 tools side by side. Window close follows VS Code's platform shortcuts;
@@ -133,9 +148,9 @@ safe application actions with their existing safeguards.
 
 ---
 
-## What It Does
+## Search and Preparation
 
-StashBase has two core jobs: prepare files and index their contents.
+The local RAG layer has two core jobs: prepare files and index their contents.
 
 ### Prepare
 
@@ -153,7 +168,17 @@ Some formats need preparation before their contents can be searched. StashBase k
 
 For PDF, DOCX, audio, and video, Agents read the derived text while the original remains the visible source file. Audio and video play directly when supported; otherwise, StashBase creates a compatible local audio preview. Large files dragged into the app stream to disk instead of being held entirely in memory. See [Architecture](design-docs/architecture.md) and [Preparation](design-docs/design/preparation.md) for the product and system contracts.
 
+Audio and video transcription is optional. Download a local speech model from
+**Settings → Transcription** when you need it. Small (465 MiB) is the default;
+Tiny (74 MiB) and Base (141 MiB) are lighter choices. Transcription runs on
+your machine with no transcription API cost.
+
 ### AI Index
+
+Sign in to StashBase for free monthly AI Index usage, or configure your own
+OpenAI/OpenRouter key in **Settings → AI Index**. An OpenAI restricted key
+needs access only to embeddings with `text-embedding-3-small`; model-list
+access is not required. Exact search needs neither option.
 
 StashBase builds its AI Index and exact text search over:
 
@@ -179,11 +204,12 @@ MCP is the main interface between StashBase and Agents.
 
 While the StashBase app is running, a local MCP server makes the same library available to external clients and the built-in Agent panel.
 
-Core tools:
+Common tools:
 
 - `library_info` - return the default folder home, opened folders, optional folder descriptions, and embedder status.
 - `search_library` - search the library in semantic (default) or keyword mode, optionally filtered by source type. Semantic mode may search the whole library; exact keyword mode works before AI Index is set up and requires a folder or path-prefix scope.
 - `reindex` - reconcile disk changes and make updated files searchable.
+- `create_project` - create and register a new project folder beneath an authorized location.
 
 StashBase also exposes bounded file helpers for opened folders:
 
@@ -198,9 +224,9 @@ These helpers exist for Agent clients that run in a sandbox and cannot directly 
 
 ### Connect a Client
 
-The normal path is **Settings -> MCP**. StashBase can write the MCP config for supported clients or copy the stdio snippet for clients that manage config themselves.
+The built-in chat agents (Claude Code, Codex) connect automatically. For any other MCP-compatible client, copy the standard configuration or the server connection details from **Settings → MCP** and register them in that client.
 
-For manual stdio setup, URL-based clients, Docker access, ports, CORS boundaries, and token rotation, see [Advanced MCP configuration](docs/mcp-configuration.md).
+For setup examples, URL-based clients, Docker access, ports, CORS boundaries, and token rotation, see [MCP configuration](docs/mcp-configuration.md).
 
 ---
 
@@ -224,6 +250,10 @@ knowledge base. It adds:
   or persisted Markdown source.
 - `@` mentions find files and folders with forgiving workspace-path search;
   selecting one inserts only its workspace-relative path.
+
+Claude Code and Codex keep their normal provider login and native history.
+Those credentials are independent from StashBase account sign-in and the
+embedding source selected for AI Index.
 
 ---
 
@@ -266,7 +296,7 @@ areas without duplicating the source tree:
 
 ## Build From Source
 
-For contributors and developers building locally, and for platforms without a prebuilt installer.
+For contributors and developers running StashBase locally from source.
 
 ### Linux prerequisites (Ubuntu / Debian)
 
@@ -289,11 +319,6 @@ pnpm electron
 # Development mode
 pnpm dev
 
-# Build a distributable app for your platform
-pnpm dist        # macOS
-pnpm dist:win    # Windows
-pnpm dist:linux  # Linux (.deb and .AppImage)
-
 # Optional: include the local PDF/OCR extractor sidecar
 pnpm build:python-extract-sidecar
 ```
@@ -303,6 +328,10 @@ Before opening a PR:
 ```bash
 pnpm check
 ```
+
+Packaging is release-only and runs from a validated release tag. Maintainers
+should follow the [release pipeline](code-review/release-pipeline.md) instead
+of creating ad hoc distributable builds.
 
 ---
 
@@ -325,7 +354,7 @@ Reasonably stable:
 - Markdown, HTML, JSON, PDF, and image preview
 - PDF extraction, image OCR, and local audio and video transcription, with persisted failures and retry
 - AI Index and exact text search
-- MCP server and client connectors
+- MCP access for built-in and externally configured clients
 - Bounded file helpers for sandboxed Agents
 - Built-in Claude Code / Codex panel
 
