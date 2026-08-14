@@ -21,12 +21,48 @@ import {
   listFiles,
   listFolders,
   listIndexableTextFilesUnder,
+  listImmediateDirectory,
+  MAX_TEXT_READ_BYTES,
   readText,
   renameFolder,
   renameOnDisk,
   saveText,
   sanitizeFilename,
 } from './files.ts';
+
+test('text reads reject files above the bounded response limit', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-bounded-read-'));
+  try {
+    fs.writeFileSync(path.join(root, 'large.md'), Buffer.alloc(MAX_TEXT_READ_BYTES + 1, 0x61));
+    await runWithFolderRoot(root, () => {
+      assert.throws(
+        () => readText('large.md'),
+        (err: Error & { code?: string; status?: number }) => err.code === 'FILE_TOO_LARGE' && err.status === 413,
+      );
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('immediate directory listing reports large files without reading their content', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-immediate-list-'));
+  try {
+    fs.mkdirSync(path.join(root, 'target'));
+    fs.writeFileSync(path.join(root, 'target', 'large.md'), Buffer.alloc(MAX_TEXT_READ_BYTES + 1, 0x61));
+    await runWithFolderRoot(root, () => {
+      assert.deepEqual(listImmediateDirectory('target'), [{
+        name: 'large.md',
+        path: 'target/large.md',
+        type: 'file',
+        format: 'md',
+        size: MAX_TEXT_READ_BYTES + 1,
+      }]);
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('renameOnDisk supports case-only file renames', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-case-rename-'));

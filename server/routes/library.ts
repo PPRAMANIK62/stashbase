@@ -14,6 +14,7 @@ import path from 'node:path';
 import { getCurrentFolderBasename } from '../files.ts';
 import {
   clearFolderPath,
+  beginLibraryFolderRemoval,
   clearCurrentFolder,
   currentWindowId,
   ensureFolderHome,
@@ -32,7 +33,7 @@ import { filesystemPath } from '../filesystem-path.ts';
 import { errorMessage, logger } from '../log.ts';
 import { deleteFolderRuntimeState, indexer } from '../state.ts';
 import { clearRecordsUnder } from '../conversion-status.ts';
-import { cancelConversionsUnder } from '../conversion.ts';
+import { cancelConversionsUnderAndWait } from '../conversion.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { deleteDerivedForSource, deleteDerivedUnderFolder, type DerivedCleanupStats } from '../derived-store.ts';
 import { deleteFileOrderForRoot } from '../file-order.ts';
@@ -62,13 +63,14 @@ async function cleanupDerivedForFolder(folderAbs: string): Promise<DerivedCleanu
 }
 
 async function cleanupRemovedLibraryFolder(abs: string): Promise<void> {
-  const cancelled = await cancelConversionsUnder(abs).catch((err: unknown) => {
-    log.warn(`folder remove: conversion cancel failed for ${abs}: ${errorMessage(err)}`);
-    return [];
-  });
+  const cancelled = await cancelConversionsUnderAndWait(abs);
   if (cancelled.length) {
     log.info(`folder remove: cancelled ${cancelled.length} queued/running conversion(s) under ${abs}`);
   }
+  try { clearRecordsUnder(abs); }
+  catch (err: unknown) { log.warn(`conversion-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
+  try { deleteFileOrderForRoot(abs); }
+  catch (err: unknown) { log.warn(`file-order cleanup failed for ${abs}: ${errorMessage(err)}`); }
   await cleanupDerivedForFolder(abs);
   // Clear its index rows + unbind from the daemon. deletePathPrefix is
   // keyed by the absolute folder root.
@@ -126,6 +128,9 @@ export function mount(app: express.Express): void {
       }
       if ((err as any)?.code === 'FOLDER_EXISTS') {
         return res.status(409).json({ error: errorMessage(err), code: 'FOLDER_EXISTS' });
+      }
+      if ((err as any)?.code === 'FOLDER_REMOVING') {
+        return res.status(409).json({ error: errorMessage(err), code: 'FOLDER_REMOVING' });
       }
       res.status(400).json({ error: errorMessage(err) });
     }
@@ -187,25 +192,26 @@ export function mount(app: express.Express): void {
       if (!abs) {
         return res.status(404).json({ error: 'folder is not in your folders' });
       }
-      // Tear down any live window bound to it FIRST (kills terminal sessions
-      // whose cwd is inside this folder).
-      clearFolderPath(abs);
-      // Built-in Agent sessions are folder-pinned and survive window folder
-      // switches, so removal must also end the sessions BOUND to this folder
-      // — including ones in windows currently showing another folder.
-      stopAgentRuntimeForFolder('claude', abs);
-      stopAgentRuntimeForFolder('codex', abs);
-      try { clearRecordsUnder(abs); }
-      catch (err: unknown) { log.warn(`conversion-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
-      try { deleteFileOrderForRoot(abs); }
-      catch (err: unknown) { log.warn(`file-order cleanup failed for ${abs}: ${errorMessage(err)}`); }
-      removeRecent(abs);
-      noteTreeChanged();
-      const cleanup = cleanupRemovedLibraryFolder(abs).catch((err: unknown) => {
-        log.warn(`folder remove cleanup failed for ${abs}: ${errorMessage(err)}`);
-      });
-      res.json({});
-      void cleanup;
+      const finishRemoval = beginLibraryFolderRemoval(abs);
+      try {
+        // Tear down any live window bound to it FIRST (kills terminal sessions
+        // whose cwd is inside this folder).
+        clearFolderPath(abs);
+        // Built-in Agent sessions are folder-pinned and survive window folder
+        // switches, so removal must also end the sessions BOUND to this folder
+        // — including ones in windows currently showing another folder.
+        stopAgentRuntimeForFolder('claude', abs);
+        stopAgentRuntimeForFolder('codex', abs);
+        // Membership is the commit record. Keep it until every cleanup owner
+        // has acknowledged completion; a failure leaves the member recoverable
+        // and the next reconcile can rebuild any partially-cleared cache.
+        await cleanupRemovedLibraryFolder(abs);
+        removeRecent(abs);
+        noteTreeChanged();
+        res.json({});
+      } finally {
+        finishRemoval();
+      }
     } catch (err: unknown) {
       sendFolderOperationError(res, err);
     }

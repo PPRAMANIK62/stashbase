@@ -56,7 +56,8 @@ user-visible source file.
 - MCP file operations are deliberately bounded to authorized library folders;
   they are never a general filesystem interface. The one membership-changing
   tool, `create_project`, only creates and registers a new folder under the
-  default folder home or inside an already-authorized location.
+  default folder home or inside an already-authorized location, with real-path
+  containment preventing a symlink from escaping that owned root.
 - One local runtime owns indexing state. Other processes communicate through
   its supported boundary rather than maintaining competing copies of the index.
 - Agent readiness is demand-driven. An explicit chat action may reuse a

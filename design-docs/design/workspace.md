@@ -74,6 +74,11 @@ manager, or a primary graph-navigation tool.
   with an actionable failure. Closing one window never tears down another.
 - Folder removal never deletes user files. Every affected window saves first,
   leaves the removed folder, and cannot silently re-add it during recovery.
+  StashBase commits membership removal only after preparation, derived data,
+  index rows, ordering, and folder-bound runtime state have finished cleanup.
+- Folder membership and favorites never replace unreadable settings with
+  fallback defaults. A durable library change fails instead, preserving the
+  user's existing configuration for recovery.
 - Source and derived state remain distinguishable. The tree and tabs show
   source files, not generated representations.
 - Chat visibility is explicit after initialization. Closing the last document

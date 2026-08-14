@@ -89,6 +89,52 @@ test('credential and source mutations never overwrite malformed config through a
   }
 });
 
+test('library membership mutations never overwrite malformed config through a fallback read', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-folder-config-corrupt-test-'));
+  const configDir = path.join(home, '.stashbase');
+  const configPath = path.join(configDir, 'config.json');
+  const member = path.join(home, 'member');
+  fs.mkdirSync(configDir);
+  fs.mkdirSync(member);
+  fs.writeFileSync(configPath, '{ malformed but user-owned config');
+  try {
+    const result = runConfigMutation(home, `
+      const folder = await import('./server/folder.ts');
+      folder.setCurrentFolder(${JSON.stringify(member)});
+    `);
+    assert.equal(result.status, 17);
+    assert.match(result.stderr, /Could not read .*config\.json: invalid JSON/);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), '{ malformed but user-owned config');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('an in-progress library removal blocks reopen and descendant registration', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-folder-removal-gate-'));
+  const member = path.join(home, 'member');
+  fs.mkdirSync(member);
+  try {
+    const result = runConfigMutation(home, `
+      const assert = (await import('node:assert/strict')).default;
+      const path = await import('node:path');
+      const folder = await import('./server/folder.ts');
+      folder.registerLibraryFolder(${JSON.stringify(member)});
+      const finish = folder.beginLibraryFolderRemoval(${JSON.stringify(member)});
+      try {
+        assert.throws(() => folder.setCurrentFolder(${JSON.stringify(member)}), (error) => error.code === 'FOLDER_REMOVING');
+        assert.throws(() => folder.registerLibraryFolder(path.join(${JSON.stringify(member)}, 'child')), (error) => error.code === 'FOLDER_REMOVING');
+      } finally {
+        finish();
+      }
+      folder.setCurrentFolder(${JSON.stringify(member)});
+    `);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('macOS config writes do not alter an ACL that blocks atomic temp files', {
   skip: process.platform !== 'darwin',
 }, () => {

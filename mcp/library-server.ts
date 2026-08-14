@@ -256,7 +256,7 @@ const BUILTIN_TOOLS = [
       description:
         'List visible files and folders in the StashBase library. `path` is optional; omit ' +
         'or pass "" to list your folders, or pass an absolute folder/subfolder path to ' +
-        'list its contents. Paths are absolute POSIX paths. Hidden ' +
+        'list its immediate contents. Paths are absolute POSIX paths. Hidden ' +
         'app-maintained derived notes and bundle folders are not surfaced.',
       inputSchema: {
         type: 'object',
@@ -271,7 +271,8 @@ const BUILTIN_TOOLS = [
         'Read a file from StashBase by absolute path ' +
         '(for example `/Users/me/notes/topic/note.md`). Markdown and HTML return source text. ' +
         'PDFs return extracted Markdown when conversion has completed. Images are visible in ' +
-        '`list_directory` and searchable through OCR evidence, but are not returned as bytes.',
+        '`list_directory` and searchable through OCR evidence, but are not returned as bytes. ' +
+        'One response is limited to 8 MiB; split oversized text before reading it through this tool.',
       inputSchema: {
         type: 'object',
         properties: {

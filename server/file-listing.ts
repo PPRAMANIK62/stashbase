@@ -4,7 +4,7 @@ import { LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION } from '../shared/file-form
 import { decodeEntities } from './html.ts';
 import { onSwitch } from './folder.ts';
 import { detectFormat, detectViewerFormat, isDerivedNoteName, type FileFormat, type ViewerFormat } from './format.ts';
-import { isCloudPlaceholderName, isHiddenDirName, isIndexExcludedDirName, shouldIndexFilePath } from './indexable.ts';
+import { isCloudPlaceholderName, isHiddenDirName, isIndexExcludedDirName, MAX_INDEXABLE_BYTES, shouldIndexFilePath } from './indexable.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { folderRoot, resolveSafe } from './file-paths.ts';
 
@@ -43,6 +43,10 @@ export interface FolderListing {
   folders: FolderEntry[];
   unsupportedFiles: UnsupportedFileSummary;
 }
+
+export type ImmediateDirectoryEntry =
+  | { name: string; path: string; type: 'directory' }
+  | { name: string; path: string; type: 'file'; format: ViewerFormat; size: number };
 
 /** Per-file preview cache keyed by absolute path. Avoids re-reading
  *  every file on every `GET /api/files`. Invalidated by mtime. */
@@ -123,35 +127,7 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
     };
   }
 
-  const noteStems = new Set<string>();
-  for (const e of entries) {
-    if (!e.isFile()) continue;
-    const m = e.name.match(/^(.+)\.(md|markdown|html|htm|pdf)$/i);
-    if (m) noteStems.add(m[1]);
-  }
-
-  const acceptedEntries: fs.Dirent[] = [];
-  for (const e of entries) {
-    if (isCloudPlaceholderName(e.name)) continue;
-    if (e.isDirectory() && isHiddenDirName(e.name)) continue;
-    if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
-    /* Dot-FILES are invisible infrastructure — .DS_Store, tool configs,
-     * our own derived artifacts. Every file manager hides them, so they
-     * are neither listed nor tallied as "unsupported": disclosing files
-     * the user cannot see reads as a bug ("2 files (no extension)"),
-     * not as information. A folder holding only dot-files thus counts
-     * as physically empty and stays visible as an empty folder. Dot
-     * DIRECTORIES are pruned above by isHiddenDirName. */
-    if (e.isFile() && e.name.startsWith('.')) continue;
-    if (e.isDirectory() && e.name.endsWith('_files')) {
-      const stem = e.name.slice(0, -'_files'.length);
-      if (noteStems.has(stem)) continue;
-      if (stem.startsWith('.')) continue;
-    }
-    if (e.isDirectory() && isDerivedScratchName(e.name)) continue;
-
-    acceptedEntries.push(e);
-  }
+  const acceptedEntries = visibleDirectoryEntries(entries);
 
   // If there are no accepted entries, this folder is physically empty.
   if (acceptedEntries.length === 0) {
@@ -204,20 +180,8 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
           entry = { heading: '', snippet: '', imported_at };
         } else {
           let content: string;
-          try {
-            if (format === 'json') {
-              const fd = fs.openSync(full, 'r');
-              try {
-                const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, st.size));
-                const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
-                content = buffer.subarray(0, bytesRead).toString('utf8');
-              } finally {
-                fs.closeSync(fd);
-              }
-            } else {
-              content = fs.readFileSync(full, 'utf8');
-            }
-          } catch { continue; }
+          try { content = readTextPrefix(full, st.size); }
+          catch { continue; }
           const { heading, snippet } = preview(content, format);
           const imported_at = st.mtime.toISOString();
           previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
@@ -293,6 +257,67 @@ export function listFolders(): FolderEntry[] {
   return listFilesAndFolders().folders;
 }
 
+/** Directory-tool listing seam. It inspects only the requested directory and
+ * directory names beneath immediate children; it never reads file contents or
+ * scans unrelated branches of the member root. */
+export function listImmediateDirectory(relPrefix = ''): ImmediateDirectoryEntry[] {
+  const prefix = relPrefix ? normalizeFolderRelativePath(relPrefix, { allowQuotes: true }) : '';
+  const dir = prefix ? resolveSafe(prefix, 'existing', 'directory') : folderRoot();
+  const st = fs.statSync(dir);
+  if (!st.isDirectory()) throw new Error('directory not found');
+  const entries = visibleDirectoryEntries(fs.readdirSync(dir, { withFileTypes: true }));
+  const out: ImmediateDirectoryEntry[] = [];
+  for (const entry of entries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (directoryTreeIsVisible(full)) out.push({ name: entry.name, path: rel, type: 'directory' });
+      continue;
+    }
+    if (!entry.isFile() || entry.name.endsWith('.tmp')) continue;
+    const format = detectViewerFormat(entry.name);
+    if (!format) continue;
+    try {
+      out.push({ name: entry.name, path: rel, type: 'file', format, size: fs.statSync(full).size });
+    } catch { /* raced with an external filesystem mutation */ }
+  }
+  return out.sort((a, b) =>
+    a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1,
+  );
+}
+
+function visibleDirectoryEntries(entries: fs.Dirent[]): fs.Dirent[] {
+  const noteStems = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const match = entry.name.match(/^(.+)\.(md|markdown|html|htm|pdf)$/i);
+    if (match) noteStems.add(match[1]);
+  }
+  return entries.filter((entry) => {
+    if (isCloudPlaceholderName(entry.name)) return false;
+    if (entry.isDirectory() && (isHiddenDirName(entry.name) || isIndexExcludedDirName(entry.name))) return false;
+    /* Dot-files and app-derived infrastructure are never user-visible. */
+    if (entry.isFile() && entry.name.startsWith('.')) return false;
+    if (entry.isDirectory() && entry.name.endsWith('_files')) {
+      const stem = entry.name.slice(0, -'_files'.length);
+      if (noteStems.has(stem) || stem.startsWith('.')) return false;
+    }
+    return !(entry.isDirectory() && isDerivedScratchName(entry.name));
+  });
+}
+
+function directoryTreeIsVisible(dir: string): boolean {
+  let entries: fs.Dirent[];
+  try { entries = visibleDirectoryEntries(fs.readdirSync(dir, { withFileTypes: true })); }
+  catch { return false; }
+  if (entries.length === 0) return true;
+  for (const entry of entries) {
+    if (entry.isFile() && !entry.name.endsWith('.tmp') && detectViewerFormat(entry.name)) return true;
+    if (entry.isDirectory() && directoryTreeIsVisible(path.join(dir, entry.name))) return true;
+  }
+  return false;
+}
+
 /** Text files that should be carried through a folder-level index rename.
  *  Includes legacy hidden derived notes if they still exist on disk. */
 export function listIndexableTextFilesUnder(relPrefix: string): Array<{ name: string; content: string }> {
@@ -304,11 +329,23 @@ export function listIndexableTextFilesUnder(relPrefix: string): Array<{ name: st
     if (!detectFormat(ent.name)) return;
     if (!shouldIndexFilePath(rel)) return;
     try {
+      if (fs.statSync(full).size > MAX_INDEXABLE_BYTES) return;
       out.push({ name: rel, content: fs.readFileSync(full, 'utf8') });
     } catch { /* unreadable files are skipped; sync can surface them later */ }
   }, { includeDerivedNotes: true });
   out.sort((a, b) => (a.name < b.name ? -1 : 1));
   return out;
+}
+
+function readTextPrefix(full: string, size: number): string {
+  const fd = fs.openSync(full, 'r');
+  try {
+    const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, size));
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    return buffer.subarray(0, bytesRead).toString('utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 /** Junk dot-FILES hidden from the sidebar. Dot DIRECTORIES (.claude,

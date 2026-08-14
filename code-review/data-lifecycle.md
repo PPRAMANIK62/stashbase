@@ -116,7 +116,9 @@ search; only explicit Start clears it.
 
 - Library removal cancels all work under the member root, removes index rows,
   derived artifacts, preparation records, ordering, runtime bindings, and
-  membership, but never deletes the user folder.
+  membership, but never deletes the user folder. A process-local removal intent
+  rejects concurrent reopen/register attempts, and durable membership is
+  removed last so an interrupted cleanup remains recoverable by reconcile.
 - Source delete removes its derived text, manifests, resumable work, playback
   preview, attention rows, and index rows.
 - Move/rename retires the old source identity. Direct text may reuse index

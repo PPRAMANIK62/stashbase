@@ -20,7 +20,8 @@ import { isIndexExcludedDirName } from './indexable.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import {
   readAppConfig as readConfig,
-  writeAppConfig as writeConfig,
+  readAppConfigStrict as readConfigStrict,
+  writeAppConfigStrict as writeConfigStrict,
   type RecentFolder,
 } from './app-config.ts';
 
@@ -54,6 +55,7 @@ const MAX_RETIRED_WINDOW_IDS = 2048;
 const requestWindow = new AsyncLocalStorage<string>();
 const currentFolders = new Map<string, string>();
 const retiredWindowIds = new Map<string, number>();
+const removingFolders = new Map<string, string>();
 const switchListeners: Array<(newRoot: string, windowId: string) => void> = [];
 const closeListeners: Array<(oldRoot: string, windowId: string) => void> = [];
 
@@ -282,17 +284,21 @@ export function ensureFolderHome(): void {
   } catch (err: any) {
     log.warn(`failed to create folder home ${root}: ${errorMessage(err)}`);
   }
-  const cfg = readConfig();
-  const before = cfg.recentFolders ?? [];
-  // Recents can live anywhere on disk (a Folder is openable from any
-  // location); only drop entries whose folder no longer exists.
-  const after = before.filter((r) => {
-    try { return fs.statSync(r.path).isDirectory(); } catch { return false; }
-  });
-  if (after.length !== before.length) {
-    cfg.recentFolders = after;
-    log.info(`pruned ${before.length - after.length} stale recent(s)`);
-    writeConfig(cfg);
+  try {
+    const cfg = readConfigStrict();
+    const before = cfg.recentFolders ?? [];
+    // Recents can live anywhere on disk (a Folder is openable from any
+    // location); only drop entries whose folder no longer exists.
+    const after = before.filter((r) => {
+      try { return fs.statSync(r.path).isDirectory(); } catch { return false; }
+    });
+    if (after.length !== before.length) {
+      cfg.recentFolders = after;
+      writeConfigStrict(cfg);
+      log.info(`pruned ${before.length - after.length} stale recent(s)`);
+    }
+  } catch (err) {
+    log.warn(`skipped recent-folder maintenance: ${errorMessage(err)}`);
   }
   // Seed the built-in manual here — `ensureFolderHome` is THE idempotent
   // "folder home is established" hook, hit on every boot.
@@ -338,30 +344,38 @@ export function seedBuiltinFolder(): void {
   const dest = path.join(root, BUILTIN_FOLDER_NAME);
 
   const latch = () => {
-    const c = readConfig();
-    if (!c.builtinSeeded) { c.builtinSeeded = true; writeConfig(c); }
+    const c = readConfigStrict();
+    if (!c.builtinSeeded) { c.builtinSeeded = true; writeConfigStrict(c); }
   };
 
   // (1) Already on disk → ensure it's in recents, regardless of the latch.
   if (fs.existsSync(dest)) {
     try {
-      const inRecents = (readConfig().recentFolders ?? []).some((r) => storedFolderPathEquals(r.path, dest));
+      const inRecents = (readConfigStrict().recentFolders ?? []).some((r) => storedFolderPathEquals(r.path, dest));
       if (!inRecents) pushRecent(dest);
+      latch();
     } catch (err) {
       log.warn(`failed to surface built-in folder: ${errorMessage(err)}`);
     }
-    latch();
     return;
   }
 
   // (2) Not on disk. If we already seeded once, the user deleted the
   // folder — don't resurrect it.
-  if (readConfig().builtinSeeded) return;
+  let seeded: boolean;
+  try {
+    seeded = !!readConfigStrict().builtinSeeded;
+  } catch (err) {
+    log.warn(`failed to read built-in folder state: ${errorMessage(err)}`);
+    return;
+  }
+  if (seeded) return;
 
   // Only seed a brand-new, empty folder home — never inject into an existing
   // user directory. Latch either way so this runs only once.
   if (listDefaultHomeFolderNames().length > 0) {
-    latch();
+    try { latch(); }
+    catch (err) { log.warn(`failed to latch built-in folder state: ${errorMessage(err)}`); }
     return;
   }
 
@@ -418,6 +432,7 @@ export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exc
   }
   if (!filesystemPath.isAbsolute(expanded)) throw new Error('path must be absolute');
   const normalized = filesystemPath.absolute(expanded);
+  assertLibraryFolderAvailable(normalized);
   // A Folder can be opened from anywhere on disk — there is no unified root
   // constraint. The folder home is only the default location for the built-in
   // folder and new-folder-by-name; opening an arbitrary folder is the
@@ -442,10 +457,10 @@ export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exc
   const st = fs.statSync(normalized);
   if (!st.isDirectory()) throw new Error('path is not a directory');
 
+  pushRecent(normalized);
   const prev = currentFolders.get(windowId) ?? null;
   const changed = prev == null || !filesystemPath.equal(prev, normalized);
   currentFolders.set(windowId, normalized);
-  pushRecent(normalized);
   return changed;
 }
 
@@ -484,18 +499,18 @@ export function clearFolderPath(absPath: string): void {
 }
 
 export function replaceCurrentFolderPath(oldPath: string, newPath: string): void {
+  const cfg = readConfigStrict();
+  if (cfg.recentFolders?.length) {
+    cfg.recentFolders = cfg.recentFolders.map((r) => (
+      storedFolderPathEquals(r.path, oldPath) ? { ...r, path: newPath } : r
+    ));
+    writeConfigStrict(cfg);
+  }
   for (const [windowId, value] of currentFolders.entries()) {
     if (filesystemPath.equal(value, oldPath)) {
       currentFolders.set(windowId, newPath);
       notifyFolderSwitch(newPath, windowId);
     }
-  }
-  const cfg = readConfig();
-  if (cfg.recentFolders?.length) {
-    cfg.recentFolders = cfg.recentFolders.map((r) => (
-      storedFolderPathEquals(r.path, oldPath) ? { ...r, path: newPath } : r
-    ));
-    writeConfig(cfg);
   }
 }
 
@@ -526,7 +541,7 @@ export function getRecentFolders(): RecentFolder[] {
 }
 
 function pushRecent(absPath: string): void {
-  const cfg = readConfig();
+  const cfg = readConfigStrict();
   const list = cfg.recentFolders ?? [];
   // Filter out the entry we're about to re-add (avoid dupes) AND
   // entries whose target folder no longer exists — keeps the persisted
@@ -552,7 +567,7 @@ function pushRecent(absPath: string): void {
   cfg.recentFolders = filtered;
   // Drop the legacy field once we've migrated its content forward.
   delete cfg.recentVaults;
-  writeConfig(cfg);
+  writeConfigStrict(cfg);
 }
 
 /** Register a folder into library membership ("Your Folders") WITHOUT
@@ -561,7 +576,38 @@ function pushRecent(absPath: string): void {
  *  used by `create_project`, which must make the new folder appear in
  *  every window's sidebar list while only the owning window navigates. */
 export function registerLibraryFolder(absPath: string): void {
-  pushRecent(filesystemPath.absolute(absPath));
+  const normalized = filesystemPath.absolute(absPath);
+  assertLibraryFolderAvailable(normalized);
+  pushRecent(normalized);
+}
+
+/** Hold a process-local removal intent while a member's conversions, derived
+ * artifacts, index rows, and runtime state are retired. Open/register calls
+ * fail during the interval so a concurrent request cannot resurrect
+ * membership halfway through cleanup. The caller commits membership last. */
+export function beginLibraryFolderRemoval(absPath: string): () => void {
+  const source = filesystemPath.absolute(absPath);
+  const key = filesystemPath.identity(source);
+  if (removingFolders.has(key)) {
+    const err = new Error('folder removal is already in progress');
+    (err as any).code = 'FOLDER_REMOVING';
+    (err as any).status = 409;
+    throw err;
+  }
+  removingFolders.set(key, source);
+  return () => { removingFolders.delete(key); };
+}
+
+export function assertLibraryFolderAvailable(absPath: string): void {
+  const requested = filesystemPath.absolute(absPath);
+  const blocked = [...removingFolders.values()].some((root) => (
+    filesystemPath.equal(root, requested) || filesystemPath.contains(root, requested)
+  ));
+  if (!blocked) return;
+  const err = new Error('folder removal is in progress');
+  (err as any).code = 'FOLDER_REMOVING';
+  (err as any).status = 409;
+  throw err;
 }
 
 /** Remove a folder from the membership list ("Your Folders"). Does NOT
@@ -569,12 +615,12 @@ export function registerLibraryFolder(absPath: string): void {
  *  base; the caller clears its index rows separately. No-op if absent. */
 export function removeRecent(absPath: string): void {
   const target = filesystemPath.absolute(absPath);
-  const cfg = readConfig();
+  const cfg = readConfigStrict();
   const list = cfg.recentFolders ?? [];
   const filtered = list.filter((v) => !storedFolderPathEquals(v.path, target));
   if (filtered.length === list.length) return;
   cfg.recentFolders = filtered;
-  writeConfig(cfg);
+  writeConfigStrict(cfg);
 }
 
 /** Star / unstar a member folder in the library list. Returns false when
@@ -582,12 +628,12 @@ export function removeRecent(absPath: string): void {
  *  field so config.json stays free of `favorite: false` noise. */
 export function setRecentFavorite(absPath: string, favorite: boolean): boolean {
   const target = filesystemPath.absolute(absPath);
-  const cfg = readConfig();
+  const cfg = readConfigStrict();
   const entry = (cfg.recentFolders ?? []).find((v) => storedFolderPathEquals(v.path, target));
   if (!entry) return false;
   if (favorite) entry.favorite = true;
   else delete entry.favorite;
-  writeConfig(cfg);
+  writeConfigStrict(cfg);
   return true;
 }
 

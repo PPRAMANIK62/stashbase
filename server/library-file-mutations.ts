@@ -1,4 +1,3 @@
-import { isEmbeddingConfigured } from './app-config.ts';
 import { isEmbeddingAvailable } from './embedding-availability.ts';
 import { queueConvertibleSource } from './conversion-dispatch.ts';
 import { clearRecord } from './conversion-status.ts';
@@ -17,6 +16,7 @@ import { filesystemPath } from './filesystem-path.ts';
 import { runWithFolderRoot } from './folder.ts';
 import { detectFormat, detectViewerFormat, isConvertibleSource } from './format.ts';
 import { contentSizeError } from './indexable.ts';
+import { remapFileOrderPath, removeFileOrderPath } from './file-order.ts';
 import {
   normalizeLibraryFilePath,
   routeError,
@@ -25,7 +25,9 @@ import {
 import { readLibraryFile } from './library-file-reader.ts';
 import { applyRenamePlan, planRenameLinks, type RenameEntry } from './links.ts';
 import { errorMessage, logger } from './log.ts';
+import { bundleRenameEntry } from './rename-helpers.ts';
 import { indexer } from './state.ts';
+import { noteTreeChanged } from './watcher.ts';
 
 const log = logger('library-file-mutations');
 
@@ -126,6 +128,8 @@ export async function moveLibraryFile(
 
     const oldDerivedArtifacts = derivedArtifactsForSource(oldTarget.folderRel);
     const renames: RenameEntry[] = [{ kind: 'file', old: oldTarget.folderRel, new: newTarget.folderRel }];
+    const bundleEntry = bundleRenameEntry(oldTarget.folderRel, newTarget.folderRel, 'pre');
+    if (bundleEntry) renames.push(bundleEntry);
     const cascadeOn = oldStructuredFormat !== 'json' && opts.cascade !== false;
     const linkPlan = cascadeOn ? planRenameLinks(renames) : [];
     renameOnDisk(oldTarget.folderRel, newTarget.folderRel);
@@ -134,6 +138,11 @@ export async function moveLibraryFile(
       applied.rollback();
       renameOnDisk(newTarget.folderRel, oldTarget.folderRel);
       throw routeError(`failed to update links in ${applied.failed.map((failure) => failure.name).join(', ')}`, 500);
+    }
+    noteTreeChanged();
+    try { remapFileOrderPath(oldTarget.folderRel, newTarget.folderRel, 'file'); }
+    catch (err: unknown) {
+      log.warn(`library move: file-order remap failed for ${oldTarget.folderRel} -> ${newTarget.folderRel}: ${errorMessage(err)}`);
     }
 
     let indexWarning: string | undefined;
@@ -165,6 +174,7 @@ export async function moveLibraryFile(
         }
         indexWarning = 'Searchable text is being regenerated in the background.';
       } else if (!isEmbeddingAvailable()) {
+        await indexer.deleteFile(oldTarget.abs);
         indexWarning = 'AI Index was not updated because it is not set up.';
       } else {
         const movedContent = readText(newTarget.folderRel) ?? content ?? '';
@@ -187,6 +197,9 @@ export async function moveLibraryFile(
     } catch (err) {
       // The disk move is already valid. Report semantic-index lag instead of
       // rolling it back after link rewrites have completed.
+      await indexer.deleteFile(oldTarget.abs).catch((cleanupErr) => {
+        log.warn(`library move: stale-source cleanup failed for ${oldTarget.abs}: ${errorMessage(cleanupErr)}`);
+      });
       indexWarning = `Moved, but AI Index update failed: ${errorMessage(err)}`;
     }
     return {
@@ -198,7 +211,7 @@ export async function moveLibraryFile(
   });
 }
 
-export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: string; alreadyGone: boolean }> {
+export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: string; alreadyGone: boolean; indexWarning?: string }> {
   const target = normalizeLibraryFilePath(rawPath);
   return runWithFolderRoot(target.folderRoot, async () => {
     await prepareFileOperation(target.folderRel);
@@ -208,14 +221,26 @@ export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: strin
     catch (err: unknown) { log.warn(`library delete: derived cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
     try { clearRecord(target.abs); }
     catch (err: unknown) { log.warn(`library delete: preparation status cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
-    if (removed && isEmbeddingConfigured()) {
-      for (const rel of [target.folderRel, ...derivedArtifacts.notes]) {
-        const sourcePath = filesystemPath.join(target.folderRoot, rel);
-        indexer.deleteFile(sourcePath).catch((err) => {
-          log.warn(`library delete: index cleanup failed for ${sourcePath}: ${errorMessage(err)}`);
-        });
+    if (removed) {
+      noteTreeChanged();
+      try { removeFileOrderPath(target.folderRel, 'file'); }
+      catch (err: unknown) {
+        log.warn(`library delete: file-order cleanup failed for ${target.folderRel}: ${errorMessage(err)}`);
       }
     }
-    return { path: target.abs, alreadyGone: !removed };
+    const failures: string[] = [];
+    for (const rel of [target.folderRel, ...derivedArtifacts.notes]) {
+      const sourcePath = filesystemPath.join(target.folderRoot, rel);
+      try { await indexer.deleteFile(sourcePath); }
+      catch (err: unknown) {
+        failures.push(sourcePath);
+        log.warn(`library delete: index cleanup failed for ${sourcePath}: ${errorMessage(err)}`);
+      }
+    }
+    return {
+      path: target.abs,
+      alreadyGone: !removed,
+      ...(failures.length ? { indexWarning: `Deleted, but AI Index cleanup failed for ${failures.length} path(s). Run sync to reconcile.` } : {}),
+    };
   });
 }

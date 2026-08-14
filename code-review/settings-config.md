@@ -23,7 +23,9 @@ access surface external clients copy from.
   domain values before exposing them.
 - A strict read or write reports malformed, inaccessible, or unwritable state.
   A fallback read may preserve app availability but must not pretend a failed
-  write persisted.
+  write persisted. Folder membership, recents, favorites, and seed-state
+  mutations use the strict path so unreadable configuration is never replaced
+  with fallback defaults.
 - The app never changes user-managed filesystem ownership, flags, or ACLs to
   repair an unwritable config directory. Errors name the user-actionable config
   location without leaking atomic temporary paths.

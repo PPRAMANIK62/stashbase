@@ -4,7 +4,7 @@ import { derivedNoteFor, sourceForDerivedText } from './derived-store.ts';
 import { memberRootForAbs, runWithFolderRoot } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { detectFormat, detectViewerFormat } from './format.ts';
-import { fileVersion, pathExists, readText } from './files.ts';
+import { fileStatVersion, fileVersion, pathExists, readText, readUtf8FileBounded } from './files.ts';
 import { isConversionTextUnavailable } from './conversion.ts';
 import { isAudioTranscriptTextUnavailable } from './audio-transcription.ts';
 import { derivedHtmlPathForDocx } from './docx.ts';
@@ -153,8 +153,9 @@ function readSourceDerivedFile(sourceAbs: string, folderRel: string, sourceForma
     : derivedNoteFor(sourceAbs);
   let content: string;
   try {
-    content = fs.readFileSync(derivedAbs, 'utf8');
-  } catch {
+    content = readUtf8FileBounded(derivedAbs);
+  } catch (err) {
+    if ((err as { code?: unknown })?.code === 'FILE_TOO_LARGE') throw err;
     throw routeError(`extracted ${label} is not available for this ${sourceFormat.toUpperCase()} yet; retry conversion or run reindex first`, 409, 'CONVERSION_NOT_READY');
   }
   return {
@@ -164,7 +165,7 @@ function readSourceDerivedFile(sourceAbs: string, folderRel: string, sourceForma
     readPath: derivedAbs,
     derived: true,
     content,
-    version: fileVersion(folderRel) ?? undefined,
+    version: fileStatVersion(folderRel) ?? undefined,
   };
 }
 
@@ -204,15 +205,16 @@ function readDerivedLibraryFile(derivedAbs: string, sourceAbs: string, folderRoo
       readPath: derivedAbs,
       derived: true,
       content: readDerivedText(derivedAbs, sourceFormat),
-      version: fileVersion(folderRel) ?? undefined,
+      version: fileStatVersion(folderRel) ?? undefined,
     };
   });
 }
 
 function readDerivedText(derivedAbs: string, sourceFormat: 'pdf' | 'docx' | 'audio'): string {
   try {
-    return fs.readFileSync(derivedAbs, 'utf8');
-  } catch {
+    return readUtf8FileBounded(derivedAbs);
+  } catch (err) {
+    if ((err as { code?: unknown })?.code === 'FILE_TOO_LARGE') throw err;
     throw routeError(sourceFormat === 'docx'
       ? 'extracted HTML is not available for this DOCX yet; retry conversion or run reindex first'
       : sourceFormat === 'audio'

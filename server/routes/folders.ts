@@ -62,8 +62,8 @@ export function mount(app: express.Express): void {
       await cancelConversionsUnderAndWait(sourcePrefix);
       // Recursive delete on disk — the route layer trusts the UI's
       // confirm prompt to be the guardrail against "oops, I just
-      // wiped a populated folder". Index cleanup fires async so we
-      // can respond fast (same fire-and-forget pattern as file delete).
+      // wiped a populated folder". Do not acknowledge completion until
+      // the old semantic prefix has also been removed.
       try { deleteDerivedUnderFolder(sourcePrefix); }
       catch (err: unknown) { log.warn(`delete_prefix: derived cleanup failed for ${p}: ${errorMessage(err)}`); }
       const removed = deleteFolder(p);
@@ -74,10 +74,8 @@ export function mount(app: express.Express): void {
       }
       try { clearRecordsUnder(toSourcePath(p)); }
       catch (err: unknown) { log.warn(`delete_prefix: preparation status cleanup failed for ${p}: ${errorMessage(err)}`); }
+      await indexer.deletePathPrefix(sourcePrefix);
       res.json({ alreadyGone: !removed });
-      indexer.deletePathPrefix(toSourcePath(p)).catch((err) => {
-        log.warn(`delete_prefix: index cleanup failed for ${p}: ${errorMessage(err)}`);
-      });
     } catch (err: unknown) {
       sendError(res, err);
     }

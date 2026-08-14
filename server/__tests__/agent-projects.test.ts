@@ -99,6 +99,7 @@ function fakeDeps(
     turnActiveSession: () => globalSession,
     setOverride: (agent, id, folder) => { log.events.push('override'); log.overrides.push({ agent, id, folder }); },
     clearOverride: (agent, id) => { log.cleared.push({ agent, id }); },
+    assertAvailable: () => {},
   };
   return { deps, log };
 }
@@ -193,6 +194,14 @@ test('an existing directory is a conflict, not a silent reuse', async () => {
   );
 });
 
+test('create_project removes its empty directory when membership cannot commit', async () => {
+  const { deps } = fakeDeps(null);
+  deps.register = () => { throw new Error('config unavailable'); };
+  const target = projectPath('Uncommitted');
+  await assert.rejects(() => createProjectFolder({ name: 'Uncommitted' }, deps), /config unavailable/);
+  assert.equal(fs.existsSync(target), false);
+});
+
 test('invalid input surfaces a 400 without touching disk', async () => {
   const { deps, log } = fakeDeps(null);
   await assert.rejects(
@@ -207,6 +216,26 @@ test('invalid input surfaces a 400 without touching disk', async () => {
     () => createProjectFolder({ name: 'Fine', location: path.join(HOME, 'does-not-exist') }, deps),
     (err: Error & { status?: number }) => err.status === 400,
   );
+  assert.deepEqual(log.registered, []);
+});
+
+test('create_project rejects a location that escapes an owned root through a symlink', async (t) => {
+  const outside = path.join(scratch, 'outside-owned-roots');
+  const link = path.join(HOME, 'linked-outside');
+  fs.mkdirSync(outside, { recursive: true });
+  try {
+    fs.symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    t.skip(`symlinks are unavailable in this environment: ${String(error)}`);
+    return;
+  }
+
+  const { deps, log } = fakeDeps(null);
+  await assert.rejects(
+    () => createProjectFolder({ name: 'Escaped', location: link }, deps),
+    (err: Error & { status?: number; code?: string }) => err.status === 400 && err.code === 'INVALID_PROJECT',
+  );
+  assert.equal(fs.existsSync(path.join(outside, 'Escaped')), false);
   assert.deepEqual(log.registered, []);
 });
 

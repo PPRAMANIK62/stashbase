@@ -77,6 +77,12 @@ For rename, move, and delete:
 Validation must happen before cancellation so an invalid request cannot disturb
 healthy work.
 
+`server/library-file-mutations.ts` is the shared source-mutation owner. The
+active-folder HTTP routes and library/MCP operations only normalize their
+transport-specific arguments and map results. A delete acknowledgement waits
+for old source and derived index identities; rename/move removes the old
+identity before reporting any optional new-identity indexing lag.
+
 ## Import Publication
 
 - Multipart import streams into disk-backed OS-temp staging; it does not hold a
@@ -102,7 +108,9 @@ cleanup. These operations must never share ambiguous copy or confirmation.
 Import accepts at most `8 GiB` per file and at most 500 files per request. Each
 file is disk-staged and published independently; these limits are not
 permission to buffer the request in memory. Direct-text indexing after a
-successful import remains independently capped at `8 MiB`.
+successful import remains independently capped at `8 MiB`. Direct HTTP/MCP
+text reads and manifest-known derived-text reads also reject responses above
+`8 MiB`; sidebar previews read at most a small prefix.
 
 ## Implementation Map
 
@@ -111,7 +119,8 @@ successful import remains independently capped at `8 MiB`.
 | Path Interface | `FilesystemPathModule` in `server/filesystem-path.ts` and in-folder policy in `server/folder-relative-path.ts` |
 | Save Interface | `validateEditableFileWrite`, `upsertSavedFile`, and `saveFileContent` in `server/file-save.ts` |
 | Active-folder Adapter | `server/routes/files.ts`, `server/routes/file-mutations.ts`, and `server/routes/upload.ts` |
-| Library/MCP Adapter | `server/library-file-mutations.ts` through `LibraryOperations` |
+| Source Mutation Module | `server/library-file-mutations.ts` |
+| Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
 | Publication Module | `server/import-publication.ts` |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |
 | Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, and `library-operations/index.test.ts` |

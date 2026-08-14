@@ -5,8 +5,38 @@ import { errorCode, errorMessage, logger } from './log.ts';
 import { isImageFile, matchNoteStem, NOTE_EXTS } from './format.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { renameAbsPreservingCase, resolveSafe } from './file-paths.ts';
+import { MAX_INDEXABLE_BYTES } from './indexable.ts';
 
 const log = logger('files');
+
+/** One synchronous text read is capped to the same admission ceiling as the
+ * local index. This bounds HTTP/MCP response memory and main-loop stalls. */
+export const MAX_TEXT_READ_BYTES = MAX_INDEXABLE_BYTES;
+
+export function readUtf8FileBounded(absPath: string, maxBytes = MAX_TEXT_READ_BYTES): string {
+  const fd = fs.openSync(absPath, 'r');
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) throw new Error('path is not a file');
+    if (st.size > maxBytes) throw textReadSizeError(st.size, maxBytes);
+    const buffer = Buffer.alloc(Math.min(maxBytes + 1, st.size + 1));
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    if (bytesRead > maxBytes) throw textReadSizeError(bytesRead, maxBytes);
+    return buffer.subarray(0, bytesRead).toString('utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function textReadSizeError(actual: number, max: number): Error {
+  const err = new Error(`file is too large to read in one response (${actual} bytes > ${max} bytes)`) as Error & {
+    code: string;
+    status: number;
+  };
+  err.code = 'FILE_TOO_LARGE';
+  err.status = 413;
+  return err;
+}
 
 export function saveText(relPath: string, content: string): void {
   saveBytes(relPath, Buffer.from(content, 'utf8'));
@@ -116,8 +146,11 @@ export function readText(relPath: string): string | null {
   let target: string;
   try { target = resolveSafe(relPath, 'existing'); } catch { return null; }
   try {
-    return fs.readFileSync(target, 'utf8');
-  } catch { return null; }
+    return readUtf8FileBounded(target);
+  } catch (err) {
+    if ((err as { code?: unknown })?.code === 'FILE_TOO_LARGE') throw err;
+    return null;
+  }
 }
 
 /** True if a file or directory exists at the folder-relative path. */

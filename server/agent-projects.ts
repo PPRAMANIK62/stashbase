@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import {
   ensureFolderHome,
+  assertLibraryFolderAvailable,
   getFolderHome,
   memberFolderRoots,
   registerLibraryFolder,
@@ -121,6 +122,19 @@ function withinAnyRoot(abs: string, roots: readonly string[]): boolean {
   return false;
 }
 
+function owningRoot(abs: string, roots: readonly string[]): string | null {
+  let owner: string | null = null;
+  for (const root of roots) {
+    try {
+      if (!filesystemPath.equal(root, abs) && !filesystemPath.contains(root, abs)) continue;
+      if (!owner || filesystemPath.contains(owner, root)) owner = filesystemPath.absolute(root);
+    } catch {
+      // A malformed persisted root cannot authorize filesystem access.
+    }
+  }
+  return owner;
+}
+
 export interface CreateProjectDeps {
   folderHome(): string;
   memberRoots(): string[];
@@ -141,6 +155,7 @@ export interface CreateProjectDeps {
   turnActiveSession(): AttributedAgentSession | null;
   setOverride(agent: 'claude' | 'codex', nativeSessionId: string, folderAbs: string): void;
   clearOverride(agent: 'claude' | 'codex', nativeSessionId: string): void;
+  assertAvailable(abs: string): void;
 }
 
 const productionDeps: CreateProjectDeps = {
@@ -158,6 +173,7 @@ const productionDeps: CreateProjectDeps = {
   turnActiveSession: () => attributedTurnActiveSession(),
   setOverride: setAgentSessionFolderOverride,
   clearOverride: clearAgentSessionFolderOverride,
+  assertAvailable: assertLibraryFolderAvailable,
 };
 
 export async function createProjectFolder(
@@ -170,16 +186,27 @@ export async function createProjectFolder(
   });
   if (!resolved.ok) throw operationError(resolved.message, 400, 'INVALID_PROJECT');
 
+  const roots = [deps.folderHome(), ...deps.memberRoots()];
+  const owner = owningRoot(resolved.parent, roots);
+  if (!owner) throw operationError('`location` is outside the owned folder scope', 400, 'INVALID_PROJECT');
+
   let parentStat: fs.Stats;
+  let target: string;
   try {
-    parentStat = fs.statSync(resolved.parent);
+    const parentRel = filesystemPath.relative(owner, resolved.parent);
+    const targetRel = filesystemPath.relative(owner, resolved.target);
+    if (parentRel == null || targetRel == null) throw new Error('path is outside the owned folder scope');
+    const parent = filesystemPath.resolveUnder(owner, parentRel, { access: 'existing', label: 'location' });
+    target = filesystemPath.resolveUnder(owner, targetRel, { access: 'creatable', label: 'project path' });
+    parentStat = fs.statSync(parent);
   } catch {
-    throw operationError('`location` does not exist', 400, 'INVALID_PROJECT');
+    throw operationError('`location` does not exist or escapes its owned folder through a symlink', 400, 'INVALID_PROJECT');
   }
   if (!parentStat.isDirectory()) throw operationError('`location` is not a directory', 400, 'INVALID_PROJECT');
+  deps.assertAvailable(target);
 
   try {
-    fs.mkdirSync(resolved.target);
+    fs.mkdirSync(target);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException)?.code === 'EEXIST') {
       throw operationError(`a folder named "${resolved.name}" already exists at that location`, 409, 'FOLDER_EXISTS');
@@ -187,19 +214,26 @@ export async function createProjectFolder(
     throw operationError(`could not create the project folder: ${errorMessage(err)}`, 500);
   }
 
+  // Membership is the commit record. Persist it before seeding any content so
+  // a config/removal failure can retire the still-empty directory we created.
+  try {
+    deps.register(target);
+  } catch (err) {
+    try { fs.rmdirSync(target); } catch { /* keep a raced/non-empty folder */ }
+    throw err;
+  }
   // The project is a normal member folder from birth: AGENTS.md contract
-  // file (create-only), library membership, tree notification, and a
-  // background daemon bind + reconcile so search covers it.
-  try { deps.ensureAgentsFile(resolved.target); }
-  catch (err: unknown) { log.warn(`create_project: AGENTS.md seed failed for ${resolved.target}: ${errorMessage(err)}`); }
-  deps.register(resolved.target);
+  // file (create-only), tree notification, and a background daemon bind +
+  // reconcile so search covers it.
+  try { deps.ensureAgentsFile(target); }
+  catch (err: unknown) { log.warn(`create_project: AGENTS.md seed failed for ${target}: ${errorMessage(err)}`); }
   deps.noteTreeChanged();
   void Promise.resolve()
-    .then(() => deps.syncFolder(resolved.target))
-    .catch((err: unknown) => log.warn(`create_project: background bind/sync failed for ${resolved.target}: ${errorMessage(err)}`));
+    .then(() => deps.syncFolder(target))
+    .catch((err: unknown) => log.warn(`create_project: background bind/sync failed for ${target}: ${errorMessage(err)}`));
 
-  const { rebound, note } = applyRebind(input, resolved.target, deps);
-  return { path: resolved.target, name: resolved.name, registered: true, rebound, note };
+  const { rebound, note } = applyRebind(input, target, deps);
+  return { path: target, name: resolved.name, registered: true, rebound, note };
 }
 
 function applyRebind(

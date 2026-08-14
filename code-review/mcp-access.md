@@ -30,10 +30,16 @@ clients and are not a general host-filesystem API.
   evidence never exposes an AppData path.
 - File mutations use the shared transaction/version boundary and schedule or
   reconcile index maintenance after success.
+- `list_directory` enumerates only the requested directory surface and does
+  not read file bodies. `read_file` has an `8 MiB` response ceiling for source
+  and current derived text; oversized content fails explicitly rather than
+  consuming unbounded server memory.
 - `create_project` creates only beneath the default folder home or an already
-  authorized location, seeds missing Agent instructions create-only, and
-  registers the folder. Session rebind requires trusted live-session
-  attribution; ambiguous or external callers only create and register.
+  authorized location. Both the selected location and creatable target must
+  remain inside that owned root after symlinks are resolved. The operation
+  seeds missing Agent instructions create-only and registers the folder.
+  Session rebind requires trusted live-session attribution; ambiguous or
+  external callers only create and register.
 
 ## Transports and Credentials
 
