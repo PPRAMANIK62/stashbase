@@ -110,9 +110,11 @@ clear library or folder scope.
    prompt.
 4. Inspect streaming output, tool activity, permission requests, attachments,
    failures, and recovery.
-5. Open a source: the same mounted chat docks beside it. Close the last source:
+5. Edit and resend an earlier prompt when needed. If a response is active, it
+   stops before the edited prompt begins as a new turn.
+6. Open a source: the same mounted chat docks beside it. Close the last source:
    an open chat expands again.
-6. Switch folders without silently rebinding a started chat.
+7. Switch folders without silently rebinding a started chat.
 
 Important recovery: runtime installation and MCP connection failures are
 distinguished and offer only relevant actions; disconnects and ambiguous turn

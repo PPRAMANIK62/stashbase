@@ -89,17 +89,35 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
     await expect(stop).toBeVisible();
     await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'turn-start' && entry.prompt === 'wait for stop')?.params?.cwd)
       .toBe(fixture.workspaces.projectA);
+
+    await panel.getByRole('button', { name: 'Edit and resend' }).last().click();
+    const inlineEditor = panel.locator('.agent-turn-edit');
+    await inlineEditor.locator('textarea').fill('edited wait for stop');
+    await inlineEditor.getByRole('button', { name: 'Send', exact: true }).click();
+
+    await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'interrupt' && entry.params?.turnId === 'fake-turn-2')?.params?.turnId)
+      .toBe('fake-turn-2');
+    await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'turn-start' && entry.prompt === 'edited wait for stop')?.turnId)
+      .toBe('fake-turn-3');
+    const editedPrompt = panel.getByText('edited wait for stop', { exact: true });
+    const editedWorking = panel.getByText('Codex is working…', { exact: true });
+    await expect(editedPrompt).toBeVisible();
+    await expect(editedWorking).toBeVisible();
+    await expect(panel.getByText(/^You stopped after /)).toBeVisible();
+    const editedBox = await editedPrompt.boundingBox();
+    const workingBox = await editedWorking.boundingBox();
+    expect(editedBox).not.toBeNull();
+    expect(workingBox).not.toBeNull();
+    expect(workingBox!.y).toBeGreaterThan(editedBox!.y);
+
     await stop.click();
-    await expect(panel.getByText('wait for stop', { exact: true })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
     await expect(panel.getByRole('alert')).toHaveCount(0);
-    await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'interrupt')?.params?.turnId)
-      .toBe('fake-turn-2');
 
     await composer.fill('terminal error');
     await panel.getByRole('button', { name: 'Send message' }).click();
     await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'terminal-error')?.turnId)
-      .toBe('fake-turn-3');
+      .toBe('fake-turn-4');
     await expect(panel.getByText('Deterministic fake Agent failure.')).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
     app.errors.assertNone();

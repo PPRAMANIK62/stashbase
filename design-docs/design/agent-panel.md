@@ -51,6 +51,9 @@ a transcript-centered file manager.
   permission requests, attachments, skills, and file artifacts remain
   inspectable. Completed working traces fold so final answers are easy to scan;
   actionable permissions and recovery never hide inside the fold.
+- Editing and resending while a response is active stops that response, then
+  starts the edited text as the next turn. It does not leave the new message
+  waiting beneath activity that belongs to the old turn.
 - The current document is never implicit context. Users attach or mention files
   explicitly. Agent-created files refresh Files but open only when selected.
 - A library-scoped Agent may create a project. Only the attributed calling
