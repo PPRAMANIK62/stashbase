@@ -15,10 +15,9 @@
  *     neutral border as its sibling: tint plus a brand-toned border read as
  *     "already selected" rather than "recommended", which is the one thing
  *     this screen must not say — nothing is chosen until the user clicks.
- *     Inert until the account system ships: drawn as the finished card, not
- *     faded out, with one quiet "Coming soon" mark in its top-right corner.
- *     A disabled card that says nothing reads as a broken button; the mark
- *     is the smallest thing that turns "it did not work" into "not yet".
+ *     The account system uses verified email OTP and the shared hosted quota.
+ *     Deployments may still disable the card explicitly; the quiet corner
+ *     mark keeps that state distinguishable from a broken control.
  *   • Use your own API key — OpenAI or OpenRouter, for advanced users;
  *     choosing it reveals the key field in place (the parent owns that swap).
  *
@@ -47,12 +46,11 @@
  * a box. Two boxes seen together are expected to wear the same corner.
  */
 
-export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = true, onSkip }: {
+export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = false, onSkip }: {
   onUseOwnKey: () => void;
   onSignIn?: () => void;
-  /** Sign-in ships behind the account system; until then the hero is
-   *  present but inert, so the primary path is visible from the first
-   *  release and does not appear out of nowhere later. */
+  /** Allows deployments without hosted accounts to hide the action while
+   * retaining the finished layout. */
   signInDisabled?: boolean;
   /** When provided (first-run gate only), renders the quiet exit to basic
    *  mode. Omitted in Settings, where continuing without indexing is moot. */
@@ -74,7 +72,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = tr
             /* Corner mark, not a chip: a filled badge would compete with
              * the card's own title for the eye that is choosing. Sits on
              * the title's line so the card keeps its two-line shape. */
-            <span className="absolute top-2 right-4 text-2xs leading-none text-muted-foreground">Coming soon</span>
+            <span className="absolute top-2 right-4 text-2xs leading-none text-muted-foreground">Unavailable</span>
           )}
         </button>
 

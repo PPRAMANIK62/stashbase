@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { discoverConvertibleSources, indexFreshConvertibleSource } from './conversion-dispatch.ts';
-import { getApiKey } from './app-config.ts';
+import { isEmbeddingConfigured } from './app-config.ts';
 import type { Indexer } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
 import { hasNoExtractableText, indexableFileSizeError, shouldIndexFilePath } from './indexable.ts';
@@ -247,16 +247,16 @@ async function cleanupConvertedRename(
 export async function syncIndex(indexer: Indexer, root: string, opts: SyncOptions = {}): Promise<SyncResult> {
   if (shouldStop(opts)) return emptyResult(true);
 
-  // No embedding key → semantic indexing is disabled by design (§5.3): the
+  // No active embedding source → semantic indexing is disabled by design (§5.3): the
   // daemon has no embedder/store, so every upsert would throw "no bound
-  // root … set an embedding API key" and a whole-folder import would flood
+  // root … set an embedding source" and a whole-folder import would flood
   // the log with one failure per file. Conversion discovery still
   // runs so PDFs/images can produce AppData derived text for keyword search
     // and future reindex.
-  if (!(opts.semanticEnabled ?? !!getApiKey())) {
+  if (!(opts.semanticEnabled ?? isEmbeddingConfigured())) {
     cleanupMissingConvertedSources(root);
     discoverConvertedSources(root);
-    log.info(`no embedding key — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
+    log.info(`no embedding source — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
     return emptyResult();
   }
 

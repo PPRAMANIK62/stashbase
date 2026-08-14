@@ -30,6 +30,7 @@ const expectedEntries = [
   'src/components/SemanticIndexingNotice.tsx',
   'src/components/UnsupportedFilesCallout.tsx',
   'src/components/EmbeddingSetupCallout.tsx',
+  'src/components/SidebarAccountRow.tsx',
   'src/components/embedder/RequireApiKeyModal.tsx',
 ];
 

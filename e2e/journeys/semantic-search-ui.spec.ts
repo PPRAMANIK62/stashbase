@@ -15,7 +15,8 @@ test('semantic search UI renders deterministic loading, grouped, empty, and erro
     app = await launchApp(fixture, testInfo);
     await app.page.route('**/api/embedder', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-        provider: 'openai', hasKey: true, model: 'fixture-model',
+        provider: 'openai', hasKey: true, authorized: true, source: 'openai',
+        model: 'fixture-model', account: { signedIn: false, active: false },
       }) });
     });
     await app.page.route('**/api/library/search', async (route: Route) => {
@@ -92,13 +93,23 @@ test('removing the API key re-offers the AI Index dialog right away', async ({},
     let hasKey = true;
     await app.page.route('**/api/embedder', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-        provider: 'openai', hasKey, model: 'fixture-model',
+        provider: 'openai',
+        hasKey,
+        authorized: hasKey,
+        source: 'openai',
+        model: 'fixture-model',
+        account: { signedIn: false, active: false },
       }) });
     });
     await app.page.route('**/api/embedder/key', async (route) => {
       hasKey = false;
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-        hasKey: false, provider: 'openai', model: 'fixture-model',
+        provider: 'openai',
+        hasKey: false,
+        authorized: false,
+        source: 'openai',
+        model: 'fixture-model',
+        account: { signedIn: false, active: false },
       }) });
     });
 

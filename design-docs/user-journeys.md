@@ -76,14 +76,19 @@ current truth.
 the visible source.
 
 1. Open library search and enter a query.
-2. Use exact text without AI Index, or meaning-based search when configured.
-3. Optionally narrow to one member folder.
-4. Review grouped evidence and readiness guidance.
-5. Open the result without exposing a hidden derived artifact or unexpectedly
+2. Use exact text without AI Index, or configure meaning-based search by
+   verifying an email for the included allowance or supplying an
+   OpenAI/OpenRouter key.
+3. When using the hosted allowance, inspect its remaining percentage and reset
+   date from the account menu; indexing and queries share that allowance.
+4. Optionally narrow to one member folder.
+5. Review grouped evidence and readiness guidance.
+6. Open the result without exposing a hidden derived artifact or unexpectedly
    replacing the window's active folder.
 
-Important recovery: partial preparation, stale index state, and provider
-failure are distinguishable from an empty result.
+Important recovery: partial preparation, stale index state, provider failure,
+and hosted quota exhaustion are distinguishable from an empty result. Exact
+search remains available when hosted semantic work cannot continue.
 
 ## J06: Start and continue an Agent chat
 

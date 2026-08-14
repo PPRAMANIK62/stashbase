@@ -292,11 +292,35 @@ export interface LibraryKeywordSearchResult {
 }
 
 export type EmbedderProvider = 'openai' | 'openrouter';
+export type EmbeddingSource = EmbedderProvider | 'stashbase-account';
+
+export interface HostedQuota {
+  plan: string;
+  grantedTokens: number;
+  usedTokens: number;
+  reservedTokens: number;
+  remainingTokens: number;
+  periodStartedAt: string | null;
+  periodEndsAt: string | null;
+}
+
+export interface HostedAccountState {
+  signedIn: boolean;
+  active: boolean;
+  userId?: string;
+  email?: string;
+  quota?: HostedQuota;
+  quotaUnavailable?: boolean;
+  backfillStarted?: boolean;
+}
 
 export interface EmbedderState {
   provider: EmbedderProvider;
   hasKey: boolean;
+  authorized: boolean;
+  source: EmbeddingSource;
   model: string;
+  account: HostedAccountState;
 }
 
 export interface McpHttpStatus {

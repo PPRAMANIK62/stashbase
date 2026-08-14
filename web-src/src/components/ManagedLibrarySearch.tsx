@@ -197,9 +197,15 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
       } else {
         const embedder = await api.getEmbedder();
         if (stale()) return;
-        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.hasKey });
-        if (!embedder.hasKey) {
+        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.authorized });
+        if (!embedder.authorized) {
           setError(EMBEDDER_KEY_ERROR);
+          setSemanticHits(null);
+          setSearching(false);
+          return;
+        }
+        if (embedder.source === 'stashbase-account' && embedder.account.quota?.remainingTokens === 0) {
+          setError('Your hosted AI Index allowance is exhausted. Exact search is still available.');
           setSemanticHits(null);
           setSearching(false);
           return;

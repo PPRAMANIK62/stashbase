@@ -5,7 +5,7 @@
  * one flat evidence model keyed by the visible, absolute source path; prepared
  * representations never cross this seam.
  */
-import { getApiKey } from '../app-config.ts';
+import { isEmbeddingConfigured } from '../app-config.ts';
 import { searchExtensionsForTypes } from '../format.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { runKeywordSearch, type KeywordSearchOpts } from '../keyword-search.ts';
@@ -47,7 +47,7 @@ export interface RetrievalDependencies {
 }
 
 const productionDependencies: RetrievalDependencies = {
-  hasEmbeddingKey: () => Boolean(getApiKey()),
+  hasEmbeddingKey: isEmbeddingConfigured,
   vectorSearch: (query, topK, folderRoot, pathPrefix, extensions) =>
     indexer.search(query, topK, folderRoot, pathPrefix, extensions),
   keywordSearch: runKeywordSearch,

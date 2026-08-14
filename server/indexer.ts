@@ -32,7 +32,7 @@ export interface SearchHit {
 export interface EmbedderRuntimeConfig {
   /** Supported embedding endpoints. OpenRouter is used only as an
    *  OpenAI-compatible embeddings endpoint for the fixed 1536d model. */
-  provider: 'openai' | 'openrouter';
+  provider: 'openai' | 'openrouter' | 'stashbase';
   /** Provider API key. Absent ⇒ the folder is registered but indexing
    *  stays disabled until the user adds a key (graceful no-key degrade). */
   apiKey?: string;

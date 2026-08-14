@@ -28,6 +28,12 @@ their clients and are updated only through explicit MCP setup actions.
 - Credentials are accepted and persisted only through Settings. Environment
   variables may isolate automated tests or select runtime plumbing, but are
   never the product credential source of truth.
+- BYOK credentials, the refreshable Supabase account session, and the active
+  embedding source persist independently. Switching sources retains the
+  inactive credential and never silently falls back after a hosted failure.
+- Account access and refresh tokens are Node-only configuration. They never
+  cross renderer HTTP responses or the Node/Python boundary; Python receives a
+  random per-process loopback bearer credential instead.
 - Read-modify-write helpers preserve unrelated config domains. Concurrent MCP
   listener transitions serialize and roll active exposure back if persistence
   fails.
@@ -43,11 +49,11 @@ their clients and are updated only through explicit MCP setup actions.
 | Role | Stable entry points |
 |---|---|
 | Persistent Interface | strict/fallback read and write plus domain getters/setters in `server/app-config.ts` |
-| Domain owners | `server/mcp-http-settings.ts`, embedding and transcription configuration Modules |
-| HTTP Adapters | `server/routes/appearance.ts`, `onboarding.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
+| Domain owners | `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-embedding-broker.ts`, embedding and transcription configuration Modules |
+| HTTP Adapters | `server/routes/appearance.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
 | Renderer Adapters | `web-src/src/components/SettingsModal.tsx`, `components/settings/AppearancePanel.tsx`, `EmbeddingPanel.tsx`, `TranscriptionPanel.tsx`, `McpClientsPanel.tsx`, `AgentRuntimePanel.tsx` |
 | Appearance Adapter | `web-src/src/appearance.ts` |
-| Focused evidence | `server/app-config.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `web-src/src/__tests__/appearance.test.ts`, `e2e/smoke/settings.spec.ts` |
+| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `web-src/src/__tests__/appearance.test.ts`, `web-src/src/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts` |
 
 ## Validation
 

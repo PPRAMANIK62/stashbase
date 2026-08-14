@@ -2,18 +2,16 @@
  * Whether AI Index is authorized, whether the user has deliberately opted
  * out of it, and the one place that decides both.
  *
- * Today the only way to authorize is a provider API key the user pasted in.
- * A signed-in account is meant to become a second way, and the point of
- * this module is that adding it is ONE edit here rather than an audit of
- * every `!hasKey` in the renderer — the dialog, the Files-panel line, the
- * settings panel, and the sidebar all ask this question, and they must
- * never disagree about the answer.
+ * A signed-in account allowance and a provider API key are equal activation
+ * sources. The server resolves the explicit active source and exposes the
+ * resulting `authorized` fact so the dialog, Files-panel line, Settings, and
+ * search never disagree.
  */
 import type { EmbedderState } from '../../api';
 
 export function isEmbeddingAuthorized(state: EmbedderState | null | undefined): boolean {
   if (!state) return false;
-  return state.hasKey;
+  return state.authorized;
 }
 
 /**

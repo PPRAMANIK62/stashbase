@@ -31,6 +31,7 @@ export interface RecentFolder {
 }
 
 export type EmbedderProvider = 'openai' | 'openrouter';
+export type EmbeddingSource = EmbedderProvider | 'stashbase-account';
 export type TranscriptionModelId = LocalTranscriptionModelId;
 export type AppearanceTheme = 'system' | 'light' | 'dark';
 export type AppearanceScale = 'small' | 'default' | 'large';
@@ -53,6 +54,14 @@ export interface EmbedderConfig {
   model: string;
   dimension: number;
   baseUrl?: string;
+}
+
+export interface HostedAccountSession {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  userId: string;
+  email: string;
 }
 
 const EMBEDDER_DEFAULTS: Record<EmbedderProvider, Omit<EmbedderConfig, 'provider' | 'apiKey'>> = {
@@ -92,6 +101,13 @@ export interface AppConfigFile {
     openaiKey?: string;
     model?: string;
     baseUrl?: string;
+  };
+  /** Active AI Index funding source. BYOK credentials and the account
+   * session are retained independently so switching never destroys the
+   * other option or silently falls back after a hosted failure. */
+  embeddingSource?: EmbeddingSource;
+  account?: {
+    session?: HostedAccountSession;
   };
   /** Legacy last-used agent field. No longer written or read by the
    *  chat panel; kept so old config files parse without churn. */
@@ -235,6 +251,59 @@ export function getApiKey(): string | undefined {
   return getEmbedderConfig().apiKey;
 }
 
+export function getHostedAccountSession(): HostedAccountSession | undefined {
+  const raw = readAppConfig().account?.session;
+  if (!raw || typeof raw !== 'object') return undefined;
+  if (
+    typeof raw.accessToken !== 'string' || !raw.accessToken ||
+    typeof raw.refreshToken !== 'string' || !raw.refreshToken ||
+    typeof raw.expiresAt !== 'number' || !Number.isFinite(raw.expiresAt) ||
+    typeof raw.userId !== 'string' || !raw.userId ||
+    typeof raw.email !== 'string' || !raw.email
+  ) return undefined;
+  return { ...raw };
+}
+
+export function setHostedAccountSession(session: HostedAccountSession | undefined): void {
+  const cfg = readAppConfig();
+  if (session) cfg.account = { ...(cfg.account ?? {}), session: { ...session } };
+  else {
+    delete cfg.account?.session;
+    if (cfg.account && Object.keys(cfg.account).length === 0) delete cfg.account;
+  }
+  writeAppConfigStrict(cfg);
+}
+
+export function getEmbeddingSource(): EmbeddingSource {
+  const cfg = readAppConfig();
+  const value = cfg.embeddingSource;
+  if (value === 'stashbase-account' || isEmbedderProvider(value)) return value;
+  const direct = getEmbedderConfig();
+  if (direct.apiKey) return direct.provider;
+  if (getHostedAccountSession()) return 'stashbase-account';
+  return direct.provider;
+}
+
+export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
+  if (source === 'stashbase-account') {
+    if (!getHostedAccountSession()) throw new Error('Sign in before selecting the StashBase account allowance.');
+  } else {
+    const direct = getEmbedderConfig();
+    if (!direct.apiKey || direct.provider !== source) throw new Error(`Add a ${source === 'openrouter' ? 'OpenRouter' : 'OpenAI'} key before selecting it.`);
+  }
+  const cfg = readAppConfig();
+  cfg.embeddingSource = source;
+  writeAppConfigStrict(cfg);
+  return source;
+}
+
+export function isEmbeddingConfigured(): boolean {
+  const source = getEmbeddingSource();
+  if (source === 'stashbase-account') return !!getHostedAccountSession();
+  const direct = getEmbedderConfig();
+  return direct.provider === source && !!direct.apiKey;
+}
+
 export function getEmbedderConfig(): EmbedderConfig {
   const cfg = readAppConfig();
   const provider = isEmbedderProvider(cfg.embedder?.provider) ? cfg.embedder.provider : 'openai';
@@ -272,6 +341,10 @@ export function setEmbedderConfig(next: { provider: EmbedderProvider; apiKey?: s
   delete cfg.embedder.openaiKey;
   if (next.provider === 'openai' && cfg.embedder.apiKey) cfg.apiKey = cfg.embedder.apiKey;
   else delete cfg.apiKey;
+  if (cfg.embedder.apiKey) cfg.embeddingSource = next.provider;
+  else if (cfg.embeddingSource === next.provider) {
+    cfg.embeddingSource = cfg.account?.session ? 'stashbase-account' : next.provider;
+  }
   writeAppConfigStrict(cfg);
   return getEmbedderConfig();
 }

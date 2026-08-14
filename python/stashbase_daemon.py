@@ -121,9 +121,10 @@ def make_embedder(provider: str = "openai", *, model=None, api_key=None, dimensi
     (`.embed(texts) -> list[list[float]]`, `.dimension`, `.model_name`).
 
     Rolled in-house — see `_OpenAIEmbedder`. ``provider`` is accepted for
-    protocol compatibility and is intentionally limited to OpenAI/OpenRouter.
+    protocol compatibility and is intentionally limited to OpenAI/OpenRouter
+    plus the loopback-only StashBase account broker.
     """
-    if provider not in ("openai", "openrouter"):
+    if provider not in ("openai", "openrouter", "stashbase"):
         raise ValueError(f"unsupported embedder provider {provider!r}")
     if not api_key:
         raise ValueError(f"{provider} embedder requires api_key")
@@ -163,7 +164,9 @@ class _OpenAIEmbedder:
     # (300k for text-embedding-3* at time of writing). Keep a margin and
     # batch locally so one big folder cannot take the daemon down.
     _MAX_REQUEST_TOKENS = 250_000
-    _MAX_BATCH_ITEMS = 128
+    # The hosted StashBase contract accepts at most 64 inputs. Keeping the
+    # same bound for direct providers makes batching source-independent.
+    _MAX_BATCH_ITEMS = 64
 
     def __init__(self, *, provider: str, model: str, api_key: str, dimension: int | None = None,
                  base_url: str | None = None,
@@ -180,7 +183,7 @@ class _OpenAIEmbedder:
         self._max_retries = max(1, max_retries)
         self._base_delay = base_delay
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    def embed(self, texts: list[str], *, purpose: str = "index") -> list[list[float]]:
         if not texts:
             return []
         out: list[list[float]] = []
@@ -197,13 +200,13 @@ class _OpenAIEmbedder:
                 batch_tokens + est > self._MAX_REQUEST_TOKENS
                 or len(batch) >= self._MAX_BATCH_ITEMS
             ):
-                out.extend(self._embed_batch(batch))
+                out.extend(self._embed_batch(batch, purpose=purpose))
                 batch = []
                 batch_tokens = 0
             batch.append(text)
             batch_tokens += est
         if batch:
-            out.extend(self._embed_batch(batch))
+            out.extend(self._embed_batch(batch, purpose=purpose))
         return out
 
     @staticmethod
@@ -212,7 +215,7 @@ class _OpenAIEmbedder:
         # ~4 chars/token; CJK is denser, so 3 chars/token leaves margin.
         return max(1, (len(text) + 2) // 3)
 
-    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+    def _embed_batch(self, texts: list[str], *, purpose: str) -> list[list[float]]:
         transient = (
             self._openai.APITimeoutError,
             self._openai.APIConnectionError,
@@ -221,6 +224,8 @@ class _OpenAIEmbedder:
         )
         native = self._NATIVE_DIMS.get(self.model_name)
         kwargs: dict = {"model": self.model_name, "input": texts}
+        if self.provider == "stashbase":
+            kwargs["extra_headers"] = {"X-StashBase-Purpose": purpose}
         if native is not None and self.dimension != native:
             kwargs["dimensions"] = self.dimension
         last_err: Exception | None = None
@@ -849,6 +854,8 @@ def _flush_store(store) -> None:
 
 
 def _embed_with_cache(svc: "StashbaseStore", path: str, embedder, texts: list[str]) -> list:
+    if getattr(embedder, "provider", None) == "stashbase":
+        return embedder.embed(texts, purpose="index")
     return embedder.embed(texts)
 
 
@@ -1316,10 +1323,19 @@ def op_search(svc: StashbaseStore, args: dict) -> dict:
     try:
         if store.is_empty():
             return {"hits": []}
-        qvec = embedder.embed([query])[0]
+        qvec = (
+            embedder.embed([query], purpose="query")[0]
+            if getattr(embedder, "provider", None) == "stashbase"
+            else embedder.embed([query])[0]
+        )
         hits = store.hybrid_search(qvec, query, path_filter=path_filter, top_k=fetch_k)
     except Exception as exc:
         sys.stderr.write(f"[stashbase] search store failed: {exc}\n")
+        # Hosted quota exhaustion is a product state, not an empty result.
+        # Let Node surface it so the renderer can keep Exact search available
+        # while explaining why meaning-based search stopped.
+        if "quota_exhausted" in str(exc):
+            raise
         return {"hits": []}
 
     out = []
