@@ -42,7 +42,9 @@ after readiness, a save failure or timeout keeps the window open.
   revives a window. The packaged `stashbase://` handler accepts only the exact
   data-free `oauth-complete` authority. macOS `open-url`, Windows/Linux second
   instances, and cold-start arguments converge on the same bounded focus path;
-  all other protocol URLs are inert.
+  all other protocol URLs are inert. After focusing, Electron acknowledges the
+  handoff to the loopback account Module so the browser page can close on
+  evidence rather than a generic focus change.
 - macOS may remain alive without a window and recreate one on activation.
   Windows and Linux quit after the final window closes. Platform window
   accelerators never masquerade as document-tab commands.

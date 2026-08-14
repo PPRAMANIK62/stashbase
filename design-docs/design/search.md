@@ -50,7 +50,9 @@ user-managed results.
 - Hosted indexing and meaning-based queries draw from one token allowance.
   The account menu shows identity, remaining percentage, and reset date. When
   the allowance is exhausted, hosted semantic work stops while Exact search
-  and every local-file workflow remain available.
+  and every local-file workflow remain available. Pending semantic work
+  resumes after the allowance refreshes or an available BYOK source is
+  selected.
 - In-app and MCP retrieval share source identity and access rules. MCP also
   supports validated source-type categories.
 

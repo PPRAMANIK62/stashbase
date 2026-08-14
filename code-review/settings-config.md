@@ -43,7 +43,9 @@ their clients and are updated only through explicit MCP setup actions.
   narrow IPC channel; no provider code or account token crosses that channel,
   and the browser callback page remains the fallback. Its app-return deep link
   is a fixed, data-free action and never carries a flow id, provider code, or
-  account token.
+  account token. The callback page treats only a Node-side acknowledgement
+  from that exact Electron handler as a successful handoff; browser blur or
+  visibility changes are not proof that the app opened.
 - Read-modify-write helpers preserve unrelated config domains. Concurrent MCP
   listener transitions serialize and roll active exposure back if persistence
   fails.
