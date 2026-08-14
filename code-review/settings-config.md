@@ -39,13 +39,13 @@ their clients and are updated only through explicit MCP setup actions.
 - Browser provider login uses PKCE. Node generates and retains the verifier,
   accepts the short-lived authorization code only on a loopback callback, and
   exposes an opaque flow id plus pending/complete/error state to the renderer.
-  After observing `complete`, the renderer may request native focus through a
-  narrow IPC channel; no provider code or account token crosses that channel,
-  and the browser callback page remains the fallback. Its app-return deep link
-  is a fixed, data-free action and never carries a flow id, provider code, or
-  account token. The callback page treats only a Node-side acknowledgement
-  from that exact Electron handler as a successful handoff; browser blur or
-  visibility changes are not proof that the app opened.
+  Renderer polling updates account state but never steals focus from the
+  callback page. The callback's app-return deep link is a fixed, data-free
+  action and never carries a flow id, provider code, or account token. The
+  exact Electron handler focuses the app and authenticates its Node-side
+  acknowledgement with a random per-launch child-process token; browser blur,
+  visibility changes, and unauthenticated loopback requests are not proof that
+  the app opened.
 - Read-modify-write helpers preserve unrelated config domains. Concurrent MCP
   listener transitions serialize and roll active exposure back if persistence
   fails.
