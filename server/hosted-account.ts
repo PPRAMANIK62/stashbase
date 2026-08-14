@@ -27,7 +27,6 @@ export interface HostedQuota {
 export interface HostedAccountState {
   signedIn: boolean;
   active: boolean;
-  userId?: string;
   email?: string;
   quota?: HostedQuota;
   quotaUnavailable?: boolean;
@@ -52,7 +51,7 @@ interface ErrorPayload {
   msg?: string;
 }
 
-export type HostedOAuthProvider = 'google' | 'github';
+export type HostedOAuthProvider = 'google';
 
 export interface HostedOAuthStart {
   flowId: string;
@@ -63,6 +62,7 @@ export interface HostedOAuthStart {
 export interface HostedOAuthStatus {
   state: 'pending' | 'complete' | 'error';
   error?: string;
+  appReturned?: boolean;
 }
 
 interface PendingOAuthFlow {
@@ -71,10 +71,16 @@ interface PendingOAuthFlow {
   createdAt: number;
   state: 'pending' | 'exchanged' | 'complete' | 'error';
   error?: string;
+  appReturnedAt?: number;
 }
 
 const OAUTH_FLOW_TTL_MS = 10 * 60 * 1000;
 const pendingOAuthFlows = new Map<string, PendingOAuthFlow>();
+const QUOTA_REFRESH_RETRY_MS = 5 * 60 * 1000;
+let lastQuota: HostedQuota | undefined;
+let quotaRefreshTimer: NodeJS.Timeout | null = null;
+let onQuotaAvailable: (() => void | Promise<void>) | null = null;
+let quotaAvailabilityRecovery: Promise<void> = Promise.resolve();
 
 function messageOf(value: ErrorPayload | null, fallback: string): string {
   return value?.message ?? value?.error_description ?? value?.msg ?? value?.error ?? fallback;
@@ -164,7 +170,7 @@ export async function exchangeHostedOAuthCode(flowId: string, authCode: string):
       code_verifier: flow.verifier,
     });
     const session = sessionFrom(payload);
-    lastQuota = undefined;
+    clearHostedQuota();
     setHostedAccountSession(session);
     flow.state = 'exchanged';
     return session;
@@ -179,6 +185,20 @@ export function finishHostedOAuth(flowId: string): void {
   if (flow?.state === 'exchanged') flow.state = 'complete';
 }
 
+/** Electron calls this only after accepting the exact data-free deep link.
+ * Callback pages poll their own flow state and close only after this proof,
+ * never merely because the browser lost focus. */
+export function noteHostedOAuthAppReturn(now = Date.now()): boolean {
+  pruneOAuthFlows(now);
+  let updated = false;
+  for (const flow of pendingOAuthFlows.values()) {
+    if (flow.state !== 'complete' && flow.state !== 'error') continue;
+    flow.appReturnedAt = now;
+    updated = true;
+  }
+  return updated;
+}
+
 export function failHostedOAuth(flowId: string, message: string): void {
   const flow = pendingOAuthFlows.get(flowId);
   if (!flow) return;
@@ -190,8 +210,15 @@ export function hostedOAuthStatus(flowId: string): HostedOAuthStatus {
   pruneOAuthFlows();
   const flow = pendingOAuthFlows.get(flowId);
   if (!flow) return { state: 'error', error: 'This sign-in request expired. Start again.' };
-  if (flow.state === 'complete') return { state: 'complete' };
-  if (flow.state === 'error') return { state: 'error', error: flow.error ?? 'Sign-in failed.' };
+  if (flow.state === 'complete') return {
+    state: 'complete',
+    ...(flow.appReturnedAt ? { appReturned: true } : {}),
+  };
+  if (flow.state === 'error') return {
+    state: 'error',
+    error: flow.error ?? 'Sign-in failed.',
+    ...(flow.appReturnedAt ? { appReturned: true } : {}),
+  };
   return { state: 'pending' };
 }
 
@@ -206,13 +233,14 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
     return refreshed.accessToken;
   } catch (error) {
     setHostedAccountSession(undefined);
+    clearHostedQuota();
     throw error;
   }
 }
 
 export async function signOutHostedAccount(): Promise<void> {
   const session = getHostedAccountSession();
-  lastQuota = undefined;
+  clearHostedQuota();
   setHostedAccountSession(undefined);
   if (!session) return;
   try { await supabaseAuth('/logout?scope=local', {}, session.accessToken); } catch { /* local sign-out still succeeds */ }
@@ -229,17 +257,56 @@ export async function fetchHostedQuota(options: { forceRefreshToken?: boolean } 
   const payload = await jsonBody<HostedQuota & ErrorPayload>(response);
   if (response.status === 401 && !options.forceRefreshToken) return fetchHostedQuota({ forceRefreshToken: true });
   if (!response.ok) throw new Error(messageOf(payload, `StashBase account service failed (HTTP ${response.status}).`));
-  return payload as HostedQuota;
+  const quota = payload as HostedQuota;
+  rememberHostedQuota(quota);
+  await quotaAvailabilityRecovery;
+  return quota;
 }
 
-let lastQuota: HostedQuota | undefined;
+function scheduleQuotaRefresh(quota: HostedQuota): void {
+  if (quotaRefreshTimer) clearTimeout(quotaRefreshTimer);
+  quotaRefreshTimer = null;
+  if (quota.remainingTokens > 0) return;
+  const resetAt = quota.periodEndsAt ? Date.parse(quota.periodEndsAt) : Number.NaN;
+  const untilReset = Number.isFinite(resetAt) ? resetAt - Date.now() + 1_000 : Number.NaN;
+  const delay = Number.isFinite(untilReset)
+    ? Math.max(untilReset, untilReset <= 0 ? QUOTA_REFRESH_RETRY_MS : 1_000)
+    : QUOTA_REFRESH_RETRY_MS;
+  quotaRefreshTimer = setTimeout(() => {
+    quotaRefreshTimer = null;
+    void fetchHostedQuota().catch(() => {
+      if (lastQuota) scheduleQuotaRefresh(lastQuota);
+    });
+  }, Math.min(delay, 2_147_000_000));
+  quotaRefreshTimer.unref?.();
+}
+
+function clearHostedQuota(): void {
+  lastQuota = undefined;
+  if (quotaRefreshTimer) clearTimeout(quotaRefreshTimer);
+  quotaRefreshTimer = null;
+}
 
 export function rememberHostedQuota(quota: HostedQuota): void {
+  const wasExhausted = isHostedQuotaExhausted();
   lastQuota = quota;
+  scheduleQuotaRefresh(quota);
+  if (wasExhausted && !isHostedQuotaExhausted()) {
+    quotaAvailabilityRecovery = Promise.resolve(onQuotaAvailable?.())
+      .catch(() => { /* owner logs recovery failures */ });
+  }
 }
 
 export function cachedHostedQuota(): HostedQuota | undefined {
   return lastQuota;
+}
+
+export function isHostedQuotaExhausted(): boolean {
+  return (lastQuota?.remainingTokens ?? 1) <= 0;
+}
+
+export function setHostedQuotaAvailableHandler(handler: (() => void | Promise<void>) | null): void {
+  onQuotaAvailable = handler;
 }
 
 export async function hostedAccountState(refreshQuota = false): Promise<HostedAccountState> {
@@ -250,7 +317,6 @@ export async function hostedAccountState(refreshQuota = false): Promise<HostedAc
   if (refreshQuota || !quota) {
     try {
       quota = await fetchHostedQuota();
-      lastQuota = quota;
     } catch {
       if (!getHostedAccountSession()) return { signedIn: false, active: false };
       quotaUnavailable = true;
@@ -259,7 +325,6 @@ export async function hostedAccountState(refreshQuota = false): Promise<HostedAc
   return {
     signedIn: true,
     active: getEmbeddingSource() === 'stashbase-account',
-    userId: session.userId,
     email: session.email,
     ...(quota ? { quota } : {}),
     ...(quotaUnavailable ? { quotaUnavailable: true } : {}),

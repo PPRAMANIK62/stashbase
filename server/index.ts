@@ -33,8 +33,9 @@ import {
 } from './agent-contract.ts';
 import { onClose, ensureFolderHome, memberFolderRoots } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { getHostedAccountSession, isEmbeddingConfigured, migrateLegacyEmbedderConfig } from './app-config.ts';
-import { bootBindAllFolders, reconcileLibraryFolders } from './state.ts';
+import { getEmbeddingSource, getHostedAccountSession, migrateLegacyEmbedderConfig } from './app-config.ts';
+import { isEmbeddingAvailable } from './embedding-availability.ts';
+import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from './state.ts';
 import { reapOrphanDaemons } from './stale-lock.ts';
 import { logger } from './log.ts';
 import { cancelAllConversions, setDerivedNoteIndexer } from './conversion.ts';
@@ -77,6 +78,7 @@ import {
 } from './agent-runtime-installer.ts';
 import { createClientErrorHandler } from './client-error.ts';
 import { startHostedEmbeddingBroker, stopHostedEmbeddingBroker } from './hosted-embedding-broker.ts';
+import { hostedAccountState, setHostedQuotaAvailableHandler } from './hosted-account.ts';
 
 const log = logger('server');
 
@@ -91,7 +93,7 @@ for (const adapter of BUILT_IN_AGENT_ADAPTERS) registerAgentAdapter(adapter);
 // completion — there is no fs-watcher intermediary anymore. Wired here
 // (not inside conversion.ts) to avoid a conversion ↔ state module cycle.
 setDerivedNoteIndexer(async (sourceAbs, derivedAbs, boundSourceHash) => {
-  if (!isEmbeddingConfigured()) return;
+  if (!isEmbeddingAvailable()) return;
   // Derived text lives in app data; index it UNDER the source
   // PDF/image/DOCX path so folder-scoped search finds it. Stamp the SOURCE's
   // byte hash so the daemon's scan_diff (which hashes the source file) sees
@@ -108,6 +110,20 @@ setDerivedNoteIndexer(async (sourceAbs, derivedAbs, boundSourceHash) => {
   }
   await indexer.upsertConvertedFile(filesystemPath.absolute(sourceAbs), derivedContent, sourceHash, path.extname(derivedAbs));
   noteTreeChanged();
+});
+
+setHostedQuotaAvailableHandler(async () => {
+  if (getEmbeddingSource() !== 'stashbase-account') return;
+  try {
+    await startHostedEmbeddingBroker();
+    await resetIndexerRuntime({ forgetBindings: true });
+    await bootBindAllFolders();
+    void reconcileLibraryFolders('hosted allowance reset').catch((err: unknown) => {
+      log.warn(`hosted allowance backfill failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  } catch (err: unknown) {
+    log.warn(`hosted allowance recovery failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 });
 
 function parsePortArg(argv: string[], fallback: number): number {
@@ -387,7 +403,9 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   // already on disk and gets picked up. Configure the daemon + bind every
   // known folder so MCP / cross-folder search works without waiting for the
   // user to open one. Background.
-  (getHostedAccountSession() ? startHostedEmbeddingBroker() : Promise.resolve())
+  (getHostedAccountSession()
+    ? hostedAccountState(true).then(() => startHostedEmbeddingBroker())
+    : Promise.resolve())
     .then(() => bootBindAllFolders())
     .then(() => reconcileLibraryFolders('app boot'))
     .catch((err) =>

@@ -6,6 +6,7 @@ import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '../accountEvents';
 import { signInWithStashBase } from '../accountOAuth';
 import { DISCORD_INVITE_URL, openExternalUrl } from '../lib/externalLink';
 import { openSettings } from './SettingsModal';
+import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '../lib/hostedQuota';
 import { Button } from './ui/button';
 import {
   Menu as AccountMenu,
@@ -42,9 +43,7 @@ export function SidebarAccountRow() {
   const label = email || 'Anonymous';
   const monogram = email ? email.slice(0, 2).toUpperCase() : '';
   const quota = account?.quota;
-  const remainingPercent = quota
-    ? Math.max(0, Math.min(100, Math.round((quota.remainingTokens / Math.max(1, quota.grantedTokens)) * 100)))
-    : null;
+  const remainingPercent = quota ? hostedQuotaRemainingPercent(quota) : null;
 
   function signOut() {
     void api.signOutAccount()
@@ -107,7 +106,7 @@ export function SidebarAccountRow() {
                         </div>
                         <div className="mt-2 flex justify-between gap-3 text-xs text-muted-foreground">
                           <span>{quota.remainingTokens.toLocaleString()} tokens</span>
-                          <span>{quota.periodEndsAt ? `Resets ${new Date(quota.periodEndsAt).toLocaleDateString()}` : ''}</span>
+                          <span>{hostedQuotaResetLabel(quota)}</span>
                         </div>
                       </>
                     ) : (

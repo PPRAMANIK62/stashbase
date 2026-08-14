@@ -27,6 +27,7 @@ const { registerBugReportReviewIpc } = require('./bug-report-review-ipc.cjs');
 const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
+  classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
@@ -35,6 +36,7 @@ const {
   focusAllowedSenderWindow,
   focusWindow,
   isOAuthReturnUrl,
+  isStashBaseProtocolUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -1123,9 +1125,15 @@ const initialWindowFlight = createSingleFlight(() => app.whenReady().then(() => 
 function focusOAuthReturn() {
   void app.whenReady().then(async () => {
     if (process.platform === 'darwin') app.focus({ steal: true });
-    if (focusLastMainWindow()) return;
-    await initialWindowFlight.run();
-    focusLastMainWindow();
+    if (!focusLastMainWindow()) {
+      await initialWindowFlight.run();
+      focusLastMainWindow();
+    }
+    const acknowledged = await requestJson(SERVER_PORT, '/api/account/oauth/app-return', 1000, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    });
+    if (!acknowledged.ok) console.warn('[electron] could not acknowledge OAuth return to the callback page');
   });
 }
 
@@ -1137,8 +1145,8 @@ function registerOAuthReturnProtocol() {
 }
 
 app.on('open-url', (event, url) => {
+  if (isStashBaseProtocolUrl(url)) event.preventDefault();
   if (!isOAuthReturnUrl(url)) return;
-  event.preventDefault();
   focusOAuthReturn();
 });
 
@@ -1147,10 +1155,14 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
-    if (argv.some(isOAuthReturnUrl)) {
+    const protocolLaunch = classifyProtocolLaunch(argv);
+    if (protocolLaunch === 'oauth-return') {
       focusOAuthReturn();
       return;
     }
+    // A malformed or unsupported stashbase: URL must not fall through to the
+    // ordinary second-launch focus/create behavior.
+    if (protocolLaunch === 'inert') return;
     if (!focusLastMainWindow()) {
       void initialWindowFlight.run().then(() => { focusLastMainWindow(); });
     }

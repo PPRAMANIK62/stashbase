@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { discoverConvertibleSources, indexFreshConvertibleSource } from './conversion-dispatch.ts';
 import { isEmbeddingConfigured } from './app-config.ts';
+import { isEmbeddingAvailable } from './embedding-availability.ts';
 import type { Indexer } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
 import { hasNoExtractableText, indexableFileSizeError, shouldIndexFilePath } from './indexable.ts';
@@ -117,6 +118,9 @@ export interface SyncOptions {
   commitEmbedding?: () => boolean;
   /** Test seam; production derives this exclusively from Settings. */
   semanticEnabled?: boolean;
+  /** Live gate checked before and between embedding calls. Production uses
+   * the hosted allowance cache so a 402 stops the remainder of the batch. */
+  embeddingAvailable?: () => boolean;
 }
 
 /** Transactional pause transition. Known-stale rows are invalidated before
@@ -152,6 +156,12 @@ function emptyResult(cancelled = false): SyncResult {
 
 function shouldStop(opts: SyncOptions | undefined): boolean {
   return opts?.shouldContinue ? !opts.shouldContinue() : false;
+}
+
+function canEmbed(opts: SyncOptions): boolean {
+  if (opts.embeddingAvailable) return opts.embeddingAvailable();
+  if (opts.semanticEnabled !== undefined) return opts.semanticEnabled;
+  return isEmbeddingAvailable();
 }
 
 function toFolderRelList(root: string, paths: string[]): string[] {
@@ -258,6 +268,13 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
     discoverConvertedSources(root);
     log.info(`no embedding source — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
     return emptyResult();
+  }
+
+  if (!canEmbed(opts)) {
+    cleanupMissingConvertedSources(root);
+    discoverConvertedSources(root);
+    log.info(`semantic embedding is paused for "${root}" (conversion + keyword search unaffected)`);
+    return { ...emptyResult(), semanticPaused: true };
   }
 
   if (shouldStop(opts)) return emptyResult(true);
@@ -386,25 +403,25 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   }
 
   const convertedAddedDone = await indexFreshConvertedSources(indexer, root, diff.added, failed, opts);
-  if (convertedAddedDone.cancelled) {
+  if (convertedAddedDone.cancelled || convertedAddedDone.semanticPaused) {
     return {
       added: toFolderRelList(root, convertedAddedDone.done),
       modified: [],
       removed: toFolderRelList(root, removedDone),
       renamed: toFolderRelList(root, renamedDone),
       failed: toFolderRelFailures(root, failed),
-      cancelled: true,
+      ...(convertedAddedDone.cancelled ? { cancelled: true } : { semanticPaused: true }),
     };
   }
   const convertedModifiedDone = await indexFreshConvertedSources(indexer, root, diff.modified, failed, opts);
-  if (convertedModifiedDone.cancelled) {
+  if (convertedModifiedDone.cancelled || convertedModifiedDone.semanticPaused) {
     return {
       added: toFolderRelList(root, convertedAddedDone.done),
       modified: toFolderRelList(root, convertedModifiedDone.done),
       removed: toFolderRelList(root, removedDone),
       renamed: toFolderRelList(root, renamedDone),
       failed: toFolderRelFailures(root, failed),
-      cancelled: true,
+      ...(convertedModifiedDone.cancelled ? { cancelled: true } : { semanticPaused: true }),
     };
   }
 
@@ -430,6 +447,13 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
         cancelled: true,
       };
     }
+    if (!canEmbed(opts)) {
+      return {
+        added: toFolderRelList(root, addedDone), modified: [],
+        removed: toFolderRelList(root, removedDone), renamed: toFolderRelList(root, renamedDone),
+        failed: toFolderRelFailures(root, failed), semanticPaused: true,
+      };
+    }
     const chunks = await indexOne(indexer, root, sourcePath, failed);
     if (chunks > 0) addedDone.push(sourcePath);
   }
@@ -444,8 +468,23 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
         cancelled: true,
       };
     }
+    if (!canEmbed(opts)) {
+      return {
+        added: toFolderRelList(root, addedDone), modified: toFolderRelList(root, modifiedDone),
+        removed: toFolderRelList(root, removedDone), renamed: toFolderRelList(root, renamedDone),
+        failed: toFolderRelFailures(root, failed), semanticPaused: true,
+      };
+    }
     const chunks = await indexOne(indexer, root, sourcePath, failed);
     if (chunks > 0) modifiedDone.push(sourcePath);
+  }
+
+  if (!canEmbed(opts)) {
+    return {
+      added: toFolderRelList(root, addedDone), modified: toFolderRelList(root, modifiedDone),
+      removed: toFolderRelList(root, removedDone), renamed: toFolderRelList(root, renamedDone),
+      failed: toFolderRelFailures(root, failed), semanticPaused: true,
+    };
   }
 
   log.info(
@@ -470,10 +509,11 @@ async function indexFreshConvertedSources(
   paths: string[],
   failed: { name: string; error: string }[],
   opts: SyncOptions,
-): Promise<{ done: string[]; cancelled: boolean }> {
+): Promise<{ done: string[]; cancelled: boolean; semanticPaused?: boolean }> {
   const done: string[] = [];
   for (const sourcePath of paths) {
     if (shouldStop(opts)) return { done, cancelled: true };
+    if (!canEmbed(opts)) return { done, cancelled: false, semanticPaused: true };
     const folderRel = folderRelOf(root, sourcePath);
     if (folderRel == null || !isConvertibleSource(folderRel)) continue;
     try {
@@ -483,6 +523,7 @@ async function indexFreshConvertedSources(
       failed.push({ name: sourcePath, error: errorMessage(err) });
     }
   }
+  if (!canEmbed(opts)) return { done, cancelled: false, semanticPaused: true };
   return { done, cancelled: false };
 }
 

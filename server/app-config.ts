@@ -265,7 +265,7 @@ export function getHostedAccountSession(): HostedAccountSession | undefined {
 }
 
 export function setHostedAccountSession(session: HostedAccountSession | undefined): void {
-  const cfg = readAppConfig();
+  const cfg = readAppConfigStrict();
   if (session) cfg.account = { ...(cfg.account ?? {}), session: { ...session } };
   else {
     delete cfg.account?.session;
@@ -285,13 +285,13 @@ export function getEmbeddingSource(): EmbeddingSource {
 }
 
 export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
+  const cfg = readAppConfigStrict();
   if (source === 'stashbase-account') {
     if (!getHostedAccountSession()) throw new Error('Sign in before selecting the StashBase account allowance.');
   } else {
     const direct = getEmbedderConfig();
     if (!direct.apiKey || direct.provider !== source) throw new Error(`Add a ${source === 'openrouter' ? 'OpenRouter' : 'OpenAI'} key before selecting it.`);
   }
-  const cfg = readAppConfig();
   cfg.embeddingSource = source;
   writeAppConfigStrict(cfg);
   return source;
@@ -328,7 +328,7 @@ export function setApiKey(key: string | undefined, provider: EmbedderProvider = 
 }
 
 export function setEmbedderConfig(next: { provider: EmbedderProvider; apiKey?: string }): EmbedderConfig {
-  const cfg = readAppConfig();
+  const cfg = readAppConfigStrict();
   const defaults = EMBEDDER_DEFAULTS[next.provider];
   cfg.embedder = {
     ...(cfg.embedder ?? {}),
@@ -385,7 +385,7 @@ export function setTranscriptionPreferences(next: Partial<TranscriptionPreferenc
     ? current.language
     : normalizeTranscriptionLanguage(next.language);
   if (!language) throw new Error('transcription language must be `auto` or a language code');
-  const cfg = readAppConfig();
+  const cfg = readAppConfigStrict();
   cfg.transcription = { providerId, modelId, language };
   writeAppConfigStrict(cfg);
   return { providerId, modelId, language };
@@ -448,7 +448,12 @@ export function getAppearancePreferences(): AppearancePreferences {
 }
 
 export function setAppearancePreferences(next: Partial<AppearancePreferences>): AppearancePreferences {
-  return appearancePreferences.set(next);
+  const cfg = readAppConfigStrict();
+  const current = normalizeAppearancePreferences(cfg.appearance);
+  const resolved = normalizeAppearancePreferences({ ...current, ...next });
+  cfg.appearance = resolved;
+  writeAppConfigStrict(cfg);
+  return resolved;
 }
 
 /** One-time upgrade from the very first global-embedder schema, when
@@ -475,7 +480,7 @@ export function getOnboardingPreferences(): OnboardingPreferences {
 }
 
 export function setOnboardingPreferences(next: Partial<OnboardingPreferences>): OnboardingPreferences {
-  const cfg = readAppConfig();
+  const cfg = readAppConfigStrict();
   const current = cfg.onboarding ?? {};
   const updated = {
     ...current,

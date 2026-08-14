@@ -1,6 +1,5 @@
 import express from 'express';
 import {
-  getEmbedderConfig,
   getHostedAccountSession,
   setEmbeddingSource,
 } from '../app-config.ts';
@@ -11,6 +10,7 @@ import {
   finishHostedOAuth,
   hostedAccountState,
   hostedOAuthStatus,
+  noteHostedOAuthAppReturn,
   signOutHostedAccount,
   type HostedOAuthProvider,
 } from '../hosted-account.ts';
@@ -18,9 +18,10 @@ import { startHostedEmbeddingBroker } from '../hosted-embedding-broker.ts';
 import { errorMessage, logger } from '../log.ts';
 import { oauthResultPage } from '../oauth-result-page.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from '../state.ts';
+import { isEmbeddingAvailable } from '../embedding-availability.ts';
 
 const log = logger('routes/account');
-const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google', 'github']);
+const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google']);
 
 function oauthProvider(value: unknown): HostedOAuthProvider | null {
   return typeof value === 'string' && OAUTH_PROVIDERS.has(value as HostedOAuthProvider)
@@ -33,8 +34,9 @@ function callbackOrigin(req: express.Request): string {
 }
 
 async function activateHostedSource(reason: string): Promise<boolean> {
+  // Learn a zero allowance before any daemon bind/reconcile can spend work.
+  await hostedAccountState(true);
   await startHostedEmbeddingBroker();
-  const hadDirectKey = !!getEmbedderConfig().apiKey;
   setEmbeddingSource('stashbase-account');
   try {
     await resetIndexerRuntime({ forgetBindings: true });
@@ -45,7 +47,7 @@ async function activateHostedSource(reason: string): Promise<boolean> {
   } catch (error: unknown) {
     log.warn(`${reason}: runtime reset/rebind failed: ${errorMessage(error)}`);
   }
-  return !hadDirectKey;
+  return isEmbeddingAvailable();
 }
 
 export function mount(app: express.Express): void {
@@ -81,6 +83,7 @@ export function mount(app: express.Express): void {
       failHostedOAuth(flowId, providerError);
       return res.status(400).type('html').send(oauthResultPage({
         title: 'Sign-in failed', message: providerError, kind: 'error',
+        returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,
       }));
     }
     try {
@@ -92,12 +95,14 @@ export function mount(app: express.Express): void {
         title: 'Signed in to StashBase',
         message: 'Your account is ready. This page will return you to the app automatically.',
         autoReturn: true,
+        returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,
       }));
     } catch (error: unknown) {
       const message = errorMessage(error);
       failHostedOAuth(flowId, message);
       res.status(400).type('html').send(oauthResultPage({
         title: 'Sign-in failed', message, kind: 'error',
+        returnStatusUrl: `/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`,
       }));
     }
   });
@@ -106,6 +111,10 @@ export function mount(app: express.Express): void {
     const flowId = typeof req.query.flow === 'string' ? req.query.flow : '';
     if (!flowId) return res.status(400).json({ error: 'Missing sign-in flow.' });
     res.json(hostedOAuthStatus(flowId));
+  });
+
+  app.post('/api/account/oauth/app-return', (_req, res) => {
+    res.json({ acknowledged: noteHostedOAuthAppReturn() });
   });
 
   app.put('/api/account/source', async (_req, res) => {

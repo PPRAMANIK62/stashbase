@@ -18,6 +18,22 @@ test('Library Operations rejects AI Index retrieval without embedding configurat
   );
 });
 
+test('Library Operations distinguishes exhausted hosted quota', async () => {
+  const operations = createLibraryOperations({
+    getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
+    retrieval: { search: async () => ({
+      evidence: [], availability: { state: 'unavailable' as const, reason: 'hosted-quota-exhausted' as const }, truncated: false,
+    }) },
+  });
+
+  await assert.rejects(
+    operations.search({ query: 'architecture' }),
+    (error: unknown) => error instanceof LibraryOperationError
+      && error.status === 402
+      && error.code === 'HOSTED_QUOTA_EXHAUSTED',
+  );
+});
+
 test('Library Operations keeps search result identity at the visible source path', async () => {
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),

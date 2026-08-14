@@ -39,6 +39,56 @@ function runConfigWrite(home: string) {
   );
 }
 
+function runConfigMutation(home: string, statement: string) {
+  return spawnSync(
+    process.execPath,
+    [
+      '--no-warnings',
+      '--import',
+      'tsx',
+      '--input-type=module',
+      '--eval',
+      `
+        try {
+          const config = await import('./server/app-config.ts');
+          ${statement}
+        } catch (error) {
+          process.stderr.write(error instanceof Error ? error.message : String(error));
+          process.exitCode = 17;
+        }
+      `,
+    ],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: { ...process.env, HOME: home },
+    },
+  );
+}
+
+test('credential and source mutations never overwrite malformed config through a fallback read', () => {
+  const statements = [
+    `config.setHostedAccountSession({ accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'person@example.com' });`,
+    `config.setEmbedderConfig({ provider: 'openai', apiKey: 'sk-test' });`,
+    `config.setEmbeddingSource('openai');`,
+  ];
+  for (const statement of statements) {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-config-corrupt-test-'));
+    const configDir = path.join(home, '.stashbase');
+    const configPath = path.join(configDir, 'config.json');
+    fs.mkdirSync(configDir);
+    fs.writeFileSync(configPath, '{ malformed but user-owned config');
+    try {
+      const result = runConfigMutation(home, statement);
+      assert.equal(result.status, 17);
+      assert.match(result.stderr, /Could not read .*config\.json: invalid JSON/);
+      assert.equal(fs.readFileSync(configPath, 'utf8'), '{ malformed but user-owned config');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  }
+});
+
 test('macOS config writes do not alter an ACL that blocks atomic temp files', {
   skip: process.platform !== 'darwin',
 }, () => {

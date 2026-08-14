@@ -380,6 +380,36 @@ test('actual reconcile skips semantic preflight entirely without a key', async (
   }
 });
 
+test('hosted quota exhaustion pauses a batch before another embedding request', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-quota-pause-'));
+  const first = path.join(root, 'first.md');
+  const second = path.join(root, 'second.md');
+  fs.writeFileSync(first, 'first');
+  fs.writeFileSync(second, 'second');
+  let available = true;
+  const upserts: string[] = [];
+  try {
+    const result = await syncIndex({
+      syncDiff: async () => ({ added: [first, second], modified: [], deleted: [], renamed: [] }),
+      listFiles: async () => ({}),
+      upsertFile: async (source: string) => {
+        upserts.push(source);
+        available = false;
+        throw new Error('hosted allowance exhausted');
+      },
+      status: async () => ({ pending: [first, second], total: 2, indexed: 0, pendingCount: 2, orphanedCount: 0, orphaned: [], upToDate: false }),
+    } as unknown as Indexer, root, {
+      semanticEnabled: true,
+      embeddingAvailable: () => available,
+    });
+    assert.deepEqual(upserts, [first]);
+    assert.equal(result.semanticPaused, true);
+    assert.equal(result.cancelled, undefined);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('actual no-op reconcile neither warns nor publishes a decision', async () => {
   let published = false;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-noop-'));

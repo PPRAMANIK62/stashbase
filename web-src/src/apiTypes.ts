@@ -142,6 +142,8 @@ export interface IndexStatus {
   upToDate: boolean;
   /** False when semantic indexing/retrieval is unavailable, e.g. no embedding key. */
   semanticEnabled?: boolean;
+  /** False while a configured hosted source is blocked by its shared quota. */
+  semanticAvailable?: boolean;
   /** Human-readable reason when semantic indexing/retrieval is disabled. */
   semanticDisabledReason?: string;
   /** True when no UI-visible file is waiting for embedding. Unlike
@@ -149,7 +151,7 @@ export interface IndexStatus {
    *  relevant to search-readiness accounting. */
   visibleIndexingSettled?: boolean;
   semanticIndexing?: {
-    state: 'disabled' | 'awaiting-decision' | 'paused' | 'partial-paused' | 'indexing' | 'partial-indexing' | 'ready' | 'failed';
+    state: 'disabled' | 'quota-exhausted' | 'partial-quota-exhausted' | 'awaiting-decision' | 'paused' | 'partial-paused' | 'indexing' | 'partial-indexing' | 'ready' | 'failed';
     sourceCount?: number;
     estimatedBytes?: number;
   };
@@ -307,14 +309,13 @@ export interface HostedQuota {
 export interface HostedAccountState {
   signedIn: boolean;
   active: boolean;
-  userId?: string;
   email?: string;
   quota?: HostedQuota;
   quotaUnavailable?: boolean;
   backfillStarted?: boolean;
 }
 
-export type HostedOAuthProvider = 'google' | 'github';
+export type HostedOAuthProvider = 'google';
 
 export interface HostedOAuthStart {
   flowId: string;
@@ -325,6 +326,7 @@ export interface HostedOAuthStart {
 export interface HostedOAuthStatus {
   state: 'pending' | 'complete' | 'error';
   error?: string;
+  appReturned?: boolean;
 }
 
 export interface EmbedderState {

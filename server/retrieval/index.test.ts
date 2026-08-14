@@ -22,6 +22,22 @@ test('Retrieval reports unavailable semantic mode without invoking its adapter',
   assert.equal(called, false);
 });
 
+test('Retrieval distinguishes exhausted hosted quota without invoking vector search', async () => {
+  let called = false;
+  const retrieval = createRetrieval({
+    hasEmbeddingKey: () => false,
+    embeddingUnavailableReason: () => 'hosted-quota-exhausted',
+    vectorSearch: async () => {
+      called = true;
+      return [];
+    },
+  });
+
+  const result = await retrieval.search({ mode: 'semantic', query: 'architecture' });
+  assert.deepEqual(result.availability, { state: 'unavailable', reason: 'hosted-quota-exhausted' });
+  assert.equal(called, false);
+});
+
 test('Retrieval normalizes keyword matches into flat visible-source evidence', async () => {
   const retrieval = createRetrieval({
     keywordSearch: async () => ({

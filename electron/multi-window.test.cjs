@@ -10,6 +10,7 @@ const {
 const {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
+  classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
@@ -18,6 +19,7 @@ const {
   focusAllowedSenderWindow,
   focusWindow,
   isOAuthReturnUrl,
+  isStashBaseProtocolUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -323,6 +325,12 @@ test('OAuth return deep links have one exact, data-free authority', () => {
   assert.equal(isOAuthReturnUrl('stashbase://other-action'), false);
   assert.equal(isOAuthReturnUrl('https://oauth-complete'), false);
   assert.equal(isOAuthReturnUrl('not a URL'), false);
+  assert.equal(isStashBaseProtocolUrl('stashbase://other-action'), true);
+  assert.equal(isStashBaseProtocolUrl('stashbase:not-a-return'), true);
+  assert.equal(isStashBaseProtocolUrl('https://oauth-complete'), false);
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase', 'stashbase://oauth-complete']), 'oauth-return');
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase', 'stashbase://other-action']), 'inert');
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase']), 'ordinary');
 
   const packageJson = require('../package.json');
   assert.deepEqual(packageJson.build.protocols, [{

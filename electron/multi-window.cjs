@@ -212,6 +212,18 @@ function isOAuthReturnUrl(value) {
   }
 }
 
+function isStashBaseProtocolUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try { return new URL(value).protocol === 'stashbase:'; }
+  catch { return false; }
+}
+
+function classifyProtocolLaunch(argv) {
+  if (argv.some(isOAuthReturnUrl)) return 'oauth-return';
+  if (argv.some(isStashBaseProtocolUrl)) return 'inert';
+  return 'ordinary';
+}
+
 async function openOrFocusFolder({
   registry,
   folder,
@@ -353,6 +365,7 @@ function createRendererFlushReadiness() {
 module.exports = {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
+  classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
@@ -361,6 +374,7 @@ module.exports = {
   focusAllowedSenderWindow,
   focusWindow,
   isOAuthReturnUrl,
+  isStashBaseProtocolUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,

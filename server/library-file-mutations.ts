@@ -1,4 +1,5 @@
 import { isEmbeddingConfigured } from './app-config.ts';
+import { isEmbeddingAvailable } from './embedding-availability.ts';
 import { queueConvertibleSource } from './conversion-dispatch.ts';
 import { clearRecord } from './conversion-status.ts';
 import { deleteDerivedForSource } from './derived-store.ts';
@@ -163,7 +164,7 @@ export async function moveLibraryFile(
           log.warn(`library move: conversion kickoff failed for ${newTarget.abs}: ${errorMessage(err)}`);
         }
         indexWarning = 'Searchable text is being regenerated in the background.';
-      } else if (!isEmbeddingConfigured()) {
+      } else if (!isEmbeddingAvailable()) {
         indexWarning = 'AI Index was not updated because it is not set up.';
       } else {
         const movedContent = readText(newTarget.folderRel) ?? content ?? '';
@@ -178,7 +179,7 @@ export async function moveLibraryFile(
         }
       }
       for (const updated of applied?.updated ?? []) {
-        if (!isEmbeddingConfigured()) break;
+        if (!isEmbeddingAvailable()) break;
         if (updated.name === newTarget.folderRel) continue;
         const body = readText(updated.name);
         if (body != null) await indexer.upsertFile(filesystemPath.join(oldTarget.folderRoot, updated.name), body);

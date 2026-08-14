@@ -243,12 +243,13 @@ export function useSearchActions(
       const s = outcome.status;
       const indexReady = s.indexReady !== false;
       const semanticEnabled = s.semanticEnabled !== false;
+      const semanticAvailable = s.semanticAvailable !== false;
       if (stateRef.current.embedderHasKey !== semanticEnabled) {
         dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: semanticEnabled });
       }
-      const newPending = semanticEnabled && indexReady ? new Set(s.pending ?? []) : new Set<string>();
+      const newPending = semanticEnabled && semanticAvailable && indexReady ? new Set(s.pending ?? []) : new Set<string>();
       const visibleIndexingSettled =
-        !semanticEnabled
+        !semanticAvailable
         || (indexReady && (s.visibleIndexingSettled ?? newPending.size === 0));
       let newConv = s.pendingConversions ?? [];
       const newBlocked = s.blockedConversions ?? [];
@@ -272,26 +273,26 @@ export function useSearchActions(
       // so a fresh drop's files flicker in and out of `pending`
       // unreliably. Hold every graced import in `newPending` until the
       // UI-visible pending set settles (batch done) or the grace expires.
-      if (semanticEnabled && importIndexGrace.current.size > 0) {
+      if (semanticAvailable && importIndexGrace.current.size > 0) {
         const stillGracing = foldGraceMap(
           importIndexGrace.current,
           () => visibleIndexingSettled, // batch fully indexed
           Date.now(),
         );
         for (const name of stillGracing) newPending.add(name);
-      } else if (!semanticEnabled && importIndexGrace.current.size > 0) {
+      } else if (!semanticAvailable && importIndexGrace.current.size > 0) {
         importIndexGrace.current.clear();
       }
       // And for key-backfill marks: the daemon owns a name once it shows
       // up in its own pending set.
-      if (semanticEnabled && keyBackfillGrace.current.size > 0) {
+      if (semanticAvailable && keyBackfillGrace.current.size > 0) {
         const stillGracing = foldGraceMap(
           keyBackfillGrace.current,
           (name) => newPending.has(name),
           Date.now(),
         );
         for (const name of stillGracing) newPending.add(name);
-      } else if (!semanticEnabled && keyBackfillGrace.current.size > 0) {
+      } else if (!semanticAvailable && keyBackfillGrace.current.size > 0) {
         keyBackfillGrace.current.clear();
       }
       const prev = stateRef.current;
@@ -375,7 +376,7 @@ export function useSearchActions(
       // Keep polling fast while a conversion is in flight, even if
       // the index itself is settled — the user is waiting on a file
       // to appear.
-      const busy = (semanticEnabled && (!indexReady || !visibleIndexingSettled)) || newConv.length > 0;
+      const busy = (semanticAvailable && (!indexReady || !visibleIndexingSettled)) || newConv.length > 0;
       if (folderPathAtStart) {
         dispatch({
           type: 'LIBRARY_FOLDER_STATUS',
