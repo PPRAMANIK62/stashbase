@@ -7,23 +7,24 @@ const { scanBugReportText } = require('./bug-report-redaction.cjs');
 const { ARTIFACT_KIND } = require('./bug-report-service.cjs');
 
 const GITHUB_NEW_ISSUE_URL = 'https://github.com/liliu-z/stashbase/issues/new';
+const DOWNLOADS_FOLDER_BASE_NAME = 'StashBase bug report';
 
 const HANDOFF_ERROR = Object.freeze({
   PREPARE_FAILED: Object.freeze({
     code: 'PREPARE_FAILED',
     message: 'StashBase could not prepare the selected report files. Nothing was opened. Please try again.',
   }),
-  REVEAL_FAILED: Object.freeze({
-    code: 'REVEAL_FAILED',
-    message: 'The report files were prepared, but StashBase could not open their attachments folder. GitHub was not opened. Please try again.',
+  DOWNLOADS_FAILED: Object.freeze({
+    code: 'DOWNLOADS_FAILED',
+    message: 'The report files could not be saved to your Downloads folder. GitHub was not opened. Please try again.',
   }),
   GITHUB_OPEN_FAILED: Object.freeze({
     code: 'GITHUB_OPEN_FAILED',
-    message: 'The report files were prepared and their folder was opened, but StashBase could not open GitHub. Please try again.',
+    message: 'The report files were saved to your Downloads folder, but StashBase could not open GitHub. Please try again.',
   }),
   SAVE_FAILED: Object.freeze({
     code: 'SAVE_FAILED',
-    message: 'StashBase could not save the selected report files. Please try again.',
+    message: 'The report files could not be saved to your Downloads folder. Please try again.',
   }),
 });
 
@@ -97,12 +98,12 @@ function environmentMarkdown(snapshot) {
 }
 
 function issueTitle(snapshot) {
-  const happened = inlineValue(snapshot?.description?.happened, '');
-  if (happened) {
+  const problem = inlineValue(snapshot?.description?.problem, '');
+  if (problem) {
     const maximumLength = 100;
-    return happened.length <= maximumLength
-      ? happened
-      : `${happened.slice(0, maximumLength - 1).trimEnd()}\u2026`;
+    return problem.length <= maximumLength
+      ? problem
+      : `${problem.slice(0, maximumLength - 1).trimEnd()}\u2026`;
   }
   const diagnosticsArtifact = snapshot?.artifacts?.find((artifact) => (
     artifact?.kind === ARTIFACT_KIND.DIAGNOSTICS
@@ -117,13 +118,9 @@ function reportField(value) {
 
 function buildGitHubIssueBody(snapshot) {
   return [
-    '## What happened',
+    '## Problem',
     '',
-    reportField(snapshot?.description?.happened),
-    '',
-    '## What did you expect to happen',
-    '',
-    reportField(snapshot?.description?.expected),
+    reportField(snapshot?.description?.problem),
     '',
     '## Steps to reproduce',
     '',
@@ -168,13 +165,13 @@ function createBugReportHandoff({
   createSessionId = createFilesystemId,
   createReportId = createFilesystemId,
   createTemporaryId = createFilesystemId,
-  revealDirectory,
+  downloadsDirectory,
   openExternal,
 } = {}) {
   if (
     typeof baseTemporaryDirectory !== 'string'
     || !pathModule.isAbsolute(baseTemporaryDirectory)
-    || typeof revealDirectory !== 'function'
+    || typeof downloadsDirectory !== 'function'
     || typeof openExternal !== 'function'
   ) {
     throw new TypeError('Bug-report handoff dependencies are required.');
@@ -183,6 +180,43 @@ function createBugReportHandoff({
   let sessionDirectory = null;
   let initialization = null;
   const preparedByApproval = new Map();
+  const downloadsByApproval = new Map();
+
+  async function allocateDownloadsFolder() {
+    const root = await downloadsDirectory();
+    if (typeof root !== 'string' || !pathModule.isAbsolute(root)) {
+      throw new Error('Invalid downloads directory');
+    }
+    for (let attempt = 1; attempt <= 100; attempt += 1) {
+      const name = attempt === 1 ? DOWNLOADS_FOLDER_BASE_NAME : `${DOWNLOADS_FOLDER_BASE_NAME} ${attempt}`;
+      const destination = pathModule.join(root, name);
+      try {
+        await fsModule.mkdir(destination, { recursive: false });
+        return destination;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') throw error;
+      }
+    }
+    throw new Error('No available downloads folder name');
+  }
+
+  // One approval keeps one Downloads folder: retries and repeated actions heal
+  // that folder instead of accumulating copies; a fresh approval allocates a
+  // new one.
+  async function copyPreparedToDownloads(snapshot, prepared) {
+    let destination = downloadsByApproval.get(snapshot.approvalId) ?? null;
+    if (destination) await fsModule.mkdir(destination, { recursive: true });
+    else {
+      destination = await allocateDownloadsFolder();
+      downloadsByApproval.set(snapshot.approvalId, destination);
+    }
+    for (const fileName of prepared.fileNames) {
+      await fsModule.copyFile(
+        pathModule.join(prepared.directory, fileName),
+        pathModule.join(destination, fileName),
+      );
+    }
+  }
 
   async function initializeSession() {
     if (sessionDirectory) return;
@@ -284,10 +318,9 @@ function createBugReportHandoff({
       if (!prepared) return fail(HANDOFF_ERROR.PREPARE_FAILED);
 
       try {
-        const revealed = await revealDirectory(prepared.directory);
-        if (revealed === false || (typeof revealed === 'string' && revealed)) throw new Error('Reveal failed');
+        await copyPreparedToDownloads(snapshot, prepared);
       } catch {
-        return fail(HANDOFF_ERROR.REVEAL_FAILED, prepared.artifactCount);
+        return fail(HANDOFF_ERROR.DOWNLOADS_FAILED, prepared.artifactCount);
       }
 
       try {
@@ -300,39 +333,14 @@ function createBugReportHandoff({
       return { ok: true, prepared: { artifactCount: prepared.artifactCount } };
     },
 
-    async saveArtifacts(snapshot, destinationDirectory) {
+    async saveToDownloads(snapshot) {
       const prepared = await preparedByApproval.get(snapshot?.approvalId);
-      if (
-        !prepared
-        || typeof destinationDirectory !== 'string'
-        || !pathModule.isAbsolute(destinationDirectory)
-      ) return fail(HANDOFF_ERROR.SAVE_FAILED);
-
-      let resolvedTemporaryRoot;
-      let resolvedDestination;
-      try {
-        [resolvedTemporaryRoot, resolvedDestination] = await Promise.all([
-          fsModule.realpath(baseTemporaryDirectory),
-          fsModule.realpath(destinationDirectory),
-        ]);
-      } catch {
-        return fail(HANDOFF_ERROR.SAVE_FAILED);
-      }
-      const relativeToTemporaryRoot = pathModule.relative(resolvedTemporaryRoot, resolvedDestination);
-      if (
-        relativeToTemporaryRoot === ''
-        || (!relativeToTemporaryRoot.startsWith('..') && !pathModule.isAbsolute(relativeToTemporaryRoot))
-      ) return fail(HANDOFF_ERROR.SAVE_FAILED);
+      if (!prepared) return fail(HANDOFF_ERROR.PREPARE_FAILED);
 
       try {
-        for (const fileName of prepared.fileNames) {
-          await fsModule.copyFile(
-            pathModule.join(prepared.directory, fileName),
-            pathModule.join(destinationDirectory, fileName),
-          );
-        }
+        await copyPreparedToDownloads(snapshot, prepared);
       } catch {
-        return fail(HANDOFF_ERROR.SAVE_FAILED);
+        return fail(HANDOFF_ERROR.SAVE_FAILED, prepared.artifactCount);
       }
       return { ok: true, saved: { artifactCount: prepared.artifactCount } };
     },

@@ -11,14 +11,20 @@ export function oauthResultPage({
   message,
   kind = 'success',
   autoReturn = false,
+  returnStatusUrl,
+  returnIntentUrl,
 }: {
   title: string;
   message: string;
   kind?: 'success' | 'error';
   autoReturn?: boolean;
+  returnStatusUrl?: string;
+  returnIntentUrl?: string;
 }): string {
   const safeTitle = escapeHtml(title);
   const safeMessage = escapeHtml(message);
+  const returnStatusJson = JSON.stringify(returnStatusUrl ?? '').replace(/</g, '\\u003c');
+  const returnIntentJson = JSON.stringify(returnIntentUrl ?? '').replace(/</g, '\\u003c');
   const isSuccess = kind === 'success';
   const icon = isSuccess
     ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.4 12.1 3 3L16.8 8.7"/></svg>'
@@ -30,7 +36,7 @@ export function oauthResultPage({
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
   <title>${safeTitle}</title>
   <style>
     :root { color-scheme: light; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -80,9 +86,12 @@ export function oauthResultPage({
       const button = document.getElementById('return-button');
       const status = document.getElementById('return-status');
       const autoReturn = card.dataset.autoReturn === 'true';
+      const returnStatusUrl = ${returnStatusJson};
+      const returnIntentUrl = ${returnIntentJson};
       let handedOff = false;
+      let returnAttempted = false;
 
-      const closeAfterHandoff = () => {
+      const closeAfterAcknowledgement = () => {
         if (handedOff) return;
         handedOff = true;
         button.hidden = true;
@@ -90,27 +99,51 @@ export function oauthResultPage({
         window.setTimeout(() => window.close(), 250);
       };
 
-      const observeHandoff = () => {
-        window.setTimeout(() => {
-          if (document.visibilityState === 'hidden' || !document.hasFocus()) closeAfterHandoff();
-        }, 120);
+      const pollAcknowledgement = async () => {
+        if (handedOff || !returnAttempted || !returnStatusUrl) return;
+        try {
+          const response = await fetch(returnStatusUrl, { cache: 'no-store' });
+          const result = response.ok ? await response.json() : null;
+          if (result && result.appReturned === true) {
+            closeAfterAcknowledgement();
+            return;
+          }
+        } catch { /* keep the fallback visible and retry */ }
+        window.setTimeout(pollAcknowledgement, 300);
       };
 
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') closeAfterHandoff();
-      });
-      window.addEventListener('blur', observeHandoff);
-      button.addEventListener('click', () => {
+      const beginReturnAttempt = () => {
+        if (!returnAttempted) {
+          returnAttempted = true;
+          void pollAcknowledgement();
+        }
         status.textContent = 'Opening StashBase…';
         window.setTimeout(() => {
           if (!handedOff) status.textContent = 'Could not open automatically. Try the button again.';
         }, 1600);
+      };
+
+      const openStashBase = async () => {
+        beginReturnAttempt();
+        if (returnIntentUrl) {
+          try { await fetch(returnIntentUrl, { method: 'POST', cache: 'no-store' }); }
+          catch { /* the native fallback can still open the app */ }
+        }
+        window.location.href = '${APP_RETURN_URL}';
+      };
+
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        void openStashBase();
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void pollAcknowledgement();
       });
 
       if (!autoReturn) return;
       window.setTimeout(() => {
         if (!handedOff && document.visibilityState === 'visible' && document.hasFocus()) {
-          window.location.href = '${APP_RETURN_URL}';
+          void openStashBase();
         }
       }, 1200);
       window.setTimeout(() => {

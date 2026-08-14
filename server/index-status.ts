@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { isEmbeddingConfigured } from './app-config.ts';
+import { embeddingAvailability } from './embedding-availability.ts';
 import { getConversionSchedulerSnapshot, getInFlightConversions } from './conversion.ts';
 import { clearRecord, listPreparationProblems, readProgress, type ConversionProgress } from './conversion-status.ts';
 import { blockedAudioSourcesForFolder } from './audio-transcription.ts';
@@ -24,8 +24,10 @@ export function semanticIndexingState(input: {
   indexed: number;
   pending: number;
   failed: boolean;
+  quotaExhausted?: boolean;
 }): string {
   if (!input.enabled) return 'disabled';
+  if (input.quotaExhausted) return input.indexed > 0 ? 'partial-quota-exhausted' : 'quota-exhausted';
   if (input.decision === 'awaiting-decision') return 'awaiting-decision';
   if (input.decision === 'paused') return input.indexed > 0 ? 'partial-paused' : 'paused';
   if (input.failed) return 'failed';
@@ -37,13 +39,16 @@ export async function buildIndexStatus(folderRoot: string): Promise<Record<strin
   const curRoot = filesystemPath.absolute(folderRoot);
   const status = await indexer.status(curRoot);
   const treeVersion = getFsChangeCounter();
-  const semanticEnabled = isEmbeddingConfigured();
-  const pending = semanticEnabled ? pendingVisibleFiles(status.pending, curRoot, folderRoot) : [];
+  const availability = embeddingAvailability();
+  const semanticEnabled = availability.configured;
+  const semanticAvailable = availability.available;
+  const unavailableReason = availability.available ? null : availability.reason;
+  const pending = semanticAvailable ? pendingVisibleFiles(status.pending, curRoot, folderRoot) : [];
   const orphaned = status.orphaned
     .map((p) => filesystemPath.relative(curRoot, p))
     .filter((p): p is string => p != null);
   const schedulerSnapshot = getConversionSchedulerSnapshot();
-  const semanticDecision = semanticEnabled ? getSemanticIndexingState(curRoot) : null;
+  const semanticDecision = semanticAvailable ? getSemanticIndexingState(curRoot) : null;
   const indexWarning = getIndexWarning(curRoot);
   const semanticState = semanticIndexingState({
     enabled: semanticEnabled,
@@ -51,18 +56,24 @@ export async function buildIndexStatus(folderRoot: string): Promise<Record<strin
     indexed: status.indexed,
     pending: pending.length,
     failed: indexWarning != null,
+    quotaExhausted: unavailableReason === 'hosted-quota-exhausted',
   });
 
   return {
     folder: curRoot,
     ...status,
     semanticEnabled,
-    ...(semanticEnabled ? {} : { semanticDisabledReason: 'Embedding API key required' }),
+    semanticAvailable,
+    ...(!semanticAvailable ? {
+      semanticDisabledReason: unavailableReason === 'hosted-quota-exhausted'
+        ? 'Hosted allowance exhausted; Exact search remains available'
+        : 'Embedding source required',
+    } : {}),
     pending,
     pendingCount: pending.length,
     orphaned,
     orphanedCount: orphaned.length,
-    visibleIndexingSettled: !semanticEnabled || semanticDecision != null || pending.length === 0,
+    visibleIndexingSettled: !semanticAvailable || semanticDecision != null || pending.length === 0,
     semanticIndexing: {
       state: semanticState,
       ...(semanticDecision ? {

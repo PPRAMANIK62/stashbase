@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('reportReview', Object.freeze({
   includeArtifact: (artifactId) => ipcRenderer.invoke(CHANNEL.INCLUDE_ARTIFACT, artifactId),
   excludeArtifact: (artifactId) => ipcRenderer.invoke(CHANNEL.EXCLUDE_ARTIFACT, artifactId),
   prepare: () => ipcRenderer.invoke(CHANNEL.PREPARE),
+  reopen: () => ipcRenderer.invoke(CHANNEL.REOPEN),
   openGitHub: () => ipcRenderer.invoke(CHANNEL.OPEN_GITHUB),
   saveArtifacts: () => ipcRenderer.invoke(CHANNEL.SAVE_ARTIFACTS),
   discard: () => ipcRenderer.invoke(CHANNEL.DISCARD),

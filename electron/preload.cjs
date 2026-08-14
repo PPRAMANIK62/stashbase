@@ -71,8 +71,7 @@ contextBridge.exposeInMainWorld('electron', {
    *  in-app webview overlay; too many sites block iframing for it to
    *  be reliable, and the system browser already has user cookies. */
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
-  /** Restore and focus this window after a browser-owned OAuth flow. */
-  focusWindow: () => ipcRenderer.invoke('window:focus-self'),
+  reportBug: () => ipcRenderer.invoke('bug-report:open'),
   openFolderWindow: (name) => ipcRenderer.invoke('window:openFolder', name),
   /** Keep the main-process folder → BrowserWindow registry current so
    *  "Open in New Window" can focus an existing matching context. */

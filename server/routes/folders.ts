@@ -17,7 +17,7 @@ import {
 } from '../files.ts';
 import { applyRenamePlan, planRenameLinks } from '../links.ts';
 import { toSourcePath } from '../folder.ts';
-import { isEmbeddingConfigured } from '../app-config.ts';
+import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
@@ -129,7 +129,7 @@ export function mount(app: express.Express): void {
             throw new Error(`failed to update links in ${applied.failed.map((f) => f.name).join(', ')}`);
           }
 
-          if (!isEmbeddingConfigured()) {
+          if (!isEmbeddingAvailable()) {
             log.info(`rename_folder: skipped index update for ${oldPath} -> ${newPath} because no embedding key is configured`);
             return;
           }

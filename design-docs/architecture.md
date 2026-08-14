@@ -90,7 +90,8 @@ user-visible source file.
   rebinds the single local daemon without rebuilding compatible vectors.
 - Hosted indexing and meaning-based queries share one token allowance. When it
   is exhausted, hosted semantic work stops while exact text retrieval and all
-  other local workflows remain available.
+  other local workflows remain available. Pending semantic work resumes after
+  the allowance resets or the user selects an available BYOK source.
 - Incomplete, stale, or partial derived output is never current truth.
 - Reconcile and reindex bring external file changes back into the library.
 - Reconcile estimates new or changed semantic work before embedding. Large

@@ -10,14 +10,15 @@ const {
 const {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
+  classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
-  focusAllowedSenderWindow,
   focusWindow,
   isOAuthReturnUrl,
+  isStashBaseProtocolUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -260,6 +261,8 @@ test('folder registry finds an existing context, excludes the sender, and retire
   registry.add('window-2', second);
   registry.setFolder('window-1', 'C:\\Users\\Ada\\Notes');
 
+  assert.equal(registry.windowForId('window-1'), first);
+  assert.equal(registry.windowForId('missing'), null);
   assert.equal(registry.findByFolder('c:/users/ada/notes'), first);
   assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes', { excludeWindowId: 'window-1' }), null);
 
@@ -281,38 +284,6 @@ test('focusing an existing folder window restores it before bringing it forward'
   assert.deepEqual(calls, ['restore', 'show', 'focus']);
 });
 
-test('a live renderer may focus only its own allowed main window', () => {
-  const calls = [];
-  const sender = { id: 17 };
-  const win = {
-    isDestroyed: () => false,
-    isMinimized: () => true,
-    restore: () => calls.push('restore'),
-    show: () => calls.push('show'),
-    focus: () => calls.push('focus'),
-  };
-  const BrowserWindow = {
-    fromWebContents: (candidate) => candidate === sender ? win : null,
-  };
-
-  assert.equal(focusAllowedSenderWindow({
-    BrowserWindow,
-    sender,
-    isAllowed: (candidate) => candidate === win,
-    beforeFocus: () => calls.push('activate-app'),
-  }), win);
-  assert.deepEqual(calls, ['activate-app', 'restore', 'show', 'focus']);
-
-  calls.length = 0;
-  assert.equal(focusAllowedSenderWindow({
-    BrowserWindow,
-    sender,
-    isAllowed: () => false,
-    beforeFocus: () => calls.push('activate-app'),
-  }), null);
-  assert.deepEqual(calls, []);
-});
-
 test('OAuth return deep links have one exact, data-free authority', () => {
   assert.equal(isOAuthReturnUrl('stashbase://oauth-complete'), true);
   assert.equal(isOAuthReturnUrl('stashbase://oauth-complete/'), true);
@@ -323,6 +294,12 @@ test('OAuth return deep links have one exact, data-free authority', () => {
   assert.equal(isOAuthReturnUrl('stashbase://other-action'), false);
   assert.equal(isOAuthReturnUrl('https://oauth-complete'), false);
   assert.equal(isOAuthReturnUrl('not a URL'), false);
+  assert.equal(isStashBaseProtocolUrl('stashbase://other-action'), true);
+  assert.equal(isStashBaseProtocolUrl('stashbase:not-a-return'), true);
+  assert.equal(isStashBaseProtocolUrl('https://oauth-complete'), false);
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase', 'stashbase://oauth-complete']), 'oauth-return');
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase', 'stashbase://other-action']), 'inert');
+  assert.equal(classifyProtocolLaunch(['/Applications/StashBase']), 'ordinary');
 
   const packageJson = require('../package.json');
   assert.deepEqual(packageJson.build.protocols, [{

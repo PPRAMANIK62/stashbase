@@ -7,6 +7,16 @@ import { AccountSignInForm } from '../components/account/AccountSignInForm';
 (globalThis as { React?: typeof React }).React = React;
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+async function waitUntil(predicate: () => boolean, message: string): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) assert.fail(message);
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
+    });
+  }
+}
+
 test('account Sign in immediately opens one Supabase Google OAuth flow without an email form', async () => {
   const requests: Array<{ url: string; method: string }> = [];
   const opened: string[] = [];
@@ -49,8 +59,11 @@ test('account Sign in immediately opens one Supabase Google OAuth flow without a
         null,
         createElement(AccountSignInForm, { onSignedIn: () => undefined }),
       ));
-      await new Promise<void>((resolve) => setImmediate(resolve));
     });
+    await waitUntil(
+      () => JSON.stringify(mounted.renderer?.toJSON()).includes('Test flow finished.'),
+      'sign-in error did not settle',
+    );
 
     assert.equal(requests[0]?.url, '/api/account/oauth/start');
     assert.equal(requests[0]?.method, 'POST');
@@ -58,14 +71,14 @@ test('account Sign in immediately opens one Supabase Google OAuth flow without a
     assert.deepEqual(opened, ['https://example.supabase.co/auth/v1/authorize?provider=google']);
     assert.equal(mounted.renderer!.root.findAll((node) => node.type === 'input').length, 0);
     assert.match(JSON.stringify(mounted.renderer!.toJSON()), /Finish signing in with Google/);
+    assert.match(JSON.stringify(mounted.renderer!.toJSON()), /Test flow finished\./);
   } finally {
     if (mounted.renderer) await act(async () => mounted.renderer?.unmount());
     Object.assign(globalThis, { window: originalWindow, fetch: originalFetch });
   }
 });
 
-test('completed browser sign-in returns focus to the initiating StashBase window', async () => {
-  let focusRequests = 0;
+test('completed browser sign-in leaves native return to the authenticated callback deep link', async () => {
   let signedInEmail: string | undefined;
   const originalWindow = globalThis.window;
   const originalFetch = globalThis.fetch;
@@ -76,12 +89,7 @@ test('completed browser sign-in returns focus to the initiating StashBase window
       constructor(public type: string) {}
     },
     window: {
-      electron: {
-        focusWindow: async () => {
-          focusRequests += 1;
-          return true;
-        },
-      },
+      electron: {},
       sessionStorage: {
         getItem: () => null,
         setItem: () => undefined,
@@ -119,10 +127,9 @@ test('completed browser sign-in returns focus to the initiating StashBase window
       renderer = create(createElement(AccountSignInForm, {
         onSignedIn: (account) => { signedInEmail = account.email; },
       }));
-      await new Promise<void>((resolve) => setImmediate(resolve));
     });
+    await waitUntil(() => signedInEmail !== undefined, 'completed sign-in did not settle');
 
-    assert.equal(focusRequests, 1);
     assert.equal(signedInEmail, 'person@example.com');
   } finally {
     if (renderer) await act(async () => renderer?.unmount());

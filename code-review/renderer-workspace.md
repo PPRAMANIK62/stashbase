@@ -26,6 +26,9 @@ semantic readiness.
   A failed save blocks the transition and keeps the recoverable buffer mounted.
 - Tabs, trees, overlays, and dialogs expose semantic selection/focus state.
   Overlay dismissal restores focus to the initiating control.
+- JSON Tree/Source mode, expansion, selected path, and tree query are retained
+  per recent tab. Only the active JSON tab owns Find/editor registration, and
+  the bounded tree entry remains lazy.
 - Polling, timers, controllers, and native subscriptions retire when their
   generation or window context ends. Late results cannot repopulate reset
   state.

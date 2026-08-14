@@ -47,19 +47,31 @@ forwarding, and script confinement.
   editable managed asset.
 - Audio and supported video use a compatible playback preview when necessary,
   while transcript state follows preparation freshness and source time.
-- JSON stays raw and read-only until explicit editing. It opens even when
-  malformed and saves through [File Transactions](file-transactions.md).
+- JSON source text is authoritative. Strict, unique-key JSON at or below
+  `512,000` UTF-8 bytes, `20,000` nodes, and depth `80` may expose the lazy Tree
+  controller; other input stays openable and saveable in Source mode with an
+  actionable reason. Tree values retain raw token spans, and structural edits
+  patch only the affected value, property, or array range. The tree never
+  materializes the document through `JSON.parse` or persists a serialized
+  object. Global Find and the visible tree search share matching semantics;
+  typing directly in the simple tree field resets undisclosed case/whole-word
+  options. Tree focus is roving; Arrow keys, Home, and End navigate visible
+  nodes before keyboard users enter a selected node's edit actions, and closing
+  an edit returns focus to that node. Search-result highlights select and reveal
+  a matching Tree node; an unrepresentable source range switches to the visible
+  Source editor before selection. Both views save through
+  [File Transactions](file-transactions.md).
 
 ## Implementation Map
 
 | Role | Stable entry points |
 |---|---|
 | Viewer dispatch | `web-src/src/components/MainPane.tsx` |
-| Primary viewers | `PdfPreview.tsx`, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `ImageLightbox.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx` |
+| Primary viewers | `PdfPreview.tsx`, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `ImageLightbox.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, and the lazy `json/JsonTreeView.tsx` controller |
 | Preview-control Modules | `web-src/src/components/audio/`, `web-src/src/components/findIframe.ts`, `previewChunkHighlight.ts`, `pdfText.ts`, `pdfFindController.ts`, `web-src/src/lib/previewIframe.ts`, and `previewMessages.ts` |
 | Worker/Sanitizer Seam | `web-src/src/workers/docxPreview.worker.ts`, `shared/html-sanitization.ts` |
 | Server asset/preparation Adapters | `/asset` and `/derived-asset` routes, `server/docx.ts`, media preparation Modules |
-| Focused evidence | `web-src/src/__tests__/pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, plus `e2e/journeys/formats-media.spec.ts` and `markdown-json.spec.ts` |
+| Focused evidence | `web-src/src/__tests__/pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, `json-source-model.test.ts`, plus `e2e/journeys/formats-media.spec.ts` and `markdown-json.spec.ts` |
 
 ## Validation
 

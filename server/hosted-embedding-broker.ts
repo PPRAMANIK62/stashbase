@@ -4,6 +4,7 @@ import { getHostedAccountSession } from './app-config.ts';
 import {
   cachedHostedQuota,
   hostedAccessToken,
+  isHostedQuotaExhausted,
   rememberHostedQuota,
   stashbaseClientVersion,
   STASHBASE_API_URL,
@@ -119,6 +120,16 @@ class HostedEmbeddingBroker {
       writeJson(response, 401, { error: { message: 'invalid broker credential', code: 'invalid_api_key' } });
       return;
     }
+    if (isHostedQuotaExhausted()) {
+      writeJson(response, 402, {
+        error: {
+          message: 'Hosted AI Index allowance is exhausted. Exact search remains available.',
+          type: 'stashbase_hosted_error',
+          code: 'quota_exhausted',
+        },
+      });
+      return;
+    }
     const body = await readJson(request);
     const rawInput = body.input;
     const inputs = typeof rawInput === 'string' ? [rawInput] : rawInput;
@@ -147,10 +158,18 @@ class HostedEmbeddingBroker {
       const error = payload as ProviderError | null;
       if (upstream.status === 402) {
         const current = cachedHostedQuota();
-        if (current) rememberHostedQuota({
+        rememberHostedQuota(current ? {
           ...current,
           usedTokens: Math.max(current.usedTokens, current.grantedTokens),
           remainingTokens: 0,
+        } : {
+          plan: 'unknown',
+          grantedTokens: 0,
+          usedTokens: 0,
+          reservedTokens: 0,
+          remainingTokens: 0,
+          periodStartedAt: null,
+          periodEndsAt: null,
         });
       }
       writeJson(response, upstream.status, {

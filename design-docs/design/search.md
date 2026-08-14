@@ -18,7 +18,8 @@ user-managed results.
 ## Current Experience
 
 - Exact text search works without AI Index, including raw JSON and current
-  prepared text.
+  prepared text. Whole-token search applies its result cap after token
+  filtering, so substring-heavy files do not hide later eligible evidence.
 - AI Index provides meaning-based retrieval when an embedding source is
   configured. Product copy says **AI Index**; engineering terms such as
   semantic indexing and embeddings appear only where technically necessary.
@@ -50,7 +51,9 @@ user-managed results.
 - Hosted indexing and meaning-based queries draw from one token allowance.
   The account menu shows identity, remaining percentage, and reset date. When
   the allowance is exhausted, hosted semantic work stops while Exact search
-  and every local-file workflow remain available.
+  and every local-file workflow remain available. Pending semantic work
+  resumes after the allowance refreshes or an available BYOK source is
+  selected.
 - In-app and MCP retrieval share source identity and access rules. MCP also
   supports validated source-type categories.
 

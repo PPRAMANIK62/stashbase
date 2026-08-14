@@ -9,8 +9,9 @@ the source remains the durable object shared with other tools and Agents.
 
 This area owns document tabs and format-appropriate reading or editing
 experiences. Together with the Workspace area, it forms the Document
-Workbench. It includes Markdown, raw JSON, HTML, PDF, DOCX, images, audio, and
-supported video containers. Preparation and indexing are separate areas.
+Workbench. It includes Markdown, source-authoritative JSON, HTML, PDF, DOCX,
+images, audio, and supported video containers. Preparation and indexing are
+separate areas.
 
 StashBase is not an unrestricted browser, a script host, a pixel-perfect Word
 editor, a media editor, or a proprietary document format.
@@ -31,9 +32,13 @@ editor, a media editor, or a proprietary document format.
 - A Markdown document may serve as a [Canvas](../glossary.md#canvas): Chat is
   for exploring, while accepted decisions are explicitly written into the
   ordinary source file.
-- JSON opens as raw syntax-highlighted text in a read-only state with explicit
-  editing. Validity is not required to open or save it; saving preserves the
-  text, leading BOM, and line-ending convention without formatting.
+- Valid strict JSON opens as a searchable, keyboard-accessible tree by default;
+  Source mode exposes the exact live text. Explicit editing enables scalar,
+  key, property, array, and validated raw-subtree operations that patch source
+  spans without serializing the document. Invalid, incomplete, empty,
+  duplicate-key, or bounded-out JSON explains why Tree mode is unavailable and
+  remains editable and saveable as source. Saving preserves BOM, line endings,
+  untouched whitespace, escapes, order, numeric lexemes, and trailing newline.
 - HTML is viewed as source content; the current compatibility preview executes
   local document scripts in a same-origin iframe. PDF uses its source document
   in the native preview surface with page, zoom, fit, and session position
@@ -56,6 +61,8 @@ editor, a media editor, or a proprietary document format.
   and unsaved content.
 - Parsing or preview failure keeps the source identity visible and offers a
   truthful recovery path.
+- A structured JSON view is a controller over source text, never a second
+  document model or persistence path.
 - Rendering untrusted document content never grants application privileges or
   loads arbitrary remote resources.
 

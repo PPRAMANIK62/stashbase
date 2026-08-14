@@ -79,6 +79,10 @@ embedding source resets and rebinds the single daemon so stale runtime
 credentials cannot survive. Compatible vectors remain reusable. Hosted index
 and query calls carry distinct purpose labels but consume one quota ledger;
 quota exhaustion disables only hosted semantic work and never exact retrieval.
+The availability gate is checked before and between embedding calls so one
+quota response stops the remainder of a batch. Pending work remains
+reconcilable and resumes after a quota refresh/reset or an available source
+switch.
 
 Large semantic workloads use the same authoritative content-hash diff. Known
 stale rows become unavailable before a durable awaiting/paused decision is
@@ -95,6 +99,8 @@ search; only explicit Start clears it.
   delete or move, immediate status/search cannot observe rows reported removed.
 - Retrieval filters unavailable sources and always remaps evidence to a live
   visible source before it crosses HTTP or MCP.
+- Exact retrieval applies whole-token filtering before its per-file result cap;
+  raw substring density cannot hide later eligible evidence.
 - Local Milvus collect-all reads use a complete scalar snapshot. Segment order
   cannot be treated as a globally ordered primary-key cursor.
 - Closing or failing to open the store releases the client, shared pymilvus

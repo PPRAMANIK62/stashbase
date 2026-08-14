@@ -27,14 +27,15 @@ const { registerBugReportReviewIpc } = require('./bug-report-review-ipc.cjs');
 const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
+  classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
-  focusAllowedSenderWindow,
   focusWindow,
   isOAuthReturnUrl,
+  isStashBaseProtocolUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
@@ -116,6 +117,7 @@ const SERVER_HOST = '127.0.0.1';
 const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
 const SERVER_PROTOCOL_VERSION = 1;
 const SERVER_SHUTDOWN_TOKEN = crypto.randomBytes(32).toString('hex');
+const OAUTH_RETURN_TOKEN = crypto.randomBytes(32).toString('hex');
 const PROJECT_ROOT = app.isPackaged ? app.getAppPath() : path.resolve(__dirname, '..');
 const SERVER_ENTRY = app.isPackaged
   ? path.join(PROJECT_ROOT, 'dist', 'server', 'index.mjs')
@@ -151,10 +153,7 @@ const bugReports = createBugReportService({
 });
 const bugReportHandoff = createBugReportHandoff({
   baseTemporaryDirectory: path.join(app.getPath('temp'), 'stashbase', 'bug-reports'),
-  revealDirectory: async (directory) => {
-    const error = await shell.openPath(directory);
-    if (error) throw new Error('The prepared report directory could not be opened.');
-  },
+  downloadsDirectory: async () => app.getPath('downloads'),
   openExternal: (url) => shell.openExternal(url),
 });
 registerBugReportReviewIpc({
@@ -165,29 +164,7 @@ registerBugReportReviewIpc({
   ),
   prepareApprovedReport: (snapshot) => bugReportHandoff.prepare(snapshot),
   openPreparedReport: (snapshot) => bugReportHandoff.openGitHub(snapshot),
-  savePreparedReport: async (snapshot, event) => {
-    try {
-      const senderWindow = BrowserWindow.fromWebContents(event.sender);
-      const options = {
-        title: 'Save Selected Artifacts',
-        buttonLabel: 'Save Here',
-        properties: ['openDirectory', 'createDirectory'],
-      };
-      const result = senderWindow && !senderWindow.isDestroyed()
-        ? await dialog.showOpenDialog(senderWindow, options)
-        : await dialog.showOpenDialog(options);
-      if (result.canceled || result.filePaths.length === 0) return { ok: true, canceled: true };
-      return bugReportHandoff.saveArtifacts(snapshot, result.filePaths[0]);
-    } catch {
-      return {
-        ok: false,
-        error: {
-          code: 'SAVE_FAILED',
-          message: 'StashBase could not save the selected report files. Please try again.',
-        },
-      };
-    }
-  },
+  savePreparedReport: (snapshot) => bugReportHandoff.saveToDownloads(snapshot),
 });
 
 const APP_CONFIG_FILE = path.join(os.homedir(), '.stashbase', 'config.json');
@@ -442,6 +419,7 @@ async function startOrReuseServer() {
       ...process.env,
       ...packagedEnv,
       STASHBASE_SHUTDOWN_TOKEN: SERVER_SHUTDOWN_TOKEN,
+      STASHBASE_OAUTH_RETURN_TOKEN: OAUTH_RETURN_TOKEN,
     },
     // stdin = 'ignore' is intentional: the server never reads from
     // stdin, and inheriting the parent's TTY made Node attach a real
@@ -655,6 +633,7 @@ async function openBugReportReview(win) {
       BrowserWindow,
       preloadPath: path.join(__dirname, 'bug-report-review-preload.cjs'),
       htmlPath: path.join(__dirname, 'bug-report-review.html'),
+      sourceWindow: isLiveMainWindow(win) ? win : null,
     });
   } catch {
     bugReports.discardDraft(created.draft.id, source.webContentsId);
@@ -1010,20 +989,14 @@ ipcMain.handle('shell:openExternal', async (_e, url) => {
   return openHttpExternal(url, 'renderer external URL');
 });
 
-// OAuth completion is observed by the initiating renderer through an opaque
-// local flow status. Let only that live main window bring itself back from the
-// system browser; this channel cannot focus arbitrary or auxiliary windows.
-ipcMain.handle('window:focus-self', (event) => {
-  const senderWindow = focusAllowedSenderWindow({
-    BrowserWindow,
-    sender: event.sender,
-    isAllowed: isLiveMainWindow,
-    beforeFocus: () => {
-      if (process.platform === 'darwin') app.focus({ steal: true });
-    },
-  });
-  if (!senderWindow) return false;
-  lastMainWindow = senderWindow;
+// Renderer-initiated bug reporting: the sidebar button is the same deliberate
+// entry as Help → Report a Bug…. The source window is derived from the IPC
+// sender, never from renderer-supplied identity, and only a live main window
+// may start a report.
+ipcMain.handle('bug-report:open', async (event) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return false;
+  await openBugReportReview(senderWindow);
   return true;
 });
 
@@ -1135,10 +1108,29 @@ const initialWindowFlight = createSingleFlight(() => app.whenReady().then(() => 
 
 function focusOAuthReturn() {
   void app.whenReady().then(async () => {
+    const acknowledged = await requestJson(SERVER_PORT, '/api/account/oauth/app-return', 1000, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-stashbase-oauth-return-token': OAUTH_RETURN_TOKEN,
+      },
+    });
+    if (!acknowledged.reachable || acknowledged.statusCode !== 200) {
+      console.warn('[electron] could not acknowledge OAuth return to the callback page');
+    }
     if (process.platform === 'darwin') app.focus({ steal: true });
-    if (focusLastMainWindow()) return;
-    await initialWindowFlight.run();
-    focusLastMainWindow();
+    const targetId = typeof acknowledged.body?.windowId === 'string'
+      ? acknowledged.body.windowId
+      : null;
+    const target = targetId ? windowRegistry.windowForId(targetId) : null;
+    if (isLiveMainWindow(target) && focusWindow(target)) {
+      lastMainWindow = target;
+      return;
+    }
+    if (!focusLastMainWindow()) {
+      await initialWindowFlight.run();
+      focusLastMainWindow();
+    }
   });
 }
 
@@ -1150,20 +1142,25 @@ function registerOAuthReturnProtocol() {
 }
 
 app.on('open-url', (event, url) => {
+  if (isStashBaseProtocolUrl(url)) event.preventDefault();
   if (!isOAuthReturnUrl(url)) return;
-  event.preventDefault();
   focusOAuthReturn();
 });
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const initialProtocolLaunch = classifyProtocolLaunch(process.argv);
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
-    if (argv.some(isOAuthReturnUrl)) {
+    const protocolLaunch = classifyProtocolLaunch(argv);
+    if (protocolLaunch === 'oauth-return') {
       focusOAuthReturn();
       return;
     }
+    // A malformed or unsupported stashbase: URL must not fall through to the
+    // ordinary second-launch focus/create behavior.
+    if (protocolLaunch === 'inert') return;
     if (!focusLastMainWindow()) {
       void initialWindowFlight.run().then(() => { focusLastMainWindow(); });
     }
@@ -1171,6 +1168,12 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     registerOAuthReturnProtocol();
+    // A cold unsupported stashbase: URL is just as inert as the same URL sent
+    // to an existing instance: do not start the server or create a window.
+    if (initialProtocolLaunch === 'inert') {
+      app.quit();
+      return;
+    }
     try {
       await bugReportHandoff.initializeSession();
     } catch {
@@ -1191,7 +1194,7 @@ if (!hasSingleInstanceLock) {
     }
     installApplicationMenu();
     await initialWindowFlight.run();
-    if (process.argv.some(isOAuthReturnUrl)) focusOAuthReturn();
+    if (initialProtocolLaunch === 'oauth-return') focusOAuthReturn();
   });
 
   app.on('activate', () => {

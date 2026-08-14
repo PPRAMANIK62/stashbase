@@ -19,6 +19,10 @@ import {
   setEmbeddingSource,
 } from '../app-config.ts';
 import type { EmbedderProvider } from '../app-config.ts';
+import {
+  isEmbeddingAvailable,
+  shouldReconcileAfterEmbeddingSourceChange,
+} from '../embedding-availability.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from '../state.ts';
 import { sendError, validateEmbedderKey } from '../http.ts';
 import { hostedAccountState } from '../hosted-account.ts';
@@ -68,7 +72,12 @@ export function mount(app: express.Express): void {
     const check = await validateEmbedderKey(provider, key);
     const warning = check.ok ? undefined : check.error;
     if (!check.ok && check.status < 500) return res.status(check.status).json({ error: check.error });
-    const shouldBackfill = !isEmbeddingConfigured();
+    const previousSource = getEmbeddingSource();
+    const shouldBackfill = shouldReconcileAfterEmbeddingSourceChange(
+      previousSource,
+      provider,
+      isEmbeddingAvailable(),
+    );
     try {
       setApiKey(key, provider);
     } catch (err: unknown) {
@@ -114,6 +123,10 @@ export function mount(app: express.Express): void {
       setEmbeddingSource(provider);
       await resetIndexerRuntime({ forgetBindings: true });
       await bootBindAllFolders();
+      void reconcileLibraryFolders(`${providerLabel(provider)} source selected`)
+        .catch((err: unknown) => {
+          log.warn(`source selected: semantic reconcile failed: ${errorMessage(err)}`);
+        });
       res.json({
         provider,
         hasKey: true,

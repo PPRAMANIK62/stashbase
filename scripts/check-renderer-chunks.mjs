@@ -18,6 +18,8 @@ const expectedEntries = [
   'src/components/ChatPane.tsx',
   'src/components/agent/AgentMathMarkdown.tsx',
   'src/components/CrepeDocument.tsx',
+  'src/components/JsonDocument.tsx',
+  'src/components/json/JsonTreeView.tsx',
   'src/components/PdfPreview.tsx',
   'src/components/DocxPreview.tsx',
   'src/components/AudioPreview.tsx',

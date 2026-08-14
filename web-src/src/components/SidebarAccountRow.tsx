@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { electronBridge } from '../electronBridge';
 import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '../icons';
 import { api, errorMessage, type HostedAccountState } from '../api';
 import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '../accountEvents';
 import { signInWithStashBase } from '../accountOAuth';
 import { DISCORD_INVITE_URL, openExternalUrl } from '../lib/externalLink';
 import { openSettings } from './SettingsModal';
+import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '../lib/hostedQuota';
 import { Button } from './ui/button';
 import {
   Menu as AccountMenu,
@@ -41,9 +43,7 @@ export function SidebarAccountRow() {
   const label = email || 'Anonymous';
   const monogram = email ? email.slice(0, 2).toUpperCase() : '';
   const quota = account?.quota;
-  const remainingPercent = quota
-    ? Math.max(0, Math.min(100, Math.round((quota.remainingTokens / Math.max(1, quota.grantedTokens)) * 100)))
-    : null;
+  const remainingPercent = quota ? hostedQuotaRemainingPercent(quota) : null;
 
   function signOut() {
     void api.signOutAccount()
@@ -106,7 +106,7 @@ export function SidebarAccountRow() {
                         </div>
                         <div className="mt-2 flex justify-between gap-3 text-xs text-muted-foreground">
                           <span>{quota.remainingTokens.toLocaleString()} tokens</span>
-                          <span>{quota.periodEndsAt ? `Resets ${new Date(quota.periodEndsAt).toLocaleDateString()}` : ''}</span>
+                          <span>{hostedQuotaResetLabel(quota)}</span>
                         </div>
                       </>
                     ) : (
@@ -153,13 +153,18 @@ export function SidebarAccountRow() {
       >
         <DiscordIcon className="size-4" />
       </Button>
+      {/* Report Bug — opens the desktop app's local review window, the same
+        * deliberate entry as Help → Report a Bug…. The flow lives in the
+        * Electron main process, so the browser dev shell keeps the dimmed
+        * placeholder. */}
       <Button
         variant="ghost"
         size="icon-sm"
-        disabled
-        aria-label="Report a bug (coming soon)"
-        title="Report a bug (coming soon)"
+        disabled={!electronBridge()?.reportBug}
+        aria-label={electronBridge()?.reportBug ? 'Report a bug' : 'Report a bug (desktop app only)'}
+        title={electronBridge()?.reportBug ? 'Report a bug' : 'Report a bug (desktop app only)'}
         className="flex-none text-muted-foreground"
+        onClick={() => { void electronBridge()?.reportBug?.(); }}
       >
         <BugIcon className="size-4" />
       </Button>

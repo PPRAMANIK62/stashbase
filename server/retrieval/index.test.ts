@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { filesystemPath } from '../filesystem-path.ts';
 import { createRetrieval } from './index.ts';
 
 test('Retrieval reports unavailable semantic mode without invoking its adapter', async () => {
@@ -22,7 +23,24 @@ test('Retrieval reports unavailable semantic mode without invoking its adapter',
   assert.equal(called, false);
 });
 
+test('Retrieval distinguishes exhausted hosted quota without invoking vector search', async () => {
+  let called = false;
+  const retrieval = createRetrieval({
+    hasEmbeddingKey: () => false,
+    embeddingUnavailableReason: () => 'hosted-quota-exhausted',
+    vectorSearch: async () => {
+      called = true;
+      return [];
+    },
+  });
+
+  const result = await retrieval.search({ mode: 'semantic', query: 'architecture' });
+  assert.deepEqual(result.availability, { state: 'unavailable', reason: 'hosted-quota-exhausted' });
+  assert.equal(called, false);
+});
+
 test('Retrieval normalizes keyword matches into flat visible-source evidence', async () => {
+  const folderRoot = filesystemPath.absolute('/library');
   const retrieval = createRetrieval({
     keywordSearch: async () => ({
       files: [{
@@ -36,12 +54,12 @@ test('Retrieval normalizes keyword matches into flat visible-source evidence', a
     }),
   });
 
-  const result = await retrieval.search({ mode: 'keyword', query: 'architecture', folderRoot: '/library' });
+  const result = await retrieval.search({ mode: 'keyword', query: 'architecture', folderRoot });
 
   assert.deepEqual(result, {
     evidence: [
-      { sourcePath: '/library/notes/brief.md', snippet: 'System architecture', ranges: [[7, 19]], sourceMatchCount: 2, locator: { line: 4 } },
-      { sourcePath: '/library/notes/brief.md', snippet: 'architecture diagram', ranges: [[0, 12]], sourceMatchCount: 2, locator: { line: 9 } },
+      { sourcePath: filesystemPath.join(folderRoot, 'notes/brief.md'), snippet: 'System architecture', ranges: [[7, 19]], sourceMatchCount: 2, locator: { line: 4 } },
+      { sourcePath: filesystemPath.join(folderRoot, 'notes/brief.md'), snippet: 'architecture diagram', ranges: [[0, 12]], sourceMatchCount: 2, locator: { line: 9 } },
     ],
     availability: { state: 'ready' },
     truncated: false,
@@ -76,18 +94,20 @@ test('Retrieval applies top_k to keyword evidence and reports truncation', async
 });
 
 test('Retrieval preserves semantic source identity and source-safe locators', async () => {
+  const folderRoot = filesystemPath.absolute('/library');
+  const sourcePath = filesystemPath.join(folderRoot, 'paper.pdf');
   const retrieval = createRetrieval({
     hasEmbeddingKey: () => true,
     vectorSearch: async () => [{
-      fileName: '/library/paper.pdf', chunkIndex: 3, content: 'derived evidence', heading: 'Results',
+      fileName: sourcePath, chunkIndex: 3, content: 'derived evidence', heading: 'Results',
       startLine: 42, endLine: 45, pdfPage: 7, score: 0.9,
     }],
   });
 
-  const result = await retrieval.search({ mode: 'semantic', query: 'evidence', folderRoot: '/library' });
+  const result = await retrieval.search({ mode: 'semantic', query: 'evidence', folderRoot });
 
   assert.deepEqual(result.evidence, [{
-    sourcePath: '/library/paper.pdf', snippet: 'derived evidence', heading: 'Results',
+    sourcePath, snippet: 'derived evidence', heading: 'Results',
     locator: { line: 42, endLine: 45, page: 7 }, score: 0.9, chunkIndex: 3,
   }]);
 });
@@ -127,7 +147,7 @@ test('Retrieval remaps scoped semantic legacy-derived hits to their visible sour
     const result = await retrieval.search({ mode: 'semantic', query: 'evidence', folderRoot });
 
     assert.deepEqual(result.evidence, [{
-      sourcePath, snippet: 'derived evidence', heading: '', locator: {}, score: 1, chunkIndex: 0,
+      sourcePath: filesystemPath.absolute(sourcePath), snippet: 'derived evidence', heading: '', locator: {}, score: 1, chunkIndex: 0,
     }]);
   } finally {
     fs.rmSync(folderRoot, { recursive: true, force: true });

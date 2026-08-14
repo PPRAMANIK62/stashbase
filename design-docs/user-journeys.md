@@ -45,7 +45,9 @@ editing behavior.
 1. Open a supported source in a persistent tab.
 2. Read it in the format-appropriate surface.
 3. For editable Markdown or JSON, explicitly enter the appropriate editing
-   state and save through the shared durability path.
+   state and save through the shared durability path. Valid JSON may be
+   inspected and patched structurally or edited as exact source; malformed JSON
+   remains recoverable in Source mode.
 4. Navigate with tabs, Quick Open, outlines, Find, local links, or search
    results.
 5. Close a tab or window without silently losing a live edit.
@@ -82,7 +84,9 @@ the visible source.
 3. When using the hosted allowance, inspect its remaining percentage and reset
    date from the account menu; indexing and queries share that allowance.
 4. Optionally narrow to one member folder.
-5. Review grouped evidence and readiness guidance.
+5. Review grouped evidence and readiness guidance. Whole-token search does not
+   hide a later eligible result merely because a file contains earlier
+   substring-only hits.
 6. Open the result without exposing a hidden derived artifact or unexpectedly
    replacing the window's active folder.
 

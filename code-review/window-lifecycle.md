@@ -36,13 +36,18 @@ after readiness, a save failure or timeout keeps the window open.
   membership still contains the folder.
 - A single-flight initial-window operation plus the single-instance lock
   prevents startup races from creating duplicate windows.
-- Browser-owned OAuth may return focus only to the live main window whose
-  renderer requests it. The focus channel restores, shows, and focuses that
-  same sender window; it never accepts an arbitrary identity or creates or
-  revives a window. The packaged `stashbase://` handler accepts only the exact
-  data-free `oauth-complete` authority. macOS `open-url`, Windows/Linux second
-  instances, and cold-start arguments converge on the same bounded focus path;
-  all other protocol URLs are inert.
+- Browser-owned OAuth returns focus only through the packaged `stashbase://`
+  handler, which accepts the exact data-free `oauth-complete` authority.
+  Renderer polling updates account state without racing that browser-owned
+  handoff. Node retains the initiating window identity on the opaque flow, and
+  the callback records return intent before opening the fixed deep link so
+  Electron can restore that live window rather than whichever window was
+  focused most recently. macOS `open-url`, Windows/Linux second instances, and
+  cold-start arguments converge on the same bounded focus path; all other
+  protocol URLs are inert and a cold invalid launch exits without creating a
+  window. Electron authenticates its loopback acknowledgement with a random
+  per-launch child-process token so the browser page closes only on evidence
+  from the exact native handler.
 - macOS may remain alive without a window and recreate one on activation.
   Windows and Linux quit after the final window closes. Platform window
   accelerators never masquerade as document-tab commands.
@@ -62,13 +67,20 @@ Windows signal behavior is not a graceful child shutdown contract.
 The Electron main process solely owns in-memory bug-report drafts. The native
 Help menu creates a draft from the source window; the dedicated review window
 is bound to that draft through its `webContents`, never a renderer-supplied
-draft ID. Its preload accepts only narrow review operations and validates an
-opaque artifact reference against the sender-bound draft. References, paths,
-destinations, URLs, raw diagnostics, screenshot buffers, and unredacted logs
-are never authority or renderer data.
+draft ID. The review window is an independent dialog-sized window — never a
+child or modal of its source, so an open review survives the source closing —
+and it cannot enter full screen itself. When its source window is full screen
+at creation, it presents as a floating dialog in that space instead of
+switching macOS to a separate desktop. Its preload accepts only narrow review operations; description
+updates carry the exact `problem` and optional `reproduction` string fields,
+and artifact operations validate an opaque reference against the sender-bound
+draft. References, paths, destinations, URLs, raw diagnostics, screenshot
+buffers, and unredacted logs are never authority or renderer data.
 
 Drafts move from collection to a bound review and then an immutable approved
-snapshot. Closing the source drops only an unbound draft; closing, cancelling,
+snapshot. An explicit reopen returns an approved draft to review by discarding
+its snapshot and pending handoff — snapshots are never mutated in place.
+Closing the source drops only an unbound draft; closing, cancelling,
 or failing the review retires the bound draft and its references. Collection is
 best effort. Text is redacted and independently scanned fail-closed before it
 is available, and selected resources are scanned again before an atomic

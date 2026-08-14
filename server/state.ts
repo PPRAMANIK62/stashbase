@@ -17,6 +17,7 @@ import type { Indexer, EmbedderRuntimeConfig } from './indexer.ts';
 import { getCurrentFolder, getRecentFolders, onClose, onSwitch, runWithWindowId } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { getEmbeddingSource, getEmbedderConfig } from './app-config.ts';
+import { isEmbeddingAvailable } from './embedding-availability.ts';
 import { hostedEmbeddingRuntime } from './hosted-embedding-broker.ts';
 import { syncIndex, type SyncResult } from './sync.ts';
 import { getDaemon } from './mfs-daemon.ts';
@@ -121,11 +122,11 @@ export function semanticSyncPolicy(folderRoot: string, forceEmbedding = false): 
   };
 }
 
-/** Resolve the active runtime embedder config. Returns null
- *  when neither account allowance nor BYOK is active — the caller still binds the folder (so it's
- *  registered) but indexing stays disabled until the user adds a key
- *  (graceful no-key degrade). */
+/** Resolve the active runtime embedder config. Returns null when no source is
+ * configured or the hosted allowance is exhausted — the caller still binds
+ * the folder, while semantic work stays paused until availability returns. */
 function resolveEmbedder(): EmbedderRuntimeConfig | null {
+  if (!isEmbeddingAvailable()) return null;
   if (getEmbeddingSource() === 'stashbase-account') return hostedEmbeddingRuntime();
   const cfg = getEmbedderConfig();
   if (!cfg.apiKey) return null;
@@ -349,7 +350,7 @@ export async function runFolderSyncOperation(
       return result;
     }
     if (syncTouchedVisibleTree(result)) noteTreeChanged();
-    if (result.failed.length) {
+    if (result.failed.length && !result.semanticPaused) {
       recordIndexWarning(folderRoot, syncFailureMessage(result));
     } else {
       clearIndexWarning(folderRoot);

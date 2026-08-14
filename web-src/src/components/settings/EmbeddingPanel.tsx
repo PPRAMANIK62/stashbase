@@ -16,6 +16,7 @@ import { Input } from '../ui/input';
 import { SegmentedControl, SegmentedControlItem } from '../ui/segmented-control';
 import { AccountSignInForm } from '../account/AccountSignInForm';
 import { notifyAccountChanged } from '../../accountEvents';
+import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '../../lib/hostedQuota';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string; costHint: string }> = {
   openai: {
@@ -196,7 +197,7 @@ export function EmbeddingPanel() {
                 </div>
                 {state.account.quota && (
                   <div className="text-right">
-                    <div className="text-base font-semibold">{Math.round((state.account.quota.remainingTokens / Math.max(1, state.account.quota.grantedTokens)) * 100)}%</div>
+                    <div className="text-base font-semibold">{hostedQuotaRemainingPercent(state.account.quota)}%</div>
                     <div className="text-2xs text-muted-foreground">remaining</div>
                   </div>
                 )}
@@ -204,11 +205,11 @@ export function EmbeddingPanel() {
               {state.account.quota && (
                 <div className="mt-3">
                   <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(0, Math.min(100, (state.account.quota.remainingTokens / Math.max(1, state.account.quota.grantedTokens)) * 100))}%` }} />
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${hostedQuotaRemainingPercent(state.account.quota)}%` }} />
                   </div>
                   <div className="mt-1.5 flex justify-between text-xs text-muted-foreground">
                     <span>{state.account.quota.remainingTokens.toLocaleString()} tokens left</span>
-                    <span>{state.account.quota.periodEndsAt ? `Resets ${new Date(state.account.quota.periodEndsAt).toLocaleDateString()}` : ''}</span>
+                    <span>{hostedQuotaResetLabel(state.account.quota)}</span>
                   </div>
                 </div>
               )}

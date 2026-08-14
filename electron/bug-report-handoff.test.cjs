@@ -19,8 +19,7 @@ function snapshot(overrides = {}) {
     approvalId: 'approval-1',
     approvedAt: '2026-08-12T08:30:00.000Z',
     description: {
-      happened: 'Opening a note showed a blank preview & stopped',
-      expected: 'The note should render normally.',
+      problem: 'Opening a note showed a blank preview & stopped',
       reproduction: '1. Open the note\n2. Switch to preview',
     },
     artifacts: [
@@ -67,36 +66,26 @@ async function temporaryRoot(t) {
   return root;
 }
 
-test('Prepare Report materializes only approved artifacts without revealing the folder or opening GitHub', async (t) => {
+test('Prepare Report materializes only approved artifacts without saving to Downloads or opening GitHub', async (t) => {
   const root = await temporaryRoot(t);
   const base = path.join(root, 'bug-reports');
-  const actions = [];
-  let revealedDirectory = null;
+  const downloads = path.join(root, 'downloads');
+  await fs.mkdir(downloads);
   let openedUrl = null;
   const handoff = createBugReportHandoff({
     baseTemporaryDirectory: base,
     createSessionId: () => 'current-session',
     createReportId: () => 'report-one',
     createTemporaryId: () => 'write-one',
-    revealDirectory: async (directory) => {
-      actions.push('reveal');
-      revealedDirectory = directory;
-      assert.deepEqual((await fs.readdir(directory)).sort(), [
-        'application-log.txt',
-        'diagnostics.txt',
-        'screenshot.png',
-      ]);
-    },
-    openExternal: async (url) => {
-      actions.push('browser');
-      openedUrl = url;
-    },
+    downloadsDirectory: () => downloads,
+    openExternal: async (url) => { openedUrl = url; },
   });
 
   const result = await handoff.prepare(snapshot());
 
   assert.deepEqual(result, { ok: true, prepared: { artifactCount: 3 } });
-  assert.deepEqual(actions, []);
+  assert.deepEqual(await fs.readdir(downloads), []);
+  assert.equal(openedUrl, null);
   const preparedDirectory = path.join(base, 'session-current-session', 'report-report-one');
   assert.deepEqual((await fs.readdir(preparedDirectory)).sort(), [
     'application-log.txt',
@@ -107,13 +96,17 @@ test('Prepare Report materializes only approved artifacts without revealing the 
   const opened = await handoff.openGitHub(snapshot());
 
   assert.deepEqual(opened, { ok: true, prepared: { artifactCount: 3 } });
-  assert.deepEqual(actions, ['reveal', 'browser']);
-  assert.equal(revealedDirectory, preparedDirectory);
-  assert.deepEqual(await fs.readFile(path.join(revealedDirectory, 'screenshot.png')), Buffer.from('approved-png-bytes'));
-  const log = await fs.readFile(path.join(revealedDirectory, 'application-log.txt'), 'utf8');
+  const downloadsFolder = path.join(downloads, 'StashBase bug report');
+  assert.deepEqual((await fs.readdir(downloadsFolder)).sort(), [
+    'application-log.txt',
+    'diagnostics.txt',
+    'screenshot.png',
+  ]);
+  assert.deepEqual(await fs.readFile(path.join(downloadsFolder, 'screenshot.png')), Buffer.from('approved-png-bytes'));
+  const log = await fs.readFile(path.join(downloadsFolder, 'application-log.txt'), 'utf8');
   assert.equal(log, 'INFO MCP_BEARER_TOKEN=[REDACTED]\nINFO ready\n');
   assert.equal(log.includes('super-secret'), false);
-  const diagnostics = await fs.readFile(path.join(revealedDirectory, 'diagnostics.txt'), 'utf8');
+  const diagnostics = await fs.readFile(path.join(downloadsFolder, 'diagnostics.txt'), 'utf8');
   assert.equal(diagnostics, [
     'Captured: 2026-08-12T08:29:00.000Z',
     'Application: StashBase',
@@ -129,7 +122,7 @@ test('Prepare Report materializes only approved artifacts without revealing the 
   assert.equal(diagnostics.includes('environment'), false);
   assert.equal(openedUrl, buildGitHubIssueUrl(snapshot()));
   assert.equal('directory' in result.prepared, false);
-  assert.equal(JSON.stringify(result).includes(revealedDirectory), false);
+  assert.equal(JSON.stringify([result, opened]).includes(root), false);
 });
 
 test('captured PNG bytes remain unchanged through approval and prepared-file creation', async (t) => {
@@ -156,24 +149,25 @@ test('captured PNG bytes remain unchanged through approval and prepared-file cre
   const claimed = service.claimApprovedReport(created.draft.id, 29);
   assert.equal(claimed.ok, true);
 
-  let revealedDirectory;
+  const downloads = path.join(root, 'downloads');
+  await fs.mkdir(downloads);
   const handoff = createBugReportHandoff({
     baseTemporaryDirectory: path.join(root, 'bug-reports'),
     createSessionId: () => 'session',
     createReportId: () => 'report',
     createTemporaryId: () => 'write',
-    revealDirectory: async (directory) => { revealedDirectory = directory; },
+    downloadsDirectory: () => downloads,
     openExternal: async () => {},
   });
   const result = await handoff.prepare(claimed.snapshot);
 
   assert.equal(result.ok, true);
   await handoff.openGitHub(claimed.snapshot);
-  const preparedPng = await fs.readFile(path.join(revealedDirectory, 'screenshot.png'));
+  const preparedPng = await fs.readFile(path.join(downloads, 'StashBase bug report', 'screenshot.png'));
   assert.deepEqual(preparedPng, originalPng);
 });
 
-test('GitHub handoff URL encodes only the four approved report sections', () => {
+test('GitHub handoff URL encodes only the three approved report sections', () => {
   const report = snapshot();
   const url = new URL(buildGitHubIssueUrl(report));
 
@@ -182,8 +176,7 @@ test('GitHub handoff URL encodes only the four approved report sections', () => 
   const body = url.searchParams.get('body');
   assert.equal(body, buildGitHubIssueBody(report));
   for (const heading of [
-    '## What happened',
-    '## What did you expect to happen',
+    '## Problem',
     '## Steps to reproduce',
     '## Environment',
   ]) assert.match(body, new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -206,13 +199,14 @@ test('GitHub handoff URL encodes only the four approved report sections', () => 
 
 test('artifacts absent from the approved snapshot are not materialized', async (t) => {
   const root = await temporaryRoot(t);
-  let revealedDirectory;
+  const downloads = path.join(root, 'downloads');
+  await fs.mkdir(downloads);
   const handoff = createBugReportHandoff({
     baseTemporaryDirectory: path.join(root, 'bug-reports'),
     createSessionId: () => 'session',
     createReportId: () => 'selected-only',
     createTemporaryId: () => 'write',
-    revealDirectory: async (directory) => { revealedDirectory = directory; },
+    downloadsDirectory: () => downloads,
     openExternal: async () => {},
   });
   const approvedLogOnly = snapshot({
@@ -223,7 +217,7 @@ test('artifacts absent from the approved snapshot are not materialized', async (
   const result = await handoff.prepare(approvedLogOnly);
 
   assert.deepEqual(result, { ok: true, prepared: { artifactCount: 1 } });
-  assert.equal(revealedDirectory, undefined);
+  assert.deepEqual(await fs.readdir(downloads), []);
   const preparedDirectory = path.join(root, 'bug-reports', 'session-session', 'report-selected-only');
   assert.deepEqual(await fs.readdir(preparedDirectory), ['application-log.txt']);
   assert.equal(await fs.stat(path.join(preparedDirectory, 'screenshot.png')).then(() => true, () => false), false);
@@ -238,7 +232,7 @@ test('concurrent preparation of one approved snapshot shares one materialized re
     createSessionId: () => 'session',
     createReportId: () => `report-${++reportIds}`,
     createTemporaryId: () => 'write',
-    revealDirectory: async () => {},
+    downloadsDirectory: () => path.join(root, 'downloads'),
     openExternal: async () => {},
   });
   const approved = snapshot({ approvalId: 'approval-concurrent' });
@@ -265,7 +259,7 @@ test('session initialization removes stale previous-session reports and keeps cu
     createSessionId: () => 'fresh',
     createReportId: () => 'one',
     createTemporaryId: () => 'write',
-    revealDirectory: async () => {},
+    downloadsDirectory: () => path.join(root, 'downloads'),
     openExternal: async () => {},
   });
 
@@ -280,29 +274,29 @@ test('session initialization removes stale previous-session reports and keeps cu
 test('handoff failures do not open later stages or expose the prepared path', async (t) => {
   const root = await temporaryRoot(t);
   let browserOpens = 0;
-  const revealFailure = createBugReportHandoff({
-    baseTemporaryDirectory: path.join(root, 'reveal-failure'),
+  const downloadsFailure = createBugReportHandoff({
+    baseTemporaryDirectory: path.join(root, 'downloads-failure'),
     createSessionId: () => 'session',
     createReportId: () => 'report',
     createTemporaryId: () => 'write',
-    revealDirectory: async () => { throw new Error('native failure with a private path'); },
+    downloadsDirectory: async () => { throw new Error('native failure with a private path'); },
     openExternal: async () => { browserOpens += 1; },
   });
 
-  assert.equal((await revealFailure.prepare(snapshot())).ok, true);
-  const revealResult = await revealFailure.openGitHub(snapshot());
-  assert.equal(revealResult.error.code, 'REVEAL_FAILED');
+  assert.equal((await downloadsFailure.prepare(snapshot())).ok, true);
+  const downloadsResult = await downloadsFailure.openGitHub(snapshot());
+  assert.equal(downloadsResult.error.code, 'DOWNLOADS_FAILED');
   assert.equal(browserOpens, 0);
-  assert.equal(/private path|reveal-failure/.test(JSON.stringify(revealResult)), false);
+  assert.equal(/private path|downloads-failure/.test(JSON.stringify(downloadsResult)), false);
 
-  let reveals = 0;
+  let downloadsLookups = 0;
   const prepareFailure = createBugReportHandoff({
     baseTemporaryDirectory: path.join(root, 'prepare-failure'),
     createSessionId: () => 'session',
     createReportId: () => 'report',
     createTemporaryId: () => 'write',
     scanText: () => ({ safe: false }),
-    revealDirectory: async () => { reveals += 1; },
+    downloadsDirectory: () => { downloadsLookups += 1; return path.join(root, 'downloads'); },
     openExternal: async () => { browserOpens += 1; },
   });
   const prepareResult = await prepareFailure.prepare(snapshot({
@@ -310,42 +304,89 @@ test('handoff failures do not open later stages or expose the prepared path', as
     artifacts: [snapshot().artifacts[1]],
   }));
   assert.equal(prepareResult.error.code, 'PREPARE_FAILED');
-  assert.equal(reveals, 0);
+  assert.equal(downloadsLookups, 0);
   assert.equal(browserOpens, 0);
 });
 
-test('GitHub open failure reports a safe retryable error after the folder is revealed', async (t) => {
+test('GitHub open failure reports a safe retryable error after the files reach Downloads', async (t) => {
   const root = await temporaryRoot(t);
-  let reveals = 0;
+  const downloads = path.join(root, 'downloads');
+  await fs.mkdir(downloads);
   const handoff = createBugReportHandoff({
     baseTemporaryDirectory: path.join(root, 'bug-reports'),
     createSessionId: () => 'session',
     createReportId: () => 'report',
     createTemporaryId: () => 'write',
-    revealDirectory: async () => { reveals += 1; },
+    downloadsDirectory: () => downloads,
     openExternal: async () => { throw new Error('browser failure'); },
   });
 
   assert.equal((await handoff.prepare(snapshot())).ok, true);
   const result = await handoff.openGitHub(snapshot());
 
-  assert.equal(reveals, 1);
   assert.equal(result.error.code, 'GITHUB_OPEN_FAILED');
   assert.deepEqual(result.prepared, { artifactCount: 3 });
   assert.equal('directory' in result.prepared, false);
+  assert.deepEqual((await fs.readdir(path.join(downloads, 'StashBase bug report'))).sort(), [
+    'application-log.txt',
+    'diagnostics.txt',
+    'screenshot.png',
+  ]);
+
+  // A retry of the same approval heals its folder instead of allocating another.
+  assert.equal((await handoff.openGitHub(snapshot())).error.code, 'GITHUB_OPEN_FAILED');
+  assert.deepEqual(await fs.readdir(downloads), ['StashBase bug report']);
 });
 
-test('Save Selected Artifacts copies only prepared files outside temporary cleanup', async (t) => {
+test('each approval gets its own Downloads folder without overwriting earlier reports', async (t) => {
+  const root = await temporaryRoot(t);
+  const downloads = path.join(root, 'downloads');
+  await fs.mkdir(downloads);
+  let reportIds = 0;
+  const handoff = createBugReportHandoff({
+    baseTemporaryDirectory: path.join(root, 'bug-reports'),
+    createSessionId: () => 'session',
+    createReportId: () => `report-${++reportIds}`,
+    createTemporaryId: () => 'write',
+    downloadsDirectory: () => downloads,
+    openExternal: async () => {},
+  });
+  const first = snapshot({ approvalId: 'approval-first' });
+  const second = snapshot({
+    approvalId: 'approval-second',
+    artifacts: snapshot().artifacts.filter((artifact) => artifact.kind === 'log'),
+  });
+
+  assert.equal((await handoff.prepare(first)).ok, true);
+  assert.equal((await handoff.openGitHub(first)).ok, true);
+  assert.equal((await handoff.prepare(second)).ok, true);
+  assert.equal((await handoff.openGitHub(second)).ok, true);
+
+  assert.deepEqual((await fs.readdir(downloads)).sort(), [
+    'StashBase bug report',
+    'StashBase bug report 2',
+  ]);
+  assert.deepEqual((await fs.readdir(path.join(downloads, 'StashBase bug report'))).sort(), [
+    'application-log.txt',
+    'diagnostics.txt',
+    'screenshot.png',
+  ]);
+  assert.deepEqual(await fs.readdir(path.join(downloads, 'StashBase bug report 2')), [
+    'application-log.txt',
+  ]);
+});
+
+test('Download copies only prepared files into Downloads outside temporary cleanup', async (t) => {
   const root = await temporaryRoot(t);
   const base = path.join(root, 'bug-reports');
-  const saved = path.join(root, 'saved-report');
-  await fs.mkdir(saved);
+  const downloads = path.join(root, 'downloads');
+  await fs.mkdir(downloads);
   const handoff = createBugReportHandoff({
     baseTemporaryDirectory: base,
     createSessionId: () => 'current',
     createReportId: () => 'selected',
     createTemporaryId: () => 'write',
-    revealDirectory: async () => {},
+    downloadsDirectory: () => downloads,
     openExternal: async () => {},
   });
   const selected = snapshot({
@@ -354,16 +395,21 @@ test('Save Selected Artifacts copies only prepared files outside temporary clean
   });
   assert.equal((await handoff.prepare(selected)).ok, true);
 
-  const result = await handoff.saveArtifacts(selected, saved);
+  const result = await handoff.saveToDownloads(selected);
 
   assert.deepEqual(result, { ok: true, saved: { artifactCount: 2 } });
+  const saved = path.join(downloads, 'StashBase bug report');
   assert.deepEqual((await fs.readdir(saved)).sort(), ['application-log.txt', 'diagnostics.txt']);
   assert.equal(await fs.stat(path.join(saved, 'screenshot.png')).then(() => true, () => false), false);
+
+  // Download and Open GitHub share the one folder owned by this approval.
+  assert.equal((await handoff.openGitHub(selected)).ok, true);
+  assert.deepEqual(await fs.readdir(downloads), ['StashBase bug report']);
 
   const nextSession = createBugReportHandoff({
     baseTemporaryDirectory: base,
     createSessionId: () => 'next',
-    revealDirectory: async () => {},
+    downloadsDirectory: () => downloads,
     openExternal: async () => {},
   });
   await nextSession.initializeSession();

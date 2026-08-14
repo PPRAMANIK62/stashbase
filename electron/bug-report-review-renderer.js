@@ -2,8 +2,6 @@
 
 const api = window.reportReview;
 const artifactsRoot = document.getElementById('artifacts');
-const artifactSummary = document.getElementById('artifact-summary');
-const artifactSummaryGroups = document.getElementById('artifact-summary-groups');
 const status = document.getElementById('status');
 const approveButton = document.getElementById('approve');
 const cancelButton = document.getElementById('cancel');
@@ -12,14 +10,16 @@ const reportReady = document.getElementById('report-ready');
 const reportReadyHeading = document.getElementById('report-ready-heading');
 const openGitHubButton = document.getElementById('open-github');
 const saveArtifactsButton = document.getElementById('save-artifacts');
+const backButton = document.getElementById('back');
+const reproductionDisclosure = document.getElementById('reproduction-disclosure');
 const fields = Object.freeze({
-  happened: document.getElementById('happened'),
-  expected: document.getElementById('expected'),
+  problem: document.getElementById('problem'),
   reproduction: document.getElementById('reproduction'),
 });
 let model = null;
 let operation = Promise.resolve();
 const previewCache = new Map();
+const openPreviews = new Set();
 
 function setStatus(message, kind = '') {
   status.textContent = message;
@@ -32,14 +32,14 @@ function safeMessage(result, fallback) {
 
 function descriptionPayload() {
   return {
-    happened: fields.happened.value,
-    expected: fields.expected.value,
+    problem: fields.problem.value,
     reproduction: fields.reproduction.value,
   };
 }
 
 function setDescription(description) {
   for (const name of Object.keys(fields)) fields[name].value = description?.[name] || '';
+  if (fields.reproduction.value.trim()) reproductionDisclosure.open = true;
 }
 
 function enqueue(action) {
@@ -51,25 +51,32 @@ function enqueue(action) {
 
 function artifactTitle(kind) {
   if (kind === 'screenshot') return 'Screenshot';
-  if (kind === 'log') return 'Recent application log';
-  return 'Diagnostics';
+  if (kind === 'log') return 'Application log';
+  return 'System info';
 }
 
-function artifactDescription(artifact) {
-  if (!artifact.available) return 'Unavailable for this report.';
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function artifactMeta(artifact) {
+  if (!artifact.available) return 'Unavailable for this report';
   if (artifact.kind === 'screenshot') {
     const size = artifact.summary?.byteLength || 0;
     const width = artifact.summary?.width || 0;
     const height = artifact.summary?.height || 0;
-    return `Captured and prepared as a lossless PNG from the StashBase window where reporting began. StashBase does not resize, recompress, or convert it. ${width} × ${height} pixels, ${size.toLocaleString()} bytes.`;
+    return `${width} × ${height} px · ${formatBytes(size)}`;
   }
   if (artifact.kind === 'log') {
     const size = artifact.summary?.byteLength || 0;
-    const truncated = artifact.summary?.truncated ? ' Bounded to the most recent entries.' : '';
+    const truncated = artifact.summary?.truncated ? ' · most recent entries' : '';
     const redactions = artifact.summary?.redactionCount || 0;
-    return `${size.toLocaleString()} bytes after privacy checks.${truncated} ${redactions} redaction${redactions === 1 ? '' : 's'} applied.`;
+    return `${formatBytes(size)}${truncated} · ${redactions} redaction${redactions === 1 ? '' : 's'}`;
   }
-  return 'A fixed allowlist of application and operating-system versions.';
+  return 'App and OS versions';
 }
 
 function renderDiagnostics(artifact, container) {
@@ -96,64 +103,37 @@ function renderDiagnostics(artifact, container) {
   container.append(list);
 }
 
-function renderArtifactSelection(artifact) {
-  if (!artifact.available) {
-    const unavailable = document.createElement('span');
-    unavailable.className = 'artifact-unavailable';
-    unavailable.textContent = 'Unavailable';
-    return unavailable;
-  }
-
+function renderArtifactToggle(artifact) {
   const title = artifactTitle(artifact.kind);
-  const selection = document.createElement('div');
-  selection.className = `artifact-selection${model.state === 'approved' ? ' is-locked' : ''}`;
-  selection.setAttribute('role', 'group');
-  selection.setAttribute('aria-label', `${title} inclusion`);
-
-  const options = [
-    {
-      included: true,
-      className: 'include',
-      label: artifact.included ? 'Included' : 'Include',
-      ariaLabel: artifact.included ? `${title} is included` : `Include ${title}`,
-    },
-    {
-      included: false,
-      className: 'exclude',
-      label: artifact.included ? 'Exclude' : 'Excluded',
-      ariaLabel: artifact.included ? `Exclude ${title}` : `${title} is excluded`,
-    },
-  ];
-
-  for (const option of options) {
-    const button = document.createElement('button');
-    const selected = artifact.included === option.included;
-    button.type = 'button';
-    button.className = `selection-option ${option.className}${selected ? ' is-selected' : ''}`;
-    button.textContent = option.label;
-    button.disabled = model.state === 'approved';
-    button.setAttribute('aria-label', option.ariaLabel);
-    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-    button.addEventListener('click', () => {
-      if (selected) return;
-      enqueue(async () => {
-        setStatus('Updating selection…');
-        const result = option.included
-          ? await api.includeArtifact(artifact.id)
-          : await api.excludeArtifact(artifact.id);
-        if (!result?.ok) {
-          setStatus(safeMessage(result, 'The selection could not be updated.'), 'error');
-          return;
-        }
-        model = result.draft;
+  const label = document.createElement('label');
+  label.className = 'artifact-check';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = Boolean(artifact.available && artifact.included);
+  checkbox.disabled = !artifact.available || model.state === 'approved';
+  checkbox.setAttribute('aria-label', `Include ${title} in the report`);
+  checkbox.addEventListener('change', () => {
+    const include = checkbox.checked;
+    enqueue(async () => {
+      setStatus('Updating selection…');
+      const result = include
+        ? await api.includeArtifact(artifact.id)
+        : await api.excludeArtifact(artifact.id);
+      if (!result?.ok) {
+        setStatus(safeMessage(result, 'The selection could not be updated.'), 'error');
         renderArtifacts();
-        setStatus(`${title} ${option.included ? 'included' : 'excluded'}.`);
-      });
+        return;
+      }
+      model = result.draft;
+      renderArtifacts();
+      setStatus(`${title} ${include ? 'included' : 'excluded'}.`);
     });
-    selection.append(button);
-  }
-
-  return selection;
+  });
+  const name = document.createElement('span');
+  name.className = 'artifact-name';
+  name.textContent = title;
+  label.append(checkbox, name);
+  return label;
 }
 
 function previewResultFor(artifact) {
@@ -181,9 +161,7 @@ function renderLogPreview(preview, container) {
   }
   const caption = document.createElement('p');
   caption.className = 'preview-caption';
-  caption.textContent = preview.truncated
-    ? 'Sanitized excerpt bounded to the most recent application-log entries.'
-    : 'Complete sanitized content of the bounded application-log excerpt.';
+  caption.textContent = 'The exact sanitized excerpt that will be attached.';
   const content = document.createElement('pre');
   content.className = 'log-preview';
   content.tabIndex = 0;
@@ -207,7 +185,7 @@ function renderScreenshotPreview(preview, container) {
 
   const caption = document.createElement('p');
   caption.className = 'preview-caption';
-  caption.textContent = `Exact captured PNG eligible for attachment, without format conversion · ${preview.width} × ${preview.height} pixels. Scroll or pinch to zoom.`;
+  caption.textContent = 'The exact capture that will be attached. Scroll or pinch to zoom.';
   const frame = document.createElement('div');
   frame.className = 'screenshot-frame';
   frame.tabIndex = 0;
@@ -379,102 +357,61 @@ function renderScreenshotPreview(preview, container) {
   image.src = preview.dataUrl;
 }
 
-function renderArtifactPreview(artifact) {
+function renderArtifactExpander(artifact) {
   const details = document.createElement('details');
   details.className = `artifact-preview-details ${artifact.kind}`;
-  details.open = true;
   const summary = document.createElement('summary');
-  summary.textContent = artifact.kind === 'log' ? 'Preview sanitized excerpt' : 'Preview screenshot';
+  summary.textContent = artifact.kind === 'diagnostics' ? 'Details' : 'Preview';
   const container = document.createElement('div');
   container.className = 'artifact-preview-body';
-  const loading = document.createElement('p');
-  loading.className = 'preview-loading';
-  loading.textContent = 'Loading preview…';
-  container.append(loading);
   details.append(summary, container);
 
-  void previewResultFor(artifact).then((result) => {
-    if (!container.isConnected) return;
-    if (!result?.ok) {
-      renderPreviewUnavailable(container, result);
-      return;
-    }
-    if (artifact.kind === 'log') renderLogPreview(result.preview, container);
-    else renderScreenshotPreview(result.preview, container);
+  if (artifact.kind === 'diagnostics') {
+    renderDiagnostics(artifact, container);
+  } else {
+    const loading = document.createElement('p');
+    loading.className = 'preview-loading';
+    loading.textContent = 'Loading preview…';
+    container.append(loading);
+    details.addEventListener('toggle', () => {
+      if (!details.open || container.dataset.loaded) return;
+      container.dataset.loaded = 'true';
+      void previewResultFor(artifact).then((result) => {
+        if (!container.isConnected) return;
+        if (!result?.ok) {
+          renderPreviewUnavailable(container, result);
+          return;
+        }
+        if (artifact.kind === 'log') renderLogPreview(result.preview, container);
+        else renderScreenshotPreview(result.preview, container);
+      });
+    });
+  }
+
+  details.addEventListener('toggle', () => {
+    if (details.open) openPreviews.add(artifact.id);
+    else openPreviews.delete(artifact.id);
   });
+  details.open = openPreviews.has(artifact.id);
   return details;
 }
 
 function renderArtifact(artifact) {
   const item = document.createElement('article');
-  item.className = 'artifact';
-  const header = document.createElement('div');
-  header.className = 'artifact-header';
-  const copy = document.createElement('div');
-  const title = document.createElement('h3');
-  title.textContent = artifactTitle(artifact.kind);
-  const summary = document.createElement('p');
-  summary.textContent = artifactDescription(artifact);
-  copy.append(title, summary);
-  header.append(copy, renderArtifactSelection(artifact));
-  item.append(header);
-
-  if (artifact.available && (artifact.kind === 'screenshot' || artifact.kind === 'log')) {
-    item.append(renderArtifactPreview(artifact));
-  } else if (artifact.kind === 'diagnostics') {
-    const details = document.createElement('div');
-    details.className = 'artifact-preview';
-    renderDiagnostics(artifact, details);
-    if (details.childNodes.length > 0) item.append(details);
-  }
+  item.className = `artifact${artifact.available ? '' : ' is-unavailable'}`;
+  const row = document.createElement('div');
+  row.className = 'artifact-row';
+  const meta = document.createElement('span');
+  meta.className = 'artifact-meta';
+  meta.textContent = artifactMeta(artifact);
+  row.append(renderArtifactToggle(artifact), meta);
+  item.append(row);
+  if (artifact.available) item.append(renderArtifactExpander(artifact));
   return item;
-}
-
-function renderArtifactSummaryGroup(title, artifacts, marker, className) {
-  const group = document.createElement('div');
-  group.className = `artifact-summary-group ${className}`;
-  const heading = document.createElement('h3');
-  heading.textContent = title;
-  const list = document.createElement('ul');
-  if (artifacts.length === 0) {
-    const empty = document.createElement('li');
-    empty.className = 'artifact-summary-empty';
-    empty.textContent = 'None';
-    list.append(empty);
-  } else {
-    for (const artifact of artifacts) {
-      const item = document.createElement('li');
-      const symbol = document.createElement('span');
-      symbol.className = 'artifact-summary-marker';
-      symbol.setAttribute('aria-hidden', 'true');
-      symbol.textContent = marker;
-      const label = document.createElement('span');
-      label.textContent = artifactTitle(artifact.kind);
-      item.append(symbol, label);
-      list.append(item);
-    }
-  }
-  group.append(heading, list);
-  return group;
-}
-
-function renderArtifactSummary() {
-  artifactSummary.hidden = model.state === 'approved';
-  if (artifactSummary.hidden) {
-    artifactSummaryGroups.replaceChildren();
-    return;
-  }
-  const included = model.artifacts.filter((artifact) => artifact.included);
-  const excluded = model.artifacts.filter((artifact) => !artifact.included);
-  artifactSummaryGroups.replaceChildren(
-    renderArtifactSummaryGroup('Included', included, '✓', 'included'),
-    renderArtifactSummaryGroup('Excluded', excluded, '×', 'excluded'),
-  );
 }
 
 function renderArtifacts() {
   artifactsRoot.replaceChildren(...model.artifacts.map(renderArtifact));
-  renderArtifactSummary();
 }
 
 function lockApprovedState(report) {
@@ -483,9 +420,13 @@ function lockApprovedState(report) {
   for (const artifactId of previewCache.keys()) {
     if (!approvedArtifactIds.has(artifactId)) previewCache.delete(artifactId);
   }
+  for (const artifactId of openPreviews) {
+    if (!approvedArtifactIds.has(artifactId)) openPreviews.delete(artifactId);
+  }
   model.artifacts = model.artifacts.filter((artifact) => approvedArtifactIds.has(artifact.id));
   for (const field of Object.values(fields)) field.disabled = true;
   cancelButton.textContent = 'Close';
+  backButton.hidden = false;
   renderArtifacts();
 }
 
@@ -505,6 +446,20 @@ function setApprovedRetryState(report, message) {
   approveButton.disabled = false;
   approveButton.textContent = 'Try Again';
   setStatus(message, 'error');
+}
+
+function setReviewState() {
+  reportReady.hidden = true;
+  reviewFlow.hidden = false;
+  backButton.hidden = true;
+  approveButton.hidden = false;
+  approveButton.disabled = false;
+  approveButton.textContent = 'Prepare Report';
+  cancelButton.textContent = 'Cancel';
+  for (const field of Object.values(fields)) field.disabled = false;
+  setDescription(model.description);
+  renderArtifacts();
+  setStatus('');
 }
 
 async function persistDescription() {
@@ -543,32 +498,40 @@ approveButton.addEventListener('click', () => enqueue(async () => {
   setPreparedState(result.report);
 }));
 
+backButton.addEventListener('click', () => enqueue(async () => {
+  backButton.disabled = true;
+  const result = await api.reopen();
+  backButton.disabled = false;
+  if (!result?.ok) {
+    setStatus(safeMessage(result, 'The review could not be reopened.'), 'error');
+    return;
+  }
+  model = result.draft;
+  setReviewState();
+}));
+
 openGitHubButton.addEventListener('click', () => enqueue(async () => {
   openGitHubButton.disabled = true;
-  setStatus('Opening the prepared artifacts and GitHubâ€¦');
+  setStatus('Saving the files to Downloads and opening GitHub…');
   const result = await api.openGitHub();
   openGitHubButton.disabled = false;
   if (!result?.ok) {
     setStatus(safeMessage(result, 'StashBase could not open GitHub.'), 'error');
     return;
   }
-  setStatus('File Explorer and the prefilled GitHub issue were opened.', 'approved');
+  setStatus('Files are in your Downloads folder — attach them to the GitHub issue.', 'approved');
 }));
 
 saveArtifactsButton.addEventListener('click', () => enqueue(async () => {
   saveArtifactsButton.disabled = true;
-  setStatus('Choose where to save the selected artifactsâ€¦');
+  setStatus('Saving the files to Downloads…');
   const result = await api.saveArtifacts();
   saveArtifactsButton.disabled = false;
   if (!result?.ok) {
-    setStatus(safeMessage(result, 'The selected artifacts could not be saved.'), 'error');
+    setStatus(safeMessage(result, 'The files could not be saved to Downloads.'), 'error');
     return;
   }
-  if (result.canceled) {
-    setStatus('Save canceled.');
-    return;
-  }
-  setStatus('The selected artifacts were saved.', 'approved');
+  setStatus('Files are in your Downloads folder.', 'approved');
 }));
 
 cancelButton.addEventListener('click', () => enqueue(async () => {

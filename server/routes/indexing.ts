@@ -289,6 +289,12 @@ export function mount(app: express.Express): void {
         mode: 'semantic', query, topK, folderRoot, pathPrefix: prefixAbs, types,
       });
       if (result.availability.state === 'unavailable') {
+        if (result.availability.reason === 'hosted-quota-exhausted') {
+          return res.status(402).json({
+            error: 'Your hosted AI Index allowance is exhausted. Exact search is still available.',
+            code: 'HOSTED_QUOTA_EXHAUSTED',
+          });
+        }
         return res.status(412).json({
           error: 'AI Index is disabled until you set it up in StashBase Settings',
           code: 'EMBEDDER_KEY_REQUIRED',

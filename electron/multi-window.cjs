@@ -155,6 +155,9 @@ function createWindowRegistry({ platform = process.platform } = {}) {
       }
       return null;
     },
+    windowForId(windowId) {
+      return records.get(windowId)?.win ?? null;
+    },
     setFolder(windowId, folder) {
       const record = records.get(windowId);
       if (!record) return false;
@@ -188,13 +191,6 @@ function focusWindow(win) {
   return true;
 }
 
-function focusAllowedSenderWindow({ BrowserWindow, sender, isAllowed, beforeFocus }) {
-  const win = BrowserWindow.fromWebContents(sender);
-  if (!win || !isAllowed(win)) return null;
-  beforeFocus?.(win);
-  return focusWindow(win) ? win : null;
-}
-
 function isOAuthReturnUrl(value) {
   if (typeof value !== 'string' || value.length > 256) return false;
   try {
@@ -210,6 +206,18 @@ function isOAuthReturnUrl(value) {
   } catch {
     return false;
   }
+}
+
+function isStashBaseProtocolUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try { return new URL(value).protocol === 'stashbase:'; }
+  catch { return false; }
+}
+
+function classifyProtocolLaunch(argv) {
+  if (argv.some(isOAuthReturnUrl)) return 'oauth-return';
+  if (argv.some(isStashBaseProtocolUrl)) return 'inert';
+  return 'ordinary';
 }
 
 async function openOrFocusFolder({
@@ -353,14 +361,15 @@ function createRendererFlushReadiness() {
 module.exports = {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
+  classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
   createSingleFlight,
   createWindowRegistry,
-  focusAllowedSenderWindow,
   focusWindow,
   isOAuthReturnUrl,
+  isStashBaseProtocolUrl,
   openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,

@@ -22,8 +22,8 @@ or timed-out CI.
 ## Source CI
 
 - The macOS, Windows, and Linux source matrix covers type/build gates plus
-  scheduler, cancellation, renderer, server, MCP, Python, and real Electron
-  lifecycle behavior.
+  config/account, scheduler, cancellation, retrieval, renderer, server, MCP,
+  Python, and real Electron lifecycle behavior.
 - Ubuntu Playwright adds smoke, deterministic functional journeys, and reviewed
   visual baselines without replacing the three-platform source matrix.
 - Linux source Electron may use `--no-sandbox` under hosted Xvfb. Packaged apps

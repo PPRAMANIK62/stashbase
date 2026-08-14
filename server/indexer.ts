@@ -160,6 +160,8 @@ export interface IndexStatus {
   upToDate: boolean;
   /** False when semantic indexing/retrieval is unavailable, e.g. no API key. */
   semanticEnabled?: boolean;
+  /** False while a configured hosted source is blocked by its shared quota. */
+  semanticAvailable?: boolean;
   /** Human-readable reason when semantic indexing/retrieval is disabled. */
   semanticDisabledReason?: string;
   /** False until the folder has received at least one daemon status response. */

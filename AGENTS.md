@@ -27,6 +27,18 @@ an explicit symlink when appropriate, or run `pnpm setup:python`. Without it,
 `ModuleNotFoundError: No module named 'mfs'`; treat that as worktree setup, not
 as a product regression. Never commit the venv or its symlink.
 
+## Electron launch environment
+
+The agent host may inherit `ELECTRON_RUN_AS_NODE=1`. Remove it from the child
+environment before any command that must launch Electron as a desktop runtime,
+including Electron smoke tests, Electron E2E, and temporary visual harnesses.
+On POSIX, run commands as
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron:smoke` (and apply the same
+prefix to the other Electron launch command). If `require('electron').app` is
+undefined or a smoke fails at `app.setPath`, treat the inherited variable as
+environment setup, not a product regression. Do not remove the variable from
+flows that intentionally run Electron's embedded Node runtime.
+
 You are responsible for keeping the relevant docs under `design-docs/` and
 `code-review/` up to date. Update them as a side effect of relevant code
 changes — never as a standalone "documentation pass". If a change touches the
@@ -89,19 +101,31 @@ When the user reports a bug or asks for a feature, run the full loop:
 2. Implement while preserving these cross-cutting constraints: sync and
    conversion are folder-explicit; hidden derived notes never surface; one
    daemon owns the local index; credentials live only in Settings, never env.
-3. Verify—never report done without:
-   - `pnpm typecheck` always;
-   - `pnpm build:web` for renderer changes;
-   - focused commands from every crossed review contract;
-   - `pnpm test:e2e:check-focus` for E2E changes;
-   - `pnpm test:e2e:smoke` for release-blocking renderer/cross-process paths;
-   - `pnpm test:e2e:functional` for affected broader journeys;
-   - `pnpm test:e2e:visual` on Linux for covered composition changes. Generate
-     intentional Linux baselines through **Generate visual baselines**; never
-     approve local macOS/Windows goldens.
+3. During implementation, run the smallest focused tests that exercise the
+   changed behavior. Do not run the full validation matrix after every edit;
+   reserve broad contract, E2E, and build verification for the pre-commit gate
+   unless a broader command is needed to diagnose the change.
 4. Update affected docs in the same change. Run `pnpm test:docs` for changes to
-   the documentation structure, links, contracts, or journey mapping.
+   the documentation structure, links, contracts, or journey mapping as part
+   of the pre-commit gate.
 5. Leave work uncommitted until the user asks to commit.
+
+## Pre-commit verification
+
+Before creating commits, run the complete validation matrix for the pending
+change:
+
+- `pnpm typecheck` always;
+- `pnpm build:web` for renderer changes;
+- focused commands from every crossed review contract;
+- `pnpm test:docs` for documentation structure, links, contracts, or journey
+  mapping changes;
+- `pnpm test:e2e:check-focus` for E2E changes;
+- `pnpm test:e2e:smoke` for release-blocking renderer/cross-process paths;
+- `pnpm test:e2e:functional` for affected broader journeys;
+- `pnpm test:e2e:visual` on Linux for covered composition changes. Generate
+  intentional Linux baselines through **Generate visual baselines**; never
+  approve local macOS/Windows goldens.
 
 ## Commit protocol
 
