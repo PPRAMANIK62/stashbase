@@ -253,6 +253,7 @@ function JsonPersistenceHarness({ control }: { control: { current: PersistenceCo
     {
       loadFiles: async () => [], refreshIndexState: async () => undefined,
       toast: () => 'toast', primeFind: () => undefined,
+      askConfirm: async () => true,
       scheduleAfter, cancelScheduled,
     },
     dispatch,
@@ -283,6 +284,7 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
   const window = new Window({ url: 'http://localhost/' });
   const previous = installDomGlobals(window);
   const originalPutFile = api.putFile;
+  const originalGetFile = api.getFile;
   try {
     const host = window.document.createElement('div');
     window.document.body.appendChild(host);
@@ -330,13 +332,20 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     let conflictAttempt = 0;
     api.putFile = async (_name, content) => {
       conflictAttempt++;
-      if (conflictAttempt === 1) throw new ApiError('changed on disk', 409, 'FILE_CHANGED');
+      const err = new ApiError('changed on disk', 409, 'FILE_CHANGED');
+      err.currentVersion = 'version-disk';
+      if (conflictAttempt === 1) throw err;
       return { content, version: 'after-conflict' };
     };
+    api.getFile = async (_name) => {
+      return { name: 'data.json', format: 'json', content: '{"disk": true}', version: 'version-disk' };
+    };
     await act(async () => { saved = await control.current!.actions.flushSave(); });
-    assert.equal(saved, true);
-    assert.equal(conflictAttempt, 2, 'an unchanged live buffer retries a 409 without the stale version');
-    assert.equal(control.current!.state.current.tabs[0].file?.version, 'after-conflict');
+    assert.equal(saved, false);
+    assert.equal(conflictAttempt, 1, 'should not retry automatically');
+    assert.ok(control.current!.state.current.tabs[0].conflict, 'transitions to conflict state');
+    assert.equal(control.current!.state.current.tabs[0].conflict?.diskContent, '{"disk": true}');
+    assert.equal(control.current!.state.current.tabs[0].conflict?.diskVersion, 'version-disk');
 
     let releaseFirst!: (value: { content: string; version: string }) => void;
     const firstSave = new Promise<{ content: string; version: string }>((resolve) => { releaseFirst = resolve; });
@@ -407,6 +416,7 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     await act(async () => root.unmount());
   } finally {
     api.putFile = originalPutFile;
+    api.getFile = originalGetFile;
     restoreDomGlobals(previous);
     window.close();
   }
