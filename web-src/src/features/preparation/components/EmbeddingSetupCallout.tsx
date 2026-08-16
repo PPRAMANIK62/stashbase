@@ -22,10 +22,10 @@
  * interrupting one.
  */
 import { useEffect, useState } from 'react';
-import { api, type EmbedderState } from '../api';
-import { openEmbeddingSetup } from './EmbedderRequireKeyGate';
-import { isEmbeddingAuthorized } from './embedder/embeddingAuth';
-import { ACCOUNT_CHANGED_EVENT } from '../accountEvents';
+import { api, type EmbedderState } from '@/api';
+import { openEmbeddingSetup } from '@/components/EmbedderRequireKeyGate';
+import { isEmbeddingAuthorized } from '@/components/embedder/embeddingAuth';
+import { ACCOUNT_CHANGED_EVENT } from '@/accountEvents';
 
 export default function EmbeddingSetupCallout() {
   const [embedder, setEmbedder] = useState<EmbedderState | null>(null);

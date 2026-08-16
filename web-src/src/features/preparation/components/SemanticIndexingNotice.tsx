@@ -1,8 +1,8 @@
 import React from 'react';
-import { formatMiB } from '../lib/format';
-import { useApp } from '../store/AppContext';
-import { buttonVariants } from './ui/button';
-import { StatusMessage } from './ui/status';
+import { formatMiB } from '@/lib/format';
+import { useApp } from '@/store/AppContext';
+import { buttonVariants } from '@/components/ui/button';
+import { StatusMessage } from '@/components/ui/status';
 
 /** Plain <button> + the shared outline-button recipe: the node test loader
  *  compiles this module graph with the classic JSX transform, under which

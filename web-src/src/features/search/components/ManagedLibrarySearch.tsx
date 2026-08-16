@@ -28,7 +28,7 @@ import { fileGlyphFormat } from '@/components/agent/attachments';
 import { folderMenuEntries } from '@/components/agent/folderState';
 import { ScopeMenu } from '@/components/ScopeMenu';
 import { FileTypeIcon } from '@/components/FileTree';
-import { SemanticIndexingNotice } from '@/components/SemanticIndexingNotice';
+import { SemanticIndexingNotice } from '@/features/preparation/components/SemanticIndexingNotice';
 import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/components/pickerChrome';
 
 /**

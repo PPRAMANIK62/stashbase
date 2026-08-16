@@ -27,9 +27,9 @@ const expectedEntries = [
   'src/features/search/components/ManagedQuickOpen.tsx',
   'src/components/ContextMenu.tsx',
   'src/components/DocumentOutline.tsx',
-  'src/components/SemanticIndexingNotice.tsx',
-  'src/components/UnsupportedFilesCallout.tsx',
-  'src/components/EmbeddingSetupCallout.tsx',
+  'src/features/preparation/components/SemanticIndexingNotice.tsx',
+  'src/features/preparation/components/UnsupportedFilesCallout.tsx',
+  'src/features/preparation/components/EmbeddingSetupCallout.tsx',
   'src/components/SidebarAccountRow.tsx',
   'src/components/embedder/RequireApiKeyModal.tsx',
 ];

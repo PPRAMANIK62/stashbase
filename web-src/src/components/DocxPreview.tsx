@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, assetBaseUrl, errorMessage, versionedAssetUrl } from '../api';
-import { preparationWaitCopy } from '../preparationCopy.ts';
+import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
 import { useIframeDropForward } from '../hooks/useIframeDropForward';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { previewClickHandler } from '../lib/previewIframe';

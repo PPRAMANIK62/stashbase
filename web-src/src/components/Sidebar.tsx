@@ -47,9 +47,9 @@ const SidebarAccountRow = lazyWithRetry(() =>
 const DocumentOutline = lazyWithRetry(() =>
   import('./DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
 const SemanticIndexingNotice = lazyWithRetry(() =>
-  import('./SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNotice })));
-const EmbeddingSetupCallout = lazyWithRetry(() => import('./EmbeddingSetupCallout'));
-const UnsupportedFilesCallout = lazyWithRetry(() => import('./UnsupportedFilesCallout'));
+  import('@/features/preparation/components/SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNotice })));
+const EmbeddingSetupCallout = lazyWithRetry(() => import('@/features/preparation/components/EmbeddingSetupCallout'));
+const UnsupportedFilesCallout = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesCallout'));
 
 /**
  * The sidebar is one Files panel — the active folder's file tree — with

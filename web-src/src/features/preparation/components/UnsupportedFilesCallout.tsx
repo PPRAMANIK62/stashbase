@@ -1,5 +1,5 @@
 import { useReducer } from 'react';
-import { useApp } from '../store/AppContext';
+import { useApp } from '@/store/AppContext';
 
 const DISMISS_KEY = 'stashbase.unsupported-callout-dismissed';
 

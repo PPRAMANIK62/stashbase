@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage, versionedAssetUrl } from '../api';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { basename } from '../lib/paths';
-import { preparationWaitCopy } from '../preparationCopy.ts';
+import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
 import { useApp } from '../store/AppContext';
 import { getPreparationFailure } from '../store/fileReadiness';
 import { emptyStateClass } from './emptyState';

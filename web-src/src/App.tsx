@@ -37,7 +37,7 @@ import {
 } from './workspaceLayout';
 
 const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane'));
-const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('./components/UnsupportedFilesModal'));
+const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesModal'));
 const LazyContextMenu = lazyWithRetry(() => import('./components/ContextMenu'));
 const LazyImageLightbox = lazyWithRetry(() =>
   import('./components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
