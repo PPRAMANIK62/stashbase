@@ -215,7 +215,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   assert.match(managedTooltipButton, /render=\{<button disabled=\{disabled\} \/>}/);
   assert.match(managedTooltipButton, /triggerRef\.current\?\.focus\(\)/);
 
-  const app = read('web-src/src/App.tsx');
+  const app = read('web-src/src/app/App.tsx');
   assert.match(app, /<OverlayStackProvider>/);
   assert.doesNotMatch(app, /classList\.add\('is-electron'\)/);
   const splitters = read('web-src/src/features/workspace/components/WorkspaceSplitters.tsx');

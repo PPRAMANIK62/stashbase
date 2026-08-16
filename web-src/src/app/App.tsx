@@ -23,7 +23,7 @@ import { DocumentOutlineProvider } from '@/features/documents/components/Documen
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { OverlayStackProvider } from '@/common/components/OverlayStack';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
-import { AppProvider, useApp } from './store/AppContext';
+import { AppProvider, useApp } from '@/store/AppContext';
 import { useChatLayoutFollowUp } from '@/features/agent-panel/hooks/useChatLayoutFollowUp';
 import { useClipboardImageOffer } from '@/common/hooks/useClipboardImageOffer';
 import { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
