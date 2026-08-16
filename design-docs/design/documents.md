@@ -68,10 +68,11 @@ editor, a media editor, or a proprietary document format.
 
 ## Known Gaps
 
-- The renderer currently retries a version-conflicted editor save without its
-  base version, so a concurrent external or Agent write can be overwritten.
-  Required recovery and the missing regression are owned by
-  [File Transactions](../../code-review/file-transactions.md#known-gap--renderer-conflict-recovery).
+- When the editor detects that a file changed on disk since it last saved
+  (version mismatch 409), it shows a side-by-side conflict resolver with
+  explicit Reload / Overwrite / Merge choices instead of silently overwriting.
+  The implementation contract lives in
+  [File Transactions](../../code-review/file-transactions.md#renderer-conflict-recovery).
 - Executable local HTML and its remote subresources currently have a weaker
   boundary than the experience contract. The compatibility tradeoff and
   required confinement work are owned by

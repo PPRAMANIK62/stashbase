@@ -53,14 +53,17 @@ editor reads V1 → Agent writes V2 with base V1
 → no automatic unversioned V3 may erase V2
 ```
 
-### Known gap — renderer conflict recovery
+### Renderer conflict recovery
 
-`web-src/src/store/useDocumentActions.ts` currently catches a version-conflict
-response and immediately retries the save without `baseVersion`, overwriting
-the newer disk copy. This Shipping behavior violates the Required contract
-above. Until explicit reload/merge/overwrite UX and the `V1 → V2 → conflict`
-regression ship, reviewers must treat concurrent editor/Agent writes as unsafe
-and must not cite ordinary save tests as coverage of conflict recovery.
+`web-src/src/store/useDocumentActions.ts` catches a version-conflict (409)
+response and transitions the tab into a conflicted state. The UI renders a
+`ConflictResolver` component displaying a side-by-side comparison. The user is
+presented with three explicit resolution paths:
+- **Reload from Disk**: discards local edits and syncs with the disk version.
+- **Overwrite Disk**: saves local edits to disk, overwriting the remote version.
+- **Merge and Edit**: combines local and disk changes using standard inline conflict
+  markers (`<<<<<<<`, `=======`, `>>>>>>>`) and returns the user to the editor
+  to resolve the conflict and save.
 
 ## Mutation Sequence
 
