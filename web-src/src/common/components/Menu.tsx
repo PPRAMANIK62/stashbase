@@ -1,5 +1,6 @@
-import { Suspense, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { LazyManaged } from '@/common/components/LazyManaged';
 import { PopupLoadingStatus } from '@/common/components/ui/status';
 
 export type MenuItem =
@@ -55,7 +56,8 @@ export function Menu(props: MenuProps) {
   const left = 'x' in anchor ? anchor.x : anchor.rect.left;
   const top = 'y' in anchor ? anchor.y : anchor.rect.bottom + 4;
   return (
-    <Suspense
+    <LazyManaged
+      as={ManagedMenu}
       fallback={(
         <PopupLoadingStatus
           label="Opening menu…"
@@ -64,8 +66,7 @@ export function Menu(props: MenuProps) {
           onCancel={props.onClose}
         />
       )}
-    >
-      <ManagedMenu {...props} />
-    </Suspense>
+      componentProps={props}
+    />
   );
 }

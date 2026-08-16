@@ -1,7 +1,5 @@
-import { Suspense } from 'react';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
-import { useOverlayLayer } from '@/common/components/OverlayStack';
-import { ModalLoadingStatus } from '@/common/components/ui/status';
+import { LazyManagedModal } from '@/common/components/LazyManaged';
 
 const ManagedClipboardImport = lazyWithRetry(() => import('@/common/components/ManagedClipboardImport'));
 
@@ -35,29 +33,24 @@ export function ClipboardImportModal({
   onAdd: () => void;
   onClose: () => void;
 }) {
-  const layer = useOverlayLayer(true);
   return (
-    <Suspense
-      fallback={(
-        <ModalLoadingStatus
-          label="Opening image import…"
-          isTopmost={layer.isTopmost}
-          onCancel={onClose}
-          closeOnBackdrop
-        />
-      )}
-    >
-      <ManagedClipboardImport
-        title="Add image to StashBase?"
-        description={<>There's an image on your clipboard. Add it to this folder — its text gets extracted so you can search it later.</>}
-        isTopmost={layer.isTopmost}
-        onCancel={onClose}
-        onAdd={onAdd}
-      >
-        <div className="clipboard-offer-preview">
-          <img src={offer.dataUrl} alt="Clipboard image" />
-        </div>
-      </ManagedClipboardImport>
-    </Suspense>
+    <LazyManagedModal
+      as={ManagedClipboardImport}
+      open
+      label="Opening image import…"
+      onCancel={onClose}
+      closeOnBackdrop
+      componentProps={{
+        title: 'Add image to StashBase?',
+        description: <>There's an image on your clipboard. Add it to this folder — its text gets extracted so you can search it later.</>,
+        onCancel: onClose,
+        onAdd,
+        children: (
+          <div className="clipboard-offer-preview">
+            <img src={offer.dataUrl} alt="Clipboard image" />
+          </div>
+        ),
+      }}
+    />
   );
 }

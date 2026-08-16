@@ -145,7 +145,7 @@ test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
   assert.match(read('web-src/src/common/components/ManagedModalShell.tsx'), /@\/common\/components\/ui\/dialog/);
   assert.match(read('web-src/src/common/components/ManagedModalShell.tsx'), /<DialogTitle/);
   assert.match(read('web-src/src/common/components/ManagedModalShell.tsx'), /w-\[min\(420px,90vw\)\]/);
-  assert.match(read('web-src/src/common/components/ClipboardImportModal.tsx'), /<ManagedClipboardImport/);
+  assert.match(read('web-src/src/common/components/ClipboardImportModal.tsx'), /as=\{ManagedClipboardImport\}/);
   assert.match(read('web-src/src/common/components/ManagedClipboardImport.tsx'), /autoFocus onClick=\{onAdd\}/);
   assert.doesNotMatch(read('web-src/src/common/components/ClipboardImportModal.tsx'), /window\.addEventListener/);
   assert.doesNotMatch(read('web-src/src/common/components/ModalShell.tsx'), /ManagedClipboardImport/);
@@ -194,7 +194,10 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   const modal = read('web-src/src/common/components/ModalShell.tsx');
   assert.match(modal, /lazyWithRetry\(\(\) => import\('@\/common\/components\/ManagedModalShell'\)\)/);
   assert.match(read('web-src/src/common/components/ManagedModalShell.tsx'), /@\/common\/components\/ui\/dialog/);
-  assert.match(modal, /<ModalLoadingStatus/);
+  // The Suspense/ModalLoadingStatus wiring moved into the shared
+  // LazyManagedModal primitive (see the "shared overlays" test below) —
+  // ModalShell just hands it the lazy component and cancel/label props.
+  assert.match(modal, /LazyManagedModal/);
   assert.doesNotMatch(modal, /createPortal|addEventListener/);
   assert.doesNotMatch(read('web-src/src/features/settings/components/SettingsModal.tsx'), /addEventListener\('keydown'/);
   assert.doesNotMatch(read('web-src/src/common/components/CascadePromptModal.tsx'), /addEventListener/);
@@ -237,16 +240,20 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
 });
 
 test('shared overlays own loading modality, popup positioning, and focus return', () => {
+  // The four blocking-modal containers all delegate to one shared
+  // primitive instead of each wiring useOverlayLayer + ModalLoadingStatus
+  // inline — that wiring now lives once in LazyManaged.tsx.
   for (const file of [
     'web-src/src/common/components/ModalShell.tsx',
     'web-src/src/features/settings/components/SettingsModal.tsx',
     'web-src/src/common/components/AlertConfirmModal.tsx',
     'web-src/src/common/components/ClipboardImportModal.tsx',
   ]) {
-    const source = read(file);
-    assert.match(source, /useOverlayLayer/);
-    assert.match(source, /<ModalLoadingStatus/);
+    assert.match(read(file), /LazyManagedModal/);
   }
+  const lazyManaged = read('web-src/src/common/components/LazyManaged.tsx');
+  assert.match(lazyManaged, /useOverlayLayer/);
+  assert.match(lazyManaged, /<ModalLoadingStatus/);
 
   const loadingStatus = read('web-src/src/common/components/ui/status.tsx');
   assert.match(loadingStatus, /dialog\.showModal\(\)/);

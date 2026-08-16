@@ -1,5 +1,5 @@
-import { Suspense } from 'react';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { LazyManaged } from '@/common/components/LazyManaged';
 
 const ManagedDropVeil = lazyWithRetry(() => import('@/common/components/ManagedDropVeil'));
 
@@ -9,8 +9,10 @@ const ManagedDropVeil = lazyWithRetry(() => import('@/common/components/ManagedD
 export function DropVeil({ hot }: { hot: boolean }) {
   if (!hot) return null;
   return (
-    <Suspense fallback={<div className="drop-veil hot">Release to import</div>}>
-      <ManagedDropVeil />
-    </Suspense>
+    <LazyManaged
+      as={ManagedDropVeil}
+      fallback={<div className="drop-veil hot">Release to import</div>}
+      componentProps={{}}
+    />
   );
 }

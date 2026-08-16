@@ -1,11 +1,6 @@
-import {
-  Suspense,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import { type ReactNode, type RefObject } from 'react';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
-import { useOverlayLayer } from '@/common/components/OverlayStack';
-import { ModalLoadingStatus } from '@/common/components/ui/status';
+import { LazyManagedModal } from '@/common/components/LazyManaged';
 
 export interface ModalShellProps {
   title: ReactNode;
@@ -28,19 +23,14 @@ const ManagedModalShell = lazyWithRetry(() => import('@/common/components/Manage
  * only: it never recreates an unmanaged modal while Base UI is loading.
  */
 export function ModalShell(props: ModalShellProps) {
-  const layer = useOverlayLayer(true);
   return (
-    <Suspense
-      fallback={(
-        <ModalLoadingStatus
-          label="Opening dialog…"
-          isTopmost={layer.isTopmost}
-          onCancel={props.onCancel}
-          closeOnBackdrop={props.closeOnBackdrop ?? true}
-        />
-      )}
-    >
-      <ManagedModalShell {...props} isTopmost={layer.isTopmost} />
-    </Suspense>
+    <LazyManagedModal
+      as={ManagedModalShell}
+      open
+      label="Opening dialog…"
+      onCancel={props.onCancel}
+      closeOnBackdrop={props.closeOnBackdrop ?? true}
+      componentProps={props}
+    />
   );
 }

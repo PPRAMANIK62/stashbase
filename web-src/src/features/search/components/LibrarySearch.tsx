@@ -1,8 +1,9 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
 import { useUiShell } from '@/store/AppContext';
 import type { LibrarySearchPrefill } from '@/features/search/lib/librarySearch';
-import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { LazyManagedPicker } from '@/common/components/LazyManaged';
 import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
 
 const ManagedLibrarySearch = lazyWithRetry(() => import('./ManagedLibrarySearch'));
@@ -58,10 +59,12 @@ export function LibrarySearch() {
   };
   const loadingClass = `${PICKER_VEIL_CLASS} quick-open-blocking text-sm text-muted-foreground`;
   return (
-    <LazyLoadBoundary className={loadingClass} label="Search" resetKey={String(request.id)}>
-      <Suspense fallback={<div className={loadingClass}>Opening search…</div>}>
-        <ManagedLibrarySearch key={request.id} prefill={request.prefill} onClose={close} />
-      </Suspense>
-    </LazyLoadBoundary>
+    <LazyManagedPicker
+      as={ManagedLibrarySearch}
+      requestId={request.id}
+      label="Search"
+      loadingClass={loadingClass}
+      componentProps={{ prefill: request.prefill, onClose: close }}
+    />
   );
 }

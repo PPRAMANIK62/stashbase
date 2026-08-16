@@ -1,7 +1,6 @@
-import { Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
-import { useOverlayLayer } from '@/common/components/OverlayStack';
-import { ModalLoadingStatus } from '@/common/components/ui/status';
+import { LazyManagedModal } from '@/common/components/LazyManaged';
 
 export type SettingsSection = 'appearance' | 'agents' | 'embedding' | 'transcription' | 'mcp';
 
@@ -28,7 +27,6 @@ export function openSettings(section?: SettingsSection): void {
 export function SettingsPortal() {
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>('appearance');
-  const layer = useOverlayLayer(open);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent<boolean>('stashbase-overlay-blocking', { detail: open }));
@@ -51,20 +49,12 @@ export function SettingsPortal() {
 
   if (!open) return null;
   return (
-    <Suspense
-      fallback={(
-        <ModalLoadingStatus
-          label="Opening Settings…"
-          isTopmost={layer.isTopmost}
-          onCancel={() => setOpen(false)}
-        />
-      )}
-    >
-      <ManagedSettingsModal
-        initialSection={section}
-        isTopmost={layer.isTopmost}
-        onClose={() => setOpen(false)}
-      />
-    </Suspense>
+    <LazyManagedModal
+      as={ManagedSettingsModal}
+      open
+      label="Opening Settings…"
+      onCancel={() => setOpen(false)}
+      componentProps={{ initialSection: section, onClose: () => setOpen(false) }}
+    />
   );
 }

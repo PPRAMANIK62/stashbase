@@ -1,7 +1,8 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
 import { useUiShell, useWorkspace } from '@/store/AppContext';
-import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { LazyManagedPicker } from '@/common/components/LazyManaged';
 import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
 
 const ManagedQuickOpen = lazyWithRetry(() => import('./ManagedQuickOpen'));
@@ -45,10 +46,12 @@ export function QuickOpen() {
   };
   const loadingClass = `${PICKER_VEIL_CLASS} quick-open-blocking text-sm text-muted-foreground`;
   return (
-    <LazyLoadBoundary className={loadingClass} label="Quick Open" resetKey={String(request.id)}>
-      <Suspense fallback={<div className={loadingClass}>Opening Quick Open…</div>}>
-        <ManagedQuickOpen key={request.id} commandsOnly={request.commandsOnly} onClose={close} />
-      </Suspense>
-    </LazyLoadBoundary>
+    <LazyManagedPicker
+      as={ManagedQuickOpen}
+      requestId={request.id}
+      label="Quick Open"
+      loadingClass={loadingClass}
+      componentProps={{ commandsOnly: request.commandsOnly, onClose: close }}
+    />
   );
 }
