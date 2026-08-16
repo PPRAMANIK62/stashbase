@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiError } from '@/common/api/apiTransport';
-import { runIndexStatusRequest } from '../store/indexStatusRequest';
+import { runIndexStatusRequest } from '../indexStatusRequest';
 import {
   commitOpenedFolderNavigation,
   runFolderOpenTransition,
-} from '../store/useFolderActions';
-import { initialState, type Action, type State } from '../store/state';
-import { reducer } from '../store/stateReducer';
+} from '../useFolderActions';
+import { initialState, type Action, type State } from '../state';
+import { reducer } from '../stateReducer';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
