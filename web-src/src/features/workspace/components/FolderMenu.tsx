@@ -7,7 +7,7 @@ import {
   SyncIcon,
   TrashIcon,
 } from '@/common/components/icons';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 
 /** The ⋯ folder menu shared by the active-folder header and every
@@ -36,7 +36,8 @@ export function FolderMenu({
   onRemove: () => void;
   onClose: () => void;
 }) {
-  const { state, actions, dispatch } = useApp();
+  const state = useWorkspace();
+  const { actions, dispatch } = useAppActions();
 
   return (
     <Menu

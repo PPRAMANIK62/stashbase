@@ -14,7 +14,7 @@ import PdfWorker from '@/features/documents/lib/pdfWorker?worker';
 import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
 import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { getFileReadiness } from '@/store/fileReadiness';
 import { makePdfFindController, scanPages } from '@/features/documents/lib/pdfFindController';
 import {
@@ -67,7 +67,9 @@ const PDFJS_ASSET_BASE = '/pdfjs-assets';
  *      the chunk text so the PDF jumps to the same passage.
  */
 export function PdfPreview({ name, showConversionBanner = true }: { name: string; showConversionBanner?: boolean }) {
-  const { state, actions, activeTab } = useApp();
+  const state = useWorkspace();
+  const { activeTab } = state;
+  const { actions } = useAppActions();
   const { consumePendingHighlight, registerFindController, updateTabPdfPage } = actions;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const containerRef = useRef<HTMLDivElement | null>(null);

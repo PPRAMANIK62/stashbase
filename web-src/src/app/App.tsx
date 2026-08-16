@@ -23,7 +23,7 @@ import { DocumentOutlineProvider } from '@/features/documents/components/Documen
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { OverlayStackProvider } from '@/common/components/OverlayStack';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
-import { AppProvider, useApp } from '@/store/AppContext';
+import { AppProvider, useAppActions, useChat, useUiShell, useWorkspace } from '@/store/AppContext';
 import { useChatLayoutFollowUp } from '@/features/agent-panel/hooks/useChatLayoutFollowUp';
 import { useClipboardImageOffer } from '@/common/hooks/useClipboardImageOffer';
 import { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
@@ -64,7 +64,17 @@ export function App() {
 
 function AppBody() {
   const veilHot = useGlobalDragDrop();
-  const { state, dispatch } = useApp();
+  // The root shell legitimately reads all three slices (layout classes,
+  // document title, and the chat panel all key off workspace + chat state;
+  // the floating context menu keys off ui-shell) — merge locally rather
+  // than rewrite every `state.` reference in this file. As with AgentView,
+  // this merge is local: it doesn't change which slice's change triggers
+  // AppBody's own re-render, and nothing downstream reads this object.
+  const workspace = useWorkspace();
+  const chat = useChat();
+  const uiShell = useUiShell();
+  const state = { ...workspace, ...chat, ...uiShell };
+  const { dispatch } = useAppActions();
   const { previewImage, closePreviewImage } = usePreviewMessages();
   const { clipboardOffer, saveClipboardOffer, dismissClipboardOffer } = useClipboardImageOffer();
   const initialFolderPending = useRef(new URLSearchParams(window.location.search).has('folder'));

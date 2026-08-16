@@ -19,7 +19,7 @@ import { acceptsAgentContextDrop, dragPayloadKinds } from '@/features/workspace/
 import { electronBridge } from '@/common/lib/electronBridge';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useStateWithRef } from '@/common/hooks/useStateWithRef';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from '@/common/components/ui/button';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
@@ -104,7 +104,18 @@ export function AgentView({
   title: string;
   agent?: AgentKind;
 }) {
-  const { state, dispatch, actions } = useApp();
+  // AgentView genuinely reads across both slices throughout this file
+  // (workspace: files/folders/folderPath/homeDir/recent for @-mentions and
+  // scope; chat: agents/chatTabs/pendingResume for this tab's own runtime
+  // state) — merge locally rather than rewrite every `state.` reference.
+  // The merge is local to this component; it doesn't affect which slice
+  // change triggers AgentView's own re-render (that's still decided by
+  // `useWorkspace`/`useChat` independently), and no other component reads
+  // this merged object.
+  const workspace = useWorkspace();
+  const chat = useChat();
+  const state = { ...workspace, ...chat };
+  const { dispatch, actions } = useAppActions();
   const meta = AGENT_META[agent];
   const runtime = state.agents.find((candidate) => candidate.id === agent);
   const runtimeUnavailable = runtime?.state === 'unavailable';

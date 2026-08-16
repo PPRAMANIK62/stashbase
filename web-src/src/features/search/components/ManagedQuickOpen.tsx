@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '@/features/search/lib/commandPalette';
 import { rankQuickOpen } from '@/features/search/lib/quickOpen';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { openLibrarySearch } from './LibrarySearch';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import {
@@ -25,7 +25,9 @@ export default function ManagedQuickOpen({
   commandsOnly: boolean;
   onClose: () => void;
 }) {
-  const { state, actions, activeTab } = useApp();
+  const state = useWorkspace();
+  const { activeTab } = state;
+  const { actions } = useAppActions();
   const [query, setQuery] = useState(commandsOnly ? '>' : '');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);

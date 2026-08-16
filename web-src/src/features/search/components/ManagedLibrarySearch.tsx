@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '@/common/api/api';
 import type { PendingHighlight } from '@/store/state';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet';
 import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
@@ -126,7 +126,8 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
   prefill?: LibrarySearchPrefill | null;
   onClose: () => void;
 }) {
-  const { state, actions, dispatch } = useApp();
+  const state = useWorkspace();
+  const { actions, dispatch } = useAppActions();
   const initial = useRef(applyLibrarySearchPrefill(readLibrarySearchMemory(), prefill)).current;
   const [query, setQuery] = useState(initial.query);
   const [mode, setMode] = useState<LibrarySearchMode>(initial.mode);
@@ -720,7 +721,8 @@ function SearchStatusBanner({ semanticMode, onNavigateAway }: {
   semanticMode: boolean;
   onNavigateAway: () => void;
 }) {
-  const { state, actions } = useApp();
+  const state = useWorkspace();
+  const { actions } = useAppActions();
   const semanticDisabled = state.embedderHasKey === false;
   const conversionPendingCount = state.pendingConversions.length;
   const semanticPendingPaths = new Set<string>();

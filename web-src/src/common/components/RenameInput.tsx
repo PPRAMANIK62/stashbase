@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { useApp } from '@/store/AppContext';
+import { useUiShell } from '@/store/AppContext';
 
 /**
  * Inline VS-Code-style rename — replaces a row's `.label` span with an
@@ -101,6 +101,6 @@ export function RenameInput({
 /** Hook returning the in-progress rename target (if any) for a given
  *  path + kind. Components use it to swap a `.label` for a `<RenameInput>`. */
 export function useRenameTarget(path: string, kind: 'file' | 'folder'): boolean {
-  const { state } = useApp();
-  return state.renaming?.path === path && state.renaming.kind === kind;
+  const { renaming } = useUiShell();
+  return renaming?.path === path && renaming.kind === kind;
 }

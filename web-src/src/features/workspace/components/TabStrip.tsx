@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { basename } from '@/common/lib/paths';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 
 const TAB_MIME = 'application/x-stashbase-tab';
 
@@ -22,7 +22,8 @@ const TAB_MIME = 'application/x-stashbase-tab';
  * this component just renders.
  */
 export function TabStrip() {
-  const { state, actions, dispatch } = useApp();
+  const state = useWorkspace();
+  const { actions, dispatch } = useAppActions();
   const [dragId, setDragId] = useState<string | null>(null);
   // `dropTarget` carries both the target tab id and which side of the
   // chip the cursor is on. Storing this lets us paint the indicator

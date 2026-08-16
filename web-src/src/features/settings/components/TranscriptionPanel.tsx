@@ -6,13 +6,13 @@ import {
   type TranscriptionSettings,
 } from '@/common/api/api';
 import { formatMiB } from '@/common/lib/format';
-import { useApp } from '@/store/AppContext';
+import { useAppActions } from '@/store/AppContext';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@/../../shared/transcription.ts';
 import { Button } from '@/common/components/ui/button';
 import { Select } from '@/common/components/ui/select';
 
 export function TranscriptionPanel() {
-  const { actions } = useApp();
+  const { actions } = useAppActions();
   const [settings, setSettings] = useState<TranscriptionSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyModel, setBusyModel] = useState<TranscriptionModelId | null>(null);

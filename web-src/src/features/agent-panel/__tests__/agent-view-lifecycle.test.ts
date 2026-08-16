@@ -6,7 +6,7 @@ import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { MessageList } from '@/features/agent-panel/components/AgentMessages';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
 import { AGENT_META } from '@/features/agent-panel/components/agentCatalog';
-import { AppContext, type AppActions } from '@/store/AppContext';
+import { AppProviders, type AppActions } from '@/store/AppContext';
 import { initialState, type State } from '@/store/state';
 
 class LifecycleWebSocket {
@@ -128,9 +128,13 @@ async function mountAgentView(t: TestContext) {
   let renderer!: ReactTestRenderer;
   await act(async () => {
     renderer = create(React.createElement(
-      AppContext.Provider,
-      { value: { state: rendererState(), dispatch: () => {}, actions: actionsStub() } },
-      React.createElement(AgentView, { active: true, id: 'tab-1', title: 'Untitled', agent: 'codex' }),
+      AppProviders,
+      {
+        state: rendererState(),
+        dispatch: () => {},
+        actions: actionsStub(),
+        children: React.createElement(AgentView, { active: true, id: 'tab-1', title: 'Untitled', agent: 'codex' }),
+      },
     ));
   });
   t.after(() => {

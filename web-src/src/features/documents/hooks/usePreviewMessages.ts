@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getWindowId } from '@/common/api/api';
 import { openExternalUrl } from '@/common/lib/externalLink';
 import { isTrustedPreviewSource } from '@/features/documents/lib/previewMessages';
-import { useApp } from '@/store/AppContext';
+import { useAppActions } from '@/store/AppContext';
 
 /**
  * Bridge from sandboxed preview iframes to the shell. Previews post
@@ -14,7 +14,7 @@ export function usePreviewMessages(): {
   previewImage: { src: string; alt: string } | null;
   closePreviewImage: () => void;
 } {
-  const { actions } = useApp();
+  const { actions } = useAppActions();
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
 
   useEffect(() => {

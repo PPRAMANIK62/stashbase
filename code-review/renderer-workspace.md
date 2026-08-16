@@ -50,14 +50,28 @@ changes, never to make an accidental dependency pass.
 |---|---|
 | Interface | `ActiveFolderWorkspace` in `web-src/src/store/useActiveFolderWorkspace.ts` |
 | Primary owners | `web-src/src/store/state.ts`, `stateReducer.ts`, `stateHelpers.ts`, `folderScopedReset.ts`, and the internal `useDocumentActions.ts`, `useFileActions.ts`, `useFolderActions.ts`, `useSearchActions.ts` Modules |
-| Shell Adapter | `web-src/src/store/AppContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/features/workspace/components/MainPane.tsx` |
+| Shell Adapter | `web-src/src/store/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/features/workspace/components/MainPane.tsx` |
 | Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
-| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`), `web-src/src/features/workspace/__tests__/folder-transition.test.ts`, `workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, and `scripts/check-renderer-chunks.mjs` |
+| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`), `web-src/src/features/workspace/__tests__/folder-transition.test.ts`, `workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, and `scripts/check-renderer-chunks.mjs` |
 
 The four action hooks are private Seams inside the workspace Module. Do not make
 components depend on them directly; that would create a second transition
 Interface.
+
+`AppContext.tsx` owns exactly one `useReducer` over the single `State` shape in
+`state.ts` — that stays the one source of truth. It does NOT expose that state
+through one merged read hook. Delivery is split into four sibling contexts
+(`WorkspaceContext`, `ChatContext`, `UiShellContext`, each memoized on only the
+`State` fields it owns per the slice map atop `state.ts`, plus `ActionsContext`
+for the stable `actions`/`dispatch` pair) so a component that reads one slice
+does not re-render when a dispatch only touches another. Components call
+`useWorkspace()` / `useChat()` / `useUiShell()` / `useAppActions()` for exactly
+what they need; there is no merged `useApp()`. A component that genuinely reads
+across slices throughout its body (`AgentView.tsx`, `App.tsx`) may merge them
+into one local object after calling the hooks — that's a local convenience,
+not a second Interface, and it does not change which slice's change triggers
+that component's own re-render.
 
 ## Validation
 

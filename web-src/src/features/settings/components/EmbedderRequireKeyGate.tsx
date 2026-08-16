@@ -32,7 +32,7 @@
  */
 import { Suspense, useEffect, useState } from 'react';
 import { api, type EmbedderState } from '@/common/api/api';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from '@/features/settings/lib/embedder/embeddingAuth';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { useOverlayLayer } from '@/common/components/OverlayStack';
@@ -53,7 +53,8 @@ export function openEmbeddingSetup(): void {
 }
 
 export function EmbedderRequireKeyGate() {
-  const { state: appState, dispatch, actions } = useApp();
+  const appState = useWorkspace();
+  const { dispatch, actions } = useAppActions();
   const folder = appState.folder;
   const [state, setState] = useState<EmbedderState | null>(null);
   const [open, setOpen] = useState(false);

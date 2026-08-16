@@ -1,7 +1,7 @@
 import { PanelLeftIcon, PanelRightIcon, SearchIcon } from '@/common/components/icons';
 import { formatPrimaryShiftShortcut } from '@/common/lib/platformShortcuts';
 import { readPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
 import { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
 import { openLibrarySearch } from '@/features/search/components/LibrarySearch';
 import { activateChatTabForAgent } from '@/features/workspace/components/Sidebar';
@@ -24,16 +24,17 @@ const controlButtonClass =
  * while the sidebar is collapsed.
  */
 export function TitlebarControls() {
-  const { state, dispatch } = useApp();
-  const collapsed = state.sidebarCollapsed;
-  const chatOpen = state.chatOpen;
+  const { sidebarCollapsed: collapsed } = useWorkspace();
+  const chat = useChat();
+  const chatOpen = chat.chatOpen;
+  const { dispatch } = useAppActions();
 
   /** Opening with NO chat tabs must land on something usable — reuse the
    *  New Chat blank-tab rule (which also opens the panel) instead of
    *  revealing an empty pane. Closing is always a plain toggle. */
   function toggleChat() {
-    if (!chatOpen && state.chatTabs.length === 0) {
-      activateChatTabForAgent(state, dispatch, readPreferredAgent());
+    if (!chatOpen && chat.chatTabs.length === 0) {
+      activateChatTabForAgent(chat, dispatch, readPreferredAgent());
       return;
     }
     dispatch({ type: 'CHAT_TOGGLE' });

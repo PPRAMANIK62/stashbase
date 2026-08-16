@@ -1,17 +1,18 @@
 import { api } from '@/common/api/api';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useUiShell, useWorkspace } from '@/store/AppContext';
 import { getPreparationProblem } from '@/store/fileReadiness';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 
 /** Right-click menu for file and folder rows. Loaded only after state owns a
  *  context-menu request; positioning and dismissal stay in the shared Menu. */
 export default function ContextMenu() {
-  const { state, dispatch, actions } = useApp();
-  if (!state.ctxMenu) return null;
-  const { x, y, target, kind } = state.ctxMenu;
-  const folderPathAtOpen = state.folderPath;
+  const { ctxMenu } = useUiShell();
+  const { folderPath: folderPathAtOpen, preparationFailures } = useWorkspace();
+  const { dispatch, actions } = useAppActions();
+  if (!ctxMenu) return null;
+  const { x, y, target, kind } = ctxMenu;
   const close = () => dispatch({ type: 'CTX_MENU', menu: null });
-  const canReprocess = kind === 'file' && Boolean(getPreparationProblem(state, target));
+  const canReprocess = kind === 'file' && Boolean(getPreparationProblem({ preparationFailures }, target));
 
   const items: MenuItem[] = [
     {

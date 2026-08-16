@@ -9,7 +9,7 @@ import {
 } from '@/common/api/api';
 import { AGENT_META, AGENTS, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { ChevronDownIcon, MoreHorizontalIcon } from '@/common/components/icons';
-import { useApp } from '@/store/AppContext';
+import { useAppActions } from '@/store/AppContext';
 import { Button } from '@/common/components/ui/button';
 import {
   Menu,
@@ -29,7 +29,7 @@ const DEFAULT_DEBUG: AgentRuntimeDebugState = {
 };
 
 export function AgentRuntimePanel() {
-  const { actions, dispatch } = useApp();
+  const { actions, dispatch } = useAppActions();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [debug, setDebug] = useState<AgentRuntimeDebugState>(DEFAULT_DEBUG);
   const [busy, setBusy] = useState<string | null>(null);

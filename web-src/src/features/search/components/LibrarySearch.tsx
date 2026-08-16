@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
-import { useApp } from '@/store/AppContext';
+import { useUiShell } from '@/store/AppContext';
 import type { LibrarySearchPrefill } from '@/features/search/lib/librarySearch';
 import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
@@ -26,12 +26,12 @@ interface SearchRequest {
  *  requested (the prefill is applied by the lazy dialog, keeping this
  *  wrapper out of the entry chunk's budget). */
 export function LibrarySearch() {
-  const { state } = useApp();
+  const { modal, cascadePrompt, ctxMenu, renaming } = useUiShell();
   const settingsBlocking = useSettingsBlocking();
   const [request, setRequest] = useState<SearchRequest | null>(null);
   const nextRequestId = useRef(0);
   const restoreRef = useRef<HTMLElement | null>(null);
-  const blocked = Boolean(settingsBlocking || state.modal || state.cascadePrompt || state.ctxMenu || state.renaming);
+  const blocked = Boolean(settingsBlocking || modal || cascadePrompt || ctxMenu || renaming);
 
   useEffect(() => {
     const onOpen = (event: Event) => {

@@ -13,7 +13,7 @@ import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { LazyLoadBoundary } from '@/common/components/ErrorBoundary';
 import { agentMeta, isAgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { cn } from '@/common/lib/utils';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useChat } from '@/store/AppContext';
 import { rememberPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 
 /** One tab body. Inactive panes stay mounted (preserving each session's
@@ -54,7 +54,8 @@ export function ChatSessionBoundary({
 }
 
 export default function ChatPane() {
-  const { state, dispatch } = useApp();
+  const state = useChat();
+  const { dispatch } = useAppActions();
   // The panel renders with or without a window folder: chats are scoped
   // per tab (a library folder, or the whole library), so a no-folder
   // window can still hold library-wide chats.

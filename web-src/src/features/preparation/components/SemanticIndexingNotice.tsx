@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatMiB } from '@/common/lib/format';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { buttonVariants } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
 
@@ -10,7 +10,8 @@ import { StatusMessage } from '@/common/components/ui/status';
 const noticeButtonClass = buttonVariants({ variant: 'outline', size: 'xs' });
 
 export function SemanticIndexingNotice() {
-  const { state, actions } = useApp();
+  const state = useWorkspace();
+  const { actions } = useAppActions();
   const workload = state.semanticIndexing;
   if (!workload || !['awaiting-decision', 'paused', 'partial-paused'].includes(workload.state)) return null;
   const awaiting = workload.state === 'awaiting-decision';

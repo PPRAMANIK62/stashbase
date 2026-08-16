@@ -7,7 +7,7 @@ import {
 } from '@/features/documents/lib/editorHistory';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useUiShell, useWorkspace } from '@/store/AppContext';
 import {
   PICKER_LABEL_CLASS,
   PICKER_RESULTS_CLASS,
@@ -68,7 +68,14 @@ interface PendingListeners {
  * arms `pending` closes both races at once.
  */
 export function EditorHistoryNavigator() {
-  const { state, actions } = useApp();
+  const workspace = useWorkspace();
+  const uiShell = useUiShell();
+  // Only used inside `stateRef`, read from an event-listener closure that
+  // needs both the workspace fields (tabs/editorHistory/folder) and the
+  // ui-shell blocking fields (modal/cascadePrompt/ctxMenu/renaming) — see
+  // the merge note in AgentView.tsx / App.tsx for why this stays local.
+  const state = { ...workspace, ...uiShell };
+  const { actions } = useAppActions();
   const [phase, setPhase] = useState<Phase>('closed');
   const [entries, setEntries] = useState<EditorHistoryEntry[]>([]);
   const [active, setActive] = useState(0);

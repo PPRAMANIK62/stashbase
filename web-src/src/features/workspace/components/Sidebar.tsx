@@ -8,7 +8,7 @@ import {
   PlusIcon,
   StarIcon,
 } from '@/common/components/icons';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
 import { folderScope } from '@/features/agent-panel/lib/folderState';
 import { ALL_HISTORY_SCOPE } from '@/features/agent-panel/lib/sessionHistory';
 import { AGENT_META, AGENTS, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
@@ -107,7 +107,8 @@ const sectionTitleClass = 'min-w-0 truncate text-base text-muted-foreground';
  * sidebar as stacked sections; library membership lives in the titlebar's
  * folder switcher. */
 function FilesPanel() {
-  const { state, activeTab } = useApp();
+  const state = useWorkspace();
+  const { activeTab } = state;
   const { outline } = useDocumentOutline();
   const [outlineExpanded, setOutlineExpanded] = useState(true);
 
@@ -235,12 +236,13 @@ function FilesPanel() {
  *  reused/created tab's scope resolves to the window default (current folder,
  *  else Library) on connect, so no scope needs to be threaded here. */
 function NewChatButton() {
-  const { state, dispatch } = useApp();
+  const chat = useChat();
+  const { dispatch } = useAppActions();
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
   const chevronRef = useRef<HTMLButtonElement | null>(null);
 
   function startChat(agent: AgentKind) {
-    activateChatTabForAgent(state, dispatch, agent);
+    activateChatTabForAgent(chat, dispatch, agent);
   }
 
   /** Picking from the chevron only updates the next-chat preference. Chat
@@ -400,7 +402,8 @@ function RootMenuButton({
  *  belongs to the working context above, while Library stays the
  *  bottom-most global section. */
 function LibrarySections({ children }: { children?: React.ReactNode }) {
-  const { state, actions, dispatch } = useApp();
+  const state = useWorkspace();
+  const { actions, dispatch } = useAppActions();
   // `children` is the Document Outline section (or false when no
   // Markdown document is open) — it decides which bottom block carries
   // the mt-auto anchor.
@@ -581,7 +584,8 @@ function ActiveFolderHeader({
   menuOpen: boolean;
   onMenu: (rect: DOMRect) => void;
 }) {
-  const { state, actions, dispatch } = useApp();
+  const state = useWorkspace();
+  const { actions, dispatch } = useAppActions();
   const [sideHeadDrop, setSideHeadDrop] = useState(false);
   // Chat-history menu open: hold the hover-revealed action cluster
   // visible while its popover (portalled outside the sidebar) is up.
@@ -670,7 +674,7 @@ function ActiveFolderHeader({
  *  brand-warmth moment (see visual-style's warmth budget) — the app mark,
  *  a single line of guidance, and the primary add-folder action. */
 function ZeroFolderState() {
-  const { actions } = useApp();
+  const { actions } = useAppActions();
   const bridge = electronBridge();
 
   async function addFolder() {
@@ -703,7 +707,8 @@ function ZeroFolderState() {
  *  the active folder. HTML notes were dropped once their editor went
  *  away, so there's no format picker — one click, one .md draft. */
 function NewNoteButton() {
-  const { state, actions } = useApp();
+  const state = useWorkspace();
+  const { actions } = useAppActions();
   const target = state.activeFolder || state.folder || 'folder root';
 
   return (

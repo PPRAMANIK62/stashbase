@@ -4,7 +4,7 @@ import { electronBridge } from '@/common/lib/electronBridge';
 import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
 import { ChevronDownIcon, FolderIcon, NewFolderIcon } from '@/common/components/icons';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { refreshLibraryMembership, useLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 import { useOpenFolderWatchdog } from '@/features/workspace/hooks/useOpenFolderWatchdog';
 import { Menu, type MenuItem } from '@/common/components/Menu';
@@ -18,7 +18,7 @@ import type { LibraryListEntry } from '@/features/workspace/lib/libraryListPlan'
  *  lands in the expected place. Browser mode (no Electron bridge) has no
  *  portable absolute-path picker, so the list is empty. */
 export function addFolderMenuItems(
-  actions: ReturnType<typeof useApp>['actions'],
+  actions: ReturnType<typeof useAppActions>['actions'],
   bridge: ReturnType<typeof electronBridge>,
 ): MenuItem[] {
   if (typeof bridge?.openFolderDialog !== 'function') return [];
@@ -77,7 +77,8 @@ export function addFolderMenuItems(
  * needs-attention members carrying the quiet warning dot).
  */
 export function FolderSwitcher() {
-  const { state, actions, dispatch } = useApp();
+  const state = useWorkspace();
+  const { actions, dispatch } = useAppActions();
   const bridge = electronBridge();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);

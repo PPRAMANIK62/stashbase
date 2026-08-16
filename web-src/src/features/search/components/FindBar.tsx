@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useUiShell, useWorkspace } from '@/store/AppContext';
 import { openLibrarySearch } from './LibrarySearch';
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
@@ -27,7 +27,9 @@ const FIND_TOGGLE_CLASS =
   'px-1.5 font-semibold tracking-wide text-muted-foreground aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent';
 
 export function FindBar() {
-  const { state, actions } = useApp();
+  const { find } = useUiShell();
+  const { folderPath } = useWorkspace();
+  const { actions } = useAppActions();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Re-focus on every open transition — Cmd+F'ing while the bar is
@@ -35,16 +37,16 @@ export function FindBar() {
   // and that render lands here. The select() lets the user retype on
   // top of the prior query without a clear step.
   useEffect(() => {
-    if (!state.find.open) return;
+    if (!find.open) return;
     const el = inputRef.current;
     if (!el) return;
     el.focus();
     el.select();
-  }, [state.find.open]);
+  }, [find.open]);
 
-  if (!state.find.open) return null;
+  if (!find.open) return null;
 
-  const { query, caseSensitive, wholeWord, current, total } = state.find;
+  const { query, caseSensitive, wholeWord, current, total } = find;
   const hasQuery = query.length > 0;
   const noMatch = hasQuery && total === 0;
 
@@ -59,7 +61,7 @@ export function FindBar() {
     openLibrarySearch({
       query: q,
       mode: 'keyword',
-      scope: state.folderPath ? { kind: 'folder', path: state.folderPath } : { kind: 'library' },
+      scope: folderPath ? { kind: 'folder', path: folderPath } : { kind: 'library' },
     });
   }
 

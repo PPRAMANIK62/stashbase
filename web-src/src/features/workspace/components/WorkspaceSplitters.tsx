@@ -10,7 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
 import {
   clampChatWidth,
   CHAT_MAX_WIDTH,
@@ -32,7 +32,8 @@ import {
  *  it doesn't perturb the `.app` grid tracks; pointer-capture keeps the
  *  drag alive once the cursor crosses into the main pane. */
 export function SidebarSplitter() {
-  const { state, dispatch } = useApp();
+  const state = useWorkspace();
+  const { dispatch } = useAppActions();
   // `w` is the panel width at drag start. `done` ends the gesture after a
   // collapse or a re-open snap so each grab does exactly one thing —
   // resize, OR collapse, OR re-open. Mixing them is what produced the
@@ -186,7 +187,8 @@ export function SidebarSplitter() {
  *  Drags the chat-panel width; lifecycle is pointer-capture style so the
  *  drag survives even if the cursor briefly leaves the handle. */
 export function ChatSplitter() {
-  const { state, dispatch } = useApp();
+  const state = useChat();
+  const { dispatch } = useAppActions();
   const startRef = useRef<{ x: number; w: number } | null>(null);
   const appRef = useRef<HTMLElement | null>(null);
   const pendingWidthRef = useRef<number | null>(null);

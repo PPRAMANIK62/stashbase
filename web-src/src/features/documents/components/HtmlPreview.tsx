@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { versionedAssetUrl, versionedDerivedAssetUrl } from '@/common/api/api';
-import { useApp, type MatchInfo } from '@/store/AppContext';
+import { useAppActions, useUiShell, useWorkspace, type MatchInfo } from '@/store/AppContext';
 import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
 import { isTrustedFrameSource } from '@/features/documents/lib/previewMessages';
 
@@ -28,7 +28,10 @@ import { isTrustedFrameSource } from '@/features/documents/lib/previewMessages';
  * computation below.
  */
 export function HtmlPreview({ name, derived = false }: { name: string; derived?: boolean }) {
-  const { state, actions, activeTab } = useApp();
+  const state = useWorkspace();
+  const { activeTab } = state;
+  const { find } = useUiShell();
+  const { actions } = useAppActions();
   const pendingAnchor = activeTab?.pendingAnchor ?? null;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const content = activeTab?.file?.content ?? '';
@@ -43,8 +46,8 @@ export function HtmlPreview({ name, derived = false }: { name: string; derived?:
   const loadedNameRef = useRef<string>('');
   // Snapshot find-bar state so the iframe re-apply path doesn't churn
   // the find effect on every find tick.
-  const findAtMount = useRef(state.find);
-  findAtMount.current = state.find;
+  const findAtMount = useRef(find);
+  findAtMount.current = find;
 
   // Cheap content fingerprint used to bust the iframe cache when the
   // file changes on disk (e.g. Claude Code wrote to it via the

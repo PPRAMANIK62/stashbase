@@ -1,7 +1,7 @@
 import { Suspense, useRef, useState } from 'react';
 import { HistoryIcon } from '@/common/components/icons';
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useChat } from '@/store/AppContext';
 import { activateChatTabForAgent } from '@/features/agent-panel/lib/chatActivation';
 import type { HistoryScope } from '@/features/agent-panel/lib/sessionHistory';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
@@ -34,7 +34,8 @@ export function ScopeHistoryButton({
    *  while the menu is open. */
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { state, dispatch } = useApp();
+  const chat = useChat();
+  const { dispatch } = useAppActions();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -51,7 +52,7 @@ export function ScopeHistoryButton({
       type: 'CHAT_RESUME_REQUEST',
       resume: { agent, sessionId, folder },
     });
-    activateChatTabForAgent(state, dispatch, agent);
+    activateChatTabForAgent(chat, dispatch, agent);
   }
 
   const rect = open ? buttonRef.current?.getBoundingClientRect() : undefined;

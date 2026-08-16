@@ -1,5 +1,5 @@
 import { basename } from '@/common/lib/paths';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useUiShell } from '@/store/AppContext';
 import { ModalShell } from '@/common/components/ModalShell';
 import { Button } from '@/common/components/ui/button';
 
@@ -17,8 +17,8 @@ import { Button } from '@/common/components/ui/button';
  * matching `resolveCascadePrompt(decision)` call.
  */
 export function CascadePromptModal() {
-  const { state, actions } = useApp();
-  const prompt = state.cascadePrompt;
+  const { actions } = useAppActions();
+  const { cascadePrompt: prompt } = useUiShell();
 
   if (!prompt) return null;
 

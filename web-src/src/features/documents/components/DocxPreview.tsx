@@ -4,7 +4,7 @@ import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.
 import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { previewClickHandler } from '@/features/documents/lib/previewIframe';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useUiShell, useWorkspace } from '@/store/AppContext';
 import { getPreparationFailure } from '@/store/fileReadiness';
 import { makeIframeFindController } from '@/features/documents/lib/findIframe';
 import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
@@ -21,7 +21,10 @@ const DIRECT_PREVIEW_TIMEOUT_MS = 20_000;
  * lane still prepares durable HTML for search, Agent reads, and fallback.
  */
 export function DocxPreview({ name }: { name: string }) {
-  const { state, actions, activeTab } = useApp();
+  const state = useWorkspace();
+  const { activeTab } = state;
+  const { find } = useUiShell();
+  const { actions } = useAppActions();
   const pendingAnchor = activeTab?.pendingAnchor ?? null;
   const pendingHighlight = activeTab?.pendingHighlight ?? null;
   const sourceVersion = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
@@ -30,7 +33,7 @@ export function DocxPreview({ name }: { name: string }) {
   const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const loadedHtmlRef = useRef('');
-  const findAtMount = useLatestRef(state.find);
+  const findAtMount = useLatestRef(find);
   const currentRef = useLatestRef({ folderPath: state.folderPath, name });
   const [html, setHtml] = useState<string | null>(null);
   const [directFailed, setDirectFailed] = useState(false);

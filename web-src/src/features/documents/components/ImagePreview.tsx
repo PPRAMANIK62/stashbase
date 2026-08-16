@@ -3,7 +3,7 @@ import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { basename } from '@/common/lib/paths';
 import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
-import { useApp } from '@/store/AppContext';
+import { useWorkspace } from '@/store/AppContext';
 import { getPreparationFailure } from '@/store/fileReadiness';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { Button } from '@/common/components/ui/button';
@@ -40,7 +40,8 @@ const MAX_SCALE = 8;
 const clampScale = (v: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
 
 export function ImagePreview({ name }: { name: string }) {
-  const { state, activeTab } = useApp();
+  const state = useWorkspace();
+  const { activeTab } = state;
   const sourceVersion = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
   const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
   const src = useMemo(() => versionedAssetUrl(name, sourceVersion, sourceFolder), [name, sourceVersion, sourceFolder]);

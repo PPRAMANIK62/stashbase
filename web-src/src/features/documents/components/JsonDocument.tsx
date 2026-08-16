@@ -5,7 +5,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { useApp, type FindController, type FindOptions, type MatchInfo } from '@/store/AppContext';
+import { useAppActions, useWorkspace, type FindController, type FindOptions, type MatchInfo } from '@/store/AppContext';
 import { analyzeJsonSource, formatPath, matchingJsonTreeNodes } from '@/features/documents/lib/json/sourceModel';
 import type { JsonTreeSessionState } from '@/features/documents/components/json/JsonTreeView';
 
@@ -142,7 +142,8 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
   readOnly: boolean;
   active: boolean;
 }) {
-  const { actions, activeTab, dispatch } = useApp();
+  const { activeTab } = useWorkspace();
+  const { actions, dispatch } = useAppActions();
   const registerFindController = actions.registerFindController;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sessionRef = useRef<JsonEditorSession | null>(null);

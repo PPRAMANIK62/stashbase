@@ -4,7 +4,7 @@ import React, { createElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { FileTree } from '@/features/workspace/components/FileTree';
 import { TabStrip } from '@/features/workspace/components/TabStrip';
-import { AppContext, type AppActions } from '@/store/AppContext';
+import { AppProviders, type AppActions } from '@/store/AppContext';
 import { initialState, makeTab, type Action, type State } from '@/store/state';
 
 (globalThis as { React?: typeof React }).React = React;
@@ -25,9 +25,8 @@ async function renderWithState(
   let renderer: ReactTestRenderer;
   await act(async () => {
     renderer = create(createElement(
-      AppContext.Provider,
-      { value: { state, actions: appActions, dispatch } },
-      child,
+      AppProviders,
+      { state, actions: appActions, dispatch, children: child },
     ));
   });
   return renderer!;

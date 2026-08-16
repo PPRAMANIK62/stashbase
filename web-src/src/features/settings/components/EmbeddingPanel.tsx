@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage, type EmbedderProvider, type EmbedderState } from '@/common/api/api';
-import { useApp } from '@/store/AppContext';
+import { useAppActions } from '@/store/AppContext';
 import { EmbeddingAuthChoice } from '@/features/settings/components/embedder/EmbeddingAuthChoice';
 import { KeyModal } from '@/features/settings/components/embedder/KeyModal';
 import { RemoveKeyModal } from '@/features/settings/components/embedder/RemoveKeyModal';
@@ -36,7 +36,7 @@ const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeh
 const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
 
 export function EmbeddingPanel() {
-  const { dispatch, actions } = useApp();
+  const { dispatch, actions } = useAppActions();
   const [state, setState] = useState<EmbedderState | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<EmbedderProvider>('openai');
   const [loadError, setLoadError] = useState<string | null>(null);

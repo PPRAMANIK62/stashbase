@@ -4,7 +4,7 @@ import { BotIcon, ChevronDownIcon, ClaudeIcon } from '@/common/components/icons'
 import type { FileMeta, FolderMeta } from '@/common/api/api';
 import { useTreeRowDrag } from '@/features/workspace/hooks/useTreeRowDrag';
 import { basename } from '@/common/lib/paths';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { getFileReadiness } from '@/store/fileReadiness';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { RenameInput, useRenameTarget } from '@/common/components/RenameInput';
@@ -123,7 +123,7 @@ function visibleNodePaths(nodes: TreeNode[], expanded: Set<string>, paths: strin
 }
 
 export function FileTree() {
-  const { state } = useApp();
+  const state = useWorkspace();
   const [rovingPath, setRovingPath] = useState<string | null>(null);
   const root = useMemo(
     () => buildTree(state.files, state.folders, state.fileOrder),
@@ -242,7 +242,8 @@ function FolderRow({
   parent: string;
   siblings: string[];
 }) {
-  const { state, dispatch, actions } = useApp();
+  const state = useWorkspace();
+  const { dispatch, actions } = useAppActions();
   const treeFocus = useContext(TreeFocusContext);
   const isExpanded = state.expanded.has(node.path);
   const isActive = state.selectedPath === node.path;
@@ -355,7 +356,8 @@ function FileRow({
   parent: string;
   siblings: string[];
 }) {
-  const { state, actions, dispatch } = useApp();
+  const state = useWorkspace();
+  const { actions, dispatch } = useAppActions();
   const treeFocus = useContext(TreeFocusContext);
   const isActive = state.selectedPath === path;
   const readiness = getFileReadiness(state, path);
@@ -406,9 +408,7 @@ function FileRow({
   }
 
   function openFile() {
-    const activeTab = state.activeTabId
-      ? state.tabs.find((t) => t.id === state.activeTabId)
-      : null;
+    const activeTab = state.activeTab;
     // An out-of-folder tab with the same relative name is a different file.
     if (activeTab?.file?.name === path && !activeTab.file.folder) {
       dispatch({ type: 'SELECT_PATH', path });
@@ -524,7 +524,7 @@ function WarningGlyph() {
  *  is `''`), so the affordance reads "the new folder will live
  *  here". Same Enter/Esc/blur/IME semantics as `<RenameInput>`. */
 function NewFolderInput({ parentPath, depth }: { parentPath: string; depth: number }) {
-  const { actions, dispatch } = useApp();
+  const { actions, dispatch } = useAppActions();
   const ref = useRef<HTMLInputElement | null>(null);
   const doneRef = useRef(false);
 

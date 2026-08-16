@@ -1,6 +1,6 @@
 import { useState, type DragEvent } from 'react';
 import { FILE_MIME, FOLDER_MIME } from '@/features/workspace/lib/dragMime';
-import { useApp } from '@/store/AppContext';
+import { useAppActions } from '@/store/AppContext';
 
 /** Where in a row the cursor is during dragover — drives the drop
  *  indicator + the action the drop triggers. `into` is folder-only
@@ -66,7 +66,7 @@ export function useTreeRowDrag({
     onDrop: (e: DragEvent<HTMLDivElement>) => void;
   };
 } {
-  const { actions } = useApp();
+  const { actions } = useAppActions();
   const [dropEdge, setDropEdge] = useState<DropEdge>(null);
 
   const isDragSource = () =>

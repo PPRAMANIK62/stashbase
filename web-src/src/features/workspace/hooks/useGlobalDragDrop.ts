@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FILE_MIME } from '@/features/workspace/lib/dragMime';
 import { acceptsKnowledgeBaseDrop } from '@/features/workspace/lib/dragRouting';
-import { useApp } from '@/store/AppContext';
+import { useAppActions } from '@/store/AppContext';
 
 /**
  * Window-level drag/drop coordinator.
@@ -22,7 +22,7 @@ import { useApp } from '@/store/AppContext';
  */
 export function useGlobalDragDrop(): boolean {
   const [veilHot, setVeilHot] = useState(false);
-  const { actions } = useApp();
+  const { actions } = useAppActions();
   const dragDepth = useRef(0);
   const hotRef = useRef(false);
   const dropTargetFolder = useRef('');

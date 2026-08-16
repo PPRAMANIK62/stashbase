@@ -6,7 +6,7 @@ import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
 import { MessageList } from '@/features/agent-panel/components/AgentMessages';
 import { AGENT_META } from '@/features/agent-panel/components/agentCatalog';
-import { AppContext, type AppActions } from '@/store/AppContext';
+import { AppProviders, type AppActions } from '@/store/AppContext';
 import { initialState, type Action, type State } from '@/store/state';
 import { reducer } from '@/store/stateReducer';
 
@@ -89,9 +89,13 @@ test('restored Claude effort and native identity survive an idle effort reconnec
     const [appState, dispatch] = React.useReducer(reducer, undefined, state);
     dispatchFromTest = dispatch;
     return React.createElement(
-      AppContext.Provider,
-      { value: { state: appState, dispatch, actions } },
-      React.createElement(AgentView, { active: true, id: 'tab-1', title: 'New Chat', agent: 'claude' }),
+      AppProviders,
+      {
+        state: appState,
+        dispatch,
+        actions,
+        children: React.createElement(AgentView, { active: true, id: 'tab-1', title: 'New Chat', agent: 'claude' }),
+      },
     );
   }
 

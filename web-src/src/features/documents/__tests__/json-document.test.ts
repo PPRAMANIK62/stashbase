@@ -12,7 +12,7 @@ import {
 import { analyzeJsonSource } from '@/features/documents/lib/json/sourceModel';
 import { directTreeSearchPatch } from '@/features/documents/components/json/JsonTreeView';
 import { JsonDocument } from '@/features/documents/components/JsonDocument';
-import { AppContext, canApplyExternalTextRefresh, type AppActions } from '@/store/AppContext';
+import { AppProviders, canApplyExternalTextRefresh, type AppActions } from '@/store/AppContext';
 import { initialState, makeTab, reducer, type Action, type State } from '@/store/state';
 import { createRoot } from 'react-dom/client';
 import { act, createElement, useCallback, useMemo, useRef, useState } from 'react';
@@ -185,8 +185,8 @@ test('JsonDocument registers editor and Find handlers only while its tab is acti
     const root = createRoot(host as unknown as Element);
     const render = async (readOnly: boolean, active: boolean) => {
       await act(async () => {
-        root.render(createElement(AppContext.Provider, {
-          value: { state, actions, dispatch: () => undefined },
+        root.render(createElement(AppProviders, {
+          state, actions, dispatch: () => undefined,
           children: createElement(JsonDocument, {
             tabId: tab.id, content: tab.file!.content, readOnly, active,
           }),
@@ -271,8 +271,8 @@ function JsonPersistenceHarness({ control }: { control: { current: PersistenceCo
     ...actions,
     registerFindController: () => undefined,
   } as unknown as AppActions;
-  return createElement(AppContext.Provider, {
-    value: { state: renderedState, actions: contextActions, dispatch },
+  return createElement(AppProviders, {
+    state: renderedState, actions: contextActions, dispatch,
     children: tab?.file ? createElement(JsonDocument, {
       tabId: tab.id, content: tab.file.content, readOnly: !tab.editMode, active: true,
     }) : null,

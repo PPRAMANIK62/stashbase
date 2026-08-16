@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { ModalShell } from '@/common/components/ModalShell';
 import { api, type OnboardingPreferences, type UnsupportedFileSummary } from '@/common/api/api';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { Button } from '@/common/components/ui/button';
 
 function formatExtensions(otherExtensions: Array<{ extension: string; count: number }>): string {
@@ -92,7 +92,8 @@ export function UnsupportedFilesModal({ unsupportedFiles, onClose }: {
 }
 
 export default function UnsupportedFilesModalGate() {
-  const { state, dispatch } = useApp();
+  const state = useWorkspace();
+  const { dispatch } = useAppActions();
   const { sourceCode = 0, other = 0 } = state.unsupportedFiles || {};
   const total = sourceCode + other;
 

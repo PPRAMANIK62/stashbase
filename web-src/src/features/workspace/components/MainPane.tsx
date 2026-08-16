@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { EditIcon, PreviewIcon } from '@/common/components/icons';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { EmptyTabLanding } from '@/features/workspace/components/EmptyTabLanding';
 import { FindBar } from '@/features/search/components/FindBar';
 import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
@@ -36,7 +36,9 @@ const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/compon
  * the pane is a clean canvas.
  */
 export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolean }) {
-  const { state, actions, activeTab } = useApp();
+  const state = useWorkspace();
+  const { activeTab } = state;
+  const { actions } = useAppActions();
   const cur = activeTab?.file ?? null;
   const editMode = activeTab?.editMode ?? false;
   const saveStatus = activeTab?.saveStatus ?? { text: '', cls: '' };

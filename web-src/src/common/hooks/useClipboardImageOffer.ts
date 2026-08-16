@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ClipboardOffer } from '@/common/components/ClipboardImportModal';
 import { electronBridge } from '@/common/lib/electronBridge';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 
 /**
  * Clipboard-image offer lifecycle. Main pushes de-duped clipboard image
@@ -17,7 +17,8 @@ export function useClipboardImageOffer(): {
   saveClipboardOffer: (offer: ClipboardOffer) => Promise<void>;
   dismissClipboardOffer: () => void;
 } {
-  const { state, actions } = useApp();
+  const state = useWorkspace();
+  const { actions } = useAppActions();
   const [clipboardOffer, setClipboardOffer] = useState<ClipboardOffer | null>(null);
   const [pendingClipboardOffer, setPendingClipboardOffer] = useState<ClipboardOffer | null>(null);
 

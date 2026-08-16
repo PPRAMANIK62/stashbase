@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useUiShell } from '@/store/AppContext';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { useOverlayLayer } from '@/common/components/OverlayStack';
 import { ModalLoadingStatus } from '@/common/components/ui/status';
@@ -7,9 +7,10 @@ import { ModalLoadingStatus } from '@/common/components/ui/status';
 const ManagedAlertConfirmModal = lazyWithRetry(() => import('@/common/components/ManagedAlertConfirmModal'));
 
 export function AlertConfirmModal() {
-  const { state, actions } = useApp();
-  const layer = useOverlayLayer(state.modal !== null);
-  if (!state.modal) return null;
+  const { actions } = useAppActions();
+  const { modal } = useUiShell();
+  const layer = useOverlayLayer(modal !== null);
+  if (!modal) return null;
 
   return (
     <Suspense
@@ -22,7 +23,7 @@ export function AlertConfirmModal() {
       )}
     >
       <ManagedAlertConfirmModal
-        request={state.modal}
+        request={modal}
         isTopmost={layer.isTopmost}
         onResolve={actions.resolveModal}
       />

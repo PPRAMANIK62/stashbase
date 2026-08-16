@@ -5,6 +5,38 @@
  * No React or side effects live in this module graph. Action-only interface
  * types remain in `actionTypes.ts` so the dependency direction stays
  * one-way.
+ *
+ * Slice map — every `State` field belongs to exactly one of three contexts
+ * (`WorkspaceContext` / `ChatContext` / `UiShellContext`; see those files).
+ * The reducer stays single: one `useReducer` in `AppContext.tsx` computes
+ * this whole `State`, and each context memoizes only the slice it owns off
+ * the SAME `state` object, so a dispatch that touches one slice's fields
+ * cannot change another slice's object identity (the reducer already
+ * returns `{ ...s, field }` on every branch — this file does not change
+ * that; it only documents how the delivery layer reads it).
+ *
+ *  - workspace: booted, folder, folderPath, recent, homeDir,
+ *    libraryFolderStatuses, files, folders, unsupportedFiles,
+ *    unsupportedModalOpen, fileOrder, tabs, recentFilePaths, editorHistory,
+ *    activeTabId, expanded, activeFolder, selectedPath, folderCollapsed,
+ *    sidebarCollapsed, sidebarWidth, pendingSemanticNames, semanticIndexing,
+ *    pendingConversions, blockedConversions, conversionProgress,
+ *    conversionRevision, conversionVersions, syncRunning, embedderHasKey,
+ *    indexWarning, preparationFailures, newFolderInputOpen
+ *      (plus the derived `activeTab`, computed from `tabs` + `activeTabId`)
+ *  - chat: chatOpen, chatWidth, agents, chatTabs, activeChatTabId,
+ *    chatTabRecencyByAgent, pendingResume
+ *  - ui-shell: ctxMenu, renaming, cascadePrompt, modal, find
+ *
+ * `ctxMenu` and `renaming` are workspace/tree interactions in origin, but
+ * they're grouped into ui-shell because that's how the app already treats
+ * them: QuickOpen/LibrarySearch read `modal || cascadePrompt || ctxMenu ||
+ * renaming` together as one "something is blocking" signal, and their only
+ * renderers (`ContextMenu.tsx`, `RenameInput.tsx`) live in `common/`, not
+ * `features/workspace/`. `newFolderInputOpen` stayed in workspace instead —
+ * its only reader is `FileTree.tsx`, paired with the workspace-owned
+ * `activeFolder` field, and nothing outside workspace treats it as a
+ * blocking overlay the way it does `renaming`.
  */
 import type {
   FileBody,

@@ -1,4 +1,4 @@
-import { useApp } from '@/store/AppContext';
+import { useAppActions } from '@/store/AppContext';
 
 /**
  * Obsidian-style landing inside a blank `+` tab — three vertically-
@@ -10,7 +10,7 @@ const ACTION_CLASS =
   'inline-flex cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-1 text-base font-medium hover:bg-muted [&_kbd]:[font-family:inherit] [&_kbd]:text-sm [&_kbd]:font-normal [&_kbd]:tracking-wide [&_kbd]:text-muted-foreground';
 
 export function EmptyTabLanding() {
-  const { actions } = useApp();
+  const { actions } = useAppActions();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 p-10">
       <button

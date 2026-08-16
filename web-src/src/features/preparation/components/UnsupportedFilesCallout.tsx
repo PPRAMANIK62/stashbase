@@ -1,5 +1,5 @@
 import { useReducer } from 'react';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 
 const DISMISS_KEY = 'stashbase.unsupported-callout-dismissed';
 
@@ -53,7 +53,8 @@ function rememberDismissed(folderPath: string, signature: string): void {
  *  as a proper notice. Dismissal is per folder and persisted (see
  *  `categorySignature` for when it comes back). */
 export default function UnsupportedFilesCallout() {
-  const { state, dispatch } = useApp();
+  const state = useWorkspace();
+  const { dispatch } = useAppActions();
   // Dismissal lives in localStorage, not the store — this bump just
   // forces the re-render that hides the card in place.
   const [, bumpDismissals] = useReducer((n: number) => n + 1, 0);

@@ -10,7 +10,7 @@ import {
 } from '@/features/documents/lib/audioTranscript.ts';
 import { AudioPlaybackPosition } from '@/features/documents/lib/audioPlayback.ts';
 import { basename } from '@/common/lib/paths';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@/../../shared/transcription.ts';
@@ -21,7 +21,9 @@ import { Select } from '@/common/components/ui/select';
 import { StatusMessage } from '@/common/components/ui/status';
 
 export function AudioPreview({ name }: { name: string }) {
-  const { state, activeTab, actions } = useApp();
+  const state = useWorkspace();
+  const { activeTab } = state;
+  const { actions } = useAppActions();
   const version = activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
   // Out-of-folder tab: every URL and prepare/transcript request must carry
   // the file's own member folder instead of the window's.

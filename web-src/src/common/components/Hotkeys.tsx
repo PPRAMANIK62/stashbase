@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { isEditorHistoryChord } from '@/features/documents/lib/editorHistory';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useUiShell } from '@/store/AppContext';
 import { openLibrarySearch } from '@/features/search/components/LibrarySearch';
 
 type WindowShortcutInput = Pick<
@@ -46,10 +46,11 @@ export function isCommandPaletteShortcut(input: WindowShortcutInput): boolean {
  * new shortcut here should not require any state plumbing.
  */
 export function Hotkeys() {
-  const { state, actions, dispatch } = useApp();
+  const { find } = useUiShell();
+  const { actions, dispatch } = useAppActions();
   // Read state via ref so the listener doesn't rebind on every find
   // tick (which would shake out the listener registration unnecessarily).
-  const findOpenRef = useLatestRef(state.find.open);
+  const findOpenRef = useLatestRef(find.open);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       // Esc closes the find bar without consuming the keystroke for

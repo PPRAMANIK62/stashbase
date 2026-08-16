@@ -17,7 +17,7 @@ import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
 import { api, assetBaseUrl } from '@/common/api/api';
 import { resolveMilkdownLink } from '@/features/documents/milkdown/navigation';
-import { useApp } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { makeIframeFindController } from '@/features/documents/lib/findIframe';
 import { applyChunkHighlight } from '@/features/documents/lib/previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '@/features/documents/milkdown/paths';
@@ -72,7 +72,8 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, dirty, f
    *  resolution carries it so relative refs stay in the file's folder. */
   folder?: string;
 }) {
-  const { actions, activeTab } = useApp();
+  const { activeTab } = useWorkspace();
+  const { actions } = useAppActions();
   const registerEditor = actions.registerEditor;
   const registerFindController = actions.registerFindController;
   const scheduleSave = actions.scheduleSave;
