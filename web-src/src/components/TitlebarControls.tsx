@@ -1,6 +1,6 @@
 import { PanelLeftIcon, PanelRightIcon, SearchIcon } from '../icons';
 import { formatPrimaryShiftShortcut } from '../platformShortcuts';
-import { readPreferredAgent } from '../agentPreference';
+import { readPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 import { useApp } from '../store/AppContext';
 import { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
 import { openLibrarySearch } from '@/features/search/components/LibrarySearch';

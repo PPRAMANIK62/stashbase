@@ -26,8 +26,8 @@ import {
   type PendingHighlight,
   type State,
 } from './state';
-import type { AgentKind } from '../agentCatalog';
-import { rememberPreferredAgent } from '../agentPreference';
+import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
+import { rememberPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 import type { EditorHandle, FindController } from './actionTypes';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { useFeedbackActions } from './useFeedbackActions';

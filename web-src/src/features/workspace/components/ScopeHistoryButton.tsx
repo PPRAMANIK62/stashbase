@@ -1,9 +1,9 @@
 import { Suspense, useRef, useState } from 'react';
 import { HistoryIcon } from '@/icons';
-import type { AgentKind } from '@/agentCatalog';
+import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { useApp } from '@/store/AppContext';
-import { activateChatTabForAgent } from '@/components/agent/chatActivation';
-import type { HistoryScope } from '@/components/agent/sessionHistory';
+import { activateChatTabForAgent } from '@/features/agent-panel/components/chatActivation';
+import type { HistoryScope } from '@/features/agent-panel/components/sessionHistory';
 import { lazyWithRetry } from '@/components/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { PopupLoadingStatus } from '@/components/ui/status';
@@ -12,9 +12,9 @@ import { PopupLoadingStatus } from '@/components/ui/status';
  *  so react-aria (which otherwise ships with the lazy chat chunk) stays
  *  out of the initial renderer bundle. */
 const SessionHistoryPopover = lazyWithRetry(() =>
-  import('@/components/agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
+  import('@/features/agent-panel/components/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
-export { activateChatTabForAgent } from '@/components/agent/chatActivation';
+export { activateChatTabForAgent } from '@/features/agent-panel/components/chatActivation';
 
 /** History clock on a sidebar scope header: opens the merged
  *  session-history menu for that scope (both agents' sessions, newest

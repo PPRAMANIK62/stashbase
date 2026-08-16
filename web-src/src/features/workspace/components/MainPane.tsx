@@ -7,7 +7,7 @@ import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
 import { ImagePreview } from '@/features/documents/components/ImagePreview';
 import { TabStrip } from '@/features/workspace/components/TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from '@/components/ErrorBoundary';
-import { readPreferredAgent } from '@/agentPreference';
+import { readPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 import { retainedMarkdownTabs } from '@/features/documents/milkdown/retainedTabs';
 import { electronBridge } from '@/electronBridge';
 import { basename } from '@/lib/paths';

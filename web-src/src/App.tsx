@@ -24,7 +24,7 @@ import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/Err
 import { OverlayStackProvider } from './components/OverlayStack';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
 import { AppProvider, useApp } from './store/AppContext';
-import { useChatLayoutFollowUp } from './hooks/useChatLayoutFollowUp';
+import { useChatLayoutFollowUp } from '@/features/agent-panel/hooks/useChatLayoutFollowUp';
 import { useClipboardImageOffer } from './hooks/useClipboardImageOffer';
 import { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
 import { usePreviewMessages } from '@/features/documents/hooks/usePreviewMessages';
@@ -36,7 +36,7 @@ import {
   resolveWorkspaceLayout,
 } from '@/features/workspace/lib/workspaceLayout';
 
-const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane'));
+const LazyChatPane = lazyWithRetry(() => import('@/features/agent-panel/components/ChatPane'));
 const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesModal'));
 const LazyContextMenu = lazyWithRetry(() => import('./components/ContextMenu'));
 const LazyImageLightbox = lazyWithRetry(() =>

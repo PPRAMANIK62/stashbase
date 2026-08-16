@@ -9,14 +9,14 @@ import {
   StarIcon,
 } from '@/icons';
 import { useApp } from '@/store/AppContext';
-import { folderScope } from '@/components/agent/folderState';
-import { ALL_HISTORY_SCOPE } from '@/components/agent/sessionHistory';
-import { AGENT_META, AGENTS, type AgentKind } from '@/agentCatalog';
+import { folderScope } from '@/features/agent-panel/components/folderState';
+import { ALL_HISTORY_SCOPE } from '@/features/agent-panel/components/sessionHistory';
+import { AGENT_META, AGENTS, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import {
   newChatAgentSelectionPlan,
   readPreferredAgent,
   rememberPreferredAgent,
-} from '@/agentPreference';
+} from '@/features/agent-panel/lib/agentPreference';
 import { electronBridge } from '@/electronBridge';
 import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
 import { basename, shortenFolderPath } from '@/lib/paths';

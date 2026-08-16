@@ -15,11 +15,11 @@ import {
   scopeDisplayName,
   type ChatScope,
   type LibraryFolderOption,
-} from '@/components/agent/folderState';
+} from '@/features/agent-panel/components/folderState';
 import {
   menuHeadClass, menuSectionClass, optActiveClass, optCheckClass, optClass, optDescClass,
   optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
-} from '@/components/agent/panelStyles';
+} from '@/features/agent-panel/components/panelStyles';
 
 /**
  * The app's ONE scope picker: the whole Library, or one library folder.

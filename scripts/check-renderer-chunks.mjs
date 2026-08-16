@@ -15,8 +15,8 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * on demand belongs in a dynamic entry above. */
 const initialJsBudgetBytes = 418 * 1024;
 const expectedEntries = [
-  'src/components/ChatPane.tsx',
-  'src/components/agent/AgentMathMarkdown.tsx',
+  'src/features/agent-panel/components/ChatPane.tsx',
+  'src/features/agent-panel/components/AgentMathMarkdown.tsx',
   'src/features/documents/components/CrepeDocument.tsx',
   'src/features/documents/components/JsonDocument.tsx',
   'src/features/documents/components/json/JsonTreeView.tsx',

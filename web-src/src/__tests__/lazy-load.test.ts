@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createElement, type ReactElement } from 'react';
 import test from 'node:test';
-import { ChatSessionBoundary, chatStatusClass } from '../components/ChatPane';
+import { ChatSessionBoundary, chatStatusClass } from '@/features/agent-panel/components/ChatPane';
 import { LazyLoadBoundary, loadWithRetry } from '../components/ErrorBoundary';
 
 test('lazy module loading retries one transient failure', async () => {

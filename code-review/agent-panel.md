@@ -102,12 +102,12 @@
 
 | Role | Stable entry points |
 |---|---|
-| Panel boundary | `web-src/src/components/ChatPane.tsx` and `AgentView.tsx` |
-| Transcript/composer Modules | `web-src/src/components/agent/AgentMessages.tsx`, `AgentComposer.tsx`, `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` |
-| State Interfaces | Chat tab state/actions in `web-src/src/store/state.ts` and `stateReducer.ts`; activation consent in `components/agent/chatActivation.ts`; focused pure state Modules under `components/agent/` |
-| Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `components/agent/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
-| Markdown Adapter | `web-src/src/components/agent/AgentMarkdown.tsx` |
-| Focused evidence | `web-src/src/__tests__/agent-*.test.ts`, `e2e/fixtures/fake-codex-app-server.test.mjs`, and `e2e/journeys/agent-panel.spec.ts` |
+| Panel boundary | `web-src/src/features/agent-panel/components/ChatPane.tsx` and `AgentView.tsx` |
+| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx`, `AgentComposer.tsx`, `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` |
+| State Interfaces | Chat tab state/actions in `web-src/src/store/state.ts` and `stateReducer.ts`; activation consent in `features/agent-panel/components/chatActivation.ts`; focused pure state Modules under `features/agent-panel/components/` |
+| Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `features/agent-panel/components/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
+| Markdown Adapter | `web-src/src/features/agent-panel/components/AgentMarkdown.tsx` |
+| Focused evidence | `web-src/src/features/agent-panel/__tests__/agent-*.test.ts`, `e2e/fixtures/fake-codex-app-server.test.mjs`, and `e2e/journeys/agent-panel.spec.ts` |
 
 ## Validation
 

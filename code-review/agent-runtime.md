@@ -115,7 +115,7 @@ assumed CLI versions.
 | Claude Adapter | `server/agent.ts` and its SDK/native-process helpers |
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
-| Renderer Adapter | `web-src/src/agentCatalog.tsx`, `components/agent/chatActivation.ts`, `components/agent/runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
+| Renderer Adapter | `web-src/src/features/agent-panel/components/agentCatalog.tsx`, `chatActivation.ts`, `runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
 | Focused evidence | `server/__tests__/agent-contract.test.ts`, `agent-runtime-installer.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs` |
 
 ## Validation

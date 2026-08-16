@@ -278,13 +278,13 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(sidebar, /aria-label=\{'New note in ' \+ target\}/);
   assert.match(sidebar, /<Button\s+type="button"\s+variant="ghost"[\s\S]{0,400}aria-label=\{`Select \$\{name\} folder root`\}/);
 
-  const chat = read('web-src/src/components/ChatPane.tsx');
+  const chat = read('web-src/src/features/agent-panel/components/ChatPane.tsx');
   assert.match(chat, /role="tablist"/);
   assert.match(chat, /aria-label="Chat sessions"/);
   assert.match(chat, /aria-controls=\{chatPanelId\(tab\.id\)\}/);
   assert.match(chat, /aria-labelledby=\{chatTabId\(tab\.id\)\}/);
 
-  const messages = read('web-src/src/components/agent/AgentMessages.tsx');
+  const messages = read('web-src/src/features/agent-panel/components/AgentMessages.tsx');
   assert.match(messages, /role="log"/);
   assert.match(messages, /aria-label="Agent conversation"/);
 
@@ -342,5 +342,5 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
 
   // Composer pills yield width under pressure (min-w-0 + label truncate)
   // so a tight chat panel truncates labels instead of clipping Send.
-  assert.match(read('web-src/src/components/agent/panelStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
+  assert.match(read('web-src/src/features/agent-panel/components/panelStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
 });
