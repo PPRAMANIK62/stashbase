@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { api, type FolderState } from '../api';
-import { folderRefsEqual, isAbsoluteFolderRef } from '../folderPath';
-import { createFolderMutationQueue } from '../folderTransition';
+import { folderRefsEqual, isAbsoluteFolderRef } from '@/features/workspace/lib/folderPath';
+import { createFolderMutationQueue } from '@/features/workspace/lib/folderTransition';
 import type { EditorHandle } from './actionTypes';
 import { folderScopedResetActions, type FolderResetReason } from './folderScopedReset';
 import type { Action, LibraryFolderStatus, State } from './state';

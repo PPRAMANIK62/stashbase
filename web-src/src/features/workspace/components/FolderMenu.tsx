@@ -6,9 +6,9 @@ import {
   StarIcon,
   SyncIcon,
   TrashIcon,
-} from '../icons';
-import { useApp } from '../store/AppContext';
-import { Menu, type MenuItem } from './Menu';
+} from '@/icons';
+import { useApp } from '@/store/AppContext';
+import { Menu, type MenuItem } from '@/components/Menu';
 
 /** The ⋯ folder menu shared by the active-folder header and every
  *  library row. The window's current folder folds its low-frequency

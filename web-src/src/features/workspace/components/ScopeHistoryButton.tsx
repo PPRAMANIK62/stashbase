@@ -1,20 +1,20 @@
 import { Suspense, useRef, useState } from 'react';
-import { HistoryIcon } from '../icons';
-import type { AgentKind } from '../agentCatalog';
-import { useApp } from '../store/AppContext';
-import { activateChatTabForAgent } from './agent/chatActivation';
-import type { HistoryScope } from './agent/sessionHistory';
-import { lazyWithRetry } from './ErrorBoundary';
-import { Button } from './ui/button';
-import { PopupLoadingStatus } from './ui/status';
+import { HistoryIcon } from '@/icons';
+import type { AgentKind } from '@/agentCatalog';
+import { useApp } from '@/store/AppContext';
+import { activateChatTabForAgent } from '@/components/agent/chatActivation';
+import type { HistoryScope } from '@/components/agent/sessionHistory';
+import { lazyWithRetry } from '@/components/ErrorBoundary';
+import { Button } from '@/components/ui/button';
+import { PopupLoadingStatus } from '@/components/ui/status';
 
 /** The merged session-history popover loads at its interaction boundary
  *  so react-aria (which otherwise ships with the lazy chat chunk) stays
  *  out of the initial renderer bundle. */
 const SessionHistoryPopover = lazyWithRetry(() =>
-  import('./agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
+  import('@/components/agent/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
-export { activateChatTabForAgent } from './agent/chatActivation';
+export { activateChatTabForAgent } from '@/components/agent/chatActivation';
 
 /** History clock on a sidebar scope header: opens the merged
  *  session-history menu for that scope (both agents' sessions, newest

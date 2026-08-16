@@ -1,6 +1,6 @@
 import { useState, type DragEvent } from 'react';
-import { FILE_MIME, FOLDER_MIME } from '../dragMime';
-import { useApp } from '../store/AppContext';
+import { FILE_MIME, FOLDER_MIME } from '@/features/workspace/lib/dragMime';
+import { useApp } from '@/store/AppContext';
 
 /** Where in a row the cursor is during dragover — drives the drop
  *  indicator + the action the drop triggers. `into` is folder-only

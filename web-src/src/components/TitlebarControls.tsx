@@ -2,9 +2,9 @@ import { PanelLeftIcon, PanelRightIcon, SearchIcon } from '../icons';
 import { formatPrimaryShiftShortcut } from '../platformShortcuts';
 import { readPreferredAgent } from '../agentPreference';
 import { useApp } from '../store/AppContext';
-import { FolderSwitcher } from './FolderSwitcher';
+import { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
 import { openLibrarySearch } from '@/features/search/components/LibrarySearch';
-import { activateChatTabForAgent } from './Sidebar';
+import { activateChatTabForAgent } from '@/features/workspace/components/Sidebar';
 import { TooltipButton } from './TooltipButton';
 
 /* [&_svg]:size-3.5 — the app-wide 14px icon size (one scale everywhere;

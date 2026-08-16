@@ -2,7 +2,7 @@ import {
   AUDIO_SOURCE_EXTENSIONS, DOCX_EXTENSIONS, HTML_NOTE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS, PDF_EXTENSIONS, STRUCTURED_DATA_EXTENSIONS,
 } from '../../../../shared/file-formats.ts';
-import type { FileGlyphFormat } from '../FileTree';
+import type { FileGlyphFormat } from '@/features/workspace/components/FileTree';
 import type { Attachment } from './types';
 
 /** The muted type glyph + short label for a file, keyed off the filename

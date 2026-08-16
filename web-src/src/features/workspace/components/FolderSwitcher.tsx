@@ -1,14 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
-import { api, errorMessage } from '../api';
-import { electronBridge } from '../electronBridge';
-import { folderRefsEqual } from '../folderPath';
-import { ChevronDownIcon, FolderIcon, NewFolderIcon } from '../icons';
-import { basename, shortenFolderPath } from '../lib/paths';
-import { useApp } from '../store/AppContext';
-import { refreshLibraryMembership, useLibraryMembership } from '../hooks/useLibraryMembership';
-import { useOpenFolderWatchdog } from '../hooks/useOpenFolderWatchdog';
-import { Menu, type MenuItem } from './Menu';
-import type { LibraryListEntry } from './libraryListPlan';
+import { api, errorMessage } from '@/api';
+import { electronBridge } from '@/electronBridge';
+import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
+import { ChevronDownIcon, FolderIcon, NewFolderIcon } from '@/icons';
+import { basename, shortenFolderPath } from '@/lib/paths';
+import { useApp } from '@/store/AppContext';
+import { refreshLibraryMembership, useLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
+import { useOpenFolderWatchdog } from '@/features/workspace/hooks/useOpenFolderWatchdog';
+import { Menu, type MenuItem } from '@/components/Menu';
+import type { LibraryListEntry } from '@/features/workspace/lib/libraryListPlan';
 
 /** The two add-folder flows shared by the switcher (and the zero-folder
  *  hero button, which keeps its own copy of the first). "Open Folder…"

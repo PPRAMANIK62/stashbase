@@ -1,4 +1,4 @@
-import { useApp } from '../store/AppContext';
+import { useApp } from '@/store/AppContext';
 
 /**
  * Obsidian-style landing inside a blank `+` tab — three vertically-

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createFolderMutationQueue } from '../folderTransition';
+import { createFolderMutationQueue } from '@/features/workspace/lib/folderTransition';
 
 test('folder context mutations stay ordered when Home is followed by Open', async () => {
   const queue = createFolderMutationQueue();

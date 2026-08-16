@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
-import { api, errorMessage } from '../api';
-import { electronBridge } from '../electronBridge';
-import type { Action } from '../store/state';
-import { refreshLibraryMembership } from './useLibraryMembership';
+import { api, errorMessage } from '@/api';
+import { electronBridge } from '@/electronBridge';
+import type { Action } from '@/store/state';
+import { refreshLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 
 /** The sidebar's remove-folder confirm flow. `pendingRemoval` is the
  *  member path awaiting confirmation (it drives the confirm modal);

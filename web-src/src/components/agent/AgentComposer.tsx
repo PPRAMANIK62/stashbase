@@ -14,7 +14,7 @@ import {
   type ChatScope,
   type LibraryFolderOption,
 } from './folderState';
-import { ScopeMenu } from '../ScopeMenu';
+import { ScopeMenu } from '@/features/workspace/components/ScopeMenu';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from './MentionComposer';
 import { rankMentionSuggestions } from './mentionRanking';
 import {

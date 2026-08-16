@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { FileTypeIcon } from '../FileTree';
+import { FileTypeIcon } from '@/features/workspace/components/FileTree';
 import { ImageLightbox } from '@/features/documents/components/ImageLightbox';
 import { fileGlyphFormat } from './attachments';
 import { attachChipClass, attachIconTileClass, attachImageChipClass, attachImagePreviewClass, attachNameClass, attachTextClass, attachTypeClass } from './panelStyles';

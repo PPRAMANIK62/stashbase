@@ -1,4 +1,4 @@
-import { folderRefsEqual } from '../folderPath';
+import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
 
 /** One library membership entry as the server reports it (recents order). */
 export interface LibraryListEntry {

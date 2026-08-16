@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React, { createElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { FileTree } from '../components/FileTree';
-import { TabStrip } from '../components/TabStrip';
+import { FileTree } from '@/features/workspace/components/FileTree';
+import { TabStrip } from '@/features/workspace/components/TabStrip';
 import { AppContext, type AppActions } from '../store/AppContext';
 import { initialState, makeTab, type Action, type State } from '../store/state';
 

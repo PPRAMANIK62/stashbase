@@ -5,9 +5,9 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import { Sidebar } from './components/Sidebar';
+import { Sidebar } from '@/features/workspace/components/Sidebar';
 import { TitlebarControls } from './components/TitlebarControls';
-import { MainPane } from './components/MainPane';
+import { MainPane } from '@/features/workspace/components/MainPane';
 import { DropVeil } from './components/DropVeil';
 import { EmbedderRequireKeyGate } from '@/features/settings/components/EmbedderRequireKeyGate';
 import { Hotkeys } from './components/Hotkeys';
@@ -22,11 +22,11 @@ import { EditorHistoryNavigator } from '@/features/documents/components/EditorHi
 import { DocumentOutlineProvider } from '@/features/documents/components/DocumentOutlineContext';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
 import { OverlayStackProvider } from './components/OverlayStack';
-import { ChatSplitter, SidebarSplitter } from './components/WorkspaceSplitters';
+import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
 import { AppProvider, useApp } from './store/AppContext';
 import { useChatLayoutFollowUp } from './hooks/useChatLayoutFollowUp';
 import { useClipboardImageOffer } from './hooks/useClipboardImageOffer';
-import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
+import { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
 import { usePreviewMessages } from '@/features/documents/hooks/usePreviewMessages';
 import { api } from './api';
 import { applyAppearance, subscribeToAppearance } from '@/features/settings/lib/appearance';
@@ -34,7 +34,7 @@ import { electronBridge } from './electronBridge';
 import {
   COMPACT_WORKSPACE_QUERY,
   resolveWorkspaceLayout,
-} from './workspaceLayout';
+} from '@/features/workspace/lib/workspaceLayout';
 
 const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane'));
 const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesModal'));

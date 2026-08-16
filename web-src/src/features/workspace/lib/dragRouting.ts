@@ -1,4 +1,4 @@
-import { FILE_MIME, FOLDER_MIME } from './dragMime';
+import { FILE_MIME, FOLDER_MIME } from '@/features/workspace/lib/dragMime';
 
 export type DropSurface = 'knowledge-base' | 'agent-context';
 

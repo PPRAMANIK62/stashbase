@@ -1,5 +1,5 @@
-import { ModalShell } from './ModalShell';
-import { Button } from './ui/button';
+import { ModalShell } from '@/components/ModalShell';
+import { Button } from '@/components/ui/button';
 
 /** Remove-from-library confirmation. Removal only detaches the folder
  *  from the library — it never deletes files on disk, and the copy says

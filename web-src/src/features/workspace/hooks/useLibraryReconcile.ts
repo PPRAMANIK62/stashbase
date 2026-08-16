@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { api } from '../api';
+import { api } from '@/api';
 
 const LIBRARY_RECONCILE_COOLDOWN_MS = 30_000;
 const RECONCILE_START_DELAY_MS = 1500;

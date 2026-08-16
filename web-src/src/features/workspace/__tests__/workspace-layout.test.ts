@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   resolveWorkspaceLayout,
   shouldAutoCollapseChat,
-} from '../workspaceLayout';
+} from '@/features/workspace/lib/workspaceLayout';
 
 test('Chat owns the workspace until a document is opened', () => {
   assert.equal(resolveWorkspaceLayout({

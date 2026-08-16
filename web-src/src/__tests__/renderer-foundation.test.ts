@@ -218,7 +218,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   const app = read('web-src/src/App.tsx');
   assert.match(app, /<OverlayStackProvider>/);
   assert.doesNotMatch(app, /classList\.add\('is-electron'\)/);
-  const splitters = read('web-src/src/components/WorkspaceSplitters.tsx');
+  const splitters = read('web-src/src/features/workspace/components/WorkspaceSplitters.tsx');
   assert.match(splitters, /role="separator"/);
   assert.match(splitters, /aria-valuemin=/);
   assert.match(splitters, /resizeSidebarByKeyboard/);
@@ -233,7 +233,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   assert.doesNotMatch(globals, /app-chrome/);
   assert.match(globals, /platform-darwin \.sidebar-drag-zone/);
   assert.match(globals, /platform-darwin \.tab-strip/);
-  assert.match(read('web-src/src/components/Sidebar.tsx'), /className="sidebar-drag-zone"/);
+  assert.match(read('web-src/src/features/workspace/components/Sidebar.tsx'), /className="sidebar-drag-zone"/);
 });
 
 test('shared overlays own loading modality, popup positioning, and focus return', () => {
@@ -252,7 +252,7 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(loadingStatus, /dialog\.showModal\(\)/);
   assert.match(loadingStatus, /if \(isTopmost\) onCancel\(\)/);
 
-  const tree = read('web-src/src/components/FileTree.tsx');
+  const tree = read('web-src/src/features/workspace/components/FileTree.tsx');
   assert.match(tree, /tabIndex=\{treeFocus\.rovingPath === node\.path \? 0 : -1\}/);
   assert.match(tree, /tabIndex=\{treeFocus\.rovingPath === path \? 0 : -1\}/);
   assert.match(tree, /currentTarget as HTMLElement\)\.focus\(\{ preventScroll: true \}\)/);
@@ -261,7 +261,7 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(tree, /role="treeitem"/);
   assert.match(tree, /aria-selected=\{isActive\}/);
 
-  const tabs = read('web-src/src/components/TabStrip.tsx');
+  const tabs = read('web-src/src/features/workspace/components/TabStrip.tsx');
   assert.match(tabs, /role="tablist"/);
   assert.match(tabs, /aria-label="Open documents"/);
   assert.match(tabs, /role="tab"/);
@@ -270,10 +270,10 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(tabs, /aria-controls="document-panel"/);
   assert.doesNotMatch(tabs, /aria-controls=\{`document-panel-\$\{t\.id\}`\}/);
 
-  const mainPane = read('web-src/src/components/MainPane.tsx');
+  const mainPane = read('web-src/src/features/workspace/components/MainPane.tsx');
   assert.match(mainPane, /id=\{activeTab \? 'document-panel' : undefined\}/);
 
-  const sidebar = read('web-src/src/components/Sidebar.tsx');
+  const sidebar = read('web-src/src/features/workspace/components/Sidebar.tsx');
   assert.match(sidebar, /aria-label=\{`Select \$\{name\} folder root`\}/);
   assert.match(sidebar, /aria-label=\{'New note in ' \+ target\}/);
   assert.match(sidebar, /<Button\s+type="button"\s+variant="ghost"[\s\S]{0,400}aria-label=\{`Select \$\{name\} folder root`\}/);

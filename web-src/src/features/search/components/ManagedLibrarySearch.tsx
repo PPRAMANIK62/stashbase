@@ -4,7 +4,7 @@ import type { PendingHighlight } from '@/store/state';
 import { useApp } from '@/store/AppContext';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet';
-import { folderRefsEqual } from '@/folderPath';
+import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
 import {
   applyLibrarySearchPrefill,
   folderBasename,
@@ -26,8 +26,8 @@ import { emptyStateClass } from '@/components/emptyState';
 import { useLatestRef } from '@/hooks/useLatestRef';
 import { fileGlyphFormat } from '@/components/agent/attachments';
 import { folderMenuEntries } from '@/components/agent/folderState';
-import { ScopeMenu } from '@/components/ScopeMenu';
-import { FileTypeIcon } from '@/components/FileTree';
+import { ScopeMenu } from '@/features/workspace/components/ScopeMenu';
+import { FileTypeIcon } from '@/features/workspace/components/FileTree';
 import { SemanticIndexingNotice } from '@/features/preparation/components/SemanticIndexingNotice';
 import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/components/pickerChrome';
 

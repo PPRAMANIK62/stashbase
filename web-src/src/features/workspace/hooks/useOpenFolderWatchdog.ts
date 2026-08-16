@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useLatestRef } from './useLatestRef';
+import { useLatestRef } from '@/hooks/useLatestRef';
 
 const OPEN_FOLDER_WATCHDOG_MS = 20_000;
 

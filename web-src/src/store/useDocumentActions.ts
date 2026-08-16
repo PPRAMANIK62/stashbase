@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import { api, ApiError } from '../api';
-import { folderRefsEqual } from '../folderPath';
+import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
 import { basename } from '../lib/paths';
 import type { EditorHandle } from './actionTypes';
 import {

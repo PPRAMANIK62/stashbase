@@ -1,5 +1,5 @@
-import { CheckIcon, ChevronDownIcon, FolderIcon, LibraryIcon } from '../icons';
-import { cn } from '../lib/utils';
+import { CheckIcon, ChevronDownIcon, FolderIcon, LibraryIcon } from '@/icons';
+import { cn } from '@/lib/utils';
 import {
   Menu,
   MenuItem,
@@ -7,19 +7,19 @@ import {
   MenuPortal,
   MenuPositioner,
   MenuTrigger,
-} from './ui/menu';
-import { basename, shortenFolderPath } from '../lib/paths';
+} from '@/components/ui/menu';
+import { basename, shortenFolderPath } from '@/lib/paths';
 import {
   folderScope,
   LIBRARY_SCOPE,
   scopeDisplayName,
   type ChatScope,
   type LibraryFolderOption,
-} from './agent/folderState';
+} from '@/components/agent/folderState';
 import {
   menuHeadClass, menuSectionClass, optActiveClass, optCheckClass, optClass, optDescClass,
   optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
-} from './agent/panelStyles';
+} from '@/components/agent/panelStyles';
 
 /**
  * The app's ONE scope picker: the whole Library, or one library folder.

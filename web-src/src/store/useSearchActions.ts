@@ -1,6 +1,6 @@
 import { useCallback, useMemo, type MutableRefObject } from 'react';
 import { api, ApiError } from '../api';
-import { rebindFolderIfStillInLibrary } from '../folderPath';
+import { rebindFolderIfStillInLibrary } from '@/features/workspace/lib/folderPath';
 import {
   shallowEqualConversionProgress,
   shallowEqualIndexWarning,

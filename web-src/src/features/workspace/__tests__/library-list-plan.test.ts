@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   libraryListPlan,
   type LibraryListEntry,
-} from '../components/libraryListPlan';
+} from '@/features/workspace/lib/libraryListPlan';
 
 function entry(path: string, favorite = false): LibraryListEntry {
   return { path, openedAt: '2026-01-01T00:00:00.000Z', favorite };
