@@ -6,13 +6,13 @@
  * wired automatically by Agent readiness (Settings → Agents).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, type McpHttpStatus } from '../../api';
-import { useApp } from '../../store/AppContext';
-import { CopyIcon, CheckIcon } from '../../icons';
-import { MCP_SETUP_EXAMPLES_URL, openExternalUrl } from '../../lib/externalLink';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { StatusMessage } from '../ui/status';
+import { api, type McpHttpStatus } from '@/api';
+import { useApp } from '@/store/AppContext';
+import { CopyIcon, CheckIcon } from '@/icons';
+import { MCP_SETUP_EXAMPLES_URL, openExternalUrl } from '@/lib/externalLink';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { StatusMessage } from '@/components/ui/status';
 
 export function McpAccessPanel() {
   const { actions } = useApp();

@@ -4,10 +4,10 @@
  * The existing index is left untouched — nothing is deleted.
  */
 import { useState } from 'react';
-import { errorMessage } from '../../api';
-import { ModalShell } from '../ModalShell';
-import { Button } from '../ui/button';
-import { StatusMessage } from '../ui/status';
+import { errorMessage } from '@/api';
+import { ModalShell } from '@/components/ModalShell';
+import { Button } from '@/components/ui/button';
+import { StatusMessage } from '@/components/ui/status';
 
 export function RemoveKeyModal({
   onCancel,

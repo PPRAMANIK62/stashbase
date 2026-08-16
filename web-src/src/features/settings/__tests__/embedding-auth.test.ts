@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { EmbedderState } from '../api';
+import type { EmbedderState } from '@/api';
 import {
   hasSkippedAiIndexing,
   isEmbeddingAuthorized,
   setAiIndexingSkipped,
-} from '../components/embedder/embeddingAuth';
+} from '@/features/settings/components/embedder/embeddingAuth';
 
 function state(patch: Partial<EmbedderState>): EmbedderState {
   return {

@@ -28,13 +28,13 @@
  *     the Files panel keeps a quiet "Set up AI Index" entry for later.
  */
 import { useRef, useState } from 'react';
-import { api, ApiError, errorMessage, type EmbedderProvider } from '../../api';
-import ManagedModalShell from '../ManagedModalShell';
-import { EmbeddingAuthChoice } from './EmbeddingAuthChoice';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { SegmentedControl, SegmentedControlItem } from '../ui/segmented-control';
-import { StatusMessage } from '../ui/status';
+import { api, ApiError, errorMessage, type EmbedderProvider } from '@/api';
+import ManagedModalShell from '@/components/ManagedModalShell';
+import { EmbeddingAuthChoice } from '@/features/settings/components/embedder/EmbeddingAuthChoice';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { SegmentedControl, SegmentedControlItem } from '@/components/ui/segmented-control';
+import { StatusMessage } from '@/components/ui/status';
 import { AccountSignInForm } from '@/features/account/components/AccountSignInForm';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string }> = {

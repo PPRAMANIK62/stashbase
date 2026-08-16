@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyAppearance } from '../appearance';
+import { applyAppearance } from '@/features/settings/lib/appearance';
 
 test('appearance preferences become the renderer presentation state', () => {
   const originalDocument = globalThis.document;

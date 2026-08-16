@@ -5,7 +5,7 @@ import { api, errorMessage, type HostedAccountState } from '@/api';
 import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '@/features/account/lib/accountEvents';
 import { signInWithStashBase } from '@/features/account/lib/accountOAuth';
 import { DISCORD_INVITE_URL, openExternalUrl } from '@/lib/externalLink';
-import { openSettings } from '@/components/SettingsModal';
+import { openSettings } from '@/features/settings/components/SettingsModal';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/lib/hostedQuota';
 import { Button } from '@/components/ui/button';
 import {

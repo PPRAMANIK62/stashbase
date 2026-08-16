@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as R
 import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '@/api';
 import type { PendingHighlight } from '@/store/state';
 import { useApp } from '@/store/AppContext';
-import { openSettings } from '@/components/SettingsModal';
+import { openSettings } from '@/features/settings/components/SettingsModal';
 import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet';
 import { folderRefsEqual } from '@/folderPath';
 import {

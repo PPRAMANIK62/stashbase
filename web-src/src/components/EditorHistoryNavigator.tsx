@@ -6,7 +6,7 @@ import {
   type EditorHistoryEntry,
 } from '../editorHistory';
 import { useLatestRef } from '../hooks/useLatestRef';
-import { useSettingsBlocking } from '../hooks/useSettingsBlocking';
+import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
 import { useApp } from '../store/AppContext';
 import {
   PICKER_LABEL_CLASS,

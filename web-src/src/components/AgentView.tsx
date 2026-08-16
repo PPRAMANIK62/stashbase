@@ -52,7 +52,7 @@ import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlSt
 import { recordFailureBeforeContinuing, TurnErrorTracker } from './agent/turnFailure';
 import { runtimeFailurePresentation } from './agent/runtimeFailurePresentation';
 import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from './agent/types';
-import { openSettings } from './SettingsModal';
+import { openSettings } from '@/features/settings/components/SettingsModal';
 
 /** Runtimes title sessions from the first message's RAW text, so a chat
  * opened with an @-mention would name its tab a bare relative path.

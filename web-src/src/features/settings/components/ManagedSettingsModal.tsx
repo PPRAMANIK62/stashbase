@@ -1,13 +1,13 @@
 import { useState, type ReactNode } from 'react';
-import { CloseIcon } from '../icons';
-import type { SettingsModalProps, SettingsSection } from './SettingsModal';
-import { AppearancePanel } from './settings/AppearancePanel';
-import { AgentRuntimePanel } from './settings/AgentRuntimePanel';
-import { EmbeddingPanel } from './settings/EmbeddingPanel';
-import { McpAccessPanel } from './settings/McpAccessPanel';
-import { TranscriptionPanel } from './settings/TranscriptionPanel';
-import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
+import { CloseIcon } from '@/icons';
+import type { SettingsModalProps, SettingsSection } from '@/features/settings/components/SettingsModal';
+import { AppearancePanel } from '@/features/settings/components/AppearancePanel';
+import { AgentRuntimePanel } from '@/features/settings/components/AgentRuntimePanel';
+import { EmbeddingPanel } from '@/features/settings/components/EmbeddingPanel';
+import { McpAccessPanel } from '@/features/settings/components/McpAccessPanel';
+import { TranscriptionPanel } from '@/features/settings/components/TranscriptionPanel';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
   { id: 'appearance', label: 'Appearance', render: () => <AppearancePanel /> },

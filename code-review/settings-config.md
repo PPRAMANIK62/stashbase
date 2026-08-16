@@ -72,9 +72,9 @@ access surface external clients copy from.
 | Persistent Interface | strict/fallback read and write plus domain getters/setters in `server/app-config.ts` |
 | Domain owners | `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-embedding-broker.ts`, embedding and transcription configuration Modules |
 | HTTP Adapters | `server/routes/appearance.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
-| Renderer Adapters | `web-src/src/components/SettingsModal.tsx`, `components/settings/AppearancePanel.tsx`, `EmbeddingPanel.tsx`, `TranscriptionPanel.tsx`, `McpAccessPanel.tsx`, `AgentRuntimePanel.tsx` |
-| Appearance Adapter | `web-src/src/appearance.ts` |
-| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `web-src/src/__tests__/appearance.test.ts`, `web-src/src/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts` |
+| Renderer Adapters | `web-src/src/features/settings/components/SettingsModal.tsx`, `AppearancePanel.tsx`, `EmbeddingPanel.tsx`, `TranscriptionPanel.tsx`, `McpAccessPanel.tsx`, `AgentRuntimePanel.tsx` |
+| Appearance Adapter | `web-src/src/features/settings/lib/appearance.ts` |
+| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `web-src/src/features/settings/__tests__/appearance.test.ts`, `web-src/src/features/settings/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts` |
 
 ## Validation
 

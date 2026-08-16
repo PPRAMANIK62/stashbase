@@ -31,16 +31,16 @@
  *     Files-panel "Set up AI Index" entry (and Settings) reopen it later.
  */
 import { Suspense, useEffect, useState } from 'react';
-import { api, type EmbedderState } from '../api';
-import { useApp } from '../store/AppContext';
-import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from './embedder/embeddingAuth';
-import { lazyWithRetry } from './ErrorBoundary';
-import { useOverlayLayer } from './OverlayStack';
-import { ModalLoadingStatus } from './ui/status';
+import { api, type EmbedderState } from '@/api';
+import { useApp } from '@/store/AppContext';
+import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from '@/features/settings/components/embedder/embeddingAuth';
+import { lazyWithRetry } from '@/components/ErrorBoundary';
+import { useOverlayLayer } from '@/components/OverlayStack';
+import { ModalLoadingStatus } from '@/components/ui/status';
 import { ACCOUNT_CHANGED_EVENT } from '@/features/account/lib/accountEvents';
 
 const RequireApiKeyModal = lazyWithRetry(() =>
-  import('./embedder/RequireApiKeyModal').then((mod) => ({ default: mod.RequireApiKeyModal })),
+  import('@/features/settings/components/embedder/RequireApiKeyModal').then((mod) => ({ default: mod.RequireApiKeyModal })),
 );
 
 const OPEN_EVENT = 'stashbase-open-embedding-setup';

@@ -3,7 +3,7 @@ import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '@/feat
 import { rankQuickOpen } from '@/features/search/lib/quickOpen';
 import { useApp } from '@/store/AppContext';
 import { openLibrarySearch } from './LibrarySearch';
-import { openSettings } from '@/components/SettingsModal';
+import { openSettings } from '@/features/settings/components/SettingsModal';
 import {
   PICKER_EMPTY_ROW_CLASS,
   PICKER_LABEL_CLASS,

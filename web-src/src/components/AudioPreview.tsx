@@ -12,7 +12,7 @@ import { AudioPlaybackPosition } from '../audioPlayback.ts';
 import { basename } from '../lib/paths';
 import { useApp } from '../store/AppContext';
 import { emptyStateClass } from './emptyState';
-import { openSettings } from './SettingsModal';
+import { openSettings } from '@/features/settings/components/SettingsModal';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '../../../shared/transcription.ts';
 import { useAudioFallbackController } from './audio/useAudioFallbackController.ts';
 import { useAudioTranscriptController } from './audio/useAudioTranscriptController.ts';

@@ -6,17 +6,17 @@
  * `EmbedderRequireKeyGate` so it fires whether or not Settings is open.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, errorMessage, type EmbedderProvider, type EmbedderState } from '../../api';
-import { useApp } from '../../store/AppContext';
-import { EmbeddingAuthChoice } from '../embedder/EmbeddingAuthChoice';
-import { KeyModal } from '../embedder/KeyModal';
-import { RemoveKeyModal } from '../embedder/RemoveKeyModal';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { SegmentedControl, SegmentedControlItem } from '../ui/segmented-control';
+import { api, errorMessage, type EmbedderProvider, type EmbedderState } from '@/api';
+import { useApp } from '@/store/AppContext';
+import { EmbeddingAuthChoice } from '@/features/settings/components/embedder/EmbeddingAuthChoice';
+import { KeyModal } from '@/features/settings/components/embedder/KeyModal';
+import { RemoveKeyModal } from '@/features/settings/components/embedder/RemoveKeyModal';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { SegmentedControl, SegmentedControlItem } from '@/components/ui/segmented-control';
 import { AccountSignInForm } from '@/features/account/components/AccountSignInForm';
 import { notifyAccountChanged } from '@/features/account/lib/accountEvents';
-import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '../../lib/hostedQuota';
+import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/lib/hostedQuota';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string; costHint: string }> = {
   openai: {

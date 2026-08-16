@@ -7,7 +7,7 @@
  * resulting `authorized` fact so the dialog, Files-panel line, Settings, and
  * search never disagree.
  */
-import type { EmbedderState } from '../../api';
+import type { EmbedderState } from '@/api';
 
 export function isEmbeddingAuthorized(state: EmbedderState | null | undefined): boolean {
   if (!state) return false;

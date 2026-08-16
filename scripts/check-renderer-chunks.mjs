@@ -31,7 +31,7 @@ const expectedEntries = [
   'src/features/preparation/components/UnsupportedFilesCallout.tsx',
   'src/features/preparation/components/EmbeddingSetupCallout.tsx',
   'src/features/account/components/SidebarAccountRow.tsx',
-  'src/components/embedder/RequireApiKeyModal.tsx',
+  'src/features/settings/components/embedder/RequireApiKeyModal.tsx',
 ];
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));

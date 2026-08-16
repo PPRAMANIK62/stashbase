@@ -5,12 +5,12 @@
  * `mode='change'` only swaps the title + button text.
  */
 import { useRef, useState } from 'react';
-import type { EmbedderProvider } from '../../api';
-import { errorMessage } from '../../api';
-import { ModalShell } from '../ModalShell';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { StatusMessage } from '../ui/status';
+import type { EmbedderProvider } from '@/api';
+import { errorMessage } from '@/api';
+import { ModalShell } from '@/components/ModalShell';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { StatusMessage } from '@/components/ui/status';
 
 export function KeyModal({
   mode = 'enter',

@@ -1,4 +1,4 @@
-import type { AppearancePreferences } from './api';
+import type { AppearancePreferences } from '@/api';
 
 /** Apply only CSS-facing state; persistence stays in the Settings API. */
 export function applyAppearance(preferences: AppearancePreferences): void {

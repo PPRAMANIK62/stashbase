@@ -9,13 +9,13 @@ import { Sidebar } from './components/Sidebar';
 import { TitlebarControls } from './components/TitlebarControls';
 import { MainPane } from './components/MainPane';
 import { DropVeil } from './components/DropVeil';
-import { EmbedderRequireKeyGate } from './components/EmbedderRequireKeyGate';
+import { EmbedderRequireKeyGate } from '@/features/settings/components/EmbedderRequireKeyGate';
 import { Hotkeys } from './components/Hotkeys';
 import { ClipboardImportModal } from './components/ClipboardImportModal';
 import { CascadePromptModal } from './components/CascadePromptModal';
 import { AlertConfirmModal } from './components/AlertConfirmModal';
 import { Toasts } from './components/Toasts';
-import { SettingsPortal } from './components/SettingsModal';
+import { SettingsPortal } from '@/features/settings/components/SettingsModal';
 import { QuickOpen } from '@/features/search/components/QuickOpen';
 import { LibrarySearch } from '@/features/search/components/LibrarySearch';
 import { EditorHistoryNavigator } from './components/EditorHistoryNavigator';
@@ -29,7 +29,7 @@ import { useClipboardImageOffer } from './hooks/useClipboardImageOffer';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
 import { usePreviewMessages } from './hooks/usePreviewMessages';
 import { api } from './api';
-import { applyAppearance, subscribeToAppearance } from './appearance';
+import { applyAppearance, subscribeToAppearance } from '@/features/settings/lib/appearance';
 import { electronBridge } from './electronBridge';
 import {
   COMPACT_WORKSPACE_QUERY,

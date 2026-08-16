@@ -6,11 +6,11 @@ import {
   type AgentRuntimeDebugState,
   type AgentSetupFailureSimulation,
   type AgentsResponse,
-} from '../../api';
-import { AGENT_META, AGENTS, type AgentKind } from '../../agentCatalog';
-import { ChevronDownIcon, MoreHorizontalIcon } from '../../icons';
-import { useApp } from '../../store/AppContext';
-import { Button } from '../ui/button';
+} from '@/api';
+import { AGENT_META, AGENTS, type AgentKind } from '@/agentCatalog';
+import { ChevronDownIcon, MoreHorizontalIcon } from '@/icons';
+import { useApp } from '@/store/AppContext';
+import { Button } from '@/components/ui/button';
 import {
   Menu,
   MenuItem,
@@ -18,9 +18,9 @@ import {
   MenuPortal,
   MenuPositioner,
   MenuTrigger,
-} from '../ui/menu';
-import { Select } from '../ui/select';
-import { StatusMessage } from '../ui/status';
+} from '@/components/ui/menu';
+import { Select } from '@/components/ui/select';
+import { StatusMessage } from '@/components/ui/status';
 
 const DEFAULT_DEBUG: AgentRuntimeDebugState = {
   enabled: false,

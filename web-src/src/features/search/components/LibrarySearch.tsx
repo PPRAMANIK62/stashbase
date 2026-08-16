@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { useSettingsBlocking } from '@/hooks/useSettingsBlocking';
+import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
 import { useApp } from '@/store/AppContext';
 import type { LibrarySearchPrefill } from '@/features/search/lib/librarySearch';
 import { LazyLoadBoundary, lazyWithRetry } from '@/components/ErrorBoundary';

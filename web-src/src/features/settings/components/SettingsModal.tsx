@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react';
-import { lazyWithRetry } from './ErrorBoundary';
-import { useOverlayLayer } from './OverlayStack';
-import { ModalLoadingStatus } from './ui/status';
+import { lazyWithRetry } from '@/components/ErrorBoundary';
+import { useOverlayLayer } from '@/components/OverlayStack';
+import { ModalLoadingStatus } from '@/components/ui/status';
 
 export type SettingsSection = 'appearance' | 'agents' | 'embedding' | 'transcription' | 'mcp';
 
@@ -15,7 +15,7 @@ interface OpenDetail {
   section?: SettingsSection;
 }
 
-const ManagedSettingsModal = lazyWithRetry(() => import('./ManagedSettingsModal'));
+const ManagedSettingsModal = lazyWithRetry(() => import('@/features/settings/components/ManagedSettingsModal'));
 
 export function openSettings(section?: SettingsSection): void {
   window.dispatchEvent(

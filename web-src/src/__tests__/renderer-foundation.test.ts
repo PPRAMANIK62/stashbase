@@ -96,19 +96,15 @@ test('chrome type scale and radius scale are the only visual values', () => {
   assert.match(legacy, /corner-shape: squircle;/);
 
   // Migrated components consume named tokens, not arbitrary-value escapes.
-  const componentDirs = ['web-src/src/components', 'web-src/src/components/ui', 'web-src/src/components/agent', 'web-src/src/components/settings', 'web-src/src/components/embedder'];
-  for (const dir of componentDirs) {
-    const full = path.join(root, dir);
-    if (!fs.existsSync(full)) continue;
-    for (const file of fs.readdirSync(full)) {
-      if (!file.endsWith('.tsx')) continue;
-      const source = read(path.join(dir, file));
-      assert.doesNotMatch(source, /text-\[calc\(/, `${dir}/${file} uses an arbitrary scaled font size — use the text-* ramp`);
-      assert.doesNotMatch(source, /bg-\[var\(--hover\)\]/, `${dir}/${file} uses bg-[var(--hover)] — use bg-muted`);
-      // Placeholders are one role, not a per-field opacity guess. Four
-      // fields had drifted to three different values before this landed.
-      assert.doesNotMatch(source, /placeholder:text-(?!placeholder\b)/, `${dir}/${file} styles a placeholder off-role — use placeholder:text-placeholder`);
-    }
+  // Reuses walkSources above (rather than a hardcoded directory list) so
+  // this coverage survives feature-folder moves without silently going stale.
+  for (const file of walkSources('web-src/src').filter((f) => f.endsWith('.tsx'))) {
+    const source = read(file);
+    assert.doesNotMatch(source, /text-\[calc\(/, `${file} uses an arbitrary scaled font size — use the text-* ramp`);
+    assert.doesNotMatch(source, /bg-\[var\(--hover\)\]/, `${file} uses bg-[var(--hover)] — use bg-muted`);
+    // Placeholders are one role, not a per-field opacity guess. Four
+    // fields had drifted to three different values before this landed.
+    assert.doesNotMatch(source, /placeholder:text-(?!placeholder\b)/, `${file} styles a placeholder off-role — use placeholder:text-placeholder`);
   }
 });
 
@@ -200,7 +196,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   assert.match(read('web-src/src/components/ManagedModalShell.tsx'), /\.\/ui\/dialog/);
   assert.match(modal, /<ModalLoadingStatus/);
   assert.doesNotMatch(modal, /createPortal|addEventListener/);
-  assert.doesNotMatch(read('web-src/src/components/SettingsModal.tsx'), /addEventListener\('keydown'/);
+  assert.doesNotMatch(read('web-src/src/features/settings/components/SettingsModal.tsx'), /addEventListener\('keydown'/);
   assert.doesNotMatch(read('web-src/src/components/CascadePromptModal.tsx'), /addEventListener/);
 
   const menu = read('web-src/src/components/Menu.tsx');
@@ -243,7 +239,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
 test('shared overlays own loading modality, popup positioning, and focus return', () => {
   for (const file of [
     'web-src/src/components/ModalShell.tsx',
-    'web-src/src/components/SettingsModal.tsx',
+    'web-src/src/features/settings/components/SettingsModal.tsx',
     'web-src/src/components/AlertConfirmModal.tsx',
     'web-src/src/components/ClipboardImportModal.tsx',
   ]) {
