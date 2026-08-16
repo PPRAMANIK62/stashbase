@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '../api';
-import type { PendingHighlight } from '../store/state';
-import { useApp } from '../store/AppContext';
-import { openSettings } from './SettingsModal';
+import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '@/api';
+import type { PendingHighlight } from '@/store/state';
+import { useApp } from '@/store/AppContext';
+import { openSettings } from '@/components/SettingsModal';
 import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet';
-import { folderRefsEqual } from '../folderPath';
+import { folderRefsEqual } from '@/folderPath';
 import {
   applyLibrarySearchPrefill,
   folderBasename,
@@ -16,20 +16,20 @@ import {
   type LibrarySearchPrefill,
   type LibrarySearchScope,
   type LibrarySemanticHit,
-} from '../librarySearch';
-import { Button } from './ui/button';
-import { SegmentedControl, SegmentedControlItem } from './ui/segmented-control';
-import { StatusMessage } from './ui/status';
-import { basename } from '../lib/paths';
-import { cn } from '../lib/utils';
-import { emptyStateClass } from './emptyState';
-import { useLatestRef } from '../hooks/useLatestRef';
-import { fileGlyphFormat } from './agent/attachments';
-import { folderMenuEntries } from './agent/folderState';
-import { ScopeMenu } from './ScopeMenu';
-import { FileTypeIcon } from './FileTree';
-import { SemanticIndexingNotice } from './SemanticIndexingNotice';
-import { PICKER_VEIL_CLASS, pickerPanelClass } from './pickerChrome';
+} from '@/features/search/lib/librarySearch';
+import { Button } from '@/components/ui/button';
+import { SegmentedControl, SegmentedControlItem } from '@/components/ui/segmented-control';
+import { StatusMessage } from '@/components/ui/status';
+import { basename } from '@/lib/paths';
+import { cn } from '@/lib/utils';
+import { emptyStateClass } from '@/components/emptyState';
+import { useLatestRef } from '@/hooks/useLatestRef';
+import { fileGlyphFormat } from '@/components/agent/attachments';
+import { folderMenuEntries } from '@/components/agent/folderState';
+import { ScopeMenu } from '@/components/ScopeMenu';
+import { FileTypeIcon } from '@/components/FileTree';
+import { SemanticIndexingNotice } from '@/components/SemanticIndexingNotice';
+import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/components/pickerChrome';
 
 /**
  * The library search popup — the app's one search surface. A palette-style

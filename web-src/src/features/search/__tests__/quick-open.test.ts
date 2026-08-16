@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { rankQuickOpen } from '../quickOpen';
+import { rankQuickOpen } from '@/features/search/lib/quickOpen';
 
 test('Quick Open shows unique recent editors before a query', () => {
   const items = rankQuickOpen(['notes/plan.md', 'readme.md'], '', ['notes/plan.md', 'notes/plan.md', 'missing.md']);

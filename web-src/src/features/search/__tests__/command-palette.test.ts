@@ -4,7 +4,7 @@ import {
   commandDefinitions,
   rankCommandPalette,
   routeQuickAccess,
-} from '../commandPalette';
+} from '@/features/search/lib/commandPalette';
 
 test('Quick Access routes explicit command input without mixing it with files', () => {
   assert.deepEqual(routeQuickAccess('>new note'), { provider: 'commands', query: 'new note' });

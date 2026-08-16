@@ -1,4 +1,4 @@
-import { fuzzyScore } from './lib/fuzzy';
+import { fuzzyScore } from './fuzzy';
 
 export type QuickAccessProvider = 'files' | 'commands' | 'help';
 

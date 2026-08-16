@@ -3,7 +3,7 @@ import { formatPrimaryShiftShortcut } from '../platformShortcuts';
 import { readPreferredAgent } from '../agentPreference';
 import { useApp } from '../store/AppContext';
 import { FolderSwitcher } from './FolderSwitcher';
-import { openLibrarySearch } from './LibrarySearch';
+import { openLibrarySearch } from '@/features/search/components/LibrarySearch';
 import { activateChatTabForAgent } from './Sidebar';
 import { TooltipButton } from './TooltipButton';
 

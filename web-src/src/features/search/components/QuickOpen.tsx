@@ -1,8 +1,8 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { useSettingsBlocking } from '../hooks/useSettingsBlocking';
-import { useApp } from '../store/AppContext';
-import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
-import { PICKER_VEIL_CLASS } from './pickerChrome';
+import { useSettingsBlocking } from '@/hooks/useSettingsBlocking';
+import { useApp } from '@/store/AppContext';
+import { LazyLoadBoundary, lazyWithRetry } from '@/components/ErrorBoundary';
+import { PICKER_VEIL_CLASS } from '@/components/pickerChrome';
 
 const ManagedQuickOpen = lazyWithRetry(() => import('./ManagedQuickOpen'));
 

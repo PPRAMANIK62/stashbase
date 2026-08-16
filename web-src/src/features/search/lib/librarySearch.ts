@@ -8,8 +8,8 @@
  * branch wipe folder-scoped fields on every switch. Module-scope memory is
  * the same deliberate choice as the command palette's recent-command list.
  */
-import type { LibraryKeywordFile, LibraryKeywordSearchResult, SearchHit } from './api';
-import type { ChatScope } from './components/agent/folderState';
+import type { LibraryKeywordFile, LibraryKeywordSearchResult, SearchHit } from '@/api';
+import type { ChatScope } from '@/components/agent/folderState';
 
 export type LibrarySearchMode = 'semantic' | 'keyword';
 

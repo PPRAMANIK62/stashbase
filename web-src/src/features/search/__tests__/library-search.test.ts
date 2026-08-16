@@ -8,8 +8,8 @@ import {
   resolveSemanticHits,
   splitLibraryPath,
   writeLibrarySearchMemory,
-} from '../librarySearch.ts';
-import type { LibraryKeywordFile, SearchHit } from '../api.ts';
+} from '@/features/search/lib/librarySearch.ts';
+import type { LibraryKeywordFile, SearchHit } from '@/api.ts';
 
 function hit(fileName: string): SearchHit {
   return { fileName, chunkIndex: 0, content: 'x', heading: '', score: 1 };

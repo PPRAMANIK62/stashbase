@@ -1,9 +1,9 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { useSettingsBlocking } from '../hooks/useSettingsBlocking';
-import { useApp } from '../store/AppContext';
-import type { LibrarySearchPrefill } from '../librarySearch';
-import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
-import { PICKER_VEIL_CLASS } from './pickerChrome';
+import { useSettingsBlocking } from '@/hooks/useSettingsBlocking';
+import { useApp } from '@/store/AppContext';
+import type { LibrarySearchPrefill } from '@/features/search/lib/librarySearch';
+import { LazyLoadBoundary, lazyWithRetry } from '@/components/ErrorBoundary';
+import { PICKER_VEIL_CLASS } from '@/components/pickerChrome';
 
 const ManagedLibrarySearch = lazyWithRetry(() => import('./ManagedLibrarySearch'));
 

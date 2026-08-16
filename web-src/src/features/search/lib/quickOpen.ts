@@ -1,5 +1,5 @@
-import { fuzzyScore } from './lib/fuzzy';
-import { basename } from './lib/paths';
+import { fuzzyScore } from './fuzzy';
+import { basename } from '@/lib/paths';
 
 export interface QuickOpenItem {
   path: string;

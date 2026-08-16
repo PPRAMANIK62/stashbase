@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '../commandPalette';
-import { rankQuickOpen } from '../quickOpen';
-import { useApp } from '../store/AppContext';
+import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '@/features/search/lib/commandPalette';
+import { rankQuickOpen } from '@/features/search/lib/quickOpen';
+import { useApp } from '@/store/AppContext';
 import { openLibrarySearch } from './LibrarySearch';
-import { openSettings } from './SettingsModal';
+import { openSettings } from '@/components/SettingsModal';
 import {
   PICKER_EMPTY_ROW_CLASS,
   PICKER_LABEL_CLASS,
@@ -12,7 +12,7 @@ import {
   PICKER_ROW_DETAIL_CLASS,
   PICKER_VEIL_CLASS,
   pickerPanelClass,
-} from './pickerChrome';
+} from '@/components/pickerChrome';
 
 let recentCommandIdsMemory: string[] = [];
 

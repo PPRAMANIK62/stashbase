@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { EditIcon, PreviewIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { EmptyTabLanding } from './EmptyTabLanding';
-import { FindBar } from './FindBar';
+import { FindBar } from '@/features/search/components/FindBar';
 import { HtmlPreview } from './HtmlPreview';
 import { ImagePreview } from './ImagePreview';
 import { TabStrip } from './TabStrip';
