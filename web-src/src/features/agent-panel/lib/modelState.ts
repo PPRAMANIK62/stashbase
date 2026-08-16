@@ -1,4 +1,4 @@
-import type { AgentModel } from '@/features/agent-panel/components/types';
+import type { AgentModel } from '@/features/agent-panel/lib/types';
 
 export interface ModelControlState {
   models: AgentModel[];

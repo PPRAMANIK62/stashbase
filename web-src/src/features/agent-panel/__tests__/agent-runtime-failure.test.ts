@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { runtimeFailurePresentation } from '@/features/agent-panel/components/runtimeFailurePresentation';
+import { runtimeFailurePresentation } from '@/features/agent-panel/lib/runtimeFailurePresentation';
 
 test('installation failures offer only installation recovery', () => {
   const result = runtimeFailurePresentation({

@@ -5,8 +5,8 @@
  * AgentMessages.
  */
 import { basename } from '@/common/lib/paths';
-import type { ToolBlock } from '@/features/agent-panel/components/types';
-import { clipInline, mcpArgs } from '@/features/agent-panel/components/toolPayload';
+import type { ToolBlock } from '@/features/agent-panel/lib/types';
+import { clipInline, mcpArgs } from '@/features/agent-panel/lib/toolPayload';
 
 export type CommandAction = { type?: unknown; path?: unknown };
 

@@ -4,14 +4,14 @@
  * (`newChatPlan`). */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { newChatPlan } from '@/features/agent-panel/components/folderState.ts';
+import { newChatPlan } from '@/features/agent-panel/lib/folderState.ts';
 import {
   historyRequestParams,
   mergeAgentSessions,
   rowResumeFolder,
   rowScopeParams,
   shouldConsumePendingResume,
-} from '@/features/agent-panel/components/sessionHistory.ts';
+} from '@/features/agent-panel/lib/sessionHistory.ts';
 
 const session = (id: string, lastModified: number) => ({ id, title: `Chat ${id}`, lastModified });
 

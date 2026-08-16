@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from 'react-aria-components';
 import { ArrowInsertIcon } from '@/common/components/icons';
-import { spinnerClass } from '@/features/agent-panel/components/panelStyles';
+import { spinnerClass } from '@/features/agent-panel/lib/panelStyles';
 
 interface Suggestion {
   /** The action-first rotating line the user reads. */

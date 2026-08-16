@@ -5,7 +5,7 @@ import { basename } from '@/common/lib/paths';
 import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
 import { useApp } from '@/store/AppContext';
 import { getPreparationFailure } from '@/store/fileReadiness';
-import { emptyStateClass } from '@/common/components/emptyState';
+import { emptyStateClass } from '@/common/lib/emptyState';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
 

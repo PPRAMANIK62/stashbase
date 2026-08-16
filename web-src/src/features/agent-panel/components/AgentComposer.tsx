@@ -8,22 +8,22 @@ import { cn } from '@/common/lib/utils';
 import type { FileMeta, FolderMeta } from '@/common/api/api';
 import { basename } from '@/common/lib/paths';
 import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from '@/features/agent-panel/components/FileAttachmentChip';
-import { effortLabel, effortOptions } from '@/features/agent-panel/components/effortMenuState';
+import { effortLabel, effortOptions } from '@/features/agent-panel/lib/effortMenuState';
 import {
   scopePillAriaLabel,
   type ChatScope,
   type LibraryFolderOption,
-} from '@/features/agent-panel/components/folderState';
+} from '@/features/agent-panel/lib/folderState';
 import { ScopeMenu } from '@/features/workspace/components/ScopeMenu';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from '@/features/agent-panel/components/MentionComposer';
-import { rankMentionSuggestions } from '@/features/agent-panel/components/mentionRanking';
+import { rankMentionSuggestions } from '@/features/agent-panel/lib/mentionRanking';
 import {
   attachImageRemoveClass, attachRemoveClass, iconGhostButtonClass,
   menuHeadClass, optActiveClass, optCheckClass, optClass, optDescClass,
   optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
-} from '@/features/agent-panel/components/panelStyles';
-import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from '@/features/agent-panel/components/types';
-import { modelMenuLabel } from '@/features/agent-panel/components/modelState';
+} from '@/features/agent-panel/lib/panelStyles';
+import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from '@/features/agent-panel/lib/types';
+import { modelMenuLabel } from '@/features/agent-panel/lib/modelState';
 
 const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon }[] = [
   { id: 'default', label: 'Ask', desc: 'Ask before edits or higher-risk actions', Icon: HandIcon },

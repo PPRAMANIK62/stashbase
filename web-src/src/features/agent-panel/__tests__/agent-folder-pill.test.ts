@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { agentConnectionUrl } from '@/features/agent-panel/components/connectionUrl.ts';
+import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl.ts';
 import { basename, shortenFolderPath } from '@/common/lib/paths.ts';
 import {
   blankTabToReuse,
@@ -23,7 +23,7 @@ import {
   shouldOpenInitialChatOnWindowEntry,
   switchWelcomeTabPlan,
   windowFolderSwitchPlan,
-} from '@/features/agent-panel/components/folderState.ts';
+} from '@/features/agent-panel/lib/folderState.ts';
 
 const recent = [
   { path: '/Users/me/Documents/StashBase/Notes', openedAt: '2026-08-01', favorite: false },

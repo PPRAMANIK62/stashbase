@@ -14,7 +14,7 @@ import {
   PICKER_ROW_CLASS,
   PICKER_VEIL_CLASS,
   pickerPanelClass,
-} from '@/common/components/pickerChrome';
+} from '@/common/lib/pickerChrome';
 
 /** How long Control must stay down before the overlay actually renders. A
  *  quick tap-release resolves inside this window and never paints — only a

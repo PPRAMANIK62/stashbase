@@ -9,7 +9,7 @@
  * the same deliberate choice as the command palette's recent-command list.
  */
 import type { LibraryKeywordFile, LibraryKeywordSearchResult, SearchHit } from '@/common/api/api';
-import type { ChatScope } from '@/features/agent-panel/components/folderState';
+import type { ChatScope } from '@/features/agent-panel/lib/folderState';
 
 export type LibrarySearchMode = 'semantic' | 'keyword';
 

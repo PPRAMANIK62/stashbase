@@ -4,7 +4,7 @@ import {
   AGENT_TURN_FAILED_MESSAGE,
   recordFailureBeforeContinuing,
   TurnErrorTracker,
-} from '@/features/agent-panel/components/turnFailure.ts';
+} from '@/features/agent-panel/lib/turnFailure.ts';
 
 test('a bare failed terminal event adds one generic explanation', () => {
   const tracker = new TurnErrorTracker();

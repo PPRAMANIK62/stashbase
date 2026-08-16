@@ -11,7 +11,7 @@ import { readPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 import {
   shouldOpenInitialChatOnWindowEntry,
   switchWelcomeTabPlan,
-} from '@/features/agent-panel/components/folderState';
+} from '@/features/agent-panel/lib/folderState';
 import { makeChatTab, type Action, type State } from '@/store/state';
 import { shouldAutoCollapseChat } from '@/features/workspace/lib/workspaceLayout';
 

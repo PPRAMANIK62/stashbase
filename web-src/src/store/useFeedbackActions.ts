@@ -3,7 +3,7 @@ import { api } from '@/common/api/api';
 import {
   feedbackToasts,
   type ToastOptions,
-} from '@/common/components/feedbackToasts';
+} from '@/common/lib/feedbackToasts';
 import type { Action, CascadeDecision, CascadePrompt, ModalRequest } from './state';
 
 type Dispatch = (action: Action) => void;

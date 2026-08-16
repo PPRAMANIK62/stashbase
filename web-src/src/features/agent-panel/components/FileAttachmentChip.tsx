@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 
 import { FileTypeIcon } from '@/features/workspace/components/FileTree';
 import { ImageLightbox } from '@/features/documents/components/ImageLightbox';
-import { fileGlyphFormat } from '@/features/agent-panel/components/attachments';
-import { attachChipClass, attachIconTileClass, attachImageChipClass, attachImagePreviewClass, attachNameClass, attachTextClass, attachTypeClass } from '@/features/agent-panel/components/panelStyles';
-import type { Attachment } from '@/features/agent-panel/components/types';
+import { fileGlyphFormat } from '@/features/agent-panel/lib/attachments';
+import { attachChipClass, attachIconTileClass, attachImageChipClass, attachImagePreviewClass, attachNameClass, attachTextClass, attachTypeClass } from '@/features/agent-panel/lib/panelStyles';
+import type { Attachment } from '@/features/agent-panel/lib/types';
 
 /** The shared file attachment card — a muted type glyph, the filename, and a
  *  type label under it (GPT-style two-line card kept in the panel's neutral

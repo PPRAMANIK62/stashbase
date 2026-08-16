@@ -9,7 +9,7 @@ import {
   createJsonEditor, fromJsonEditorText, jsonTreeHighlightPath, makeJsonTreeFindController,
   textMatches, toJsonEditorText,
 } from '@/features/documents/components/JsonDocument';
-import { analyzeJsonSource } from '@/features/documents/components/json/sourceModel';
+import { analyzeJsonSource } from '@/features/documents/lib/json/sourceModel';
 import { directTreeSearchPatch } from '@/features/documents/components/json/JsonTreeView';
 import { JsonDocument } from '@/features/documents/components/JsonDocument';
 import { AppContext, canApplyExternalTextRefresh, type AppActions } from '@/store/AppContext';

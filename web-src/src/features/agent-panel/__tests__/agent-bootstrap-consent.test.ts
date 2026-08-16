@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { api, type AgentsResponse } from '@/common/api/api';
-import { activateChatTabForAgent } from '@/features/agent-panel/components/chatActivation';
+import { activateChatTabForAgent } from '@/features/agent-panel/lib/chatActivation';
 import type { Action } from '@/store/state';
 
 test('switching a blank Codex tab to Claude does not install Claude before confirmation', async () => {

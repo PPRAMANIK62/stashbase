@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { agentConnectionUrl } from '@/features/agent-panel/components/connectionUrl.ts';
-import { applyModelEvent, modelMenuLabel, modelMenuLocked, modelMenuVisible } from '@/features/agent-panel/components/modelState.ts';
+import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl.ts';
+import { applyModelEvent, modelMenuLabel, modelMenuLocked, modelMenuVisible } from '@/features/agent-panel/lib/modelState.ts';
 
 const base = { protocol: 'http:', host: 'localhost:3000', endpoint: '/ws/agent', windowId: 'window-1', effort: 'high', access: 'default', agent: 'codex' };
 

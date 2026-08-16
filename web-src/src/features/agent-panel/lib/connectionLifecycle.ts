@@ -1,4 +1,4 @@
-import type { Block } from '@/features/agent-panel/components/types';
+import type { Block } from '@/features/agent-panel/lib/types';
 
 export interface AgentTerminalState {
   blocks: Block[];

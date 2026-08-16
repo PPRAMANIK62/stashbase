@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { rankMentionSuggestions } from '@/features/agent-panel/components/mentionRanking';
+import { rankMentionSuggestions } from '@/features/agent-panel/lib/mentionRanking';
 
 const files = [
   { name: 'docs/archive/agent-panel.md', format: 'md' as const, heading: '', snippet: '' },

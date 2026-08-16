@@ -6,7 +6,7 @@
  * ARIA state and the visual state can never drift apart — a quiet
  * neutral surface (`bg-active`), never an accent wash.
  */
-import { emptyStateClass } from '@/common/components/emptyState';
+import { emptyStateClass } from '@/common/lib/emptyState';
 
 export const PICKER_VEIL_CLASS =
   'fixed inset-0 z-1200 flex items-start justify-center bg-veil-quiet pt-[min(18vh,150px)]';

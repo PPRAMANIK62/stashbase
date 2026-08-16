@@ -1,6 +1,6 @@
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { makeChatTab, type Action, type State } from '@/store/state';
-import { newChatPlan } from '@/features/agent-panel/components/folderState';
+import { newChatPlan } from '@/features/agent-panel/lib/folderState';
 
 /** Open or reuse a chat tab without starting runtime installation. A missing
  * runtime is owned by AgentView's explicit `Install and continue` gate; tab

@@ -8,17 +8,17 @@ import { cn } from '@/common/lib/utils';
 import { buttonVariants } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
 import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from '@/features/agent-panel/components/FileAttachmentChip';
-import { buildDiff, type DiffRow } from '@/features/agent-panel/components/diffModel';
-import { segmentFileMentions } from '@/features/agent-panel/components/mentionText';
-import { spinnerClass } from '@/features/agent-panel/components/panelStyles';
-import { activitySummary, askTitle, classifyTool, fileChanges, toolRowParts } from '@/features/agent-panel/components/toolActivity';
-import { clipResult, payloadPreview } from '@/features/agent-panel/components/toolPayload';
-import type { Attachment, Block, ToolBlock } from '@/features/agent-panel/components/types';
+import { buildDiff, type DiffRow } from '@/features/agent-panel/lib/diffModel';
+import { segmentFileMentions } from '@/features/agent-panel/lib/mentionText';
+import { spinnerClass } from '@/features/agent-panel/lib/panelStyles';
+import { activitySummary, askTitle, classifyTool, fileChanges, toolRowParts } from '@/features/agent-panel/lib/toolActivity';
+import { clipResult, payloadPreview } from '@/features/agent-panel/lib/toolPayload';
+import type { Attachment, Block, ToolBlock } from '@/features/agent-panel/lib/types';
 
 // Stable seams live in focused modules; re-exported here for existing
 // importers (AgentView, tests) so their call sites compile unchanged.
-export { flattenFileMentions } from '@/features/agent-panel/components/mentionText';
-export { activitySummary } from '@/features/agent-panel/components/toolActivity';
+export { flattenFileMentions } from '@/features/agent-panel/lib/mentionText';
+export { activitySummary } from '@/features/agent-panel/lib/toolActivity';
 
 const outlineSmClass = buttonVariants({ variant: 'outline', size: 'sm' });
 const primarySmClass = buttonVariants({ variant: 'default', size: 'sm' });

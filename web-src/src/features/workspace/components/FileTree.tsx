@@ -6,7 +6,7 @@ import { useTreeRowDrag } from '@/features/workspace/hooks/useTreeRowDrag';
 import { basename } from '@/common/lib/paths';
 import { useApp } from '@/store/AppContext';
 import { getFileReadiness } from '@/store/fileReadiness';
-import { emptyStateClass } from '@/common/components/emptyState';
+import { emptyStateClass } from '@/common/lib/emptyState';
 import { RenameInput, useRenameTarget } from '@/common/components/RenameInput';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');

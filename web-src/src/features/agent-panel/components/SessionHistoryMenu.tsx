@@ -22,8 +22,8 @@ import { EditIcon, TrashIcon } from '@/common/components/icons';
 import { basename } from '@/common/lib/paths';
 import { buttonVariants } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
-import { emptyStateClass } from '@/common/components/emptyState';
-import { historyRequestParams, mergeAgentSessions, rowResumeFolder, rowScopeParams, type HistoryScope, type MergedSessionRow } from '@/features/agent-panel/components/sessionHistory';
+import { emptyStateClass } from '@/common/lib/emptyState';
+import { historyRequestParams, mergeAgentSessions, rowResumeFolder, rowScopeParams, type HistoryScope, type MergedSessionRow } from '@/features/agent-panel/lib/sessionHistory';
 
 function relTime(ms: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));

@@ -7,7 +7,7 @@ import {
 import {
   bindFeedbackToastRuntime,
   feedbackToasts,
-} from '@/common/components/feedbackToasts';
+} from '@/common/lib/feedbackToasts';
 
 test('feedback toasts deduplicate in place and refresh their timeout', () => {
   const added: Array<Record<string, unknown>> = [];

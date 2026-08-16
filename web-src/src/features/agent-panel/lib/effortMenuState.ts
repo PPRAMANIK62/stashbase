@@ -1,4 +1,4 @@
-import type { EffortLevel } from '@/features/agent-panel/components/types';
+import type { EffortLevel } from '@/features/agent-panel/lib/types';
 
 export const EFFORT_LEVELS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 

@@ -11,7 +11,7 @@ import { Button } from "@/common/components/ui/button"
 import type {
   ToastLevel,
   ToastOptions,
-} from "@/common/components/feedbackToasts"
+} from "@/common/lib/feedbackToasts"
 
 export type { ToastLevel, ToastOptions }
 

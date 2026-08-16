@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { bindFeedbackToastRuntime } from '@/common/components/feedbackToasts';
+import { bindFeedbackToastRuntime } from '@/common/lib/feedbackToasts';
 import {
   managedFeedbackToasts,
   ToastAction,

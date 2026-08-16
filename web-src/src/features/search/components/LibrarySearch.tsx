@@ -3,7 +3,7 @@ import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocki
 import { useApp } from '@/store/AppContext';
 import type { LibrarySearchPrefill } from '@/features/search/lib/librarySearch';
 import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
-import { PICKER_VEIL_CLASS } from '@/common/components/pickerChrome';
+import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
 
 const ManagedLibrarySearch = lazyWithRetry(() => import('./ManagedLibrarySearch'));
 

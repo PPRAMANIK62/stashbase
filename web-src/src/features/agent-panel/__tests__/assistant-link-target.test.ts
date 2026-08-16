@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveAssistantLink } from '@/features/agent-panel/components/assistantLinkTarget.ts';
+import { resolveAssistantLink } from '@/features/agent-panel/lib/assistantLinkTarget.ts';
 
 const members = ['/u/lib/tennis', '/u/lib/work'];
 

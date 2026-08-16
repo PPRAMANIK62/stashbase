@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { activitySummary, settledReplySections } from '@/features/agent-panel/components/AgentMessages';
-import { buildDiff } from '@/features/agent-panel/components/diffModel';
-import { flattenFileMentions, segmentFileMentions } from '@/features/agent-panel/components/mentionText';
-import { payloadPreview } from '@/features/agent-panel/components/toolPayload';
-import type { Block, ToolBlock } from '@/features/agent-panel/components/types';
+import { buildDiff } from '@/features/agent-panel/lib/diffModel';
+import { flattenFileMentions, segmentFileMentions } from '@/features/agent-panel/lib/mentionText';
+import { payloadPreview } from '@/features/agent-panel/lib/toolPayload';
+import type { Block, ToolBlock } from '@/features/agent-panel/lib/types';
 
 test('count-free activity summaries use stable plural category labels', () => {
   const tools: ToolBlock[] = [

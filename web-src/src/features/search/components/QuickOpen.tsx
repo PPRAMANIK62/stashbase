@@ -2,7 +2,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
 import { useApp } from '@/store/AppContext';
 import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
-import { PICKER_VEIL_CLASS } from '@/common/components/pickerChrome';
+import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
 
 const ManagedQuickOpen = lazyWithRetry(() => import('./ManagedQuickOpen'));
 

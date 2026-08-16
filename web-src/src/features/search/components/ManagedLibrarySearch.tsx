@@ -22,14 +22,14 @@ import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/s
 import { StatusMessage } from '@/common/components/ui/status';
 import { basename } from '@/common/lib/paths';
 import { cn } from '@/common/lib/utils';
-import { emptyStateClass } from '@/common/components/emptyState';
+import { emptyStateClass } from '@/common/lib/emptyState';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
-import { fileGlyphFormat } from '@/features/agent-panel/components/attachments';
-import { folderMenuEntries } from '@/features/agent-panel/components/folderState';
+import { fileGlyphFormat } from '@/features/agent-panel/lib/attachments';
+import { folderMenuEntries } from '@/features/agent-panel/lib/folderState';
 import { ScopeMenu } from '@/features/workspace/components/ScopeMenu';
 import { FileTypeIcon } from '@/features/workspace/components/FileTree';
 import { SemanticIndexingNotice } from '@/features/preparation/components/SemanticIndexingNotice';
-import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/common/components/pickerChrome';
+import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/common/lib/pickerChrome';
 
 /**
  * The library search popup — the app's one search surface. A palette-style

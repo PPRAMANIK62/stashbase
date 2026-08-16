@@ -2,8 +2,8 @@ import { Suspense, useRef, useState } from 'react';
 import { HistoryIcon } from '@/common/components/icons';
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { useApp } from '@/store/AppContext';
-import { activateChatTabForAgent } from '@/features/agent-panel/components/chatActivation';
-import type { HistoryScope } from '@/features/agent-panel/components/sessionHistory';
+import { activateChatTabForAgent } from '@/features/agent-panel/lib/chatActivation';
+import type { HistoryScope } from '@/features/agent-panel/lib/sessionHistory';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { Button } from '@/common/components/ui/button';
 import { PopupLoadingStatus } from '@/common/components/ui/status';
@@ -14,7 +14,7 @@ import { PopupLoadingStatus } from '@/common/components/ui/status';
 const SessionHistoryPopover = lazyWithRetry(() =>
   import('@/features/agent-panel/components/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
-export { activateChatTabForAgent } from '@/features/agent-panel/components/chatActivation';
+export { activateChatTabForAgent } from '@/features/agent-panel/lib/chatActivation';
 
 /** History clock on a sidebar scope header: opens the merged
  *  session-history menu for that scope (both agents' sessions, newest

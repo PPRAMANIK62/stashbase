@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clipboardImageFiles, handleComposerPaste } from '@/features/agent-panel/components/clipboardAttachments';
+import { clipboardImageFiles, handleComposerPaste } from '@/features/agent-panel/lib/clipboardAttachments';
 
 function image(type: string, name = ''): File {
   return new File(['image-bytes'], name, { type });

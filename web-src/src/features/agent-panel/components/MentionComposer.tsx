@@ -3,8 +3,8 @@ import { Compartment, EditorState, RangeSet, RangeValue, StateEffect, StateField
 import { defaultKeymap, history, historyKeymap, invertedEffects } from '@codemirror/commands';
 import { Decoration, type DecorationSet, EditorView, keymap, placeholder, WidgetType } from '@codemirror/view';
 import { basename } from '@/common/lib/paths';
-import { mentionKeyAction } from '@/features/agent-panel/components/mentionKeys';
-import { handleComposerPaste } from '@/features/agent-panel/components/clipboardAttachments';
+import { mentionKeyAction } from '@/features/agent-panel/lib/mentionKeys';
+import { handleComposerPaste } from '@/features/agent-panel/lib/clipboardAttachments';
 
 const MENTION = '\uFFFC';
 

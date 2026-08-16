@@ -4,8 +4,8 @@ import {
   closeAgentSocketIntentionally,
   terminalAgentState,
   type ClosableAgentSocket,
-} from '@/features/agent-panel/components/connectionLifecycle';
-import type { Block } from '@/features/agent-panel/components/types';
+} from '@/features/agent-panel/lib/connectionLifecycle';
+import type { Block } from '@/features/agent-panel/lib/types';
 
 const transcript: Block[] = [
   { kind: 'user', id: 'user', text: 'Keep this question' },

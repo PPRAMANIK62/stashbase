@@ -6,7 +6,7 @@ import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/lang
 import { tags } from '@lezer/highlight';
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, type FindController, type FindOptions, type MatchInfo } from '@/store/AppContext';
-import { analyzeJsonSource, formatPath, matchingJsonTreeNodes } from '@/features/documents/components/json/sourceModel';
+import { analyzeJsonSource, formatPath, matchingJsonTreeNodes } from '@/features/documents/lib/json/sourceModel';
 import type { JsonTreeSessionState } from '@/features/documents/components/json/JsonTreeView';
 
 const LazyJsonTreeView = lazy(() => import('@/features/documents/components/json/JsonTreeView').then((module) => ({ default: module.JsonTreeView })));

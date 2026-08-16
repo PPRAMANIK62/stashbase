@@ -18,7 +18,7 @@
  */
 import type { SessionInfo, SessionScopeParams } from '@/common/api/api';
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
-import { scopeRequestParams, type ChatScope } from '@/features/agent-panel/components/folderState';
+import { scopeRequestParams, type ChatScope } from '@/features/agent-panel/lib/folderState';
 
 /** What a history menu can list: one chat scope, or every session across
  *  the library ('all' — the New Chat row's global history). `all` exists

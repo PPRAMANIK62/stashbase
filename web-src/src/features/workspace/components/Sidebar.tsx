@@ -9,8 +9,8 @@ import {
   StarIcon,
 } from '@/common/components/icons';
 import { useApp } from '@/store/AppContext';
-import { folderScope } from '@/features/agent-panel/components/folderState';
-import { ALL_HISTORY_SCOPE } from '@/features/agent-panel/components/sessionHistory';
+import { folderScope } from '@/features/agent-panel/lib/folderState';
+import { ALL_HISTORY_SCOPE } from '@/features/agent-panel/lib/sessionHistory';
 import { AGENT_META, AGENTS, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import {
   newChatAgentSelectionPlan,

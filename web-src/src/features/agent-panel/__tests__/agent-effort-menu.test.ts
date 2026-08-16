@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   effortLabel,
   effortOptions,
-} from '@/features/agent-panel/components/effortMenuState';
+} from '@/features/agent-panel/lib/effortMenuState';
 
 test('native effort identifiers retain their advertised order and labels', () => {
   const native = ['ultra', 'minimal', 'provider_native-level'];

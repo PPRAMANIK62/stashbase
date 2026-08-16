@@ -24,11 +24,11 @@ import { Button } from 'react-aria-components';
 import { buttonVariants } from '@/common/components/ui/button';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
 import { EmptyChatGreeting, EmptyChatSuggestion } from '@/features/agent-panel/components/AgentEmptyState';
-import { resolveAssistantLink } from '@/features/agent-panel/components/assistantLinkTarget';
+import { resolveAssistantLink } from '@/features/agent-panel/lib/assistantLinkTarget';
 import { MessageList, flattenFileMentions, type QueuedTurnPreview, type TurnMeta } from '@/features/agent-panel/components/AgentMessages';
-import { mergeAttachments, readImageDims } from '@/features/agent-panel/components/attachments';
+import { mergeAttachments, readImageDims } from '@/features/agent-panel/lib/attachments';
 import { basename } from '@/common/lib/paths';
-import { agentConnectionUrl } from '@/features/agent-panel/components/connectionUrl';
+import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl';
 import {
   chatScopePill,
   chatScopesEqual,
@@ -44,14 +44,14 @@ import {
   scopeRequestParams,
   windowFolderSwitchPlan,
   type ChatScope,
-} from '@/features/agent-panel/components/folderState';
-import { shouldConsumePendingResume } from '@/features/agent-panel/components/sessionHistory';
-import { closeAgentSocketIntentionally, terminalAgentState } from '@/features/agent-panel/components/connectionLifecycle';
-import { effortMenuLocked } from '@/features/agent-panel/components/effortMenuState';
-import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from '@/features/agent-panel/components/modelState';
-import { recordFailureBeforeContinuing, TurnErrorTracker } from '@/features/agent-panel/components/turnFailure';
-import { runtimeFailurePresentation } from '@/features/agent-panel/components/runtimeFailurePresentation';
-import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from '@/features/agent-panel/components/types';
+} from '@/features/agent-panel/lib/folderState';
+import { shouldConsumePendingResume } from '@/features/agent-panel/lib/sessionHistory';
+import { closeAgentSocketIntentionally, terminalAgentState } from '@/features/agent-panel/lib/connectionLifecycle';
+import { effortMenuLocked } from '@/features/agent-panel/lib/effortMenuState';
+import { applyModelEvent, modelMenuLocked, modelMenuVisible, type ModelControlState } from '@/features/agent-panel/lib/modelState';
+import { recordFailureBeforeContinuing, TurnErrorTracker } from '@/features/agent-panel/lib/turnFailure';
+import { runtimeFailurePresentation } from '@/features/agent-panel/lib/runtimeFailurePresentation';
+import type { AgentSkill, Attachment, Block, EffortLevel, PermMode, ServerEvent, ToolBlock } from '@/features/agent-panel/lib/types';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 
 /** Runtimes title sessions from the first message's RAW text, so a chat

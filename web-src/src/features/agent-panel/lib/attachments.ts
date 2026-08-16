@@ -3,7 +3,7 @@ import {
   IMAGE_SOURCE_EXTENSIONS, PDF_EXTENSIONS, STRUCTURED_DATA_EXTENSIONS,
 } from '@/../../shared/file-formats.ts';
 import type { FileGlyphFormat } from '@/features/workspace/components/FileTree';
-import type { Attachment } from '@/features/agent-panel/components/types';
+import type { Attachment } from '@/features/agent-panel/lib/types';
 
 /** The muted type glyph + short label for a file, keyed off the filename
  *  extension. Reuses the file tree's format vocabulary so a PDF reads the

@@ -342,5 +342,5 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
 
   // Composer pills yield width under pressure (min-w-0 + label truncate)
   // so a tight chat panel truncates labels instead of clipping Send.
-  assert.match(read('web-src/src/features/agent-panel/components/panelStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
+  assert.match(read('web-src/src/features/agent-panel/lib/panelStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
 });

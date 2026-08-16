@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   JSON_TREE_LIMITS, addJsonChild, analyzeJsonSource, deleteJsonPath, renameJsonProperty,
   matchingJsonTreeNodes, reorderJsonArrayItem, replaceJsonNode,
-} from '@/features/documents/components/json/sourceModel';
+} from '@/features/documents/lib/json/sourceModel';
 
 test('strict tree analysis rejects malformed, empty, comments, trailing commas, and duplicate keys truthfully', () => {
   for (const [source, reason] of [

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addJsonChild, analyzeJsonSource, deleteJsonPath, formatPath, renameJsonProperty,
   matchingJsonTreeNodes, reorderJsonArrayItem, replaceJsonNode, type JsonSourceNode,
-} from '@/features/documents/components/json/sourceModel';
+} from '@/features/documents/lib/json/sourceModel';
 
 type EditIntent =
   | { kind: 'value' | 'subtree'; node: JsonSourceNode }
