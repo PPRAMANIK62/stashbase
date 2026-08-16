@@ -62,6 +62,9 @@ export interface ActiveFolderWorkspace {
   scheduleSave: () => void;
   flushSave: () => Promise<boolean>;
   registerEditor: (handle: EditorHandle | null) => void;
+  resolveConflictOverwrite: (tabId: string) => Promise<void>;
+  resolveConflictReload: (tabId: string) => Promise<void>;
+  resolveConflictMerge: (tabId: string) => Promise<void>;
 }
 
 interface WorkspaceDependencies {
@@ -139,7 +142,7 @@ export function useActiveFolderWorkspace(
   );
   const documents = useDocumentActions(
     { state: stateRef, editor, saveTimer, saveInFlight },
-    { loadFiles, refreshIndexState: search.refreshIndexState, toast, primeFind }, dispatch,
+    { loadFiles, refreshIndexState: search.refreshIndexState, toast, primeFind, askConfirm }, dispatch,
   );
   const files = useFileActions(
     { stateRef, saveTimer, importConversionGrace, importIndexGrace },

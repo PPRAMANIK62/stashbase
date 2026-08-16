@@ -9,8 +9,91 @@ import {
   keywordFindCaseSensitive,
   waitForNextFrame,
 } from './appContextHelpers';
-import { getActiveTab, type Action, type PendingHighlight, type State } from './state';
+import { getActiveTab, type Action, type PendingHighlight, type State, type TabConflict, type ModalRequest } from './state';
 import type { ToastOptions } from './useFeedbackActions';
+
+export function computeLineDiff(original: string, modified: string) {
+  const originalLines = original.split('\n');
+  const modifiedLines = modified.split('\n');
+  const n = originalLines.length;
+  const m = modifiedLines.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      if (originalLines[i - 1] === modifiedLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+
+  let i = n, j = m;
+  const result: { original?: string; modified?: string; type: 'equal' | 'delete' | 'insert' | 'modify' }[] = [];
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && originalLines[i - 1] === modifiedLines[j - 1]) {
+      result.unshift({ original: originalLines[i - 1], modified: modifiedLines[j - 1], type: 'equal' });
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      result.unshift({ modified: modifiedLines[j - 1], type: 'insert' });
+      j--;
+    } else {
+      result.unshift({ original: originalLines[i - 1], type: 'delete' });
+      i--;
+    }
+  }
+
+  const alignedRows: {
+    leftLineNum?: number;
+    leftText?: string;
+    rightLineNum?: number;
+    rightText?: string;
+    type: 'equal' | 'delete' | 'insert' | 'modify';
+  }[] = [];
+
+  let leftLine = 1;
+  let rightLine = 1;
+  let idx = 0;
+  while (idx < result.length) {
+    const item = result[idx];
+    if (item.type === 'equal') {
+      alignedRows.push({
+        leftLineNum: leftLine++,
+        leftText: item.original,
+        rightLineNum: rightLine++,
+        rightText: item.modified,
+        type: 'equal'
+      });
+      idx++;
+    } else {
+      const deletes: string[] = [];
+      const inserts: string[] = [];
+      while (idx < result.length && result[idx].type !== 'equal') {
+        if (result[idx].type === 'delete') {
+          deletes.push(result[idx].original!);
+        } else {
+          inserts.push(result[idx].modified!);
+        }
+        idx++;
+      }
+      const maxLen = Math.max(deletes.length, inserts.length);
+      for (let k = 0; k < maxLen; k++) {
+        const hasLeft = k < deletes.length;
+        const hasRight = k < inserts.length;
+        alignedRows.push({
+          leftLineNum: hasLeft ? leftLine++ : undefined,
+          leftText: hasLeft ? deletes[k] : undefined,
+          rightLineNum: hasRight ? rightLine++ : undefined,
+          rightText: hasRight ? inserts[k] : undefined,
+          type: (hasLeft && hasRight) ? 'modify' : hasLeft ? 'delete' : 'insert'
+        });
+      }
+    }
+  }
+
+  return alignedRows;
+}
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const AUDIO_SOURCE_RE = new RegExp(`\\.(${AUDIO_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
@@ -31,6 +114,7 @@ interface DocumentActionDependencies {
   loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   toast: Toast;
+  askConfirm: (message: string, opts?: Pick<ModalRequest, 'title' | 'confirmLabel' | 'destructive'>) => Promise<boolean>;
   primeFind: (query: string, opts: { wholeWord: boolean; caseSensitive: boolean }) => void;
   scheduleAfter?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
   cancelScheduled?: (timer: ReturnType<typeof setTimeout>) => void;
@@ -64,7 +148,7 @@ export function useDocumentActions(
   const lastAcceptedSave = useRef<{
     name: string; content: string; version?: string; superseded: Set<string | undefined>;
   } | null>(null);
-  const { loadFiles, refreshIndexState, toast, primeFind } = dependencies;
+  const { loadFiles, refreshIndexState, toast, primeFind, askConfirm } = dependencies;
   const scheduleAfter = dependencies.scheduleAfter ?? scheduleWithTimeout;
   const cancelScheduled = dependencies.cancelScheduled ?? cancelTimeout;
 
@@ -119,12 +203,27 @@ export function useDocumentActions(
           savedResult = await saveContent(baseVersion);
         } catch (err: unknown) {
           if (!(err instanceof ApiError && err.status === 409)) throw err;
-          const latestTab = getActiveTab(state.current);
-          const sameTab = latestTab?.id === tabId && latestTab.file?.name === currentFile.name;
-          const liveValue = editor.current?.getValue();
-          if (!sameTab || liveValue !== content) return false;
-          savedResult = await saveContent(undefined);
-          toast('Saved over a newer disk copy from sync.', { level: 'info' });
+          const diskVersion = (err as ApiError).currentVersion ?? '';
+          let diskContent = '';
+          try {
+            const body = await api.getFile(currentFile.name);
+            diskContent = body.content;
+          } catch (fetchErr: unknown) {
+            console.error('Failed to fetch conflicted file content from disk:', fetchErr);
+            throw err;
+          }
+          if (!tabId) throw err;
+          dispatch({
+            type: 'SET_CONFLICT',
+            id: tabId,
+            conflict: {
+              diskContent,
+              diskVersion,
+              editorContent: content,
+            },
+          });
+          dispatch({ type: 'SAVE_STATUS', status: { text: 'Conflict detected', cls: 'error' } });
+          return false;
         }
         const superseded = staleAfterAccepted && accepted ? accepted.superseded : new Set<string | undefined>();
         superseded.add(baseVersion);
@@ -352,9 +451,24 @@ export function useDocumentActions(
 
   const closeTab = useCallback(async (id: string) => {
     const currentState = state.current;
+    const tab = currentState.tabs.find((t) => t.id === id);
+    if (tab?.conflict) {
+      const confirmed = await askConfirm(
+        `"${tab.file?.name}" has unresolved conflicts. Closing this tab will discard your changes.`,
+        {
+          title: 'Discard Conflicted Changes?',
+          confirmLabel: 'Close and Discard',
+          destructive: true,
+        }
+      );
+      if (!confirmed) return;
+      dispatch({ type: 'RESOLVE_CONFLICT_DISCARD', id });
+      dispatch({ type: 'CLOSE_TAB', id });
+      return;
+    }
     if (currentState.activeTabId === id && editor.current && !(await flushSave())) return;
     dispatch({ type: 'CLOSE_TAB', id });
-  }, [dispatch, editor, flushSave, state]);
+  }, [dispatch, editor, flushSave, state, askConfirm]);
 
   const closeActiveTab = useCallback(async () => {
     const id = state.current.activeTabId;
@@ -466,6 +580,80 @@ export function useDocumentActions(
     dispatch({ type: 'UNSUPPORTED_MODAL', open });
   }, [dispatch]);
 
+  const resolveConflictOverwrite = useCallback(async (tabId: string) => {
+    const currentState = state.current;
+    const tab = currentState.tabs.find((t) => t.id === tabId);
+    if (!tab?.conflict || !tab.file) return;
+    const { editorContent } = tab.conflict;
+    const fileName = tab.file.name;
+    dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
+    try {
+      const savedResult = await api.putFile(fileName, editorContent, undefined);
+      if (savedResult.indexWarning) toast(savedResult.indexWarning, { level: 'warning' });
+
+      dispatch({ type: 'FILE_PATCH', patch: { content: editorContent, version: savedResult.version } });
+      dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
+      dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
+      dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
+      void loadFiles(currentState.folderPath);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + message, cls: 'error' } });
+      toast('Failed to overwrite: ' + message, { level: 'error' });
+    }
+  }, [dispatch, loadFiles, state, toast]);
+
+  const resolveConflictReload = useCallback(async (tabId: string) => {
+    const currentState = state.current;
+    const tab = currentState.tabs.find((t) => t.id === tabId);
+    if (!tab?.conflict || !tab.file) return;
+    const { diskContent, diskVersion } = tab.conflict;
+    dispatch({ type: 'FILE_PATCH', patch: { content: diskContent, version: diskVersion } });
+    dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
+    dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
+    dispatch({ type: 'SAVE_STATUS', status: { text: '', cls: '' } });
+    void loadFiles(currentState.folderPath);
+  }, [dispatch, loadFiles, state]);
+
+  const resolveConflictMerge = useCallback(async (tabId: string) => {
+    const currentState = state.current;
+    const tab = currentState.tabs.find((t) => t.id === tabId);
+    if (!tab?.conflict || !tab.file) return;
+    const { diskContent, editorContent, diskVersion } = tab.conflict;
+
+    const mergedLines: string[] = [];
+    const alignedRows = computeLineDiff(editorContent, diskContent);
+
+    let idx = 0;
+    while (idx < alignedRows.length) {
+      const row = alignedRows[idx];
+      if (row.type === 'equal') {
+        mergedLines.push(row.leftText ?? '');
+        idx++;
+      } else {
+        const editorBlock: string[] = [];
+        const diskBlock: string[] = [];
+        while (idx < alignedRows.length && alignedRows[idx].type !== 'equal') {
+          const r = alignedRows[idx];
+          if (r.leftText !== undefined) editorBlock.push(r.leftText);
+          if (r.rightText !== undefined) diskBlock.push(r.rightText);
+          idx++;
+        }
+        mergedLines.push('<<<<<<< Editor Version');
+        mergedLines.push(...editorBlock);
+        mergedLines.push('=======');
+        mergedLines.push(...diskBlock);
+        mergedLines.push('>>>>>>> Disk Version');
+      }
+    }
+    const mergedContent = mergedLines.join('\n');
+
+    dispatch({ type: 'FILE_PATCH', patch: { content: mergedContent, version: diskVersion } });
+    dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
+    dispatch({ type: 'DOCUMENT_DIRTY', dirty: true });
+    dispatch({ type: 'SAVE_STATUS', status: { text: 'Merged', cls: '' } });
+  }, [dispatch, state]);
+
   // One stable actions object: the workspace memo depends on this object,
   // not on individually listed members, so a new action added here is
   // tracked automatically.
@@ -487,6 +675,9 @@ export function useDocumentActions(
     setUnsupportedModalOpen,
     toggleEditMode,
     updateTabPdfPage,
+    resolveConflictOverwrite,
+    resolveConflictReload,
+    resolveConflictMerge,
   }), [
     activateTab,
     closeActiveTab,
@@ -505,5 +696,8 @@ export function useDocumentActions(
     setUnsupportedModalOpen,
     toggleEditMode,
     updateTabPdfPage,
+    resolveConflictOverwrite,
+    resolveConflictReload,
+    resolveConflictMerge,
   ]);
 }
