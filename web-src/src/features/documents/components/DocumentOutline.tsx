@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ChevronDownIcon } from '@/icons';
+import { ChevronDownIcon } from '@/common/components/icons';
 import { outlineDepths, outlineHasChildren, visibleOutlineHeadings, type DocumentHeading } from '@/features/documents/milkdown/headings';
 
 export function DocumentOutline({

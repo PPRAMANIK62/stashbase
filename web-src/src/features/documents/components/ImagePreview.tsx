@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, errorMessage, versionedAssetUrl } from '@/api';
-import { useLatestRef } from '@/hooks/useLatestRef';
-import { basename } from '@/lib/paths';
+import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
+import { useLatestRef } from '@/common/hooks/useLatestRef';
+import { basename } from '@/common/lib/paths';
 import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
 import { useApp } from '@/store/AppContext';
 import { getPreparationFailure } from '@/store/fileReadiness';
-import { emptyStateClass } from '@/components/emptyState';
-import { Button } from '@/components/ui/button';
-import { StatusMessage } from '@/components/ui/status';
+import { emptyStateClass } from '@/common/components/emptyState';
+import { Button } from '@/common/components/ui/button';
+import { StatusMessage } from '@/common/components/ui/status';
 
 /**
  * In-pane viewer for a standalone image file. The image binary is

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from 'react-aria-components';
 import { AgentMarkdown } from '@/features/agent-panel/components/AgentMarkdown';
-import { ChevronDownIcon, CodeIcon, CopyIcon, EditIcon, FileGenericIcon, FolderIcon, MoreHorizontalIcon, NewFileIcon, SearchIcon } from '@/icons';
-import { Menu, type MenuItem } from '@/components/Menu';
-import { basename } from '@/lib/paths';
-import { cn } from '@/lib/utils';
-import { buttonVariants } from '@/components/ui/button';
-import { StatusMessage } from '@/components/ui/status';
+import { ChevronDownIcon, CodeIcon, CopyIcon, EditIcon, FileGenericIcon, FolderIcon, MoreHorizontalIcon, NewFileIcon, SearchIcon } from '@/common/components/icons';
+import { Menu, type MenuItem } from '@/common/components/Menu';
+import { basename } from '@/common/lib/paths';
+import { cn } from '@/common/lib/utils';
+import { buttonVariants } from '@/common/components/ui/button';
+import { StatusMessage } from '@/common/components/ui/status';
 import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from '@/features/agent-panel/components/FileAttachmentChip';
 import { buildDiff, type DiffRow } from '@/features/agent-panel/components/diffModel';
 import { segmentFileMentions } from '@/features/agent-panel/components/mentionText';

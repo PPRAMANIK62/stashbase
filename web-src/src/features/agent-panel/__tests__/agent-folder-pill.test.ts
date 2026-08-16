@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { agentConnectionUrl } from '@/features/agent-panel/components/connectionUrl.ts';
-import { basename, shortenFolderPath } from '@/lib/paths.ts';
+import { basename, shortenFolderPath } from '@/common/lib/paths.ts';
 import {
   blankTabToReuse,
   chatScopePill,

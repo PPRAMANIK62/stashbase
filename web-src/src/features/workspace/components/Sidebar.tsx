@@ -7,7 +7,7 @@ import {
   OutlineIcon,
   PlusIcon,
   StarIcon,
-} from '@/icons';
+} from '@/common/components/icons';
 import { useApp } from '@/store/AppContext';
 import { folderScope } from '@/features/agent-panel/components/folderState';
 import { ALL_HISTORY_SCOPE } from '@/features/agent-panel/components/sessionHistory';
@@ -17,18 +17,18 @@ import {
   readPreferredAgent,
   rememberPreferredAgent,
 } from '@/features/agent-panel/lib/agentPreference';
-import { electronBridge } from '@/electronBridge';
+import { electronBridge } from '@/common/lib/electronBridge';
 import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
-import { basename, shortenFolderPath } from '@/lib/paths';
+import { basename, shortenFolderPath } from '@/common/lib/paths';
 import { FileTree } from '@/features/workspace/components/FileTree';
 import { useDocumentOutline } from '@/features/documents/components/DocumentOutlineContext';
-import { LazyLoadBoundary, lazyWithRetry } from '@/components/ErrorBoundary';
+import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { FolderMenu } from '@/features/workspace/components/FolderMenu';
-import { Menu, type MenuItem } from '@/components/Menu';
+import { Menu, type MenuItem } from '@/common/components/Menu';
 import { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderModal';
 import { activateChatTabForAgent, ScopeHistoryButton } from '@/features/workspace/components/ScopeHistoryButton';
-import { Button } from '@/components/ui/button';
-import { api, errorMessage } from '@/api';
+import { Button } from '@/common/components/ui/button';
+import { api, errorMessage } from '@/common/api/api';
 import { FILE_MIME } from '@/features/workspace/lib/dragMime';
 import { useFolderRemoval } from '@/features/workspace/hooks/useFolderRemoval';
 import { refreshLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';

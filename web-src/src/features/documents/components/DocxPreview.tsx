@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, assetBaseUrl, errorMessage, versionedAssetUrl } from '@/api';
+import { api, assetBaseUrl, errorMessage, versionedAssetUrl } from '@/common/api/api';
 import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
 import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
-import { useLatestRef } from '@/hooks/useLatestRef';
+import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { previewClickHandler } from '@/features/documents/lib/previewIframe';
 import { useApp } from '@/store/AppContext';
 import { getPreparationFailure } from '@/store/fileReadiness';
 import { makeIframeFindController } from '@/features/documents/lib/findIframe';
 import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
 import { applyChunkHighlight } from '@/features/documents/lib/previewChunkHighlight';
-import { Button } from '@/components/ui/button';
-import { StatusMessage } from '@/components/ui/status';
+import { Button } from '@/common/components/ui/button';
+import { StatusMessage } from '@/common/components/ui/status';
 
 const DIRECT_PREVIEW_TIMEOUT_MS = 20_000;
 

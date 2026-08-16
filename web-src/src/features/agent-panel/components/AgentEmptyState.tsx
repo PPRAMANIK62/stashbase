@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Button } from 'react-aria-components';
-import { ArrowInsertIcon } from '@/icons';
+import { ArrowInsertIcon } from '@/common/components/icons';
 import { spinnerClass } from '@/features/agent-panel/components/panelStyles';
 
 interface Suggestion {

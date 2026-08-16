@@ -1,4 +1,4 @@
-import { assetBaseUrl } from '@/api';
+import { assetBaseUrl } from '@/common/api/api';
 
 export type MilkdownLinkTarget =
   | { kind: 'anchor'; id: string }

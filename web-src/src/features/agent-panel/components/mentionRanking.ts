@@ -1,5 +1,5 @@
-import { basename } from '@/lib/paths';
-import type { FileMeta, FolderMeta } from '@/apiTypes';
+import { basename } from '@/common/lib/paths';
+import type { FileMeta, FolderMeta } from '@/common/api/apiTypes';
 
 export type MentionSuggestion = { path: string; kind: 'file' | 'folder' };
 

@@ -25,7 +25,7 @@ this file records the mechanics a change must respect.
    `ease-ui`, and the semantic colors. `muted` is the subtle SURFACE role;
    `muted-foreground` is subdued text. The `dark:` variant is redefined to
    follow `data-theme`; never rely on the raw media query.
-3. **Primitives** (`web-src/src/components/ui/`) — shadcn-generated Base UI
+3. **Primitives** (`web-src/src/common/components/ui/`) — shadcn-generated Base UI
    adapters (button, input, select, segmented-control, dialog, alert-dialog,
    menu, toast, tooltip, status). Feature code must not recreate
    their focus, Escape, outside-press, collision, timer, or announcement
@@ -78,7 +78,7 @@ stay concentric when the scale moves.
 
 ## Icons
 
-`web-src/src/icons.tsx` is generated — run `node scripts/gen-icons.mjs` and
+`web-src/src/common/components/icons.tsx` is generated — run `node scripts/gen-icons.mjs` and
 edit the map in that script, never the paths in the output. Icons are
 inlined from the `@phosphor-icons/core` devDependency rather than imported
 from `@phosphor-icons/react`, which ships six weights per icon and would not
@@ -93,7 +93,7 @@ reusing an existing export over adding a near-duplicate.
 
 ## Enforcement
 
-`web-src/src/__tests__/renderer-foundation.test.ts` locks the mapping, the
+`web-src/src/common/__tests__/renderer-foundation.test.ts` locks the mapping, the
 type and corner scales, the squircle rule, and bans `text-[calc(` and
 `bg-[var(--hover)]` in components. It also asserts that `styles/*.css`
 carries no literal `border-radius: <n>px` other than the one sanctioned
@@ -140,10 +140,10 @@ rules in the same change.
 |---|---|
 | Token Interface | `web-src/src/styles/globals.css` |
 | Utility Adapter | Tailwind mapping in `web-src/src/styles.css` |
-| Primitive Interface | `web-src/src/components/ui/` |
+| Primitive Interface | `web-src/src/common/components/ui/` |
 | Feature styling | JSX utility classes plus the documented exemptions under `web-src/src/styles/` |
-| Generated icon Adapter | source map in `scripts/gen-icons.mjs` → `web-src/src/icons.tsx` |
-| Focused evidence | `web-src/src/__tests__/renderer-foundation.test.ts`, `electron/tab-strip-layout-smoke.cjs`, and `e2e/visual/` |
+| Generated icon Adapter | source map in `scripts/gen-icons.mjs` → `web-src/src/common/components/icons.tsx` |
+| Focused evidence | `web-src/src/common/__tests__/renderer-foundation.test.ts`, `electron/tab-strip-layout-smoke.cjs`, and `e2e/visual/` |
 
 ## Review checklist for styling changes
 

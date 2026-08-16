@@ -4,7 +4,7 @@
  * titles, and the file changes a tool leaves behind. Rendering lives in
  * AgentMessages.
  */
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 import type { ToolBlock } from '@/features/agent-panel/components/types';
 import { clipInline, mcpArgs } from '@/features/agent-panel/components/toolPayload';
 

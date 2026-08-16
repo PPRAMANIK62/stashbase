@@ -2,23 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   audioPreviewAssetUrl,
   versionedAssetUrl,
-} from '@/api';
+} from '@/common/api/api';
 import {
   audioPreviewProgressCopy,
   audioTranscriptStatusCopy,
   findAudioSeekSegment,
 } from '@/features/documents/lib/audioTranscript.ts';
 import { AudioPlaybackPosition } from '@/features/documents/lib/audioPlayback.ts';
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 import { useApp } from '@/store/AppContext';
-import { emptyStateClass } from '@/components/emptyState';
+import { emptyStateClass } from '@/common/components/emptyState';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@/../../shared/transcription.ts';
 import { useAudioFallbackController } from '@/features/documents/components/audio/useAudioFallbackController.ts';
 import { useAudioTranscriptController } from '@/features/documents/components/audio/useAudioTranscriptController.ts';
-import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/select';
-import { StatusMessage } from '@/components/ui/status';
+import { Button } from '@/common/components/ui/button';
+import { Select } from '@/common/components/ui/select';
+import { StatusMessage } from '@/common/components/ui/status';
 
 export function AudioPreview({ name }: { name: string }) {
   const { state, activeTab, actions } = useApp();

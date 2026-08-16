@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ApiError } from '../apiTransport';
+import { ApiError } from '@/common/api/apiTransport';
 import { runIndexStatusRequest } from '../store/indexStatusRequest';
 import {
   commitOpenedFolderNavigation,

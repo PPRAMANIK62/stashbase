@@ -5,7 +5,7 @@ import {
   orderEditorHistory,
   type EditorHistoryEntry,
 } from '@/features/documents/lib/editorHistory';
-import { useLatestRef } from '@/hooks/useLatestRef';
+import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
 import { useApp } from '@/store/AppContext';
 import {
@@ -14,7 +14,7 @@ import {
   PICKER_ROW_CLASS,
   PICKER_VEIL_CLASS,
   pickerPanelClass,
-} from '@/components/pickerChrome';
+} from '@/common/components/pickerChrome';
 
 /** How long Control must stay down before the overlay actually renders. A
  *  quick tap-release resolves inside this window and never paints — only a

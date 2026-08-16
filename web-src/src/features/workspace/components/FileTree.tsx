@@ -1,13 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@/../../shared/file-formats.ts';
-import { BotIcon, ChevronDownIcon, ClaudeIcon } from '@/icons';
-import type { FileMeta, FolderMeta } from '@/api';
+import { BotIcon, ChevronDownIcon, ClaudeIcon } from '@/common/components/icons';
+import type { FileMeta, FolderMeta } from '@/common/api/api';
 import { useTreeRowDrag } from '@/features/workspace/hooks/useTreeRowDrag';
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 import { useApp } from '@/store/AppContext';
 import { getFileReadiness } from '@/store/fileReadiness';
-import { emptyStateClass } from '@/components/emptyState';
-import { RenameInput, useRenameTarget } from '@/components/RenameInput';
+import { emptyStateClass } from '@/common/components/emptyState';
+import { RenameInput, useRenameTarget } from '@/common/components/RenameInput';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
 

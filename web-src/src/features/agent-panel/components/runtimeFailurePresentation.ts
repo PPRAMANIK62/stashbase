@@ -1,4 +1,4 @@
-import type { AgentBootstrapStatus } from '@/apiTypes';
+import type { AgentBootstrapStatus } from '@/common/api/apiTypes';
 
 export type AgentRuntimeFailureAction = 'copy-install-command' | 'open-mcp-settings';
 

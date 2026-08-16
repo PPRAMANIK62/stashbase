@@ -22,7 +22,7 @@
  * interrupting one.
  */
 import { useEffect, useState } from 'react';
-import { api, type EmbedderState } from '@/api';
+import { api, type EmbedderState } from '@/common/api/api';
 import { openEmbeddingSetup } from '@/features/settings/components/EmbedderRequireKeyGate';
 import { isEmbeddingAuthorized } from '@/features/settings/components/embedder/embeddingAuth';
 import { ACCOUNT_CHANGED_EVENT } from '@/features/account/lib/accountEvents';

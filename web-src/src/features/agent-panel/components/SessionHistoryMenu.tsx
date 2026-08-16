@@ -16,13 +16,13 @@
  */
 import { useEffect, useMemo, useState, type RefObject } from 'react';
 import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } from 'react-aria-components';
-import { api } from '@/api';
+import { api } from '@/common/api/api';
 import { AGENTS, AGENT_META, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
-import { EditIcon, TrashIcon } from '@/icons';
-import { basename } from '@/lib/paths';
-import { buttonVariants } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { emptyStateClass } from '@/components/emptyState';
+import { EditIcon, TrashIcon } from '@/common/components/icons';
+import { basename } from '@/common/lib/paths';
+import { buttonVariants } from '@/common/components/ui/button';
+import { Input } from '@/common/components/ui/input';
+import { emptyStateClass } from '@/common/components/emptyState';
 import { historyRequestParams, mergeAgentSessions, rowResumeFolder, rowScopeParams, type HistoryScope, type MergedSessionRow } from '@/features/agent-panel/components/sessionHistory';
 
 function relTime(ms: number): string {

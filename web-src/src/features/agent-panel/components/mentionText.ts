@@ -5,7 +5,7 @@
  * surfaces can chip them (transcript) or flatten them (titles, previews).
  */
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@/../../shared/file-formats.ts';
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 
 const FILE_MENTION_RE = new RegExp(
   `(^|\\s)@([^\\n]*?\\.(?:${VIEWABLE_FILE_EXTENSION_ALTERNATION}))(?![/.])`,

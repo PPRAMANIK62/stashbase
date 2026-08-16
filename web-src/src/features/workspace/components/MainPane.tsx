@@ -1,18 +1,18 @@
 import { Suspense } from 'react';
-import { EditIcon, PreviewIcon } from '@/icons';
+import { EditIcon, PreviewIcon } from '@/common/components/icons';
 import { useApp } from '@/store/AppContext';
 import { EmptyTabLanding } from '@/features/workspace/components/EmptyTabLanding';
 import { FindBar } from '@/features/search/components/FindBar';
 import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
 import { ImagePreview } from '@/features/documents/components/ImagePreview';
 import { TabStrip } from '@/features/workspace/components/TabStrip';
-import { LazyLoadBoundary, lazyWithRetry } from '@/components/ErrorBoundary';
+import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { readPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 import { retainedMarkdownTabs } from '@/features/documents/milkdown/retainedTabs';
-import { electronBridge } from '@/electronBridge';
-import { basename } from '@/lib/paths';
-import { Button } from '@/components/ui/button';
-import { StatusMessage } from '@/components/ui/status';
+import { electronBridge } from '@/common/lib/electronBridge';
+import { basename } from '@/common/lib/paths';
+import { Button } from '@/common/components/ui/button';
+import { StatusMessage } from '@/common/components/ui/status';
 
 /** Muted "Loading…" bodies shared by the lazy viewer fallbacks. */
 const VIEWER_LOADING_CLASS = 'p-4 text-base text-muted-foreground';

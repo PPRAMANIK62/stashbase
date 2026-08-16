@@ -11,7 +11,7 @@
  * changes, instead of paging through a destroyed pdfjs document.
  */
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { escapeRegExp } from '@/lib/regex';
+import { escapeRegExp } from '@/common/lib/regex';
 import type { FindController, FindOptions, MatchInfo } from '@/store/AppContext';
 import {
   flattenPageText,

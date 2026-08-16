@@ -4,12 +4,12 @@ import {
   errorMessage,
   type TranscriptionModelId,
   type TranscriptionSettings,
-} from '@/api';
-import { formatMiB } from '@/lib/format';
+} from '@/common/api/api';
+import { formatMiB } from '@/common/lib/format';
 import { useApp } from '@/store/AppContext';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@/../../shared/transcription.ts';
-import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/select';
+import { Button } from '@/common/components/ui/button';
+import { Select } from '@/common/components/ui/select';
 
 export function TranscriptionPanel() {
   const { actions } = useApp();

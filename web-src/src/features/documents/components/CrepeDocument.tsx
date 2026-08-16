@@ -15,7 +15,7 @@ import { table } from '@milkdown/crepe/feature/table';
 import { toolbar } from '@milkdown/crepe/feature/toolbar';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
-import { api, assetBaseUrl } from '@/api';
+import { api, assetBaseUrl } from '@/common/api/api';
 import { resolveMilkdownLink } from '@/features/documents/milkdown/navigation';
 import { useApp } from '@/store/AppContext';
 import { makeIframeFindController } from '@/features/documents/lib/findIframe';
@@ -27,8 +27,8 @@ import { resolveLocalImageUrl } from '@/features/documents/milkdown/imageUrls';
 import { activeHeadingId, extractDocumentHeadings, headingSlug, type DocumentHeading, type ProseMirrorDocument } from '@/features/documents/milkdown/headings';
 import { documentScroller, headingElementAtPosition, scrollOutlineToHeading, type HeadingNodeView } from '@/features/documents/milkdown/outlineNavigation';
 import { useDocumentOutline } from '@/features/documents/components/DocumentOutlineContext';
-import { Button } from '@/components/ui/button';
-import { StatusMessage } from '@/components/ui/status';
+import { Button } from '@/common/components/ui/button';
+import { StatusMessage } from '@/common/components/ui/status';
 
 type CreationState = 'creating' | 'ready' | 'failed';
 type RegistrationKind = 'editor' | 'find' | 'outline';
@@ -53,7 +53,7 @@ function claimRegistration(
     clear();
   };
 }
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 
 /**
  * A retained Markdown surface for one tab. CrepeBuilder provides Milkdown's

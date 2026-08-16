@@ -1,12 +1,12 @@
 import { Suspense, useRef, useState } from 'react';
-import { HistoryIcon } from '@/icons';
+import { HistoryIcon } from '@/common/components/icons';
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { useApp } from '@/store/AppContext';
 import { activateChatTabForAgent } from '@/features/agent-panel/components/chatActivation';
 import type { HistoryScope } from '@/features/agent-panel/components/sessionHistory';
-import { lazyWithRetry } from '@/components/ErrorBoundary';
-import { Button } from '@/components/ui/button';
-import { PopupLoadingStatus } from '@/components/ui/status';
+import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { Button } from '@/common/components/ui/button';
+import { PopupLoadingStatus } from '@/common/components/ui/status';
 
 /** The merged session-history popover loads at its interaction boundary
  *  so react-aria (which otherwise ships with the lazy chat chunk) stays

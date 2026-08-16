@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '@/store/AppContext';
 import { openLibrarySearch } from './LibrarySearch';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/common/components/ui/button';
+import { Input } from '@/common/components/ui/input';
 
 /**
  * Chrome-style in-document find bar. Floats over the top-right of the

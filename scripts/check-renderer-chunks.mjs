@@ -25,7 +25,7 @@ const expectedEntries = [
   'src/features/documents/components/AudioPreview.tsx',
   'src/features/search/components/ManagedLibrarySearch.tsx',
   'src/features/search/components/ManagedQuickOpen.tsx',
-  'src/components/ContextMenu.tsx',
+  'src/common/components/ContextMenu.tsx',
   'src/features/documents/components/DocumentOutline.tsx',
   'src/features/preparation/components/SemanticIndexingNotice.tsx',
   'src/features/preparation/components/UnsupportedFilesCallout.tsx',

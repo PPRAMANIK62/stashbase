@@ -3,10 +3,10 @@ import { Button, ListBox, ListBoxItem, MenuTrigger, Popover, VisuallyHidden } fr
 import {
   ArrowUpIcon, BoltIcon, CheckIcon, ChevronDownIcon, ClipboardListIcon, CodeIcon,
   FileGenericIcon, FolderIcon, HandIcon, PlusIcon, StopIcon,
-} from '@/icons';
-import { cn } from '@/lib/utils';
-import type { FileMeta, FolderMeta } from '@/api';
-import { basename } from '@/lib/paths';
+} from '@/common/components/icons';
+import { cn } from '@/common/lib/utils';
+import type { FileMeta, FolderMeta } from '@/common/api/api';
+import { basename } from '@/common/lib/paths';
 import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from '@/features/agent-panel/components/FileAttachmentChip';
 import { effortLabel, effortOptions } from '@/features/agent-panel/components/effortMenuState';
 import {

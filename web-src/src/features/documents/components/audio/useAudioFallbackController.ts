@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, errorMessage, type AudioPreviewStatus } from '@/api';
+import { api, errorMessage, type AudioPreviewStatus } from '@/common/api/api';
 
 export function useAudioFallbackController(input: {
   name: string;

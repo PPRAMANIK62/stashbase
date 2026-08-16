@@ -4,8 +4,8 @@
  * typography (.agent-prose), the sticky turn-head system, and the One-Dark
  * code palette intentionally stay in styles/chat.css.
  */
-import { cn } from '@/lib/utils';
-import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/common/lib/utils';
+import { buttonVariants } from '@/common/components/ui/button';
 
 /** Quiet 28px icon action — pane header buttons and composer bar buttons. */
 export const iconGhostButtonClass = cn(

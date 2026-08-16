@@ -5,8 +5,8 @@
  * outside this module and crosses its small interaction seams as callbacks.
  */
 import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
-import { api, encodePath, getWindowId } from '../api';
-import { electronBridge } from '../electronBridge';
+import { api, encodePath, getWindowId } from '@/common/api/api';
+import { electronBridge } from '@/common/lib/electronBridge';
 import { getActiveTab, type Action, type PendingHighlight, type State } from './state';
 import type { EditorHandle } from './actionTypes';
 import { useDocumentActions } from './useDocumentActions';

@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const ROOT = '/Users/bingwu/Projects/StashBase/stashbase';
 const ASSETS = path.join(ROOT, 'node_modules/@phosphor-icons/core/assets');
-const TARGET = path.join(ROOT, 'web-src/src/icons.tsx');
+const TARGET = path.join(ROOT, 'web-src/src/common/components/icons.tsx');
 
 // [export name, phosphor slug, weight, note, mirror?]
 const MAP = [

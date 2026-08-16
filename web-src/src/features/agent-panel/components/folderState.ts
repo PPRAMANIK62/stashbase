@@ -18,7 +18,7 @@
  *   what the user saw instead of silently following the window.
  */
 
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 
 /** Explicit chat scope: one library folder, or the whole library. */
 export type ChatScope = { kind: 'library' } | { kind: 'folder'; path: string };

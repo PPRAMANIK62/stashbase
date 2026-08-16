@@ -16,7 +16,7 @@
  * tab's AgentView consumes the request (CHAT_RESUME_CONSUMED) and
  * resumes the session within the request's scope.
  */
-import type { SessionInfo, SessionScopeParams } from '@/api';
+import type { SessionInfo, SessionScopeParams } from '@/common/api/api';
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { scopeRequestParams, type ChatScope } from '@/features/agent-panel/components/folderState';
 

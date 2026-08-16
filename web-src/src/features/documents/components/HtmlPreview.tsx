@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { versionedAssetUrl, versionedDerivedAssetUrl } from '@/api';
+import { versionedAssetUrl, versionedDerivedAssetUrl } from '@/common/api/api';
 import { useApp, type MatchInfo } from '@/store/AppContext';
 import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
 import { isTrustedFrameSource } from '@/features/documents/lib/previewMessages';

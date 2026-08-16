@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { EmbedderState } from '@/api';
+import type { EmbedderState } from '@/common/api/api';
 import {
   hasSkippedAiIndexing,
   isEmbeddingAuthorized,

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { api, errorMessage } from '@/api';
-import { electronBridge } from '@/electronBridge';
+import { api, errorMessage } from '@/common/api/api';
+import { electronBridge } from '@/common/lib/electronBridge';
 import type { Action } from '@/store/state';
 import { refreshLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 

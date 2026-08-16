@@ -31,12 +31,12 @@
  *     Files-panel "Set up AI Index" entry (and Settings) reopen it later.
  */
 import { Suspense, useEffect, useState } from 'react';
-import { api, type EmbedderState } from '@/api';
+import { api, type EmbedderState } from '@/common/api/api';
 import { useApp } from '@/store/AppContext';
 import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from '@/features/settings/components/embedder/embeddingAuth';
-import { lazyWithRetry } from '@/components/ErrorBoundary';
-import { useOverlayLayer } from '@/components/OverlayStack';
-import { ModalLoadingStatus } from '@/components/ui/status';
+import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { useOverlayLayer } from '@/common/components/OverlayStack';
+import { ModalLoadingStatus } from '@/common/components/ui/status';
 import { ACCOUNT_CHANGED_EVENT } from '@/features/account/lib/accountEvents';
 
 const RequireApiKeyModal = lazyWithRetry(() =>

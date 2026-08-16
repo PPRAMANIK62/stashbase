@@ -1,9 +1,9 @@
 import { useCallback, useRef } from 'react';
-import { api } from '../api';
+import { api } from '@/common/api/api';
 import {
   feedbackToasts,
   type ToastOptions,
-} from '../components/feedbackToasts';
+} from '@/common/components/feedbackToasts';
 import type { Action, CascadeDecision, CascadePrompt, ModalRequest } from './state';
 
 type Dispatch = (action: Action) => void;

@@ -15,7 +15,7 @@ import {
 import {
   api,
   ApiError,
-} from '../api';
+} from '@/common/api/api';
 import {
   getActiveTab,
   initialState,
@@ -29,7 +29,7 @@ import {
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { rememberPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 import type { EditorHandle, FindController } from './actionTypes';
-import { useLatestRef } from '../hooks/useLatestRef';
+import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useFeedbackActions } from './useFeedbackActions';
 import { useFindActions } from './useFindActions';
 import { useActiveFolderWorkspace } from './useActiveFolderWorkspace';

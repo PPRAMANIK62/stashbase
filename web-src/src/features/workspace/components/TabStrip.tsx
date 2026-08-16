@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent } from 'react';
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 import { useApp } from '@/store/AppContext';
 
 const TAB_MIME = 'application/x-stashbase-tab';

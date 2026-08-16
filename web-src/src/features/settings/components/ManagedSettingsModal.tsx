@@ -1,13 +1,13 @@
 import { useState, type ReactNode } from 'react';
-import { CloseIcon } from '@/icons';
+import { CloseIcon } from '@/common/components/icons';
 import type { SettingsModalProps, SettingsSection } from '@/features/settings/components/SettingsModal';
 import { AppearancePanel } from '@/features/settings/components/AppearancePanel';
 import { AgentRuntimePanel } from '@/features/settings/components/AgentRuntimePanel';
 import { EmbeddingPanel } from '@/features/settings/components/EmbeddingPanel';
 import { McpAccessPanel } from '@/features/settings/components/McpAccessPanel';
 import { TranscriptionPanel } from '@/features/settings/components/TranscriptionPanel';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/common/components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from '@/common/components/ui/dialog';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
   { id: 'appearance', label: 'Appearance', render: () => <AppearancePanel /> },

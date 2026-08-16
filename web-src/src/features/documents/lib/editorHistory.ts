@@ -1,4 +1,4 @@
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 import type { Tab } from '@/store/state';
 
 export interface EditorHistoryEntry {

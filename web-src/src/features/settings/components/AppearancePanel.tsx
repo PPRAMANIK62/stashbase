@@ -5,9 +5,9 @@ import {
   type AppearancePreferences,
   type AppearanceScale,
   type AppearanceTheme,
-} from '@/api';
+} from '@/common/api/api';
 import { applyAppearance, publishAppearance, subscribeToAppearance } from '@/features/settings/lib/appearance';
-import { SegmentedControl, SegmentedControlItem } from '@/components/ui/segmented-control';
+import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
 
 const THEMES: Array<{ value: AppearanceTheme; label: string; hint: string }> = [
   { value: 'system', label: 'System', hint: 'Follow your operating system.' },

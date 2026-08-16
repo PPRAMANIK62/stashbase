@@ -2,7 +2,7 @@ import type {
   AudioPreviewStatus,
   AudioTranscriptSegment,
   AudioTranscriptState,
-} from '@/apiTypes.ts';
+} from '@/common/api/apiTypes.ts';
 import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
 
 export function audioPreviewProgressCopy(state: AudioPreviewStatus | null): string {

@@ -18,7 +18,7 @@
  * Browser support: CSS Custom Highlight API ships in Chromium 105+,
  * which covers every Electron version we target. No fallback needed.
  */
-import { escapeRegExp } from '@/lib/regex';
+import { escapeRegExp } from '@/common/lib/regex';
 import type { FindController, MatchInfo } from '@/store/AppContext';
 
 const HL_ALL = 'stash-find';

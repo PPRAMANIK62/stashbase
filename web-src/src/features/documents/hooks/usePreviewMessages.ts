@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getWindowId } from '@/api';
-import { openExternalUrl } from '@/lib/externalLink';
+import { getWindowId } from '@/common/api/api';
+import { openExternalUrl } from '@/common/lib/externalLink';
 import { isTrustedPreviewSource } from '@/features/documents/lib/previewMessages';
 import { useApp } from '@/store/AppContext';
 

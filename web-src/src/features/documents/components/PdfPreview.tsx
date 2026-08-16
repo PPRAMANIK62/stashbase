@@ -11,9 +11,9 @@ import {
 // `lib/pdfWorker.ts` / `lib/pdfPolyfill.ts`). `?worker` bundles the
 // worker for both dev and the packaged build, unlike a bare `?url`.
 import PdfWorker from '@/features/documents/lib/pdfWorker?worker';
-import { api, errorMessage, versionedAssetUrl } from '@/api';
+import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
 import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
-import { useLatestRef } from '@/hooks/useLatestRef';
+import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useApp } from '@/store/AppContext';
 import { getFileReadiness } from '@/store/fileReadiness';
 import { makePdfFindController, scanPages } from '@/features/documents/lib/pdfFindController';
@@ -31,8 +31,8 @@ import {
 // Polyfill the main-thread scope too — render() calls getOrInsertComputed
 // synchronously before it ever talks to the worker.
 import '../lib/pdfPolyfill';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/common/components/ui/button';
+import { Input } from '@/common/components/ui/input';
 
 // One shared worker for the viewer, owned by US (a PDFWorker we construct)
 // rather than handed to pdfjs via `GlobalWorkerOptions.workerPort`. The

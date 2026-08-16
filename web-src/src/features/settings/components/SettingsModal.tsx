@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react';
-import { lazyWithRetry } from '@/components/ErrorBoundary';
-import { useOverlayLayer } from '@/components/OverlayStack';
-import { ModalLoadingStatus } from '@/components/ui/status';
+import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { useOverlayLayer } from '@/common/components/OverlayStack';
+import { ModalLoadingStatus } from '@/common/components/ui/status';
 
 export type SettingsSection = 'appearance' | 'agents' | 'embedding' | 'transcription' | 'mcp';
 

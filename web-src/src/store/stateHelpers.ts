@@ -2,7 +2,7 @@
  * Pure renderer state transition helpers shared by action hooks and the reducer.
  * Runtime dependencies stay browser-safe and free of React side effects.
  */
-import type { FileMeta } from '../api';
+import type { FileMeta } from '@/common/api/api';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
 import type { ChatTab, State, Tab } from './state';
 

@@ -125,7 +125,7 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 | Markdown Modules | `web-src/src/features/documents/milkdown/frontmatter.ts`, `headings.ts`, `outlineNavigation.ts`, `navigation.ts`, `paths.ts`, and `imageUrls.ts` |
 | Trust Interface | `sanitizeMarkdownHtml` in `shared/html-sanitization.ts` |
 | Workspace Adapter | `useDocumentActions.ts`, document tabs, Find, outline, lightbox, and upload actions |
-| Asset/navigation Adapter | `/asset` route plus `web-src/src/api.ts` and Milkdown navigation helpers |
+| Asset/navigation Adapter | `/asset` route plus `web-src/src/common/api/api.ts` and Milkdown navigation helpers |
 | Focused evidence | `web-src/src/features/documents/milkdown/__tests__/`, navigation/image/Find renderer tests, and `e2e/journeys/markdown-*.spec.ts` |
 
 ## Validation

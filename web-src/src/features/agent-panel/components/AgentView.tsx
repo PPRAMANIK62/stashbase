@@ -11,23 +11,23 @@
  * See design-docs/architecture.md §8 for the shared library path.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse, type FileMeta, type FolderMeta } from '@/api';
+import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse, type FileMeta, type FolderMeta } from '@/common/api/api';
 import { AGENT_META, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
-import { errorMessage } from '@/apiTransport';
+import { errorMessage } from '@/common/api/apiTransport';
 import { FILE_MIME } from '@/features/workspace/lib/dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '@/features/workspace/lib/dragRouting';
-import { electronBridge } from '@/electronBridge';
-import { useLatestRef } from '@/hooks/useLatestRef';
-import { useStateWithRef } from '@/hooks/useStateWithRef';
+import { electronBridge } from '@/common/lib/electronBridge';
+import { useLatestRef } from '@/common/hooks/useLatestRef';
+import { useStateWithRef } from '@/common/hooks/useStateWithRef';
 import { useApp } from '@/store/AppContext';
 import { Button } from 'react-aria-components';
-import { buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/common/components/ui/button';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
 import { EmptyChatGreeting, EmptyChatSuggestion } from '@/features/agent-panel/components/AgentEmptyState';
 import { resolveAssistantLink } from '@/features/agent-panel/components/assistantLinkTarget';
 import { MessageList, flattenFileMentions, type QueuedTurnPreview, type TurnMeta } from '@/features/agent-panel/components/AgentMessages';
 import { mergeAttachments, readImageDims } from '@/features/agent-panel/components/attachments';
-import { basename } from '@/lib/paths';
+import { basename } from '@/common/lib/paths';
 import { agentConnectionUrl } from '@/features/agent-panel/components/connectionUrl';
 import {
   chatScopePill,

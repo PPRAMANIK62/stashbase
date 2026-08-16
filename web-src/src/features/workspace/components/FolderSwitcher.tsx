@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
-import { api, errorMessage } from '@/api';
-import { electronBridge } from '@/electronBridge';
+import { api, errorMessage } from '@/common/api/api';
+import { electronBridge } from '@/common/lib/electronBridge';
 import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
-import { ChevronDownIcon, FolderIcon, NewFolderIcon } from '@/icons';
-import { basename, shortenFolderPath } from '@/lib/paths';
+import { ChevronDownIcon, FolderIcon, NewFolderIcon } from '@/common/components/icons';
+import { basename, shortenFolderPath } from '@/common/lib/paths';
 import { useApp } from '@/store/AppContext';
 import { refreshLibraryMembership, useLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 import { useOpenFolderWatchdog } from '@/features/workspace/hooks/useOpenFolderWatchdog';
-import { Menu, type MenuItem } from '@/components/Menu';
+import { Menu, type MenuItem } from '@/common/components/Menu';
 import type { LibraryListEntry } from '@/features/workspace/lib/libraryListPlan';
 
 /** The two add-folder flows shared by the switcher (and the zero-folder

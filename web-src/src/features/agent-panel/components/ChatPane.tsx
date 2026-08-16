@@ -10,9 +10,9 @@
 import * as React from 'react';
 import type { ReactNode } from 'react';
 import { AgentView } from '@/features/agent-panel/components/AgentView';
-import { LazyLoadBoundary } from '@/components/ErrorBoundary';
+import { LazyLoadBoundary } from '@/common/components/ErrorBoundary';
 import { agentMeta, isAgentKind } from '@/features/agent-panel/components/agentCatalog';
-import { cn } from '@/lib/utils';
+import { cn } from '@/common/lib/utils';
 import { useApp } from '@/store/AppContext';
 import { rememberPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 

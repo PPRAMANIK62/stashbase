@@ -51,7 +51,7 @@ changes, never to make an accidental dependency pass.
 | Interface | `ActiveFolderWorkspace` in `web-src/src/store/useActiveFolderWorkspace.ts` |
 | Primary owners | `web-src/src/store/state.ts`, `stateReducer.ts`, `stateHelpers.ts`, `folderScopedReset.ts`, and the internal `useDocumentActions.ts`, `useFileActions.ts`, `useFolderActions.ts`, `useSearchActions.ts` Modules |
 | Shell Adapter | `web-src/src/store/AppContext.tsx`, `web-src/src/App.tsx`, `web-src/src/features/workspace/components/MainPane.tsx` |
-| Server transport Adapter | `web-src/src/api.ts`, `web-src/src/apiTransport.ts` |
+| Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
 | Focused evidence | `web-src/src/store/__tests__/`, `web-src/src/features/workspace/__tests__/folder-transition.test.ts`, `workspace-layout.test.ts`, `web-src/src/__tests__/index-status-request.test.ts`, `overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, and `scripts/check-renderer-chunks.mjs` |
 

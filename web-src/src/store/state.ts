@@ -16,7 +16,7 @@ import type {
   IndexStatus,
   Agent,
   UnsupportedFileSummary,
-} from '../api';
+} from '@/common/api/api';
 
 export {
   CHAT_MAX_WIDTH,

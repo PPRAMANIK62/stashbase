@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
-import { api, type FolderState } from '../api';
+import { api, type FolderState } from '@/common/api/api';
 import { folderRefsEqual, isAbsoluteFolderRef } from '@/features/workspace/lib/folderPath';
 import { createFolderMutationQueue } from '@/features/workspace/lib/folderTransition';
 import type { EditorHandle } from './actionTypes';

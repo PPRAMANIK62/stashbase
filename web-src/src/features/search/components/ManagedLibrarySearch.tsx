@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '@/api';
+import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '@/common/api/api';
 import type { PendingHighlight } from '@/store/state';
 import { useApp } from '@/store/AppContext';
 import { openSettings } from '@/features/settings/components/SettingsModal';
@@ -17,19 +17,19 @@ import {
   type LibrarySearchScope,
   type LibrarySemanticHit,
 } from '@/features/search/lib/librarySearch';
-import { Button } from '@/components/ui/button';
-import { SegmentedControl, SegmentedControlItem } from '@/components/ui/segmented-control';
-import { StatusMessage } from '@/components/ui/status';
-import { basename } from '@/lib/paths';
-import { cn } from '@/lib/utils';
-import { emptyStateClass } from '@/components/emptyState';
-import { useLatestRef } from '@/hooks/useLatestRef';
+import { Button } from '@/common/components/ui/button';
+import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
+import { StatusMessage } from '@/common/components/ui/status';
+import { basename } from '@/common/lib/paths';
+import { cn } from '@/common/lib/utils';
+import { emptyStateClass } from '@/common/components/emptyState';
+import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { fileGlyphFormat } from '@/features/agent-panel/components/attachments';
 import { folderMenuEntries } from '@/features/agent-panel/components/folderState';
 import { ScopeMenu } from '@/features/workspace/components/ScopeMenu';
 import { FileTypeIcon } from '@/features/workspace/components/FileTree';
 import { SemanticIndexingNotice } from '@/features/preparation/components/SemanticIndexingNotice';
-import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/components/pickerChrome';
+import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/common/components/pickerChrome';
 
 /**
  * The library search popup — the app's one search surface. A palette-style

@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { ModalShell } from '@/components/ModalShell';
-import { api, type OnboardingPreferences, type UnsupportedFileSummary } from '@/api';
+import { ModalShell } from '@/common/components/ModalShell';
+import { api, type OnboardingPreferences, type UnsupportedFileSummary } from '@/common/api/api';
 import { useApp } from '@/store/AppContext';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/common/components/ui/button';
 
 function formatExtensions(otherExtensions: Array<{ extension: string; count: number }>): string {
   const list = otherExtensions.map((e) => e.extension);

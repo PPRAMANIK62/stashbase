@@ -2,8 +2,8 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
 import { useApp } from '@/store/AppContext';
 import type { LibrarySearchPrefill } from '@/features/search/lib/librarySearch';
-import { LazyLoadBoundary, lazyWithRetry } from '@/components/ErrorBoundary';
-import { PICKER_VEIL_CLASS } from '@/components/pickerChrome';
+import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { PICKER_VEIL_CLASS } from '@/common/components/pickerChrome';
 
 const ManagedLibrarySearch = lazyWithRetry(() => import('./ManagedLibrarySearch'));
 

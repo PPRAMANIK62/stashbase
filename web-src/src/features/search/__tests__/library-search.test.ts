@@ -9,7 +9,7 @@ import {
   splitLibraryPath,
   writeLibrarySearchMemory,
 } from '@/features/search/lib/librarySearch.ts';
-import type { LibraryKeywordFile, SearchHit } from '@/api.ts';
+import type { LibraryKeywordFile, SearchHit } from '@/common/api/api.ts';
 
 function hit(fileName: string): SearchHit {
   return { fileName, chunkIndex: 0, content: 'x', heading: '', score: 1 };

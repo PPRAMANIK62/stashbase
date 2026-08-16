@@ -1,4 +1,4 @@
-import type { PreparationFailure } from '../api';
+import type { PreparationFailure } from '@/common/api/api';
 import type { State } from './state';
 
 export interface FileReadiness {

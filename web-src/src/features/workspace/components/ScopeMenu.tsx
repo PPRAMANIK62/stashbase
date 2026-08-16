@@ -1,5 +1,5 @@
-import { CheckIcon, ChevronDownIcon, FolderIcon, LibraryIcon } from '@/icons';
-import { cn } from '@/lib/utils';
+import { CheckIcon, ChevronDownIcon, FolderIcon, LibraryIcon } from '@/common/components/icons';
+import { cn } from '@/common/lib/utils';
 import {
   Menu,
   MenuItem,
@@ -7,8 +7,8 @@ import {
   MenuPortal,
   MenuPositioner,
   MenuTrigger,
-} from '@/components/ui/menu';
-import { basename, shortenFolderPath } from '@/lib/paths';
+} from '@/common/components/ui/menu';
+import { basename, shortenFolderPath } from '@/common/lib/paths';
 import {
   folderScope,
   LIBRARY_SCOPE,

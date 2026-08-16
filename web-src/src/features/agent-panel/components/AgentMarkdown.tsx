@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { lazyWithRetry } from '@/components/ErrorBoundary';
+import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { prepareAgentMathMarkdown } from '@/features/agent-panel/components/agentMath';
 import { agentMarkdownComponents, type AgentMarkdownProps } from '@/features/agent-panel/components/agentMarkdownPolicy';
 

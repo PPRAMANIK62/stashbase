@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, errorMessage, type AudioTranscriptState } from '@/api';
+import { api, errorMessage, type AudioTranscriptState } from '@/common/api/api';
 
 interface AudioTarget {
   name: string;

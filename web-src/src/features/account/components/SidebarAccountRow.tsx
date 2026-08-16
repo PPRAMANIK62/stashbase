@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { electronBridge } from '@/electronBridge';
-import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '@/icons';
-import { api, errorMessage, type HostedAccountState } from '@/api';
+import { electronBridge } from '@/common/lib/electronBridge';
+import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '@/common/components/icons';
+import { api, errorMessage, type HostedAccountState } from '@/common/api/api';
 import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '@/features/account/lib/accountEvents';
 import { signInWithStashBase } from '@/features/account/lib/accountOAuth';
-import { DISCORD_INVITE_URL, openExternalUrl } from '@/lib/externalLink';
+import { DISCORD_INVITE_URL, openExternalUrl } from '@/common/lib/externalLink';
 import { openSettings } from '@/features/settings/components/SettingsModal';
-import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/lib/hostedQuota';
-import { Button } from '@/components/ui/button';
+import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
+import { Button } from '@/common/components/ui/button';
 import {
   Menu as AccountMenu,
   MenuItem,
@@ -16,7 +16,7 @@ import {
   MenuPositioner,
   MenuSeparator,
   MenuTrigger,
-} from '@/components/ui/menu';
+} from '@/common/components/ui/menu';
 
 /**
  * Bottom sidebar chrome: identity on the left and persistent utilities on the

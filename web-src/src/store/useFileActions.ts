@@ -3,8 +3,8 @@ import {
   CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION,
   VIEWABLE_FILE_EXTENSION_ALTERNATION,
 } from '../../../shared/file-formats.ts';
-import { api, ApiError, errorMessage } from '../api';
-import { basename } from '../lib/paths';
+import { api, ApiError, errorMessage } from '@/common/api/api';
+import { basename } from '@/common/lib/paths';
 import { isFolderFileTab } from './appContextHelpers';
 import {
   getActiveTab,

@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { ClaudeIcon, CodexIcon } from '@/icons';
+import { ClaudeIcon, CodexIcon } from '@/common/components/icons';
 
 export type AgentKind = 'claude' | 'codex';
 

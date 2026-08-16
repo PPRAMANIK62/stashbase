@@ -6,31 +6,31 @@ import {
   type CSSProperties,
 } from 'react';
 import { Sidebar } from '@/features/workspace/components/Sidebar';
-import { TitlebarControls } from './components/TitlebarControls';
+import { TitlebarControls } from '@/common/components/TitlebarControls';
 import { MainPane } from '@/features/workspace/components/MainPane';
-import { DropVeil } from './components/DropVeil';
+import { DropVeil } from '@/common/components/DropVeil';
 import { EmbedderRequireKeyGate } from '@/features/settings/components/EmbedderRequireKeyGate';
-import { Hotkeys } from './components/Hotkeys';
-import { ClipboardImportModal } from './components/ClipboardImportModal';
-import { CascadePromptModal } from './components/CascadePromptModal';
-import { AlertConfirmModal } from './components/AlertConfirmModal';
-import { Toasts } from './components/Toasts';
+import { Hotkeys } from '@/common/components/Hotkeys';
+import { ClipboardImportModal } from '@/common/components/ClipboardImportModal';
+import { CascadePromptModal } from '@/common/components/CascadePromptModal';
+import { AlertConfirmModal } from '@/common/components/AlertConfirmModal';
+import { Toasts } from '@/common/components/Toasts';
 import { SettingsPortal } from '@/features/settings/components/SettingsModal';
 import { QuickOpen } from '@/features/search/components/QuickOpen';
 import { LibrarySearch } from '@/features/search/components/LibrarySearch';
 import { EditorHistoryNavigator } from '@/features/documents/components/EditorHistoryNavigator';
 import { DocumentOutlineProvider } from '@/features/documents/components/DocumentOutlineContext';
-import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
-import { OverlayStackProvider } from './components/OverlayStack';
+import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { OverlayStackProvider } from '@/common/components/OverlayStack';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
 import { AppProvider, useApp } from './store/AppContext';
 import { useChatLayoutFollowUp } from '@/features/agent-panel/hooks/useChatLayoutFollowUp';
-import { useClipboardImageOffer } from './hooks/useClipboardImageOffer';
+import { useClipboardImageOffer } from '@/common/hooks/useClipboardImageOffer';
 import { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
 import { usePreviewMessages } from '@/features/documents/hooks/usePreviewMessages';
-import { api } from './api';
+import { api } from '@/common/api/api';
 import { applyAppearance, subscribeToAppearance } from '@/features/settings/lib/appearance';
-import { electronBridge } from './electronBridge';
+import { electronBridge } from '@/common/lib/electronBridge';
 import {
   COMPACT_WORKSPACE_QUERY,
   resolveWorkspaceLayout,
@@ -38,7 +38,7 @@ import {
 
 const LazyChatPane = lazyWithRetry(() => import('@/features/agent-panel/components/ChatPane'));
 const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesModal'));
-const LazyContextMenu = lazyWithRetry(() => import('./components/ContextMenu'));
+const LazyContextMenu = lazyWithRetry(() => import('@/common/components/ContextMenu'));
 const LazyImageLightbox = lazyWithRetry(() =>
   import('@/features/documents/components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
 );

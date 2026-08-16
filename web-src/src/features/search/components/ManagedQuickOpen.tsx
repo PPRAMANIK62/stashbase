@@ -12,7 +12,7 @@ import {
   PICKER_ROW_DETAIL_CLASS,
   PICKER_VEIL_CLASS,
   pickerPanelClass,
-} from '@/components/pickerChrome';
+} from '@/common/components/pickerChrome';
 
 let recentCommandIdsMemory: string[] = [];
 

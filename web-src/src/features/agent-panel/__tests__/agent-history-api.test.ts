@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { api } from '@/api';
+import { api } from '@/common/api/api';
 
 test('history replay uses protocol-v2 effort metadata when available', async (t) => {
   const originalFetch = globalThis.fetch;

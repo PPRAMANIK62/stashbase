@@ -16,7 +16,7 @@ import { AppContext, canApplyExternalTextRefresh, type AppActions } from '@/stor
 import { initialState, makeTab, reducer, type Action, type State } from '@/store/state';
 import { createRoot } from 'react-dom/client';
 import { act, createElement, useCallback, useMemo, useRef, useState } from 'react';
-import { api, ApiError } from '@/api';
+import { api, ApiError } from '@/common/api/api';
 import { useDocumentActions } from '@/store/useDocumentActions';
 import type { EditorHandle } from '@/store/actionTypes';
 
