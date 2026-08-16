@@ -35,7 +35,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { SegmentedControl, SegmentedControlItem } from '../ui/segmented-control';
 import { StatusMessage } from '../ui/status';
-import { AccountSignInForm } from '../account/AccountSignInForm';
+import { AccountSignInForm } from '@/features/account/components/AccountSignInForm';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string }> = {
   openai: {

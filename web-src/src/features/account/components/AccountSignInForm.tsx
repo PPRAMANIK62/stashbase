@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { errorMessage, type HostedAccountState } from '../../api';
-import { signInWithStashBase } from '../../accountOAuth';
-import { Button } from '../ui/button';
-import { StatusMessage } from '../ui/status';
+import { errorMessage, type HostedAccountState } from '@/api';
+import { signInWithStashBase } from '@/features/account/lib/accountOAuth';
+import { Button } from '@/components/ui/button';
+import { StatusMessage } from '@/components/ui/status';
 
 export function AccountSignInForm({
   onSignedIn,

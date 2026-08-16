@@ -41,7 +41,7 @@ import { Suspense, useCallback, useEffect, useRef, useState, type DragEvent } fr
 export { activateChatTabForAgent } from './ScopeHistoryButton';
 
 const SidebarAccountRow = lazyWithRetry(() =>
-  import('./SidebarAccountRow').then((mod) => ({ default: mod.SidebarAccountRow })),
+  import('@/features/account/components/SidebarAccountRow').then((mod) => ({ default: mod.SidebarAccountRow })),
 );
 
 const DocumentOutline = lazyWithRetry(() =>

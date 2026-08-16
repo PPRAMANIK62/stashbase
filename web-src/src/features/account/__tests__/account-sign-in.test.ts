@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React, { createElement, StrictMode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { AccountSignInForm } from '../components/account/AccountSignInForm';
+import { AccountSignInForm } from '@/features/account/components/AccountSignInForm';
 
 (globalThis as { React?: typeof React }).React = React;
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

@@ -37,7 +37,7 @@ import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } fro
 import { lazyWithRetry } from './ErrorBoundary';
 import { useOverlayLayer } from './OverlayStack';
 import { ModalLoadingStatus } from './ui/status';
-import { ACCOUNT_CHANGED_EVENT } from '../accountEvents';
+import { ACCOUNT_CHANGED_EVENT } from '@/features/account/lib/accountEvents';
 
 const RequireApiKeyModal = lazyWithRetry(() =>
   import('./embedder/RequireApiKeyModal').then((mod) => ({ default: mod.RequireApiKeyModal })),

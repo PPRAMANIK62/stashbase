@@ -1,6 +1,6 @@
-import { api, type HostedAccountState, type HostedOAuthProvider } from './api';
+import { api, type HostedAccountState, type HostedOAuthProvider } from '@/api';
 import { notifyAccountChanged } from './accountEvents';
-import { openExternalUrl } from './lib/externalLink';
+import { openExternalUrl } from '@/lib/externalLink';
 
 const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
 const OAUTH_POLL_MS = 750;
