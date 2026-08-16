@@ -422,6 +422,109 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
   }
 });
 
+test('conflict resolution callbacks apply correct edits and state transitions', async () => {
+  const window = new Window({ url: 'http://localhost/' });
+  const previous = installDomGlobals(window);
+  const originalPutFile = api.putFile;
+  const originalGetFile = api.getFile;
+  try {
+    const host = window.document.createElement('div');
+    window.document.body.appendChild(host);
+    const root = createRoot(host as unknown as Element);
+    const control: { current: PersistenceControl | null } = { current: null };
+    const calls: Array<{ content: string; version?: string }> = [];
+    api.putFile = async (_name, content, version) => {
+      calls.push({ content, version });
+      return { content, version: 'overwritten-version' };
+    };
+
+    await act(async () => {
+      root.render(createElement(JsonPersistenceHarness, { control }));
+      await Promise.resolve();
+    });
+
+    const tabId = control.current!.state.current.activeTabId!;
+
+    // 1. Setup tab conflict state manually in reducer to test resolution callbacks
+    await act(async () => {
+      control.current!.dispatch({
+        type: 'SET_CONFLICT',
+        id: tabId,
+        conflict: {
+          diskContent: '{"disk": true}',
+          diskVersion: 'v-disk',
+          editorContent: '{"editor": true}',
+        },
+      });
+    });
+
+    // Verify setup
+    assert.ok(control.current!.state.current.tabs[0].conflict);
+
+    // 2. Test reload
+    await act(async () => {
+      await control.current!.actions.resolveConflictReload(tabId);
+    });
+    assert.equal(control.current!.state.current.tabs[0].conflict, null);
+    assert.equal(control.current!.state.current.tabs[0].dirty, false);
+    assert.equal(control.current!.state.current.tabs[0].file?.content, '{"disk": true}');
+    assert.equal(control.current!.state.current.tabs[0].file?.version, 'v-disk');
+
+    // 3. Reset conflict state and test overwrite
+    await act(async () => {
+      control.current!.dispatch({
+        type: 'SET_CONFLICT',
+        id: tabId,
+        conflict: {
+          diskContent: '{"disk": true}',
+          diskVersion: 'v-disk',
+          editorContent: '{"editor": true}',
+        },
+      });
+    });
+
+    await act(async () => {
+      await control.current!.actions.resolveConflictOverwrite(tabId);
+    });
+    assert.equal(control.current!.state.current.tabs[0].conflict, null);
+    assert.equal(control.current!.state.current.tabs[0].dirty, false);
+    assert.equal(control.current!.state.current.tabs[0].file?.content, '{"editor": true}');
+    assert.equal(control.current!.state.current.tabs[0].file?.version, 'overwritten-version');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].version, undefined, 'overwrite uses undefined base version to bypass mismatch checks');
+
+    // 4. Reset conflict state and test merge
+    await act(async () => {
+      control.current!.dispatch({
+        type: 'SET_CONFLICT',
+        id: tabId,
+        conflict: {
+          diskContent: 'line1\ndisk\nline3',
+          diskVersion: 'v-disk',
+          editorContent: 'line1\neditor\nline3',
+        },
+      });
+    });
+
+    await act(async () => {
+      await control.current!.actions.resolveConflictMerge(tabId);
+    });
+    assert.equal(control.current!.state.current.tabs[0].conflict, null);
+    assert.equal(control.current!.state.current.tabs[0].dirty, true, 'merged state remains dirty');
+    const content: string = control.current!.state.current.tabs[0].file?.content ?? '';
+    assert.ok(content.includes('<<<<<<< Editor Version'));
+    assert.ok(content.includes('======='));
+    assert.ok(content.includes('>>>>>>> Disk Version'));
+
+    await act(async () => root.unmount());
+  } finally {
+    api.putFile = originalPutFile;
+    api.getFile = originalGetFile;
+    restoreDomGlobals(previous);
+    window.close();
+  }
+});
+
 type DomGlobals = Record<string, PropertyDescriptor | undefined>;
 
 function installDomGlobals(window: Window): DomGlobals {
