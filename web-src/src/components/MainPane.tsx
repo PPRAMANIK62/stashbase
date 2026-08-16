@@ -3,12 +3,12 @@ import { EditIcon, PreviewIcon } from '../icons';
 import { useApp } from '../store/AppContext';
 import { EmptyTabLanding } from './EmptyTabLanding';
 import { FindBar } from '@/features/search/components/FindBar';
-import { HtmlPreview } from './HtmlPreview';
-import { ImagePreview } from './ImagePreview';
+import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
+import { ImagePreview } from '@/features/documents/components/ImagePreview';
 import { TabStrip } from './TabStrip';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { readPreferredAgent } from '../agentPreference';
-import { retainedMarkdownTabs } from '../milkdown/retainedTabs';
+import { retainedMarkdownTabs } from '@/features/documents/milkdown/retainedTabs';
 import { electronBridge } from '../electronBridge';
 import { basename } from '../lib/paths';
 import { Button } from './ui/button';
@@ -19,11 +19,11 @@ const VIEWER_LOADING_CLASS = 'p-4 text-base text-muted-foreground';
 const VIEWER_PADDED_LOADING_CLASS = 'p-6 text-base text-muted-foreground';
 const VIEWER_CENTERED_LOADING_CLASS = 'grid h-full place-items-center text-base text-muted-foreground';
 
-const LazyCrepeDocument = lazyWithRetry(() => import('./CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
-const LazyPdfPreview = lazyWithRetry(() => import('./PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
-const LazyDocxPreview = lazyWithRetry(() => import('./DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
-const LazyAudioPreview = lazyWithRetry(() => import('./AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
-const LazyJsonDocument = lazyWithRetry(() => import('./JsonDocument').then((mod) => ({ default: mod.JsonDocument })));
+const LazyCrepeDocument = lazyWithRetry(() => import('@/features/documents/components/CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
+const LazyPdfPreview = lazyWithRetry(() => import('@/features/documents/components/PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
+const LazyDocxPreview = lazyWithRetry(() => import('@/features/documents/components/DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
+const LazyAudioPreview = lazyWithRetry(() => import('@/features/documents/components/AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
+const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/components/JsonDocument').then((mod) => ({ default: mod.JsonDocument })));
 
 /**
  * Right rail. Layout from top to bottom:

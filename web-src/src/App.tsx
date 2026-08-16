@@ -18,8 +18,8 @@ import { Toasts } from './components/Toasts';
 import { SettingsPortal } from '@/features/settings/components/SettingsModal';
 import { QuickOpen } from '@/features/search/components/QuickOpen';
 import { LibrarySearch } from '@/features/search/components/LibrarySearch';
-import { EditorHistoryNavigator } from './components/EditorHistoryNavigator';
-import { DocumentOutlineProvider } from './components/DocumentOutlineContext';
+import { EditorHistoryNavigator } from '@/features/documents/components/EditorHistoryNavigator';
+import { DocumentOutlineProvider } from '@/features/documents/components/DocumentOutlineContext';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from './components/ErrorBoundary';
 import { OverlayStackProvider } from './components/OverlayStack';
 import { ChatSplitter, SidebarSplitter } from './components/WorkspaceSplitters';
@@ -27,7 +27,7 @@ import { AppProvider, useApp } from './store/AppContext';
 import { useChatLayoutFollowUp } from './hooks/useChatLayoutFollowUp';
 import { useClipboardImageOffer } from './hooks/useClipboardImageOffer';
 import { useGlobalDragDrop } from './hooks/useGlobalDragDrop';
-import { usePreviewMessages } from './hooks/usePreviewMessages';
+import { usePreviewMessages } from '@/features/documents/hooks/usePreviewMessages';
 import { api } from './api';
 import { applyAppearance, subscribeToAppearance } from '@/features/settings/lib/appearance';
 import { electronBridge } from './electronBridge';
@@ -40,7 +40,7 @@ const LazyChatPane = lazyWithRetry(() => import('./components/ChatPane'));
 const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesModal'));
 const LazyContextMenu = lazyWithRetry(() => import('./components/ContextMenu'));
 const LazyImageLightbox = lazyWithRetry(() =>
-  import('./components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
+  import('@/features/documents/components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
 );
 
 /**

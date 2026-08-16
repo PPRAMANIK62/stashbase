@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { FileTypeIcon } from '../FileTree';
-import { ImageLightbox } from '../ImageLightbox';
+import { ImageLightbox } from '@/features/documents/components/ImageLightbox';
 import { fileGlyphFormat } from './attachments';
 import { attachChipClass, attachIconTileClass, attachImageChipClass, attachImagePreviewClass, attachNameClass, attachTextClass, attachTypeClass } from './panelStyles';
 import type { Attachment } from './types';

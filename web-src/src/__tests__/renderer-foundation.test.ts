@@ -158,14 +158,14 @@ test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
 });
 
 test('Markdown Find controller registration is independent of changing action-bag identity', () => {
-  const markdown = read('web-src/src/components/CrepeDocument.tsx');
+  const markdown = read('web-src/src/features/documents/components/CrepeDocument.tsx');
   assert.match(markdown, /const registerFindController = actions\.registerFindController/);
   assert.match(markdown, /\[active, creationState, registerFindController\]/);
   assert.doesNotMatch(markdown, /registerFindController\(null\);\n  \}, \[actions, active\]\)/);
 });
 
 test('PDF load and Find registration are independent of changing action-bag identity', () => {
-  const pdf = read('web-src/src/components/PdfPreview.tsx');
+  const pdf = read('web-src/src/features/documents/components/PdfPreview.tsx');
   assert.match(pdf, /\}, \[fileUrl\]\);/);
   assert.match(pdf, /\[doc, numPages, registerFindController\]/);
   assert.match(pdf, /function scrollToPage[\s\S]*updateTabPdfPage\(activeTab\.id, targetPage\)/);
@@ -175,7 +175,7 @@ test('PDF load and Find registration are independent of changing action-bag iden
 });
 
 test('JSON Find registration is independent of changing action-bag identity', () => {
-  const json = read('web-src/src/components/JsonDocument.tsx');
+  const json = read('web-src/src/features/documents/components/JsonDocument.tsx');
   assert.match(json, /const registerFindController = actions\.registerFindController/);
   assert.match(json, /\[registerFindController, active, viewMode\]/);
   assert.doesNotMatch(json, /\[actions, active\]/);
@@ -288,11 +288,11 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(messages, /role="log"/);
   assert.match(messages, /aria-label="Agent conversation"/);
 
-  const markdown = read('web-src/src/components/CrepeDocument.tsx');
+  const markdown = read('web-src/src/features/documents/components/CrepeDocument.tsx');
   assert.match(markdown, /role="region"/);
   assert.match(markdown, /aria-label=\{`\$\{basename\(name\)\} Markdown document`\}/);
 
-  const json = read('web-src/src/components/JsonDocument.tsx');
+  const json = read('web-src/src/features/documents/components/JsonDocument.tsx');
   assert.match(json, /role="region"/);
   assert.match(json, /aria-label="JSON document"/);
 });

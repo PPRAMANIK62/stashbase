@@ -21,7 +21,7 @@ import { electronBridge } from '../electronBridge';
 import { folderRefsEqual } from '../folderPath';
 import { basename, shortenFolderPath } from '../lib/paths';
 import { FileTree } from './FileTree';
-import { useDocumentOutline } from './DocumentOutlineContext';
+import { useDocumentOutline } from '@/features/documents/components/DocumentOutlineContext';
 import { LazyLoadBoundary, lazyWithRetry } from './ErrorBoundary';
 import { FolderMenu } from './FolderMenu';
 import { Menu, type MenuItem } from './Menu';
@@ -45,7 +45,7 @@ const SidebarAccountRow = lazyWithRetry(() =>
 );
 
 const DocumentOutline = lazyWithRetry(() =>
-  import('./DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
+  import('@/features/documents/components/DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
 const SemanticIndexingNotice = lazyWithRetry(() =>
   import('@/features/preparation/components/SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNotice })));
 const EmbeddingSetupCallout = lazyWithRetry(() => import('@/features/preparation/components/EmbeddingSetupCallout'));

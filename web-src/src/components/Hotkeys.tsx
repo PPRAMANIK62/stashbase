@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { isEditorHistoryChord } from '../editorHistory';
+import { isEditorHistoryChord } from '@/features/documents/lib/editorHistory';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { useApp } from '../store/AppContext';
 import { openLibrarySearch } from '@/features/search/components/LibrarySearch';
