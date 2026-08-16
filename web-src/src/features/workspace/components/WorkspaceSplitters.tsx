@@ -10,6 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import '@/features/workspace/workspace.css';
 import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
 import {
   clampChatWidth,

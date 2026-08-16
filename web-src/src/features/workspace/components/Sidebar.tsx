@@ -1,3 +1,4 @@
+import '@/common/styles/tree.css';
 import {
   ChevronDownIcon,
   CubeLogoIcon,
@@ -568,7 +569,7 @@ function removalDialogTarget(
  *  same ⋯ folder menu as the library rows. The `#sideHead` id and
  *  `drop-target` state class stay CSS-driven: `useGlobalDragDrop` toggles
  *  `drop-target` imperatively on #sideHead, sharing the tree's exempted
- *  drop styling (see sidebar.css). The header carries no persistent
+ *  drop styling (see common/styles/tree.css). The header carries no persistent
  *  selected surface — its position above the tree already marks it as the
  *  current folder. */
 function ActiveFolderHeader({

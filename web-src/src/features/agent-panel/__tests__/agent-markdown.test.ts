@@ -150,7 +150,7 @@ test('copy reply retains the original Markdown and LaTeX source', () => {
 });
 
 test('agent display math owns narrow-panel overflow and offline KaTeX assets', () => {
-  const css = fs.readFileSync('web-src/src/styles/chat.css', 'utf8');
+  const css = fs.readFileSync('web-src/src/features/agent-panel/agent-panel.css', 'utf8');
   const mathRenderer = fs.readFileSync('web-src/src/features/agent-panel/components/AgentMathMarkdown.tsx', 'utf8');
 
   assert.match(mathRenderer, /import 'katex\/dist\/katex\.min\.css'/);

@@ -1,3 +1,4 @@
+import './drop-veil.css';
 import { MotionConfig, motion } from 'motion/react';
 
 /** Loaded only during an active import drag; opacity is retained for reduced motion. */

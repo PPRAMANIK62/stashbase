@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import '@/common/styles/tree.css';
+import '@/features/workspace/workspace.css';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@/../../shared/file-formats.ts';
 import { BotIcon, ChevronDownIcon, ClaudeIcon } from '@/common/components/icons';
 import type { FileMeta, FolderMeta } from '@/common/api/api';

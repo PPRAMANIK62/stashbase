@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import '@/features/workspace/workspace.css';
 import { EditIcon, PreviewIcon } from '@/common/components/icons';
 import { useAppActions, useWorkspace } from '@/store/AppContext';
 import { EmptyTabLanding } from '@/features/workspace/components/EmptyTabLanding';
@@ -99,7 +100,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         * `<body>`, the user's content) lays out at zero. Grid cells give
         * children a definite size unambiguously, sidestepping that bug.
         * The `main-body` class itself is the structural hook for
-        * `.main.no-file > :not(.main-body)` in mainpane.css. */}
+        * `.main.no-file > :not(.main-body)` in workspace.css. */}
       <div
         className={'main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden' + (chromeBand ? ' pt-8' : '')}
         role={activeTab ? 'tabpanel' : undefined}

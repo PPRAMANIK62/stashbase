@@ -5,6 +5,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import './json/json-tree.css';
 import { useAppActions, useWorkspace, type FindController, type FindOptions, type MatchInfo } from '@/store/AppContext';
 import { analyzeJsonSource, formatPath, matchingJsonTreeNodes } from '@/features/documents/lib/json/sourceModel';
 import type { JsonTreeSessionState } from '@/features/documents/components/json/JsonTreeView';

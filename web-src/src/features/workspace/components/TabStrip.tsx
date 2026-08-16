@@ -1,4 +1,5 @@
 import { useRef, useState, type DragEvent } from 'react';
+import '@/features/workspace/workspace.css';
 import { basename } from '@/common/lib/paths';
 import { useAppActions, useWorkspace } from '@/store/AppContext';
 
@@ -100,7 +101,7 @@ export function TabStrip() {
 
   return (
     /* Layout metrics live in .tab-strip / .tab-strip-inner CSS —
-     * electron/tab-strip-layout-smoke.cjs consumes mainpane.css raw. */
+     * electron/tab-strip-layout-smoke.cjs consumes workspace.css raw. */
     <div className="tab-strip">
       <div
         className="tab-strip-inner"

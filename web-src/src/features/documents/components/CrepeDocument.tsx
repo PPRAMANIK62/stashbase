@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import '@/features/documents/documents.css';
 import { languages } from '@codemirror/language-data';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { replaceAll } from '@milkdown/kit/utils';

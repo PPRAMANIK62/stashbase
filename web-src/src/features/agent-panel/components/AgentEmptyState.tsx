@@ -120,7 +120,7 @@ const HINT_FADE_MS = 700;
  * toward the pane's bottom edge below the hero composer. Rotates
  * on a quiet timer with a continuous upward motion: the outgoing line
  * drifts up as it fades and the incoming one rises from below
- * (`chat-hint-rise` in chat.css). The global reduced-motion policy zeroes
+ * (`chat-hint-rise` in agent-panel.css). The global reduced-motion policy zeroes
  * the keyframe and drops `translate` from transition-property, so the swap
  * degrades to a plain crossfade there. Hover or focus pauses the rotation:
  * a moving press target would swap under the pointer, and a focused

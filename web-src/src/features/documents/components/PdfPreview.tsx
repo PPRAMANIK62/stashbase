@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import '@/features/documents/documents.css';
 import { createPortal } from 'react-dom';
 import {
   PDFWorker,

@@ -67,9 +67,17 @@ test('chrome type scale and radius scale are the only visual values', () => {
   assert.doesNotMatch(button, /rounded-(lg|xl|2xl)/);
 
   // Legacy CSS stays on the shared scale: no half-pixel chrome sizes, no
-  // off-palette accent blues, no odd font weights.
-  const legacy = ['globals', 'chat', 'sidebar', 'mainpane']
-    .map((name) => read(`web-src/src/styles/${name}.css`))
+  // off-palette accent blues, no odd font weights. Scans every colocated
+  // .css file (not a hardcoded list) so this coverage survives a file
+  // moving to a new feature folder without silently going stale.
+  const walkCss = (dir: string): string[] =>
+    fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((entry) => {
+      const rel = path.join(dir, entry.name);
+      if (entry.isDirectory()) return entry.name === '__tests__' ? [] : walkCss(rel);
+      return entry.name.endsWith('.css') ? [rel] : [];
+    });
+  const legacy = walkCss('web-src/src')
+    .map((file) => read(file))
     .join('\n');
   const legacyBlue = /46, ?116, ?230|#4a8cff|#4f7cff|#1a73e8/;
   assert.doesNotMatch(legacy, /font-size: calc\((9|10|11|12|13)\.5px/);
@@ -231,11 +239,12 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   assert.match(preload, /platform-\$\{process\.platform\}/);
   // Cursor-style chrome: no titlebar strip — the traffic lights float
   // over the sidebar's top drag zone and the tab strip's empty
-  // background doubles as the other macOS drag surface.
-  const globals = read('web-src/src/styles/globals.css');
-  assert.doesNotMatch(globals, /app-chrome/);
-  assert.match(globals, /platform-darwin \.sidebar-drag-zone/);
-  assert.match(globals, /platform-darwin \.tab-strip/);
+  // background doubles as the other macOS drag surface. This composition
+  // lives in the app shell, not any one feature's CSS.
+  const appShellChrome = read('web-src/src/app/app-shell.css');
+  assert.doesNotMatch(appShellChrome, /app-chrome/);
+  assert.match(appShellChrome, /platform-darwin \.sidebar-drag-zone/);
+  assert.match(appShellChrome, /platform-darwin \.tab-strip/);
   assert.match(read('web-src/src/features/workspace/components/Sidebar.tsx'), /className="sidebar-drag-zone"/);
 });
 
@@ -305,23 +314,23 @@ test('shared overlays own loading modality, popup positioning, and focus return'
 });
 
 test('shell geometry and reading-surface fixes stay pinned', () => {
-  const globals = read('web-src/src/styles/globals.css');
+  const appShell = read('web-src/src/app/app-shell.css');
   // Drag surfaces never overlap controls: the sidebar drag zone stops at
   // the titlebar controls (per-element no-drag carve-outs proved
   // intermittently stale on windowed macOS — geometry, not carving).
-  assert.match(globals, /\.sidebar-drag-zone \{[^}]*width: var\(--titlebar-controls-left\)/s);
+  assert.match(appShell, /\.sidebar-drag-zone \{[^}]*width: var\(--titlebar-controls-left\)/s);
   // The left cluster ellipsizes at the sidebar column edge instead of
   // bleeding onto the tab strip…
-  assert.match(globals, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\) - 8px\)/s);
+  assert.match(appShell, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\) - 8px\)/s);
   // …and the collapsed-sidebar budget is ONE token shared by the cluster
   // cap and both tab-row reserves, so the floating controls never overlap
   // a tab.
-  assert.match(globals, /--titlebar-controls-collapsed-width:/);
-  assert.match(globals, /\.app\.sidebar-collapsed \.tab-strip \{[^}]*var\(--titlebar-controls-collapsed-width\)/s);
-  assert.match(globals, /\.app\.sidebar-collapsed \.titlebar-controls \{[^}]*max-width: var\(--titlebar-controls-collapsed-width\)/s);
-  assert.match(read('web-src/src/styles/chat.css'), /\.app\.sidebar-collapsed\.chat-primary \.chat-tab-row \{[^}]*var\(--titlebar-controls-collapsed-width\)/s);
+  assert.match(appShell, /--titlebar-controls-collapsed-width:/);
+  assert.match(appShell, /\.app\.sidebar-collapsed \.tab-strip \{[^}]*var\(--titlebar-controls-collapsed-width\)/s);
+  assert.match(appShell, /\.app\.sidebar-collapsed \.titlebar-controls \{[^}]*max-width: var\(--titlebar-controls-collapsed-width\)/s);
+  assert.match(appShell, /\.app\.sidebar-collapsed\.chat-primary \.chat-tab-row \{[^}]*var\(--titlebar-controls-collapsed-width\)/s);
 
-  const chat = read('web-src/src/styles/chat.css');
+  const chat = read('web-src/src/features/agent-panel/agent-panel.css');
   // Entering message edit must not collapse the bubble (the textarea has
   // no intrinsic width): the head takes the full bubble width instead.
   assert.match(chat, /\.agent-turn-head:has\(\.agent-turn-edit\) \{[^}]*width: min\(85%, 620px\)/s);
@@ -330,22 +339,22 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
   // edit open. The mode change is the affordance.
   assert.doesNotMatch(chat, /\.agent-turn-edit textarea:focus-visible/);
 
-  const mainpane = read('web-src/src/styles/mainpane.css');
+  const documentsCss = read('web-src/src/features/documents/documents.css');
   // Reading gutters follow the PANE, not the window.
-  assert.match(mainpane, /\.crepe-shell \{[^}]*container-type: inline-size/s);
-  assert.match(mainpane, /clamp\(20px, 6cqi, 48px\)/);
+  assert.match(documentsCss, /\.crepe-shell \{[^}]*container-type: inline-size/s);
+  assert.match(documentsCss, /clamp\(20px, 6cqi, 48px\)/);
   // THREE-class selector on purpose: Crepe's packaged stylesheet ships
   // `.milkdown .ProseMirror { padding: 60px 120px }` in a LATER-loaded
   // chunk — equal specificity would hand the gutters back to the package.
-  assert.match(mainpane, /\.crepe-shell \.milkdown \.ProseMirror \{/);
+  assert.match(documentsCss, /\.crepe-shell \.milkdown \.ProseMirror \{/);
   // Editable gutters seat the block handle (48px); under pane pressure
   // the ADD tile yields so the drag tile fits instead of clipping.
-  assert.match(mainpane, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown \.ProseMirror \{[^}]*padding-inline: 48px/s);
-  assert.match(mainpane, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown-block-handle \.operation-item:first-child \{[^}]*display: none/s);
+  assert.match(documentsCss, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown \.ProseMirror \{[^}]*padding-inline: 48px/s);
+  assert.match(documentsCss, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown-block-handle \.operation-item:first-child \{[^}]*display: none/s);
   // Crepe names the handle `milkdown-block-handle`; a `crepe-`-prefixed
   // selector silently matches nothing.
-  assert.match(mainpane, /\.crepe-readonly \.milkdown-block-handle \{ display: none; \}/);
-  assert.doesNotMatch(mainpane, /crepe-block-handle/);
+  assert.match(documentsCss, /\.crepe-readonly \.milkdown-block-handle \{ display: none; \}/);
+  assert.doesNotMatch(documentsCss, /crepe-block-handle/);
 
   // Composer pills yield width under pressure (min-w-0 + label truncate)
   // so a tight chat panel truncates labels instead of clipping Send.

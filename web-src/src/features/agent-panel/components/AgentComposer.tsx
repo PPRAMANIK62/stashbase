@@ -409,7 +409,7 @@ export function AgentComposer({
 
   return (
     // `agent-composer` is a layout hook: the chat-primary grid rules in
-    // styles/chat.css center it to the readable transcript width. In hero
+    // agent-panel.css center it to the readable transcript width. In hero
     // mode the empty-state column (656px = 640px content + own padding)
     // replaces that hook so the composer centers mid-panel.
     // px-3 matches the transcript's 12px insets so the composer card and

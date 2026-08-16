@@ -1,3 +1,4 @@
+import './clipboard-offer-preview.css';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedModal } from '@/common/components/LazyManaged';
 

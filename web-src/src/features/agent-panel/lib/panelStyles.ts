@@ -2,7 +2,7 @@
  * Shared Tailwind class recipes for agent-panel chrome that more than one
  * agent component renders (header icon buttons, attachment chips). Content
  * typography (.agent-prose), the sticky turn-head system, and the One-Dark
- * code palette intentionally stay in styles/chat.css.
+ * code palette intentionally stay in agent-panel.css.
  */
 import { cn } from '@/common/lib/utils';
 import { buttonVariants } from '@/common/components/ui/button';

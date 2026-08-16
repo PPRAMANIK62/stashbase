@@ -5,6 +5,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
+import '@/app/app-shell.css';
 import { Sidebar } from '@/features/workspace/components/Sidebar';
 import { TitlebarControls } from '@/common/components/TitlebarControls';
 import { MainPane } from '@/features/workspace/components/MainPane';

@@ -1,3 +1,4 @@
+import './drop-veil.css';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManaged } from '@/common/components/LazyManaged';
 

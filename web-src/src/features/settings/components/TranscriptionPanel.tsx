@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import '@/features/settings/settings.css';
 import {
   api,
   errorMessage,

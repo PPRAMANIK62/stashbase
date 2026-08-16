@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import './json-tree.css';
 import {
   addJsonChild, analyzeJsonSource, deleteJsonPath, formatPath, renameJsonProperty,
   matchingJsonTreeNodes, reorderJsonArrayItem, replaceJsonNode, type JsonSourceNode,

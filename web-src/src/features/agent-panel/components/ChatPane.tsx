@@ -9,6 +9,7 @@
  */
 import * as React from 'react';
 import type { ReactNode } from 'react';
+import '@/features/agent-panel/agent-panel.css';
 import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { LazyLoadBoundary } from '@/common/components/ErrorBoundary';
 import { agentMeta, isAgentKind } from '@/features/agent-panel/components/agentCatalog';
@@ -75,7 +76,7 @@ export default function ChatPane() {
         * shell's floating chat toggle (TitlebarControls).
         *
         * Geometry mirrors the document strip (`.tab-strip` in
-        * mainpane.css): 6px above, NOTHING below, tabs bottom-aligned.
+        * workspace.css): 6px above, NOTHING below, tabs bottom-aligned.
         * The two strips sit side by side across the window, so a 4px
         * bottom pad here left the chat tabs floating above a line the
         * document tabs sat on. Change one, change both. */}
@@ -92,7 +93,7 @@ export default function ChatPane() {
                 // text-sm (12px) + py-1.5 (6px) + rounded-t-sm (the 6px
                 // control-role top corners) = the document tab's exact
                 // type size, vertical padding, and radius (`.tab` in
-                // mainpane.css), so both strips' tabs stand the same
+                // workspace.css), so both strips' tabs stand the same
                 // height in the same voice.
                 'group/tab inline-flex max-w-45 min-w-0 cursor-pointer items-center gap-1.5 rounded-t-sm border border-transparent border-b-0 py-1.5 pr-1.5 pl-2.5 text-sm whitespace-nowrap text-muted-foreground select-none hover:bg-muted hover:text-foreground',
                 // bg-canvas, not bg-background: an active tab takes the

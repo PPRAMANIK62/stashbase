@@ -95,7 +95,7 @@ export function MessageList({
 
   return (
     // `agent-messages` is a layout hook: the chat-primary grid rules in
-    // styles/chat.css widen its padding to center the readable column.
+    // agent-panel.css widen its padding to center the readable column.
     // No top padding — the first child's own top margin carries the
     // breathing room (it scrolls away with the transcript).
     <div

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import '@/common/styles/tree.css';
 import { ChevronDownIcon } from '@/common/components/icons';
 import { outlineDepths, outlineHasChildren, visibleOutlineHeadings, type DocumentHeading } from '@/features/documents/milkdown/headings';
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import '@/features/documents/documents.css';
 import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { basename } from '@/common/lib/paths';
