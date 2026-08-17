@@ -351,7 +351,17 @@ const CODEX_INSTALLER = process.platform === 'win32'
   ? 'https://chatgpt.com/codex/install.ps1'
   : 'https://chatgpt.com/codex/install.sh';
 
-export async function installCodex(update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void> {
+type AgentExecutableVerifier = (
+  executable: string,
+  label: string,
+  env: NodeJS.ProcessEnv,
+) => void;
+
+export async function installCodex(
+  update: (next: ProgressUpdate) => void,
+  signal: AbortSignal,
+  verifyExecutable: AgentExecutableVerifier = verifyAgentExecutable,
+): Promise<void> {
   update({ message: 'Downloading the official Codex installer…' });
   const script = await fetchBoundedText(CODEX_INSTALLER, signal, 2_000_000);
   const binDir = managedCodexBinDir();
@@ -373,7 +383,7 @@ export async function installCodex(update: (next: ProgressUpdate) => void, signa
     if (message) update({ message });
   });
   const executable = path.join(binDir, process.platform === 'win32' ? 'codex.exe' : 'codex');
-  verifyAgentExecutable(executable, 'Codex', env);
+  verifyExecutable(executable, 'Codex', env);
   update({ progress: 1, message: 'Codex installed.' });
 }
 
