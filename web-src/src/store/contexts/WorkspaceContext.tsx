@@ -10,7 +10,7 @@
  * re-render for it.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { getActiveTab, type State, type Tab } from '../state/state';
+import { getActiveTab, type State, type Tab } from '@/store/state/state';
 
 export interface WorkspaceState {
   booted: State['booted'];

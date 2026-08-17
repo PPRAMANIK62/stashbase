@@ -12,10 +12,10 @@ import {
   optimisticKeyBackfillPaths,
   type Action,
   type State,
-} from '../state/state';
+} from '@/store/state/state';
 import type { ToastOptions } from './useFeedbackActions';
-import { hasAggregatePreparationFailure } from '../lib/fileReadiness';
-import { runIndexStatusRequest } from '../lib/indexStatusRequest';
+import { hasAggregatePreparationFailure } from '@/store/lib/fileReadiness';
+import { runIndexStatusRequest } from '@/store/lib/indexStatusRequest';
 
 const POLL_PENDING_MS = 1500;
 const POLL_IDLE_MS = 8000;

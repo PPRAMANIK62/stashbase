@@ -13,7 +13,7 @@ import { basename } from '@/common/lib/paths';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { openSettings } from '@/common/lib/settingsTrigger';
-import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@/../../shared/transcription.ts';
+import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@shared/transcription';
 import { useAudioFallbackController } from '@/features/documents/hooks/useAudioFallbackController.ts';
 import { useAudioTranscriptController } from '@/features/documents/hooks/useAudioTranscriptController.ts';
 import { Button } from '@/common/components/ui/button';

@@ -1,5 +1,5 @@
 import mammoth from 'mammoth';
-import { sanitizeDocxHtml } from '@/../../shared/html-sanitization';
+import { sanitizeDocxHtml } from '@shared/html-sanitization';
 
 interface DocxPreviewRequest {
   arrayBuffer: ArrayBuffer;

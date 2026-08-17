@@ -4,7 +4,7 @@ import {
   feedbackToasts,
   type ToastOptions,
 } from '@/common/lib/feedbackToasts';
-import type { Action, CascadeDecision, CascadePrompt, ModalRequest } from '../state/state';
+import type { Action, CascadeDecision, CascadePrompt, ModalRequest } from '@/store/state/state';
 
 type Dispatch = (action: Action) => void;
 

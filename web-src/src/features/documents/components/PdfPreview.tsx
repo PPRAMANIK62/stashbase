@@ -31,7 +31,7 @@ import {
 
 // Polyfill the main-thread scope too — render() calls getOrInsertComputed
 // synchronously before it ever talks to the worker.
-import '../lib/pdfPolyfill';
+import '@/features/documents/lib/pdfPolyfill';
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 

@@ -4,7 +4,7 @@
  * also emit bare multi-segment paths. This module finds those spans so
  * surfaces can chip them (transcript) or flatten them (titles, previews).
  */
-import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@/../../shared/file-formats.ts';
+import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
 import { basename } from '@/common/lib/paths';
 
 const FILE_MENTION_RE = new RegExp(

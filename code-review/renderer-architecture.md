@@ -30,6 +30,41 @@ its own layer and from every layer below it, never above.
    only layer allowed to import from multiple features, because composing
    them is what it exists to do.
 
+## Import specifiers
+
+Only two forms are allowed inside `web-src/src/`: `./sibling` for a module in
+the same directory, and an alias for everything else. `../` never appears in a
+specifier, in any form — including the `@/../../shared/…` spelling, which
+climbs out of `src/` and is a relative path in disguise.
+
+Three aliases carry the rest, declared in both `web-src/tsconfig.json` (which
+the renderer test runner reads through `TSX_TSCONFIG_PATH`) and
+`web-src/vite.config.ts` (which the build reads). Both must stay in sync or one
+of the two resolves and the other does not.
+
+| Alias | Target |
+|---|---|
+| `@/` | `web-src/src/` |
+| `@shared/` | repo-root `shared/` — cross-process contract types |
+| `@server/` | repo-root `server/` — type-only, and a Known Gap (below) |
+
+Aliased specifiers are extensionless, apart from non-TS assets such as the
+shared links JSON. This is not cosmetic: the boundary regexes below match
+the raw specifier text, so a relative import would evade them silently.
+
+`new URL('../workers/…', import.meta.url)` is exempt. Vite resolves that form
+against the file's own location at build time and does not apply `resolve.alias`
+to it, so the worker reference stays relative.
+
+**Known Gap — `@server/`.** `features/agent-panel/lib/types.ts` takes
+`AgentModel`, `AgentSkill`, and `AgentServerEvent` from `server/agent-contract.ts`.
+Those three are renderer/server wire types, so they belong in `shared/`
+beside `conversion.ts` and `transcription.ts`; the renderer should not reach
+into `server/` at all. The alias names an existing dependency rather than
+creating one — it previously hid inside a `@/../../server/…` specifier — and
+naming it is what makes it removable. Do not add `@server/` imports; move the
+types into `shared/` instead.
+
 ## Context value stability
 
 The four contexts under `store/contexts/` exist to stop one slice's change
@@ -134,6 +169,7 @@ import a feature component to render it realistically.
 | Composition root | `web-src/src/app/App.tsx` over `app/components/` (including `MainPane.tsx` and `Sidebar.tsx`) and `app/hooks/` |
 | Cross-feature triggers | `web-src/src/common/lib/settingsTrigger.ts`, `librarySearchTrigger.ts`, `embeddingSetupTrigger.ts` |
 | Boundary enforcement | `.oxlintrc.json` and the `lint:web` script |
+| Path aliases | `web-src/tsconfig.json` `compilerOptions.paths`, `web-src/vite.config.ts` `resolve.alias` |
 
 ## Validation
 

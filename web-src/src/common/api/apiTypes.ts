@@ -2,9 +2,9 @@
  * Renderer-facing request and response contracts for the local HTTP API.
  * These declarations have no runtime dependencies.
  */
-import type { ConversionProgress } from '@/../../shared/conversion.ts';
-import type { LocalTranscriptionModelId } from '@/../../shared/transcription.ts';
-export type { ConversionProgress } from '@/../../shared/conversion.ts';
+import type { ConversionProgress } from '@shared/conversion';
+import type { LocalTranscriptionModelId } from '@shared/transcription';
+export type { ConversionProgress } from '@shared/conversion';
 export type {
   AudioPreviewStatus,
   AudioTranscript,
@@ -14,7 +14,7 @@ export type {
   TranscriptionModelOperation,
   TranscriptionModelState,
   TranscriptionSettings,
-} from '@/../../shared/transcription.ts';
+} from '@shared/transcription';
 export type TranscriptionModelId = LocalTranscriptionModelId;
 export type AppearanceTheme = 'system' | 'light' | 'dark';
 export type AppearanceScale = 'small' | 'default' | 'large';

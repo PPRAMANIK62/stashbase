@@ -1,7 +1,7 @@
 import {
   AUDIO_SOURCE_EXTENSIONS, DOCX_EXTENSIONS, HTML_NOTE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS, PDF_EXTENSIONS, STRUCTURED_DATA_EXTENSIONS,
-} from '@/../../shared/file-formats.ts';
+} from '@shared/file-formats';
 import type { FileGlyphFormat } from '@/common/components/FileTypeIcon';
 
 /** The muted type glyph + short label for a file, keyed off the filename

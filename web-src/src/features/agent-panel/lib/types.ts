@@ -32,5 +32,5 @@ export type Block =
 export type ServerEvent = AgentServerEvent;
 
 export type AgentKind = 'claude' | 'codex';
-export type { AgentModel, AgentSkill } from '@/../../server/agent-contract.ts';
-import type { AgentServerEvent } from '@/../../server/agent-contract.ts';
+export type { AgentModel, AgentSkill } from '@server/agent-contract';
+import type { AgentServerEvent } from '@server/agent-contract';

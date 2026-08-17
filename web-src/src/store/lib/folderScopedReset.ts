@@ -20,7 +20,7 @@
  *   reset too: the server ends the affected sessions, and panels must
  *   not keep rendering against a folder that is gone.
  */
-import type { Action } from '../state/state';
+import type { Action } from '@/store/state/state';
 
 export type FolderResetReason = 'switch' | 'folder-lost';
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet.ts';
+import { plainSnippetText, searchSnippetText } from '@/features/search/lib/searchSnippet';
 
 test('strips a leading YAML frontmatter block so the snippet starts at content', () => {
   const chunk = [

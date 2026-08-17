@@ -8,7 +8,7 @@
  * one function and do not have to know which host they are running in.
  */
 
-import links from '@/../../shared/links.json';
+import links from '@shared/links.json';
 import { electronBridge } from '@/common/lib/electronBridge';
 
 /** The community server, linked from the sidebar's bottom row and the

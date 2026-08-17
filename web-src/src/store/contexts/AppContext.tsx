@@ -33,13 +33,13 @@ import {
   makeChatTab,
   reducer,
   type State,
-} from '../state/state';
+} from '@/store/state/state';
 import { rememberPreferredAgent } from '@/common/lib/agentPreference';
 import { newChatPlan } from '@/store/lib/chatTabPlan';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
-import { useFeedbackActions } from '../hooks/useFeedbackActions';
-import { useFindActions } from '../hooks/useFindActions';
-import { useActiveFolderWorkspace } from '../hooks/useActiveFolderWorkspace';
+import { useFeedbackActions } from '@/store/hooks/useFeedbackActions';
+import { useFindActions } from '@/store/hooks/useFindActions';
+import { useActiveFolderWorkspace } from '@/store/hooks/useActiveFolderWorkspace';
 import { ActionsProvider, type AppActions } from './ActionsContext';
 import { WorkspaceProvider } from './WorkspaceContext';
 import { ChatProvider } from './ChatContext';
@@ -60,8 +60,8 @@ export type {
   SaveStatus,
   State,
   Tab,
-} from '../state/state';
-export type { EditorHandle, FindController, FindOptions, MatchInfo } from '../state/actionTypes';
+} from '@/store/state/state';
+export type { EditorHandle, FindController, FindOptions, MatchInfo } from '@/store/state/actionTypes';
 export type { AppActions } from './ActionsContext';
 export { useWorkspace, type WorkspaceState } from './WorkspaceContext';
 export { useChat, type ChatState } from './ChatContext';
@@ -95,7 +95,7 @@ export function AppProviders({
 }: {
   state: State;
   actions: AppActions;
-  dispatch: (a: import('../state/state').Action) => void;
+  dispatch: (a: import('@/store/state/state').Action) => void;
   children: ReactNode;
 }) {
   return (

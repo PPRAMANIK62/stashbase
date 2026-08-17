@@ -2,16 +2,16 @@ import { useCallback, useMemo, type MutableRefObject } from 'react';
 import {
   CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION,
   VIEWABLE_FILE_EXTENSION_ALTERNATION,
-} from '../../../../shared/file-formats.ts';
+} from '@shared/file-formats';
 import { api, ApiError, errorMessage } from '@/common/api/api';
 import { basename } from '@/common/lib/paths';
-import { isFolderFileTab } from '../lib/appContextHelpers';
+import { isFolderFileTab } from '@/store/lib/appContextHelpers';
 import {
   getActiveTab,
   renamedFilePath,
   type Action,
   type State,
-} from '../state/state';
+} from '@/store/state/state';
 import type { ToastOptions } from './useFeedbackActions';
 
 const CONVERTIBLE_SOURCE_RE = new RegExp(`\\.(${CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
