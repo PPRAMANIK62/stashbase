@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { api, type AgentsResponse } from '@/common/api/api';
-import { activateChatTabForAgent } from '@/features/agent-panel/lib/chatActivation';
-import type { Action } from '@/store/state/state';
+import { newChatPlan } from '@/store/lib/chatTabPlan';
 
 test('switching a blank Codex tab to Claude does not install Claude before confirmation', async () => {
   const originalBootstrap = api.bootstrapAgent;
@@ -12,21 +11,13 @@ test('switching a blank Codex tab to Claude does not install Claude before confi
     return { clis: [] };
   };
   try {
-    const actions: Action[] = [];
-    activateChatTabForAgent(
-      {
-        chatTabs: [{ id: 'codex-blank', agent: 'codex', title: 'New Chat', blank: true }],
-        chatOpen: true,
-      },
-      (action) => actions.push(action),
+    const plan = newChatPlan(
+      [{ id: 'codex-blank', agent: 'codex', blank: true }],
       'claude',
     );
     await Promise.resolve();
 
-    assert.deepEqual(actions, [
-      { type: 'CHAT_TAB_SET_AGENT', id: 'codex-blank', agent: 'claude' },
-      { type: 'CHAT_TAB_ACTIVATE', id: 'codex-blank' },
-    ]);
+    assert.deepEqual(plan, { kind: 'reuse', id: 'codex-blank', switchAgent: true });
     assert.deepEqual(requested, []);
   } finally {
     api.bootstrapAgent = originalBootstrap;

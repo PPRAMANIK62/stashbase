@@ -13,13 +13,13 @@ import {
   folderScope,
   LIBRARY_SCOPE,
   scopeDisplayName,
-  type ChatScope,
   type LibraryFolderOption,
-} from '@/features/agent-panel/lib/folderState';
+  type LibraryScope,
+} from '@/common/lib/libraryScope';
 import {
   menuHeadClass, menuSectionClass, optActiveClass, optCheckClass, optClass, optDescClass,
   optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
-} from '@/features/agent-panel/lib/panelStyles';
+} from '@/common/lib/pillMenuStyles';
 
 /**
  * The app's ONE scope picker: the whole Library, or one library folder.
@@ -45,7 +45,7 @@ export function ScopeMenu({
   triggerClassName,
   onSetScope,
 }: {
-  scope: ChatScope;
+  scope: LibraryScope;
   entries: LibraryFolderOption[];
   homeDir: string;
   /** Menu title, e.g. "Session scope" / "Search scope". */
@@ -57,7 +57,7 @@ export function ScopeMenu({
   locked?: boolean;
   disabled?: boolean;
   triggerClassName?: string;
-  onSetScope: (scope: ChatScope) => void;
+  onSetScope: (scope: LibraryScope) => void;
 }) {
   const isLibrary = scope.kind === 'library';
   return (

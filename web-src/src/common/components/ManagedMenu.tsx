@@ -86,7 +86,7 @@ function renderMenuItems(
                 : 'heading' in item && item.heading !== undefined
                 ? (
                   /* Same quiet section-label recipe as the composer pill
-                   * menus (panelStyles.menuSectionClass). */
+                   * menus (pillMenuStyles.menuSectionClass). */
                   <div key={`heading-${index}`} className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground" role="presentation">
                     {item.heading}
                   </div>

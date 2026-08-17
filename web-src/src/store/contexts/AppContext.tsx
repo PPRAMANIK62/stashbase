@@ -34,7 +34,8 @@ import {
   reducer,
   type State,
 } from '../state/state';
-import { rememberPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
+import { rememberPreferredAgent } from '@/common/lib/agentPreference';
+import { newChatPlan } from '@/store/lib/chatTabPlan';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useFeedbackActions } from '../hooks/useFeedbackActions';
 import { useFindActions } from '../hooks/useFindActions';
@@ -335,6 +336,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         agent,
         tab: hasOpenTab ? undefined : makeChatTab(agent, current.chatTabs),
       });
+    },
+    activateChatTab: (agent) => {
+      rememberPreferredAgent(agent);
+      const current = stateRef.current;
+      const plan = newChatPlan(current.chatTabs, agent);
+      if (plan.kind === 'reuse') {
+        if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });
+        dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
+      } else {
+        dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, current.chatTabs) });
+      }
+      if (!current.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
     },
     newNote: workspace.newNote, newFolder: workspace.newFolder, deleteFile: workspace.deleteFile, deleteFolder: workspace.deleteFolder,
     renameFile: workspace.renameFile, renameFolder: workspace.renameFolder, moveFile: workspace.moveFile, upload: workspace.upload,

@@ -208,7 +208,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   assert.match(modal, /LazyManagedModal/);
   assert.doesNotMatch(modal, /createPortal|addEventListener/);
   assert.doesNotMatch(read('web-src/src/features/settings/components/SettingsModal.tsx'), /addEventListener\('keydown'/);
-  assert.doesNotMatch(read('web-src/src/common/components/CascadePromptModal.tsx'), /addEventListener/);
+  assert.doesNotMatch(read('web-src/src/app/CascadePromptModal.tsx'), /addEventListener/);
 
   const menu = read('web-src/src/common/components/Menu.tsx');
   assert.match(menu, /lazyWithRetry\(\(\) => import\('@\/common\/components\/ManagedMenu'\)\)/);
@@ -255,7 +255,7 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   for (const file of [
     'web-src/src/common/components/ModalShell.tsx',
     'web-src/src/features/settings/components/SettingsModal.tsx',
-    'web-src/src/common/components/AlertConfirmModal.tsx',
+    'web-src/src/app/AlertConfirmModal.tsx',
     'web-src/src/common/components/ClipboardImportModal.tsx',
   ]) {
     assert.match(read(file), /LazyManagedModal/);
@@ -358,5 +358,5 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
 
   // Composer pills yield width under pressure (min-w-0 + label truncate)
   // so a tight chat panel truncates labels instead of clipping Send.
-  assert.match(read('web-src/src/features/agent-panel/lib/panelStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
+  assert.match(read('web-src/src/common/lib/pillMenuStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
 });

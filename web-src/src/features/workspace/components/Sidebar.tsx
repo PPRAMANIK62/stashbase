@@ -9,17 +9,17 @@ import {
   PlusIcon,
   StarIcon,
 } from '@/common/components/icons';
-import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
-import { folderScope } from '@/features/agent-panel/lib/folderState';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { folderScope } from '@/common/lib/libraryScope';
 import { ALL_HISTORY_SCOPE } from '@/features/agent-panel/lib/sessionHistory';
-import { AGENT_META, AGENTS, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
+import { AGENT_META, AGENTS, type AgentKind } from '@/common/lib/agentCatalog';
 import {
   newChatAgentSelectionPlan,
   readPreferredAgent,
   rememberPreferredAgent,
-} from '@/features/agent-panel/lib/agentPreference';
+} from '@/common/lib/agentPreference';
 import { electronBridge } from '@/common/lib/electronBridge';
-import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
+import { folderRefsEqual } from '@/store/lib/folderPath';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
 import { FileTree } from '@/features/workspace/components/FileTree';
 import { useDocumentOutline } from '@/features/documents/components/DocumentOutlineContext';
@@ -27,7 +27,7 @@ import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBounda
 import { FolderMenu } from '@/features/workspace/components/FolderMenu';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 import { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderModal';
-import { activateChatTabForAgent, ScopeHistoryButton } from '@/features/workspace/components/ScopeHistoryButton';
+import { ScopeHistoryButton } from '@/features/workspace/components/ScopeHistoryButton';
 import { Button } from '@/common/components/ui/button';
 import { api, errorMessage } from '@/common/api/api';
 import { FILE_MIME } from '@/features/workspace/lib/dragMime';
@@ -35,11 +35,6 @@ import { useFolderRemoval } from '@/features/workspace/hooks/useFolderRemoval';
 import { refreshLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 import { useLibraryReconcile } from '@/features/workspace/hooks/useLibraryReconcile';
 import { Suspense, useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
-
-/** The chat-activation rule lives beside the History resume path in
- *  `ScopeHistoryButton.tsx`; re-exported here because the titlebar chat
- *  toggle imports it from this module. */
-export { activateChatTabForAgent } from '@/features/workspace/components/ScopeHistoryButton';
 
 const SidebarAccountRow = lazyWithRetry(() =>
   import('@/features/account/components/SidebarAccountRow').then((mod) => ({ default: mod.SidebarAccountRow })),
@@ -237,13 +232,12 @@ function FilesPanel() {
  *  reused/created tab's scope resolves to the window default (current folder,
  *  else Library) on connect, so no scope needs to be threaded here. */
 function NewChatButton() {
-  const chat = useChat();
-  const { dispatch } = useAppActions();
+  const { actions } = useAppActions();
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
   const chevronRef = useRef<HTMLButtonElement | null>(null);
 
   function startChat(agent: AgentKind) {
-    activateChatTabForAgent(chat, dispatch, agent);
+    actions.activateChatTab(agent);
   }
 
   /** Picking from the chevron only updates the next-chat preference. Chat

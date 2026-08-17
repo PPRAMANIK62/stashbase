@@ -4,7 +4,7 @@ import type { PendingHighlight } from '@/store/state/state';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet';
-import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
+import { folderRefsEqual } from '@/store/lib/folderPath';
 import {
   applyLibrarySearchPrefill,
   folderBasename,
@@ -24,10 +24,10 @@ import { basename } from '@/common/lib/paths';
 import { cn } from '@/common/lib/utils';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
-import { fileGlyphFormat } from '@/features/agent-panel/lib/attachments';
-import { folderMenuEntries } from '@/features/agent-panel/lib/folderState';
-import { ScopeMenu } from '@/features/workspace/components/ScopeMenu';
-import { FileTypeIcon } from '@/features/workspace/components/FileTree';
+import { fileGlyphFormat } from '@/common/lib/fileGlyphFormat';
+import { folderMenuEntries } from '@/common/lib/libraryScope';
+import { ScopeMenu } from '@/common/components/ScopeMenu';
+import { FileTypeIcon } from '@/common/components/FileTypeIcon';
 import { SemanticIndexingNotice } from '@/features/preparation/components/SemanticIndexingNotice';
 import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/common/lib/pickerChrome';
 

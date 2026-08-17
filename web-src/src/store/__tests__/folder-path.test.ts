@@ -5,7 +5,7 @@ import {
   isAbsoluteFolderRef,
   isFolderStillInLibrary,
   rebindFolderIfStillInLibrary,
-} from '@/features/workspace/lib/folderPath';
+} from '@/store/lib/folderPath';
 
 test('initial window folder references recognize POSIX, drive, and UNC roots', () => {
   assert.equal(isAbsoluteFolderRef('/Users/example/Notes'), true);

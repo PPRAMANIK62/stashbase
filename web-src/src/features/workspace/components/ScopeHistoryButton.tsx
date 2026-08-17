@@ -1,8 +1,7 @@
 import { Suspense, useRef, useState } from 'react';
 import { HistoryIcon } from '@/common/components/icons';
-import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
-import { useAppActions, useChat } from '@/store/contexts/AppContext';
-import { activateChatTabForAgent } from '@/features/agent-panel/lib/chatActivation';
+import type { AgentKind } from '@/common/lib/agentCatalog';
+import { useAppActions } from '@/store/contexts/AppContext';
 import type { HistoryScope } from '@/features/agent-panel/lib/sessionHistory';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { Button } from '@/common/components/ui/button';
@@ -13,8 +12,6 @@ import { PopupLoadingStatus } from '@/common/components/ui/status';
  *  out of the initial renderer bundle. */
 const SessionHistoryPopover = lazyWithRetry(() =>
   import('@/features/agent-panel/components/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
-
-export { activateChatTabForAgent } from '@/features/agent-panel/lib/chatActivation';
 
 /** History clock on a sidebar scope header: opens the merged
  *  session-history menu for that scope (both agents' sessions, newest
@@ -34,8 +31,7 @@ export function ScopeHistoryButton({
    *  while the menu is open. */
   onOpenChange?: (open: boolean) => void;
 }) {
-  const chat = useChat();
-  const { dispatch } = useAppActions();
+  const { actions, dispatch } = useAppActions();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -52,7 +48,7 @@ export function ScopeHistoryButton({
       type: 'CHAT_RESUME_REQUEST',
       resume: { agent, sessionId, folder },
     });
-    activateChatTabForAgent(chat, dispatch, agent);
+    actions.activateChatTab(agent);
   }
 
   const rect = open ? buttonRef.current?.getBoundingClientRect() : undefined;

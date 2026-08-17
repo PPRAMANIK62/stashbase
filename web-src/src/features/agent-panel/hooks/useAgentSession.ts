@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { api, getWindowId, type Agent, type AgentContextFile, type AgentsResponse, type FileMeta, type FolderMeta } from '@/common/api/api';
-import { AGENT_META, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
+import { AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { errorMessage } from '@/common/api/apiTransport';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
@@ -11,20 +11,22 @@ import { flattenFileMentions, type QueuedTurnPreview, type TurnMeta } from '@/fe
 import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl';
 import {
   chatScopePill,
-  chatScopesEqual,
-  folderMenuEntries,
   folderMenuLocked,
-  folderScope,
   isBlankChatTab,
-  LIBRARY_SCOPE,
   mentionListingPlan,
   newChatScope,
   nextSessionScope,
+  windowFolderSwitchPlan,
+} from '@/features/agent-panel/lib/folderState';
+import {
+  folderMenuEntries,
+  folderScope,
+  libraryScopesEqual,
+  LIBRARY_SCOPE,
   scopeChangedScope,
   scopeRequestParams,
-  windowFolderSwitchPlan,
-  type ChatScope,
-} from '@/features/agent-panel/lib/folderState';
+  type LibraryScope,
+} from '@/common/lib/libraryScope';
 import { shouldConsumePendingResume } from '@/features/agent-panel/lib/sessionHistory';
 import { closeAgentSocketIntentionally, terminalAgentState } from '@/features/agent-panel/lib/connectionLifecycle';
 import { effortMenuLocked } from '@/features/agent-panel/lib/effortMenuState';
@@ -205,8 +207,8 @@ export function useAgentSession({
   // undefined follows the window default (current folder, else library).
   // `connectedScope` is the binding the live session actually connected
   // with — captured per connect and never rebound.
-  const [pickedScope, setPickedScope, pickedScopeRef] = useStateWithRef<ChatScope | undefined>(undefined);
-  const [connectedScope, setConnectedScope, connectedScopeRef] = useStateWithRef<ChatScope | null>(null);
+  const [pickedScope, setPickedScope, pickedScopeRef] = useStateWithRef<LibraryScope | undefined>(undefined);
+  const [connectedScope, setConnectedScope, connectedScopeRef] = useStateWithRef<LibraryScope | null>(null);
   // Unsent draft text lifted from the composer: a draft freezes the tab's
   // scope on a window-folder switch and keeps the tab from counting as a
   // reusable blank welcome tab.
@@ -630,7 +632,7 @@ export function useAgentSession({
    *  scope the History menu was scoped to; the tab's binding pins to it so
    *  the reconnect below carries the same scope — a resumed session always
    *  keeps its own scope. */
-  async function resumeSession(resumeSessionId: string, scope: ChatScope) {
+  async function resumeSession(resumeSessionId: string, scope: LibraryScope) {
     let hist: Block[] = [];
     try {
       const replay = await api.getSessionReplay(resumeSessionId, agent, scopeRequestParams(scope));
@@ -642,7 +644,7 @@ export function useAgentSession({
       actions.toast('Could not load that session.', { level: 'error' });
       return;
     }
-    setPickedScope(chatScopesEqual(scope, newChatScope(folderPathRef.current)) ? undefined : scope);
+    setPickedScope(libraryScopesEqual(scope, newChatScope(folderPathRef.current)) ? undefined : scope);
     resetSessionState({
       transcript: hist,
       clearAttachments: true,
@@ -1088,9 +1090,9 @@ export function useAgentSession({
    * refused once the conversation has content — a live session is never
    * rebound to another scope. Picking the window default returns the tab
    * to follow-the-window. */
-  function changeScope(next: ChatScope) {
+  function changeScope(next: LibraryScope) {
     if (blocks.length > 0 || turnActive || modelControl.resumedSession) return;
-    setPickedScope(chatScopesEqual(next, newChatScope(folderPathRef.current)) ? undefined : next);
+    setPickedScope(libraryScopesEqual(next, newChatScope(folderPathRef.current)) ? undefined : next);
     reconnect();
   }
 

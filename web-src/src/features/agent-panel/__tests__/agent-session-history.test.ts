@@ -4,7 +4,7 @@
  * (`newChatPlan`). */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { newChatPlan } from '@/features/agent-panel/lib/folderState.ts';
+import { newChatPlan } from '@/store/lib/chatTabPlan.ts';
 import {
   historyRequestParams,
   mergeAgentSessions,

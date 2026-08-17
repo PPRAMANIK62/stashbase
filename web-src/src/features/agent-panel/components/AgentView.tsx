@@ -16,7 +16,7 @@
  * See design-docs/architecture.md §8 for the shared library path.
  */
 import { useState } from 'react';
-import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
+import type { AgentKind } from '@/common/lib/agentCatalog';
 import { FILE_MIME } from '@/features/workspace/lib/dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '@/features/workspace/lib/dragRouting';
 import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
-import { FileTypeIcon } from '@/features/workspace/components/FileTree';
+import { FileTypeIcon } from '@/common/components/FileTypeIcon';
 import { ImageLightbox } from '@/features/documents/components/ImageLightbox';
-import { fileGlyphFormat } from '@/features/agent-panel/lib/attachments';
+import { fileGlyphFormat } from '@/common/lib/fileGlyphFormat';
 import { attachChipClass, attachIconTileClass, attachImageChipClass, attachImagePreviewClass, attachNameClass, attachTextClass, attachTypeClass } from '@/features/agent-panel/lib/panelStyles';
 import type { Attachment } from '@/features/agent-panel/lib/types';
 

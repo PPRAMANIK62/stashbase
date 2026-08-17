@@ -11,17 +11,19 @@ import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from '@/f
 import { effortLabel, effortOptions } from '@/features/agent-panel/lib/effortMenuState';
 import {
   scopePillAriaLabel,
-  type ChatScope,
+  type LibraryScope,
   type LibraryFolderOption,
-} from '@/features/agent-panel/lib/folderState';
-import { ScopeMenu } from '@/features/workspace/components/ScopeMenu';
+} from '@/common/lib/libraryScope';
+import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { MentionComposer, type MentionComposerHandle, type MentionQuery } from '@/features/agent-panel/components/MentionComposer';
 import { rankMentionSuggestions } from '@/features/agent-panel/lib/mentionRanking';
 import {
   attachImageRemoveClass, attachRemoveClass, iconGhostButtonClass,
+} from '@/features/agent-panel/lib/panelStyles';
+import {
   menuHeadClass, optActiveClass, optCheckClass, optClass, optDescClass,
   optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
-} from '@/features/agent-panel/lib/panelStyles';
+} from '@/common/lib/pillMenuStyles';
 import type { AgentModel, AgentSkill, Attachment, EffortLevel, PermMode } from '@/features/agent-panel/lib/types';
 import { modelMenuLabel } from '@/features/agent-panel/lib/modelState';
 
@@ -101,11 +103,11 @@ export interface ComposerModelControl {
 
 /** The scope this tab's session is (or will be) bound to. */
 export interface ComposerScopeControl {
-  current: ChatScope;
+  current: LibraryScope;
   entries: LibraryFolderOption[];
   homeDir: string;
   locked: boolean;
-  onSet: (scope: ChatScope) => void;
+  onSet: (scope: LibraryScope) => void;
 }
 
 /** File/folder listing that feeds `@` mention ranking. For a tab bound to

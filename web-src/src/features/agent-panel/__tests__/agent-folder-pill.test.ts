@@ -3,27 +3,28 @@ import test from 'node:test';
 import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl.ts';
 import { basename, shortenFolderPath } from '@/common/lib/paths.ts';
 import {
-  blankTabToReuse,
   chatScopePill,
-  chatScopesEqual,
-  folderMenuEntries,
   folderMenuLocked,
-  folderScope,
   isBlankChatTab,
-  LIBRARY_SCOPE,
   mentionListingPlan,
-  newChatPlan,
   newChatScope,
   nextSessionScope,
-  scopeChangedScope,
-  scopeDisplayName,
-  scopePillAriaLabel,
-  scopeRequestParams,
   shouldFollowWindowFolder,
   shouldOpenInitialChatOnWindowEntry,
   switchWelcomeTabPlan,
   windowFolderSwitchPlan,
 } from '@/features/agent-panel/lib/folderState.ts';
+import { blankTabToReuse, newChatPlan } from '@/store/lib/chatTabPlan.ts';
+import {
+  folderMenuEntries,
+  folderScope,
+  LIBRARY_SCOPE,
+  libraryScopesEqual,
+  scopeChangedScope,
+  scopeDisplayName,
+  scopePillAriaLabel,
+  scopeRequestParams,
+} from '@/common/lib/libraryScope.ts';
 
 const recent = [
   { path: '/Users/me/Documents/StashBase/Notes', openedAt: '2026-08-01', favorite: false },
@@ -315,12 +316,12 @@ test('scope labels: the library scope is called "Library", never "Global"', () =
 
 
 test('scope equality treats library and folder scopes distinctly', () => {
-  assert.equal(chatScopesEqual(LIBRARY_SCOPE, { kind: 'library' }), true);
-  assert.equal(chatScopesEqual(folderScope('/a'), folderScope('/a')), true);
-  assert.equal(chatScopesEqual(folderScope('/a'), folderScope('/b')), false);
-  assert.equal(chatScopesEqual(folderScope('/a'), LIBRARY_SCOPE), false);
-  assert.equal(chatScopesEqual(undefined, undefined), true);
-  assert.equal(chatScopesEqual(LIBRARY_SCOPE, undefined), false);
+  assert.equal(libraryScopesEqual(LIBRARY_SCOPE, { kind: 'library' }), true);
+  assert.equal(libraryScopesEqual(folderScope('/a'), folderScope('/a')), true);
+  assert.equal(libraryScopesEqual(folderScope('/a'), folderScope('/b')), false);
+  assert.equal(libraryScopesEqual(folderScope('/a'), LIBRARY_SCOPE), false);
+  assert.equal(libraryScopesEqual(undefined, undefined), true);
+  assert.equal(libraryScopesEqual(LIBRARY_SCOPE, undefined), false);
 });
 
 test('switchWelcomeTabPlan: an active tab already bound to the new folder means no welcome tab', () => {

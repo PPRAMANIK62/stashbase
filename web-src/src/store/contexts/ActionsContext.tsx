@@ -8,7 +8,7 @@
  * because reading it never causes a re-render on its own.
  */
 import { createContext, useContext, type ReactNode } from 'react';
-import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
+import type { AgentKind } from '@/common/lib/agentCatalog';
 import type { Action, CascadeDecision, PendingHighlight, State } from '../state/state';
 import type { EditorHandle, FindController } from '../state/actionTypes';
 
@@ -112,6 +112,13 @@ export interface AppActions {
   /** Reveal an existing Agent Panel session or create its first tab. This only
    * changes renderer layout; permissions and Agent context remain unchanged. */
   openAgent: (agent: AgentKind) => void;
+  /** Open or reuse a chat tab without starting runtime installation — the
+   *  New Chat / resume-as-agent entry point. Reuses the one completely
+   *  blank tab (switching its agent if needed) instead of `openAgent`'s
+   *  reveal-or-create-per-agent semantics. A missing runtime is owned by
+   *  AgentView's explicit "Install and continue" gate; tab activation
+   *  alone is never consent to download another Agent. */
+  activateChatTab: (agent: AgentKind) => void;
 
   newNote: () => Promise<void>;
   newFolder: (path: string) => Promise<void>;

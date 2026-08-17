@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { api, errorMessage } from '@/common/api/api';
 import { electronBridge } from '@/common/lib/electronBridge';
-import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
+import { folderRefsEqual } from '@/store/lib/folderPath';
 import { ChevronDownIcon, FolderIcon, NewFolderIcon } from '@/common/components/icons';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';

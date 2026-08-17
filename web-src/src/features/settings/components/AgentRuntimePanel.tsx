@@ -7,7 +7,7 @@ import {
   type AgentSetupFailureSimulation,
   type AgentsResponse,
 } from '@/common/api/api';
-import { AGENT_META, AGENTS, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
+import { AGENT_META, AGENTS, type AgentKind } from '@/common/lib/agentCatalog';
 import { ChevronDownIcon, MoreHorizontalIcon } from '@/common/components/icons';
 import { useAppActions } from '@/store/contexts/AppContext';
 import { Button } from '@/common/components/ui/button';

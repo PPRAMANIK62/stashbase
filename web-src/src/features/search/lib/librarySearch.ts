@@ -9,7 +9,7 @@
  * the same deliberate choice as the command palette's recent-command list.
  */
 import type { LibraryKeywordFile, LibraryKeywordSearchResult, SearchHit } from '@/common/api/api';
-import type { ChatScope } from '@/features/agent-panel/lib/folderState';
+import type { LibraryScope } from '@/common/lib/libraryScope';
 
 export type LibrarySearchMode = 'semantic' | 'keyword';
 
@@ -17,7 +17,7 @@ export type LibrarySearchMode = 'semantic' | 'keyword';
  *  model the chat composer binds a session to, so both surfaces share one
  *  scope picker (`ScopeMenu`) and one mental model. A folder scope names
  *  its folder outright, so it survives a window folder switch unchanged. */
-export type LibrarySearchScope = ChatScope;
+export type LibrarySearchScope = LibraryScope;
 
 export interface LibrarySemanticHit extends SearchHit {
   /** Absolute member folder root the hit lives in. */

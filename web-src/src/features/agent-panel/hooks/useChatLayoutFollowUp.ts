@@ -7,7 +7,7 @@
  * the user's explicit chat-visibility choice.
  */
 import { useEffect, useRef } from 'react';
-import { readPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
+import { readPreferredAgent } from '@/common/lib/agentPreference';
 import {
   shouldOpenInitialChatOnWindowEntry,
   switchWelcomeTabPlan,

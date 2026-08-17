@@ -7,14 +7,14 @@ import {
 } from 'react';
 import '@/app/app-shell.css';
 import { Sidebar } from '@/features/workspace/components/Sidebar';
-import { TitlebarControls } from '@/common/components/TitlebarControls';
+import { TitlebarControls } from '@/app/TitlebarControls';
 import { MainPane } from '@/features/workspace/components/MainPane';
 import { DropVeil } from '@/common/components/DropVeil';
 import { EmbedderRequireKeyGate } from '@/features/settings/components/EmbedderRequireKeyGate';
-import { Hotkeys } from '@/common/components/Hotkeys';
+import { Hotkeys } from '@/app/Hotkeys';
 import { ClipboardImportModal } from '@/common/components/ClipboardImportModal';
-import { CascadePromptModal } from '@/common/components/CascadePromptModal';
-import { AlertConfirmModal } from '@/common/components/AlertConfirmModal';
+import { CascadePromptModal } from '@/app/CascadePromptModal';
+import { AlertConfirmModal } from '@/app/AlertConfirmModal';
 import { Toasts } from '@/common/components/Toasts';
 import { SettingsPortal } from '@/features/settings/components/SettingsModal';
 import { QuickOpen } from '@/features/search/components/QuickOpen';
@@ -26,7 +26,7 @@ import { OverlayStackProvider } from '@/common/components/OverlayStack';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
 import { AppProvider, useAppActions, useChat, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import { useChatLayoutFollowUp } from '@/features/agent-panel/hooks/useChatLayoutFollowUp';
-import { useClipboardImageOffer } from '@/common/hooks/useClipboardImageOffer';
+import { useClipboardImageOffer } from '@/app/useClipboardImageOffer';
 import { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
 import { usePreviewMessages } from '@/features/documents/hooks/usePreviewMessages';
 import { api } from '@/common/api/api';
@@ -39,7 +39,7 @@ import {
 
 const LazyChatPane = lazyWithRetry(() => import('@/features/agent-panel/components/ChatPane'));
 const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesModal'));
-const LazyContextMenu = lazyWithRetry(() => import('@/common/components/ContextMenu'));
+const LazyContextMenu = lazyWithRetry(() => import('@/app/ContextMenu'));
 const LazyImageLightbox = lazyWithRetry(() =>
   import('@/features/documents/components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
 );

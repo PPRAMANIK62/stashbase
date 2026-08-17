@@ -12,10 +12,10 @@ import type { ReactNode } from 'react';
 import '@/features/agent-panel/agent-panel.css';
 import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { LazyLoadBoundary } from '@/common/components/ErrorBoundary';
-import { agentMeta, isAgentKind } from '@/features/agent-panel/components/agentCatalog';
+import { agentMeta, isAgentKind } from '@/common/lib/agentCatalog';
 import { cn } from '@/common/lib/utils';
 import { useAppActions, useChat } from '@/store/contexts/AppContext';
-import { rememberPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
+import { rememberPreferredAgent } from '@/common/lib/agentPreference';
 
 /** One tab body. Inactive panes stay mounted (preserving each session's
  *  state) but render invisible and inert. */

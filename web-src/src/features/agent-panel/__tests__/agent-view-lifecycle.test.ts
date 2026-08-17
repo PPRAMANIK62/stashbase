@@ -5,7 +5,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { MessageList } from '@/features/agent-panel/components/AgentMessages';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
-import { AGENT_META } from '@/features/agent-panel/components/agentCatalog';
+import { AGENT_META } from '@/common/lib/agentCatalog';
 import { AppProviders, type AppActions } from '@/store/contexts/AppContext';
 import { initialState, type State } from '@/store/state/state';
 

@@ -5,7 +5,7 @@ import {
   newChatAgentSelectionPlan,
   readPreferredAgent,
   rememberPreferredAgent,
-} from '@/features/agent-panel/lib/agentPreference';
+} from '@/common/lib/agentPreference';
 
 function memoryStorage(initial: string | null = null) {
   let value = initial;

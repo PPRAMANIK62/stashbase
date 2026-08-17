@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useState, type RefObject } from 'react';
 import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } from 'react-aria-components';
 import { api } from '@/common/api/api';
-import { AGENTS, AGENT_META, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
+import { AGENTS, AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { EditIcon, TrashIcon } from '@/common/components/icons';
 import { basename } from '@/common/lib/paths';
 import { buttonVariants } from '@/common/components/ui/button';

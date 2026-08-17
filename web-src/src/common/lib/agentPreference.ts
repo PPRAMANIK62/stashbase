@@ -1,4 +1,4 @@
-import { isAgentKind, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
+import { isAgentKind, type AgentKind } from '@/common/lib/agentCatalog';
 
 const AGENT_PREFERENCE_KEY = 'stashbase.preferred-agent';
 export const DEFAULT_AGENT: AgentKind = 'codex';
