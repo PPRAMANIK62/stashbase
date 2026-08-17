@@ -590,6 +590,15 @@ export function AgentView({
     }
   }
 
+  async function checkRuntime() {
+    try {
+      const result = await api.checkAgent(agent);
+      dispatch({ type: 'AGENTS_LOADED', agents: result.clis });
+    } catch (error) {
+      actions.toast(error instanceof Error ? error.message : String(error), { level: 'error' });
+    }
+  }
+
   /** Open a past session from the sidebar's History menu: paint its
    *  transcript, then reconnect with `resume` so the SDK appends to it and
    *  the user can keep chatting. Unlike `reconnect`, blocks are
@@ -1290,6 +1299,7 @@ export function AgentView({
           runtime={runtime}
           fallbackName={meta.name}
           onRetry={() => void startRuntimeBootstrap()}
+          onRefresh={() => void checkRuntime()}
           onCopyInstall={copyInstallHint}
           onOpenMcpSetup={() => openSettings('mcp')}
         />
@@ -1301,7 +1311,7 @@ export function AgentView({
           runtime={runtime}
           fallbackName={meta.name}
           onInstall={() => void startRuntimeBootstrap()}
-          onRefresh={() => void refreshRuntimes()}
+          onRefresh={() => void checkRuntime()}
         />
       );
     }
@@ -1528,12 +1538,14 @@ function AgentRuntimeFailure({
   runtime,
   fallbackName,
   onRetry,
+  onRefresh,
   onCopyInstall,
   onOpenMcpSetup,
 }: {
   runtime: Agent;
   fallbackName: string;
   onRetry: () => void;
+  onRefresh: () => void;
   onCopyInstall: () => void;
   onOpenMcpSetup: () => void;
 }) {
@@ -1553,6 +1565,11 @@ function AgentRuntimeFailure({
           {manualAction && presentation.manualLabel && (
             <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={manualAction}>
               {presentation.manualLabel}
+            </Button>
+          )}
+          {runtime.bootstrap?.failure?.stage !== 'mcp' && (
+            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>
+              Check again
             </Button>
           )}
           <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onRetry}>

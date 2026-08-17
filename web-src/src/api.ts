@@ -301,6 +301,8 @@ export const api = {
   // the renderer just calls them "agents". `listAgents` populates the
   // launcher registry / installed-state.
   listAgents: () => getJson<AgentsResponse>('/api/terminal/clis'),
+  checkAgent: (agent: 'claude' | 'codex') =>
+    send<AgentsResponse>('POST', `/api/terminal/clis/${encodeURIComponent(agent)}/check`),
   bootstrapAgent: (agent: 'claude' | 'codex') =>
     send<AgentsResponse>('POST', `/api/terminal/clis/${encodeURIComponent(agent)}/bootstrap`),
   setAgentRuntimeDebug: (patch: Partial<{

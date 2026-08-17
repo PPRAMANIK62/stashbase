@@ -20,7 +20,9 @@
   the structured preparation failure stage and advertised manual recovery:
   installation can copy an install command, MCP can open manual setup, and
   simulated failures can remain retry-only. Error prose never selects an
-  action.
+  action. Installation failures retain a separate **Check again** action beside
+  Retry; it calls the no-download discovery path so external recovery does not
+  silently grant installation consent.
 - Tab activation and history resume only select renderer state. A missing
   runtime remains on the setup gate until **Install and continue**; activation
   code must not call the preparation endpoint speculatively.

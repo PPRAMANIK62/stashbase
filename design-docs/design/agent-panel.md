@@ -55,8 +55,10 @@ a transcript-centered file manager.
   Each missing runtime waits for its own explicit setup action.
 - A runtime, transport, or turn failure leaves one persistent explanation and
   a truthful, stage-specific recovery path. Retrying preparation resumes from
-  the first incomplete stage. Late output from an abandoned generation cannot
-  enter a newer turn.
+  the first incomplete stage. After an installation failure, **Check again**
+  remains available so an external repair can be discovered without
+  authorizing another download. Late output from an abandoned generation
+  cannot enter a newer turn.
 - Permission, deletion, command, network, and broader filesystem decisions
   remain explicit. Tool payloads render in a human-readable form.
 - Agent copy and tool affordances describe the actual source or prepared

@@ -104,6 +104,21 @@ export function managedCodexInstallerHome(): string {
   return path.join(managedAgentRuntimeRoot('codex'), 'installer-home');
 }
 
+function managedCodexExecutableCandidates(): string[] {
+  const executableName = process.platform === 'win32' ? 'codex.exe' : 'codex';
+  const standaloneCurrent = path.join(
+    managedCodexInstallerHome(),
+    'packages',
+    'standalone',
+    'current',
+  );
+  return [
+    path.join(managedCodexBinDir(), executableName),
+    path.join(standaloneCurrent, 'bin', executableName),
+    path.join(standaloneCurrent, executableName),
+  ];
+}
+
 export function managedClaudeReleasesDir(): string {
   return path.join(managedAgentRuntimeRoot('claude'), 'releases');
 }
@@ -139,8 +154,7 @@ function readManagedClaudeManifest(): ManagedRuntimeManifest | null {
 
 export function managedAgentExecutable(id: ManagedAgentId): string | null {
   if (id === 'codex') {
-    const executable = path.join(managedCodexBinDir(), process.platform === 'win32' ? 'codex.exe' : 'codex');
-    return executableFile(executable) ? executable : null;
+    return managedCodexExecutableCandidates().find(executableFile) ?? null;
   }
   const manifest = readManagedClaudeManifest();
   if (!manifest) return null;

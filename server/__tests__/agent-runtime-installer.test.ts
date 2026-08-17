@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test, { mock } from 'node:test';
-import { resolveAgentCli, resolveAgentCliWithLoginShell } from '../agent-cli.ts';
+import { agentCliSearchDirs, resolveAgentCli, resolveAgentCliWithLoginShell } from '../agent-cli.ts';
 import {
   AgentBootstrapCoordinator,
   claudePlatform,
@@ -18,6 +18,7 @@ import {
   consumeAgentSetupFailure,
   getAgentRuntimeDebugState,
   initialAgentDiscoveryPolicy,
+  managedAgentRuntimeRoot,
   managedCodexBinDir,
   managedCodexInstallerHome,
   setAgentRuntimeDebugState,
@@ -82,6 +83,31 @@ test('startup connects MCP for discovered runtimes without installing missing on
   installed = false;
   assert.equal(coordinator.connectIfInstalled('claude').phase, 'idle');
   assert.equal(installs, 0);
+  assert.equal(configured, 1);
+});
+
+test('recheck recovers a failed setup from an externally installed runtime without downloading', async () => {
+  let externallyInstalled = false;
+  let installs = 0;
+  let configured = 0;
+  const fake = fakeDependencies({
+    resolveExecutable: () => externallyInstalled ? '/system/codex' : null,
+    installRuntime: async () => {
+      installs += 1;
+      throw new Error('download failed');
+    },
+    configureMcp: () => { configured += 1; },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+
+  assert.equal(coordinator.begin('codex').phase, 'installing');
+  assert.equal((await coordinator.wait('codex')).phase, 'failed');
+  externallyInstalled = true;
+
+  const checked = coordinator.connectIfInstalled('codex', { probeLoginShell: true });
+
+  assert.equal(checked.phase, 'ready');
+  assert.equal(installs, 1);
   assert.equal(configured, 1);
 });
 
@@ -295,6 +321,17 @@ test('Windows Codex installation finds standard PowerShell 7 when the app PATH i
   assert.equal(shell.kind, 'powershell-7');
 });
 
+test('Windows Agent discovery includes the official Codex standalone bin when PATH is stale', () => {
+  const localAppData = 'C:\\Users\\bingwu\\AppData\\Local';
+  const dirs = agentCliSearchDirs(
+    'win32',
+    { LOCALAPPDATA: localAppData, APPDATA: 'C:\\Users\\bingwu\\AppData\\Roaming' },
+    'C:\\Users\\bingwu',
+  );
+
+  assert.ok(dirs.includes(path.win32.join(localAppData, 'Programs', 'OpenAI', 'Codex', 'bin')));
+});
+
 test('Windows Codex installation falls back to Windows PowerShell only when pwsh is unavailable', () => {
   const powershell = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
   const shell = resolveCodexInstallerShell(
@@ -334,6 +371,57 @@ test('Windows PowerShell architecture failures explain the PowerShell 7 recovery
   }
 });
 
+test('PowerShell Codex installer failures do not fall through to executable ENOENT', async () => {
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-powershell-error-test-'));
+  const fakePowerShell = path.join(root, 'fake-powershell.cjs');
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  fs.writeFileSync(fakePowerShell, `
+const fs = require('node:fs');
+const scriptPath = process.argv[2];
+if (scriptPath && scriptPath.endsWith('.ps1')) {
+  const script = fs.readFileSync(scriptPath, 'utf8');
+  process.stderr.write('Codex package download blocked by proxy.');
+  process.exitCode = script.includes('# official installer') ? 23 : 24;
+} else {
+  process.stdin.resume();
+  process.stdin.on('end', () => {
+    process.stderr.write('Codex package download blocked by proxy.');
+    process.exitCode = 0;
+  });
+}
+`);
+  mock.method(globalThis, 'fetch', async () => new Response('# official installer'));
+  try {
+    await assert.rejects(
+      installCodex(() => {}, new AbortController().signal, {
+        resolveInstallerShell: () => ({
+          command: process.execPath,
+          args: [fakePowerShell],
+          kind: 'powershell-7',
+        }),
+        verifyExecutable: (executable) => {
+          throw new Error(`spawnSync ${executable} ENOENT`);
+        },
+      }),
+      (error) => {
+        assert.match(String(error), /Codex package download blocked by proxy/);
+        assert.doesNotMatch(String(error), /ENOENT/);
+        return true;
+      },
+    );
+    assert.equal(
+      fs.readdirSync(managedAgentRuntimeRoot('codex')).some((entry) => entry.startsWith('.installer-script.')),
+      false,
+    );
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('Codex post-install verification preserves the isolated installer environment', async () => {
   const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-install-test-'));
@@ -363,6 +451,39 @@ set -eu
     });
     assert.equal(verified, true);
     if (process.platform === 'win32') assert.equal(selectedShell?.kind, 'powershell-7');
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Codex installation resolves the official current package when the visible bin link is unavailable', async () => {
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-current-layout-test-'));
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  const currentExecutable = path.join(
+    managedCodexInstallerHome(),
+    'packages',
+    'standalone',
+    'current',
+    'bin',
+    process.platform === 'win32' ? 'codex.exe' : 'codex',
+  );
+  mock.method(globalThis, 'fetch', async () => new Response('# installer'));
+  try {
+    await installCodex(() => {}, new AbortController().signal, {
+      runInstallerScript: async () => {
+        fs.mkdirSync(path.dirname(currentExecutable), { recursive: true });
+        fs.writeFileSync(currentExecutable, 'installed Codex');
+        if (process.platform !== 'win32') fs.chmodSync(currentExecutable, 0o755);
+      },
+      verifyExecutable: (executable) => {
+        if (!fs.existsSync(executable)) throw new Error(`spawnSync ${executable} ENOENT`);
+        assert.equal(executable, currentExecutable);
+      },
+    });
   } finally {
     mock.restoreAll();
     if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;

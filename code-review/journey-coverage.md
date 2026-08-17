@@ -173,7 +173,8 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** `pnpm test:agent`, `pnpm test:e2e:agent-protocol`, and
   renderer tests cover consent, normalized protocol, scope, lifecycle,
-  permissions, recovery, transcript, and layout state.
+  permissions, failed-install external recheck without another download,
+  transcript, and layout state.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
   the built-in panel against the deterministic fake runtime.
 - **AI Eval:** not required for panel and runtime correctness; actual

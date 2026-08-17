@@ -323,8 +323,10 @@ ready, missing, disconnected, or recoverable.
 ### Degradation and Recovery
 
 Runtime installation, MCP connection, transport, and turn failures remain
-distinguishable and preserve the transcript. Abandoned or interrupted output
-cannot arrive in a newer turn or session.
+distinguishable and preserve the transcript. An installation failure retains a
+no-download recheck so a CLI installed or repaired outside StashBase can resume
+preparation without repeating the managed install. Abandoned or interrupted
+output cannot arrive in a newer turn or session.
 
 ### Evidence
 

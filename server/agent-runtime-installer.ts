@@ -230,6 +230,13 @@ export function beginAgentBootstrap(id: ManagedAgentId): AgentBootstrapStatus {
   return agentBootstrapCoordinator.begin(id);
 }
 
+/** Explicit user recovery after fixing an installation outside StashBase.
+ * Re-run discovery (including the login-shell probe) and MCP preparation for
+ * an executable that now exists, but never authorize another download. */
+export function recheckAgentBootstrap(id: ManagedAgentId): AgentBootstrapStatus {
+  return agentBootstrapCoordinator.connectIfInstalled(id, { probeLoginShell: true });
+}
+
 export function connectInstalledAgentMcpOnStartup(): Array<{ id: ManagedAgentId; status: AgentBootstrapStatus }> {
   return (['codex', 'claude'] as const).map((id) => ({
     id,
@@ -383,8 +390,7 @@ type AgentExecutableVerifier = (
 ) => void;
 
 type InstallerScriptRunner = (
-  command: string,
-  args: string[],
+  shell: CodexInstallerShell,
   script: string,
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
@@ -418,7 +424,7 @@ export function resolveCodexInstallerShell(
 ): CodexInstallerShell {
   if (platform !== 'win32') return { command: '/bin/sh', args: [], kind: 'posix' };
 
-  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '-'];
+  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File'];
   const candidates: string[] = [];
   const pathValue = environmentValue(env, 'PATH');
   for (const entry of pathValue.split(path.win32.delimiter)) {
@@ -485,14 +491,20 @@ export async function installCodex(
   };
   const shell = resolveInstallerShell();
   try {
-    await runScript(shell.command, shell.args, script, env, signal, (line) => {
+    await runScript(shell, script, env, signal, (line) => {
       const message = line.replace(/^==>\s*/, '').trim();
-      if (message) update({ message });
+      if (!message) return;
+      update({
+        message: /^Downloading Codex CLI$/i.test(message)
+          ? 'Downloading Codex CLI… this may take several minutes.'
+          : message,
+      });
     });
   } catch (error) {
     throw codexInstallerFailure(error, shell);
   }
-  const executable = path.join(binDir, process.platform === 'win32' ? 'codex.exe' : 'codex');
+  const executable = managedAgentExecutable('codex')
+    ?? path.join(binDir, process.platform === 'win32' ? 'codex.exe' : 'codex');
   verifyExecutable(executable, 'Codex', env);
   update({ progress: 1, message: 'Codex installed.' });
 }
@@ -581,44 +593,64 @@ export function verifyAgentExecutable(
 }
 
 async function runInstallerScript(
-  command: string,
-  args: string[],
+  shell: CodexInstallerShell,
   script: string,
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
   onLine: (line: string) => void,
 ): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
-      env,
-      detached: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
+  let scriptDir: string | null = null;
+  let scriptFile: string | null = null;
+  if (shell.kind !== 'posix') {
+    const runtimeRoot = managedAgentRuntimeRoot('codex');
+    fs.mkdirSync(runtimeRoot, { recursive: true, mode: 0o700 });
+    scriptDir = fs.mkdtempSync(path.join(runtimeRoot, '.installer-script.'));
+    scriptFile = path.join(scriptDir, 'install.ps1');
+    fs.writeFileSync(scriptFile, script, { mode: 0o600 });
+  }
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(shell.command, scriptFile ? [...shell.args, scriptFile] : shell.args, {
+        env,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+      let stderr = '';
+      let buffered = '';
+      const abort = () => terminateInstallerTree(child);
+      signal.addEventListener('abort', abort, { once: true });
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk: string) => {
+        buffered += chunk;
+        const lines = buffered.split(/\r?\n/);
+        buffered = lines.pop() ?? '';
+        for (const line of lines) onLine(line);
+      });
+      child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-4000); });
+      child.on('error', (error) => {
+        signal.removeEventListener('abort', abort);
+        reject(error);
+      });
+      child.on('close', (code) => {
+        signal.removeEventListener('abort', abort);
+        if (buffered.trim()) onLine(buffered);
+        if (signal.aborted) reject(new Error('Agent installation was cancelled.'));
+        else if (code === 0) resolve();
+        else reject(new Error(stderr.trim() || `Official Agent installer exited with code ${code ?? 'unknown'}.`));
+      });
+      if (scriptFile) child.stdin.end();
+      else child.stdin.end(script);
     });
-    let stderr = '';
-    let buffered = '';
-    const abort = () => terminateInstallerTree(child);
-    signal.addEventListener('abort', abort, { once: true });
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      buffered += chunk;
-      const lines = buffered.split(/\r?\n/);
-      buffered = lines.pop() ?? '';
-      for (const line of lines) onLine(line);
-    });
-    child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-4000); });
-    child.on('error', (error) => {
-      signal.removeEventListener('abort', abort);
-      reject(error);
-    });
-    child.on('close', (code) => {
-      signal.removeEventListener('abort', abort);
-      if (buffered.trim()) onLine(buffered);
-      if (signal.aborted) reject(new Error('Agent installation was cancelled.'));
-      else if (code === 0) resolve();
-      else reject(new Error(stderr.trim() || `Official Agent installer exited with code ${code ?? 'unknown'}.`));
-    });
-    child.stdin.end(script);
-  });
+  } finally {
+    if (scriptDir) {
+      try {
+        fs.rmSync(scriptDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      } catch {
+        // The downloaded public installer contains no credentials. A transient
+        // Windows lock must not replace the installation result that matters.
+      }
+    }
+  }
 }

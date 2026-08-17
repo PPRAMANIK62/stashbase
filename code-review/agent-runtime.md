@@ -28,6 +28,18 @@
   the inherited PATH or its standard Program Files location, then falls back
   to Windows PowerShell; a known legacy-shell architecture failure names the
   PowerShell 7 recovery instead of becoming a generic executable-check error.
+  The downloaded PowerShell installer runs as one temporary `.ps1` file rather
+  than a statement stream, so a failed download, extraction, or verification
+  cannot be followed by a successful stdin statement that masks the failure
+  with exit code zero. Temporary script cleanup never replaces that result.
+  Download status warns that the progress-silent package may take several
+  minutes, while any eventual installer stderr remains the primary failure.
+  System discovery also checks the official Windows standalone bin under
+  LocalAppData, so an install completed outside StashBase is visible even when
+  the already-running desktop process still has the previous user PATH.
+  Managed discovery accepts both the installer's visible bin junction and its
+  official standalone `current` package layout, so a missing or temporarily
+  unavailable junction does not turn a verified Windows install into ENOENT.
   Native sessions still use the provider's normal account and history home.
   Claude uses its official release manifest, verifies size and SHA-256, and
   publishes atomically. Disposable staging cleanup retries transient Windows
@@ -49,6 +61,10 @@
 - Retry calls the same preparation Interface. Fresh discovery skips a completed
   installation, so an MCP retry rewrites only the idempotent MCP configuration;
   no parallel repair state machine exists.
+- Explicit recheck is narrower than Retry: it repeats fresh executable
+  discovery (including the deliberate shell probe) and configures MCP only when
+  a runtime now exists. A missing runtime preserves the prior failure and never
+  starts another download.
 - Development failure injection is one mutually exclusive, in-memory
   `nextFailure` value. It is consumed only when explicit readiness reaches that
   stage and immediately resets to normal; background startup repair never
