@@ -778,10 +778,8 @@ async function runInstallerScript(
     const runtimeRoot = managedAgentRuntimeRoot('codex');
     fs.mkdirSync(runtimeRoot, { recursive: true, mode: 0o700 });
     scriptDir = fs.mkdtempSync(path.join(runtimeRoot, '.installer-script.'));
-    const installerFile = path.join(scriptDir, 'install.ps1');
-    scriptFile = path.join(scriptDir, 'run.ps1');
-    fs.writeFileSync(installerFile, script, { mode: 0o600 });
-    fs.writeFileSync(scriptFile, codexPowerShellInstallerWrapper(installerFile, env), { mode: 0o600 });
+    scriptFile = path.join(scriptDir, 'install.ps1');
+    fs.writeFileSync(scriptFile, codexPowerShellInstallerScript(script, env), { mode: 0o600 });
   }
   try {
     await new Promise<void>((resolve, reject) => {
@@ -834,12 +832,13 @@ function powerShellSingleQuoted(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-/** Pin installer-owned paths inside PowerShell itself. Windows environment
- * keys are case-insensitive and packaged desktop processes can inherit stale
- * or duplicate variants; the wrapper makes the official script's inputs
- * independent of that parent environment representation. */
-export function codexPowerShellInstallerWrapper(
-  installerFile: string,
+/** Pin installer-owned paths inside the official PowerShell file itself.
+ * Windows environment keys are case-insensitive and packaged desktop
+ * processes can inherit stale or duplicate variants. Executing one file also
+ * avoids a nested script invocation that can return success without running
+ * its target on some packaged Windows environments. */
+export function codexPowerShellInstallerScript(
+  installerScript: string,
   env: NodeJS.ProcessEnv,
 ): string {
   const installDir = env.CODEX_INSTALL_DIR;
@@ -847,14 +846,17 @@ export function codexPowerShellInstallerWrapper(
   if (!installDir || !codexHome) {
     throw new Error('Codex installer wrapper requires managed install and home directories.');
   }
-  return [
+  const bootstrap = [
     '$ErrorActionPreference = "Stop"',
     `$env:CODEX_INSTALL_DIR = ${powerShellSingleQuoted(installDir)}`,
     `$env:CODEX_HOME = ${powerShellSingleQuoted(codexHome)}`,
     '$env:CODEX_NON_INTERACTIVE = "true"',
-    'Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue',
-    `& ${powerShellSingleQuoted(installerFile)}`,
-    'if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }',
+    'Remove-Item Env:\\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue',
     '',
   ].join('\r\n');
+  const parameterBlock = installerScript.match(
+    /^(?:\uFEFF)?\s*\[CmdletBinding\(\)\]\s*\r?\nparam\([\s\S]*?\r?\n\)\s*\r?\n/,
+  )?.[0];
+  if (!parameterBlock) return bootstrap + installerScript;
+  return parameterBlock + bootstrap + installerScript.slice(parameterBlock.length);
 }

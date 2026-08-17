@@ -9,7 +9,7 @@ import {
   AgentBootstrapCoordinator,
   agentIsAuthenticated,
   claudePlatform,
-  codexPowerShellInstallerWrapper,
+  codexPowerShellInstallerScript,
   installClaude,
   installCodex,
   loginToAgent,
@@ -419,19 +419,21 @@ test('Windows Codex installation falls back to Windows PowerShell only when pwsh
   assert.equal(shell.kind, 'windows-powershell');
 });
 
-test('PowerShell Codex wrapper pins managed paths inside the script process', () => {
-  const wrapper = codexPowerShellInstallerWrapper(
-    "C:\\Users\\O'Brien\\AppData\\Local\\StashBase\\install.ps1",
+test('PowerShell Codex bootstrap pins managed paths inside the official script', () => {
+  const officialScript = '[CmdletBinding()]\nparam(\n  [string]$Release\n)\nWrite-Host "official installer"\n';
+  const installer = codexPowerShellInstallerScript(
+    officialScript,
     {
       CODEX_INSTALL_DIR: "C:\\Users\\O'Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\bin",
       CODEX_HOME: "C:\\Users\\O'Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\installer-home",
     },
   );
 
-  assert.ok(wrapper.includes("$env:CODEX_INSTALL_DIR = 'C:\\Users\\O''Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\bin'"));
-  assert.ok(wrapper.includes("$env:CODEX_HOME = 'C:\\Users\\O''Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\installer-home'"));
-  assert.ok(wrapper.includes('$env:CODEX_NON_INTERACTIVE = "true"'));
-  assert.ok(wrapper.includes("& 'C:\\Users\\O''Brien\\AppData\\Local\\StashBase\\install.ps1'"));
+  assert.ok(installer.startsWith('[CmdletBinding()]\nparam(\n  [string]$Release\n)\n'));
+  assert.ok(installer.includes("$env:CODEX_INSTALL_DIR = 'C:\\Users\\O''Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\bin'"));
+  assert.ok(installer.includes("$env:CODEX_HOME = 'C:\\Users\\O''Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\installer-home'"));
+  assert.ok(installer.includes('$env:CODEX_NON_INTERACTIVE = "true"'));
+  assert.ok(installer.indexOf('$env:CODEX_HOME') < installer.indexOf('Write-Host "official installer"'));
 });
 
 test('Windows PowerShell architecture failures explain the PowerShell 7 recovery', async () => {

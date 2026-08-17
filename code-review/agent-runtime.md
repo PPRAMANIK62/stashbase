@@ -38,13 +38,14 @@
   the inherited PATH or its standard Program Files location, then falls back
   to Windows PowerShell; a known legacy-shell architecture failure names the
   PowerShell 7 recovery instead of becoming a generic executable-check error.
-  The downloaded PowerShell installer runs from a temporary `.ps1` file under
-  a small wrapper rather than as a statement stream, so a failed download,
+  The downloaded PowerShell installer runs from one temporary `.ps1` file
+  rather than as a statement stream or nested script, so a failed download,
   extraction, or verification cannot be followed by a successful stdin
-  statement that masks the failure with exit code zero. The wrapper pins the
-  private install and package homes inside PowerShell itself, and StashBase
-  does not pre-create the visible bin path that the official Windows installer
-  owns as a junction. Temporary script cleanup never replaces that result.
+  statement or outer script that masks the failure with exit code zero. A
+  bootstrap inserted after the official parameter declaration pins the private
+  install and package homes inside that same file, and StashBase does not
+  pre-create the visible bin path that the official Windows installer owns as
+  a junction. Temporary script cleanup never replaces that result.
   Download status warns that the progress-silent package may take several
   minutes, while any eventual installer stderr remains the primary failure.
   System discovery also checks the official Windows standalone bin under
