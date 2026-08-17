@@ -49,6 +49,7 @@
     "setup:python": "node scripts/setup-python.mjs",
     "test:python": "node scripts/test-python.mjs",
     "test:config": "node --import tsx --test server/app-config.test.ts server/embedding-availability.test.ts server/hosted-account.test.ts server/account-route.test.ts",
+    "lint:web": "oxlint --config .oxlintrc.json web-src/src",
     "test:renderer": "TSX_TSCONFIG_PATH=web-src/tsconfig.json node --import ./scripts/register-css-stub.mjs --import tsx --test 'web-src/src/**/*.test.ts'",
     "test:electron": "node --test --test-reporter=spec electron/multi-window.test.cjs electron/bug-report-service.test.cjs electron/bug-report-redaction.test.cjs electron/bug-report-collection.test.cjs electron/bug-report-handoff.test.cjs electron/bug-report-review.test.cjs",
     "test:electron:smoke": "node electron/multi-window-smoke-runner.cjs",
@@ -270,8 +271,8 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.1",
     "@phosphor-icons/core": "2.1.1",
+    "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^4.17.21",
@@ -289,6 +290,7 @@
     "esbuild": "^0.28.0",
     "happy-dom": "^20.11.2",
     "http-proxy-middleware": "^4.0.0",
+    "oxlint": "^1.78.0",
     "playwright": "1.62.1",
     "react-test-renderer": "19.2.6",
     "tailwindcss": "^4.3.3",

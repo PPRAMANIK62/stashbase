@@ -47,6 +47,7 @@ product area → user journey → review contract
 | MCP tools, transports, credentials, scope | [MCP Access](mcp-access.md) |
 | CLI discovery, installation, native sessions, history | [Agent Runtime](agent-runtime.md) |
 | Chat renderer, transcript, composer, permissions | [Agent Panel](agent-panel.md) |
+| Renderer module boundaries and layer promotion | [Renderer Architecture](renderer-architecture.md) |
 | Theme tokens, primitives, CSS boundaries | [Renderer Styling](renderer-styling.md) |
 | Journey-to-test ownership and remaining gaps | [Journey Coverage](journey-coverage.md) |
 | Electron E2E mechanics, baselines, fixtures | [UI Regression Testing](ui-regression-testing.md) |

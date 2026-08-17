@@ -70,7 +70,7 @@ forwarding, and script confinement.
 |---|---|
 | Viewer dispatch | `web-src/src/app/MainPane.tsx` |
 | Primary viewers | `web-src/src/features/documents/components/PdfPreview.tsx`, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, the lazy `json/JsonTreeView.tsx` controller, and the shared `web-src/src/common/components/ImageLightbox.tsx` |
-| Preview-control Modules | `web-src/src/features/documents/components/audio/`, `web-src/src/features/documents/lib/findIframe.ts`, `previewChunkHighlight.ts`, `pdfText.ts`, `pdfFindController.ts`, `previewIframe.ts`, and `previewMessages.ts` |
+| Preview-control Modules | `web-src/src/features/documents/hooks/useAudioFallbackController.ts`, `useAudioTranscriptController.ts`, `web-src/src/features/documents/lib/audioPlayback.ts`, `audioTranscript.ts`, `findIframe.ts`, `previewChunkHighlight.ts`, `pdfText.ts`, `pdfFindController.ts`, `previewIframe.ts`, and `previewMessages.ts` |
 | Worker/Sanitizer Seam | `web-src/src/features/documents/workers/docxPreview.worker.ts`, `shared/html-sanitization.ts` |
 | Server asset/preparation Adapters | `/asset` and `/derived-asset` routes, `server/docx.ts`, media preparation Modules |
 | Focused evidence | `web-src/src/features/documents/__tests__/pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, `json-source-model.test.ts`, plus `e2e/journeys/formats-media.spec.ts` and `markdown-json.spec.ts` |
