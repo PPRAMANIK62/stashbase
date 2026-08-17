@@ -546,9 +546,11 @@ test('conflict resolution callbacks apply correct edits and state transitions', 
         control.current!.actions.resolveConflictReload(tabId),
         control.current!.actions.resolveConflictMerge(tabId),
         control.current!.actions.resolveConflictOverwrite(tabId),
+        control.current!.actions.closeTab(tabId),
       ]);
     });
     assert.ok(control.current!.state.current.tabs[0].conflict, 'the first decision owns the unresolved UI');
+    assert.equal(control.current!.state.current.tabs.length, 1, 'tab discard cannot overtake the owning decision');
     assert.equal(calls.length, 1, 'competing conflict decisions cannot start another disk mutation');
     await act(async () => {
       finishOverwrite({ content: '{"editor": true}', version: 'overwritten-version' });
@@ -561,7 +563,32 @@ test('conflict resolution callbacks apply correct edits and state transitions', 
     assert.equal(calls.length, 1);
     assert.equal(calls[0].version, undefined, 'overwrite uses undefined base version to bypass mismatch checks');
 
-    // 4. Reset conflict state and test merge
+    // 4. A failed owner releases the conflict so another decision can proceed.
+    await act(async () => {
+      control.current!.dispatch({
+        type: 'SET_CONFLICT',
+        id: tabId,
+        conflict: {
+          diskContent: '{"diskAfterFailure": true}',
+          diskVersion: 'v-disk-after-failure',
+          editorContent: '{"editorAfterFailure": true}',
+        },
+      });
+    });
+    api.putFile = async () => { throw new Error('overwrite unavailable'); };
+    await act(async () => {
+      await control.current!.actions.resolveConflictOverwrite(tabId);
+    });
+    const failedConflict = control.current!.state.current.tabs[0].conflict as State['tabs'][number]['conflict'];
+    assert.ok(failedConflict, 'failed overwrite keeps both versions recoverable');
+    assert.equal(failedConflict?.resolving, false, 'failed overwrite releases the decision owner');
+    await act(async () => {
+      await control.current!.actions.resolveConflictReload(tabId);
+    });
+    assert.equal(control.current!.state.current.tabs[0].conflict, null, 'a later resolution can claim the conflict');
+    assert.equal(control.current!.state.current.tabs[0].file?.content, '{"diskAfterFailure": true}');
+
+    // 5. Reset conflict state and test merge
     await act(async () => {
       control.current!.dispatch({
         type: 'SET_CONFLICT',

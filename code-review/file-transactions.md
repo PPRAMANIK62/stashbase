@@ -63,8 +63,9 @@ editor reads V1 → Agent writes V2 with base V1
 ### Renderer conflict recovery
 
 Shipping behavior shows the newer disk source beside the unsaved editor source
-and accepts one explicit decision at a time. Once a resolution starts, every
-choice stays disabled until that decision succeeds or fails:
+and accepts one explicit decision at a time. Resolution and confirmed
+close-and-discard share one owner; once either starts, competing choices stay
+blocked until that decision succeeds, fails, or is cancelled:
 
 - Reload adopts the disk snapshot.
 - Overwrite publishes the editor source without a stale base.

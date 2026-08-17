@@ -226,6 +226,29 @@ export function useDocumentActions(
     saveTimer.current = scheduleAfter(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
   }, [cancelScheduled, dispatch, flushSave, saveTimer, scheduleAfter]);
 
+  const claimConflictResolution = useCallback((tabId: string) => {
+    const tab = state.current.tabs.find((candidate) => candidate.id === tabId);
+    if (
+      !tab?.conflict
+      || !tab.file
+      || tab.conflict.resolving
+      || conflictResolutionsInFlight.current.has(tabId)
+    ) {
+      return null;
+    }
+    conflictResolutionsInFlight.current.add(tabId);
+    dispatch({ type: 'SET_CONFLICT_RESOLVING', id: tabId, resolving: true });
+    return tab;
+  }, [dispatch, state]);
+
+  const releaseConflictResolution = useCallback((tabId: string) => {
+    conflictResolutionsInFlight.current.delete(tabId);
+    // Successful settlement clears the conflict first, making this a no-op.
+    // Failure or a cancelled close keeps the comparison visible and
+    // re-enables every choice.
+    dispatch({ type: 'SET_CONFLICT_RESOLVING', id: tabId, resolving: false });
+  }, [dispatch]);
+
   const loadFile = useCallback(async (
     name: string,
     opts: {
@@ -398,22 +421,28 @@ export function useDocumentActions(
     const currentState = state.current;
     const tab = currentState.tabs.find((t) => t.id === id);
     if (tab?.conflict) {
-      const confirmed = await askConfirm(
-        `"${tab.file?.name}" has unresolved conflicts. Closing this tab will discard your changes.`,
-        {
-          title: 'Discard Conflicted Changes?',
-          confirmLabel: 'Close and Discard',
-          destructive: true,
-        }
-      );
-      if (!confirmed) return;
-      dispatch({ type: 'RESOLVE_CONFLICT_DISCARD', id });
-      dispatch({ type: 'CLOSE_TAB', id });
+      const ownedTab = claimConflictResolution(id);
+      if (!ownedTab) return;
+      try {
+        const confirmed = await askConfirm(
+          `"${ownedTab.file?.name}" has unresolved conflicts. Closing this tab will discard your changes.`,
+          {
+            title: 'Discard Conflicted Changes?',
+            confirmLabel: 'Close and Discard',
+            destructive: true,
+          }
+        );
+        if (!confirmed) return;
+        dispatch({ type: 'RESOLVE_CONFLICT_DISCARD', id });
+        dispatch({ type: 'CLOSE_TAB', id });
+      } finally {
+        releaseConflictResolution(id);
+      }
       return;
     }
     if (currentState.activeTabId === id && !(await flushSave())) return;
     dispatch({ type: 'CLOSE_TAB', id });
-  }, [dispatch, editor, flushSave, state, askConfirm]);
+  }, [askConfirm, claimConflictResolution, dispatch, editor, flushSave, releaseConflictResolution, state]);
 
   const closeActiveTab = useCallback(async () => {
     const id = state.current.activeTabId;
@@ -549,22 +578,6 @@ export function useDocumentActions(
     dispatch({ type: 'SAVE_STATUS', status: settlement.status });
     return true;
   }, [dispatch, state]);
-
-  const claimConflictResolution = useCallback((tabId: string) => {
-    if (conflictResolutionsInFlight.current.has(tabId)) return null;
-    const tab = state.current.tabs.find((candidate) => candidate.id === tabId);
-    if (!tab?.conflict || !tab.file) return null;
-    conflictResolutionsInFlight.current.add(tabId);
-    dispatch({ type: 'SET_CONFLICT_RESOLVING', id: tabId, resolving: true });
-    return tab;
-  }, [dispatch, state]);
-
-  const releaseConflictResolution = useCallback((tabId: string) => {
-    conflictResolutionsInFlight.current.delete(tabId);
-    // Successful settlement clears the conflict first, making this a no-op.
-    // Failure keeps the comparison visible and re-enables all three choices.
-    dispatch({ type: 'SET_CONFLICT_RESOLVING', id: tabId, resolving: false });
-  }, [dispatch]);
 
   const resolveConflictOverwrite = useCallback(async (tabId: string) => {
     const tab = claimConflictResolution(tabId);
