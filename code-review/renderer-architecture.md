@@ -63,10 +63,19 @@ outside the Agent Panel.
 
 `.oxlintrc.json` at the repo root, run by `pnpm lint:web`.
 
-Each layer gets an `overrides` block keyed by path glob, carrying a
-`no-restricted-imports` pattern set — one per layer plus one per feature,
-each naming the siblings it may not reach. oxlint `overrides` do not merge
-with the base config, so every block repeats its full rule.
+The boundary rule is location-dependent: what a module may not import differs
+per directory, and `common/` forbidding `store/` has nothing in common with
+`features/search` forbidding its six siblings. `overrides[].files` is the only
+way to scope a rule's configuration by path, so there is one block per layer,
+one per feature, and one exempting tests. Per-feature blocks cannot be
+collapsed into one — a regex cannot refer to the path of the file it is
+checking, so "any sibling but my own" has to be written out per feature.
+
+Every block repeats the shared `^@/app/` pattern rather than hoisting it to
+the base `rules`. Base entries for *other* rules do apply inside an
+override-matched file, but when the *same* rule appears in both, the
+override's options replace the base's instead of merging — a hoisted
+`^@/app/` would be silently dropped everywhere.
 
 The regexes match the raw `@/…` specifier, which is what makes them catch
 `lazyWithRetry(() => import('@/features/…'))` as well as static imports. Four
