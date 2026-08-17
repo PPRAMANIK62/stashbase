@@ -518,8 +518,10 @@ test('Codex post-install verification preserves the isolated installer environme
   process.env.STASHBASE_LOCAL_DATA_ROOT = root;
   const installer = process.platform === 'win32'
     ? [
-      'New-Item -ItemType Directory -Force -Path $env:CODEX_INSTALL_DIR | Out-Null',
-      'New-Item -ItemType File -Force -Path (Join-Path $env:CODEX_INSTALL_DIR "codex.exe") | Out-Null',
+      '$null = [System.IO.Directory]::CreateDirectory($env:CODEX_INSTALL_DIR)',
+      '$codexPath = Join-Path $env:CODEX_INSTALL_DIR "codex.exe"',
+      '[System.IO.File]::WriteAllText($codexPath, "installed Codex")',
+      'if (-not (Test-Path -LiteralPath $codexPath -PathType Leaf)) { throw "fixture did not create codex.exe" }',
       '',
     ].join('\n')
     : `#!/bin/sh
