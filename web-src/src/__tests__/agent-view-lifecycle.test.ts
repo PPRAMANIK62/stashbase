@@ -173,7 +173,7 @@ test('failed runtime setup keeps Check again available after external recovery',
   }];
 
   let checks = 0;
-  t.mock.method(api, 'checkAgent', async () => {
+  t.mock.method(api, 'prepareAgent', async () => {
     checks += 1;
     return { clis: state.agents };
   });
@@ -187,6 +187,48 @@ test('failed runtime setup keeps Check again available after external recovery',
   assert.ok(checkAgain);
   await act(async () => { checkAgain.props.onPress(); });
   assert.equal(checks, 1);
+});
+
+test('Codex authentication recovery starts login with the installed runtime', async (t) => {
+  const state = rendererState();
+  state.agents = [{
+    ...state.agents[0]!,
+    installed: true,
+    source: 'managed',
+    state: 'available',
+    bootstrap: {
+      phase: 'failed',
+      failure: {
+        stage: 'authentication',
+        code: 'authentication-required',
+        message: 'Codex is installed, but it is not signed in.',
+        retryable: true,
+      },
+    },
+  }];
+
+  let logins = 0;
+  t.mock.method(api, 'prepareAgent', async (
+    _agent: 'claude' | 'codex',
+    action: 'check' | 'bootstrap' | 'login',
+  ) => {
+    if (action === 'login') logins += 1;
+    return {
+      clis: [{
+        ...state.agents[0]!,
+        bootstrap: { phase: 'authenticating', message: 'Finish signing in to Codex in your browser…' },
+      }],
+    };
+  });
+  const { renderer } = await mountAgentView(t, state);
+
+  buttonNamed(renderer.root, 'Sign in with ChatGPT');
+  const signIn = renderer.root.findAll((node) => (
+    node.props.children === 'Sign in with ChatGPT' && typeof node.props.onPress === 'function'
+  ))[0];
+  assert.ok(signIn);
+  await act(async () => { signIn.props.onPress(); });
+  assert.equal(logins, 1);
 });
 
 test('mounted AgentView ready → raw close renders recovery and reconnects with transcript + resume', async (t) => {

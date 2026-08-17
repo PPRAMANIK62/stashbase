@@ -24,6 +24,9 @@ a transcript-centered file manager.
 - New Chat is the deliberate creation entry and reuses a completely blank tab.
   Opening the app, a folder, a tab, or history never grants runtime-installation
   consent; a missing runtime waits for **Install and continue**.
+- An installed but signed-out Codex runtime stops at a dedicated sign-in gate.
+  **Sign in with ChatGPT** runs that same discovered executable's official
+  browser flow; completion resumes preparation without another installation.
 - Every conversation is scoped to Library or one member folder. Drafts,
   attachments, content, and resumed history freeze that scope, while folder
   switching preserves started work. History remains attributable to its Agent
@@ -57,8 +60,10 @@ a transcript-centered file manager.
   a truthful, stage-specific recovery path. Retrying preparation resumes from
   the first incomplete stage. After an installation failure, **Check again**
   remains available so an external repair can be discovered without
-  authorizing another download. Late output from an abandoned generation
-  cannot enter a newer turn.
+  authorizing another download. Authentication is distinct from installation:
+  in-app sign-in uses the selected Codex runtime and never handles its token,
+  while **Check again** discovers a login completed elsewhere. Late output
+  from an abandoned generation cannot enter a newer turn.
 - Permission, deletion, command, network, and broader filesystem decisions
   remain explicit. Tool payloads render in a human-readable form.
 - Agent copy and tool affordances describe the actual source or prepared

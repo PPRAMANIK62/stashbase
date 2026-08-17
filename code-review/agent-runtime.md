@@ -5,8 +5,9 @@
 
 ## Discovery and Preparation
 
-- App boot and folder navigation perform only cheap discovery and idempotent
-  MCP repair for already installed runtimes. They never install an Agent or run
+- App boot and folder navigation perform only cheap discovery, a bounded
+  side-effect-free Codex authentication check, and idempotent MCP repair for
+  already installed runtimes. They never install an Agent, start login, or run
   a login-shell probe.
 - New Chat opens readiness for the selected Agent but does not itself authorize
   a download. Discovery prefers a supported system executable, then a managed
@@ -17,6 +18,15 @@
 - Managed runtimes never modify `PATH` and continue using the provider's normal
   account and history home. Resetting a managed executable never clears login
   or native history.
+- Codex readiness checks the selected executable with `codex login status`.
+  A signed-out runtime is installed but not ready: it stops at the structured
+  authentication stage before MCP configuration. The explicit sign-in action
+  runs that exact executable's `codex login` browser flow with its normal
+  account home, never installs another copy, and never passes credentials
+  through StashBase. Success rechecks status and resumes MCP preparation;
+  cancellation, timeout, and native exit remain retryable authentication
+  failures. Claude continues to report authentication through its native SDK
+  connection.
 - Settings offers Uninstall only for a StashBase-managed runtime, never for a
   system executable. It stops that agent's sessions, resets preparation state,
   and removes only the private install under AppData (the removal path-guards
@@ -53,14 +63,16 @@
   is part of readiness, and Settings surfaces a repair action only on
   failure.
 - Preparation is one staged Interface: discover, install only when missing,
-  then configure MCP. Its failure contract names `stage`, `code`, a bounded
-  message, retryability, and an optional manual recovery. Renderer code must
-  not classify failures by parsing messages. Installation failure may expose
-  the provider install command; MCP failure may expose the read-only manual MCP
-  setup, never an install command.
+  verify provider authentication where supported, then configure MCP. Its
+  failure contract names `stage`, `code`, a bounded message, retryability, and
+  an optional manual recovery. Renderer code must not classify failures by
+  parsing messages. Installation failure may expose the provider install
+  command; authentication offers the provider-owned in-app browser flow; MCP
+  failure may expose the read-only manual MCP setup, never an install command.
 - Retry calls the same preparation Interface. Fresh discovery skips a completed
-  installation, so an MCP retry rewrites only the idempotent MCP configuration;
-  no parallel repair state machine exists.
+  installation, authentication recovery reuses the selected executable, and an
+  MCP retry rewrites only the idempotent MCP configuration; no parallel repair
+  state machine exists.
 - Explicit recheck is narrower than Retry: it repeats fresh executable
   discovery (including the deliberate shell probe) and configures MCP only when
   a runtime now exists. A missing runtime preserves the prior failure and never
@@ -73,8 +85,9 @@
   visually distinct development-only surface; production omits the surface.
   Availability follows the general development-runtime marker and does not
   depend on whether the renderer is served through Vite.
-- A discovery, installation, or MCP failure is visible and retryable but never
-  blocks the workspace or silently substitutes another Agent.
+- A discovery, installation, authentication, or MCP failure is visible and
+  retryable but never blocks the workspace or silently substitutes another
+  Agent.
 
 ## Session Scope and Lifetime
 

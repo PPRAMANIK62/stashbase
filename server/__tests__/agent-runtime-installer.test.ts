@@ -7,9 +7,11 @@ import test, { mock } from 'node:test';
 import { agentCliSearchDirs, resolveAgentCli, resolveAgentCliWithLoginShell } from '../agent-cli.ts';
 import {
   AgentBootstrapCoordinator,
+  agentIsAuthenticated,
   claudePlatform,
   installClaude,
   installCodex,
+  loginToAgent,
   resolveCodexInstallerShell,
   verifyAgentExecutable,
   type AgentBootstrapDependencies,
@@ -26,6 +28,7 @@ import {
 
 function fakeDependencies(overrides: Partial<AgentBootstrapDependencies> = {}) {
   let installed = false;
+  let authenticated = true;
   let configured = 0;
   const dependencies: AgentBootstrapDependencies = {
     resolveExecutable: () => installed ? '/managed/codex' : null,
@@ -34,11 +37,16 @@ function fakeDependencies(overrides: Partial<AgentBootstrapDependencies> = {}) {
       await Promise.resolve();
       installed = true;
     },
+    isAuthenticated: () => authenticated,
+    login: async () => { authenticated = true; },
     configureMcp: () => { configured += 1; },
     consumeFailure: () => false,
     ...overrides,
   };
-  return { dependencies, configured: () => configured };
+  return {
+    dependencies,
+    configured: () => configured,
+  };
 }
 
 test('missing runtime moves through install and MCP configuration to ready', async () => {
@@ -66,6 +74,71 @@ test('existing runtime skips download but still ensures MCP configuration', () =
   assert.equal(coordinator.begin('claude').phase, 'ready');
   assert.equal(installs, 0);
   assert.equal(configured, 1);
+});
+
+test('installed Codex stops at a distinct authentication failure before MCP configuration', () => {
+  let configured = 0;
+  const fake = fakeDependencies({
+    resolveExecutable: () => '/managed/codex',
+    isAuthenticated: () => false,
+    configureMcp: () => { configured += 1; },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+
+  const status = coordinator.begin('codex');
+
+  assert.equal(status.phase, 'failed');
+  assert.equal(status.failure?.stage, 'authentication');
+  assert.equal(status.failure?.code, 'authentication-required');
+  assert.equal(status.failure?.manualRecovery, undefined);
+  assert.match(status.failure?.message ?? '', /installed.*not signed in/i);
+  assert.equal(configured, 0);
+});
+
+test('Codex browser login uses the discovered executable and resumes MCP preparation', async () => {
+  let authenticated = false;
+  let configured = 0;
+  let loginExecutable = '';
+  let completeLogin!: () => void;
+  const fake = fakeDependencies({
+    resolveExecutable: () => '/managed/codex',
+    isAuthenticated: () => authenticated,
+    login: async (_id, executable) => {
+      loginExecutable = executable;
+      await new Promise<void>((resolve) => { completeLogin = resolve; });
+      authenticated = true;
+    },
+    configureMcp: () => { configured += 1; },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+  assert.equal(coordinator.begin('codex').failure?.stage, 'authentication');
+
+  assert.equal(coordinator.login('codex').phase, 'authenticating');
+  assert.equal(loginExecutable, '/managed/codex');
+  completeLogin();
+  const settled = await coordinator.wait('codex');
+
+  assert.equal(settled.phase, 'ready');
+  assert.equal(configured, 1);
+});
+
+test('Codex authentication commands use the selected executable', { skip: process.platform === 'win32' }, async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-auth-test-'));
+  const executable = path.join(root, 'codex');
+  fs.writeFileSync(executable, [
+    '#!/bin/sh',
+    'if [ "$1 $2" = "login status" ]; then echo "Not logged in" >&2; exit 1; fi',
+    'if [ "$1" = "login" ]; then exit 0; fi',
+    'exit 9',
+    '',
+  ].join('\n'));
+  fs.chmodSync(executable, 0o755);
+  try {
+    assert.equal(agentIsAuthenticated('codex', executable), false);
+    await loginToAgent('codex', executable, new AbortController().signal);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('startup connects MCP for discovered runtimes without installing missing ones', () => {

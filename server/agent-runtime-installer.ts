@@ -20,12 +20,23 @@ import {
   type ManagedAgentId,
 } from './agent-runtime-paths.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
-import { resolveAgentCli, resolveAgentCliWithLoginShell } from './agent-cli.ts';
+import {
+  agentCliEnv,
+  agentCliNeedsShell,
+  commandDir,
+  resolveAgentCli,
+  resolveAgentCliWithLoginShell,
+} from './agent-cli.ts';
 import { terminateExtractorTree as terminateInstallerTree } from './extractor-process.ts';
 
-export type AgentBootstrapPhase = 'idle' | 'installing' | 'configuring' | 'ready' | 'failed';
-export type AgentBootstrapFailureStage = 'discovery' | 'installation' | 'mcp';
-export type AgentBootstrapFailureCode = 'simulated' | 'operation-failed' | 'runtime-unavailable';
+export type AgentBootstrapPhase = 'idle' | 'installing' | 'authenticating' | 'configuring' | 'ready' | 'failed';
+export type AgentBootstrapFailureStage = 'discovery' | 'installation' | 'authentication' | 'mcp';
+export type AgentBootstrapFailureCode =
+  | 'simulated'
+  | 'operation-failed'
+  | 'runtime-unavailable'
+  | 'authentication-required'
+  | 'authentication-check-failed';
 export type AgentBootstrapManualRecovery = 'install-command' | 'mcp-settings';
 
 export interface AgentBootstrapFailure {
@@ -48,6 +59,8 @@ type ProgressUpdate = Pick<AgentBootstrapStatus, 'progress' | 'message'>;
 export interface AgentBootstrapDependencies {
   resolveExecutable(id: ManagedAgentId, options?: { probeLoginShell?: boolean }): string | null;
   installRuntime(id: ManagedAgentId, update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void>;
+  isAuthenticated(id: ManagedAgentId, executable: string): boolean;
+  login(id: ManagedAgentId, executable: string, signal: AbortSignal): Promise<void>;
   configureMcp(id: ManagedAgentId): void;
   consumeFailure(stage: 'installation' | 'mcp'): boolean;
 }
@@ -75,7 +88,7 @@ export class AgentBootstrapCoordinator {
       return this.status(id);
     }
     if (executable) {
-      this.configure(id);
+      this.prepare(id, executable);
       return this.status(id);
     }
 
@@ -117,13 +130,74 @@ export class AgentBootstrapCoordinator {
         return;
       }
       this.statuses.set(id, { phase: 'configuring', progress: 1, message: 'Connecting StashBase MCP…' });
-      this.configure(id);
+      this.prepare(id, installedExecutable);
     })().finally(() => {
       this.controllers.delete(id);
       this.runs.delete(id);
     });
     this.runs.set(id, run);
     return this.status(id);
+  }
+
+  /** Start the provider-owned browser login with the exact executable that
+   * discovery selected. Credentials remain in Codex's normal account home;
+   * StashBase owns only the child-process lifecycle and readiness state. */
+  login(id: ManagedAgentId): AgentBootstrapStatus {
+    if (this.runs.has(id)) return this.status(id);
+    let executable: string | null;
+    try {
+      executable = this.dependencies.resolveExecutable(id, { probeLoginShell: true });
+    } catch (error) {
+      this.fail(id, 'discovery', 'operation-failed', error);
+      return this.status(id);
+    }
+    if (!executable) {
+      this.fail(id, 'discovery', 'runtime-unavailable', new Error(`${agentLabel(id)} is not installed.`));
+      return this.status(id);
+    }
+    if (id !== 'codex') {
+      this.fail(id, 'authentication', 'operation-failed', new Error('In-app login is not supported for this Agent.'));
+      return this.status(id);
+    }
+
+    const controller = new AbortController();
+    this.controllers.set(id, controller);
+    this.statuses.set(id, {
+      phase: 'authenticating',
+      message: 'Finish signing in to Codex in your browser…',
+    });
+    const run = this.dependencies.login(id, executable, controller.signal).then(() => {
+      if (!this.checkAuthentication(id, executable)) return;
+      this.statuses.set(id, { phase: 'configuring', progress: 1, message: 'Connecting StashBase MCP…' });
+      this.configure(id);
+    }).catch((error) => {
+      this.fail(id, 'authentication', 'operation-failed', error);
+    }).finally(() => {
+      this.controllers.delete(id);
+      this.runs.delete(id);
+    });
+    this.runs.set(id, run);
+    return this.status(id);
+  }
+
+  private prepare(id: ManagedAgentId, executable: string, allowSimulation = true): void {
+    if (!this.checkAuthentication(id, executable)) return;
+    this.configure(id, allowSimulation);
+  }
+
+  private checkAuthentication(id: ManagedAgentId, executable: string): boolean {
+    try {
+      if (this.dependencies.isAuthenticated(id, executable)) return true;
+      this.fail(
+        id,
+        'authentication',
+        'authentication-required',
+        new Error(`${agentLabel(id)} is installed, but it is not signed in.`),
+      );
+    } catch (error) {
+      this.fail(id, 'authentication', 'authentication-check-failed', error);
+    }
+    return false;
   }
 
   private configure(id: ManagedAgentId, allowSimulation = true): void {
@@ -139,10 +213,10 @@ export class AgentBootstrapCoordinator {
     }
   }
 
-  /** App startup may repair MCP for runtimes it can already discover, but it
-   * must never turn discovery into an implicit download. The synchronous
-   * boot pass skips login-shell probing so listen stays quick; a deferred
-   * post-boot pass repeats it WITH the probe (see
+  /** App startup may check authentication and repair MCP for runtimes it can
+   * already discover, but it must never turn discovery into an implicit
+   * download or login. The first post-bind pass skips login-shell probing; a
+   * deferred pass repeats it WITH the probe (see
    * `connectInstalledAgentMcpAfterBoot`), so a system runtime that only a
    * login shell can resolve still auto-connects without waiting for the
    * first New Chat. */
@@ -158,7 +232,7 @@ export class AgentBootstrapCoordinator {
     if (!executable) return this.status(id);
     // Startup repair is background maintenance, not the explicit setup action
     // targeted by the development `nextFailure` control.
-    this.configure(id, false);
+    this.prepare(id, executable, false);
     return this.status(id);
   }
 
@@ -215,9 +289,98 @@ function resolveManagedOrSystemExecutable(
     : { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude Code' });
 }
 
+/** Claude reports authentication through its native SDK connection. Codex
+ * exposes a cheap, side-effect-free status command, so preparation can stop
+ * before opening an app-server that cannot serve a turn. */
+export function agentIsAuthenticated(id: ManagedAgentId, executable: string): boolean {
+  if (id !== 'codex') return true;
+  const timeoutMs = 10_000;
+  const result = spawnSync(executable, ['login', 'status'], {
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    windowsHide: true,
+    shell: agentCliNeedsShell(executable),
+    env: agentCliEnv({}, [commandDir(executable)]),
+  });
+  const output = [result.stdout, result.stderr]
+    .filter((value): value is string => typeof value === 'string')
+    .join('\n')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(-800);
+  if (result.status === 0) return true;
+  if (result.status === 1 && /not logged in/i.test(output)) return false;
+  const nativeError = result.error as NodeJS.ErrnoException | undefined;
+  let detail: string;
+  if (nativeError?.code === 'ETIMEDOUT') detail = `timed out after ${timeoutMs}ms`;
+  else if (nativeError) detail = `could not start: ${nativeError.message}`;
+  else if (result.status !== null) detail = `exited with code ${result.status}`;
+  else if (result.signal) detail = `terminated by ${result.signal}`;
+  else detail = 'returned no exit status';
+  throw new Error(`Could not check Codex sign-in (${detail}${output ? `: ${output}` : ''}).`);
+}
+
+const CODEX_LOGIN_TIMEOUT_MS = 10 * 60_000;
+
+/** Run Codex's own browser-based login. The selected CLI opens the provider
+ * page and writes credentials to its normal home; no token passes through
+ * StashBase. */
+export async function loginToAgent(
+  id: ManagedAgentId,
+  executable: string,
+  signal: AbortSignal,
+): Promise<void> {
+  if (id !== 'codex') throw new Error('In-app login is available only for Codex.');
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(executable, ['login'], {
+      env: agentCliEnv({}, [commandDir(executable)]),
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      shell: agentCliNeedsShell(executable),
+    });
+    let output = '';
+    let settled = false;
+    let timedOut = false;
+    const append = (chunk: Buffer | string) => {
+      output = (output + chunk.toString()).slice(-4000);
+    };
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', abort);
+    };
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    const abort = () => terminateInstallerTree(child);
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      terminateInstallerTree(child);
+    }, CODEX_LOGIN_TIMEOUT_MS);
+    timeout.unref?.();
+    signal.addEventListener('abort', abort, { once: true });
+    child.stdout.on('data', append);
+    child.stderr.on('data', append);
+    child.once('error', (error) => finish(error));
+    child.once('close', (code) => {
+      const detail = output.replace(/\s+/g, ' ').trim().slice(-800);
+      if (signal.aborted) finish(new Error('Codex sign-in was cancelled.'));
+      else if (code === 0) finish();
+      else if (timedOut) finish(new Error('Codex sign-in timed out after 10 minutes.'));
+      else finish(new Error(detail || `Codex sign-in exited with code ${code ?? 'unknown'}.`));
+    });
+  });
+}
+
 export const agentBootstrapCoordinator = new AgentBootstrapCoordinator({
   resolveExecutable: resolveManagedOrSystemExecutable,
   installRuntime: installManagedRuntime,
+  isAuthenticated: agentIsAuthenticated,
+  login: loginToAgent,
   configureMcp: (id) => { ensureAgentMcp(id); },
   consumeFailure: consumeAgentSetupFailure,
 });
@@ -228,6 +391,10 @@ export function agentBootstrapStatus(id: ManagedAgentId): AgentBootstrapStatus {
 
 export function beginAgentBootstrap(id: ManagedAgentId): AgentBootstrapStatus {
   return agentBootstrapCoordinator.begin(id);
+}
+
+export function loginAgentBootstrap(id: ManagedAgentId): AgentBootstrapStatus {
+  return agentBootstrapCoordinator.login(id);
 }
 
 /** Explicit user recovery after fixing an installation outside StashBase.
