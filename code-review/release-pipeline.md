@@ -13,8 +13,9 @@ source commit → CI push run succeeds
 → release assets
 ```
 
-Source validation and platform packaging are separate workflows. A package may
-be built only from a tag whose exact commit has a successful `ci.yml` push run.
+Source validation and platform packaging are separate workflows. Source CI runs
+for `main` and `release/**` pushes. A package may be built only from a tag whose
+exact commit has a successful `ci.yml` push run.
 The reusable gate resolves lightweight or annotated tags, waits for an active
 matching run within its bound, and fails closed on missing, failed, cancelled,
 or timed-out CI.
@@ -86,11 +87,12 @@ When asked to release, run this sequence unattended after the one version
 choice:
 
 1. Inspect `git status` and `git log --oneline -10`; group a dirty tree into
-   focused commits. Push `main` before tagging.
+   focused commits. Push `main`, then create `release/v<version>` from that
+   ready commit.
 2. Ask whether the `package.json` version bump is patch, minor, or major.
 3. Commit only the bump as `chore: bump to <version>`.
-4. Push `main`; wait for the `CI` workflow to succeed for that exact commit.
-   Then create and push `v<version>`.
+4. Push the release branch; wait for the `CI` workflow to succeed for that
+   exact commit. Then create and push `v<version>` from the release branch.
 5. Have the maintainer publish the GitHub Release for that tag. Platform
    workflows build assets; they may also be manually dispatched with the tag
    to backfill. macOS tap publication requires `HOMEBREW_TAP_TOKEN` with push
