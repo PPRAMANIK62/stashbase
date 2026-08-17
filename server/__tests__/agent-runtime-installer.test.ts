@@ -520,7 +520,7 @@ test('Codex post-install verification preserves the isolated installer environme
     ? [
       '$null = [System.IO.Directory]::CreateDirectory($env:CODEX_INSTALL_DIR)',
       '$codexPath = Join-Path $env:CODEX_INSTALL_DIR "codex.exe"',
-      '[System.IO.File]::WriteAllText($codexPath, "installed Codex")',
+      'Copy-Item -LiteralPath (Get-Process -Id $PID).Path -Destination $codexPath',
       'if (-not (Test-Path -LiteralPath $codexPath -PathType Leaf)) { throw "fixture did not create codex.exe" }',
       '',
     ].join('\n')
