@@ -14,8 +14,8 @@ import { RemoveKeyModal } from '@/features/settings/components/embedder/RemoveKe
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
-import { AccountSignInForm } from '@/features/account/components/AccountSignInForm';
-import { notifyAccountChanged } from '@/features/account/lib/accountEvents';
+import { AccountSignInForm } from '@/common/components/AccountSignInForm';
+import { notifyAccountChanged } from '@/common/lib/accountEvents';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string; costHint: string }> = {

@@ -6,7 +6,7 @@
  * feature or component it styles — imported directly from that
  * component's .tsx file (e.g. `features/agent-panel/agent-panel.css` is
  * imported from ChatPane.tsx, `features/workspace/workspace.css` from the
- * workspace components that render `.main` / `.tab-strip` / `.chat-splitter`
+ * components that render `.main` / `.tab-strip` / `.chat-splitter`
  * / `.sidebar-splitter`). The app shell's own `.app` grid composition
  * lives in `app/app-shell.css`, imported from `app/App.tsx`. Vite inlines
  * every one of these into one stylesheet at build time — no extra runtime

@@ -23,9 +23,9 @@
  */
 import { useEffect, useState } from 'react';
 import { api, type EmbedderState } from '@/common/api/api';
-import { openEmbeddingSetup } from '@/features/settings/components/EmbedderRequireKeyGate';
-import { isEmbeddingAuthorized } from '@/features/settings/lib/embedder/embeddingAuth';
-import { ACCOUNT_CHANGED_EVENT } from '@/features/account/lib/accountEvents';
+import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
+import { isEmbeddingAuthorized } from '@/common/lib/embeddingAuth';
+import { ACCOUNT_CHANGED_EVENT } from '@/common/lib/accountEvents';
 
 export default function EmbeddingSetupCallout() {
   const [embedder, setEmbedder] = useState<EmbedderState | null>(null);

@@ -13,7 +13,7 @@ import {
   switchWelcomeTabPlan,
 } from '@/features/agent-panel/lib/folderState';
 import { makeChatTab, type Action, type State } from '@/store/state/state';
-import { shouldAutoCollapseChat } from '@/features/workspace/lib/workspaceLayout';
+import { shouldAutoCollapseChat } from '@/common/lib/workspaceLayout';
 
 export function useChatLayoutFollowUp(
   state: Pick<State, 'activeChatTabId' | 'booted' | 'chatOpen' | 'chatTabs' | 'folderPath'>,

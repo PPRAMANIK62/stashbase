@@ -23,7 +23,8 @@ import { basename } from '@/common/lib/paths';
 import { buttonVariants } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 import { emptyStateClass } from '@/common/lib/emptyState';
-import { historyRequestParams, mergeAgentSessions, rowResumeFolder, rowScopeParams, type HistoryScope, type MergedSessionRow } from '@/features/agent-panel/lib/sessionHistory';
+import type { HistoryScope } from '@/common/lib/libraryScope';
+import { historyRequestParams, mergeAgentSessions, rowResumeFolder, rowScopeParams, type MergedSessionRow } from '@/features/agent-panel/lib/sessionHistory';
 
 function relTime(ms: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));

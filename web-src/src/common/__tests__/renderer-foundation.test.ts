@@ -286,7 +286,7 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(tabs, /aria-controls="document-panel"/);
   assert.doesNotMatch(tabs, /aria-controls=\{`document-panel-\$\{t\.id\}`\}/);
 
-  const mainPane = read('web-src/src/features/workspace/components/MainPane.tsx');
+  const mainPane = read('web-src/src/app/MainPane.tsx');
   assert.match(mainPane, /id=\{activeTab \? 'document-panel' : undefined\}/);
 
   const sidebar = read('web-src/src/features/workspace/components/Sidebar.tsx');

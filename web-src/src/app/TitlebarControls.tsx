@@ -3,7 +3,7 @@ import { formatPrimaryShiftShortcut } from '@/common/lib/platformShortcuts';
 import { readPreferredAgent } from '@/common/lib/agentPreference';
 import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
 import { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
-import { openLibrarySearch } from '@/features/search/components/LibrarySearch';
+import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
 import { TooltipButton } from '@/common/components/TooltipButton';
 
 /* [&_svg]:size-3.5 — the app-wide 14px icon size (one scale everywhere;

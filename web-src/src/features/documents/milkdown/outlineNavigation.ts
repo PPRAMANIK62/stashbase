@@ -1,4 +1,5 @@
-import { extractDocumentHeadings, outlineScrollTop, resolveCurrentDocumentHeading, type DocumentHeading, type ProseMirrorDocument } from '@/features/documents/milkdown/headings';
+import { extractDocumentHeadings, outlineScrollTop, resolveCurrentDocumentHeading, type ProseMirrorDocument } from '@/features/documents/milkdown/headings';
+import type { DocumentHeading } from '@/common/lib/documentOutline';
 
 export type HeadingNodeView = {
   nodeDOM: (position: number) => Node | null;

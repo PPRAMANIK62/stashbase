@@ -1,6 +1,6 @@
 /* Shared tree-row primitive. Consumed by the sidebar's file tree
  * (features/workspace/components/FileTree.tsx, Sidebar.tsx) and by the two
- * in-document outline trees (features/documents/components/DocumentOutline.tsx,
+ * in-document outline trees (common/components/DocumentOutline.tsx,
  * features/documents/components/json/JsonTreeView.tsx) — one visual family,
  * not a workspace-only concern. Relocated verbatim from styles/sidebar.css. */
 

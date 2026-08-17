@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { DocumentOutline } from '@/features/documents/components/DocumentOutline';
+import { DocumentOutline } from '@/common/components/DocumentOutline';
 
 test('outline entries are keyboard buttons with active and full-label accessibility state', () => {
   const markup = renderToStaticMarkup(createElement(DocumentOutline, {

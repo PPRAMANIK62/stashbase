@@ -33,24 +33,16 @@
 import { Suspense, useEffect, useState } from 'react';
 import { api, type EmbedderState } from '@/common/api/api';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
-import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from '@/features/settings/lib/embedder/embeddingAuth';
+import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from '@/common/lib/embeddingAuth';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { useOverlayLayer } from '@/common/components/OverlayStack';
 import { ModalLoadingStatus } from '@/common/components/ui/status';
-import { ACCOUNT_CHANGED_EVENT } from '@/features/account/lib/accountEvents';
+import { ACCOUNT_CHANGED_EVENT } from '@/common/lib/accountEvents';
+import { OPEN_EMBEDDING_SETUP_EVENT } from '@/common/lib/embeddingSetupTrigger';
 
 const RequireApiKeyModal = lazyWithRetry(() =>
   import('@/features/settings/components/embedder/RequireApiKeyModal').then((mod) => ({ default: mod.RequireApiKeyModal })),
 );
-
-const OPEN_EVENT = 'stashbase-open-embedding-setup';
-
-/** Open the setup dialog from anywhere — the Files-panel "Set up AI Index"
- *  entry, or Settings. Mirrors `openSettings`; the alternative is threading a
- *  callback from the app root down to a lazily-loaded card. */
-export function openEmbeddingSetup(): void {
-  window.dispatchEvent(new CustomEvent(OPEN_EVENT));
-}
 
 export function EmbedderRequireKeyGate() {
   const appState = useWorkspace();
@@ -93,8 +85,8 @@ export function EmbedderRequireKeyGate() {
 
   useEffect(() => {
     function onOpen() { setOpen(true); }
-    window.addEventListener(OPEN_EVENT, onOpen);
-    return () => window.removeEventListener(OPEN_EVENT, onOpen);
+    window.addEventListener(OPEN_EMBEDDING_SETUP_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_EMBEDDING_SETUP_EVENT, onOpen);
   }, []);
 
   if (!open) return null;

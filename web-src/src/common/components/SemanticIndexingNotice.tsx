@@ -1,6 +1,5 @@
 import React from 'react';
 import { formatMiB } from '@/common/lib/format';
-import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { buttonVariants } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
 
@@ -9,23 +8,9 @@ import { StatusMessage } from '@/common/components/ui/status';
  *  the ui/button component module (no explicit React import) cannot load. */
 const noticeButtonClass = buttonVariants({ variant: 'outline', size: 'xs' });
 
-export function SemanticIndexingNotice() {
-  const state = useWorkspace();
-  const { actions } = useAppActions();
-  const workload = state.semanticIndexing;
-  if (!workload || !['awaiting-decision', 'paused', 'partial-paused'].includes(workload.state)) return null;
-  const awaiting = workload.state === 'awaiting-decision';
-  const count = workload.sourceCount ?? state.pendingSemanticNames.size;
-  return <SemanticIndexingNoticeView
-    awaiting={awaiting}
-    count={count}
-    estimatedBytes={workload.estimatedBytes}
-    failureMessage={state.indexWarning?.message}
-    onStart={() => { void actions.decideSemanticIndexing('start'); }}
-    onDefer={() => { void actions.decideSemanticIndexing('defer'); }}
-  />;
-}
-
+/** The AI Index workload notice. Presentational: the surfaces that show it
+ *  (the Files panel and the search popup) read the workload through
+ *  `useSemanticIndexingNotice` and pass it in. */
 export function SemanticIndexingNoticeView({
   awaiting,
   count,

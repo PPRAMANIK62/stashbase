@@ -1,21 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
+import { useSettingsBlocking } from '@/common/hooks/useSettingsBlocking';
 import { useUiShell } from '@/store/contexts/AppContext';
-import type { LibrarySearchPrefill } from '@/features/search/lib/librarySearch';
+import { OPEN_LIBRARY_SEARCH_EVENT, type LibrarySearchPrefill } from '@/common/lib/librarySearchTrigger';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedPicker } from '@/common/components/LazyManaged';
 import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
 
 const ManagedLibrarySearch = lazyWithRetry(() => import('./ManagedLibrarySearch'));
-
-export const OPEN_LIBRARY_SEARCH_EVENT = 'stashbase-open-library-search';
-
-/** Open the library search popup, optionally seeding its remembered state
- *  (the FindBar's "search all files" handoff passes query + exact-mode
- *  options). Same pubsub idiom as `openSettings`. */
-export function openLibrarySearch(prefill?: LibrarySearchPrefill): void {
-  window.dispatchEvent(new CustomEvent(OPEN_LIBRARY_SEARCH_EVENT, { detail: prefill ?? null }));
-}
 
 interface SearchRequest {
   id: number;

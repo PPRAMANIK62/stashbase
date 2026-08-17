@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Schema } from '@milkdown/kit/prose/model';
 import { EditorState } from '@milkdown/kit/prose/state';
-import { activeHeadingId, extractDocumentHeadings, outlineDepth, outlineHasChildren, outlineScrollTop, visibleOutlineHeadings } from '@/features/documents/milkdown/headings';
+import { activeHeadingId, extractDocumentHeadings, outlineScrollTop } from '@/features/documents/milkdown/headings';
+import { outlineDepth, outlineHasChildren, visibleOutlineHeadings } from '@/common/lib/documentOutline';
 import { scrollOutlineToHeading, type HeadingNodeView } from '@/features/documents/milkdown/outlineNavigation';
 
 const outlineSchema = new Schema({

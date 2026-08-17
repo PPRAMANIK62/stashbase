@@ -10,8 +10,8 @@ import {
   StarIcon,
 } from '@/common/components/icons';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
-import { folderScope } from '@/common/lib/libraryScope';
-import { ALL_HISTORY_SCOPE } from '@/features/agent-panel/lib/sessionHistory';
+import { useSemanticIndexingNotice } from '@/store/hooks/useSemanticIndexingNotice';
+import { ALL_HISTORY_SCOPE, folderScope } from '@/common/lib/libraryScope';
 import { AGENT_META, AGENTS, type AgentKind } from '@/common/lib/agentCatalog';
 import {
   newChatAgentSelectionPlan,
@@ -22,7 +22,7 @@ import { electronBridge } from '@/common/lib/electronBridge';
 import { folderRefsEqual } from '@/store/lib/folderPath';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
 import { FileTree } from '@/features/workspace/components/FileTree';
-import { useDocumentOutline } from '@/features/documents/components/DocumentOutlineContext';
+import { useDocumentOutline } from '@/common/components/DocumentOutlineContext';
 import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { FolderMenu } from '@/features/workspace/components/FolderMenu';
 import { Menu, type MenuItem } from '@/common/components/Menu';
@@ -30,7 +30,7 @@ import { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderM
 import { ScopeHistoryButton } from '@/features/workspace/components/ScopeHistoryButton';
 import { Button } from '@/common/components/ui/button';
 import { api, errorMessage } from '@/common/api/api';
-import { FILE_MIME } from '@/features/workspace/lib/dragMime';
+import { FILE_MIME } from '@/common/lib/dragMime';
 import { useFolderRemoval } from '@/features/workspace/hooks/useFolderRemoval';
 import { refreshLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 import { useLibraryReconcile } from '@/features/workspace/hooks/useLibraryReconcile';
@@ -41,9 +41,9 @@ const SidebarAccountRow = lazyWithRetry(() =>
 );
 
 const DocumentOutline = lazyWithRetry(() =>
-  import('@/features/documents/components/DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
-const SemanticIndexingNotice = lazyWithRetry(() =>
-  import('@/features/preparation/components/SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNotice })));
+  import('@/common/components/DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
+const SemanticIndexingNoticeView = lazyWithRetry(() =>
+  import('@/common/components/SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNoticeView })));
 const EmbeddingSetupCallout = lazyWithRetry(() => import('@/features/preparation/components/EmbeddingSetupCallout'));
 const UnsupportedFilesCallout = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesCallout'));
 
@@ -403,10 +403,7 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
   // Markdown document is open) — it decides which bottom block carries
   // the mt-auto anchor.
   const hasOutline = Boolean(children);
-  const semanticNoticeVisible = Boolean(
-    state.semanticIndexing
-    && ['awaiting-decision', 'paused', 'partial-paused'].includes(state.semanticIndexing.state),
-  );
+  const semanticNotice = useSemanticIndexingNotice();
   const unsupportedFilesVisible = Boolean(
     (state.unsupportedFiles?.sourceCode ?? 0) + (state.unsupportedFiles?.other ?? 0),
   );
@@ -490,9 +487,9 @@ function LibrarySections({ children }: { children?: React.ReactNode }) {
             * folder's prior open/closed state. */}
           {!state.folderCollapsed && (
             <div className="scrollbar-quiet min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
-              {semanticNoticeVisible && (
+              {semanticNotice && (
                 <Suspense fallback={null}>
-                  <SemanticIndexingNotice />
+                  <SemanticIndexingNoticeView {...semanticNotice} />
                 </Suspense>
               )}
               {unsupportedFilesVisible && (

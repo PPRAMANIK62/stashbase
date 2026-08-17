@@ -74,7 +74,8 @@ access surface external clients copy from.
 | HTTP Adapters | `server/routes/appearance.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
 | Renderer Adapters | `web-src/src/features/settings/components/SettingsModal.tsx`, `AppearancePanel.tsx`, `EmbeddingPanel.tsx`, `TranscriptionPanel.tsx`, `McpAccessPanel.tsx`, `AgentRuntimePanel.tsx` |
 | Appearance Adapter | `web-src/src/features/settings/lib/appearance.ts` |
-| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `web-src/src/features/settings/__tests__/appearance.test.ts`, `web-src/src/features/settings/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts` |
+| Open-request Interfaces | `web-src/src/common/lib/settingsTrigger.ts` (Settings), `web-src/src/common/lib/embeddingSetupTrigger.ts` (AI Index setup), `web-src/src/common/lib/embeddingAuth.ts` (authorization and basic-mode facts) — shared so no surface reaches into the Settings feature to ask it to open |
+| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `web-src/src/features/settings/__tests__/appearance.test.ts`, `web-src/src/common/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts` |
 
 ## Validation
 

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedModal } from '@/common/components/LazyManaged';
-
-export type SettingsSection = 'appearance' | 'agents' | 'embedding' | 'transcription' | 'mcp';
+import { OPEN_SETTINGS_EVENT, type SettingsOpenDetail, type SettingsSection } from '@/common/lib/settingsTrigger';
+import { OVERLAY_BLOCKING_EVENT } from '@/common/hooks/useSettingsBlocking';
 
 export interface SettingsModalProps {
   initialSection: SettingsSection;
@@ -10,17 +10,7 @@ export interface SettingsModalProps {
   onClose: () => void;
 }
 
-interface OpenDetail {
-  section?: SettingsSection;
-}
-
 const ManagedSettingsModal = lazyWithRetry(() => import('@/features/settings/components/ManagedSettingsModal'));
-
-export function openSettings(section?: SettingsSection): void {
-  window.dispatchEvent(
-    new CustomEvent<OpenDetail>('stashbase-open-settings', { detail: { section } }),
-  );
-}
 
 /** Event ownership stays eager; the managed dialog and settings panels load
  * only when Settings is first opened. */
@@ -29,21 +19,21 @@ export function SettingsPortal() {
   const [section, setSection] = useState<SettingsSection>('appearance');
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent<boolean>('stashbase-overlay-blocking', { detail: open }));
+    window.dispatchEvent(new CustomEvent<boolean>(OVERLAY_BLOCKING_EVENT, { detail: open }));
     return () => {
-      window.dispatchEvent(new CustomEvent<boolean>('stashbase-overlay-blocking', { detail: false }));
+      window.dispatchEvent(new CustomEvent<boolean>(OVERLAY_BLOCKING_EVENT, { detail: false }));
     };
   }, [open]);
 
   useEffect(() => {
     function onOpen(event: Event) {
-      const detail = (event as CustomEvent<OpenDetail>).detail;
+      const detail = (event as CustomEvent<SettingsOpenDetail>).detail;
       if (detail?.section) setSection(detail.section);
       setOpen(true);
     }
-    window.addEventListener('stashbase-open-settings', onOpen);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onOpen);
     return () => {
-      window.removeEventListener('stashbase-open-settings', onOpen);
+      window.removeEventListener(OPEN_SETTINGS_EVENT, onOpen);
     };
   }, []);
 

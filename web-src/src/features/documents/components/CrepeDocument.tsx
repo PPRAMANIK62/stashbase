@@ -25,9 +25,10 @@ import { portableImageMarkdownPath, relativeAssetPath } from '@/features/documen
 import { splitLeadingYamlFrontmatter } from '@/features/documents/milkdown/frontmatter';
 import { planIncomingMarkdownSync, startCrepeCreation } from '@/features/documents/milkdown/crepeLifecycle';
 import { resolveLocalImageUrl } from '@/features/documents/milkdown/imageUrls';
-import { activeHeadingId, extractDocumentHeadings, headingSlug, type DocumentHeading, type ProseMirrorDocument } from '@/features/documents/milkdown/headings';
+import { activeHeadingId, extractDocumentHeadings, headingSlug, type ProseMirrorDocument } from '@/features/documents/milkdown/headings';
+import type { DocumentHeading } from '@/common/lib/documentOutline';
 import { documentScroller, headingElementAtPosition, scrollOutlineToHeading, type HeadingNodeView } from '@/features/documents/milkdown/outlineNavigation';
-import { useDocumentOutline } from '@/features/documents/components/DocumentOutlineContext';
+import { useDocumentOutline } from '@/common/components/DocumentOutlineContext';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
 

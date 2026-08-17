@@ -8,7 +8,7 @@ import {
 import '@/app/app-shell.css';
 import { Sidebar } from '@/features/workspace/components/Sidebar';
 import { TitlebarControls } from '@/app/TitlebarControls';
-import { MainPane } from '@/features/workspace/components/MainPane';
+import { MainPane } from '@/app/MainPane';
 import { DropVeil } from '@/common/components/DropVeil';
 import { EmbedderRequireKeyGate } from '@/features/settings/components/EmbedderRequireKeyGate';
 import { Hotkeys } from '@/app/Hotkeys';
@@ -20,7 +20,7 @@ import { SettingsPortal } from '@/features/settings/components/SettingsModal';
 import { QuickOpen } from '@/features/search/components/QuickOpen';
 import { LibrarySearch } from '@/features/search/components/LibrarySearch';
 import { EditorHistoryNavigator } from '@/features/documents/components/EditorHistoryNavigator';
-import { DocumentOutlineProvider } from '@/features/documents/components/DocumentOutlineContext';
+import { DocumentOutlineProvider } from '@/common/components/DocumentOutlineContext';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { OverlayStackProvider } from '@/common/components/OverlayStack';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
@@ -35,13 +35,13 @@ import { electronBridge } from '@/common/lib/electronBridge';
 import {
   COMPACT_WORKSPACE_QUERY,
   resolveWorkspaceLayout,
-} from '@/features/workspace/lib/workspaceLayout';
+} from '@/common/lib/workspaceLayout';
 
 const LazyChatPane = lazyWithRetry(() => import('@/features/agent-panel/components/ChatPane'));
 const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesModal'));
 const LazyContextMenu = lazyWithRetry(() => import('@/app/ContextMenu'));
 const LazyImageLightbox = lazyWithRetry(() =>
-  import('@/features/documents/components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
+  import('@/common/components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
 );
 
 /**

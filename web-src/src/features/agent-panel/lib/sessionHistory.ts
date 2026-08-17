@@ -18,15 +18,7 @@
  */
 import type { SessionInfo, SessionScopeParams } from '@/common/api/api';
 import type { AgentKind } from '@/common/lib/agentCatalog';
-import { scopeRequestParams, type LibraryScope } from '@/common/lib/libraryScope';
-
-/** What a history menu can list: one chat scope, or every session across
- *  the library ('all' — the New Chat row's global history). `all` exists
- *  only for history; connect requests always bind a concrete LibraryScope. */
-export type HistoryScope = LibraryScope | { kind: 'all' };
-
-/** The New Chat row's global history scope. */
-export const ALL_HISTORY_SCOPE: HistoryScope = { kind: 'all' };
+import { scopeRequestParams, type HistoryScope } from '@/common/lib/libraryScope';
 
 /** The listing params a history scope resolves to. */
 export function historyRequestParams(scope: HistoryScope): SessionScopeParams {

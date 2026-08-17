@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
+import { useSettingsBlocking } from '@/common/hooks/useSettingsBlocking';
 import { useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedPicker } from '@/common/components/LazyManaged';

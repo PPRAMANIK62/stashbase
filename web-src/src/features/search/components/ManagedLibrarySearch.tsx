@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as R
 import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '@/common/api/api';
 import type { PendingHighlight } from '@/store/state/state';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
-import { openSettings } from '@/features/settings/components/SettingsModal';
+import { openSettings } from '@/common/lib/settingsTrigger';
 import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet';
 import { folderRefsEqual } from '@/store/lib/folderPath';
 import {
@@ -12,11 +12,10 @@ import {
   readLibrarySearchMemory,
   resolveSemanticHits,
   writeLibrarySearchMemory,
-  type LibrarySearchMode,
-  type LibrarySearchPrefill,
   type LibrarySearchScope,
   type LibrarySemanticHit,
 } from '@/features/search/lib/librarySearch';
+import type { LibrarySearchMode, LibrarySearchPrefill } from '@/common/lib/librarySearchTrigger';
 import { Button } from '@/common/components/ui/button';
 import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
 import { StatusMessage } from '@/common/components/ui/status';
@@ -28,7 +27,8 @@ import { fileGlyphFormat } from '@/common/lib/fileGlyphFormat';
 import { folderMenuEntries } from '@/common/lib/libraryScope';
 import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { FileTypeIcon } from '@/common/components/FileTypeIcon';
-import { SemanticIndexingNotice } from '@/features/preparation/components/SemanticIndexingNotice';
+import { SemanticIndexingNoticeView } from '@/common/components/SemanticIndexingNotice';
+import { useSemanticIndexingNotice } from '@/store/hooks/useSemanticIndexingNotice';
 import { PICKER_VEIL_CLASS, pickerPanelClass } from '@/common/lib/pickerChrome';
 
 /**
@@ -128,6 +128,7 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
 }) {
   const state = useWorkspace();
   const { actions, dispatch } = useAppActions();
+  const semanticNotice = useSemanticIndexingNotice();
   const initial = useRef(applyLibrarySearchPrefill(readLibrarySearchMemory(), prefill)).current;
   const [query, setQuery] = useState(initial.query);
   const [mode, setMode] = useState<LibrarySearchMode>(initial.mode);
@@ -635,7 +636,7 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
             </SegmentedControlItem>
           </SegmentedControl>
         </div>
-        <SemanticIndexingNotice />
+        {semanticNotice && <SemanticIndexingNoticeView {...semanticNotice} />}
         <SearchStatusBanner semanticMode={!isKeyword} onNavigateAway={onClose} />
         <div id="library-search-results" role="listbox" aria-label="Search results" className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
           {renderResults()}

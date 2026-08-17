@@ -17,8 +17,8 @@
  */
 import { useState } from 'react';
 import type { AgentKind } from '@/common/lib/agentCatalog';
-import { FILE_MIME } from '@/features/workspace/lib/dragMime';
-import { acceptsAgentContextDrop, dragPayloadKinds } from '@/features/workspace/lib/dragRouting';
+import { FILE_MIME } from '@/common/lib/dragMime';
+import { acceptsAgentContextDrop, dragPayloadKinds } from '@/common/lib/dragRouting';
 import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from '@/common/components/ui/button';
@@ -28,7 +28,7 @@ import { EmptyChatGreeting, EmptyChatSuggestion } from '@/features/agent-panel/c
 import { MessageList } from '@/features/agent-panel/components/AgentMessages';
 import { useAgentAttachments } from '@/features/agent-panel/hooks/useAgentAttachments';
 import { useAgentSession } from '@/features/agent-panel/hooks/useAgentSession';
-import { openSettings } from '@/features/settings/components/SettingsModal';
+import { openSettings } from '@/common/lib/settingsTrigger';
 
 export function AgentView({
   active,

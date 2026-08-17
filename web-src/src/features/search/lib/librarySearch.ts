@@ -10,8 +10,7 @@
  */
 import type { LibraryKeywordFile, LibraryKeywordSearchResult, SearchHit } from '@/common/api/api';
 import type { LibraryScope } from '@/common/lib/libraryScope';
-
-export type LibrarySearchMode = 'semantic' | 'keyword';
+import type { LibrarySearchMode, LibrarySearchPrefill } from '@/common/lib/librarySearchTrigger';
 
 /** The whole library, or one library folder by absolute path — the SAME
  *  model the chat composer binds a session to, so both surfaces share one
@@ -36,12 +35,6 @@ export interface LibrarySearchMemory extends LibrarySearchResults {
   query: string;
   mode: LibrarySearchMode;
   scope: LibrarySearchScope;
-}
-
-export interface LibrarySearchPrefill {
-  query?: string;
-  mode?: LibrarySearchMode;
-  scope?: LibrarySearchScope;
 }
 
 const defaultMemory: LibrarySearchMemory = {

@@ -24,6 +24,14 @@ export function libraryScopesEqual(a: LibraryScope | null | undefined, b: Librar
   return b.kind === 'folder' && b.path === a.path;
 }
 
+/** What a history menu can list: one library scope, or every session across
+ *  the library ('all' — the New Chat row's global history). `all` exists
+ *  only for history; connect requests always bind a concrete LibraryScope. */
+export type HistoryScope = LibraryScope | { kind: 'all' };
+
+/** The New Chat row's global history scope. */
+export const ALL_HISTORY_SCOPE: HistoryScope = { kind: 'all' };
+
 export interface LibraryFolderOption {
   path: string;
   favorite?: boolean;

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
-import { openLibrarySearch } from './LibrarySearch';
+import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 

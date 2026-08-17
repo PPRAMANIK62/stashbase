@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { FileTypeIcon } from '@/common/components/FileTypeIcon';
-import { ImageLightbox } from '@/features/documents/components/ImageLightbox';
+import { ImageLightbox } from '@/common/components/ImageLightbox';
 import { fileGlyphFormat } from '@/common/lib/fileGlyphFormat';
 import { attachChipClass, attachIconTileClass, attachImageChipClass, attachImagePreviewClass, attachNameClass, attachTextClass, attachTypeClass } from '@/features/agent-panel/lib/panelStyles';
 import type { Attachment } from '@/features/agent-panel/lib/types';

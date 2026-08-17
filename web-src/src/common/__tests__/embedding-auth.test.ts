@@ -5,7 +5,7 @@ import {
   hasSkippedAiIndexing,
   isEmbeddingAuthorized,
   setAiIndexingSkipped,
-} from '@/features/settings/lib/embedder/embeddingAuth';
+} from '@/common/lib/embeddingAuth';
 
 function state(patch: Partial<EmbedderState>): EmbedderState {
   return {

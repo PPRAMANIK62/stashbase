@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import type { DocumentHeading } from '@/features/documents/milkdown/headings';
+import type { DocumentHeading } from '@/common/lib/documentOutline';
 
 type DocumentOutlineModel = {
   headings: DocumentHeading[];

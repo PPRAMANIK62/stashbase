@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { isEditorHistoryChord } from '@/features/documents/lib/editorHistory';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useAppActions, useUiShell } from '@/store/contexts/AppContext';
-import { openLibrarySearch } from '@/features/search/components/LibrarySearch';
+import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
 
 type WindowShortcutInput = Pick<
   KeyboardEvent,

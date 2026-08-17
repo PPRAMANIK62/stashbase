@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '@/common/components/icons';
 import { api, errorMessage, type HostedAccountState } from '@/common/api/api';
-import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '@/features/account/lib/accountEvents';
-import { signInWithStashBase } from '@/features/account/lib/accountOAuth';
+import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '@/common/lib/accountEvents';
+import { signInWithStashBase } from '@/common/lib/accountOAuth';
 import { DISCORD_INVITE_URL, openExternalUrl } from '@/common/lib/externalLink';
-import { openSettings } from '@/features/settings/components/SettingsModal';
+import { openSettings } from '@/common/lib/settingsTrigger';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
 import { Button } from '@/common/components/ui/button';
 import {

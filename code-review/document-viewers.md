@@ -68,8 +68,8 @@ forwarding, and script confinement.
 
 | Role | Stable entry points |
 |---|---|
-| Viewer dispatch | `web-src/src/features/workspace/components/MainPane.tsx` |
-| Primary viewers | `web-src/src/features/documents/components/PdfPreview.tsx`, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `ImageLightbox.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, and the lazy `json/JsonTreeView.tsx` controller |
+| Viewer dispatch | `web-src/src/app/MainPane.tsx` |
+| Primary viewers | `web-src/src/features/documents/components/PdfPreview.tsx`, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, the lazy `json/JsonTreeView.tsx` controller, and the shared `web-src/src/common/components/ImageLightbox.tsx` |
 | Preview-control Modules | `web-src/src/features/documents/components/audio/`, `web-src/src/features/documents/lib/findIframe.ts`, `previewChunkHighlight.ts`, `pdfText.ts`, `pdfFindController.ts`, `previewIframe.ts`, and `previewMessages.ts` |
 | Worker/Sanitizer Seam | `web-src/src/features/documents/workers/docxPreview.worker.ts`, `shared/html-sanitization.ts` |
 | Server asset/preparation Adapters | `/asset` and `/derived-asset` routes, `server/docx.ts`, media preparation Modules |

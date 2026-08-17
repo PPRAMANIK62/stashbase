@@ -2,7 +2,7 @@ import { Suspense, useRef, useState } from 'react';
 import { HistoryIcon } from '@/common/components/icons';
 import type { AgentKind } from '@/common/lib/agentCatalog';
 import { useAppActions } from '@/store/contexts/AppContext';
-import type { HistoryScope } from '@/features/agent-panel/lib/sessionHistory';
+import type { HistoryScope } from '@/common/lib/libraryScope';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { Button } from '@/common/components/ui/button';
 import { PopupLoadingStatus } from '@/common/components/ui/status';

@@ -1,5 +1,5 @@
 import { api, type HostedAccountState, type HostedOAuthProvider } from '@/common/api/api';
-import { notifyAccountChanged } from './accountEvents';
+import { notifyAccountChanged } from '@/common/lib/accountEvents';
 import { openExternalUrl } from '@/common/lib/externalLink';
 
 const OAUTH_TIMEOUT_MS = 5 * 60 * 1000;

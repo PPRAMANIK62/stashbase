@@ -6,7 +6,7 @@ import {
   type EditorHistoryEntry,
 } from '@/features/documents/lib/editorHistory';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
-import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
+import { useSettingsBlocking } from '@/common/hooks/useSettingsBlocking';
 import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import {
   PICKER_LABEL_CLASS,

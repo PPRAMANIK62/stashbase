@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { CloseIcon } from '@/common/components/icons';
-import type { SettingsModalProps, SettingsSection } from '@/features/settings/components/SettingsModal';
+import type { SettingsSection } from '@/common/lib/settingsTrigger';
+import type { SettingsModalProps } from '@/features/settings/components/SettingsModal';
 import { AppearancePanel } from '@/features/settings/components/AppearancePanel';
 import { AgentRuntimePanel } from '@/features/settings/components/AgentRuntimePanel';
 import { EmbeddingPanel } from '@/features/settings/components/EmbeddingPanel';

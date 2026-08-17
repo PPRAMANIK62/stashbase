@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react';
-import { FILE_MIME, FOLDER_MIME } from '@/features/workspace/lib/dragMime';
+import { FILE_MIME, FOLDER_MIME } from '@/common/lib/dragMime';
 import { useAppActions } from '@/store/contexts/AppContext';
 
 /** Where in a row the cursor is during dragover — drives the drop

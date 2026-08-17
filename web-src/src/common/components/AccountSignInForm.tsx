@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { errorMessage, type HostedAccountState } from '@/common/api/api';
-import { signInWithStashBase } from '@/features/account/lib/accountOAuth';
+import { signInWithStashBase } from '@/common/lib/accountOAuth';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
 
