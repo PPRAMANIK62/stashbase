@@ -22,6 +22,36 @@ The Playwright jobs supplement, rather than replace, the existing three-OS
 `source-build` matrix. In particular, do not remove either `test:electron` or
 the real-app `test:electron:smoke` lifecycle gate when changing the UI suite.
 
+## What a renderer assertion may read
+
+A renderer invariant is asserted against **rendered output**, never against a
+component's source text. Mount the component and query what it produced —
+`renderToStaticMarkup` for static markup, `react-test-renderer` when the
+assertion needs hooks or effects. Assertions live beside the feature that owns
+the component, in that feature's `__tests__` folder.
+
+Reading a component file off disk and matching its text pins the invariant to
+a file path and a spelling: the assertion breaks when the component moves or
+is split, and passes when the component keeps the matched text but stops
+rendering it. Both failure modes are wrong in the same direction — the test
+tracks the source, not the behavior.
+
+Source text is the correct artefact in exactly two cases, both in
+`common/__tests__/renderer-foundation.test.ts`:
+
+- **Stylesheets.** A token forwarding rule such as `--radius-lg:
+  var(--radius-container)` has no rendered form to assert against; the text is
+  the artefact.
+- **Repo-wide literal bans.** The `walkCss` / `walkSources` scans forbid
+  specific literals in every file, including inside injected `<style>` strings
+  no render reaches. They walk the tree instead of naming paths, so a file
+  moving between folders neither breaks them nor drops out of their coverage.
+
+Known Gap: `PdfPreview.tsx` is still asserted through source text. It imports
+its worker through Vite's `?worker` suffix, which Node cannot resolve, so the
+module cannot be imported under `test:renderer` — there is no rendered output
+to assert against until that import moves behind a runtime-resolvable seam.
+
 ## Harness, isolation, and cleanup
 
 Every spec launches the real Electron renderer through `e2e/electron-entry.cjs`

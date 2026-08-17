@@ -1,3 +1,38 @@
+/**
+ * Design-token discipline for the renderer's foundation.
+ *
+ * WHY THIS FILE READS SOURCE TEXT, AND WHY THAT IS ONLY EVER STYLESHEETS
+ * --------------------------------------------------------------------
+ * A stylesheet has no rendered output to assert against. `--radius-lg:
+ * var(--radius-container)` is not observable from any component: nothing
+ * mounts it, jsdom/happy-dom resolve `var()` only for declarations they
+ * were handed, and the rule these tests protect is about which ROLE a token
+ * forwards, not about any pixel that lands on screen. The text of the
+ * stylesheet is the artefact. Reading it is the assertion.
+ *
+ * A component is the opposite. `aria-label`, `role`, a class recipe, the
+ * Base UI primitive a surface delegates to, whether a lazy container really
+ * loads its managed body — every one of those is observable by mounting the
+ * component, and every one of them is invisible to a regex the moment the
+ * component moves file, gets split in two, or spells the same output a
+ * different way. Component invariants therefore live in tests that RENDER:
+ * see `shared-overlays.test.ts`, `accessibility-semantics.test.ts`,
+ * `@/app/__tests__/app-shell-semantics.test.ts`, and the per-feature
+ * `__tests__` folders. Do not move a component assertion back into this
+ * file, and do not "clean up" the stylesheet reads that remain — they are
+ * the only form those assertions can take.
+ *
+ * The two `walkCss` / `walkSources` scans below are the one deliberate
+ * exception on the source-text side: they are repo-wide bans on specific
+ * literals (a legacy accent blue, an arbitrary-value escape, a hand-stamped
+ * platform class) that must hold in EVERY file, including inside injected
+ * `<style>` strings that no render can reach. They walk the tree rather
+ * than naming paths, so a file moving between feature folders neither
+ * breaks them nor silently drops out of their coverage.
+ *
+ * `electron/preload.cjs` is read for the same reason as a stylesheet: it is
+ * a main-process file with no renderer to mount.
+ */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -61,10 +96,9 @@ test('chrome type scale and radius scale are the only visual values', () => {
   ]) {
     assert.match(styles, new RegExp(`--radius-${name}: ${role.replace(/[()*]/g, (c) => '\\' + c)};`));
   }
-  // Buttons are items, not boxes. If the base ever reaches for a container
-  // step, every 32px button silently becomes a capsule.
-  const button = read('web-src/src/common/components/ui/button.tsx');
-  assert.doesNotMatch(button, /rounded-(lg|xl|2xl)/);
+  // Buttons are items, not boxes: the Button recipe must never reach for a
+  // container step. That one is asserted against the class strings the
+  // component actually emits — see `shared-overlays.test.ts`.
 
   // Legacy CSS stays on the shared scale: no half-pixel chrome sizes, no
   // off-palette accent blues, no odd font weights. Scans every colocated
@@ -94,6 +128,12 @@ test('chrome type scale and radius scale are the only visual values', () => {
     });
   for (const file of walkSources('web-src/src')) {
     assert.doesNotMatch(read(file), legacyBlue, `${file} carries a legacy accent blue`);
+    // Cursor-style chrome has no `is-electron` switch: platform classes are
+    // stamped ONCE by `electron/preload.cjs` as `platform-${process.platform}`
+    // (asserted below), and the app-shell CSS keys off those. A renderer
+    // module stamping its own class would fork that contract, so the ban is
+    // repo-wide rather than pinned to whichever file composes the shell.
+    assert.doesNotMatch(read(file), /is-electron/, `${file} stamps its own Electron class`);
   }
   // Corners come off the scale too. The transcript's jump-to-latest
   // capsule is the one sanctioned literal — a 999px pill is a shape, not
@@ -142,179 +182,33 @@ test('shadcn generation is configured for Base UI and renderer aliases', () => {
   assert.equal((config.aliases as { ui?: string }).ui, '@/common/components/ui');
 });
 
-test('new foundation paths use Base UI and reduced-motion-aware Motion', () => {
-  // The clipboard prompt rides the shared shell; the shell owns the one
-  // Base UI dialog recipe (surface, width, title role) for every modal.
-  assert.match(read('web-src/src/common/components/ManagedClipboardImport.tsx'), /@\/common\/components\/ManagedModalShell/);
-  assert.match(read('web-src/src/common/components/ManagedClipboardImport.tsx'), /@\/common\/components\/ui\/button/);
-  assert.match(read('web-src/src/common/components/ui/dialog.tsx'), /@base-ui\/react\/dialog/);
-  assert.match(read('web-src/src/common/components/ui/dialog.tsx'), /bg-veil.*data-open:animate-in/);
-  assert.match(read('web-src/src/common/components/ui/dialog.tsx'), /data-open:zoom-in-95/);
-  assert.match(read('web-src/src/common/components/ManagedModalShell.tsx'), /@\/common\/components\/ui\/dialog/);
-  assert.match(read('web-src/src/common/components/ManagedModalShell.tsx'), /<DialogTitle/);
-  assert.match(read('web-src/src/common/components/ManagedModalShell.tsx'), /w-\[min\(420px,90vw\)\]/);
-  assert.match(read('web-src/src/common/components/ClipboardImportModal.tsx'), /as=\{ManagedClipboardImport\}/);
-  assert.match(read('web-src/src/common/components/ManagedClipboardImport.tsx'), /autoFocus onClick=\{onAdd\}/);
-  assert.doesNotMatch(read('web-src/src/common/components/ClipboardImportModal.tsx'), /window\.addEventListener/);
-  assert.doesNotMatch(read('web-src/src/common/components/ModalShell.tsx'), /ManagedClipboardImport/);
-  assert.match(read('web-src/src/common/components/ManagedDropVeil.tsx'), /MotionConfig reducedMotion="user"/);
-  assert.match(read('web-src/src/common/components/ManagedDropVeil.tsx'), /animate=\{\{ opacity: 1 \}\}/);
-  assert.match(read('web-src/src/common/components/DropVeil.tsx'), /lazyWithRetry\(\(\) => import\('@\/common\/components\/ManagedDropVeil'\)\)/);
+test('motion is budgeted and reduced-motion is honoured at the stylesheet level', () => {
+  // The per-component motion contracts (the drag veil's reduced-motion
+  // config, the dialog's enter/exit) are asserted by rendering, in
+  // `shared-overlays.test.ts`. What lives only in CSS is the global budget.
   const globals = read('web-src/src/styles/globals.css');
   assert.match(globals, /transition-property: opacity, color, background-color/);
   assert.match(globals, /animation-duration: 0\.01ms !important/);
 });
 
-test('Markdown Find controller registration is independent of changing action-bag identity', () => {
-  const markdown = read('web-src/src/features/documents/components/CrepeDocument.tsx');
-  assert.match(markdown, /const registerFindController = actions\.registerFindController/);
-  assert.match(markdown, /\[active, creationState, registerFindController\]/);
-  assert.doesNotMatch(markdown, /registerFindController\(null\);\n  \}, \[actions, active\]\)/);
-});
-
-test('PDF load and Find registration are independent of changing action-bag identity', () => {
-  const pdf = read('web-src/src/features/documents/components/PdfPreview.tsx');
-  assert.match(pdf, /\}, \[fileUrl\]\);/);
-  assert.match(pdf, /\[doc, numPages, registerFindController\]/);
-  assert.match(pdf, /function scrollToPage[\s\S]*updateTabPdfPage\(activeTab\.id, targetPage\)/);
-  assert.match(pdf, /programmaticPageRef\.current = behavior === 'smooth' \? page : null/);
-  assert.match(pdf, /bestPage !== programmaticPage\) return/);
-  assert.doesNotMatch(pdf, /\[fileUrl, actions\]/);
-});
-
-test('JSON Find registration is independent of changing action-bag identity', () => {
-  const json = read('web-src/src/features/documents/components/JsonDocument.tsx');
-  assert.match(json, /const registerFindController = actions\.registerFindController/);
-  assert.match(json, /\[registerFindController, active, viewMode\]/);
-  assert.doesNotMatch(json, /\[actions, active\]/);
-});
-
-test('shared interaction surfaces delegate behavior to the renderer UI layer', () => {
-  for (const [file, primitive] of [
-    ['web-src/src/common/components/ui/alert-dialog.tsx', 'alert-dialog'],
-    ['web-src/src/common/components/ui/menu.tsx', 'menu'],
-    ['web-src/src/common/components/ui/toast.tsx', 'toast'],
-    ['web-src/src/common/components/ui/tooltip.tsx', 'tooltip'],
-  ]) {
-    assert.match(read(file), new RegExp(`@base-ui/react/${primitive}`));
-  }
-
-  const modal = read('web-src/src/common/components/ModalShell.tsx');
-  assert.match(modal, /lazyWithRetry\(\(\) => import\('@\/common\/components\/ManagedModalShell'\)\)/);
-  assert.match(read('web-src/src/common/components/ManagedModalShell.tsx'), /@\/common\/components\/ui\/dialog/);
-  // The Suspense/ModalLoadingStatus wiring moved into the shared
-  // LazyManagedModal primitive (see the "shared overlays" test below) —
-  // ModalShell just hands it the lazy component and cancel/label props.
-  assert.match(modal, /LazyManagedModal/);
-  assert.doesNotMatch(modal, /createPortal|addEventListener/);
-  assert.doesNotMatch(read('web-src/src/features/settings/components/SettingsModal.tsx'), /addEventListener\('keydown'/);
-  assert.doesNotMatch(read('web-src/src/app/components/CascadePromptModal.tsx'), /addEventListener/);
-
-  const menu = read('web-src/src/common/components/Menu.tsx');
-  assert.match(menu, /lazyWithRetry\(\(\) => import\('@\/common\/components\/ManagedMenu'\)\)/);
-  const managedMenu = read('web-src/src/common/components/ManagedMenu.tsx');
-  assert.match(managedMenu, /@\/common\/components\/ui\/menu/);
-  assert.doesNotMatch(managedMenu, /useLayoutEffect|addEventListener|getBoundingClientRect\(\).*set/);
-
-  assert.match(read('web-src/src/common/components/Toasts.tsx'), /lazyWithRetry\(\(\) => import\('@\/common\/components\/ManagedToasts'\)\)/);
-  assert.match(read('web-src/src/common/components/ManagedToasts.tsx'), /@\/common\/components\/ui\/toast/);
-  assert.doesNotMatch(read('web-src/src/store/state/state.ts'), /TOAST_(ADD|DISMISS|CLEAR)/);
-  assert.doesNotMatch(read('web-src/src/store/state/stateReducer.ts'), /case 'TOAST_/);
-
-  const managedTooltipButton = read('web-src/src/common/components/ManagedTooltipButton.tsx');
-  assert.match(managedTooltipButton, /<TooltipTrigger\s+\{\.\.\.triggerProps\}/);
-  assert.match(managedTooltipButton, /render=\{<button disabled=\{disabled\} \/>}/);
-  assert.match(managedTooltipButton, /triggerRef\.current\?\.focus\(\)/);
-
-  const app = read('web-src/src/app/App.tsx');
-  assert.match(app, /<OverlayStackProvider>/);
-  assert.doesNotMatch(app, /classList\.add\('is-electron'\)/);
-  const splitters = read('web-src/src/features/workspace/components/WorkspaceSplitters.tsx');
-  assert.match(splitters, /role="separator"/);
-  assert.match(splitters, /aria-valuemin=/);
-  assert.match(splitters, /resizeSidebarByKeyboard/);
-  assert.match(splitters, /resizeChatByKeyboard/);
-
+test('the Electron chrome contract is stamped once, by preload', () => {
+  // A main-process file: no renderer, nothing to mount, so its text is the
+  // artefact — the same reason the stylesheet reads above stay.
   const preload = read('electron/preload.cjs');
   assert.match(preload, /platform-\$\{process\.platform\}/);
-  // Cursor-style chrome: no titlebar strip — the traffic lights float
-  // over the sidebar's top drag zone and the tab strip's empty
-  // background doubles as the other macOS drag surface. This composition
-  // lives in the app shell, not any one feature's CSS.
-  const appShellChrome = read('web-src/src/app/app-shell.css');
-  assert.doesNotMatch(appShellChrome, /app-chrome/);
-  assert.match(appShellChrome, /platform-darwin \.sidebar-drag-zone/);
-  assert.match(appShellChrome, /platform-darwin \.tab-strip/);
-  assert.match(read('web-src/src/app/components/Sidebar.tsx'), /className="sidebar-drag-zone"/);
-});
-
-test('shared overlays own loading modality, popup positioning, and focus return', () => {
-  // The four blocking-modal containers all delegate to one shared
-  // primitive instead of each wiring useOverlayLayer + ModalLoadingStatus
-  // inline — that wiring now lives once in LazyManaged.tsx.
-  for (const file of [
-    'web-src/src/common/components/ModalShell.tsx',
-    'web-src/src/features/settings/components/SettingsModal.tsx',
-    'web-src/src/app/components/AlertConfirmModal.tsx',
-    'web-src/src/common/components/ClipboardImportModal.tsx',
-  ]) {
-    assert.match(read(file), /LazyManagedModal/);
-  }
-  const lazyManaged = read('web-src/src/common/components/LazyManaged.tsx');
-  assert.match(lazyManaged, /useOverlayLayer/);
-  assert.match(lazyManaged, /<ModalLoadingStatus/);
-
-  const loadingStatus = read('web-src/src/common/components/ui/status.tsx');
-  assert.match(loadingStatus, /dialog\.showModal\(\)/);
-  assert.match(loadingStatus, /if \(isTopmost\) onCancel\(\)/);
-
-  const tree = read('web-src/src/features/workspace/components/FileTree.tsx');
-  assert.match(tree, /tabIndex=\{treeFocus\.rovingPath === node\.path \? 0 : -1\}/);
-  assert.match(tree, /tabIndex=\{treeFocus\.rovingPath === path \? 0 : -1\}/);
-  assert.match(tree, /currentTarget as HTMLElement\)\.focus\(\{ preventScroll: true \}\)/);
-  assert.match(tree, /role="tree"/);
-  assert.match(tree, /aria-label="Files"/);
-  assert.match(tree, /role="treeitem"/);
-  assert.match(tree, /aria-selected=\{isActive\}/);
-
-  const tabs = read('web-src/src/features/workspace/components/TabStrip.tsx');
-  assert.match(tabs, /role="tablist"/);
-  assert.match(tabs, /aria-label="Open documents"/);
-  assert.match(tabs, /role="tab"/);
-  assert.match(tabs, /aria-selected=\{isActive\}/);
-  assert.match(tabs, /aria-label=\{`Close \$\{label\}`\}/);
-  assert.match(tabs, /aria-controls="document-panel"/);
-  assert.doesNotMatch(tabs, /aria-controls=\{`document-panel-\$\{t\.id\}`\}/);
-
-  const mainPane = read('web-src/src/app/components/MainPane.tsx');
-  assert.match(mainPane, /id=\{activeTab \? 'document-panel' : undefined\}/);
-
-  const sidebar = read('web-src/src/app/components/Sidebar.tsx');
-  assert.match(sidebar, /aria-label=\{`Select \$\{name\} folder root`\}/);
-  assert.match(sidebar, /aria-label=\{'New note in ' \+ target\}/);
-  assert.match(sidebar, /<Button\s+type="button"\s+variant="ghost"[\s\S]{0,400}aria-label=\{`Select \$\{name\} folder root`\}/);
-
-  const chat = read('web-src/src/features/agent-panel/components/ChatPane.tsx');
-  assert.match(chat, /role="tablist"/);
-  assert.match(chat, /aria-label="Chat sessions"/);
-  assert.match(chat, /aria-controls=\{chatPanelId\(tab\.id\)\}/);
-  assert.match(chat, /aria-labelledby=\{chatTabId\(tab\.id\)\}/);
-
-  const messages = read('web-src/src/features/agent-panel/components/AgentMessages.tsx');
-  assert.match(messages, /role="log"/);
-  assert.match(messages, /aria-label="Agent conversation"/);
-
-  const markdown = read('web-src/src/features/documents/components/CrepeDocument.tsx');
-  assert.match(markdown, /role="region"/);
-  assert.match(markdown, /aria-label=\{`\$\{basename\(name\)\} Markdown document`\}/);
-
-  const json = read('web-src/src/features/documents/components/JsonDocument.tsx');
-  assert.match(json, /role="region"/);
-  assert.match(json, /aria-label="JSON document"/);
 });
 
 test('shell geometry and reading-surface fixes stay pinned', () => {
   const appShell = read('web-src/src/app/app-shell.css');
+  // Cursor-style chrome: no titlebar strip — the traffic lights float
+  // over the sidebar's top drag zone and the tab strip's empty
+  // background doubles as the other macOS drag surface. This composition
+  // lives in the app shell, not any one feature's CSS. (The sidebar's
+  // matching drag-zone ELEMENT is asserted by rendering the sidebar — see
+  // `@/app/__tests__/app-shell-semantics.test.ts`.)
+  assert.doesNotMatch(appShell, /app-chrome/);
+  assert.match(appShell, /platform-darwin \.sidebar-drag-zone/);
+  assert.match(appShell, /platform-darwin \.tab-strip/);
   // Drag surfaces never overlap controls: the sidebar drag zone stops at
   // the titlebar controls (per-element no-drag carve-outs proved
   // intermittently stale on windowed macOS — geometry, not carving).
@@ -355,8 +249,22 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
   // selector silently matches nothing.
   assert.match(documentsCss, /\.crepe-readonly \.milkdown-block-handle \{ display: none; \}/);
   assert.doesNotMatch(documentsCss, /crepe-block-handle/);
+});
 
-  // Composer pills yield width under pressure (min-w-0 + label truncate)
-  // so a tight chat panel truncates labels instead of clipping Send.
-  assert.match(read('web-src/src/common/lib/pillMenuStyles.ts'), /pillClass =\n?\s*'inline-flex min-w-0 /);
+test('PDF load and Find registration are independent of changing action-bag identity', () => {
+  // KNOWN GAP — the one component assertion still made against source text.
+  // `PdfPreview.tsx` imports its worker through Vite's `?worker` suffix,
+  // which Node's module resolution cannot load, so the module cannot be
+  // imported (let alone mounted) under `pnpm test:renderer`. Until the
+  // worker import moves behind a runtime-resolvable seam, there is no
+  // rendered output to assert against. The equivalent invariants for the
+  // Markdown and JSON viewers, which DO mount, are asserted behaviourally
+  // in `@/features/documents/__tests__/document-surface-semantics.test.ts`.
+  const pdf = read('web-src/src/features/documents/components/PdfPreview.tsx');
+  assert.match(pdf, /\}, \[fileUrl\]\);/);
+  assert.match(pdf, /\[doc, numPages, registerFindController\]/);
+  assert.match(pdf, /function scrollToPage[\s\S]*updateTabPdfPage\(activeTab\.id, targetPage\)/);
+  assert.match(pdf, /programmaticPageRef\.current = behavior === 'smooth' \? page : null/);
+  assert.match(pdf, /bestPage !== programmaticPage\) return/);
+  assert.doesNotMatch(pdf, /\[fileUrl, actions\]/);
 });
