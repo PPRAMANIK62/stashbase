@@ -339,18 +339,20 @@ test('Codex post-install verification preserves the isolated installer environme
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-install-test-'));
   process.env.STASHBASE_LOCAL_DATA_ROOT = root;
   const installer = process.platform === 'win32'
-    ? 'Write-Output "SHELL_EDITION=$($PSVersionTable.PSEdition)"\nNew-Item -ItemType File -Force -Path (Join-Path $env:CODEX_INSTALL_DIR "codex.exe") | Out-Null\n'
+    ? 'New-Item -ItemType File -Force -Path (Join-Path $env:CODEX_INSTALL_DIR "codex.exe") | Out-Null\n'
     : `#!/bin/sh
 set -eu
 : > "$CODEX_INSTALL_DIR/codex"
 `;
   mock.method(globalThis, 'fetch', async () => new Response(installer));
   let verified = false;
-  const messages: string[] = [];
+  let selectedShell: ReturnType<typeof resolveCodexInstallerShell> | undefined;
   try {
-    await installCodex((update) => {
-      if (update.message) messages.push(update.message);
-    }, new AbortController().signal, {
+    await installCodex(() => {}, new AbortController().signal, {
+      resolveInstallerShell: () => {
+        selectedShell = resolveCodexInstallerShell();
+        return selectedShell;
+      },
       verifyExecutable: (executable, label, env) => {
         verified = true;
         assert.equal(executable, path.join(managedCodexBinDir(), process.platform === 'win32' ? 'codex.exe' : 'codex'));
@@ -360,7 +362,7 @@ set -eu
       },
     });
     assert.equal(verified, true);
-    if (process.platform === 'win32') assert.ok(messages.includes('SHELL_EDITION=Core'));
+    if (process.platform === 'win32') assert.equal(selectedShell?.kind, 'powershell-7');
   } finally {
     mock.restoreAll();
     if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
