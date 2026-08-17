@@ -72,6 +72,11 @@ test('macOS package configuration requires Developer ID signing and notarization
   const mac = pkg.build.mac;
   const dmgEntries = pkg.build.dmg.contents.map((entry) => entry.path).filter(Boolean);
 
+  assert.equal(
+    Object.hasOwn(pkg.build, 'electronDist'),
+    false,
+    'release packaging must unpack the official Electron zip so macOS framework symlinks survive',
+  );
   assert.equal(Object.hasOwn(mac, 'identity'), false);
   assert.equal(mac.hardenedRuntime, true);
   assert.equal(mac.notarize, true);

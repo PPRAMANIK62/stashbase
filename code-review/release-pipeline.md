@@ -42,6 +42,9 @@ or timed-out CI.
   included in the electron-builder input. The package-input test scans relative
   CommonJS dependencies that cross out of `electron/` so a source-only smoke
   cannot hide a packaged startup failure.
+- Electron packages use electron-builder's official zip download and extraction
+  path. Do not point `electronDist` at the unpacked npm installation: that path
+  can flatten macOS framework symlinks before Developer ID signing.
 - Windows provisions the manifest-reading Node runtime and compiler tools inside
   MINGW64. Linux preserves the documented glibc/glibc++ baseline. macOS targets
   12.0 and retains the generic CPU fallback alongside supported acceleration.
@@ -124,9 +127,8 @@ Known macOS failures:
 
 - `bundle format is ambiguous` means a framework no longer has Apple's required
   versioned-bundle layout. The pre-sign structure check must identify a
-  flattened top-level link before `codesign`; reinstall
-  `node_modules/electron/dist` through the Electron installer if the source
-  framework is already damaged.
+  flattened top-level link before `codesign`; ensure packaging uses the official
+  Electron zip extraction path rather than copying `node_modules/electron/dist`.
 - `resource fork / Finder information detritus` means iCloud/File Provider
   metadata reached the bundle. Keep both defenses: `.nosync` output and the
   local-only `afterPack` `ditto --noextattr` clone before signing. CI must retain
