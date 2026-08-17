@@ -36,6 +36,8 @@ a transcript-centered file manager.
 - Streaming, tool activity, permissions, attachments, skills, recovery, and
   file artifacts remain inspectable. Editing and resending an earlier prompt
   stops conflicting active work before beginning the new turn.
+- Attachment labels preserve user-visible Unicode filenames from selection or
+  drop through the sent transcript and restored history.
 - Source and attachment access follows the
   [Documents format matrix](documents.md#format-capability-matrix). Built-in
   image attachment behavior does not imply that every external MCP client can

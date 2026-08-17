@@ -61,6 +61,9 @@
 - File and image context is explicit through mentions, selection, drag/drop, or
   composer-focused paste. Image paste suppresses the competing library-import
   offer and preserves accompanying text.
+- Transient attachment upload preserves the user-visible Unicode basename
+  by parsing multipart filename parameters as UTF-8. The server still
+  sanitizes and uniquifies every supplied display name before writing.
 - A selected skill appears as an inline display token and applies only to the
   next turn; it is not serialized as ordinary prompt text.
 
@@ -115,6 +118,7 @@
 | Transcript/composer Modules | `web-src/src/components/agent/AgentMessages.tsx`, `AgentComposer.tsx`, `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` |
 | State Interfaces | Chat tab state/actions in `web-src/src/store/state.ts` and `stateReducer.ts`; activation consent in `components/agent/chatActivation.ts`; focused pure state Modules under `components/agent/` |
 | Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `components/agent/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
+| Attachment HTTP Adapter | `web-src/src/api.ts` and `server/routes/attach.ts` |
 | Markdown Adapter | `web-src/src/components/agent/AgentMarkdown.tsx` |
 | Focused evidence | `web-src/src/__tests__/agent-*.test.ts`, `e2e/fixtures/fake-codex-app-server.test.mjs`, and `e2e/journeys/agent-panel.spec.ts` |
 
