@@ -51,13 +51,15 @@ or timed-out CI.
   validates transcript output, and serves the compatible preview before
   upload.
 
-## macOS Unsigned Recovery
+## macOS Developer ID Distribution
 
-The DMG ships `Fix.sh` and user instructions. Replacement retains the previous
-application as a same-volume rollback until copy, ad-hoc signing, and strict
-verification succeed. Interruption or failure restores the prior bundle; if
-restoration itself fails, preserve and report the backup path. Source and
-release gates exercise these stages.
+Published macOS apps use a Developer ID Application identity, Hardened Runtime,
+secure timestamps, Apple notarization, and a stapled ticket. Release packaging
+fails closed when signing or notarization credentials are missing, incomplete,
+or ambiguous. The `afterPack` adapter removes File Provider metadata before the
+final signature; no package, Homebrew, or recovery step may mutate or ad-hoc
+re-sign the app afterward. The mounted release DMG must pass `codesign`,
+Gatekeeper `spctl`, and stapler validation before upload.
 
 ## Maintainer Handoff
 
@@ -77,9 +79,9 @@ clipboard, and real-media seams; it does not repeat automated journeys.
 | Source CI | `.github/workflows/ci.yml` |
 | Tag gate Interface | `.github/workflows/release-ci-gate.yml` and `scripts/require-green-ci.mjs` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
-| Packaging Module | `scripts/package-unsigned.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-unsigned.cjs` |
-| Packaged verification | `scripts/smoke-packaged-server.mjs`, platform release verifiers, and macOS recovery verifier |
-| Focused evidence | `scripts/package-inputs.test.mjs`, `scripts/require-green-ci.test.mjs`, `scripts/macos-recovery-installer.test.mjs`, and the platform workflows |
+| Packaging Module | `scripts/package-desktop.mjs`, `scripts/macos-release-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
+| Packaged verification | `scripts/smoke-packaged-server.mjs` and platform release verifiers |
+| Focused evidence | `scripts/package-inputs.test.mjs`, `scripts/require-green-ci.test.mjs`, `scripts/macos-release-contract.test.mjs`, and the platform workflows |
 
 ## Release Runbook
 
@@ -101,8 +103,10 @@ choice:
    Linux deb/AppImage, Windows exe/zip, and the tap update, then perform the
    residual packaged UI sanity checks.
 
-Release notes state that macOS is arm64-only and unsigned. Gatekeeper blocks
-the first launch; the DMG includes `Fix.sh` and `build/dmg-scripts/Read Me.txt`.
+Release notes state that macOS is arm64-only, Developer ID-signed, and
+notarized. The macOS workflow requires the signing certificate secrets
+`MAC_CSC_LINK` and `MAC_CSC_KEY_PASSWORD` plus the App Store Connect Team API
+key secrets `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`.
 
 Local macOS fallback only:
 
@@ -123,6 +127,12 @@ Known macOS failures:
   metadata reached the bundle. Keep both defenses: `.nosync` output and the
   `afterPack` `ditto --noextattr` clone before signing. `xattr -cr` alone is not
   sufficient because File Provider can reapply tags.
+- `Unable to find next certificate in the chain` means the Developer ID G2
+  intermediate certificate is absent from the signing keychain. Install the
+  Apple-published intermediate before exporting or using the identity.
+- A rejected notarization must stop publication. Retrieve the notary log,
+  repair every unsigned nested Mach-O or invalid entitlement, and rebuild from
+  source; never patch an already signed bundle.
 
 ## Validation for Pipeline Changes
 
@@ -131,10 +141,12 @@ Run:
 ```bash
 pnpm test:release-gate
 pnpm test:package-inputs
-pnpm test:macos-recovery-installer
+pnpm test:macos-signing
 pnpm typecheck
 ```
 
 Exercise the reusable tag/CI gate against matching, missing, active, failed,
-and annotated-tag cases. Any native manifest or packaging change must pass the
-platform verifier and `pnpm smoke:packaged-server` before publication.
+and annotated-tag cases. Exercise missing, partial, conflicting, and complete
+macOS signing credentials through the focused contract test. Any native
+manifest or packaging change must pass the platform verifier and
+`pnpm smoke:packaged-server` before publication.

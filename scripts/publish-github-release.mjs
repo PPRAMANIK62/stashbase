@@ -22,11 +22,12 @@ const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 // extractor is not bundled" the first time a user opens a PDF. The flag is
 // opt-in for dev/local builds (the extractor adds ~450MB), but the release is
 // the one place where "complete" beats "lean", so force it on and make it
-// mandatory: the package build bundles it, package-unsigned asserts it, and
+// mandatory: the package build bundles it, package-desktop asserts it, and
 // the smoke test verifies it end-to-end. Both child processes below inherit
 // these via process.env.
 process.env.STASHBASE_BUILD_EXTRACT = '1';
 process.env.STASHBASE_REQUIRE_EXTRACT = '1';
+if (process.platform === 'darwin') process.env.STASHBASE_RELEASE_BUILD = '1';
 
 if (!repo) {
   throw new Error('Unable to determine GitHub repository. Set GITHUB_REPOSITORY=owner/repo.');
@@ -184,12 +185,19 @@ function publishWithGh(artifacts) {
 }
 
 if (!skipBuild) {
-  run(process.execPath, [path.join(root, 'scripts', 'package-unsigned.mjs')]);
+  run(process.execPath, [path.join(root, 'scripts', 'package-desktop.mjs')]);
 }
 if (!skipSmoke && process.platform === 'darwin') {
   run(process.execPath, [
     path.join(root, 'scripts', 'smoke-packaged-server.mjs'),
     '--require-transcription',
+  ]);
+}
+if (process.platform === 'darwin') {
+  run(process.execPath, [
+    path.join(root, 'scripts', 'release-verify-mac.mjs'),
+    '--skip-build',
+    '--skip-smoke',
   ]);
 }
 

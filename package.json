@@ -72,15 +72,15 @@
     "test:mcp": "node --import tsx --test server/__tests__/mcp-http-settings.test.ts server/__tests__/mcp-http-service.test.ts server/__tests__/mcp-http-transport.test.ts server/__tests__/shutdown-cleanup.test.ts",
     "test:release-gate": "node --test scripts/require-green-ci.test.mjs",
     "test:package-inputs": "node --test scripts/package-inputs.test.mjs",
-    "test:macos-recovery-installer": "node --test scripts/macos-recovery-installer.test.mjs",
+    "test:macos-signing": "node --test scripts/macos-release-contract.test.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web-src/tsconfig.json && pnpm typecheck:e2e",
-    "check": "pnpm test:docs && pnpm test:inventory && pnpm test:python && pnpm test:release-gate && pnpm test:package-inputs && pnpm test:macos-recovery-installer && pnpm test:config && pnpm test:renderer && npm run test:electron && pnpm test:conversion-scheduler && pnpm test:library-files && pnpm test:retrieval && pnpm test:agent && pnpm test:mcp && pnpm typecheck && pnpm build && pnpm test:electron:smoke",
+    "check": "pnpm test:docs && pnpm test:inventory && pnpm test:python && pnpm test:release-gate && pnpm test:package-inputs && pnpm test:macos-signing && pnpm test:config && pnpm test:renderer && npm run test:electron && pnpm test:conversion-scheduler && pnpm test:library-files && pnpm test:retrieval && pnpm test:agent && pnpm test:mcp && pnpm typecheck && pnpm build && pnpm test:electron:smoke",
     "prestart": "pnpm build:web",
     "electron": "electron .",
-    "package:mac": "node scripts/package-unsigned.mjs",
-    "package:mac:dir": "node scripts/package-unsigned.mjs --dir",
-    "package:win": "node scripts/package-unsigned.mjs --win",
-    "package:linux": "node scripts/package-unsigned.mjs --linux",
+    "package:mac": "node scripts/package-desktop.mjs",
+    "package:mac:dir": "node scripts/package-desktop.mjs --dir",
+    "package:win": "node scripts/package-desktop.mjs --win",
+    "package:linux": "node scripts/package-desktop.mjs --linux",
     "dist": "pnpm package:mac",
     "dist:all": "pnpm package:mac && pnpm package:win && pnpm package:linux",
     "dist:brew": "node scripts/publish.mjs",
@@ -105,7 +105,7 @@
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "icon": "build/icon",
     "electronDist": "node_modules/electron/dist",
-    "afterPack": "scripts/after-pack-unsigned.cjs",
+    "afterPack": "scripts/after-pack-macos.cjs",
     "directories": {
       "output": "release.nosync"
     },
@@ -155,9 +155,11 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "identity": null,
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "notarize": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "target": [
         "dmg"
       ]
@@ -176,27 +178,6 @@
           "y": 220,
           "type": "link",
           "path": "/Applications"
-        },
-        {
-          "x": 120,
-          "y": 80,
-          "type": "file",
-          "path": "build/dmg-scripts/Fix.sh",
-          "name": "Fix.sh"
-        },
-        {
-          "x": 420,
-          "y": 80,
-          "type": "file",
-          "path": "build/dmg-scripts/Read Me.txt",
-          "name": "Read Me.txt"
-        },
-        {
-          "x": 40,
-          "y": 40,
-          "type": "file",
-          "path": "scripts/sign-macos-app.sh",
-          "name": ".sign-macos-app.sh"
         }
       ]
     },

@@ -30,9 +30,10 @@ reason when a platform cannot exercise it.
 ## Residual checks
 
 - [ ] **J01** — Install or unpack the release asset and launch it through the platform's
-  normal path. Confirm one window appears and quits cleanly. On unsigned macOS
-  builds, verify the bundled `Fix.sh`/`Read Me.txt` recovery instructions when
-  Gatekeeper blocks first launch.
+  normal path. Confirm one window appears and quits cleanly. On macOS, confirm
+  Gatekeeper accepts the downloaded Developer ID-signed, notarized app without
+  a security override; preserve the automated `codesign`, `spctl`, and stapler
+  results with the release evidence.
 - [ ] **J02** — Use the real native folder picker: cancel once without changing the
   library, then add a disposable folder and confirm it opens.
 - [ ] **J02 / J06** — Drag a real OS file or folder onto each supported drop target and confirm

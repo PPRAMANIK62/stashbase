@@ -46,7 +46,7 @@ Apple Silicon Macs running macOS 12 or later can install with Homebrew:
 brew install --cask liliu-z/stashbase/stashbase
 ```
 
-Or download the `StashBase-*-mac-arm64.dmg` from [Releases](https://github.com/liliu-z/stashbase/releases), drag the app to **Applications**, and open it there. If macOS says the app is damaged or asks to move it to Trash, use the `Fix.sh` included in that DMG to repair the copy in Applications.
+Or download the `StashBase-*-mac-arm64.dmg` from [Releases](https://github.com/liliu-z/stashbase/releases), drag the app to **Applications**, and open it there. Published macOS artifacts are signed with Apple Developer ID and notarized by Apple.
 
 ### Windows
 
@@ -112,9 +112,9 @@ them. Neither is required to begin browsing local files.
 - Try running the installer as Administrator (right-click → Run as administrator)
 - If antivirus software blocks it, temporarily disable it and try again (it's safe to do so from official releases)
 
-**"App is damaged" error on macOS**
-- This can happen with unsigned builds. The `Fix.sh` script in the DMG resolves this
-- Drag StashBase to Applications, then run the `Fix.sh` from the DMG
+**macOS blocks or rejects the downloaded app**
+- Delete that copy and download the current DMG again from the official Releases page
+- Do not bypass Gatekeeper for an artifact that still reports a signing or malware-verification problem; report the StashBase version and macOS version in the Discord community
 
 **App won't launch after installation**
 - Try restarting your computer

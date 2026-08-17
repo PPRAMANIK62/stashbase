@@ -77,9 +77,10 @@ aliases, and Journey E2E owns representative composition.
 - **AI Eval:** onboarding mechanics are deterministic. If first value uses
   semantic retrieval or a real Agent, its quality evidence comes from J05 or
   J10 rather than being duplicated here.
-- **Release Check:** packaged first launch, native folder selection, offline
-  startup, and one first-session-to-returning-session pass remain release
-  evidence.
+- **Release Check:** Gatekeeper acceptance of the Developer ID-signed and
+  notarized macOS artifact, packaged first launch, native folder selection,
+  offline startup, and one first-session-to-returning-session pass remain
+  release evidence.
 - **Gap:** no single Journey E2E currently proves that a first-time user sees
   the source/derived/hosted distinction, authorizes useful content, reaches a
   concrete first result, and returns without unnecessary onboarding replay.

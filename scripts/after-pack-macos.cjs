@@ -2,9 +2,6 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const root = path.resolve(__dirname, '..');
-const signScript = path.join(root, 'scripts', 'sign-macos-app.sh');
-
 module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') return;
 
@@ -21,7 +18,9 @@ module.exports = async function afterPack(context) {
   // fork, Finder information, or similar detritus not allowed"). A
   // `ditto --noextattr` clone writes fresh inodes carrying none of the
   // strippable attrs — only the kernel-applied com.apple.provenance
-  // survives, which codesign tolerates. Clone, swap, then sign.
+  // survives, which codesign tolerates. Clone and swap before electron-builder
+  // applies the final Developer ID signature and notarization ticket. Nothing
+  // may mutate the bundle after that point.
   const cleanPath = `${appPath}.clean`;
   fs.rmSync(cleanPath, { recursive: true, force: true });
   execFileSync('/usr/bin/ditto', ['--noextattr', '--noacl', '--norsrc', appPath, cleanPath], {
@@ -29,8 +28,4 @@ module.exports = async function afterPack(context) {
   });
   fs.rmSync(appPath, { recursive: true, force: true });
   fs.renameSync(cleanPath, appPath);
-
-  // Ad-hoc signature is mandatory: Apple Silicon refuses to execute
-  // completely unsigned binaries, "unsigned distribution" or not.
-  execFileSync('/bin/zsh', [signScript, appPath], { stdio: 'inherit' });
 };
