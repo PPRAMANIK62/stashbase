@@ -9,6 +9,7 @@ import {
   AgentBootstrapCoordinator,
   agentIsAuthenticated,
   claudePlatform,
+  codexPowerShellInstallerWrapper,
   installClaude,
   installCodex,
   loginToAgent,
@@ -23,6 +24,7 @@ import {
   managedAgentRuntimeRoot,
   managedCodexBinDir,
   managedCodexInstallerHome,
+  managedCodexReleasesDir,
   setAgentRuntimeDebugState,
 } from '../agent-runtime-paths.ts';
 
@@ -417,6 +419,21 @@ test('Windows Codex installation falls back to Windows PowerShell only when pwsh
   assert.equal(shell.kind, 'windows-powershell');
 });
 
+test('PowerShell Codex wrapper pins managed paths inside the script process', () => {
+  const wrapper = codexPowerShellInstallerWrapper(
+    "C:\\Users\\O'Brien\\AppData\\Local\\StashBase\\install.ps1",
+    {
+      CODEX_INSTALL_DIR: "C:\\Users\\O'Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\bin",
+      CODEX_HOME: "C:\\Users\\O'Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\installer-home",
+    },
+  );
+
+  assert.ok(wrapper.includes("$env:CODEX_INSTALL_DIR = 'C:\\Users\\O''Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\bin'"));
+  assert.ok(wrapper.includes("$env:CODEX_HOME = 'C:\\Users\\O''Brien\\AppData\\Local\\StashBase\\agent-runtimes\\codex\\installer-home'"));
+  assert.ok(wrapper.includes('$env:CODEX_NON_INTERACTIVE = "true"'));
+  assert.ok(wrapper.includes("& 'C:\\Users\\O''Brien\\AppData\\Local\\StashBase\\install.ps1'"));
+});
+
 test('Windows PowerShell architecture failures explain the PowerShell 7 recovery', async () => {
   const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-shell-test-'));
@@ -500,10 +517,16 @@ test('Codex post-install verification preserves the isolated installer environme
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-install-test-'));
   process.env.STASHBASE_LOCAL_DATA_ROOT = root;
   const installer = process.platform === 'win32'
-    ? 'New-Item -ItemType File -Force -Path (Join-Path $env:CODEX_INSTALL_DIR "codex.exe") | Out-Null\n'
+    ? [
+      'New-Item -ItemType Directory -Force -Path $env:CODEX_INSTALL_DIR | Out-Null',
+      'New-Item -ItemType File -Force -Path (Join-Path $env:CODEX_INSTALL_DIR "codex.exe") | Out-Null',
+      '',
+    ].join('\n')
     : `#!/bin/sh
 set -eu
+mkdir -p "$CODEX_INSTALL_DIR"
 : > "$CODEX_INSTALL_DIR/codex"
+chmod +x "$CODEX_INSTALL_DIR/codex"
 `;
   mock.method(globalThis, 'fetch', async () => new Response(installer));
   let verified = false;
@@ -524,6 +547,60 @@ set -eu
     });
     assert.equal(verified, true);
     if (process.platform === 'win32') assert.equal(selectedShell?.kind, 'powershell-7');
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Codex leaves the visible bin path for the official installer to create', async () => {
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-bin-ownership-test-'));
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  mock.method(globalThis, 'fetch', async () => new Response('# official installer'));
+  try {
+    await installCodex(() => {}, new AbortController().signal, {
+      runInstallerScript: async (_shell, _script, env) => {
+        assert.equal(fs.existsSync(managedCodexBinDir()), false);
+        const executable = path.join(
+          env.CODEX_INSTALL_DIR ?? '',
+          process.platform === 'win32' ? 'codex.exe' : 'codex',
+        );
+        fs.mkdirSync(path.dirname(executable), { recursive: true });
+        fs.writeFileSync(executable, 'installed Codex');
+        if (process.platform !== 'win32') fs.chmodSync(executable, 0o755);
+      },
+      verifyExecutable: () => {},
+    });
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Codex installation reports missing managed output without a fabricated ENOENT check', async () => {
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-missing-output-test-'));
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  mock.method(globalThis, 'fetch', async () => new Response('# official installer'));
+  let verified = false;
+  try {
+    await assert.rejects(
+      installCodex(() => {}, new AbortController().signal, {
+        runInstallerScript: async () => {},
+        verifyExecutable: () => { verified = true; },
+      }),
+      (error) => {
+        assert.match(String(error), /exited successfully.*did not create an executable/i);
+        assert.doesNotMatch(String(error), /ENOENT/);
+        return true;
+      },
+    );
+    assert.equal(verified, false);
   } finally {
     mock.restoreAll();
     if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
@@ -555,6 +632,47 @@ test('Codex installation resolves the official current package when the visible 
       verifyExecutable: (executable) => {
         if (!fs.existsSync(executable)) throw new Error(`spawnSync ${executable} ENOENT`);
         assert.equal(executable, currentExecutable);
+      },
+    });
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Codex installation resolves a physical official release when both junctions are unavailable', async (context) => {
+  const target = process.platform === 'win32'
+    ? process.arch === 'arm64' ? 'x86_64-pc-windows-msvc' : 'aarch64-pc-windows-msvc'
+    : process.platform === 'darwin'
+      ? process.arch === 'arm64' ? 'x86_64-apple-darwin' : 'aarch64-apple-darwin'
+      : process.platform === 'linux'
+        ? process.arch === 'arm64' ? 'x86_64-unknown-linux-gnu' : 'aarch64-unknown-linux-gnu'
+        : null;
+  if (!target || !['arm64', 'x64'].includes(process.arch)) {
+    context.skip('Codex does not publish a managed runtime for this test platform.');
+    return;
+  }
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-release-layout-test-'));
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  const releaseExecutable = path.join(
+    managedCodexReleasesDir(),
+    `0.147.0-${target}`,
+    'bin',
+    process.platform === 'win32' ? 'codex.exe' : 'codex',
+  );
+  mock.method(globalThis, 'fetch', async () => new Response('# installer'));
+  try {
+    await installCodex(() => {}, new AbortController().signal, {
+      runInstallerScript: async () => {
+        fs.mkdirSync(path.dirname(releaseExecutable), { recursive: true });
+        fs.writeFileSync(releaseExecutable, 'installed Codex');
+        if (process.platform !== 'win32') fs.chmodSync(releaseExecutable, 0o755);
+      },
+      verifyExecutable: (executable) => {
+        assert.equal(executable, releaseExecutable);
       },
     });
   } finally {

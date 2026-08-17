@@ -174,7 +174,8 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** `pnpm test:agent`, `pnpm test:e2e:agent-protocol`, and
   renderer tests cover consent, normalized protocol, scope, lifecycle,
   permissions, failed-install external recheck without another download,
-  installed-but-signed-out Codex detection, same-executable browser login and
+  managed Codex PowerShell path ownership and missing-output diagnostics,
+  installed-but-signed-out Codex detection, same-executable browser login,
   recovery, transcript, and layout state.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
   the built-in panel against the deterministic fake runtime.
