@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findDraftReleaseByTag } from './github-release-api.mjs';
 import { assertMacUpdateArtifacts } from './update-artifact-contract.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,13 +107,7 @@ async function github(pathname, options = {}) {
 }
 
 async function getDraftRelease() {
-  const existing = await github(`/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`);
-  if (!existing) {
-    throw new Error(`Draft release ${tag} does not exist. Start the coordinated Release workflow.`);
-  }
-  if (!existing.draft) {
-    throw new Error(`Release ${tag} must remain a draft while assets are uploaded.`);
-  }
+  const existing = await findDraftReleaseByTag({ request: github, repo, tag });
   console.log(`[release] found ${existing.html_url}`);
   return existing;
 }

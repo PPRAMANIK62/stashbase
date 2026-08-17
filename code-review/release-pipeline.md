@@ -62,6 +62,9 @@ before its metadata and payloads coexist.
   draft and never overwrite an existing name. If a coordinated run leaves an
   incomplete draft, delete that draft and rerun from the same tag rather than
   replacing individual bytes under the version.
+- Draft lookup resolves the tag through GitHub GraphQL, then reads and uploads
+  through the numeric REST release id. The REST tag endpoint does not expose an
+  unpublished draft and must not be used as the draft-existence check.
 - Windows provisions the manifest-reading Node runtime and compiler tools inside
   MINGW64. Linux preserves the documented glibc/glibc++ baseline. macOS targets
   12.0 and retains the generic CPU fallback alongside supported acceleration.

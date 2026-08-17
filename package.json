@@ -74,7 +74,7 @@
     "test:package-inputs": "node --test scripts/package-inputs.test.mjs",
     "test:macos-signing": "node --test scripts/macos-release-contract.test.mjs",
     "test:windows-signing": "node --test scripts/windows-release-contract.test.mjs",
-    "test:updates": "node --test electron/update-manager.test.cjs electron/update-install-strategy.test.cjs electron/update-window-barrier.test.cjs scripts/update-release-contract.test.mjs",
+    "test:updates": "node --test electron/update-manager.test.cjs electron/update-install-strategy.test.cjs electron/update-window-barrier.test.cjs scripts/github-release-api.test.mjs scripts/update-release-contract.test.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web-src/tsconfig.json && pnpm typecheck:e2e",
     "check": "pnpm test:docs && pnpm test:inventory && pnpm test:python && pnpm test:release-gate && pnpm test:package-inputs && pnpm test:macos-signing && pnpm test:windows-signing && pnpm test:updates && pnpm test:config && pnpm test:renderer && npm run test:electron && pnpm test:conversion-scheduler && pnpm test:library-files && pnpm test:retrieval && pnpm test:agent && pnpm test:mcp && pnpm typecheck && pnpm build && pnpm test:electron:smoke",
     "prestart": "pnpm build:web",
