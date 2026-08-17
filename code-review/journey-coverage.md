@@ -68,7 +68,7 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
-  `pnpm test:config`, and `pnpm test:electron:smoke`.
+  `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
 - **Journey E2E:** [launch smoke](../e2e/smoke/launch.spec.ts) and
   [library navigation](../e2e/journeys/library-navigation.spec.ts) exercise
   blank-workspace entry, AI Index skip behavior, folder selection, and local
@@ -79,8 +79,8 @@ aliases, and Journey E2E owns representative composition.
   J10 rather than being duplicated here.
 - **Release Check:** Gatekeeper acceptance of the Developer ID-signed and
   notarized macOS artifact, packaged first launch, native folder selection,
-  offline startup, and one first-session-to-returning-session pass remain
-  release evidence.
+  offline startup, one first-session-to-returning-session pass, and real
+  N→N+1 desktop updates on supported platforms remain release evidence.
 - **Gap:** no single Journey E2E currently proves that a first-time user sees
   the source/derived/hosted distinction, authorizes useful content, reaches a
   concrete first result, and returns without unnecessary onboarding replay.

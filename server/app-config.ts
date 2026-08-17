@@ -44,6 +44,11 @@ export interface CapturePreferences {
   clipboardImageImport: boolean;
 }
 
+export interface UpdatePreferences {
+  /** Check the official desktop release channel after launch and periodically. */
+  autoCheck: boolean;
+}
+
 export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
   theme: 'system',
   uiScale: 'default',
@@ -52,6 +57,10 @@ export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
 
 export const DEFAULT_CAPTURE_PREFERENCES: CapturePreferences = {
   clipboardImageImport: false,
+};
+
+export const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
+  autoCheck: true,
 };
 
 export interface EmbedderConfig {
@@ -148,6 +157,10 @@ export interface AppConfigFile {
   /** Explicit opt-ins for ambient capture. Absent and invalid values fail
    * closed so upgrades never begin reading the clipboard automatically. */
   capture?: Partial<CapturePreferences>;
+  /** Desktop release checks are enabled by default. The Electron main process
+   * reads this through the local server so this process remains the sole
+   * config writer. */
+  updates?: Partial<UpdatePreferences>;
   onboarding?: OnboardingPreferences;
 }
 
@@ -514,6 +527,56 @@ export function setCapturePreferences(next: Partial<CapturePreferences>): Captur
   cfg.capture = resolved;
   writeAppConfigStrict(cfg);
   return resolved;
+}
+
+export function normalizeUpdatePreferences(value: unknown): UpdatePreferences {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<UpdatePreferences>
+    : {};
+  return {
+    autoCheck: typeof raw.autoCheck === 'boolean'
+      ? raw.autoCheck
+      : DEFAULT_UPDATE_PREFERENCES.autoCheck,
+  };
+}
+
+export interface UpdatePreferencesStore {
+  get(): UpdatePreferences;
+  set(next: Partial<UpdatePreferences>): UpdatePreferences;
+}
+
+export function createUpdatePreferencesStore(io: {
+  read(): AppConfigFile;
+  write(config: AppConfigFile): void;
+}): UpdatePreferencesStore {
+  return {
+    get: () => normalizeUpdatePreferences(io.read().updates),
+    set(next) {
+      const config = io.read();
+      const resolved = normalizeUpdatePreferences({
+        ...normalizeUpdatePreferences(config.updates),
+        ...next,
+      });
+      config.updates = resolved;
+      io.write(config);
+      return resolved;
+    },
+  };
+}
+
+const updatePreferences = createUpdatePreferencesStore({
+  // Writes and their read-modify-write precondition must fail closed on a
+  // malformed or inaccessible config instead of replacing it with defaults.
+  read: readAppConfigStrict,
+  write: writeAppConfigStrict,
+});
+
+export function getUpdatePreferences(): UpdatePreferences {
+  return updatePreferences.get();
+}
+
+export function setUpdatePreferences(next: Partial<UpdatePreferences>): UpdatePreferences {
+  return updatePreferences.set(next);
 }
 
 /** One-time upgrade from the very first global-embedder schema, when

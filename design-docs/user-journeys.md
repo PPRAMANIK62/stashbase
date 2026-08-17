@@ -52,7 +52,11 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
    every optional capability first.
 6. **Return.** Close and relaunch StashBase. The library, durable settings, and
    completed setup remain available; transient skips and active-folder choice
-   follow their documented scope rather than becoming hidden global state.
+   follow their documented scope rather than becoming hidden global state. A
+   packaged build may quietly check the stable release channel when the saved
+   default-on preference permits it. One deliberate Update action may then
+   download, install, and relaunch after open edits are saved; Linux package
+   installs may request system administrator approval.
 
 ### Required Observable Results
 

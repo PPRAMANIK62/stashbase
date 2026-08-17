@@ -1,5 +1,29 @@
 import type { ClipboardOffer } from './components/ClipboardImportModal';
 
+export type DesktopUpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'current'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'installing'
+  | 'error'
+  | 'unsupported';
+
+export interface DesktopUpdateState {
+  phase: DesktopUpdatePhase;
+  currentVersion: string;
+  platform: string;
+  autoCheckEnabled: boolean;
+  releaseUrl: string;
+  availableVersion?: string;
+  releaseName?: string;
+  releaseDate?: string;
+  percent?: number;
+  message?: string;
+}
+
 /** The renderer-visible surface of `electron/preload.cjs`. One declaration
  * for the whole renderer — feature code must not re-declare partial copies
  * or cast `window` inline. Every member is optional because the browser dev
@@ -29,6 +53,12 @@ export interface ElectronBridge {
   onLibraryFolderAdded?: (handler: (folder: string) => void) => (() => void);
   onClipboardImage?: (handler: (offer: ClipboardOffer) => void) => (() => void);
   refreshClipboardWatch?: () => Promise<boolean>;
+  getUpdateState?: () => Promise<DesktopUpdateState | null>;
+  checkForUpdates?: () => Promise<DesktopUpdateState | null>;
+  runUpdateAction?: () => Promise<DesktopUpdateState | null>;
+  openUpdateDownloadPage?: () => Promise<boolean>;
+  refreshUpdatePreference?: () => Promise<DesktopUpdateState | null>;
+  onUpdateState?: (handler: (state: DesktopUpdateState) => void) => (() => void);
   markClipboardHandled?: (hash: string) => void;
   markCurrentClipboardImageHandled?: () => void;
   setAgentComposerFocused?: (focused: boolean) => void;

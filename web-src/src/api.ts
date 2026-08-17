@@ -8,6 +8,7 @@ import type {
   AgentsResponse,
   AppearancePreferences,
   CapturePreferences,
+  UpdatePreferences,
   ApiKeySaveResult,
   EmbedderState,
   EmbedderProvider,
@@ -271,6 +272,9 @@ export const api = {
   capturePreferences: () => getJson<CapturePreferences>('/api/capture'),
   setCapturePreferences: (preferences: Partial<CapturePreferences>) =>
     send<CapturePreferences>('PUT', '/api/capture', preferences),
+  updatePreferences: () => getJson<UpdatePreferences>('/api/updates/preferences'),
+  setUpdatePreferences: (preferences: Partial<UpdatePreferences>) =>
+    send<UpdatePreferences>('PUT', '/api/updates/preferences', preferences),
   setTranscriptionPreferences: (preferences: { providerId?: string; modelId?: string; language?: string }) =>
     send<{ providerId: string; modelId: string; language: string }>('PUT', '/api/transcription/preferences', preferences),
   downloadTranscriptionModel: (id: TranscriptionModelId) =>
