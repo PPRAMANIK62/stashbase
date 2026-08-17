@@ -361,7 +361,6 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
       await Promise.resolve();
     });
     const conflictError = new ApiError('changed on disk', 409, 'FILE_CHANGED');
-    conflictError.currentVersion = 'version-from-conflict-response';
     await act(async () => {
       rejectConflict(conflictError);
       saved = await conflictPending;
@@ -527,8 +526,33 @@ test('conflict resolution callbacks apply correct edits and state transitions', 
       });
     });
 
+    let finishOverwrite!: (value: { content: string; version: string }) => void;
+    const overwriteResult = new Promise<{ content: string; version: string }>((resolve) => {
+      finishOverwrite = resolve;
+    });
+    api.putFile = async (_name, content, version) => {
+      calls.push({ content, version });
+      return overwriteResult;
+    };
+    let overwritePending!: Promise<void>;
     await act(async () => {
-      await control.current!.actions.resolveConflictOverwrite(tabId);
+      overwritePending = control.current!.actions.resolveConflictOverwrite(tabId);
+      await Promise.resolve();
+    });
+    const resolvingConflict = control.current!.state.current.tabs[0].conflict as State['tabs'][number]['conflict'];
+    assert.equal(resolvingConflict?.resolving, true);
+    await act(async () => {
+      await Promise.all([
+        control.current!.actions.resolveConflictReload(tabId),
+        control.current!.actions.resolveConflictMerge(tabId),
+        control.current!.actions.resolveConflictOverwrite(tabId),
+      ]);
+    });
+    assert.ok(control.current!.state.current.tabs[0].conflict, 'the first decision owns the unresolved UI');
+    assert.equal(calls.length, 1, 'competing conflict decisions cannot start another disk mutation');
+    await act(async () => {
+      finishOverwrite({ content: '{"editor": true}', version: 'overwritten-version' });
+      await overwritePending;
     });
     assert.equal(control.current!.state.current.tabs[0].conflict, null);
     assert.equal(control.current!.state.current.tabs[0].dirty, false);

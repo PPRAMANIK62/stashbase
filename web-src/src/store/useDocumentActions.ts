@@ -75,6 +75,10 @@ export function useDocumentActions(
   const latestDurableBaseline = useRef<{
     name: string; content: string; version?: string; superseded: Set<string | undefined>;
   } | null>(null);
+  // The state flag disables the UI after React commits; this ref closes the
+  // earlier same-tick window so two resolution callbacks cannot both mutate
+  // one conflict.
+  const conflictResolutionsInFlight = useRef(new Set<string>());
   const { loadFiles, refreshIndexState, toast, primeFind, askConfirm } = dependencies;
   const scheduleAfter = dependencies.scheduleAfter ?? scheduleWithTimeout;
   const cancelScheduled = dependencies.cancelScheduled ?? cancelTimeout;
@@ -546,10 +550,26 @@ export function useDocumentActions(
     return true;
   }, [dispatch, state]);
 
+  const claimConflictResolution = useCallback((tabId: string) => {
+    if (conflictResolutionsInFlight.current.has(tabId)) return null;
+    const tab = state.current.tabs.find((candidate) => candidate.id === tabId);
+    if (!tab?.conflict || !tab.file) return null;
+    conflictResolutionsInFlight.current.add(tabId);
+    dispatch({ type: 'SET_CONFLICT_RESOLVING', id: tabId, resolving: true });
+    return tab;
+  }, [dispatch, state]);
+
+  const releaseConflictResolution = useCallback((tabId: string) => {
+    conflictResolutionsInFlight.current.delete(tabId);
+    // Successful settlement clears the conflict first, making this a no-op.
+    // Failure keeps the comparison visible and re-enables all three choices.
+    dispatch({ type: 'SET_CONFLICT_RESOLVING', id: tabId, resolving: false });
+  }, [dispatch]);
+
   const resolveConflictOverwrite = useCallback(async (tabId: string) => {
-    const currentState = state.current;
-    const tab = currentState.tabs.find((t) => t.id === tabId);
+    const tab = claimConflictResolution(tabId);
     if (!tab?.conflict || !tab.file) return;
+    const folderPathAtStart = state.current.folderPath;
     const { editorContent } = tab.conflict;
     const fileName = tab.file.name;
     dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
@@ -568,7 +588,7 @@ export function useDocumentActions(
         dirty: false,
         status: { text: 'Saved', cls: 'saved' },
       })) return;
-      void loadFiles(currentState.folderPath);
+      void loadFiles(folderPathAtStart);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       const activeTab = getActiveTab(state.current);
@@ -576,30 +596,35 @@ export function useDocumentActions(
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + message, cls: 'error' } });
       }
       toast('Failed to overwrite: ' + message, { level: 'error' });
+    } finally {
+      releaseConflictResolution(tabId);
     }
-  }, [dispatch, loadFiles, settleConflict, state, toast]);
+  }, [claimConflictResolution, dispatch, loadFiles, releaseConflictResolution, settleConflict, state, toast]);
 
   const resolveConflictReload = useCallback(async (tabId: string) => {
-    const currentState = state.current;
-    const tab = currentState.tabs.find((t) => t.id === tabId);
+    const tab = claimConflictResolution(tabId);
     if (!tab?.conflict || !tab.file) return;
+    const folderPathAtStart = state.current.folderPath;
     const { diskContent, diskVersion } = tab.conflict;
-    if (!settleConflict({
-      tabId,
-      fileName: tab.file.name,
-      durableContent: diskContent,
-      durableVersion: diskVersion,
-      supersededVersions: [tab.file.version],
-      nextContent: diskContent,
-      dirty: false,
-      status: { text: '', cls: '' },
-    })) return;
-    void loadFiles(currentState.folderPath);
-  }, [loadFiles, settleConflict, state]);
+    try {
+      if (!settleConflict({
+        tabId,
+        fileName: tab.file.name,
+        durableContent: diskContent,
+        durableVersion: diskVersion,
+        supersededVersions: [tab.file.version],
+        nextContent: diskContent,
+        dirty: false,
+        status: { text: '', cls: '' },
+      })) return;
+      void loadFiles(folderPathAtStart);
+    } finally {
+      releaseConflictResolution(tabId);
+    }
+  }, [claimConflictResolution, loadFiles, releaseConflictResolution, settleConflict, state]);
 
   const resolveConflictMerge = useCallback(async (tabId: string) => {
-    const currentState = state.current;
-    const tab = currentState.tabs.find((t) => t.id === tabId);
+    const tab = claimConflictResolution(tabId);
     if (!tab?.conflict || !tab.file) return;
     const { diskContent, editorContent, diskVersion } = tab.conflict;
 
@@ -608,17 +633,21 @@ export function useDocumentActions(
     // The merge is an editor draft based on the disk snapshot, not a durable
     // save. Preserve the disk content/version as the comparison baseline so
     // the remounted editor must PUT the merged draft before any transition.
-    settleConflict({
-      tabId,
-      fileName: tab.file.name,
-      durableContent: diskContent,
-      durableVersion: diskVersion,
-      supersededVersions: [tab.file.version, diskVersion],
-      nextContent: mergedContent,
-      dirty: true,
-      status: { text: 'Merged', cls: '' },
-    });
-  }, [settleConflict, state]);
+    try {
+      settleConflict({
+        tabId,
+        fileName: tab.file.name,
+        durableContent: diskContent,
+        durableVersion: diskVersion,
+        supersededVersions: [tab.file.version, diskVersion],
+        nextContent: mergedContent,
+        dirty: true,
+        status: { text: 'Merged', cls: '' },
+      });
+    } finally {
+      releaseConflictResolution(tabId);
+    }
+  }, [claimConflictResolution, releaseConflictResolution, settleConflict]);
 
   // One stable actions object: the workspace memo depends on this object,
   // not on individually listed members, so a new action added here is

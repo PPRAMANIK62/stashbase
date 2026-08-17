@@ -63,7 +63,8 @@ editor reads V1 → Agent writes V2 with base V1
 ### Renderer conflict recovery
 
 Shipping behavior shows the newer disk source beside the unsaved editor source
-and waits for one explicit decision:
+and accepts one explicit decision at a time. Once a resolution starts, every
+choice stays disabled until that decision succeeds or fails:
 
 - Reload adopts the disk snapshot.
 - Overwrite publishes the editor source without a stale base.

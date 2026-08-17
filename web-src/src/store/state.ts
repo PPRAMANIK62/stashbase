@@ -110,6 +110,8 @@ export interface TabConflict {
   diskContent: string;
   diskVersion: string;
   editorContent: string;
+  /** One explicit resolution owns the conflict until it settles. */
+  resolving?: boolean;
 }
 
 /** One open tab. Everything that varies per-document lives here so
@@ -499,4 +501,5 @@ export type Action =
   | { type: 'FIND_SET'; patch: Partial<State['find']> }
   | { type: 'UNSUPPORTED_MODAL'; open: boolean }
   | { type: 'SET_CONFLICT'; id: string; conflict: TabConflict | null }
+  | { type: 'SET_CONFLICT_RESOLVING'; id: string; resolving: boolean }
   | { type: 'RESOLVE_CONFLICT_DISCARD'; id: string };

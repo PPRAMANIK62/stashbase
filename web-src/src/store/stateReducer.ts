@@ -435,6 +435,15 @@ export function reducer(s: State, a: Action): State {
         ...s,
         tabs: s.tabs.map((t) => (t.id === a.id ? { ...t, conflict: a.conflict } : t)),
       };
+    case 'SET_CONFLICT_RESOLVING':
+      return {
+        ...s,
+        tabs: s.tabs.map((t) => (
+          t.id === a.id && t.conflict
+            ? { ...t, conflict: { ...t.conflict, resolving: a.resolving } }
+            : t
+        )),
+      };
     case 'RESOLVE_CONFLICT_DISCARD':
       return {
         ...s,

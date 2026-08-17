@@ -17,7 +17,6 @@ export function errorMessage(err: unknown): string {
 export class ApiError extends Error {
   status: number;
   code?: string;
-  currentVersion?: string;
   constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
@@ -118,13 +117,7 @@ export async function parseJsonOrThrow<T>(r: Response): Promise<T> {
     const code = payload && typeof payload === 'object' && typeof (payload as any).code === 'string'
       ? (payload as any).code as string
       : undefined;
-    const err = new ApiError(msg, r.status, code);
-    const currentVersion = payload && typeof payload === 'object'
-      && typeof (payload as { currentVersion?: unknown }).currentVersion === 'string'
-      ? (payload as { currentVersion: string }).currentVersion
-      : undefined;
-    if (currentVersion) err.currentVersion = currentVersion;
-    throw err;
+    throw new ApiError(msg, r.status, code);
   }
   // 2xx bodies pass through untouched even when they carry an `error`
   // field: routes like /api/audio/transcript model failure as state

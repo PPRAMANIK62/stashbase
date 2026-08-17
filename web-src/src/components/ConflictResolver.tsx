@@ -10,6 +10,7 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
 
   const { diskContent, editorContent } = tab.conflict;
   const fileName = tab.file.name;
+  const resolving = tab.conflict.resolving === true;
 
   const diffRows = useMemo(() => {
     // Left = Disk (Newer version), Right = Editor (Your unsaved changes)
@@ -21,6 +22,7 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
       className="flex h-full flex-col bg-background text-foreground"
       role="region"
       aria-labelledby={`conflict-title-${tabId}`}
+      aria-busy={resolving}
     >
       {/* Banner bar */}
       <div className="flex items-center justify-between border-b border-muted bg-accent/5 px-4 py-3 shrink-0">
@@ -36,6 +38,7 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
           <Button
             variant="default"
             size="sm"
+            disabled={resolving}
             onClick={() => void actions.resolveConflictReload(tabId)}
           >
             Reload from Disk
@@ -43,6 +46,7 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
           <Button
             variant="outline"
             size="sm"
+            disabled={resolving}
             onClick={() => void actions.resolveConflictMerge(tabId)}
           >
             Merge and Edit
@@ -50,6 +54,7 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
           <Button
             variant="destructive-outline"
             size="sm"
+            disabled={resolving}
             onClick={() => void actions.resolveConflictOverwrite(tabId)}
           >
             Overwrite Disk
