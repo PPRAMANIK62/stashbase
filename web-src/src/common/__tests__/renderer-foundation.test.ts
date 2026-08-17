@@ -252,33 +252,9 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
   assert.doesNotMatch(documentsCss, /crepe-block-handle/);
 });
 
-test('PDF load and Find registration are independent of changing action-bag identity', () => {
-  // KNOWN GAP — the one component assertion still made against source text.
-  //
-  // The import barrier is gone: `vite-import-stub-loader.mjs` now stands in
-  // for the `?worker` specifier and `domEnvironment` supplies the canvas
-  // geometry globals pdf.js reads at module scope, so this module imports
-  // fine under `pnpm test:renderer`.
-  //
-  // What remains is that these six assertions are not about rendered output
-  // at all. They pin effect dependency arrays and the single-scroll-owner
-  // protocol — `programmaticPageRef`, the `bestPage !== programmaticPage`
-  // bail — which are internal to the component and have no accessible
-  // surface to query. The behavioural home for them is the extracted
-  // `usePdfDocument` / `usePdfPageTracking` hooks; converting them before
-  // that extraction would mean mounting the whole viewer and driving
-  // pdf.js through a fake document to observe an effect count.
-  //
-  // So these move when the viewer is split, not before — and the split is
-  // what makes them cheap. The equivalent invariants for the Markdown and
-  // JSON viewers, which have no such internals, are already asserted
-  // behaviourally in
-  // `@/features/documents/__tests__/document-surface-semantics.test.ts`.
-  const pdf = read('web-src/src/features/documents/components/PdfPreview.tsx');
-  assert.match(pdf, /\}, \[fileUrl\]\);/);
-  assert.match(pdf, /\[doc, numPages, registerFindController\]/);
-  assert.match(pdf, /function scrollToPage[\s\S]*updateTabPdfPage\(activeTab\.id, targetPage\)/);
-  assert.match(pdf, /programmaticPageRef\.current = behavior === 'smooth' \? page : null/);
-  assert.match(pdf, /bestPage !== programmaticPage\) return/);
-  assert.doesNotMatch(pdf, /\[fileUrl, actions\]/);
-});
+/* The PDF viewer's load keying, Find registration lifetime, and
+ * single-scroll-owner protocol used to be asserted here through six regexes
+ * over `PdfPreview.tsx`. The viewer's split gave each of them a hook with an
+ * interface to drive, so they now run in
+ * `@/features/documents/__tests__/pdf-viewer.test.ts` — no source text left
+ * in this file outside stylesheets and the repo-wide literal scans. */

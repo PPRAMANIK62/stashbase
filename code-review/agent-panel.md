@@ -104,7 +104,7 @@
 |---|---|
 | Panel boundary | `web-src/src/features/agent-panel/components/ChatPane.tsx` and `AgentView.tsx` |
 | Session state Interface | `web-src/src/features/agent-panel/hooks/useAgentSession.ts` owns transport, event routing, and session reset/resume, and composes the focused sub-hooks beside it in `web-src/src/features/agent-panel/hooks/` |
-| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx`, `AgentComposer.tsx`, `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` |
+| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx` owns the block list and turn layout over the pure turn model in `lib/turnModel.ts`, with the user half in `AgentUserTurn.tsx` and the tool surface in `AgentToolActivity.tsx`; `AgentComposer.tsx`, `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` |
 | State Interfaces | Chat tab state/actions in `web-src/src/store/state/state.ts` and `state/stateReducer.ts`; activation consent in the `activateChatTab` action (`store/contexts/AppContext.tsx`) over `store/lib/chatTabPlan.ts`; focused pure state Modules under `features/agent-panel/lib/` |
 | Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `features/agent-panel/lib/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
 | Markdown Adapter | `web-src/src/features/agent-panel/components/AgentMarkdown.tsx` |

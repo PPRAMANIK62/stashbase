@@ -57,12 +57,14 @@ entry, which exports nothing. `domEnvironment` additionally defines the canvas
 geometry interfaces (`DOMMatrix`, `DOMPoint`, `Path2D`, `ImageData`) that
 pdf.js reads at module scope and happy-dom does not implement.
 
-Known Gap: `PdfPreview.tsx` is still asserted through source text. The module
-now imports and mounts, but its six remaining assertions pin effect dependency
-arrays and the single-scroll-owner protocol — component internals with no
-accessible surface to query. They belong on the extracted `usePdfDocument` and
-`usePdfPageTracking` hooks and should move when the viewer is split, which is
-also what makes them cheap to express.
+No renderer component is asserted through source text any more. The PDF
+viewer was the last one: its six assertions pinned effect dependency arrays
+and the single-scroll-owner protocol, which the 861-line component exposed
+nowhere. Splitting it gave each machine a hook with an interface to drive, and
+the claims now run against those hooks in
+`web-src/src/features/documents/__tests__/pdf-viewer.test.ts`. When an
+invariant has no queryable surface, that is the move: give it one, rather than
+reading the file that implements it.
 
 ## Harness, isolation, and cleanup
 

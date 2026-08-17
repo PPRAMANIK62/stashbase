@@ -20,7 +20,7 @@ const expectedEntries = [
   'src/features/documents/components/CrepeDocument.tsx',
   'src/features/documents/components/JsonDocument.tsx',
   'src/features/documents/components/json/JsonTreeView.tsx',
-  'src/features/documents/components/PdfPreview.tsx',
+  'src/features/documents/components/PdfViewerPane.tsx',
   'src/features/documents/components/DocxPreview.tsx',
   'src/features/documents/components/AudioPreview.tsx',
   'src/features/search/components/ManagedLibrarySearch.tsx',

@@ -7,6 +7,16 @@
 import { cn } from '@/common/lib/utils';
 import { buttonVariants } from '@/common/components/ui/button';
 
+/** Small outline / primary actions inside transcript cards — the fatal
+ * notices, the inline user-message editor, and the permission ask all use
+ * the same pair, so their emphasis cannot drift apart. */
+export const outlineSmClass = buttonVariants({ variant: 'outline', size: 'sm' });
+export const primarySmClass = buttonVariants({ variant: 'default', size: 'sm' });
+
+/** Accent status dot used by working/queued/running indicators. Render with
+ * `aria-hidden` — the adjacent text carries the meaning. */
+export const accentDotClass = 'inline-block size-1.75 shrink-0 rounded-full bg-accent';
+
 /** Quiet 28px icon action — pane header buttons and composer bar buttons. */
 export const iconGhostButtonClass = cn(
   buttonVariants({ variant: 'ghost', size: 'icon-sm' }),

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { activitySummary, settledReplySections } from '@/features/agent-panel/components/AgentMessages';
 import { buildDiff } from '@/features/agent-panel/lib/diffModel';
 import { flattenFileMentions, segmentFileMentions } from '@/features/agent-panel/lib/mentionText';
+import { activitySummary } from '@/features/agent-panel/lib/toolActivity';
 import { payloadPreview } from '@/features/agent-panel/lib/toolPayload';
-import type { Block, ToolBlock } from '@/features/agent-panel/lib/types';
+import type { ToolBlock } from '@/features/agent-panel/lib/types';
 
 test('count-free activity summaries use stable plural category labels', () => {
   const tools: ToolBlock[] = [
@@ -30,26 +30,6 @@ test('count-free activity summaries use stable plural category labels', () => {
     activitySummary(tools),
     'Read files, listed folders, searched, ran commands, edited files, used tools',
   );
-});
-
-test('terminal Agent errors remain outside the collapsed work trace', () => {
-  const work: Block = { kind: 'thinking', id: 'thinking-1', text: 'Checking' };
-  const error: Block = { kind: 'error', id: 'error-1', text: 'Deterministic failure' };
-
-  assert.deepEqual(settledReplySections([work, error]), {
-    workBlocks: [work],
-    answerBlocks: [error],
-  });
-});
-
-test('the final assistant answer keeps the existing settled layout', () => {
-  const work: Block = { kind: 'thinking', id: 'thinking-1', text: 'Checking' };
-  const answer: Block = { kind: 'assistant', id: 'answer-1', text: 'Done' };
-
-  assert.deepEqual(settledReplySections([work, answer]), {
-    workBlocks: [work],
-    answerBlocks: [answer],
-  });
 });
 
 test('file mentions segment into chips while plain file names stay text', () => {

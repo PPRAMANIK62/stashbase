@@ -17,7 +17,7 @@ const VIEWER_CENTERED_LOADING_CLASS = 'grid h-full place-items-center text-base 
  * renders `<DocumentViewer />`. Their manifest paths are pinned by
  * `scripts/check-renderer-chunks.mjs`. */
 const LazyCrepeDocument = lazyWithRetry(() => import('@/features/documents/components/CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
-const LazyPdfPreview = lazyWithRetry(() => import('@/features/documents/components/PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
+const LazyPdfViewerPane = lazyWithRetry(() => import('@/features/documents/components/PdfViewerPane'));
 const LazyDocxPreview = lazyWithRetry(() => import('@/features/documents/components/DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
 const LazyAudioPreview = lazyWithRetry(() => import('@/features/documents/components/AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
 const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/components/JsonDocument').then((mod) => ({ default: mod.JsonDocument })));
@@ -35,6 +35,14 @@ const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/compon
  * survive). Every other format renders the single active file.
  *
  * Adding a format means one `lazyWithRetry` and one branch in this file.
+ *
+ * Every branch here is a lazy boundary, and this file is eager — it is the
+ * component `MainPane` renders. So nothing format-specific may be computed
+ * at this level: a hook called here ships in the initial chunk for every
+ * window, including the ones that never open that format. PDF preparation is
+ * the worked example — extraction progress and the Reprocess command are
+ * preparation concerns rather than viewer ones, but they are decided in
+ * `PdfViewerPane` behind the PDF dynamic import, not here.
  */
 export function DocumentViewer({
   tabs,
@@ -111,10 +119,12 @@ export function DocumentViewer({
         // the original PDF is shown: the extracted `.md` is a hidden
         // implementation detail (search hits remap back to the PDF;
         // the derived note must never surface as content). The
-        // preparation failure banner + Reprocess live inside PdfPreview.
+        // preparation failure banner + Reprocess are decided inside the
+        // lazy chunk (PdfViewerPane) and handed to the viewer, which only
+        // draws them — that policy is PDF-only and must not ship eagerly.
         <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="PDF preview" resetKey={resourceResetKey}>
           <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Loading PDF…</div>}>
-            <LazyPdfPreview key={activeTab?.id} name={cur.name} />
+            <LazyPdfViewerPane key={activeTab?.id} name={cur.name} />
           </Suspense>
         </LazyLoadBoundary>
       )}

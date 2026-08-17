@@ -1,7 +1,8 @@
 /**
  * Agent panel accessibility semantics asserted through rendered output.
- * `ChatPane.tsx` and `AgentMessages.tsx` are both on a later phase's split
- * list, so these mount the surfaces rather than reading their source.
+ * `ChatPane.tsx` is still on a later phase's split list and the transcript
+ * now spans several modules, so these mount the surfaces rather than
+ * reading their source.
  */
 import '@/common/__tests__/domEnvironment';
 import assert from 'node:assert/strict';

@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AgentMarkdown, isHttpUrl, localAssistantLinkPath } from '@/features/agent-panel/components/AgentMarkdown.tsx';
 import { AgentMathMarkdownCore } from '@/features/agent-panel/components/AgentMathMarkdownCore.tsx';
-import { turnReplyText } from '@/features/agent-panel/components/AgentMessages.tsx';
+import { turnReplyText } from '@/features/agent-panel/lib/turnModel.ts';
 import { normalizeAgentMathDelimiters } from '@/features/agent-panel/lib/agentMath.ts';
 
 function renderMarkdown(markdown: string): string {

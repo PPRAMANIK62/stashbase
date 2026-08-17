@@ -7,7 +7,7 @@ import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useStateWithRef } from '@/common/hooks/useStateWithRef';
 import type { Action, AppActions, ChatState, WorkspaceState } from '@/store/contexts/AppContext';
 import { resolveAssistantLink } from '@/features/agent-panel/lib/assistantLinkTarget';
-import type { TurnMeta } from '@/features/agent-panel/components/AgentMessages';
+import type { TurnMeta } from '@/features/agent-panel/lib/turnModel';
 import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl';
 import { isBlankChatTab, newChatScope, nextSessionScope } from '@/features/agent-panel/lib/folderState';
 import {
