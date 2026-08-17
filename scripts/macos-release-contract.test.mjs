@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { assertMacosReleaseCredentials } from './macos-release-contract.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
+const afterPack = require('./after-pack-macos.cjs');
 
 function source(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -131,4 +135,50 @@ test('macOS release adapters preserve the final signature and require its verifi
   ]) {
     assert.equal(fs.existsSync(path.join(root, removed)), false, `${removed} must stay retired`);
   }
+});
+
+test('macOS afterPack preserves the original CI bundle and rejects flattened framework links', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-after-pack-'));
+  const appPath = path.join(output, 'StashBase.app');
+  const frameworkPath = path.join(
+    appPath,
+    'Contents',
+    'Frameworks',
+    'Electron Framework.framework',
+  );
+  const versionPath = path.join(frameworkPath, 'Versions', 'A');
+  fs.mkdirSync(path.join(versionPath, 'Resources'), { recursive: true });
+  fs.writeFileSync(path.join(versionPath, 'Resources', 'Info.plist'), '<plist/>');
+  fs.writeFileSync(path.join(versionPath, 'Electron Framework'), 'fixture');
+  fs.symlinkSync('A', path.join(frameworkPath, 'Versions', 'Current'));
+  fs.symlinkSync(
+    'Versions/Current/Electron Framework',
+    path.join(frameworkPath, 'Electron Framework'),
+  );
+  fs.symlinkSync('Versions/Current/Resources', path.join(frameworkPath, 'Resources'));
+
+  const originalInode = fs.statSync(appPath).ino;
+  const previousActions = process.env.GITHUB_ACTIONS;
+  process.env.GITHUB_ACTIONS = 'true';
+  try {
+    await afterPack({
+      electronPlatformName: 'darwin',
+      appOutDir: output,
+      packager: { appInfo: { productFilename: 'StashBase' } },
+    });
+  } finally {
+    if (previousActions === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = previousActions;
+  }
+  assert.equal(fs.statSync(appPath).ino, originalInode);
+
+  fs.unlinkSync(path.join(frameworkPath, 'Electron Framework'));
+  fs.writeFileSync(path.join(frameworkPath, 'Electron Framework'), 'flattened');
+  assert.throws(
+    () => afterPack.assertVersionedFrameworkStructure(appPath),
+    /must remain a symbolic link before codesign/,
+  );
+  fs.rmSync(output, { recursive: true, force: true });
 });

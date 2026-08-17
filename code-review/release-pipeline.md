@@ -56,10 +56,12 @@ or timed-out CI.
 Published macOS apps use a Developer ID Application identity, Hardened Runtime,
 secure timestamps, Apple notarization, and a stapled ticket. Release packaging
 fails closed when signing or notarization credentials are missing, incomplete,
-or ambiguous. The `afterPack` adapter removes File Provider metadata before the
-final signature; no package, Homebrew, or recovery step may mutate or ad-hoc
-re-sign the app afterward. The mounted release DMG must pass `codesign`,
-Gatekeeper `spctl`, and stapler validation before upload.
+or ambiguous. The `afterPack` adapter validates versioned framework symlinks
+before signing. It preserves the original bundle in clean CI workspaces and
+uses a metadata-free clone only for local File Provider workspaces; no package,
+Homebrew, or recovery step may mutate or ad-hoc re-sign the app afterward. The
+mounted release DMG must pass `codesign`, Gatekeeper `spctl`, and stapler
+validation before upload.
 
 ## Maintainer Handoff
 
@@ -120,13 +122,17 @@ package; `release.nosync/` is the only output root.
 
 Known macOS failures:
 
-- `bundle format is ambiguous (Mantle.framework)` means Electron framework
-  symlinks were flattened. Reinstall `node_modules/electron/dist` through the
-  Electron installer before retrying.
+- `bundle format is ambiguous` means a framework no longer has Apple's required
+  versioned-bundle layout. The pre-sign structure check must identify a
+  flattened top-level link before `codesign`; reinstall
+  `node_modules/electron/dist` through the Electron installer if the source
+  framework is already damaged.
 - `resource fork / Finder information detritus` means iCloud/File Provider
   metadata reached the bundle. Keep both defenses: `.nosync` output and the
-  `afterPack` `ditto --noextattr` clone before signing. `xattr -cr` alone is not
-  sufficient because File Provider can reapply tags.
+  local-only `afterPack` `ditto --noextattr` clone before signing. CI must retain
+  electron-builder's original bundle because it does not have File Provider
+  metadata. `xattr -cr` alone is not sufficient in a local File Provider
+  workspace because the provider can reapply tags.
 - `Unable to find next certificate in the chain` means the Developer ID G2
   intermediate certificate is absent from the signing keychain. Install the
   Apple-published intermediate before exporting or using the identity.
