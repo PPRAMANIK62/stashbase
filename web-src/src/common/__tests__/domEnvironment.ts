@@ -61,5 +61,20 @@ for (const [name, value] of Object.entries(globals)) {
   Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
 }
 
+// Canvas geometry interfaces pdf.js reads at MODULE scope — importing
+// `pdfjs-dist` throws on a bare `DOMMatrix` reference before any component
+// mounts. happy-dom does not implement them, and the renderer tests never
+// rasterize a page, so a constructible placeholder is the whole requirement.
+// Only defined when absent, so a real implementation always wins.
+for (const name of ['DOMMatrix', 'DOMPoint', 'Path2D', 'ImageData']) {
+  if ((globalThis as Record<string, unknown>)[name] === undefined) {
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      writable: true,
+      value: class {},
+    });
+  }
+}
+
 /** The happy-dom window backing the installed globals. */
 export const testWindow = window;

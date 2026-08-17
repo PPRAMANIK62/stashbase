@@ -47,10 +47,22 @@ Source text is the correct artefact in exactly two cases, both in
   no render reaches. They walk the tree instead of naming paths, so a file
   moving between folders neither breaks them nor drops out of their coverage.
 
-Known Gap: `PdfPreview.tsx` is still asserted through source text. It imports
-its worker through Vite's `?worker` suffix, which Node cannot resolve, so the
-module cannot be imported under `test:renderer` — there is no rendered output
-to assert against until that import moves behind a runtime-resolvable seam.
+Two Vite-only specifier forms cannot reach Node's resolver, so
+`scripts/vite-import-stub-loader.mjs` stands in for both: a colocated
+stylesheet import resolves to an empty module, and Vite's `?worker` suffix
+resolves to a constructible Worker-shaped stub. It is registered *after* `tsx` in
+`test:renderer`, because the most recently registered hook resolves first and
+`tsx` would otherwise strip the `?worker` query and load the bare worker
+entry, which exports nothing. `domEnvironment` additionally defines the canvas
+geometry interfaces (`DOMMatrix`, `DOMPoint`, `Path2D`, `ImageData`) that
+pdf.js reads at module scope and happy-dom does not implement.
+
+Known Gap: `PdfPreview.tsx` is still asserted through source text. The module
+now imports and mounts, but its six remaining assertions pin effect dependency
+arrays and the single-scroll-owner protocol — component internals with no
+accessible surface to query. They belong on the extracted `usePdfDocument` and
+`usePdfPageTracking` hooks and should move when the viewer is split, which is
+also what makes them cheap to express.
 
 ## Harness, isolation, and cleanup
 

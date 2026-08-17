@@ -253,13 +253,26 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
 
 test('PDF load and Find registration are independent of changing action-bag identity', () => {
   // KNOWN GAP — the one component assertion still made against source text.
-  // `PdfPreview.tsx` imports its worker through Vite's `?worker` suffix,
-  // which Node's module resolution cannot load, so the module cannot be
-  // imported (let alone mounted) under `pnpm test:renderer`. Until the
-  // worker import moves behind a runtime-resolvable seam, there is no
-  // rendered output to assert against. The equivalent invariants for the
-  // Markdown and JSON viewers, which DO mount, are asserted behaviourally
-  // in `@/features/documents/__tests__/document-surface-semantics.test.ts`.
+  //
+  // The import barrier is gone: `vite-import-stub-loader.mjs` now stands in
+  // for the `?worker` specifier and `domEnvironment` supplies the canvas
+  // geometry globals pdf.js reads at module scope, so this module imports
+  // fine under `pnpm test:renderer`.
+  //
+  // What remains is that these six assertions are not about rendered output
+  // at all. They pin effect dependency arrays and the single-scroll-owner
+  // protocol — `programmaticPageRef`, the `bestPage !== programmaticPage`
+  // bail — which are internal to the component and have no accessible
+  // surface to query. The behavioural home for them is the extracted
+  // `usePdfDocument` / `usePdfPageTracking` hooks; converting them before
+  // that extraction would mean mounting the whole viewer and driving
+  // pdf.js through a fake document to observe an effect count.
+  //
+  // So these move when the viewer is split, not before — and the split is
+  // what makes them cheap. The equivalent invariants for the Markdown and
+  // JSON viewers, which have no such internals, are already asserted
+  // behaviourally in
+  // `@/features/documents/__tests__/document-surface-semantics.test.ts`.
   const pdf = read('web-src/src/features/documents/components/PdfPreview.tsx');
   assert.match(pdf, /\}, \[fileUrl\]\);/);
   assert.match(pdf, /\[doc, numPages, registerFindController\]/);
