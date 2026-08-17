@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useApp } from '../store/AppContext';
+import { computeLineDiff } from '../store/conflictDiff';
 import { Button } from './ui/button';
-import { computeLineDiff } from '../store/useDocumentActions';
 
 export function ConflictResolver({ tabId }: { tabId: string }) {
   const { state, actions } = useApp();
@@ -30,7 +30,7 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-4">
           <Button
-            variant="outline"
+            variant="default"
             size="sm"
             onClick={() => void actions.resolveConflictReload(tabId)}
           >
@@ -44,7 +44,7 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
             Merge and Edit
           </Button>
           <Button
-            variant="default"
+            variant="destructive-outline"
             size="sm"
             onClick={() => void actions.resolveConflictOverwrite(tabId)}
           >
@@ -69,9 +69,9 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
               let leftBg = '';
               let rightBg = '';
               if (row.type === 'delete') {
-                leftBg = 'bg-red-500/10 text-red-500';
-              } else if (row.type === 'insert') {
                 rightBg = 'bg-green-500/10 text-green-500';
+              } else if (row.type === 'insert') {
+                leftBg = 'bg-red-500/10 text-red-500';
               } else if (row.type === 'modify') {
                 leftBg = 'bg-amber-500/10 text-amber-500';
                 rightBg = 'bg-amber-500/10 text-amber-500';
@@ -81,19 +81,19 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
                 <tr key={idx} className="border-b border-muted/10 hover:bg-muted/5 leading-relaxed">
                   {/* Left Line Num */}
                   <td className="w-12 select-none border-r border-muted/30 text-right pr-2 text-[10px] text-muted-foreground/60 py-0.5 font-light align-top bg-muted/5">
-                    {row.rightLineNum ?? ''}
+                    {row.diskLineNumber ?? ''}
                   </td>
                   {/* Left Content (Disk Version) */}
                   <td className={`pl-3 pr-2 py-0.5 whitespace-pre-wrap break-all align-top ${leftBg}`}>
-                    {row.rightText ?? ''}
+                    {row.diskText ?? ''}
                   </td>
                   {/* Right Line Num */}
                   <td className="w-12 select-none border-l border-muted border-r border-muted/30 text-right pr-2 text-[10px] text-muted-foreground/60 py-0.5 font-light align-top bg-muted/5">
-                    {row.leftLineNum ?? ''}
+                    {row.editorLineNumber ?? ''}
                   </td>
                   {/* Right Content (Editor/Your Version) */}
                   <td className={`pl-3 pr-2 py-0.5 whitespace-pre-wrap break-all align-top ${rightBg}`}>
-                    {row.leftText ?? ''}
+                    {row.editorText ?? ''}
                   </td>
                 </tr>
               );

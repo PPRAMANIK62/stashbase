@@ -4,6 +4,7 @@ import { api, ApiError } from '../api';
 import { folderRefsEqual } from '../folderPath';
 import { basename } from '../lib/paths';
 import type { EditorHandle } from './actionTypes';
+import { buildConflictMarkerDraft } from './conflictDiff';
 import {
   isFolderFileTab,
   keywordFindCaseSensitive,
@@ -11,89 +12,6 @@ import {
 } from './appContextHelpers';
 import { getActiveTab, type Action, type PendingHighlight, type State, type TabConflict, type ModalRequest } from './state';
 import type { ToastOptions } from './useFeedbackActions';
-
-export function computeLineDiff(original: string, modified: string) {
-  const originalLines = original.split('\n');
-  const modifiedLines = modified.split('\n');
-  const n = originalLines.length;
-  const m = modifiedLines.length;
-  const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
-  for (let i = 1; i <= n; i++) {
-    for (let j = 1; j <= m; j++) {
-      if (originalLines[i - 1] === modifiedLines[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1;
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-      }
-    }
-  }
-
-  let i = n, j = m;
-  const result: { original?: string; modified?: string; type: 'equal' | 'delete' | 'insert' | 'modify' }[] = [];
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && originalLines[i - 1] === modifiedLines[j - 1]) {
-      result.unshift({ original: originalLines[i - 1], modified: modifiedLines[j - 1], type: 'equal' });
-      i--;
-      j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      result.unshift({ modified: modifiedLines[j - 1], type: 'insert' });
-      j--;
-    } else {
-      result.unshift({ original: originalLines[i - 1], type: 'delete' });
-      i--;
-    }
-  }
-
-  const alignedRows: {
-    leftLineNum?: number;
-    leftText?: string;
-    rightLineNum?: number;
-    rightText?: string;
-    type: 'equal' | 'delete' | 'insert' | 'modify';
-  }[] = [];
-
-  let leftLine = 1;
-  let rightLine = 1;
-  let idx = 0;
-  while (idx < result.length) {
-    const item = result[idx];
-    if (item.type === 'equal') {
-      alignedRows.push({
-        leftLineNum: leftLine++,
-        leftText: item.original,
-        rightLineNum: rightLine++,
-        rightText: item.modified,
-        type: 'equal'
-      });
-      idx++;
-    } else {
-      const deletes: string[] = [];
-      const inserts: string[] = [];
-      while (idx < result.length && result[idx].type !== 'equal') {
-        if (result[idx].type === 'delete') {
-          deletes.push(result[idx].original!);
-        } else {
-          inserts.push(result[idx].modified!);
-        }
-        idx++;
-      }
-      const maxLen = Math.max(deletes.length, inserts.length);
-      for (let k = 0; k < maxLen; k++) {
-        const hasLeft = k < deletes.length;
-        const hasRight = k < inserts.length;
-        alignedRows.push({
-          leftLineNum: hasLeft ? leftLine++ : undefined,
-          leftText: hasLeft ? deletes[k] : undefined,
-          rightLineNum: hasRight ? rightLine++ : undefined,
-          rightText: hasRight ? inserts[k] : undefined,
-          type: (hasLeft && hasRight) ? 'modify' : hasLeft ? 'delete' : 'insert'
-        });
-      }
-    }
-  }
-
-  return alignedRows;
-}
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const AUDIO_SOURCE_RE = new RegExp(`\\.(${AUDIO_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
@@ -139,13 +57,11 @@ export function useDocumentActions(
   dispatch: Dispatch,
 ) {
   const { editor, saveInFlight, saveTimer, state } = refs;
-  /** The last save the server accepted. `state` is a render-time mirror, so
-   *  a flush that starts between a previous run's dispatches and the React
-   *  commit still reads the pre-save file; this ref carries the accepted
-   *  baseline across that gap (see flushSave). `superseded` holds every
-   *  baseVersion this uncommitted save chain has replaced, so a reader
-   *  lagging more than one save still recognizes its version as stale. */
-  const lastAcceptedSave = useRef<{
+  /** The latest durable disk baseline. `state` is a render-time mirror, so a
+   *  flush can start before the reducer commits a save acknowledgement or a
+   *  conflict-resolution snapshot. This ref carries that baseline across the
+   *  render gap. `superseded` holds every older baseVersion in the chain. */
+  const latestDurableBaseline = useRef<{
     name: string; content: string; version?: string; superseded: Set<string | undefined>;
   } | null>(null);
   const { loadFiles, refreshIndexState, toast, primeFind, askConfirm } = dependencies;
@@ -166,31 +82,37 @@ export function useDocumentActions(
 
     const run = (async () => {
       const tabAtStart = getActiveTab(state.current);
-      const currentFile = tabAtStart?.file ?? null;
-      const tabId = tabAtStart?.id ?? null;
+      if (!tabAtStart?.file) return true;
+      const currentFile = tabAtStart.file;
+      const tabId = tabAtStart.id;
       const folderPathAtSave = state.current.folderPath;
-      const handle = editor.current;
-      if (!currentFile || !handle) return true;
       // Out-of-folder tabs are read-only; a PUT would write a same-named
       // file into the ACTIVE folder.
       if (currentFile.folder) return true;
-      if (!tabAtStart?.dirty) return true;
+      // The conflict surface intentionally replaces the editor. Treat that as
+      // an unresolved save barrier, not as evidence that there is nothing to
+      // save; native close/reload and renderer navigation must remain blocked.
+      if (tabAtStart.conflict) return false;
+      const handle = editor.current;
+      if (!handle) return tabAtStart.dirty !== true;
+      // The editor callback can update its live value one render before the
+      // reducer's dirty flag reaches state.current. Context release may land
+      // in that gap, so the UI flag is presentation, not save authority.
       const content = handle.getValue();
-      // If the state mirror still shows the version the last accepted save
-      // replaced, its FILE_PATCH has not committed yet: compare and base the
-      // PUT on the accepted save instead, or this run would re-send with a
-      // stale baseVersion and trip the 409 force-overwrite path.
-      const accepted = lastAcceptedSave.current;
-      const staleAfterAccepted = accepted != null
-        && accepted.name === currentFile.name
-        && accepted.superseded.has(currentFile.version);
-      const baselineContent = staleAfterAccepted ? accepted.content : currentFile.content;
+      // If the state mirror still shows a version the durable baseline
+      // replaced, its reducer patch has not committed yet: compare and base
+      // the PUT on the ref instead, or this run would use a stale version.
+      const durable = latestDurableBaseline.current;
+      const stateLagsDurable = durable != null
+        && durable.name === currentFile.name
+        && durable.superseded.has(currentFile.version);
+      const baselineContent = stateLagsDurable ? durable.content : currentFile.content;
       if (content === baselineContent) {
         dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
         return true;
       }
-      const baseVersion = staleAfterAccepted ? accepted.version : currentFile.version;
+      const baseVersion = stateLagsDurable ? durable.version : currentFile.version;
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Saving…', cls: '' } });
       const saveContent = async (base?: string) => {
         const result = await api.putFile(currentFile.name, content, base);
@@ -203,11 +125,12 @@ export function useDocumentActions(
           savedResult = await saveContent(baseVersion);
         } catch (err: unknown) {
           if (!(err instanceof ApiError && err.status === 409)) throw err;
-          const diskVersion = (err as ApiError).currentVersion ?? '';
           let diskContent = '';
+          let diskVersion = '';
           try {
             const body = await api.getFile(currentFile.name);
             diskContent = body.content;
+            diskVersion = body.version ?? err.currentVersion ?? '';
           } catch (fetchErr: unknown) {
             console.error('Failed to fetch conflicted file content from disk:', fetchErr);
             throw err;
@@ -225,9 +148,9 @@ export function useDocumentActions(
           dispatch({ type: 'SAVE_STATUS', status: { text: 'Conflict detected', cls: 'error' } });
           return false;
         }
-        const superseded = staleAfterAccepted && accepted ? accepted.superseded : new Set<string | undefined>();
+        const superseded = stateLagsDurable && durable ? durable.superseded : new Set<string | undefined>();
         superseded.add(baseVersion);
-        lastAcceptedSave.current = {
+        latestDurableBaseline.current = {
           name: currentFile.name,
           content,
           version: savedResult.version,
@@ -294,7 +217,7 @@ export function useDocumentActions(
   ) => {
     if (opts.expectedFolder && state.current.folderPath !== opts.expectedFolder) return;
     const currentFile = getActiveTab(state.current)?.file ?? null;
-    if (editor.current && currentFile && currentFile.name !== name && !opts.newTab) {
+    if (currentFile && currentFile.name !== name && !opts.newTab) {
       if (!(await flushSave())) return;
     }
     if (opts.expectedFolder && state.current.folderPath !== opts.expectedFolder) return;
@@ -386,7 +309,7 @@ export function useDocumentActions(
   // one click, one lasting tab.
   const selectFile = useCallback(async (name: string) => {
     const expectedFolder = state.current.folderPath;
-    if (editor.current && !(await flushSave())) return;
+    if (!(await flushSave())) return;
     if (state.current.folderPath !== expectedFolder) return;
     const currentState = state.current;
     const existing = currentState.tabs.find((tab) => isFolderFileTab(tab, name));
@@ -433,7 +356,7 @@ export function useDocumentActions(
   const openInNewTab = useCallback(async (name: string, expectedFolder?: string) => {
     const targetFolder = expectedFolder ?? state.current.folderPath;
     if (targetFolder && state.current.folderPath !== targetFolder) return;
-    if (editor.current && !(await flushSave())) return;
+    if (!(await flushSave())) return;
     if (targetFolder && state.current.folderPath !== targetFolder) return;
     const currentState = state.current;
     const existing = currentState.tabs.find((tab) => isFolderFileTab(tab, name));
@@ -445,7 +368,7 @@ export function useDocumentActions(
   }, [dispatch, editor, flushSave, loadFile, state]);
 
   const newTab = useCallback(async () => {
-    if (editor.current && !(await flushSave())) return;
+    if (!(await flushSave())) return;
     dispatch({ type: 'NEW_TAB' });
   }, [dispatch, editor, flushSave]);
 
@@ -466,7 +389,7 @@ export function useDocumentActions(
       dispatch({ type: 'CLOSE_TAB', id });
       return;
     }
-    if (currentState.activeTabId === id && editor.current && !(await flushSave())) return;
+    if (currentState.activeTabId === id && !(await flushSave())) return;
     dispatch({ type: 'CLOSE_TAB', id });
   }, [dispatch, editor, flushSave, state, askConfirm]);
 
@@ -478,7 +401,7 @@ export function useDocumentActions(
   const activateTab = useCallback(async (id: string) => {
     const currentState = state.current;
     if (currentState.activeTabId === id) return;
-    if (editor.current && !(await flushSave())) return;
+    if (!(await flushSave())) return;
     dispatch({ type: 'ACTIVATE_TAB', id });
   }, [dispatch, editor, flushSave, state]);
 
@@ -489,7 +412,7 @@ export function useDocumentActions(
       if (anchor) dispatch({ type: 'PENDING_SCROLL', anchor });
       return;
     }
-    if (editor.current && !(await flushSave())) return;
+    if (!(await flushSave())) return;
     if (state.current.folderPath !== expectedFolder) return;
     const existing = state.current.tabs.find((tab) => isFolderFileTab(tab, name));
     if (existing) {
@@ -515,7 +438,7 @@ export function useDocumentActions(
       else await selectFile(name);
       return;
     }
-    if (editor.current && !(await flushSave())) return;
+    if (!(await flushSave())) return;
     const isTarget = () => {
       const file = getActiveTab(state.current)?.file;
       return file?.name === name && file.folder != null && folderRefsEqual(file.folder, folder);
@@ -591,6 +514,12 @@ export function useDocumentActions(
       const savedResult = await api.putFile(fileName, editorContent, undefined);
       if (savedResult.indexWarning) toast(savedResult.indexWarning, { level: 'warning' });
 
+      latestDurableBaseline.current = {
+        name: fileName,
+        content: editorContent,
+        version: savedResult.version,
+        superseded: new Set([tab.file.version]),
+      };
       dispatch({ type: 'FILE_PATCH', patch: { content: editorContent, version: savedResult.version } });
       dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
       dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
@@ -608,6 +537,12 @@ export function useDocumentActions(
     const tab = currentState.tabs.find((t) => t.id === tabId);
     if (!tab?.conflict || !tab.file) return;
     const { diskContent, diskVersion } = tab.conflict;
+    latestDurableBaseline.current = {
+      name: tab.file.name,
+      content: diskContent,
+      version: diskVersion,
+      superseded: new Set([tab.file.version]),
+    };
     dispatch({ type: 'FILE_PATCH', patch: { content: diskContent, version: diskVersion } });
     dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
     dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
@@ -621,33 +556,17 @@ export function useDocumentActions(
     if (!tab?.conflict || !tab.file) return;
     const { diskContent, editorContent, diskVersion } = tab.conflict;
 
-    const mergedLines: string[] = [];
-    const alignedRows = computeLineDiff(editorContent, diskContent);
+    const mergedContent = buildConflictMarkerDraft(editorContent, diskContent);
 
-    let idx = 0;
-    while (idx < alignedRows.length) {
-      const row = alignedRows[idx];
-      if (row.type === 'equal') {
-        mergedLines.push(row.leftText ?? '');
-        idx++;
-      } else {
-        const editorBlock: string[] = [];
-        const diskBlock: string[] = [];
-        while (idx < alignedRows.length && alignedRows[idx].type !== 'equal') {
-          const r = alignedRows[idx];
-          if (r.leftText !== undefined) editorBlock.push(r.leftText);
-          if (r.rightText !== undefined) diskBlock.push(r.rightText);
-          idx++;
-        }
-        mergedLines.push('<<<<<<< Editor Version');
-        mergedLines.push(...editorBlock);
-        mergedLines.push('=======');
-        mergedLines.push(...diskBlock);
-        mergedLines.push('>>>>>>> Disk Version');
-      }
-    }
-    const mergedContent = mergedLines.join('\n');
-
+    // The merge is an editor draft based on the disk snapshot, not a durable
+    // save. Preserve the disk content/version as the comparison baseline so
+    // the remounted editor must PUT the merged draft before any transition.
+    latestDurableBaseline.current = {
+      name: tab.file.name,
+      content: diskContent,
+      version: diskVersion,
+      superseded: new Set([tab.file.version, diskVersion]),
+    };
     dispatch({ type: 'FILE_PATCH', patch: { content: mergedContent, version: diskVersion } });
     dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
     dispatch({ type: 'DOCUMENT_DIRTY', dirty: true });

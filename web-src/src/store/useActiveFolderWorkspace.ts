@@ -149,7 +149,7 @@ export function useActiveFolderWorkspace(
     { askCascadeForRename, askConfirm, flushSave: documents.flushSave, loadFiles, openInNewTab: documents.openInNewTab, refreshIndexState: search.refreshIndexState, toast }, dispatch,
   );
   const folders = useFolderActions(
-    { state: stateRef, folderContextPath, editor, openGeneration, openingFolderGeneration, syncGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
+    { state: stateRef, folderContextPath, openGeneration, openingFolderGeneration, syncGeneration, lastTreeVersion, importConversionGrace, importIndexGrace, keyBackfillGrace },
     { flushSave: documents.flushSave, loadFiles, loadFileOrder, markVisibleFilesPendingForSearch: search.markVisibleFilesPendingForSearch, refreshIndexState: search.refreshIndexState, toast }, dispatch,
   );
 
