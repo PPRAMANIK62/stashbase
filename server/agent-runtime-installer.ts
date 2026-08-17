@@ -295,7 +295,26 @@ interface ClaudeManifest {
   platforms: Record<string, { binary: string; checksum: string; size: number }>;
 }
 
-async function installClaude(update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void> {
+function removeInstallerStaging(staging: string): void {
+  try {
+    fs.rmSync(staging, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
+  } catch {
+    // A just-executed Windows binary may remain transiently locked by the OS
+    // or endpoint protection. Staging is disposable; never let its cleanup
+    // hide the installation or executable-verification failure that matters.
+  }
+}
+
+export async function installClaude(
+  update: (next: ProgressUpdate) => void,
+  signal: AbortSignal,
+  verifyExecutable: AgentExecutableVerifier = verifyAgentExecutable,
+): Promise<void> {
   update({ progress: 0, message: 'Resolving the latest Claude Code release…' });
   const version = (await fetchBoundedText(`${CLAUDE_RELEASES}/latest`, signal, 200)).trim();
   if (!/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(version)) {
@@ -332,16 +351,16 @@ async function installClaude(update: (next: ProgressUpdate) => void, signal: Abo
         (progress) => update({ progress, message: `Downloading Claude Code… ${Math.round(progress * 100)}%` }),
       );
       if (process.platform !== 'win32') fs.chmodSync(stagingBinary, 0o755);
-      verifyAgentExecutable(stagingBinary, 'Claude Code');
+      verifyExecutable(stagingBinary, 'Claude Code', process.env);
       fs.mkdirSync(path.dirname(releaseRoot), { recursive: true, mode: 0o700 });
       if (!fs.existsSync(releaseRoot)) fs.renameSync(staging, releaseRoot);
-      else fs.rmSync(staging, { recursive: true, force: true });
+      else removeInstallerStaging(staging);
     } catch (error) {
-      fs.rmSync(staging, { recursive: true, force: true });
+      removeInstallerStaging(staging);
       throw error;
     }
   }
-  verifyAgentExecutable(finalBinary, 'Claude Code');
+  verifyExecutable(finalBinary, 'Claude Code', process.env);
   const relative = path.relative(managedAgentRuntimeRoot('claude'), finalBinary);
   writeManagedClaudeManifest({ version, platform, executable: relative });
   update({ progress: 1, message: 'Claude Code installed.' });
@@ -351,17 +370,107 @@ const CODEX_INSTALLER = process.platform === 'win32'
   ? 'https://chatgpt.com/codex/install.ps1'
   : 'https://chatgpt.com/codex/install.sh';
 
+export interface CodexInstallerShell {
+  command: string;
+  args: string[];
+  kind: 'posix' | 'powershell-7' | 'windows-powershell';
+}
+
 type AgentExecutableVerifier = (
   executable: string,
   label: string,
   env: NodeJS.ProcessEnv,
 ) => void;
 
+type InstallerScriptRunner = (
+  command: string,
+  args: string[],
+  script: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+  onLine: (line: string) => void,
+) => Promise<void>;
+
+export interface CodexInstallDependencies {
+  verifyExecutable: AgentExecutableVerifier;
+  resolveInstallerShell: () => CodexInstallerShell;
+  runInstallerScript: InstallerScriptRunner;
+}
+
+function environmentValue(env: NodeJS.ProcessEnv, name: string): string {
+  const key = Object.keys(env).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  const value = key ? env[key] : undefined;
+  return typeof value === 'string' ? value : '';
+}
+
+function regularFile(candidate: string): boolean {
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
+export function resolveCodexInstallerShell(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  isFile: (candidate: string) => boolean = regularFile,
+): CodexInstallerShell {
+  if (platform !== 'win32') return { command: '/bin/sh', args: [], kind: 'posix' };
+
+  const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '-'];
+  const candidates: string[] = [];
+  const pathValue = environmentValue(env, 'PATH');
+  for (const entry of pathValue.split(path.win32.delimiter)) {
+    const dir = entry.trim().replace(/^"(.*)"$/, '$1');
+    if (dir) candidates.push(path.win32.join(dir, 'pwsh.exe'));
+  }
+  for (const name of ['ProgramW6432', 'ProgramFiles']) {
+    const programFiles = environmentValue(env, name);
+    if (programFiles) candidates.push(path.win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'));
+  }
+
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const key = candidate.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (isFile(candidate)) return { command: candidate, args, kind: 'powershell-7' };
+  }
+
+  const systemRoot = environmentValue(env, 'SystemRoot');
+  const windowsPowerShell = systemRoot
+    ? path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+    : 'powershell.exe';
+  return {
+    command: isFile(windowsPowerShell) ? windowsPowerShell : 'powershell.exe',
+    args,
+    kind: 'windows-powershell',
+  };
+}
+
+function codexInstallerFailure(error: unknown, shell: CodexInstallerShell): Error {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  if (
+    shell.kind === 'windows-powershell'
+    && /property\s+['"]OSArchitecture['"]\s+cannot be found/i.test(failure.message)
+  ) {
+    return new Error(
+      'The official Codex installer is incompatible with Windows PowerShell 5.1 on this PC. '
+      + 'Install PowerShell 7 (pwsh.exe), then retry.',
+    );
+  }
+  return failure;
+}
+
 export async function installCodex(
   update: (next: ProgressUpdate) => void,
   signal: AbortSignal,
-  verifyExecutable: AgentExecutableVerifier = verifyAgentExecutable,
+  dependencies: Partial<CodexInstallDependencies> = {},
 ): Promise<void> {
+  const verifyExecutable = dependencies.verifyExecutable ?? verifyAgentExecutable;
+  const resolveInstallerShell = dependencies.resolveInstallerShell ?? resolveCodexInstallerShell;
+  const runScript = dependencies.runInstallerScript ?? runInstallerScript;
   update({ message: 'Downloading the official Codex installer…' });
   const script = await fetchBoundedText(CODEX_INSTALLER, signal, 2_000_000);
   const binDir = managedCodexBinDir();
@@ -374,14 +483,15 @@ export async function installCodex(
     PATH: [binDir, process.env.PATH ?? ''].filter(Boolean).join(path.delimiter),
     ELECTRON_RUN_AS_NODE: undefined,
   };
-  const command = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
-  const args = process.platform === 'win32'
-    ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '-']
-    : [];
-  await runInstallerScript(command, args, script, env, signal, (line) => {
-    const message = line.replace(/^==>\s*/, '').trim();
-    if (message) update({ message });
-  });
+  const shell = resolveInstallerShell();
+  try {
+    await runScript(shell.command, shell.args, script, env, signal, (line) => {
+      const message = line.replace(/^==>\s*/, '').trim();
+      if (message) update({ message });
+    });
+  } catch (error) {
+    throw codexInstallerFailure(error, shell);
+  }
   const executable = path.join(binDir, process.platform === 'win32' ? 'codex.exe' : 'codex');
   verifyExecutable(executable, 'Codex', env);
   update({ progress: 1, message: 'Codex installed.' });
@@ -441,19 +551,32 @@ async function downloadVerified(
   onProgress(1);
 }
 
-function verifyAgentExecutable(
+export function verifyAgentExecutable(
   executable: string,
   label: string,
   env: NodeJS.ProcessEnv = process.env,
+  timeoutMs = 20_000,
 ): void {
   const result = spawnSync(executable, ['--version'], {
     encoding: 'utf8',
-    timeout: 20_000,
+    timeout: timeoutMs,
     windowsHide: true,
     env: { ...env, ELECTRON_RUN_AS_NODE: undefined },
   });
   if (result.status !== 0) {
-    throw new Error(`${label} was downloaded but did not pass its executable check.`);
+    const nativeError = result.error as NodeJS.ErrnoException | undefined;
+    const stderr = typeof result.stderr === 'string'
+      ? result.stderr.replace(/\s+/g, ' ').trim().slice(-800)
+      : '';
+    let detail: string;
+    if (nativeError?.code === 'ETIMEDOUT') detail = `timed out after ${timeoutMs}ms`;
+    else if (nativeError) detail = `could not start: ${nativeError.message}`;
+    else if (result.status !== null) detail = `exited with code ${result.status}`;
+    else if (result.signal) detail = `terminated by ${result.signal}`;
+    else detail = 'returned no exit status';
+    throw new Error(
+      `${label} was downloaded but did not pass its executable check (${detail}${stderr ? `: ${stderr}` : ''}).`,
+    );
   }
 }
 

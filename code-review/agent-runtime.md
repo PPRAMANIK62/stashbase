@@ -24,9 +24,16 @@
   explicit New Chat re-runs readiness.
 - Codex uses its official standalone installer in a private target. Its
   installer process and immediate executable check share that isolated
-  installer environment; native sessions still use the provider's normal
-  account and history home. Claude uses its official release manifest, verifies
-  size and SHA-256, and publishes atomically. Shutdown cancels preparation.
+  installer environment. On Windows, installation prefers PowerShell 7 from
+  the inherited PATH or its standard Program Files location, then falls back
+  to Windows PowerShell; a known legacy-shell architecture failure names the
+  PowerShell 7 recovery instead of becoming a generic executable-check error.
+  Native sessions still use the provider's normal account and history home.
+  Claude uses its official release manifest, verifies size and SHA-256, and
+  publishes atomically. Disposable staging cleanup retries transient Windows
+  locks and never replaces the primary download or executable-check failure;
+  failed executable checks retain bounded timeout, exit-code, and stderr
+  diagnostics. Shutdown cancels preparation.
 - Readiness configures the matching CLI's StashBase MCP entry through
   `ensureAgentMcp`, the only writer of the built-in agents' own config files.
   Native attach repeats that idempotent write immediately before process

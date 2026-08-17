@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +8,10 @@ import { resolveAgentCli, resolveAgentCliWithLoginShell } from '../agent-cli.ts'
 import {
   AgentBootstrapCoordinator,
   claudePlatform,
+  installClaude,
   installCodex,
+  resolveCodexInstallerShell,
+  verifyAgentExecutable,
   type AgentBootstrapDependencies,
 } from '../agent-runtime-installer.ts';
 import {
@@ -178,27 +182,185 @@ test('Claude release platform mapping stays provider-shaped', () => {
   assert.throws(() => claudePlatform('freebsd', 'x64', false), /does not publish/);
 });
 
+test('Claude staging cleanup never masks the executable verification failure', async () => {
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-cleanup-test-'));
+  const version = '2.1.233';
+  const platform = claudePlatform();
+  const binary = Buffer.from('fake Claude executable');
+  const verifierFailure = new Error('Claude verifier timed out after 20 seconds.');
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0]) => {
+    const url = String(input);
+    if (url.endsWith('/latest')) return new Response(version);
+    if (url.endsWith('/manifest.json')) {
+      return new Response(JSON.stringify({
+        version,
+        platforms: {
+          [platform]: {
+            binary: process.platform === 'win32' ? 'claude.exe' : 'claude',
+            checksum: crypto.createHash('sha256').update(binary).digest('hex'),
+            size: binary.length,
+          },
+        },
+      }));
+    }
+    return new Response(binary);
+  });
+  const originalRmSync = fs.rmSync;
+  let cleanupOptions: fs.RmDirOptions | undefined;
+  mock.method(fs, 'rmSync', ((target: fs.PathLike, options?: fs.RmDirOptions) => {
+    if (String(target).includes('.staging.')) {
+      cleanupOptions = options;
+      throw Object.assign(new Error(`EPERM: operation not permitted, unlink '${target}\\claude.exe'`), {
+        code: 'EPERM',
+        syscall: 'unlink',
+      });
+    }
+    return originalRmSync(target, options);
+  }) as typeof fs.rmSync);
+  try {
+    await assert.rejects(
+      installClaude(() => {}, new AbortController().signal, () => { throw verifierFailure; }),
+      (error) => {
+        assert.equal(error, verifierFailure);
+        return true;
+      },
+    );
+    assert.ok((cleanupOptions?.maxRetries ?? 0) > 0);
+    assert.ok((cleanupOptions?.retryDelay ?? 0) > 0);
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Agent executable verification reports the native exit code and stderr', {
+  skip: process.platform === 'win32',
+}, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agent-verifier-test-'));
+  const executable = path.join(root, 'agent');
+  fs.writeFileSync(executable, '#!/bin/sh\nprintf "blocked by policy\\n" >&2\nexit 23\n');
+  fs.chmodSync(executable, 0o755);
+  try {
+    assert.throws(
+      () => verifyAgentExecutable(executable, 'Claude Code'),
+      /Claude Code.*exited with code 23.*blocked by policy/i,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Agent executable verification identifies a timeout', {
+  skip: process.platform === 'win32',
+}, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agent-verifier-timeout-test-'));
+  const executable = path.join(root, 'agent');
+  fs.writeFileSync(executable, '#!/bin/sh\nwhile :; do :; done\n');
+  fs.chmodSync(executable, 0o755);
+  try {
+    assert.throws(
+      () => verifyAgentExecutable(executable, 'Claude Code', process.env, 25),
+      /Claude Code.*timed out after 25ms/i,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Windows Codex installation prefers PowerShell 7 from PATH', () => {
+  const pwsh = 'C:\\Tools\\PowerShell\\pwsh.exe';
+  const shell = resolveCodexInstallerShell(
+    'win32',
+    { Path: 'C:\\Windows\\System32;C:\\Tools\\PowerShell' },
+    (candidate) => candidate === pwsh,
+  );
+
+  assert.equal(shell.command, pwsh);
+  assert.equal(shell.kind, 'powershell-7');
+});
+
+test('Windows Codex installation finds standard PowerShell 7 when the app PATH is stale', () => {
+  const pwsh = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe';
+  const shell = resolveCodexInstallerShell(
+    'win32',
+    { ProgramFiles: 'C:\\Program Files', Path: 'C:\\Windows\\System32' },
+    (candidate) => candidate === pwsh,
+  );
+
+  assert.equal(shell.command, pwsh);
+  assert.equal(shell.kind, 'powershell-7');
+});
+
+test('Windows Codex installation falls back to Windows PowerShell only when pwsh is unavailable', () => {
+  const powershell = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  const shell = resolveCodexInstallerShell(
+    'win32',
+    { SystemRoot: 'C:\\Windows', Path: 'C:\\Windows\\System32' },
+    (candidate) => candidate === powershell,
+  );
+
+  assert.equal(shell.command, powershell);
+  assert.equal(shell.kind, 'windows-powershell');
+});
+
+test('Windows PowerShell architecture failures explain the PowerShell 7 recovery', async () => {
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-shell-test-'));
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  mock.method(globalThis, 'fetch', async () => new Response('# installer'));
+  try {
+    await assert.rejects(
+      installCodex(() => {}, new AbortController().signal, {
+        resolveInstallerShell: () => ({
+          command: 'powershell.exe',
+          args: [],
+          kind: 'windows-powershell',
+        }),
+        runInstallerScript: async () => {
+          throw new Error("The property 'OSArchitecture' cannot be found on this object.");
+        },
+      }),
+      /PowerShell 7.*pwsh\.exe.*retry/i,
+    );
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('Codex post-install verification preserves the isolated installer environment', async () => {
   const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-install-test-'));
   process.env.STASHBASE_LOCAL_DATA_ROOT = root;
   const installer = process.platform === 'win32'
-    ? 'New-Item -ItemType File -Force -Path (Join-Path $env:CODEX_INSTALL_DIR "codex.exe") | Out-Null\n'
+    ? 'Write-Output "SHELL_EDITION=$($PSVersionTable.PSEdition)"\nNew-Item -ItemType File -Force -Path (Join-Path $env:CODEX_INSTALL_DIR "codex.exe") | Out-Null\n'
     : `#!/bin/sh
 set -eu
 : > "$CODEX_INSTALL_DIR/codex"
 `;
   mock.method(globalThis, 'fetch', async () => new Response(installer));
   let verified = false;
+  const messages: string[] = [];
   try {
-    await installCodex(() => {}, new AbortController().signal, (executable, label, env) => {
-      verified = true;
-      assert.equal(executable, path.join(managedCodexBinDir(), process.platform === 'win32' ? 'codex.exe' : 'codex'));
-      assert.equal(label, 'Codex');
-      assert.equal(env.CODEX_INSTALL_DIR, managedCodexBinDir());
-      assert.equal(env.CODEX_HOME, managedCodexInstallerHome());
+    await installCodex((update) => {
+      if (update.message) messages.push(update.message);
+    }, new AbortController().signal, {
+      verifyExecutable: (executable, label, env) => {
+        verified = true;
+        assert.equal(executable, path.join(managedCodexBinDir(), process.platform === 'win32' ? 'codex.exe' : 'codex'));
+        assert.equal(label, 'Codex');
+        assert.equal(env.CODEX_INSTALL_DIR, managedCodexBinDir());
+        assert.equal(env.CODEX_HOME, managedCodexInstallerHome());
+      },
     });
     assert.equal(verified, true);
+    if (process.platform === 'win32') assert.ok(messages.includes('SHELL_EDITION=Core'));
   } finally {
     mock.restoreAll();
     if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
