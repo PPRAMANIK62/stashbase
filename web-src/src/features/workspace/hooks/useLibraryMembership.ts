@@ -1,26 +1,9 @@
 import { useEffect } from 'react';
-import { api } from '@/common/api/api';
 import type { Action, State } from '@/store/state/state';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
+import { refreshLibraryMembership } from '@/features/workspace/lib/libraryMembership';
 
 const MEMBERSHIP_POLL_MS = 4000;
-
-/** Adopt the server's library membership: fetch the lightweight
- *  `/api/folder` payload and dispatch `RECENT_LOADED` from it — the one
- *  resync step behind every optimistic membership edit (favorite flips,
- *  removals, failed opens) and the background poll. `shouldAdopt` can
- *  veto the dispatch (the poll ignores unchanged lists). Rejects on
- *  fetch failure so each call site decides whether its optimistic state
- *  survives. */
-export async function refreshLibraryMembership(
-  dispatch: (a: Action) => void,
-  shouldAdopt?: (recent: State['recent']) => boolean,
-): Promise<void> {
-  const j = await api.getFolder();
-  const recent = j.recent ?? [];
-  if (shouldAdopt && !shouldAdopt(recent)) return;
-  dispatch({ type: 'RECENT_LOADED', recent, homeDir: j.homeDir });
-}
 
 /** Library membership can change without this window acting: an agent's
  *  create_project in another window, or an external MCP client. There is

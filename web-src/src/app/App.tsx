@@ -10,35 +10,29 @@ import { Sidebar } from '@/app/components/Sidebar';
 import { TitlebarControls } from '@/app/components/TitlebarControls';
 import { MainPane } from '@/app/components/MainPane';
 import { DropVeil } from '@/common/components/DropVeil';
-import { EmbedderRequireKeyGate } from '@/features/settings/components/EmbedderRequireKeyGate';
 import { Hotkeys } from '@/app/components/Hotkeys';
 import { ClipboardImportModal } from '@/common/components/ClipboardImportModal';
 import { CascadePromptModal } from '@/app/components/CascadePromptModal';
 import { AlertConfirmModal } from '@/app/components/AlertConfirmModal';
 import { Toasts } from '@/common/components/Toasts';
-import { SettingsPortal } from '@/features/settings/components/SettingsModal';
-import { QuickOpen } from '@/features/search/components/QuickOpen';
-import { LibrarySearch } from '@/features/search/components/LibrarySearch';
-import { EditorHistoryNavigator } from '@/features/documents/components/EditorHistoryNavigator';
+import { ChatPane, useChatLayoutFollowUp } from '@/features/agent-panel';
+import { EditorHistoryNavigator, usePreviewMessages } from '@/features/documents';
+import { UnsupportedFilesModal } from '@/features/preparation';
+import { LibrarySearch, QuickOpen } from '@/features/search';
+import { applyAppearance, EmbedderRequireKeyGate, SettingsPortal, subscribeToAppearance } from '@/features/settings';
+import { ChatSplitter, SidebarSplitter, useGlobalDragDrop } from '@/features/workspace';
 import { DocumentOutlineProvider } from '@/common/components/DocumentOutlineContext';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { OverlayStackProvider } from '@/common/components/OverlayStack';
-import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
 import { AppProvider, useAppActions, useChat, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
-import { useChatLayoutFollowUp } from '@/features/agent-panel/hooks/useChatLayoutFollowUp';
 import { useClipboardImageOffer } from '@/app/hooks/useClipboardImageOffer';
-import { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
-import { usePreviewMessages } from '@/features/documents/hooks/usePreviewMessages';
 import { api } from '@/common/api/api';
-import { applyAppearance, subscribeToAppearance } from '@/features/settings/lib/appearance';
 import { electronBridge } from '@/common/lib/electronBridge';
 import {
   COMPACT_WORKSPACE_QUERY,
   resolveWorkspaceLayout,
 } from '@/common/lib/workspaceLayout';
 
-const LazyChatPane = lazyWithRetry(() => import('@/features/agent-panel/components/ChatPane'));
-const LazyUnsupportedFilesModalGate = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesModal'));
 const LazyContextMenu = lazyWithRetry(() => import('@/app/components/ContextMenu'));
 const LazyImageLightbox = lazyWithRetry(() =>
   import('@/common/components/ImageLightbox').then((mod) => ({ default: mod.ImageLightbox })),
@@ -183,7 +177,7 @@ function AppBody() {
             resetKey={`${state.activeChatTabId ?? 'none'}:${state.chatOpen ? 'open' : 'closed'}`}
           >
             <Suspense fallback={<aside className="chat-pane-shell" aria-label="Agent chat" />}>
-              <LazyChatPane />
+              <ChatPane />
             </Suspense>
           </LazyLoadBoundary>
         )}
@@ -228,7 +222,7 @@ function AppBody() {
       )}
       <CascadePromptModal />
       <Suspense fallback={null}>
-        <LazyUnsupportedFilesModalGate />
+        <UnsupportedFilesModal />
       </Suspense>
       <AlertConfirmModal />
       <Toasts />

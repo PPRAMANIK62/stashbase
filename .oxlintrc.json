@@ -111,6 +111,14 @@
       }
     },
     {
+      "files": ["web-src/src/app/**"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": [
+          { "regex": "^@/features/[^/]+/.+", "message": "app/ may import a feature only through its barrel: use '@/features/<area>'. If what you need is not exported there, add it to that feature's index.ts (or give it a proper entry point) rather than reaching into the feature's internals." }
+        ]}]
+      }
+    },
+    {
       "files": ["**/__tests__/**"],
       "rules": {
         "no-restricted-imports": "off",

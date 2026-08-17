@@ -23,12 +23,61 @@ its own layer and from every layer below it, never above.
    `documents`, `preparation`, `search`, `settings`, `workspace`. A feature
    imports `common/`, `store/`, and its own subtree. **A feature never imports
    another feature** — not a component, not a type, not a trigger function,
-   and not through a dynamic `import()`.
+   and not through a dynamic `import()`. Each owns an `index.ts` barrel; that
+   barrel is the feature's whole public surface, and everything else in the
+   subtree is internal.
 4. **`app/`** — the composition root: `App.tsx`, the global shell overlays,
    the surfaces that wire several features into one layout (`MainPane`,
    `Sidebar`), and the shell-wide keyboard and titlebar controls. This is the
    only layer allowed to import from multiple features, because composing
-   them is what it exists to do.
+   them is what it exists to do. It reaches each of them **only through the
+   barrel**: `@/features/documents`, never
+   `@/features/documents/components/PdfPreview`.
+
+Direction and depth are separate rules. Direction says which layers a module
+may reach at all; depth says how far into a feature a caller may reach once
+it is allowed to. Direction alone left `app/` importing 36 feature internals,
+so every viewer, hook, and helper a feature happened to define was
+load-bearing shell API and could not be moved without touching the
+composition root.
+
+## What a barrel exports
+
+A feature's `index.ts` lists exactly what a caller outside the feature
+needs, and nothing else. It is a curated surface, not a re-export of the
+directory: an export that no consumer imports is API the feature now has to
+keep working.
+
+Three rules decide what a line in a barrel looks like:
+
+- **Eager re-export** (`export { X } from '…'`) for anything the shell
+  mounts unconditionally or calls at boot — the always-mounted gates, the
+  hooks, the pure predicates.
+- **The feature owns its own lazy boundaries.** A surface that must not
+  ship in the initial chunk is exported as an already-wrapped
+  `lazyWithRetry(() => import('…'))` const, so it stays a dynamic entry no
+  matter who imports the barrel. Plainly re-exporting such a component
+  would make it eager the moment any consumer touches the barrel for
+  anything else — the barrel is a static import, so its whole static graph
+  is initial JS. The caller still supplies the `Suspense` (and, where a
+  failure must not take the shell down, a `LazyLoadBoundary`), because the
+  fallback is a layout decision.
+- **A surface, not its parts.** Where several modules only ever get used
+  together behind one decision, the feature exports the decision.
+  `DocumentViewer` is the worked example: it owns the file-format → viewer
+  dispatch and all five viewer lazy boundaries, so adding a format is a
+  change inside `features/documents/` and the composition root keeps
+  rendering one component. The per-format viewers are deliberately absent
+  from the barrel — being unreachable except through the dispatch is what
+  keeps their chunks off the initial load.
+
+A caller needing something the barrel does not export adds it to the barrel
+— or, where the caller is reaching past a module's real purpose, gets a
+proper entry point instead. `refreshLibraryMembership` was pulled out of
+`useLibraryMembership.ts` into `workspace/lib/libraryMembership.ts` for that
+reason: it is an imperative resync the sidebar needs without the poll, so
+exporting it meant exporting the module that owns it, not the hook that
+also happens to call it.
 
 ## Import specifiers
 
@@ -133,6 +182,12 @@ one per feature, and one exempting tests. Per-feature blocks cannot be
 collapsed into one — a regex cannot refer to the path of the file it is
 checking, so "any sibling but my own" has to be written out per feature.
 
+The `app/**` block is the depth rule, and the one place the layer model
+constrains the composition root. It rejects `^@/features/[^/]+/.+` and says
+nothing about `^@/features/[^/]+`, so the barrel resolves and every path
+below it does not. `app/` needs no direction rule: it sits at the top, so
+there is nothing above it to forbid.
+
 Every block repeats the shared `^@/app/` pattern rather than hoisting it to
 the base `rules`. Base entries for *other* rules do apply inside an
 override-matched file, but when the *same* rule appears in both, the
@@ -165,10 +220,13 @@ import a feature component to render it realistically.
 
 | Role | Stable entry points |
 |---|---|
-| Layer roots | `web-src/src/common/`, `web-src/src/store/`, `web-src/src/features/<area>/`, `web-src/src/app/` |
+| Layer roots | `web-src/src/common/`, `web-src/src/store/`, `web-src/src/features/`, `web-src/src/app/` |
+| Feature public surfaces | `web-src/src/features/*/index.ts` — one barrel per area, and the only path `app/` may import |
+| Documents entry point | `web-src/src/features/documents/components/DocumentViewer.tsx` — the format → viewer dispatch and every viewer's lazy boundary |
 | Composition root | `web-src/src/app/App.tsx` over `app/components/` (including `MainPane.tsx` and `Sidebar.tsx`) and `app/hooks/` |
 | Cross-feature triggers | `web-src/src/common/lib/settingsTrigger.ts`, `librarySearchTrigger.ts`, `embeddingSetupTrigger.ts` |
-| Boundary enforcement | `.oxlintrc.json` and the `lint:web` script |
+| Boundary enforcement | `.oxlintrc.json` (direction per layer/feature, depth under `app/**`) and the `lint:web` script |
+| Lazy-surface guard | `scripts/check-renderer-chunks.mjs` — the pinned dynamic-entry set and the initial-JS budget |
 | Path aliases | `web-src/tsconfig.json` `compilerOptions.paths`, `web-src/vite.config.ts` `resolve.alias` |
 
 ## Validation
@@ -182,7 +240,11 @@ pnpm build:web
 `pnpm build:web` also runs `scripts/check-renderer-chunks.mjs`, which holds
 the initial-JS budget and the required dynamic-entry set. Moving a lazy
 surface between layers changes its manifest path — update that list rather
-than raising the budget.
+than raising the budget. The budget is also the check on the barrels: a
+barrel that re-exports a lazy component eagerly pulls its whole chunk into
+the initial load, and this is what catches it. Moving a `lazyWithRetry`
+declaration from a caller into the owning feature's barrel does *not* change
+the manifest — the dynamic specifier still names the same module.
 
 Related contracts: [Renderer Workspace](renderer-workspace.md),
 [Renderer Styling](renderer-styling.md), and [Agent Panel](agent-panel.md).

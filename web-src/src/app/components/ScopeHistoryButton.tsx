@@ -3,15 +3,9 @@ import { HistoryIcon } from '@/common/components/icons';
 import type { AgentKind } from '@/common/lib/agentCatalog';
 import { useAppActions } from '@/store/contexts/AppContext';
 import type { HistoryScope } from '@/common/lib/libraryScope';
-import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { SessionHistoryMenu } from '@/features/agent-panel';
 import { Button } from '@/common/components/ui/button';
 import { PopupLoadingStatus } from '@/common/components/ui/status';
-
-/** The merged session-history popover loads at its interaction boundary
- *  so react-aria (which otherwise ships with the lazy chat chunk) stays
- *  out of the initial renderer bundle. */
-const SessionHistoryPopover = lazyWithRetry(() =>
-  import('@/features/agent-panel/components/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
 /** History clock on a sidebar scope header: opens the merged
  *  session-history menu for that scope (both agents' sessions, newest
@@ -79,7 +73,9 @@ export function ScopeHistoryButton({
             />
           )}
         >
-          <SessionHistoryPopover
+          {/* The popover loads at this interaction boundary — react-aria
+            * ships with it, and the Agent Panel owns that lazy split. */}
+          <SessionHistoryMenu
             scope={scope}
             ariaLabel={label}
             triggerRef={buttonRef}

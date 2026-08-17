@@ -1,30 +1,13 @@
-import { Suspense } from 'react';
-import '@/features/workspace/workspace.css';
 import { EditIcon, PreviewIcon } from '@/common/components/icons';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
-import { EmptyTabLanding } from '@/features/workspace/components/EmptyTabLanding';
-import { FindBar } from '@/features/search/components/FindBar';
-import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
-import { ImagePreview } from '@/features/documents/components/ImagePreview';
-import { TabStrip } from '@/features/workspace/components/TabStrip';
-import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { DocumentViewer } from '@/features/documents';
+import { EmptyTabLanding, TabStrip } from '@/features/workspace';
+import { FindBar } from '@/features/search';
 import { readPreferredAgent } from '@/common/lib/agentPreference';
-import { retainedMarkdownTabs } from '@/features/documents/milkdown/retainedTabs';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { basename } from '@/common/lib/paths';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
-
-/** Muted "Loading…" bodies shared by the lazy viewer fallbacks. */
-const VIEWER_LOADING_CLASS = 'p-4 text-base text-muted-foreground';
-const VIEWER_PADDED_LOADING_CLASS = 'p-6 text-base text-muted-foreground';
-const VIEWER_CENTERED_LOADING_CLASS = 'grid h-full place-items-center text-base text-muted-foreground';
-
-const LazyCrepeDocument = lazyWithRetry(() => import('@/features/documents/components/CrepeDocument').then((mod) => ({ default: mod.CrepeDocument })));
-const LazyPdfPreview = lazyWithRetry(() => import('@/features/documents/components/PdfPreview').then((mod) => ({ default: mod.PdfPreview })));
-const LazyDocxPreview = lazyWithRetry(() => import('@/features/documents/components/DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
-const LazyAudioPreview = lazyWithRetry(() => import('@/features/documents/components/AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
-const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/components/JsonDocument').then((mod) => ({ default: mod.JsonDocument })));
 
 /**
  * Right rail. Layout from top to bottom:
@@ -45,7 +28,6 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   const saveStatus = activeTab?.saveStatus ?? { text: '', cls: '' };
   const hasTabs = state.tabs.length > 0;
   const emptyTab = !!activeTab && !cur;
-  const resourceResetKey = cur ? `${cur.folder ?? ''}:${cur.name}:${cur.version ?? ''}` : undefined;
   // Out-of-folder tab (a library search hit viewed without switching the
   // window's folder): a quiet identity banner with the one escape hatch —
   // open that folder in its own window.
@@ -70,7 +52,6 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   // has to span 44 - 35.7 + 24. Every control that lives in it is
   // therefore 24px; put a 28px one back and it hangs into the document.
   const chromeBand = hasTabs && cur?.format !== 'html' && cur?.format !== 'image';
-  const markdownTabs = retainedMarkdownTabs(state.tabs, state.editorHistory, state.activeTabId);
 
   return (
     <main
@@ -146,81 +127,16 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}
-        {markdownTabs.map((tab) => {
-          const file = tab.file!;
-          const active = tab.id === state.activeTabId;
-          return (
-            <div
-              key={`${tab.id}:${file.folder ?? ''}:${file.name}`}
-              className="markdown-tab-layer"
-              hidden={!active}
-            >
-              <LazyLoadBoundary
-                className={VIEWER_LOADING_CLASS}
-                label="Markdown document"
-                resetKey={`${file.folder ?? ''}:${file.name}:${file.version ?? ''}`}
-              >
-                <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Opening document…</div>}>
-                  <LazyCrepeDocument
-                    tabId={tab.id}
-                    name={file.name}
-                    content={file.content}
-                    readOnly={!tab.editMode}
-                    active={active}
-                    dirty={tab.dirty}
-                    folder={file.folder}
-                  />
-                </Suspense>
-              </LazyLoadBoundary>
-            </div>
-          );
-        })}
-        {cur && cur.format === 'json' && (
-          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="JSON document" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening JSON…</div>}>
-              <LazyJsonDocument
-                key={activeTab?.id ?? cur.name}
-                tabId={activeTab?.id ?? ''}
-                content={cur.content}
-                readOnly={!editMode}
-                active
-              />
-            </Suspense>
-          </LazyLoadBoundary>
-        )}
-        {cur && !editMode && cur.format === 'html' && (
-          <HtmlPreview name={cur.name} />
-        )}
-        {cur && cur.format === 'docx' && (
-          <LazyLoadBoundary className={VIEWER_CENTERED_LOADING_CLASS} label="document preview" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className={VIEWER_CENTERED_LOADING_CLASS}>Opening document…</div>}>
-              <LazyDocxPreview name={cur.name} />
-            </Suspense>
-          </LazyLoadBoundary>
-        )}
-        {cur && cur.format === 'pdf' && (
-          // PDFs have no edit mode — the source is a binary file. Only
-          // the original PDF is shown: the extracted `.md` is a hidden
-          // implementation detail (search hits remap back to the PDF;
-          // the derived note must never surface as content). The
-          // preparation failure banner + Reprocess live inside PdfPreview.
-          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="PDF preview" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Loading PDF…</div>}>
-              <LazyPdfPreview key={activeTab?.id} name={cur.name} />
-            </Suspense>
-          </LazyLoadBoundary>
-        )}
-        {cur && cur.format === 'image' && (
-          // Images, like PDFs, are binary — no edit mode.
-          <ImagePreview name={cur.name} />
-        )}
-        {cur && cur.format === 'audio' && (
-          <LazyLoadBoundary className={VIEWER_PADDED_LOADING_CLASS} label="audio preview" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className={VIEWER_PADDED_LOADING_CLASS}>Opening audio…</div>}>
-              <LazyAudioPreview name={cur.name} />
-            </Suspense>
-          </LazyLoadBoundary>
-        )}
+        {/* One Documents surface, whatever the open file is. Which viewer
+          * a format gets, and which of them load lazily, is the Documents
+          * feature's business — this pane only supplies the tab state and
+          * the cell to fill. */}
+        <DocumentViewer
+          tabs={state.tabs}
+          activeTab={activeTab}
+          activeTabId={state.activeTabId}
+          editorHistory={state.editorHistory}
+        />
       </div>
       {emptyTab && (
         // Centered placeholder strip for an empty (Untitled) tab —

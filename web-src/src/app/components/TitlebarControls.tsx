@@ -2,7 +2,7 @@ import { PanelLeftIcon, PanelRightIcon, SearchIcon } from '@/common/components/i
 import { formatPrimaryShiftShortcut } from '@/common/lib/platformShortcuts';
 import { readPreferredAgent } from '@/common/lib/agentPreference';
 import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
-import { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
+import { FolderSwitcher } from '@/features/workspace';
 import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
 import { TooltipButton } from '@/common/components/TooltipButton';
 

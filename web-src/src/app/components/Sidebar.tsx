@@ -21,31 +21,29 @@ import {
 import { electronBridge } from '@/common/lib/electronBridge';
 import { folderRefsEqual } from '@/store/lib/folderPath';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
-import { FileTree } from '@/features/workspace/components/FileTree';
+import { SidebarAccountRow } from '@/features/account';
+import { EmbeddingSetupCallout, UnsupportedFilesCallout } from '@/features/preparation';
+import {
+  FileTree,
+  FolderMenu,
+  refreshLibraryMembership,
+  RemoveFolderModal,
+  useFolderRemoval,
+  useLibraryReconcile,
+} from '@/features/workspace';
 import { useDocumentOutline } from '@/common/components/DocumentOutlineContext';
 import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
-import { FolderMenu } from '@/features/workspace/components/FolderMenu';
 import { Menu, type MenuItem } from '@/common/components/Menu';
-import { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderModal';
 import { ScopeHistoryButton } from '@/app/components/ScopeHistoryButton';
 import { Button } from '@/common/components/ui/button';
 import { api, errorMessage } from '@/common/api/api';
 import { FILE_MIME } from '@/common/lib/dragMime';
-import { useFolderRemoval } from '@/features/workspace/hooks/useFolderRemoval';
-import { refreshLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
-import { useLibraryReconcile } from '@/features/workspace/hooks/useLibraryReconcile';
 import { Suspense, useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
-
-const SidebarAccountRow = lazyWithRetry(() =>
-  import('@/features/account/components/SidebarAccountRow').then((mod) => ({ default: mod.SidebarAccountRow })),
-);
 
 const DocumentOutline = lazyWithRetry(() =>
   import('@/common/components/DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
 const SemanticIndexingNoticeView = lazyWithRetry(() =>
   import('@/common/components/SemanticIndexingNotice').then((mod) => ({ default: mod.SemanticIndexingNoticeView })));
-const EmbeddingSetupCallout = lazyWithRetry(() => import('@/features/preparation/components/EmbeddingSetupCallout'));
-const UnsupportedFilesCallout = lazyWithRetry(() => import('@/features/preparation/components/UnsupportedFilesCallout'));
 
 /**
  * The sidebar is one Files panel — the active folder's file tree — with
