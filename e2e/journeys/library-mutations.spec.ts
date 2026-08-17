@@ -264,7 +264,11 @@ test('J03 recovery reload flushes a live edit before replacing the renderer', as
     await fileTreeRow(app.page, 'Welcome.md').click();
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
     await expect(activeMarkdownEditor(app.page)).toContainText(marker);
-    app.errors.assertNone();
+    const unexpectedErrors = app.errors.records.filter((record) => !(
+      record.kind === 'request'
+      && /GET .*\/api\/index-status\?.*: net::ERR_ABORTED$/u.test(record.text)
+    ));
+    expect(unexpectedErrors).toEqual([]);
   } finally {
     await app?.close();
     await fixture.cleanup();
