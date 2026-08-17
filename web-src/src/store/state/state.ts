@@ -61,17 +61,32 @@ export {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   clampChatWidth,
+  hasName,
   isSplitterKey,
   resizeChatByKeyboard,
   resizeSidebarByKeyboard,
   getActiveTab,
   makeChatTab,
   makeTab,
+  nameSetSize,
   optimisticKeyBackfillPaths,
   patchActiveTab,
   renamedFilePath,
+  toNameSet,
 } from './stateHelpers';
 export { reducer } from './stateReducer';
+
+/**
+ * A membership-only set of path-like strings, stored as a plain keyed record
+ * rather than a `Set`. Records keep `State` JSON-serializable and
+ * structurally diffable (a `Set` survives neither), while membership stays
+ * O(1) — which matters for `expanded`, consulted once per visible tree row.
+ *
+ * Always go through `toNameSet` / `hasName` / `nameSetSize` instead of
+ * indexing directly: a path such as `constructor` or `__proto__` would
+ * otherwise read as a member off `Object.prototype`.
+ */
+export type NameSet = Record<string, true>;
 
 export interface SaveStatus {
   text: string;
@@ -271,7 +286,9 @@ export interface State {
   editorHistory: string[];
   activeTabId: string | null;
 
-  expanded: Set<string>;
+  /** Sidebar folder paths whose children are shown. See `NameSet` — this is
+   *  the field whose membership test is hot (every visible tree row). */
+  expanded: NameSet;
   activeFolder: string;
   /** The single "focused row" in the sidebar — at most one row (file or
    *  folder) is visually selected at a time. Tracks the open file by
@@ -299,7 +316,15 @@ export interface State {
    *  is empty (panel closed or just initialised). */
   activeChatTabId: string | null;
   /** Per-agent tab activation history, oldest first. The last id is the
-   *  tab that an agent icon selects when reopening that agent. */
+   *  tab that an agent icon selects when reopening that agent.
+   *
+   *  Deliberately stored, not derived: `chatTabs` is strip order and never
+   *  changes on activation, so nothing in it records that the user last
+   *  looked at the SECOND claude tab. Only the single most-recent tab could
+   *  be reconstructed (from `activeChatTabId`); the tail behind it — which
+   *  is what an agent icon falls back to once that tab closes — has no
+   *  other source. Every write goes through `updateChatTabRecency` so the
+   *  five reducer cases that maintain it cannot drift apart. */
   chatTabRecencyByAgent: Record<string, string[]>;
   /** Un-consumed sidebar History resume request, if any. See
    *  `PendingChatResume`; a new request replaces an unconsumed one, and
@@ -309,7 +334,7 @@ export interface State {
   /** User-visible paths whose AI Index content is still being
    *  embedded/indexed. Keyword search ignores this state and can search
    *  converted/source text without embeddings. */
-  pendingSemanticNames: Set<string>;
+  pendingSemanticNames: NameSet;
   semanticIndexing: NonNullable<IndexStatus['semanticIndexing']> | null;
   /** Folder-relative paths of PDF/image/DOCX conversions that are queued or
    *  running. Kept for search-readiness accounting and refresh timing. */
@@ -391,7 +416,7 @@ export const initialState: State = {
   recentFilePaths: [],
   editorHistory: [],
   activeTabId: null,
-  expanded: new Set(),
+  expanded: {},
   activeFolder: '',
   selectedPath: '',
   folderCollapsed: false,
@@ -408,7 +433,7 @@ export const initialState: State = {
   activeChatTabId: null,
   chatTabRecencyByAgent: {},
   pendingResume: null,
-  pendingSemanticNames: new Set(),
+  pendingSemanticNames: {},
   semanticIndexing: null,
   pendingConversions: [],
   blockedConversions: [],
@@ -495,7 +520,7 @@ export type Action =
   /** Move the sidebar's single focus to `path`. Pure visual highlight
    *  — does not touch expand state, activeFolder, or the open file. */
   | { type: 'SELECT_PATH'; path: string }
-  | { type: 'PENDING_SEMANTIC_NAMES'; names: Set<string> }
+  | { type: 'PENDING_SEMANTIC_NAMES'; names: NameSet }
   | { type: 'SEMANTIC_INDEXING_STATE'; state: State['semanticIndexing'] }
   | { type: 'PENDING_CONVERSIONS'; paths: string[] }
   | { type: 'BLOCKED_CONVERSIONS'; paths: string[] }

@@ -10,9 +10,11 @@ import {
 } from '@/store/lib/appContextHelpers';
 import {
   optimisticKeyBackfillPaths,
+  toNameSet,
   type Action,
   type State,
 } from '@/store/state/state';
+import { folderScopedPreparationResetActions } from '@/store/lib/folderScopedReset';
 import type { ToastOptions } from './useFeedbackActions';
 import { hasAggregatePreparationFailure } from '@/store/lib/fileReadiness';
 import { runIndexStatusRequest } from '@/store/lib/indexStatusRequest';
@@ -74,13 +76,20 @@ interface SearchActionDependencies {
  *  that, hard-reset every folder-scoped indicator and — when a folder was
  *  visibly open — the workspace itself.
  *
- *  Deliberately NOT built on `folderScopedResetActions` ('folder-lost'):
- *  this ladder clears preparation indicators even when no folder is open,
- *  resets the workspace only conditionally, and its dispatch order is
- *  pinned by the store tests and e2e journeys. Returns `'rebound'` when
- *  the folder was re-bound (a fast follow-up poll is already scheduled);
- *  `'reset'` when the caller should schedule its own next poll. */
-async function recoverLostFolderContext({
+ *  The preparation-indicator half comes from the shared
+ *  `folderScopedPreparationResetActions` builder, so this ladder and the
+ *  folder-switch plan cannot disagree about which indicators are
+ *  folder-scoped. The rest is deliberately NOT `folderScopedResetActions`
+ *  ('folder-lost'): this ladder clears the shared indicators even when no
+ *  folder is open, resets the workspace only conditionally, and orders the
+ *  two halves the other way round. Returns `'rebound'` when the folder was
+ *  re-bound (a fast follow-up poll is already scheduled); `'reset'` when the
+ *  caller should schedule its own next poll.
+ *
+ *  Exported for `store/__tests__/folder-scoped-reset.test.ts`, which pins
+ *  both the shared set and this ladder's dispatch order; nothing outside the
+ *  poll calls it. */
+export async function recoverLostFolderContext({
   folderPathAtStart,
   openGenAtStart,
   refs,
@@ -142,14 +151,7 @@ async function recoverLostFolderContext({
   syncGeneration.current += 1;
   openGeneration.current += 1;
   folderContextPath.current = '';
-  dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set() });
-  dispatch({ type: 'PENDING_CONVERSIONS', paths: [] });
-  dispatch({ type: 'BLOCKED_CONVERSIONS', paths: [] });
-  dispatch({ type: 'CONVERSION_PROGRESS', progress: {} });
-  dispatch({ type: 'CONVERSION_SCHEDULER_STATE', revision: 0, versions: {} });
-  dispatch({ type: 'INDEX_WARNING', warning: null });
-  dispatch({ type: 'PREPARATION_FAILURES', failures: [] });
-  dispatch({ type: 'SYNC_RUNNING', running: false });
+  for (const action of folderScopedPreparationResetActions()) dispatch(action);
   lastTreeVersion.current = -1;
   if (stateRef.current.folderPath) {
     // Another window may have deleted/closed the folder. The server
@@ -207,12 +209,11 @@ export function useSearchActions(
     const paths = optimisticKeyBackfillPaths(source);
     if (paths.length === 0) return;
     const deadline = Date.now() + 15000;
-    const merged = new Set(stateRef.current.pendingSemanticNames);
-    for (const path of paths) {
-      keyBackfillGrace.current.set(path, deadline);
-      merged.add(path);
-    }
-    dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: merged });
+    for (const path of paths) keyBackfillGrace.current.set(path, deadline);
+    dispatch({
+      type: 'PENDING_SEMANTIC_NAMES',
+      names: { ...stateRef.current.pendingSemanticNames, ...toNameSet(paths) },
+    });
   }, [loadFiles]);
 
 
@@ -297,16 +298,25 @@ export function useSearchActions(
         keyBackfillGrace.current.clear();
       }
       const prev = stateRef.current;
+      // Guarded in `planSemanticPollDispatches` rather than inline: both
+      // actions land in the workspace slice and this poll runs every
+      // POLL_PENDING_MS while indexing, so dispatching unconditionally
+      // re-rendered every `useWorkspace()` consumer on each tick. Planned
+      // here (it is pure) but dispatched in the established position below.
+      const semanticPollDispatches = planSemanticPollDispatches(prev, {
+        pending: newPending,
+        semanticIndexing: s.semanticIndexing ?? null,
+      });
       // Trigger a `/api/files` refresh whenever the indexer's
       // awareness of the disk grew or shrank — covers new files
       // landing from the watcher (vim edits) AND `.html` notes
       // appearing after PDF conversion finishes, both of which
       // would otherwise leave the sidebar tree stale until the
-      // next user action.
-      const pendingChanged =
-        newPending.size !== prev.pendingSemanticNames.size
-        || [...newPending].some((n) => !prev.pendingSemanticNames.has(n))
-        || [...prev.pendingSemanticNames].some((n) => !newPending.has(n));
+      // next user action. That is the same membership question the plan
+      // above already answered, so read it off the plan.
+      const pendingChanged = semanticPollDispatches.some(
+        (action) => action.type === 'PENDING_SEMANTIC_NAMES',
+      );
       const convChanged =
         newConv.length !== prev.pendingConversions.length
         || newConv.some((p, i) => p !== prev.pendingConversions[i]);
@@ -321,16 +331,7 @@ export function useSearchActions(
       const treeChanged =
         lastTreeVersion.current >= 0 && newTreeVersion !== lastTreeVersion.current;
       lastTreeVersion.current = newTreeVersion;
-      // Guarded in `planSemanticPollDispatches` rather than inline: both
-      // actions land in the workspace slice and this poll runs every
-      // POLL_PENDING_MS while indexing, so dispatching unconditionally
-      // re-rendered every `useWorkspace()` consumer on each tick.
-      for (const action of planSemanticPollDispatches(prev, {
-        pending: newPending,
-        semanticIndexing: s.semanticIndexing ?? null,
-      })) {
-        dispatch(action);
-      }
+      for (const action of semanticPollDispatches) dispatch(action);
       if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
       if (blockedChanged) dispatch({ type: 'BLOCKED_CONVERSIONS', paths: newBlocked });
       const incomingProgress = s.conversionProgress ?? {};

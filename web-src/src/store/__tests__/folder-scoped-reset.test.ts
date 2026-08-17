@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { folderScopedResetActions } from '@/store/lib/folderScopedReset';
+import {
+  folderScopedPreparationResetActions,
+  folderScopedResetActions,
+} from '@/store/lib/folderScopedReset';
+import { recoverLostFolderContext } from '@/store/hooks/useSearchActions';
 import { reducer } from '@/store/state/stateReducer';
-import { initialState, type State } from '@/store/state/state';
+import { initialState, type Action, type State } from '@/store/state/state';
 
 function stateWithChatTabs(): State {
   return {
@@ -50,4 +54,88 @@ test('both transitions clear the same folder-scoped preparation state', () => {
     lostTypes.filter((type) => type !== 'CHAT_TABS_RESET'),
     switchTypes,
   );
+});
+
+/** The workspace half of a folder-context reset. Both sites dispatch these
+ *  four, but at different points in their own ladders (see
+ *  `folderScopedReset.ts`), so they are excluded when comparing the SHARED
+ *  preparation-indicator set. */
+const WORKSPACE_RESET_TYPES = new Set([
+  'TABS_RESET',
+  'CHAT_TABS_RESET',
+  'ACTIVE_FOLDER',
+  'FILE_ORDER_LOADED',
+]);
+
+/** Drive the 412 recovery ladder with no folder bound anywhere, so the
+ *  rebind attempt and the conditional workspace reset are both skipped and
+ *  only the shared preparation block runs. */
+async function recoveryDispatchesWithNoFolder(): Promise<Action[]> {
+  const dispatched: Action[] = [];
+  const outcome = await recoverLostFolderContext({
+    folderPathAtStart: '',
+    openGenAtStart: 0,
+    refs: {
+      stateRef: { current: initialState },
+      folderContextPath: { current: '' },
+      lastTreeVersion: { current: 7 },
+      syncGeneration: { current: 0 },
+      openGeneration: { current: 0 },
+    },
+    dispatch: (action) => { dispatched.push(action); },
+    loadFilesFromServer: async () => null,
+    schedulePoll: () => {},
+  });
+  assert.equal(outcome, 'reset');
+  return dispatched;
+}
+
+test('the 412 recovery ladder clears exactly the shared folder-scoped preparation set', async () => {
+  // Nothing but a shared builder keeps these two ladders in step. Adding a
+  // folder-scoped indicator field to `State` and clearing it inline at one
+  // site — the failure mode that leaves a stale banner alive through a 412
+  // recovery — has to fail here.
+  const shared = folderScopedPreparationResetActions().map((action) => action.type);
+  assert.ok(shared.length > 0);
+
+  const dispatched = await recoveryDispatchesWithNoFolder();
+  assert.deepEqual(dispatched.map((action) => action.type), shared);
+
+  assert.deepEqual(
+    folderScopedResetActions('folder-lost')
+      .map((action) => action.type)
+      .filter((type) => !WORKSPACE_RESET_TYPES.has(type)),
+    shared,
+  );
+});
+
+test('the shared preparation reset returns every folder-scoped indicator to its initial value', () => {
+  const dirty: State = {
+    ...initialState,
+    pendingSemanticNames: { 'note.md': true },
+    pendingConversions: ['paper.pdf'],
+    blockedConversions: ['scan.png'],
+    conversionProgress: { 'paper.pdf': { phase: 'queued', lane: 'heavy', tasksAhead: 1 } },
+    conversionRevision: 4,
+    conversionVersions: { 'paper.pdf': 2 },
+    indexWarning: { message: 'embedding failed', at: '2026-01-01T00:00:00.000Z' },
+    preparationFailures: [{ path: 'paper.pdf', attempts: 2, lastError: 'boom', status: 'failed' }],
+    syncRunning: true,
+  };
+  const cleared = folderScopedPreparationResetActions()
+    .reduce((current, action) => reducer(current, action), dirty);
+
+  for (const field of [
+    'pendingSemanticNames',
+    'pendingConversions',
+    'blockedConversions',
+    'conversionProgress',
+    'conversionRevision',
+    'conversionVersions',
+    'indexWarning',
+    'preparationFailures',
+    'syncRunning',
+  ] as const) {
+    assert.deepEqual(cleared[field], initialState[field], `${field} survived the reset`);
+  }
 });

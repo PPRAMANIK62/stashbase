@@ -1,4 +1,5 @@
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { nameSetSize } from '@/store/state/state';
 
 interface SemanticIndexingNoticeModel {
   awaiting: boolean;
@@ -21,7 +22,7 @@ export function useSemanticIndexingNotice(): SemanticIndexingNoticeModel | null 
   if (!workload || !NOTICE_STATES.includes(workload.state)) return null;
   return {
     awaiting: workload.state === 'awaiting-decision',
-    count: workload.sourceCount ?? state.pendingSemanticNames.size,
+    count: workload.sourceCount ?? nameSetSize(state.pendingSemanticNames),
     estimatedBytes: workload.estimatedBytes,
     failureMessage: state.indexWarning?.message,
     onStart: () => { void actions.decideSemanticIndexing('start'); },

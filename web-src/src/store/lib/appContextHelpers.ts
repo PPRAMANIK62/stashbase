@@ -1,4 +1,4 @@
-import type { Action, State } from '@/store/state/state';
+import { hasName, toNameSet, type Action, type NameSet, type State } from '@/store/state/state';
 
 export function shallowEqualIndexWarning(
   a: State['indexWarning'],
@@ -64,11 +64,13 @@ export function shallowEqualSemanticIndexing(
     && a.estimatedBytes === b.estimatedBytes;
 }
 
-export function equalNameSets(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+/** Membership equality for two `NameSet` records — key order is not part of
+ *  their meaning, so this is the only correct comparison. */
+export function equalNameSets(a: NameSet, b: NameSet): boolean {
   if (a === b) return true;
-  if (a.size !== b.size) return false;
-  for (const name of a) if (!b.has(name)) return false;
-  return true;
+  const names = Object.keys(a);
+  if (names.length !== Object.keys(b).length) return false;
+  return names.every((name) => hasName(b, name));
 }
 
 /**
@@ -76,19 +78,20 @@ export function equalNameSets(a: ReadonlySet<string>, b: ReadonlySet<string>): b
  * dispatch. Both land in the workspace slice and the poll runs every
  * `POLL_PENDING_MS` while indexing, so dispatching unconditionally
  * re-renders all ~37 `useWorkspace()` consumers on every tick — the poll
- * rebuilds `pendingSemanticNames` as a fresh `Set`, so its identity alone
- * never indicates a real change.
+ * rebuilds `pendingSemanticNames` from scratch, so its identity alone never
+ * indicates a real change.
  *
  * Pure and separate from the hook so the guard is testable: a closure-local
  * `if` can be deleted without any test noticing.
  */
 export function planSemanticPollDispatches(
   prev: Pick<State, 'pendingSemanticNames' | 'semanticIndexing'>,
-  incoming: { pending: ReadonlySet<string>; semanticIndexing: State['semanticIndexing'] },
+  incoming: { pending: Iterable<string>; semanticIndexing: State['semanticIndexing'] },
 ): Action[] {
   const actions: Action[] = [];
-  if (!equalNameSets(prev.pendingSemanticNames, incoming.pending)) {
-    actions.push({ type: 'PENDING_SEMANTIC_NAMES', names: new Set(incoming.pending) });
+  const pending = toNameSet(incoming.pending);
+  if (!equalNameSets(prev.pendingSemanticNames, pending)) {
+    actions.push({ type: 'PENDING_SEMANTIC_NAMES', names: pending });
   }
   if (!shallowEqualSemanticIndexing(prev.semanticIndexing, incoming.semanticIndexing)) {
     actions.push({ type: 'SEMANTIC_INDEXING_STATE', state: incoming.semanticIndexing });

@@ -2,14 +2,14 @@
  * Pure renderer reducer. State and action definitions remain in the stable
  * state.ts facade; transition helpers live in stateHelpers.ts.
  */
-import type { Action, OpenFile, State, Tab } from './state';
+import type { Action, NameSet, OpenFile, State, Tab } from './state';
 import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   clampChatWidth,
-  forgetChatTab,
   forgetClosedTabs,
   getActiveTab,
+  hasName,
   makeTab,
   mostRecentChatTab,
   patchActiveTab,
@@ -17,7 +17,8 @@ import {
   rememberRecentFile,
   remapFileOrder,
   remapOnePath,
-  rememberChatTab,
+  toNameSet,
+  updateChatTabRecency,
 } from './stateHelpers';
 
 /** The sidebar's focused row for a tab — '' for an out-of-folder tab, whose
@@ -192,8 +193,9 @@ export function reducer(s: State, a: Action): State {
         const nextName = remapOnePath(t.file.name, a.from, a.to, a.kind);
         return nextName === t.file.name ? t : { ...t, file: { ...t.file, name: nextName } };
       });
-      const expanded = new Set<string>();
-      for (const p of s.expanded) expanded.add(remapOnePath(p, a.from, a.to, a.kind));
+      const expanded = toNameSet(
+        Object.keys(s.expanded).map((p) => remapOnePath(p, a.from, a.to, a.kind)),
+      );
       return {
         ...s,
         files,
@@ -263,22 +265,28 @@ export function reducer(s: State, a: Action): State {
       });
     }
     case 'TOGGLE_FOLDER': {
-      const next = new Set(s.expanded);
-      if (next.has(a.path)) next.delete(a.path); else next.add(a.path);
+      // Computed-key spread and rest-destructuring both define/copy own
+      // properties, so a folder literally named `__proto__` toggles like any
+      // other row instead of reassigning the record's prototype.
+      let next: NameSet;
+      if (hasName(s.expanded, a.path)) {
+        const { [a.path]: _collapsed, ...rest } = s.expanded;
+        next = rest;
+      } else {
+        next = { ...s.expanded, [a.path]: true };
+      }
       // Click on a folder row → it becomes the focused row + the
       // creation anchor.
       return { ...s, expanded: next, activeFolder: a.path, selectedPath: a.path };
     }
     case 'EXPAND_FOLDER': {
-      if (s.expanded.has(a.path)) return s;
-      const next = new Set(s.expanded);
-      next.add(a.path);
-      return { ...s, expanded: next };
+      if (hasName(s.expanded, a.path)) return s;
+      return { ...s, expanded: { ...s.expanded, [a.path]: true } };
     }
     case 'COLLAPSE_ALL_FOLDERS':
-      return { ...s, expanded: new Set(), activeFolder: '' };
+      return { ...s, expanded: {}, activeFolder: '' };
     case 'EXPAND_ALL_FOLDERS':
-      return { ...s, expanded: new Set(a.paths) };
+      return { ...s, expanded: toNameSet(a.paths) };
     case 'FOLDER_FOLD_TOGGLE':
       return { ...s, folderCollapsed: !s.folderCollapsed };
     case 'SIDEBAR_SET_COLLAPSED':
@@ -303,7 +311,7 @@ export function reducer(s: State, a: Action): State {
           ...s,
           chatOpen: true,
           activeChatTabId: existingTab.id,
-          chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, existingTab),
+          chatTabRecencyByAgent: updateChatTabRecency(s.chatTabRecencyByAgent, { remember: existingTab }),
         };
       }
       if (!a.tab) return s;
@@ -312,7 +320,7 @@ export function reducer(s: State, a: Action): State {
         chatOpen: true,
         chatTabs: [...s.chatTabs, a.tab],
         activeChatTabId: a.tab.id,
-        chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, a.tab),
+        chatTabRecencyByAgent: updateChatTabRecency(s.chatTabRecencyByAgent, { remember: a.tab }),
       };
     }
     case 'CHAT_TAB_NEW':
@@ -320,7 +328,7 @@ export function reducer(s: State, a: Action): State {
         ...s,
         chatTabs: [...s.chatTabs, a.tab],
         activeChatTabId: a.tab.id,
-        chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, a.tab),
+        chatTabRecencyByAgent: updateChatTabRecency(s.chatTabRecencyByAgent, { remember: a.tab }),
       };
     case 'CHAT_TAB_CLOSE': {
       const idx = s.chatTabs.findIndex((t) => t.id === a.id);
@@ -338,9 +346,10 @@ export function reducer(s: State, a: Action): State {
         ...s,
         chatTabs: nextTabs,
         activeChatTabId: nextActive,
-        chatTabRecencyByAgent: nextActiveTab
-          ? rememberChatTab(forgetChatTab(s.chatTabRecencyByAgent, closedTab), nextActiveTab)
-          : forgetChatTab(s.chatTabRecencyByAgent, closedTab),
+        chatTabRecencyByAgent: updateChatTabRecency(s.chatTabRecencyByAgent, {
+          forget: closedTab,
+          remember: nextActiveTab,
+        }),
         // Closing the last chat window folds the panel — the sidebar's
         // New Chat button is the way back in, and an empty panel is just
         // dead folder.
@@ -354,7 +363,7 @@ export function reducer(s: State, a: Action): State {
         return {
           ...s,
           activeChatTabId: a.id,
-          chatTabRecencyByAgent: rememberChatTab(s.chatTabRecencyByAgent, tab),
+          chatTabRecencyByAgent: updateChatTabRecency(s.chatTabRecencyByAgent, { remember: tab }),
         };
       }
     case 'CHAT_TAB_RENAME':
@@ -387,7 +396,10 @@ export function reducer(s: State, a: Action): State {
         chatTabs: s.chatTabs.map((t) => (t.id === a.id ? next : t)),
         // Move the tab's recency entry from the old agent's list to the
         // new agent's, so per-agent most-recent lookups stay coherent.
-        chatTabRecencyByAgent: rememberChatTab(forgetChatTab(s.chatTabRecencyByAgent, tab), next),
+        chatTabRecencyByAgent: updateChatTabRecency(s.chatTabRecencyByAgent, {
+          forget: tab,
+          remember: next,
+        }),
       };
     }
     case 'CHAT_TAB_SET_SCOPE':

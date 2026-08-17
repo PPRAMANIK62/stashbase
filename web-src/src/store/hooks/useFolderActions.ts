@@ -4,7 +4,7 @@ import { folderRefsEqual, isAbsoluteFolderRef } from '@/store/lib/folderPath';
 import { createFolderMutationQueue } from '@/store/lib/folderTransition';
 import type { EditorHandle } from '@/store/state/editorTypes';
 import { folderScopedResetActions, type FolderResetReason } from '@/store/lib/folderScopedReset';
-import type { Action, LibraryFolderStatus, State } from '@/store/state/state';
+import { nameSetSize, type Action, type LibraryFolderStatus, type State } from '@/store/state/state';
 import type { ToastOptions } from './useFeedbackActions';
 
 type Dispatch = (action: Action) => void;
@@ -83,7 +83,7 @@ export function commitOpenedFolderNavigation(
 function libraryStatusFromActiveFolder(state: State): LibraryFolderStatus {
   const hasPreparationFailure = state.preparationFailures.some((problem) => problem.status !== 'cancelled');
   if (state.indexWarning || hasPreparationFailure || state.blockedConversions.length > 0) return 'failed';
-  const semanticPending = state.embedderHasKey !== false && state.pendingSemanticNames.size > 0;
+  const semanticPending = state.embedderHasKey !== false && nameSetSize(state.pendingSemanticNames) > 0;
   if (state.syncRunning || semanticPending || state.pendingConversions.length > 0) return 'preparing';
   return 'ready';
 }

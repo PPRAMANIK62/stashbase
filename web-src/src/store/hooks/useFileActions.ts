@@ -8,7 +8,9 @@ import { basename } from '@/common/lib/paths';
 import { isFolderFileTab } from '@/store/lib/appContextHelpers';
 import {
   getActiveTab,
+  hasName,
   renamedFilePath,
+  toNameSet,
   type Action,
   type State,
 } from '@/store/state/state';
@@ -135,7 +137,8 @@ export function useFileActions(
       for (const t of stale) dispatch({ type: 'CLOSE_TAB', id: t.id });
       importConversionGrace.current.delete(name);
       importIndexGrace.current.delete(name);
-      dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: new Set([...before.pendingSemanticNames].filter((p) => p !== name)) });
+      const { [name]: _deletedPending, ...remainingPending } = before.pendingSemanticNames;
+      dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: remainingPending });
       dispatch({ type: 'PENDING_CONVERSIONS', paths: before.pendingConversions.filter((p) => p !== name) });
       const { [name]: _deletedProgress, ...remainingProgress } = before.conversionProgress;
       dispatch({ type: 'CONVERSION_PROGRESS', progress: remainingProgress });
@@ -320,7 +323,7 @@ export function useFileActions(
       // across so the renamed folder stays open after `loadFiles`.
       // The orphan oldPath entry in the set is harmless — no folder
       // row matches it, so it just sits inert until the next reset.
-      if (s.expanded.has(oldPath)) {
+      if (hasName(s.expanded, oldPath)) {
         dispatch({ type: 'EXPAND_FOLDER', path: j.path });
       }
       dispatch({ type: 'REMAP_PATHS', from: oldPath, to: j.path, kind: 'folder' });
@@ -415,9 +418,10 @@ export function useFileActions(
       if (indexing.length) {
         const deadline = Date.now() + 60000;
         for (const name of indexing) importIndexGrace.current.set(name, deadline);
-        const merged = new Set(stateRef.current.pendingSemanticNames);
-        for (const name of indexing) merged.add(name);
-        dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: merged });
+        dispatch({
+          type: 'PENDING_SEMANTIC_NAMES',
+          names: { ...stateRef.current.pendingSemanticNames, ...toNameSet(indexing) },
+        });
       }
       // Now the server has fired any PDF/image/DOCX conversions. Poll
       // immediately so search-readiness accounting catches up even when a

@@ -10,6 +10,7 @@
  * exercised. See `__tests__/file-tree-model.test.ts`.
  */
 import type { FileMeta, FolderMeta } from '@/common/api/api';
+import { hasName, type NameSet } from '@/store/state/state';
 
 export interface FolderNode {
   type: 'folder';
@@ -112,10 +113,10 @@ export function buildTree(
  * This is also the tree's keyboard order — `useTreeRoving` navigates
  * over exactly this list rather than re-deriving visibility from the DOM.
  */
-export function visibleNodePaths(nodes: TreeNode[], expanded: Set<string>, paths: string[] = []): string[] {
+export function visibleNodePaths(nodes: TreeNode[], expanded: NameSet, paths: string[] = []): string[] {
   for (const node of nodes) {
     paths.push(node.path);
-    if (node.type === 'folder' && expanded.has(node.path)) {
+    if (node.type === 'folder' && hasName(expanded, node.path)) {
       visibleNodePaths(node.children, expanded, paths);
     }
   }

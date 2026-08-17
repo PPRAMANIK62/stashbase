@@ -37,7 +37,7 @@ export function SearchStatusBanner({ semanticMode, onNavigateAway }: {
   const semanticDisabled = state.embedderHasKey === false;
   const conversionPendingCount = state.pendingConversions.length;
   const semanticPendingPaths = new Set<string>();
-  for (const path of state.pendingSemanticNames) semanticPendingPaths.add(path);
+  for (const path of Object.keys(state.pendingSemanticNames)) semanticPendingPaths.add(path);
   for (const path of state.pendingConversions) semanticPendingPaths.add(path);
   const semanticPendingCount = semanticPendingPaths.size;
   const pendingCount = semanticMode ? semanticPendingCount : conversionPendingCount;
@@ -50,7 +50,7 @@ export function SearchStatusBanner({ semanticMode, onNavigateAway }: {
     ...state.pendingConversions,
     ...state.preparationFailures.map((failure) => failure.path),
     ...state.blockedConversions,
-    ...(semanticMode ? [...state.pendingSemanticNames] : []),
+    ...(semanticMode ? Object.keys(state.pendingSemanticNames) : []),
   ]);
   const readyCount = Math.max(0, total - unavailablePaths.size);
 

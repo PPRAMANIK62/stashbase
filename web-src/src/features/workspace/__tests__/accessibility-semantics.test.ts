@@ -12,7 +12,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { FileTree } from '@/features/workspace/components/FileTree';
 import { TabStrip } from '@/features/workspace/components/TabStrip';
 import { AppProviders, type AppActions } from '@/store/contexts/AppContext';
-import { initialState, makeTab, type Action, type State } from '@/store/state/state';
+import { initialState, makeTab, toNameSet, type Action, type State } from '@/store/state/state';
 
 (globalThis as { React?: typeof React }).React = React;
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -74,7 +74,7 @@ test('file explorer exposes expandable and selected items plus named edit fields
     folderPath: '/workspace',
     folders: [{ path: 'Guides' }],
     files: [{ name: 'note.md', format: 'md' }],
-    expanded: new Set(['Guides']),
+    expanded: toNameSet(['Guides']),
     selectedPath: 'note.md',
   } as State;
   let renderer = await renderWithState(base, createElement(FileTree));

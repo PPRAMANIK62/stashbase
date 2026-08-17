@@ -16,7 +16,7 @@ import { appState, mountApp, withDom } from '@/common/__tests__/renderHarness';
 import { FileTree } from '@/features/workspace/components/FileTree';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
 import { resizeChatByKeyboard, resizeSidebarByKeyboard } from '@/store/state/stateHelpers';
-import type { Action, State } from '@/store/state/state';
+import { toNameSet, type Action, type State } from '@/store/state/state';
 
 function keydown(key: string): KeyboardEvent {
   return new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
@@ -99,7 +99,7 @@ test('opening a tree row context menu moves DOM focus to that row first', async 
     folderPath: '/workspace',
     folders: [{ path: 'Guides' }],
     files: [{ name: 'note.md', format: 'md', heading: 'note', snippet: '' }],
-    expanded: new Set(['Guides']),
+    expanded: toNameSet(['Guides']),
   } as Partial<State>);
 
   for (const label of ['Guides', 'note.md']) {
@@ -135,7 +135,7 @@ function nestedTree(expanded: string[]): State {
       { name: 'Guides/inner.md', format: 'md', heading: 'inner', snippet: '' },
       { name: 'top.md', format: 'md', heading: 'top', snippet: '' },
     ],
-    expanded: new Set(expanded),
+    expanded: toNameSet(expanded),
   } as Partial<State>);
 }
 

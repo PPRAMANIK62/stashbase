@@ -4,9 +4,26 @@
  */
 import type { FileMeta } from '@/common/api/api';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
-import type { ChatTab, State, Tab } from './state';
+import type { ChatTab, NameSet, State, Tab } from './state';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
+
+/** Build a `NameSet` from any name iterable. `Object.fromEntries` defines own
+ *  properties, so a name like `__proto__` becomes a real member instead of
+ *  reassigning the prototype. */
+export function toNameSet(names: Iterable<string>): NameSet {
+  return Object.fromEntries(Array.from(names, (name) => [name, true] as const));
+}
+
+/** Membership test for a `NameSet`. Own-property only: plain indexing would
+ *  report `constructor` / `toString` / `valueOf` as members. */
+export function hasName(set: NameSet, name: string): boolean {
+  return Object.hasOwn(set, name);
+}
+
+export function nameSetSize(set: NameSet): number {
+  return Object.keys(set).length;
+}
 
 /** Sidebar side-panel resize bounds (px), shared by the reducer and the
  *  drag handle. Dragging the panel narrower than `COLLAPSE_AT` collapses
@@ -105,7 +122,7 @@ export function makeChatTab(agent: string, tabs: ChatTab[]): ChatTab {
 }
 
 /** Move a chat tab to the most-recent position for its agent. */
-export function rememberChatTab(recency: State['chatTabRecencyByAgent'], tab: ChatTab): State['chatTabRecencyByAgent'] {
+function rememberChatTab(recency: State['chatTabRecencyByAgent'], tab: ChatTab): State['chatTabRecencyByAgent'] {
   return {
     ...recency,
     [tab.agent]: [...(recency[tab.agent] ?? []).filter((id) => id !== tab.id), tab.id],
@@ -113,11 +130,31 @@ export function rememberChatTab(recency: State['chatTabRecencyByAgent'], tab: Ch
 }
 
 /** Drop a closed tab from its agent's recency list. */
-export function forgetChatTab(recency: State['chatTabRecencyByAgent'], tab: ChatTab): State['chatTabRecencyByAgent'] {
+function forgetChatTab(recency: State['chatTabRecencyByAgent'], tab: ChatTab): State['chatTabRecencyByAgent'] {
   const ids = (recency[tab.agent] ?? []).filter((id) => id !== tab.id);
   if (ids.length > 0) return { ...recency, [tab.agent]: ids };
   const { [tab.agent]: _removed, ...rest } = recency;
   return rest;
+}
+
+/** The ONE way `chatTabRecencyByAgent` changes. Every reducer case that opens,
+ *  creates, activates, closes, or re-agents a chat tab states its intent here
+ *  instead of hand-rolling the index:
+ *
+ *  - `forget` drops a tab from the agent bucket it currently sits in (a close,
+ *    or the old agent when a blank tab switches agents);
+ *  - `remember` moves a tab to the most-recent slot of the agent it now
+ *    belongs to.
+ *
+ *  `forget` is always applied first, so passing the same tab under both keys
+ *  is exactly the bucket move `CHAT_TAB_SET_AGENT` needs. Omitted keys are
+ *  no-ops, so a case that only activates a tab passes only `remember`. */
+export function updateChatTabRecency(
+  recency: State['chatTabRecencyByAgent'],
+  change: { forget?: ChatTab | null; remember?: ChatTab | null },
+): State['chatTabRecencyByAgent'] {
+  const forgotten = change.forget ? forgetChatTab(recency, change.forget) : recency;
+  return change.remember ? rememberChatTab(forgotten, change.remember) : forgotten;
 }
 
 /** Return an agent's most recently active tab that is still open. */

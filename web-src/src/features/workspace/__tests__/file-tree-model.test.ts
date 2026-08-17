@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FileMeta, FolderMeta } from '@/common/api/api';
+import { toNameSet } from '@/store/state/state';
 import {
   buildTree,
   visibleNodePaths,
@@ -161,20 +162,20 @@ test('visible paths descend only into expanded folders, in render order', () => 
   );
 
   assert.deepEqual(
-    visibleNodePaths(root.children, new Set()),
+    visibleNodePaths(root.children, {}),
     ['Guides', 'top.md'],
     'a collapsed folder contributes only its own row',
   );
   assert.deepEqual(
-    visibleNodePaths(root.children, new Set(['Guides'])),
+    visibleNodePaths(root.children, toNameSet(['Guides'])),
     ['Guides', 'Guides/Deep', 'Guides/inner.md', 'top.md'],
   );
   assert.deepEqual(
-    visibleNodePaths(root.children, new Set(['Guides', 'Guides/Deep'])),
+    visibleNodePaths(root.children, toNameSet(['Guides', 'Guides/Deep'])),
     ['Guides', 'Guides/Deep', 'Guides/Deep/buried.md', 'Guides/inner.md', 'top.md'],
   );
   assert.deepEqual(
-    visibleNodePaths(root.children, new Set(['Guides/Deep'])),
+    visibleNodePaths(root.children, toNameSet(['Guides/Deep'])),
     ['Guides', 'top.md'],
     'expansion below a collapsed ancestor stays off screen',
   );

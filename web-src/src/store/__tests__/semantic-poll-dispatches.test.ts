@@ -16,13 +16,13 @@ import {
   planSemanticPollDispatches,
   shallowEqualSemanticIndexing,
 } from '@/store/lib/appContextHelpers';
-import type { State } from '@/store/state/state';
+import { toNameSet, type State } from '@/store/state/state';
 
 function prevState(
   pending: string[],
   semanticIndexing: State['semanticIndexing'] = null,
 ): Pick<State, 'pendingSemanticNames' | 'semanticIndexing'> {
-  return { pendingSemanticNames: new Set(pending), semanticIndexing };
+  return { pendingSemanticNames: toNameSet(pending), semanticIndexing };
 }
 
 test('an unchanged poll payload dispatches nothing', () => {
@@ -107,7 +107,7 @@ test('the dispatched pending set is a copy, not the caller-owned instance', () =
   assert.equal(action.type, 'PENDING_SEMANTIC_NAMES');
   if (action.type !== 'PENDING_SEMANTIC_NAMES') return;
   assert.notEqual(action.names, incoming, 'state must not alias a set the poll keeps mutating');
-  assert.deepEqual([...action.names], ['a.md']);
+  assert.deepEqual(Object.keys(action.names), ['a.md']);
 });
 
 test('both changing dispatches both, preserving the established order', () => {
@@ -122,9 +122,9 @@ test('both changing dispatches both, preserving the established order', () => {
 });
 
 test('equalNameSets compares membership, not identity', () => {
-  assert.ok(equalNameSets(new Set(['a', 'b']), new Set(['b', 'a'])));
-  assert.ok(!equalNameSets(new Set(['a']), new Set(['a', 'b'])));
-  assert.ok(!equalNameSets(new Set(['a']), new Set(['b'])));
+  assert.ok(equalNameSets(toNameSet(['a', 'b']), toNameSet(['b', 'a'])));
+  assert.ok(!equalNameSets(toNameSet(['a']), toNameSet(['a', 'b'])));
+  assert.ok(!equalNameSets(toNameSet(['a']), toNameSet(['b'])));
 });
 
 test('shallowEqualSemanticIndexing compares every reported field', () => {

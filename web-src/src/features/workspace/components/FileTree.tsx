@@ -8,6 +8,7 @@ import { TreeRovingContext, useTreeRoving, useTreeRow } from '@/features/workspa
 import { buildTree, visibleNodePaths, type FolderNode, type TreeNode } from '@/features/workspace/lib/fileTreeModel';
 import { basename } from '@/common/lib/paths';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { hasName } from '@/store/state/state';
 import { getFileReadiness } from '@/store/lib/fileReadiness';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { FileTypeIcon } from '@/common/components/FileTypeIcon';
@@ -102,7 +103,7 @@ function FolderRow({
   const state = useWorkspace();
   const { dispatch, actions } = useAppActions();
   const row = useTreeRow(node.path, parent);
-  const isExpanded = state.expanded.has(node.path);
+  const isExpanded = hasName(state.expanded, node.path);
   const isActive = state.selectedPath === node.path;
   const renaming = useRenameTarget(node.path, 'folder');
   const { dropEdge, dragProps } = useTreeRowDrag({

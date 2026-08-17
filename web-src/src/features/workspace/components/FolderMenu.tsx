@@ -8,6 +8,7 @@ import {
   TrashIcon,
 } from '@/common/components/icons';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { nameSetSize } from '@/store/state/state';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 
 /** The ⋯ folder menu shared by the active-folder header and every
@@ -62,7 +63,7 @@ export function FolderMenu({
             detail: 'Re-scan disk for external changes',
             onSelect: () => { void actions.runSync(); },
           },
-          state.expanded.size === 0
+          nameSetSize(state.expanded) === 0
             ? {
                 label: 'Expand All Folders',
                 icon: <ExpandAllIcon />,

@@ -4,6 +4,7 @@ import {
   initialState,
   makeChatTab,
   reducer,
+  toNameSet,
   type ChatTab,
   type State,
   type Tab,
@@ -16,8 +17,8 @@ function freshState(overrides: Partial<State> = {}): State {
     tabs: [],
     chatTabs: [],
     chatTabRecencyByAgent: {},
-    expanded: new Set(),
-    pendingSemanticNames: new Set(),
+    expanded: {},
+    pendingSemanticNames: {},
     fileOrder: {},
     ...overrides,
   };
@@ -224,7 +225,7 @@ test('folder path remap updates files, tabs, expansion, focus, and manual order 
     tabs: [documentTab('tab-a', 'docs/a.md')],
     recentFilePaths: ['docs/a.md'],
     activeTabId: 'tab-a',
-    expanded: new Set(['docs', 'docs/sub']),
+    expanded: toNameSet(['docs', 'docs/sub']),
     activeFolder: 'docs/sub',
     selectedPath: 'docs/a.md',
     fileOrder: {
@@ -239,7 +240,7 @@ test('folder path remap updates files, tabs, expansion, focus, and manual order 
   assert.deepEqual(next.folders.map((folder) => folder.path), ['archive', 'archive/sub']);
   assert.equal(next.tabs[0].file?.name, 'archive/a.md');
   assert.deepEqual(next.recentFilePaths, ['archive/a.md']);
-  assert.deepEqual([...next.expanded], ['archive', 'archive/sub']);
+  assert.deepEqual(Object.keys(next.expanded), ['archive', 'archive/sub']);
   assert.equal(next.activeFolder, 'archive/sub');
   assert.equal(next.selectedPath, 'archive/a.md');
   assert.deepEqual(next.fileOrder, {
