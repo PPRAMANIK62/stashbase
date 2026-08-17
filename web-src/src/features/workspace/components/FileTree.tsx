@@ -9,7 +9,7 @@ import { basename } from '@/common/lib/paths';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { getFileReadiness } from '@/store/lib/fileReadiness';
 import { emptyStateClass } from '@/common/lib/emptyState';
-import { FileTypeIcon, type FileGlyphFormat } from '@/common/components/FileTypeIcon';
+import { FileTypeIcon } from '@/common/components/FileTypeIcon';
 import { RenameInput, useRenameTarget } from '@/features/workspace/components/RenameInput';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');

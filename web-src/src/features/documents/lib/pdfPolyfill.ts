@@ -7,6 +7,10 @@
  *
  * Remove once Electron's bundled Chromium ships these APIs.
  */
+// This module has no imports or exports, so it is an ambient script and this
+// declaration merges into the global `Math` — which is what types the
+// `Math.sumPrecise` access below. oxlint reads it as an unused local.
+// oxlint-disable-next-line no-unused-vars
 interface Math {
   sumPrecise?: (values: Iterable<number>) => number;
 }

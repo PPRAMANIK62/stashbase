@@ -27,7 +27,7 @@ import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBounda
 import { FolderMenu } from '@/features/workspace/components/FolderMenu';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 import { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderModal';
-import { ScopeHistoryButton } from '@/features/workspace/components/ScopeHistoryButton';
+import { ScopeHistoryButton } from '@/app/ScopeHistoryButton';
 import { Button } from '@/common/components/ui/button';
 import { api, errorMessage } from '@/common/api/api';
 import { FILE_MIME } from '@/common/lib/dragMime';
@@ -399,10 +399,6 @@ function RootMenuButton({
 function LibrarySections({ children }: { children?: React.ReactNode }) {
   const state = useWorkspace();
   const { actions, dispatch } = useAppActions();
-  // `children` is the Document Outline section (or false when no
-  // Markdown document is open) — it decides which bottom block carries
-  // the mt-auto anchor.
-  const hasOutline = Boolean(children);
   const semanticNotice = useSemanticIndexingNotice();
   const unsupportedFilesVisible = Boolean(
     (state.unsupportedFiles?.sourceCode ?? 0) + (state.unsupportedFiles?.other ?? 0),

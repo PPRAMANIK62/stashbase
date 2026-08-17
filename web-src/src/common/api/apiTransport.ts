@@ -45,7 +45,7 @@ export function getWindowId(): string {
 }
 
 export function requestHeaders(extra?: HeadersInit): HeadersInit {
-  return { ...(extra ?? {}), 'x-stashbase-window-id': getWindowId() };
+  return { ...extra, 'x-stashbase-window-id': getWindowId() };
 }
 
 /** GET wrapper. Throws `ApiError` for non-2xx; returns parsed JSON. */

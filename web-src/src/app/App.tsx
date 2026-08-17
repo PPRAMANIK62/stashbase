@@ -6,7 +6,7 @@ import {
   type CSSProperties,
 } from 'react';
 import '@/app/app-shell.css';
-import { Sidebar } from '@/features/workspace/components/Sidebar';
+import { Sidebar } from '@/app/Sidebar';
 import { TitlebarControls } from '@/app/TitlebarControls';
 import { MainPane } from '@/app/MainPane';
 import { DropVeil } from '@/common/components/DropVeil';

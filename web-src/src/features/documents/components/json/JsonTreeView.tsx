@@ -101,7 +101,7 @@ export function JsonTreeView({ source, editable, session, onSessionChange, onSou
           siblingCount={1}
           onSelect={(selectedPath) => updateSession({ selectedPath })}
           onNavigate={moveTreeSelection}
-          onToggle={(path) => { const expanded = new Set(session.expanded); expanded.has(path) ? expanded.delete(path) : expanded.add(path); updateSession({ expanded }); }}
+          onToggle={(path) => { const expanded = new Set(session.expanded); if (expanded.has(path)) expanded.delete(path); else expanded.add(path); updateSession({ expanded }); }}
           onEdit={openIntent}
           onDelete={(node) => mutate(() => deleteJsonPath(source, node.path), formatPath(node.path.slice(0, -1)))}
           onMove={(node, delta) => mutate(() => reorderJsonArrayItem(source, node.path.slice(0, -1), Number(node.path.at(-1)), Number(node.path.at(-1)) + delta), formatPath(node.path.slice(0, -1).concat(Number(node.path.at(-1)) + delta)))}
@@ -136,7 +136,7 @@ function TreeNode({ node, source, editable, expanded, selectedPath, selectedRef,
         else if (event.key === 'ArrowUp') { event.preventDefault(); onNavigate(node, 'previous'); }
         else if (event.key === 'Home') { event.preventDefault(); onNavigate(node, 'first'); }
         else if (event.key === 'End') { event.preventDefault(); onNavigate(node, 'last'); }
-        else if (event.key === 'ArrowRight' && container) { event.preventDefault(); isExpanded ? onNavigate(node, 'child') : onToggle(path); }
+        else if (event.key === 'ArrowRight' && container) { event.preventDefault(); if (isExpanded) onNavigate(node, 'child'); else onToggle(path); }
         else if (event.key === 'ArrowLeft') { event.preventDefault(); if (container && isExpanded && node.path.length) onToggle(path); else if (node.path.length) onNavigate(node, 'parent'); }
         if (event.key === 'Enter' && editable) { event.preventDefault(); onEdit({ kind: container ? 'subtree' : 'value', node }); }
       }}>

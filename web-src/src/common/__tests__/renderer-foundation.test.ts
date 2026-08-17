@@ -245,7 +245,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   assert.doesNotMatch(appShellChrome, /app-chrome/);
   assert.match(appShellChrome, /platform-darwin \.sidebar-drag-zone/);
   assert.match(appShellChrome, /platform-darwin \.tab-strip/);
-  assert.match(read('web-src/src/features/workspace/components/Sidebar.tsx'), /className="sidebar-drag-zone"/);
+  assert.match(read('web-src/src/app/Sidebar.tsx'), /className="sidebar-drag-zone"/);
 });
 
 test('shared overlays own loading modality, popup positioning, and focus return', () => {
@@ -289,7 +289,7 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   const mainPane = read('web-src/src/app/MainPane.tsx');
   assert.match(mainPane, /id=\{activeTab \? 'document-panel' : undefined\}/);
 
-  const sidebar = read('web-src/src/features/workspace/components/Sidebar.tsx');
+  const sidebar = read('web-src/src/app/Sidebar.tsx');
   assert.match(sidebar, /aria-label=\{`Select \$\{name\} folder root`\}/);
   assert.match(sidebar, /aria-label=\{'New note in ' \+ target\}/);
   assert.match(sidebar, /<Button\s+type="button"\s+variant="ghost"[\s\S]{0,400}aria-label=\{`Select \$\{name\} folder root`\}/);

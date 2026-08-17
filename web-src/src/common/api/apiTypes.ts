@@ -3,16 +3,7 @@
  * These declarations have no runtime dependencies.
  */
 import type { ConversionProgress } from '@/../../shared/conversion.ts';
-import type {
-  AudioPreviewStatus,
-  AudioTranscript,
-  AudioTranscriptSegment,
-  AudioTranscriptState,
-  LocalTranscriptionModelId,
-  TranscriptionModelOperation,
-  TranscriptionModelState,
-  TranscriptionSettings,
-} from '@/../../shared/transcription.ts';
+import type { LocalTranscriptionModelId } from '@/../../shared/transcription.ts';
 export type { ConversionProgress } from '@/../../shared/conversion.ts';
 export type {
   AudioPreviewStatus,

@@ -29,7 +29,7 @@ export function isSafeFolderRelativePath(path: string): boolean {
 export function shouldRefreshAfterTool(name: string | undefined): boolean {
   if (!name) return false;
   if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name)) return true;
-  return /^mcp__/.test(name) && /(write|delete|rename|update|set_|create|move)/i.test(name);
+  return name.startsWith('mcp__') && /(write|delete|rename|update|set_|create|move)/i.test(name);
 }
 
 /** Clipboard access can be unavailable in an unfocused Electron webview. */
