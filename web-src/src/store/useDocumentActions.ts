@@ -38,6 +38,17 @@ interface DocumentActionDependencies {
   cancelScheduled?: (timer: ReturnType<typeof setTimeout>) => void;
 }
 
+interface ConflictSettlement {
+  tabId: string;
+  fileName: string;
+  durableContent: string;
+  durableVersion: string;
+  supersededVersions: Array<string | undefined>;
+  nextContent: string;
+  dirty: boolean;
+  status: State['tabs'][number]['saveStatus'];
+}
+
 function isDocxName(name: string): boolean {
   // Names reaching loadFile are POSIX rel paths (listings, search hits, and
   // preview links already URL-resolved, which folds `\` into `/`), so no
@@ -125,24 +136,31 @@ export function useDocumentActions(
           savedResult = await saveContent(baseVersion);
         } catch (err: unknown) {
           if (!(err instanceof ApiError && err.status === 409)) throw err;
-          let diskContent = '';
-          let diskVersion = '';
+          let diskContent: string;
+          let diskVersion: string;
           try {
             const body = await api.getFile(currentFile.name);
+            if (!body.version) throw new Error('conflicted file read did not include a version');
             diskContent = body.content;
-            diskVersion = body.version ?? err.currentVersion ?? '';
+            diskVersion = body.version;
           } catch (fetchErr: unknown) {
             console.error('Failed to fetch conflicted file content from disk:', fetchErr);
             throw err;
           }
-          if (!tabId) throw err;
+          const latestTab = getActiveTab(state.current);
+          const sameTab = latestTab?.id === tabId && latestTab.file?.name === currentFile.name;
+          if (!sameTab) return false;
+          // The request may have been in flight while the user kept typing.
+          // Capture the live buffer immediately before the conflict surface
+          // replaces and unmounts the editor.
+          const latestEditorContent = editor.current?.getValue() ?? content;
           dispatch({
             type: 'SET_CONFLICT',
             id: tabId,
             conflict: {
               diskContent,
               diskVersion,
-              editorContent: content,
+              editorContent: latestEditorContent,
             },
           });
           dispatch({ type: 'SAVE_STATUS', status: { text: 'Conflict detected', cls: 'error' } });
@@ -503,6 +521,31 @@ export function useDocumentActions(
     dispatch({ type: 'UNSUPPORTED_MODAL', open });
   }, [dispatch]);
 
+  const settleConflict = useCallback((settlement: ConflictSettlement) => {
+    const activeTab = getActiveTab(state.current);
+    if (
+      activeTab?.id !== settlement.tabId
+      || activeTab.file?.name !== settlement.fileName
+      || !activeTab.conflict
+    ) {
+      return false;
+    }
+    latestDurableBaseline.current = {
+      name: settlement.fileName,
+      content: settlement.durableContent,
+      version: settlement.durableVersion,
+      superseded: new Set(settlement.supersededVersions),
+    };
+    dispatch({
+      type: 'FILE_PATCH',
+      patch: { content: settlement.nextContent, version: settlement.durableVersion },
+    });
+    dispatch({ type: 'SET_CONFLICT', id: settlement.tabId, conflict: null });
+    dispatch({ type: 'DOCUMENT_DIRTY', dirty: settlement.dirty });
+    dispatch({ type: 'SAVE_STATUS', status: settlement.status });
+    return true;
+  }, [dispatch, state]);
+
   const resolveConflictOverwrite = useCallback(async (tabId: string) => {
     const currentState = state.current;
     const tab = currentState.tabs.find((t) => t.id === tabId);
@@ -514,41 +557,45 @@ export function useDocumentActions(
       const savedResult = await api.putFile(fileName, editorContent, undefined);
       if (savedResult.indexWarning) toast(savedResult.indexWarning, { level: 'warning' });
 
-      latestDurableBaseline.current = {
-        name: fileName,
-        content: editorContent,
-        version: savedResult.version,
-        superseded: new Set([tab.file.version]),
-      };
-      dispatch({ type: 'FILE_PATCH', patch: { content: editorContent, version: savedResult.version } });
-      dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
-      dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
-      dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
+      if (!savedResult.version) throw new Error('save response did not include a version');
+      if (!settleConflict({
+        tabId,
+        fileName,
+        durableContent: editorContent,
+        durableVersion: savedResult.version,
+        supersededVersions: [tab.file.version],
+        nextContent: editorContent,
+        dirty: false,
+        status: { text: 'Saved', cls: 'saved' },
+      })) return;
       void loadFiles(currentState.folderPath);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + message, cls: 'error' } });
+      const activeTab = getActiveTab(state.current);
+      if (activeTab?.id === tabId && activeTab.file?.name === fileName && activeTab.conflict) {
+        dispatch({ type: 'SAVE_STATUS', status: { text: 'Save failed: ' + message, cls: 'error' } });
+      }
       toast('Failed to overwrite: ' + message, { level: 'error' });
     }
-  }, [dispatch, loadFiles, state, toast]);
+  }, [dispatch, loadFiles, settleConflict, state, toast]);
 
   const resolveConflictReload = useCallback(async (tabId: string) => {
     const currentState = state.current;
     const tab = currentState.tabs.find((t) => t.id === tabId);
     if (!tab?.conflict || !tab.file) return;
     const { diskContent, diskVersion } = tab.conflict;
-    latestDurableBaseline.current = {
-      name: tab.file.name,
-      content: diskContent,
-      version: diskVersion,
-      superseded: new Set([tab.file.version]),
-    };
-    dispatch({ type: 'FILE_PATCH', patch: { content: diskContent, version: diskVersion } });
-    dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
-    dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
-    dispatch({ type: 'SAVE_STATUS', status: { text: '', cls: '' } });
+    if (!settleConflict({
+      tabId,
+      fileName: tab.file.name,
+      durableContent: diskContent,
+      durableVersion: diskVersion,
+      supersededVersions: [tab.file.version],
+      nextContent: diskContent,
+      dirty: false,
+      status: { text: '', cls: '' },
+    })) return;
     void loadFiles(currentState.folderPath);
-  }, [dispatch, loadFiles, state]);
+  }, [loadFiles, settleConflict, state]);
 
   const resolveConflictMerge = useCallback(async (tabId: string) => {
     const currentState = state.current;
@@ -561,17 +608,17 @@ export function useDocumentActions(
     // The merge is an editor draft based on the disk snapshot, not a durable
     // save. Preserve the disk content/version as the comparison baseline so
     // the remounted editor must PUT the merged draft before any transition.
-    latestDurableBaseline.current = {
-      name: tab.file.name,
-      content: diskContent,
-      version: diskVersion,
-      superseded: new Set([tab.file.version, diskVersion]),
-    };
-    dispatch({ type: 'FILE_PATCH', patch: { content: mergedContent, version: diskVersion } });
-    dispatch({ type: 'SET_CONFLICT', id: tabId, conflict: null });
-    dispatch({ type: 'DOCUMENT_DIRTY', dirty: true });
-    dispatch({ type: 'SAVE_STATUS', status: { text: 'Merged', cls: '' } });
-  }, [dispatch, state]);
+    settleConflict({
+      tabId,
+      fileName: tab.file.name,
+      durableContent: diskContent,
+      durableVersion: diskVersion,
+      supersededVersions: [tab.file.version, diskVersion],
+      nextContent: mergedContent,
+      dirty: true,
+      status: { text: 'Merged', cls: '' },
+    });
+  }, [settleConflict, state]);
 
   // One stable actions object: the workspace memo depends on this object,
   // not on individually listed members, so a new action added here is

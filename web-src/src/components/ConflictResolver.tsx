@@ -17,11 +17,15 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
   }, [diskContent, editorContent]);
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground" data-testid="conflict-resolver">
+    <div
+      className="flex h-full flex-col bg-background text-foreground"
+      role="region"
+      aria-labelledby={`conflict-title-${tabId}`}
+    >
       {/* Banner bar */}
       <div className="flex items-center justify-between border-b border-muted bg-accent/5 px-4 py-3 shrink-0">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold truncate text-foreground">
+          <h3 id={`conflict-title-${tabId}`} className="text-sm font-semibold truncate text-foreground">
             Conflict detected in {fileName}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">

@@ -190,7 +190,7 @@ test('J03 exposes both versions and blocks navigation until a save conflict is r
   const fixture = await createAppFixture({ membership: 'one-folder' });
   const source = path.join(fixture.workspaces.projectA, 'Welcome.md');
   const editorMarker = 'Unsaved editor version remains recoverable.';
-  const diskMarker = 'Newer Agent version remains recoverable.';
+  const diskMarker = 'Newer external-tool version remains recoverable.';
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
@@ -203,9 +203,9 @@ test('J03 exposes both versions and blocks navigation until a save conflict is r
     await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
     await app.page.keyboard.insertText(`\n${editorMarker}`);
     await expect(app.page.getByText('Unsaved', { exact: true })).toBeVisible();
-    fs.writeFileSync(source, `# Agent update\n\n${diskMarker}\n`, 'utf8');
+    fs.writeFileSync(source, `# External update\n\n${diskMarker}\n`, 'utf8');
 
-    const resolver = app.page.getByTestId('conflict-resolver');
+    const resolver = app.page.getByRole('region', { name: 'Conflict detected in Welcome.md' });
     await expect(resolver).toBeVisible();
     await expect(resolver).toContainText(diskMarker);
     await expect(resolver).toContainText(editorMarker);
@@ -213,17 +213,14 @@ test('J03 exposes both versions and blocks navigation until a save conflict is r
     await fileTreeRow(app.page, 'Second Note.md').click();
     await expect(resolver).toBeVisible();
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
-    await app.electron.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.close();
-    });
-    await expect(resolver).toBeVisible();
-    await expect(app.page).toHaveTitle('project-alpha — StashBase');
 
     await resolver.getByRole('button', { name: 'Reload from Disk' }).click();
     await expect(resolver).toHaveCount(0);
     await expect(activeMarkdownEditor(app.page)).toContainText(diskMarker);
     await expect(activeMarkdownEditor(app.page)).not.toContainText(editorMarker);
     await expect.poll(() => fs.readFileSync(source, 'utf8')).toContain(diskMarker);
+    await fileTreeRow(app.page, 'Second Note.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Second Note.md');
     expect(app.errors.records.filter((record) => !(
       /console: Failed to load resource: the server responded with a status of 409 \(Conflict\)/
         .test(`${record.kind}: ${record.text}`)

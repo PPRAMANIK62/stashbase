@@ -340,21 +340,41 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     assert.match(control.current!.state.current.tabs[0].saveStatus.text, /Save failed: disk unavailable/u);
 
     let conflictAttempt = 0;
+    let rejectConflict!: (reason: unknown) => void;
+    const conflictSave = new Promise<never>((_resolve, reject) => { rejectConflict = reject; });
     api.putFile = async (_name, content) => {
       conflictAttempt++;
-      const err = new ApiError('changed on disk', 409, 'FILE_CHANGED');
-      err.currentVersion = 'version-from-conflict-response';
-      if (conflictAttempt === 1) throw err;
+      if (conflictAttempt === 1) return conflictSave;
       return { content, version: 'after-conflict' };
     };
     api.getFile = async (_name) => {
       return { name: 'data.json', format: 'json', content: '{"disk": true}', version: 'version-disk' };
     };
-    await act(async () => { saved = await control.current!.actions.flushSave(); });
+    let conflictPending!: Promise<boolean>;
+    await act(async () => {
+      conflictPending = control.current!.actions.flushSave();
+      await Promise.resolve();
+    });
+    const lateConflictEdit = ' typed while conflict request was in flight';
+    await act(async () => {
+      cm!.dispatch({ changes: { from: cm!.state.doc.length, insert: lateConflictEdit } });
+      await Promise.resolve();
+    });
+    const conflictError = new ApiError('changed on disk', 409, 'FILE_CHANGED');
+    conflictError.currentVersion = 'version-from-conflict-response';
+    await act(async () => {
+      rejectConflict(conflictError);
+      saved = await conflictPending;
+    });
     assert.equal(saved, false);
     assert.equal(conflictAttempt, 1, 'should not retry automatically');
     assert.ok(control.current!.state.current.tabs[0].conflict, 'transitions to conflict state');
     assert.equal(control.current!.state.current.tabs[0].conflict?.diskContent, '{"disk": true}');
+    assert.match(
+      control.current!.state.current.tabs[0].conflict?.editorContent ?? '',
+      new RegExp(lateConflictEdit),
+      'the conflict snapshot includes edits typed while the stale save was in flight',
+    );
     assert.equal(
       control.current!.state.current.tabs[0].conflict?.diskVersion,
       'version-disk',
