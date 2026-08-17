@@ -29,6 +29,10 @@ after readiness, a save failure or timeout keeps the window open.
 - Native close awaits the current renderer save barrier before retiring the
   identity. Retirement installs a bounded tombstone so an in-flight open
   request cannot recreate a ghost binding.
+- Renderer reload is the same durability boundary as close. Shipping menus and
+  accelerators expose no direct reload bypass; recovery reload awaits the save
+  barrier, or requires explicit risk confirmation when the renderer can no
+  longer provide one.
 - Closing one window releases only that window's folder and Agent state. Shared
   server, daemon, settings, MCP, and other windows remain live.
 - Removing a library folder flushes every window showing it, commits membership
@@ -85,6 +89,7 @@ creation, presentation, survival, and retirement.
 ## Failure and Recovery
 
 - Save error or timeout: leave the native window open and surface the failure.
+- Recovery reload save failure: keep the current renderer and source intact.
 - Late request after retirement: reject it; never recreate window state.
 - Initial quit cancelled by an asynchronous window guard: resume quit through
   the platform-specific final-window path.

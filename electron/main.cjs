@@ -35,6 +35,7 @@ const {
   createApplicationMenuTemplate,
   createRendererFlushCoordinator,
   createRendererFlushReadiness,
+  createSafeReloadCoordinator,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,
@@ -139,6 +140,23 @@ const bugReportReviewDraftBySender = new Map();
 const windowRegistry = createWindowRegistry({ platform: process.platform });
 const rendererFlush = createRendererFlushCoordinator();
 const rendererFlushReadinessByWebContents = new Map();
+const safeReload = createSafeReloadCoordinator({
+  requestFlush: (win, reason) => rendererFlush.request(win, reason),
+  confirmWithoutSaveBarrier: async (win) => {
+    const result = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Reload without save confirmation?',
+      message: 'StashBase cannot confirm that the current edit is saved.',
+      detail: 'Reloading may discard unsaved changes. Continue only if the window cannot recover.',
+      buttons: ['Cancel', 'Reload Anyway'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    return result.response === 1;
+  },
+  reloadWindow: (win) => win.webContents.reload(),
+});
 const approvedWindowCloses = new WeakSet();
 const pendingWindowCloses = new WeakSet();
 let lastMainWindow = null;
@@ -887,13 +905,9 @@ async function createWindow(initialFolder) {
     pushFullscreen();
   });
 
-  // Swallow ⌘R / Ctrl+R from the keyboard. Electron's default View
-  // menu binds it to "Reload", which does a full renderer re-mount —
-  // dropping all tab / nav / search state on the floor. Folder switching
-  // happens through the sidebar's library list, which swaps the window's
-  // folder cleanly without re-mounting.
-  // The View → Reload menu item is left in place as an escape hatch
-  // (mouse click); only the keyboard chord is gone.
+  // Reload is a destructive renderer-context transition. Native reload and
+  // force-reload chords stay blocked; the recovery UI invokes main's awaited
+  // save barrier and receives an explicit failure instead.
   win.webContents.on('before-input-event', (event, input) => {
     // Own window-level input before it reaches the renderer. The native menu
     // still advertises the platform accelerator, while this boundary prevents
@@ -909,10 +923,7 @@ async function createWindow(initialFolder) {
       win.close();
       return;
     }
-    if (input.type !== 'keyDown') return;
-    if (!(input.meta || input.control)) return;
-    if (input.shift) return; // ⌘⇧R (Force Reload) stays — dev escape hatch.
-    if (input.key.toLowerCase() === 'r') event.preventDefault();
+    if (windowAction === 'block-reload') event.preventDefault();
   });
 
   const url = initialFolder
@@ -961,6 +972,7 @@ function installApplicationMenu() {
       const target = BrowserWindow.getFocusedWindow();
       void openBugReportReview(isLiveMainWindow(target) ? target : lastMainWindow);
     },
+    includeDeveloperTools: process.env.STASHBASE_DEV_VITE === '1',
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -1027,6 +1039,31 @@ ipcMain.handle('window:openFolder', async (event, name) => {
   });
   if (result.ok && result.win) lastMainWindow = result.win;
   return result.ok;
+});
+
+ipcMain.handle('window:safeReload', async (event) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return false;
+  const saveBarrierReady = rendererFlushReadinessByWebContents
+    .get(event.sender.id)
+    ?.shouldRequest() === true;
+  const result = await safeReload.request(senderWindow, { saveBarrierReady });
+  if (!result.reloaded && result.reason === 'save-failed' && isLiveMainWindow(senderWindow)) {
+    await dialog.showMessageBox(senderWindow, {
+      type: 'error',
+      title: 'Could not reload window',
+      message: 'StashBase could not confirm that the current edit was saved.',
+      detail: 'Resolve the save error and try again.',
+    });
+  }
+  if (!result.reloaded && result.reason === 'reload-failed' && isLiveMainWindow(senderWindow)) {
+    await dialog.showMessageBox(senderWindow, {
+      type: 'error',
+      title: 'Could not reload window',
+      message: 'StashBase could not reload this window.',
+    });
+  }
+  return result.reloaded;
 });
 
 ipcMain.on('window:context-release-ready', (event, payload) => {

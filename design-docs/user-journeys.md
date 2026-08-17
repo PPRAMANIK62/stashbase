@@ -54,8 +54,10 @@ editing behavior.
    results.
 5. Close a tab or window without silently losing a live edit.
 
-Important recovery: version conflict, parse failure, or unsupported preview
-does not overwrite or disguise the source.
+Important recovery: a version conflict keeps the newer disk source and unsaved
+editor source visible until the user reloads, overwrites, or merges. Leaving or
+reloading cannot bypass that decision. Parse failure or unsupported preview
+does not disguise the source.
 
 ## J04: Prepare a hard-to-read file
 

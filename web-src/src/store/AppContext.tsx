@@ -165,6 +165,13 @@ export interface AppActions {
   scheduleSave: () => void;
   flushSave: () => Promise<boolean>;
 
+  /** Resolve a save-conflict by overwriting the disk file with the editor's current content. */
+  resolveConflictOverwrite: (tabId: string) => Promise<void>;
+  /** Resolve a save-conflict by reloading the disk version, discarding unsaved edits. */
+  resolveConflictReload: (tabId: string) => Promise<void>;
+  /** Resolve a save-conflict by inserting inline conflict markers and returning to the editor. */
+  resolveConflictMerge: (tabId: string) => Promise<void>;
+
   registerEditor: (h: EditorHandle | null) => void;
 
   /** A view registers its find driver on mount; `null` on unmount.
@@ -430,6 +437,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     newNote: workspace.newNote, newFolder: workspace.newFolder, deleteFile: workspace.deleteFile, deleteFolder: workspace.deleteFolder,
     renameFile: workspace.renameFile, renameFolder: workspace.renameFolder, moveFile: workspace.moveFile, upload: workspace.upload,
     scheduleSave: workspace.scheduleSave, flushSave: workspace.flushSave,
+    resolveConflictOverwrite: workspace.resolveConflictOverwrite,
+    resolveConflictReload: workspace.resolveConflictReload,
+    resolveConflictMerge: workspace.resolveConflictMerge,
     registerEditor: workspace.registerEditor,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,

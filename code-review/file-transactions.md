@@ -44,6 +44,14 @@
 - A `FILE_CHANGED` conflict must never automatically retry without
   `baseVersion`. The dirty editor buffer and newer disk source both remain
   recoverable until an explicit reload, merge, or overwrite decision.
+- A synchronous editor-change marker makes the live editor value save
+  authority before the renderer's dirty presentation commits. Merely mounting
+  or reading an editor never publishes its normalized serialization.
+- Conflict comparison content and version come from one disk read. While the
+  conflict is unresolved, navigation, folder switch, window close, and reload
+  remain behind the failed save barrier.
+- Merge creates a dirty draft against the newer disk version. It is not
+  durable until the normal versioned save path accepts it.
 
 Regression shape:
 
@@ -53,14 +61,17 @@ editor reads V1 → Agent writes V2 with base V1
 → no automatic unversioned V3 may erase V2
 ```
 
-### Known gap — renderer conflict recovery
+### Renderer conflict recovery
 
-`web-src/src/store/useDocumentActions.ts` currently catches a version-conflict
-response and immediately retries the save without `baseVersion`, overwriting
-the newer disk copy. This Shipping behavior violates the Required contract
-above. Until explicit reload/merge/overwrite UX and the `V1 → V2 → conflict`
-regression ship, reviewers must treat concurrent editor/Agent writes as unsafe
-and must not cite ordinary save tests as coverage of conflict recovery.
+Shipping behavior shows the newer disk source beside the unsaved editor source
+and accepts one explicit decision at a time. Resolution and confirmed
+close-and-discard share one owner; once either starts, competing choices stay
+blocked until that decision succeeds, fails, or is cancelled:
+
+- Reload adopts the disk snapshot.
+- Overwrite publishes the editor source without a stale base.
+- Merge opens a dirty draft with conflict markers and saves it against the disk
+  snapshot through the ordinary versioned path.
 
 ## Mutation Sequence
 
@@ -123,7 +134,7 @@ text reads and manifest-known derived-text reads also reject responses above
 | Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
 | Publication Module | `server/import-publication.ts` |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |
-| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, and `library-operations/index.test.ts` |
+| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, `library-operations/index.test.ts`, renderer persistence tests, and the J03 conflict Journey |
 
 ## Validation
 
