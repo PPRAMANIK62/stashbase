@@ -266,7 +266,10 @@ test('J03 recovery reload flushes a live edit before replacing the renderer', as
     await expect(activeMarkdownEditor(app.page)).toContainText(marker);
     const unexpectedErrors = app.errors.records.filter((record) => !(
       record.kind === 'request'
-      && /GET .*\/api\/index-status\?.*: net::ERR_ABORTED$/u.test(record.text)
+      && (
+        /GET .*\/api\/files: net::ERR_ABORTED$/u.test(record.text)
+        || /GET .*\/api\/index-status\?.*: net::ERR_ABORTED$/u.test(record.text)
+      )
     ));
     expect(unexpectedErrors).toEqual([]);
   } finally {

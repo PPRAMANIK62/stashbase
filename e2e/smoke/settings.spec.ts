@@ -78,16 +78,26 @@ test('clipboard screenshot offers are default-off and require an explicit Genera
     });
     await expect(clipboardCapture).not.toBeChecked();
     await clipboardCapture.check();
+    await expect.poll(() => {
+      const saved = JSON.parse(fs.readFileSync(fixture.configFile, 'utf8')) as {
+        capture?: { clipboardImageImport?: boolean };
+      };
+      return saved.capture?.clipboardImageImport;
+    }).toBe(true);
+    const watchEnabled = await app.page.evaluate(async () => {
+      const bridge = (window as unknown as {
+        electron?: { refreshClipboardWatch?: () => Promise<boolean> };
+      }).electron;
+      return bridge?.refreshClipboardWatch?.();
+    });
+    expect(watchEnabled).toBe(true);
+    await app.electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.emit('focus'));
 
     const offer = app.page.getByRole('dialog', { name: 'Add image to StashBase?' });
     await expect(offer).toBeVisible();
     await offer.getByRole('button', { name: 'Dismiss' }).click();
     await expect(offer).toBeHidden();
 
-    const persisted = JSON.parse(fs.readFileSync(fixture.configFile, 'utf8')) as {
-      capture?: { clipboardImageImport?: boolean };
-    };
-    expect(persisted.capture?.clipboardImageImport).toBe(true);
     app.errors.assertNone();
   } finally {
     try {
