@@ -44,8 +44,9 @@
 - A `FILE_CHANGED` conflict must never automatically retry without
   `baseVersion`. The dirty editor buffer and newer disk source both remain
   recoverable until an explicit reload, merge, or overwrite decision.
-- The live editor value is save authority; the renderer's dirty flag is only
-  presentation state and may lag by one render.
+- A synchronous editor-change marker makes the live editor value save
+  authority before the renderer's dirty presentation commits. Merely mounting
+  or reading an editor never publishes its normalized serialization.
 - Conflict comparison content and version come from one disk read. While the
   conflict is unresolved, navigation, folder switch, window close, and reload
   remain behind the failed save barrier.

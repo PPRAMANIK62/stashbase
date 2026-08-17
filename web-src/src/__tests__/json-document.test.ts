@@ -488,6 +488,17 @@ test('conflict resolution callbacks apply correct edits and state transitions', 
 
     const tabId = control.current!.state.current.activeTabId!;
 
+    control.current!.actions.registerEditor({
+      getValue: () => '{"mountNormalized": true}',
+      focus: () => undefined,
+    });
+    let untouchedFlush = false;
+    await act(async () => {
+      untouchedFlush = await control.current!.actions.flushSave();
+    });
+    assert.equal(untouchedFlush, true);
+    assert.equal(calls.length, 0, 'mount-time editor normalization is not a user edit or save authority');
+
     // 1. Setup tab conflict state manually in reducer to test resolution callbacks
     await act(async () => {
       control.current!.dispatch({

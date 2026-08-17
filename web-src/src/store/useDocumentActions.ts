@@ -79,6 +79,11 @@ export function useDocumentActions(
   // earlier same-tick window so two resolution callbacks cannot both mutate
   // one conflict.
   const conflictResolutionsInFlight = useRef(new Set<string>());
+  // A renderer dirty dispatch may commit one render after the editor change.
+  // Track edit intent synchronously per tab so the live buffer can remain save
+  // authority without treating an editor's mount-time normalization as a user
+  // edit.
+  const pendingEditorChangeTabs = useRef(new Set<string>());
   const { loadFiles, refreshIndexState, toast, primeFind, askConfirm } = dependencies;
   const scheduleAfter = dependencies.scheduleAfter ?? scheduleWithTimeout;
   const cancelScheduled = dependencies.cancelScheduled ?? cancelTimeout;
@@ -110,6 +115,9 @@ export function useDocumentActions(
       if (tabAtStart.conflict) return false;
       const handle = editor.current;
       if (!handle) return tabAtStart.dirty !== true;
+      if (!pendingEditorChangeTabs.current.has(tabId) && tabAtStart.dirty !== true) {
+        return true;
+      }
       // The editor callback can update its live value one render before the
       // reducer's dirty flag reaches state.current. Context release may land
       // in that gap, so the UI flag is presentation, not save authority.
@@ -123,6 +131,7 @@ export function useDocumentActions(
         && durable.superseded.has(currentFile.version);
       const baselineContent = stateLagsDurable ? durable.content : currentFile.content;
       if (content === baselineContent) {
+        pendingEditorChangeTabs.current.delete(tabId);
         dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
         return true;
@@ -189,9 +198,11 @@ export function useDocumentActions(
         // acknowledgement this value already equals the live editor.
         dispatch({ type: 'FILE_PATCH', patch: { content, version: savedResult.version } });
         if (liveValue === content) {
+          pendingEditorChangeTabs.current.delete(tabId);
           dispatch({ type: 'DOCUMENT_DIRTY', dirty: false });
           dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
         } else {
+          pendingEditorChangeTabs.current.add(tabId);
           dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
           if (!saveTimer.current) {
             saveTimer.current = scheduleAfter(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
@@ -220,11 +231,13 @@ export function useDocumentActions(
   }, [cancelScheduled, dispatch, editor, loadFiles, saveInFlight, saveTimer, scheduleAfter, state, toast]);
 
   const scheduleSave = useCallback(() => {
+    const tabId = state.current.activeTabId;
+    if (tabId) pendingEditorChangeTabs.current.add(tabId);
     dispatch({ type: 'DOCUMENT_DIRTY', dirty: true });
     dispatch({ type: 'SAVE_STATUS', status: { text: 'Unsaved', cls: '' } });
     if (saveTimer.current) cancelScheduled(saveTimer.current);
     saveTimer.current = scheduleAfter(() => { void flushSave(); }, AUTOSAVE_DEBOUNCE_MS);
-  }, [cancelScheduled, dispatch, flushSave, saveTimer, scheduleAfter]);
+  }, [cancelScheduled, dispatch, flushSave, saveTimer, scheduleAfter, state]);
 
   const claimConflictResolution = useCallback((tabId: string) => {
     const tab = state.current.tabs.find((candidate) => candidate.id === tabId);
@@ -433,6 +446,7 @@ export function useDocumentActions(
           }
         );
         if (!confirmed) return;
+        pendingEditorChangeTabs.current.delete(id);
         dispatch({ type: 'RESOLVE_CONFLICT_DISCARD', id });
         dispatch({ type: 'CLOSE_TAB', id });
       } finally {
@@ -569,6 +583,8 @@ export function useDocumentActions(
       version: settlement.durableVersion,
       superseded: new Set(settlement.supersededVersions),
     };
+    if (settlement.dirty) pendingEditorChangeTabs.current.add(settlement.tabId);
+    else pendingEditorChangeTabs.current.delete(settlement.tabId);
     dispatch({
       type: 'FILE_PATCH',
       patch: { content: settlement.nextContent, version: settlement.durableVersion },
