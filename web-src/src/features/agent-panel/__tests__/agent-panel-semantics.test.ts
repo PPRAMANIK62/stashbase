@@ -37,7 +37,7 @@ test('chat sessions are a named tab list whose tabs and panels reference each ot
   await withDom(async (dom) => {
     const dispatched: Action[] = [];
     await mountApp(dom, h(ChatPane), {
-      state: appState({ chatOpen: true, chatTabs: [first, second], activeChatTabId: first.id }),
+      state: appState({ chat: { chatOpen: true, chatTabs: [first, second], activeChatTabId: first.id } }),
       dispatch: (action) => dispatched.push(action),
     });
 
@@ -72,7 +72,7 @@ test('each chat tab offers a close action named for its session', async () => {
   const tab = { ...makeChatTab('codex', []), title: 'Release notes' };
   await withDom(async (dom) => {
     await mountApp(dom, h(ChatPane), {
-      state: appState({ chatOpen: true, chatTabs: [tab], activeChatTabId: tab.id }),
+      state: appState({ chat: { chatOpen: true, chatTabs: [tab], activeChatTabId: tab.id } }),
     });
     assert.equal(dom.byLabel('Close Release notes').length, 1);
   });

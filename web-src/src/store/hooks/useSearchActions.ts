@@ -13,6 +13,7 @@ import {
   toNameSet,
   type Action,
   type State,
+  type WorkspaceSlice,
 } from '@/store/state/state';
 import { folderScopedPreparationResetActions } from '@/store/lib/folderScopedReset';
 import type { ToastOptions } from './useFeedbackActions';
@@ -62,10 +63,10 @@ interface SearchActionRefs {
 }
 
 interface SearchActionDependencies {
-  loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
+  loadFiles: (expectedFolderPath?: string) => Promise<WorkspaceSlice['files']>;
   loadFilesFromServer: (
     expectedFolderPath?: string,
-  ) => Promise<State['files'] | null>;
+  ) => Promise<WorkspaceSlice['files'] | null>;
   refreshActiveTabFromDisk: (opts?: { force?: boolean }) => Promise<void>;
   toast: Toast;
 }
@@ -126,7 +127,7 @@ export async function recoverLostFolderContext({
       }
       const opened = recovery.opened;
       if (
-        stateRef.current.folderPath === folderPathAtStart
+        stateRef.current.workspace.folderPath === folderPathAtStart
         && opened.current?.path
       ) {
         folderContextPath.current = opened.current.path;
@@ -153,7 +154,7 @@ export async function recoverLostFolderContext({
   folderContextPath.current = '';
   for (const action of folderScopedPreparationResetActions()) dispatch(action);
   lastTreeVersion.current = -1;
-  if (stateRef.current.folderPath) {
+  if (stateRef.current.workspace.folderPath) {
     // Another window may have deleted/closed the folder. The server
     // has already cleared this window's current-folder context; make
     // the renderer match instead of leaving a stale tree open.
@@ -202,17 +203,17 @@ export function useSearchActions(
     refreshActiveTabFromDisk,
     toast,
   } = dependencies;
-  const markVisibleFilesPendingForSearch = useCallback(async (files?: State['files']) => {
-    const folderPath = stateRef.current.folderPath;
-    const source = files ?? (stateRef.current.files.length ? stateRef.current.files : folderPath ? await loadFiles(folderPath) : []);
-    if (stateRef.current.folderPath !== folderPath) return;
+  const markVisibleFilesPendingForSearch = useCallback(async (files?: WorkspaceSlice['files']) => {
+    const folderPath = stateRef.current.workspace.folderPath;
+    const source = files ?? (stateRef.current.workspace.files.length ? stateRef.current.workspace.files : folderPath ? await loadFiles(folderPath) : []);
+    if (stateRef.current.workspace.folderPath !== folderPath) return;
     const paths = optimisticKeyBackfillPaths(source);
     if (paths.length === 0) return;
     const deadline = Date.now() + 15000;
     for (const path of paths) keyBackfillGrace.current.set(path, deadline);
     dispatch({
       type: 'PENDING_SEMANTIC_NAMES',
-      names: { ...stateRef.current.pendingSemanticNames, ...toNameSet(paths) },
+      names: { ...stateRef.current.workspace.pendingSemanticNames, ...toNameSet(paths) },
     });
   }, [loadFiles]);
 
@@ -233,7 +234,7 @@ export function useSearchActions(
         activeFolderTransitionInProgress: openingFolderGeneration.current != null,
         explicitFolderPath,
         openGenerationAtStart: openGenAtStart,
-        getCurrentFolderPath: () => stateRef.current.folderPath,
+        getCurrentFolderPath: () => stateRef.current.workspace.folderPath,
         getCurrentOpenGeneration: () => openGen.current,
         request: (folderPath) => api.indexStatus(folderPath),
       });
@@ -246,7 +247,7 @@ export function useSearchActions(
       const indexReady = s.indexReady !== false;
       const semanticEnabled = s.semanticEnabled !== false;
       const semanticAvailable = s.semanticAvailable !== false;
-      if (stateRef.current.embedderHasKey !== semanticEnabled) {
+      if (stateRef.current.workspace.embedderHasKey !== semanticEnabled) {
         dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: semanticEnabled });
       }
       const newPending = semanticEnabled && semanticAvailable && indexReady ? new Set(s.pending ?? []) : new Set<string>();
@@ -297,7 +298,7 @@ export function useSearchActions(
       } else if (!semanticAvailable && keyBackfillGrace.current.size > 0) {
         keyBackfillGrace.current.clear();
       }
-      const prev = stateRef.current;
+      const prev = stateRef.current.workspace;
       // Guarded in `planSemanticPollDispatches` rather than inline: both
       // actions land in the workspace slice and this poll runs every
       // POLL_PENDING_MS while indexing, so dispatching unconditionally
@@ -358,7 +359,7 @@ export function useSearchActions(
       if (!shallowEqualPreparationFailures(prev.preparationFailures, incomingFailures)) {
         dispatch({ type: 'PREPARATION_FAILURES', failures: incomingFailures });
       }
-      const canRefreshVisibleFiles = stateRef.current.folderPath === folderPathAtStart;
+      const canRefreshVisibleFiles = stateRef.current.workspace.folderPath === folderPathAtStart;
       if (canRefreshVisibleFiles && (pendingChanged || convChanged || blockedChanged || treeChanged)) {
         if (treeChanged) {
           const expectedFolderPath = folderPathAtStart;
@@ -420,15 +421,15 @@ export function useSearchActions(
   }, [loadFiles, loadFilesFromServer, refreshActiveTabFromDisk]);
 
   const runSync = useCallback(async () => {
-    if (stateRef.current.syncRunning) return;
-    const targetFolderPath = stateRef.current.folderPath;
+    if (stateRef.current.workspace.syncRunning) return;
+    const targetFolderPath = stateRef.current.workspace.folderPath;
     if (!targetFolderPath) return;
     const myGen = ++syncGen.current;
     dispatch({ type: 'SYNC_RUNNING', running: true });
     void refreshIndexState();
     try {
       const result = await api.sync(targetFolderPath);
-      if (stateRef.current.folderPath !== targetFolderPath) return;
+      if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
       if (result.failed?.length || result.cancelled) {
         await refreshIndexState();
       } else {
@@ -443,7 +444,7 @@ export function useSearchActions(
   }, [loadFiles, refreshIndexState]);
 
   const dismissIndexWarning = useCallback(async () => {
-    const folderAtStart = stateRef.current.folderPath;
+    const folderAtStart = stateRef.current.workspace.folderPath;
     dispatch({ type: 'INDEX_WARNING', warning: null });
     try { await api.dismissIndexWarning(folderAtStart || undefined); }
     catch (err) {
@@ -452,7 +453,7 @@ export function useSearchActions(
   }, []);
 
   const decideSemanticIndexing = useCallback(async (decision: 'start' | 'defer') => {
-    const folderAtStart = stateRef.current.folderPath;
+    const folderAtStart = stateRef.current.workspace.folderPath;
     if (!folderAtStart) return;
     await api.semanticIndexingDecision(decision, folderAtStart);
     await refreshIndexState(folderAtStart);

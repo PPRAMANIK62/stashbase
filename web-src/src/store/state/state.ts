@@ -9,31 +9,19 @@
  * registered by a rendered view rather than stored in `State`, so keeping them
  * out of this file is what keeps the dependency direction one-way.
  *
- * Slice map — every `State` field belongs to exactly one of three contexts
- * (`WorkspaceContext` / `ChatContext` / `UiShellContext`; see those files).
- * The reducer stays single: one `useReducer` in `AppContext.tsx` computes
- * this whole `State`, and each context memoizes only the slice it owns off
- * the SAME `state` object, so a dispatch that touches one slice's fields
- * cannot change another slice's object identity (the reducer already
- * returns `{ ...s, field }` on every branch — this file does not change
- * that; it only documents how the delivery layer reads it).
- *
- *  - workspace: booted, folder, folderPath, recent, homeDir,
- *    libraryFolderStatuses, files, folders, unsupportedFiles,
- *    unsupportedModalOpen, fileOrder, tabs, recentFilePaths, editorHistory,
- *    activeTabId, expanded, activeFolder, selectedPath, folderCollapsed,
- *    sidebarCollapsed, sidebarWidth, pendingSemanticNames, semanticIndexing,
- *    pendingConversions, blockedConversions, conversionProgress,
- *    conversionRevision, conversionVersions, syncRunning, embedderHasKey,
- *    indexWarning, preparationFailures, newFolderInputOpen
- *      (plus the derived `activeTab`, computed from `tabs` + `activeTabId`)
- *  - chat: chatOpen, chatWidth, agents, chatTabs, activeChatTabId,
- *    chatTabRecencyByAgent, pendingResume
- *  - ui-shell: ctxMenu, renaming, cascadePrompt, modal, find
+ * Slice map — `State` is exactly three nested slices, one per delivery
+ * context (`WorkspaceSlice` → `WorkspaceContext`, `ChatSlice` →
+ * `ChatContext`, `UiShellSlice` → `UiShellContext`). Membership is the type,
+ * not a comment: adding a field to a slice interface is the whole
+ * declaration, and the context that owns it publishes `state.<slice>`
+ * verbatim. The reducer stays single from the caller's side — one
+ * `useReducer` in `AppContext.tsx` — but composes three sub-reducers that
+ * each rebuild only their own slice, so a dispatch touching one slice cannot
+ * change another slice's object identity.
  *
  * `ctxMenu` and `renaming` are workspace/tree interactions in origin, but
- * they're grouped into ui-shell because that's how the app already treats
- * them: QuickOpen/LibrarySearch read `modal || cascadePrompt || ctxMenu ||
+ * they sit in ui-shell because that's how the app already treats them:
+ * QuickOpen/LibrarySearch read `modal || cascadePrompt || ctxMenu ||
  * renaming` together as one "something is blocking" signal, and their only
  * renderers (`ContextMenu.tsx`, `RenameInput.tsx`) live in `common/`, not
  * `features/workspace/`. `newFolderInputOpen` stayed in workspace instead —
@@ -234,7 +222,12 @@ export interface ModalRequest {
   destructive?: boolean;
 }
 
-export interface State {
+/**
+ * Folder identity, the file tree, document tabs, the sidebar, and
+ * folder-level indexing/preparation state. Published as-is by
+ * `WorkspaceContext` (plus the derived `activeTab`).
+ */
+export interface WorkspaceSlice {
   /** True once `bootstrap` has settled (initial library load plus any
    *  auto-open attempt). Lets the shell distinguish "still booting" from
    *  "booted with no folder" — e.g. before releasing a pending
@@ -302,34 +295,6 @@ export interface State {
   /** Width (px) of the sidebar. User-resizable via the drag handle on
    *  the sidebar's right edge; clamped to [SIDEBAR_MIN_WIDTH, MAX]. */
   sidebarWidth: number;
-  /** True opens the right-side chat panel. */
-  chatOpen: boolean;
-  /** Chat panel width in pixels — user-resizable via drag handle. */
-  chatWidth: number;
-  /** Catalog of available agents from the server, populated on demand. */
-  agents: Agent[];
-  /** Active chat tabs. Each tab owns its own agent session so switching
-   *  tabs preserves that conversation. The chrome agent icons select or
-   *  toggle an agent's chat; the in-panel `+` creates new tabs. */
-  chatTabs: ChatTab[];
-  /** Id of the currently-visible tab. `null` only when `chatTabs`
-   *  is empty (panel closed or just initialised). */
-  activeChatTabId: string | null;
-  /** Per-agent tab activation history, oldest first. The last id is the
-   *  tab that an agent icon selects when reopening that agent.
-   *
-   *  Deliberately stored, not derived: `chatTabs` is strip order and never
-   *  changes on activation, so nothing in it records that the user last
-   *  looked at the SECOND claude tab. Only the single most-recent tab could
-   *  be reconstructed (from `activeChatTabId`); the tail behind it — which
-   *  is what an agent icon falls back to once that tab closes — has no
-   *  other source. Every write goes through `updateChatTabRecency` so the
-   *  five reducer cases that maintain it cannot drift apart. */
-  chatTabRecencyByAgent: Record<string, string[]>;
-  /** Un-consumed sidebar History resume request, if any. See
-   *  `PendingChatResume`; a new request replaces an unconsumed one, and
-   *  losing the window's folder context (CHAT_TABS_RESET) clears it. */
-  pendingResume: PendingChatResume | null;
 
   /** User-visible paths whose AI Index content is still being
    *  embedded/indexed. Keyword search ignores this state and can search
@@ -367,9 +332,70 @@ export interface State {
    *  "Reprocess" entry. Empty when no failures. */
   preparationFailures: PreparationFailure[];
 
+  /** True while the user is typing a new folder name. The input
+   *  renders inside the FileTree at the row matching
+   *  `state.activeFolder` so the new folder appears under the
+   *  parent the user actually selected (mirrors new-note inline
+   *  rename placement). */
+  newFolderInputOpen: boolean;
+}
+
+/**
+ * The right-side Agent Panel's tab bookkeeping. Published as-is by
+ * `ChatContext`.
+ */
+export interface ChatSlice {
+  /** True opens the right-side chat panel. */
+  chatOpen: boolean;
+  /** Chat panel width in pixels — user-resizable via drag handle. */
+  chatWidth: number;
+  /** Catalog of available agents from the server, populated on demand. */
+  agents: Agent[];
+  /** Active chat tabs. Each tab owns its own agent session so switching
+   *  tabs preserves that conversation. The chrome agent icons select or
+   *  toggle an agent's chat; the in-panel `+` creates new tabs. */
+  chatTabs: ChatTab[];
+  /** Id of the currently-visible tab. `null` only when `chatTabs`
+   *  is empty (panel closed or just initialised). */
+  activeChatTabId: string | null;
+  /** Per-agent tab activation history, oldest first. The last id is the
+   *  tab that an agent icon selects when reopening that agent.
+   *
+   *  Deliberately stored, not derived: `chatTabs` is strip order and never
+   *  changes on activation, so nothing in it records that the user last
+   *  looked at the SECOND claude tab. Only the single most-recent tab could
+   *  be reconstructed (from `activeChatTabId`); the tail behind it — which
+   *  is what an agent icon falls back to once that tab closes — has no
+   *  other source. Every write goes through `updateChatTabRecency` so the
+   *  five reducer cases that maintain it cannot drift apart. */
+  chatTabRecencyByAgent: Record<string, string[]>;
+  /** Un-consumed sidebar History resume request, if any. See
+   *  `PendingChatResume`; a new request replaces an unconsumed one, and
+   *  losing the window's folder context (CHAT_TABS_RESET) clears it. */
+  pendingResume: PendingChatResume | null;
+}
+
+/** Chrome-style in-document keyword find. Global (not per-tab) to mirror
+ *  the browser: opening Cmd+F overlays one bar over whichever view (editor
+ *  / md preview / html preview iframe) is active, and switching tabs
+ *  carries the bar over. `current` is 1-indexed for display; 0 means no
+ *  match selected (empty query or nothing matched). */
+export interface FindState {
+  open: boolean;
+  query: string;
+  caseSensitive: boolean;
+  wholeWord: boolean;
+  current: number;
+  total: number;
+}
+
+/**
+ * The cross-cutting overlay/blocking states. Published as-is by
+ * `UiShellContext`.
+ */
+export interface UiShellSlice {
   ctxMenu: CtxMenu | null;
   renaming: { path: string; kind: 'file' | 'folder' } | null;
-
   /** Active rename-cascade dialog payload. `null` means hidden. The
    *  caller awaits a separate `resolveCascadePrompt` action to settle
    *  the decision. */
@@ -378,29 +404,16 @@ export interface State {
    *  Provider's `actions.alert` / `actions.confirm` set this and resolve
    *  the returned Promise once the user dismisses. */
   modal: ModalRequest | null;
-  /** True while the user is typing a new folder name. The input
-   *  renders inside the FileTree at the row matching
-   *  `state.activeFolder` so the new folder appears under the
-   *  parent the user actually selected (mirrors new-note inline
-   *  rename placement). */
-  newFolderInputOpen: boolean;
-
-  /** Chrome-style in-document keyword find. Global (not per-tab) to
-   *  mirror the browser: opening Cmd+F overlays one bar over whichever
-   *  view (editor / md preview / html preview iframe) is active, and
-   *  switching tabs carries the bar over. `current` is 1-indexed for
-   *  display; 0 means no match selected (empty query or nothing matched). */
-  find: {
-    open: boolean;
-    query: string;
-    caseSensitive: boolean;
-    wholeWord: boolean;
-    current: number;
-    total: number;
-  };
+  find: FindState;
 }
 
-export const initialState: State = {
+export interface State {
+  workspace: WorkspaceSlice;
+  chat: ChatSlice;
+  uiShell: UiShellSlice;
+}
+
+const initialWorkspace: WorkspaceSlice = {
   booted: false,
   folder: '',
   folderPath: '',
@@ -422,17 +435,6 @@ export const initialState: State = {
   folderCollapsed: false,
   sidebarCollapsed: false,
   sidebarWidth: 280,
-  // The app boots into the library-scoped Chat workspace. Keep the shell open
-  // from the first renderer frame; AppBody creates the initial blank tab once
-  // bootstrap settles, but the panel must not flash or remain collapsed while
-  // that asynchronous state arrives.
-  chatOpen: true,
-  chatWidth: 480,
-  agents: [],
-  chatTabs: [],
-  activeChatTabId: null,
-  chatTabRecencyByAgent: {},
-  pendingResume: null,
   pendingSemanticNames: {},
   semanticIndexing: null,
   pendingConversions: [],
@@ -444,17 +446,40 @@ export const initialState: State = {
   embedderHasKey: null,
   indexWarning: null,
   preparationFailures: [],
+  newFolderInputOpen: false,
+};
+
+const initialChat: ChatSlice = {
+  // The app boots into the library-scoped Chat workspace. Keep the shell open
+  // from the first renderer frame; AppBody creates the initial blank tab once
+  // bootstrap settles, but the panel must not flash or remain collapsed while
+  // that asynchronous state arrives.
+  chatOpen: true,
+  chatWidth: 480,
+  agents: [],
+  chatTabs: [],
+  activeChatTabId: null,
+  chatTabRecencyByAgent: {},
+  pendingResume: null,
+};
+
+const initialUiShell: UiShellSlice = {
   ctxMenu: null,
   renaming: null,
   cascadePrompt: null,
   modal: null,
-  newFolderInputOpen: false,
   find: { open: false, query: '', caseSensitive: false, wholeWord: false, current: 0, total: 0 },
+};
+
+export const initialState: State = {
+  workspace: initialWorkspace,
+  chat: initialChat,
+  uiShell: initialUiShell,
 };
 
 export type Action =
   | { type: 'BOOTED' }
-  | { type: 'RECENT_LOADED'; recent: State['recent']; homeDir?: string }
+  | { type: 'RECENT_LOADED'; recent: WorkspaceSlice['recent']; homeDir?: string }
   | { type: 'LIBRARY_FOLDER_STATUS'; path: string; status: LibraryFolderStatus }
   | { type: 'LIBRARY_FOLDER_STATUS_REMOVE'; path: string }
   | { type: 'FOLDER_CONTEXT'; folder: string; folderPath: string }
@@ -492,7 +517,7 @@ export type Action =
   | { type: 'SIDEBAR_WIDTH'; width: number }
   | { type: 'CHAT_TOGGLE' }
   | { type: 'CHAT_WIDTH'; width: number }
-  | { type: 'AGENTS_LOADED'; agents: State['agents'] }
+  | { type: 'AGENTS_LOADED'; agents: ChatSlice['agents'] }
   /** Reveal an agent's most recent Agent Panel session (opening the panel
    *  when hidden) without toggling an already-visible panel. `tab` is
    *  supplied only when that agent has no open tabs. */
@@ -521,7 +546,7 @@ export type Action =
    *  — does not touch expand state, activeFolder, or the open file. */
   | { type: 'SELECT_PATH'; path: string }
   | { type: 'PENDING_SEMANTIC_NAMES'; names: NameSet }
-  | { type: 'SEMANTIC_INDEXING_STATE'; state: State['semanticIndexing'] }
+  | { type: 'SEMANTIC_INDEXING_STATE'; state: WorkspaceSlice['semanticIndexing'] }
   | { type: 'PENDING_CONVERSIONS'; paths: string[] }
   | { type: 'BLOCKED_CONVERSIONS'; paths: string[] }
   | { type: 'CONVERSION_PROGRESS'; progress: Record<string, ConversionProgress> }
@@ -532,7 +557,7 @@ export type Action =
   | { type: 'INDEX_WARNING'; warning: IndexWarning | null }
   | { type: 'PREPARATION_FAILURES'; failures: PreparationFailure[] }
   | { type: 'CTX_MENU'; menu: CtxMenu | null }
-  | { type: 'RENAMING'; renaming: State['renaming'] }
+  | { type: 'RENAMING'; renaming: UiShellSlice['renaming'] }
   /** Arm the active tab's pending scroll-to-anchor (cross-file links /
    *  search hits); the viewer consumes it on next render. */
   | { type: 'PENDING_SCROLL'; anchor: string | null }
@@ -549,5 +574,5 @@ export type Action =
   | { type: 'NEW_FOLDER_INPUT'; open: boolean }
   | { type: 'FIND_OPEN' }
   | { type: 'FIND_CLOSE' }
-  | { type: 'FIND_SET'; patch: Partial<State['find']> }
+  | { type: 'FIND_SET'; patch: Partial<FindState> }
   | { type: 'UNSUPPORTED_MODAL'; open: boolean };

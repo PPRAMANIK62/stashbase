@@ -223,13 +223,21 @@ interface PersistenceControl {
 }
 
 function JsonPersistenceHarness({ control }: { control: { current: PersistenceControl | null } }) {
-  const initial = useMemo(() => {
+  const initial = useMemo<State>(() => {
     const tab = makeTab();
     tab.file = {
       name: 'data.json', format: 'json', content: '\uFEFF{\r\n  "value": 1\r\n}\r\n', version: 'v1',
     };
     tab.editMode = true;
-    return { ...initialState, folderPath: '/library', tabs: [tab], activeTabId: tab.id } as State;
+    return {
+      ...initialState,
+      workspace: {
+        ...initialState.workspace,
+        folderPath: '/library',
+        tabs: [tab],
+        activeTabId: tab.id,
+      },
+    };
   }, []);
   const [renderedState, setRenderedState] = useState(initial);
   const state = useRef(renderedState);
@@ -266,7 +274,7 @@ function JsonPersistenceHarness({ control }: { control: { current: PersistenceCo
       return actions.flushSave();
     },
   };
-  const tab = state.current.tabs.find((candidate) => candidate.id === state.current.activeTabId);
+  const tab = state.current.workspace.tabs.find((candidate) => candidate.id === state.current.workspace.activeTabId);
   const contextActions = {
     ...actions,
     registerFindController: () => undefined,
@@ -302,10 +310,10 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
       cm!.dispatch({ changes: { from: cm!.state.doc.length - 2, insert: ',\n  "added": true' } });
       await Promise.resolve();
     });
-    assert.equal(control.current!.state.current.tabs[0].dirty, true);
-    assert.equal(control.current!.state.current.tabs[0].saveStatus.text, 'Unsaved');
+    assert.equal(control.current!.state.current.workspace.tabs[0].dirty, true);
+    assert.equal(control.current!.state.current.workspace.tabs[0].saveStatus.text, 'Unsaved');
     assert.equal(
-      canApplyExternalTextRefresh(control.current!.state.current, '/library', 'data.json'),
+      canApplyExternalTextRefresh(control.current!.state.current.workspace, '/library', 'data.json'),
       false,
       'watcher refresh cannot replace a dirty JSON buffer',
     );
@@ -314,8 +322,8 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     assert.equal(calls.length, 1, 'debounced edit reaches api.putFile');
     assert.equal(calls[0].version, 'v1');
     assert.match(calls[0].content, /^\uFEFF\{/u, 'raw source and BOM reach the API without JSON serialization');
-    assert.equal(control.current!.state.current.tabs[0].dirty, false);
-    assert.equal(control.current!.state.current.tabs[0].saveStatus.text, 'Saved');
+    assert.equal(control.current!.state.current.workspace.tabs[0].dirty, false);
+    assert.equal(control.current!.state.current.workspace.tabs[0].saveStatus.text, 'Saved');
 
     api.putFile = async () => { throw new Error('disk unavailable'); };
     await act(async () => {
@@ -324,8 +332,8 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     });
     await act(async () => { saved = await control.current!.actions.flushSave(); });
     assert.equal(saved, false);
-    assert.equal(control.current!.state.current.tabs[0].dirty, true);
-    assert.match(control.current!.state.current.tabs[0].saveStatus.text, /Save failed: disk unavailable/u);
+    assert.equal(control.current!.state.current.workspace.tabs[0].dirty, true);
+    assert.match(control.current!.state.current.workspace.tabs[0].saveStatus.text, /Save failed: disk unavailable/u);
 
     let conflictAttempt = 0;
     api.putFile = async (_name, content) => {
@@ -336,7 +344,7 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     await act(async () => { saved = await control.current!.actions.flushSave(); });
     assert.equal(saved, true);
     assert.equal(conflictAttempt, 2, 'an unchanged live buffer retries a 409 without the stale version');
-    assert.equal(control.current!.state.current.tabs[0].file?.version, 'after-conflict');
+    assert.equal(control.current!.state.current.workspace.tabs[0].file?.version, 'after-conflict');
 
     let releaseFirst!: (value: { content: string; version: string }) => void;
     const firstSave = new Promise<{ content: string; version: string }>((resolve) => { releaseFirst = resolve; });
@@ -364,12 +372,12 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
       firstSaved = await pending;
     });
     assert.equal(firstSaved, true);
-    assert.equal(control.current!.state.current.tabs[0].dirty, true, 'a newer edit survives an older save acknowledgement');
+    assert.equal(control.current!.state.current.workspace.tabs[0].dirty, true, 'a newer edit survives an older save acknowledgement');
     await act(async () => { saved = await control.current!.actions.flushSave(); });
     assert.equal(saved, true);
     assert.equal(inFlightCalls, 2);
 
-    const firstTabId = control.current!.state.current.activeTabId!;
+    const firstTabId = control.current!.state.current.workspace.activeTabId!;
     await act(async () => {
       control.current!.dispatch({ type: 'NEW_TAB' });
       control.current!.dispatch({
@@ -377,7 +385,7 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
         body: { name: 'other.json', format: 'json', content: '{"other":true}', version: 'other-v1' },
       });
     });
-    const secondTabId = control.current!.state.current.activeTabId!;
+    const secondTabId = control.current!.state.current.workspace.activeTabId!;
     await act(async () => { await control.current!.actions.activateTab(firstTabId); });
     cm = EditorView.findFromDOM(host.querySelector('.cm-editor') as unknown as HTMLElement);
     await act(async () => {
@@ -388,9 +396,9 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
     const callsBeforeSwitch = inFlightCalls;
     await act(async () => { await control.current!.actions.activateTab(secondTabId); });
     assert.equal(inFlightCalls, callsBeforeSwitch + 1, 'tab switching flushes the live JSON editor first');
-    assert.equal(control.current!.state.current.activeTabId, secondTabId);
+    assert.equal(control.current!.state.current.workspace.activeTabId, secondTabId);
     assert.equal(
-      control.current!.state.current.tabs.find((tab) => tab.id === firstTabId)?.file?.content,
+      control.current!.state.current.workspace.tabs.find((tab) => tab.id === firstTabId)?.file?.content,
       fromJsonEditorText(firstTabSourceBeforeSwitch, 'crlf'),
       'a successful save retains the submitted source for later tab reactivation',
     );
@@ -401,9 +409,9 @@ test('mounted JSON uses production dirty, debounce, conflict, in-flight, and clo
       cm!.dispatch({ changes: { from: cm!.state.doc.length, insert: '!' } });
       await Promise.resolve();
     });
-    await act(async () => { await control.current!.actions.closeTab(control.current!.state.current.tabs[0].id); });
-    assert.equal(control.current!.state.current.tabs.length, 1, 'closing waits for the final JSON save');
-    assert.equal(control.current!.state.current.tabs[0].id, secondTabId);
+    await act(async () => { await control.current!.actions.closeTab(control.current!.state.current.workspace.tabs[0].id); });
+    assert.equal(control.current!.state.current.workspace.tabs.length, 1, 'closing waits for the final JSON save');
+    assert.equal(control.current!.state.current.workspace.tabs[0].id, secondTabId);
     await act(async () => root.unmount());
   } finally {
     api.putFile = originalPutFile;

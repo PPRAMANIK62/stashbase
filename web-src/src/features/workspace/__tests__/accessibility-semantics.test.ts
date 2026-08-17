@@ -50,7 +50,7 @@ test('document tabs expose their selected tab and named close action', async () 
   second.file = { name: 'Second.md', format: 'md', content: '' };
   const activated: string[] = [];
   const renderer = await renderWithState(
-    { ...initialState, tabs: [first, second], activeTabId: first.id },
+    { ...initialState, workspace: { ...initialState.workspace, tabs: [first, second], activeTabId: first.id } },
     createElement(TabStrip),
     actions({ activateTab: async (id) => { activated.push(id); } }),
   );
@@ -71,11 +71,14 @@ test('document tabs expose their selected tab and named close action', async () 
 test('file explorer exposes expandable and selected items plus named edit fields', async () => {
   const base = {
     ...initialState,
-    folderPath: '/workspace',
-    folders: [{ path: 'Guides' }],
-    files: [{ name: 'note.md', format: 'md' }],
-    expanded: toNameSet(['Guides']),
-    selectedPath: 'note.md',
+    workspace: {
+      ...initialState.workspace,
+      folderPath: '/workspace',
+      folders: [{ path: 'Guides' }],
+      files: [{ name: 'note.md', format: 'md' }],
+      expanded: toNameSet(['Guides']),
+      selectedPath: 'note.md',
+    },
   } as State;
   let renderer = await renderWithState(base, createElement(FileTree));
   assert.equal(byRole(renderer.root, 'tree')[0]?.props['aria-label'], 'Files');
@@ -96,7 +99,7 @@ test('file explorer exposes expandable and selected items plus named edit fields
 
   renderer = await renderWithState({
     ...base,
-    renaming: { path: 'note.md', kind: 'file' },
+    uiShell: { ...base.uiShell, renaming: { path: 'note.md', kind: 'file' } },
   }, createElement(FileTree));
   const rename = renderer.root.findAll((node) => node.type === 'input' && node.props['aria-label'] === 'Rename file note.md');
   assert.equal(rename.length, 1);
@@ -104,8 +107,7 @@ test('file explorer exposes expandable and selected items plus named edit fields
 
   renderer = await renderWithState({
     ...base,
-    activeFolder: '',
-    newFolderInputOpen: true,
+    workspace: { ...base.workspace, activeFolder: '', newFolderInputOpen: true },
   }, createElement(FileTree));
   const createFolder = renderer.root.findAll((node) => node.type === 'input' && node.props['aria-label'] === 'New folder in folder root');
   assert.equal(createFolder.length, 1);

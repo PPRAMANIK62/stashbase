@@ -42,9 +42,8 @@ function actionsStub(): AppActions {
 function rendererState(withRuntime: boolean): State {
   return {
     ...initialState,
-    folder: 'workspace',
-    folderPath: '/workspace',
-    agents: withRuntime ? [{
+    workspace: { ...initialState.workspace, folder: 'workspace', folderPath: '/workspace' },
+    chat: { ...initialState.chat, agents: withRuntime ? [{
       id: 'codex',
       label: 'Codex',
       vendor: 'OpenAI',
@@ -54,7 +53,7 @@ function rendererState(withRuntime: boolean): State {
       endpoint: '/ws/agent',
       state: 'available',
       capabilities: AGENT_META.codex.capabilities,
-    }] : [],
+    }] : [] },
   };
 }
 

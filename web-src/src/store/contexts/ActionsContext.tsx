@@ -14,7 +14,7 @@
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { AgentKind } from '@/common/lib/agentCatalog';
-import type { Action, CascadeDecision, PendingHighlight, State } from '@/store/state/state';
+import type { Action, CascadeDecision, PendingHighlight, WorkspaceSlice } from '@/store/state/state';
 import type { EditorHandle, FindController } from '@/store/state/editorTypes';
 
 export interface AppActions {
@@ -27,12 +27,12 @@ export interface AppActions {
     opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticPendingOnOpen?: boolean },
   ) => Promise<void>;
 
-  loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
+  loadFiles: (expectedFolderPath?: string) => Promise<WorkspaceSlice['files']>;
   /** Optimistically mark the current visible files as pending for search. Used
    *  after the first embedder key is added and immediately after a
    *  folder import opens the new folder, before daemon status can catch
    *  up. */
-  markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
+  markVisibleFilesPendingForSearch: (files?: WorkspaceSlice['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   runSync: () => Promise<void>;
   /** Clear the active folder's background-index warning. */

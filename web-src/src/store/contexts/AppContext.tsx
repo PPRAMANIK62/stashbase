@@ -6,10 +6,11 @@
  * State is NOT delivered through one merged context. `AppProvider` owns the
  * single `useReducer` and the action hooks, then hands the resulting
  * `state` / `actions` / `dispatch` to `AppProviders`, which mounts four
- * independent contexts side by side: `WorkspaceContext`, `ChatContext`,
- * `UiShellContext` (each memoized on only the fields it owns — see the
- * slice map atop `state.ts`), and `ActionsContext` (stable across every
- * dispatch, so it doesn't need slicing). Components call `useWorkspace()`,
+ * independent contexts side by side: `WorkspaceContext`, `ChatContext`, and
+ * `UiShellContext` (each publishing the one nested slice of `State` it owns,
+ * which the composed reducer rebuilds only for that slice's own actions), and
+ * `ActionsContext` (stable across every dispatch, so it doesn't need
+ * slicing). Components call `useWorkspace()`,
  * `useChat()`, `useUiShell()`, and/or `useAppActions()` for exactly what
  * they read — never a merged `useApp()` — so a dispatch that only touches
  * one slice can't re-render a component that reads a different one.
@@ -33,6 +34,7 @@ import {
   makeChatTab,
   reducer,
   type State,
+  type WorkspaceSlice,
 } from '@/store/state/state';
 import { rememberPreferredAgent } from '@/common/lib/agentPreference';
 import { newChatPlan } from '@/store/lib/chatTabPlan';
@@ -70,12 +72,12 @@ export { useAppActions, type AppActionsValue } from './ActionsContext';
 
 /** Re-check external text refresh ownership after its asynchronous disk read. */
 export function canApplyExternalTextRefresh(
-  state: State,
+  workspace: WorkspaceSlice,
   folderPathAtStart: string,
   name: string,
 ): boolean {
-  const latest = getActiveTab(state);
-  return state.folderPath === folderPathAtStart
+  const latest = getActiveTab(workspace);
+  return workspace.folderPath === folderPathAtStart
     && latest?.file?.name === name
     && !latest.dirty;
 }
@@ -117,8 +119,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Folder transitions update this ref before React commits. Async tree/order
   // refreshes use it as their ownership boundary so an old folder cannot
   // repopulate the workspace during the render gap.
-  const folderContextPath = useRef(state.folderPath);
-  folderContextPath.current = state.folderPath;
+  const folderContextPath = useRef(state.workspace.folderPath);
+  folderContextPath.current = state.workspace.folderPath;
   const {
     askCascadeForRename,
     askConfirm,
@@ -173,13 +175,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!requestIsCurrent) return [];
       const fallbackFolder = err instanceof ApiError && err.status === 412
         ? ''
-        : stateRef.current.folder;
+        : stateRef.current.workspace.folder;
       dispatch({
         type: 'FILES_LOADED',
         files: [],
         folders: [],
         folder: fallbackFolder,
-        folderPath: fallbackFolder ? stateRef.current.folderPath : '',
+        folderPath: fallbackFolder ? stateRef.current.workspace.folderPath : '',
       });
       return [];
     }
@@ -228,10 +230,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
    *  disk. Failures are swallowed — the sidebar reload that runs in
    *  the same poll cycle covers the "file got deleted externally" case. */
   const refreshActiveTabFromDisk = useCallback(async (opts: { force?: boolean } = {}) => {
-    const tab = getActiveTab(stateRef.current);
+    const tab = getActiveTab(stateRef.current.workspace);
     if (!tab?.file) return;
     if (tab.dirty && !opts.force) return;
-    const folderPathAtStart = stateRef.current.folderPath;
+    const folderPathAtStart = stateRef.current.workspace.folderPath;
     const name = tab.file.name;
     // Out-of-folder tabs re-read against their own folder — a bare rel
     // fetch would resolve a same-named file in the ACTIVE folder.
@@ -247,8 +249,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         || tab.file.format === 'audio'
       ) {
         const stat = await api.statFile(name, readOpts);
-        if (stateRef.current.folderPath !== folderPathAtStart) return;
-        const latestActive = getActiveTab(stateRef.current);
+        if (stateRef.current.workspace.folderPath !== folderPathAtStart) return;
+        const latestActive = getActiveTab(stateRef.current.workspace);
         const latestFile = latestActive?.file;
         if (!sameDocument(latestFile) || latestActive?.dirty) return;
         if (stat.version !== latestFile!.version) {
@@ -262,9 +264,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const body = await api.getFile(name, readOpts);
       // The active tab may have been swapped (or the file renamed) in
       // the time it took to fetch — re-check before patching.
-      if (!canApplyExternalTextRefresh(stateRef.current, folderPathAtStart, name) && !opts.force) return;
-      if (stateRef.current.folderPath !== folderPathAtStart) return;
-      const latestActive = getActiveTab(stateRef.current);
+      if (!canApplyExternalTextRefresh(stateRef.current.workspace, folderPathAtStart, name) && !opts.force) return;
+      if (stateRef.current.workspace.folderPath !== folderPathAtStart) return;
+      const latestActive = getActiveTab(stateRef.current.workspace);
       const latestFile = latestActive?.file;
       if (!sameDocument(latestFile)) return;
       if (opts.force) {
@@ -329,7 +331,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setUnsupportedModalOpen: workspace.setUnsupportedModalOpen,
     openAgent: (agent) => {
       rememberPreferredAgent(agent);
-      const current = stateRef.current;
+      const current = stateRef.current.chat;
       const hasOpenTab = current.chatTabs.some((tab) => tab.agent === agent);
       dispatch({
         type: 'CHAT_AGENT_OPEN',
@@ -339,7 +341,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     activateChatTab: (agent) => {
       rememberPreferredAgent(agent);
-      const current = stateRef.current;
+      const current = stateRef.current.chat;
       const plan = newChatPlan(current.chatTabs, agent);
       if (plan.kind === 'reuse') {
         if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });

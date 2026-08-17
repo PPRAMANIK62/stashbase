@@ -93,8 +93,22 @@ export function appActions(overrides: Partial<AppActions> = {}): AppActions {
   }) as AppActions;
 }
 
-export function appState(overrides: Partial<State> = {}): State {
-  return { ...initialState, ...overrides } as State;
+/**
+ * `initialState` with per-slice overrides merged in — `appState({ workspace:
+ * { tabs } })`. Slice-shaped rather than flat so a fixture names the same
+ * path a component reads (`useWorkspace().tabs` ← `state.workspace.tabs`)
+ * and the compiler keeps rejecting a field placed in the wrong slice.
+ */
+export function appState(overrides: {
+  workspace?: Partial<State['workspace']>;
+  chat?: Partial<State['chat']>;
+  uiShell?: Partial<State['uiShell']>;
+} = {}): State {
+  return {
+    workspace: { ...initialState.workspace, ...overrides.workspace },
+    chat: { ...initialState.chat, ...overrides.chat },
+    uiShell: { ...initialState.uiShell, ...overrides.uiShell },
+  };
 }
 
 /** Mounts `element` under the real four-context provider stack. */

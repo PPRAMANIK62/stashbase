@@ -16,9 +16,9 @@ its own layer and from every layer below it, never above.
    `shared/`. It may not import `store/` — `store/` already imports `common/`,
    so that direction is a cycle, and a store-connected module belongs a layer
    up.
-2. **`store/`** — the single `useReducer` over one `State`, its four sliced
-   contexts, the action hooks, and the pure domain logic those actions apply
-   (`store/lib/`). It imports `common/` only.
+2. **`store/`** — the single `useReducer` over one `State` of three nested
+   slices, the four contexts that deliver it, the action hooks, and the pure
+   domain logic those actions apply (`store/lib/`). It imports `common/` only.
 3. **`features/<area>/`** — one product area: `account`, `agent-panel`,
    `documents`, `preparation`, `search`, `settings`, `workspace`. A feature
    imports `common/`, `store/`, and its own subtree. **A feature never imports

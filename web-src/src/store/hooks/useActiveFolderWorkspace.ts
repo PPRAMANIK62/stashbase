@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { api, encodePath, getWindowId } from '@/common/api/api';
 import { electronBridge } from '@/common/lib/electronBridge';
-import { getActiveTab, type Action, type PendingHighlight, type State } from '@/store/state/state';
+import { getActiveTab, type Action, type PendingHighlight, type State, type WorkspaceSlice } from '@/store/state/state';
 import type { EditorHandle } from '@/store/state/editorTypes';
 import { useDocumentActions } from './useDocumentActions';
 import { useFileActions } from './useFileActions';
@@ -30,8 +30,8 @@ export interface ActiveFolderWorkspace {
     name: string,
     opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticPendingOnOpen?: boolean },
   ) => Promise<void>;
-  loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
-  markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
+  loadFiles: (expectedFolderPath?: string) => Promise<WorkspaceSlice['files']>;
+  markVisibleFilesPendingForSearch: (files?: WorkspaceSlice['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   runSync: () => Promise<void>;
   dismissIndexWarning: () => Promise<void>;
@@ -68,8 +68,8 @@ interface WorkspaceDependencies {
   state: State;
   folderContextPath: MutableRefObject<string>;
   dispatch: Dispatch;
-  loadFiles: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<State['files']>;
-  loadFilesFromServer: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<State['files'] | null>;
+  loadFiles: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<WorkspaceSlice['files']>;
+  loadFilesFromServer: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<WorkspaceSlice['files'] | null>;
   loadFileOrder: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<void>;
   setFolderOrder: (parentPath: string, names: string[]) => Promise<void>;
   refreshActiveTabFromDisk: (opts?: { force?: boolean }) => Promise<void>;
@@ -153,7 +153,7 @@ export function useActiveFolderWorkspace(
   // An inactive tab can miss a watcher refresh while another tab is visible.
   // Revalidate it whenever it becomes active so retained Markdown editors and
   // binary previews never reuse source data from before an external change.
-  const activeTab = getActiveTab(renderedState);
+  const activeTab = getActiveTab(renderedState.workspace);
   const revalidatedFileName = activeTab?.file && ACTIVATION_REVALIDATED_FORMATS.has(activeTab.file.format)
     ? activeTab.file.name
     : null;
@@ -165,7 +165,7 @@ export function useActiveFolderWorkspace(
 
   useEffect(() => {
     return electronBridge()?.onPrepareContextRelease?.(async (reason) => {
-      const folderAtStart = stateRef.current.folderPath;
+      const folderAtStart = stateRef.current.workspace.folderPath;
       const saved = await documents.flushSave();
       if (saved && reason === 'folder-removal' && folderAtStart) folders.prepareForFolderRemoval(folderAtStart);
       return saved;
@@ -194,7 +194,7 @@ export function useActiveFolderWorkspace(
   useEffect(() => {
     let lastFocusSync = 0;
     function onFocus() {
-      const focusFolder = stateRef.current.folderPath;
+      const focusFolder = stateRef.current.workspace.folderPath;
       if (!focusFolder) return;
       const now = Date.now();
       if (now - lastFocusSync < 5000) return;
@@ -210,7 +210,7 @@ export function useActiveFolderWorkspace(
   useEffect(() => {
     if (typeof electronBridge()?.onPrepareContextRelease === 'function') return;
     function onUnload() {
-      const cur = getActiveTab(stateRef.current)?.file ?? null;
+      const cur = getActiveTab(stateRef.current.workspace)?.file ?? null;
       const liveValue = editor.current?.getValue();
       if (!cur || !editor.current || liveValue === undefined || liveValue === cur.content) return;
       if (saveTimer.current !== null) {

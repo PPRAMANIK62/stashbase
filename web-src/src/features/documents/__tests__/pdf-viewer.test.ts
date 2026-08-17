@@ -473,7 +473,7 @@ test('the viewer draws the preparation status it is handed and starts no reproce
     slot.id = 'pdf-chrome-slot';
     document.body.appendChild(slot);
     let retries = 0;
-    const state = appState({ tabs: [pdfTab()], activeTabId: 't1' });
+    const state = appState({ workspace: { tabs: [pdfTab()], activeTabId: 't1' } });
 
     try {
       await mountApp(dom, h(PdfPreview, {

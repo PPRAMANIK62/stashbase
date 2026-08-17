@@ -25,14 +25,13 @@ class HistoryWebSocket {
 function state(): State {
   return {
     ...initialState,
-    folder: 'workspace',
-    folderPath: '/workspace',
-    agents: [{
+    workspace: { ...initialState.workspace, folder: 'workspace', folderPath: '/workspace' },
+    chat: { ...initialState.chat, agents: [{
       id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
       installHint: 'npm install -g @anthropic-ai/claude-code',
       installed: true, launchCommand: 'claude', endpoint: '/ws/agent',
       state: 'available', capabilities: AGENT_META.claude.capabilities,
-    }],
+    }] },
   };
 }
 

@@ -1,10 +1,10 @@
 /**
  * Regression guard for the context split (see the slice map atop
- * `state.ts`): a dispatch that only touches one slice's fields must not
- * change the OTHER slices' context value identity. Without this, a future
- * edit to `WorkspaceProvider` / `ChatProvider` / `UiShellProvider` could
- * silently widen its `useMemo` deps (or drop them) and quietly reintroduce
- * the whole-tree re-render problem this split exists to fix.
+ * `state.ts`): a dispatch that only touches one slice must not change the
+ * OTHER slices' context value identity. Without this, a future edit to a
+ * sub-reducer could start rebuilding a slice it does not own — or a provider
+ * could start deriving its value off the whole `state` — and quietly
+ * reintroduce the whole-tree re-render problem this split exists to fix.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

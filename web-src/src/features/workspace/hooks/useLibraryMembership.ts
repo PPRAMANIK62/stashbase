@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { Action, State } from '@/store/state/state';
+import type { Action, WorkspaceSlice } from '@/store/state/state';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { refreshLibraryMembership } from '@/features/workspace/lib/libraryMembership';
 
@@ -13,7 +13,7 @@ const MEMBERSHIP_POLL_MS = 4000;
  *  ignored — recency labels refresh on the next explicit action). */
 export function useLibraryMembership(
   enabled: boolean,
-  recent: State['recent'],
+  recent: WorkspaceSlice['recent'],
   dispatch: (a: Action) => void,
 ): void {
   // Read through a ref: adopting a fresh list must not restart the

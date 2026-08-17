@@ -1,8 +1,8 @@
-import { hasName, toNameSet, type Action, type NameSet, type State } from '@/store/state/state';
+import { hasName, toNameSet, type Action, type NameSet, type WorkspaceSlice } from '@/store/state/state';
 
 export function shallowEqualIndexWarning(
-  a: State['indexWarning'],
-  b: State['indexWarning'],
+  a: WorkspaceSlice['indexWarning'],
+  b: WorkspaceSlice['indexWarning'],
 ): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -10,8 +10,8 @@ export function shallowEqualIndexWarning(
 }
 
 export function shallowEqualPreparationFailures(
-  a: State['preparationFailures'],
-  b: State['preparationFailures'],
+  a: WorkspaceSlice['preparationFailures'],
+  b: WorkspaceSlice['preparationFailures'],
 ): boolean {
   if (a === b) return true;
   if (a.length !== b.length) return false;
@@ -24,8 +24,8 @@ export function shallowEqualPreparationFailures(
 }
 
 export function shallowEqualConversionProgress(
-  a: State['conversionProgress'],
-  b: State['conversionProgress'],
+  a: WorkspaceSlice['conversionProgress'],
+  b: WorkspaceSlice['conversionProgress'],
 ): boolean {
   const ak = Object.keys(a);
   const bk = Object.keys(b);
@@ -54,8 +54,8 @@ export function shallowEqualConversionProgress(
  *  every `useWorkspace()` consumer even when the reported state is
  *  unchanged. */
 export function shallowEqualSemanticIndexing(
-  a: State['semanticIndexing'],
-  b: State['semanticIndexing'],
+  a: WorkspaceSlice['semanticIndexing'],
+  b: WorkspaceSlice['semanticIndexing'],
 ): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -85,8 +85,8 @@ export function equalNameSets(a: NameSet, b: NameSet): boolean {
  * `if` can be deleted without any test noticing.
  */
 export function planSemanticPollDispatches(
-  prev: Pick<State, 'pendingSemanticNames' | 'semanticIndexing'>,
-  incoming: { pending: Iterable<string>; semanticIndexing: State['semanticIndexing'] },
+  prev: Pick<WorkspaceSlice, 'pendingSemanticNames' | 'semanticIndexing'>,
+  incoming: { pending: Iterable<string>; semanticIndexing: WorkspaceSlice['semanticIndexing'] },
 ): Action[] {
   const actions: Action[] = [];
   const pending = toNameSet(incoming.pending);
@@ -125,6 +125,6 @@ export function keywordFindCaseSensitive(query: string, caseStrict: boolean): bo
 /** True when the tab holds the ACTIVE folder's file `name`. Out-of-folder
  *  tabs (`file.folder` set) are a different document even under the same
  *  rel name, so they never match. */
-export function isFolderFileTab(t: { file: State['tabs'][number]['file'] }, name: string): boolean {
+export function isFolderFileTab(t: { file: WorkspaceSlice['tabs'][number]['file'] }, name: string): boolean {
   return t.file?.name === name && !t.file.folder;
 }

@@ -71,7 +71,7 @@ changes, never to make an accidental dependency pass.
 | Role | Stable entry points |
 |---|---|
 | Interface | `ActiveFolderWorkspace` in `web-src/src/store/hooks/useActiveFolderWorkspace.ts` |
-| Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts`, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, `lib/folderPath.ts`, `lib/folderTransition.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
+| Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts` and the `state/workspaceReducer.ts`, `state/chatReducer.ts`, `state/uiShellReducer.ts` sub-reducers it composes, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, `lib/folderPath.ts`, `lib/folderTransition.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
 | Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx` |
 | Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
 | Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts` |
@@ -83,12 +83,23 @@ components depend on them directly; that would create a second transition
 Interface.
 
 `AppContext.tsx` owns exactly one `useReducer` over the single `State` shape in
-`state.ts` — that stays the one source of truth. It does NOT expose that state
-through one merged read hook. Delivery is split into four sibling contexts
-(`WorkspaceContext`, `ChatContext`, `UiShellContext`, each memoized on only the
-`State` fields it owns per the slice map atop `state.ts`, plus `ActionsContext`
-for the stable `actions`/`dispatch` pair) so a component that reads one slice
-does not re-render when a dispatch only touches another. Components call
+`state.ts` — that stays the one source of truth. `State` is three nested
+slices (`WorkspaceSlice`, `ChatSlice`, `UiShellSlice`); slice membership is
+declared once, by the field's position in one of those interfaces, and nothing
+restates it. `reducer` composes one sub-reducer per slice, each of which sees
+every action and rebuilds only its own slice, so an action spanning two slices
+is expressed once per slice rather than in a coordinating branch. A sub-reducer
+answers `undefined` for an action it does not own; an action **no** slice
+claims therefore produces `undefined` instead of a silent no-op, which is what
+replaces the exhaustiveness check the single pre-split switch got from the
+compiler.
+
+State is NOT exposed through one merged read hook. Delivery is four sibling
+contexts: `WorkspaceContext` publishes `state.workspace` plus the derived
+`activeTab`, `ChatContext` and `UiShellContext` publish their slice verbatim,
+and `ActionsContext` carries the stable `actions`/`dispatch` pair. A component
+that reads one slice does not re-render when a dispatch only touches another.
+Components call
 `useWorkspace()` / `useChat()` / `useUiShell()` / `useAppActions()` for exactly
 what they need; there is no merged `useApp()`. A component that genuinely reads
 across slices throughout its body (`AgentView.tsx`, `App.tsx`) may merge them

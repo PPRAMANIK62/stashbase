@@ -16,12 +16,12 @@ import {
   planSemanticPollDispatches,
   shallowEqualSemanticIndexing,
 } from '@/store/lib/appContextHelpers';
-import { toNameSet, type State } from '@/store/state/state';
+import { toNameSet, type WorkspaceSlice } from '@/store/state/state';
 
 function prevState(
   pending: string[],
-  semanticIndexing: State['semanticIndexing'] = null,
-): Pick<State, 'pendingSemanticNames' | 'semanticIndexing'> {
+  semanticIndexing: WorkspaceSlice['semanticIndexing'] = null,
+): Pick<WorkspaceSlice, 'pendingSemanticNames' | 'semanticIndexing'> {
   return { pendingSemanticNames: toNameSet(pending), semanticIndexing };
 }
 

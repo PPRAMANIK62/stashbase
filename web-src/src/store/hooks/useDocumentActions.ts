@@ -9,7 +9,7 @@ import {
   keywordFindCaseSensitive,
   waitForNextFrame,
 } from '@/store/lib/appContextHelpers';
-import { getActiveTab, type Action, type PendingHighlight, type State } from '@/store/state/state';
+import { getActiveTab, type Action, type PendingHighlight, type State, type WorkspaceSlice } from '@/store/state/state';
 import type { ToastOptions } from './useFeedbackActions';
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
@@ -28,7 +28,7 @@ interface DocumentActionRefs {
 }
 
 interface DocumentActionDependencies {
-  loadFiles: (expectedFolderPath?: string) => Promise<State['files']>;
+  loadFiles: (expectedFolderPath?: string) => Promise<WorkspaceSlice['files']>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   toast: Toast;
   primeFind: (query: string, opts: { wholeWord: boolean; caseSensitive: boolean }) => void;
@@ -81,10 +81,10 @@ export function useDocumentActions(
     }
 
     const run = (async () => {
-      const tabAtStart = getActiveTab(state.current);
+      const tabAtStart = getActiveTab(state.current.workspace);
       const currentFile = tabAtStart?.file ?? null;
       const tabId = tabAtStart?.id ?? null;
-      const folderPathAtSave = state.current.folderPath;
+      const folderPathAtSave = state.current.workspace.folderPath;
       const handle = editor.current;
       if (!currentFile || !handle) return true;
       // Out-of-folder tabs are read-only; a PUT would write a same-named
@@ -119,7 +119,7 @@ export function useDocumentActions(
           savedResult = await saveContent(baseVersion);
         } catch (err: unknown) {
           if (!(err instanceof ApiError && err.status === 409)) throw err;
-          const latestTab = getActiveTab(state.current);
+          const latestTab = getActiveTab(state.current.workspace);
           const sameTab = latestTab?.id === tabId && latestTab.file?.name === currentFile.name;
           const liveValue = editor.current?.getValue();
           if (!sameTab || liveValue !== content) return false;
@@ -134,7 +134,7 @@ export function useDocumentActions(
           version: savedResult.version,
           superseded,
         };
-        const latestTab = getActiveTab(state.current);
+        const latestTab = getActiveTab(state.current.workspace);
         const sameTab = latestTab?.id === tabId && latestTab.file?.name === currentFile.name;
         if (!sameTab) return true;
 
@@ -158,7 +158,7 @@ export function useDocumentActions(
         void loadFiles(folderPathAtSave);
         return true;
       } catch (err: unknown) {
-        const latestTab = getActiveTab(state.current);
+        const latestTab = getActiveTab(state.current.workspace);
         const sameTab = latestTab?.id === tabId && latestTab.file?.name === currentFile.name;
         if (!sameTab) return false;
         const message = err instanceof Error ? err.message : String(err);
@@ -193,12 +193,12 @@ export function useDocumentActions(
       libraryFolder?: string;
     },
   ) => {
-    if (opts.expectedFolder && state.current.folderPath !== opts.expectedFolder) return;
-    const currentFile = getActiveTab(state.current)?.file ?? null;
+    if (opts.expectedFolder && state.current.workspace.folderPath !== opts.expectedFolder) return;
+    const currentFile = getActiveTab(state.current.workspace)?.file ?? null;
     if (editor.current && currentFile && currentFile.name !== name && !opts.newTab) {
       if (!(await flushSave())) return;
     }
-    if (opts.expectedFolder && state.current.folderPath !== opts.expectedFolder) return;
+    if (opts.expectedFolder && state.current.workspace.folderPath !== opts.expectedFolder) return;
     const readOpts = opts.libraryFolder ? { folder: opts.libraryFolder } : undefined;
 
     let body;
@@ -224,7 +224,7 @@ export function useDocumentActions(
         toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
         return;
       }
-      const folder = opts.libraryFolder ?? opts.expectedFolder ?? state.current.folderPath;
+      const folder = opts.libraryFolder ?? opts.expectedFolder ?? state.current.workspace.folderPath;
       void api.prepareDocx(name, { folder: folder || undefined })
         .then(() => refreshIndexState(folder || undefined))
         .catch((err: unknown) => {
@@ -241,7 +241,7 @@ export function useDocumentActions(
         toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
         return;
       }
-      const folder = opts.libraryFolder ?? opts.expectedFolder ?? state.current.folderPath;
+      const folder = opts.libraryFolder ?? opts.expectedFolder ?? state.current.workspace.folderPath;
       void api.prepareAudio(name, { folder: folder || undefined })
         .then(() => refreshIndexState(folder || undefined))
         .catch((err: unknown) => {
@@ -269,8 +269,8 @@ export function useDocumentActions(
         return;
       }
     }
-    if (opts.expectedFolder && state.current.folderPath !== opts.expectedFolder) return;
-    const noActiveTab = state.current.activeTabId == null || !getActiveTab(state.current);
+    if (opts.expectedFolder && state.current.workspace.folderPath !== opts.expectedFolder) return;
+    const noActiveTab = state.current.workspace.activeTabId == null || !getActiveTab(state.current.workspace);
     const newTabMode = !!opts.newTab || noActiveTab;
     dispatch({
       type: 'FILE_OPEN',
@@ -286,10 +286,10 @@ export function useDocumentActions(
   // it in place; otherwise open a fresh tab. No preview/replace mode:
   // one click, one lasting tab.
   const selectFile = useCallback(async (name: string) => {
-    const expectedFolder = state.current.folderPath;
+    const expectedFolder = state.current.workspace.folderPath;
     if (editor.current && !(await flushSave())) return;
-    if (state.current.folderPath !== expectedFolder) return;
-    const currentState = state.current;
+    if (state.current.workspace.folderPath !== expectedFolder) return;
+    const currentState = state.current.workspace;
     const existing = currentState.tabs.find((tab) => isFolderFileTab(tab, name));
     if (existing) {
       if (currentState.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
@@ -314,29 +314,29 @@ export function useDocumentActions(
   }, [dispatch, primeFind]);
 
   const selectFileWithHighlight = useCallback(async (name: string, hit: PendingHighlight) => {
-    const expectedFolder = state.current.folderPath;
+    const expectedFolder = state.current.workspace.folderPath;
     const isTarget = () => {
-      const file = getActiveTab(state.current)?.file;
+      const file = getActiveTab(state.current.workspace)?.file;
       // Same rel name on an out-of-folder tab is a different document.
       return file?.name === name && !file.folder;
     };
     await selectFile(name);
-    if (state.current.folderPath !== expectedFolder) return;
+    if (state.current.workspace.folderPath !== expectedFolder) return;
     for (let i = 0; i < 8; i++) {
       if (isTarget()) break;
       await waitForNextFrame();
-      if (state.current.folderPath !== expectedFolder) return;
+      if (state.current.workspace.folderPath !== expectedFolder) return;
     }
     if (!isTarget()) return;
     armHighlight(hit);
   }, [armHighlight, selectFile, state]);
 
   const openInNewTab = useCallback(async (name: string, expectedFolder?: string) => {
-    const targetFolder = expectedFolder ?? state.current.folderPath;
-    if (targetFolder && state.current.folderPath !== targetFolder) return;
+    const targetFolder = expectedFolder ?? state.current.workspace.folderPath;
+    if (targetFolder && state.current.workspace.folderPath !== targetFolder) return;
     if (editor.current && !(await flushSave())) return;
-    if (targetFolder && state.current.folderPath !== targetFolder) return;
-    const currentState = state.current;
+    if (targetFolder && state.current.workspace.folderPath !== targetFolder) return;
+    const currentState = state.current.workspace;
     const existing = currentState.tabs.find((tab) => isFolderFileTab(tab, name));
     if (existing) {
       if (currentState.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
@@ -351,35 +351,35 @@ export function useDocumentActions(
   }, [dispatch, editor, flushSave]);
 
   const closeTab = useCallback(async (id: string) => {
-    const currentState = state.current;
+    const currentState = state.current.workspace;
     if (currentState.activeTabId === id && editor.current && !(await flushSave())) return;
     dispatch({ type: 'CLOSE_TAB', id });
   }, [dispatch, editor, flushSave, state]);
 
   const closeActiveTab = useCallback(async () => {
-    const id = state.current.activeTabId;
+    const id = state.current.workspace.activeTabId;
     if (id) await closeTab(id);
   }, [closeTab, state]);
 
   const activateTab = useCallback(async (id: string) => {
-    const currentState = state.current;
+    const currentState = state.current.workspace;
     if (currentState.activeTabId === id) return;
     if (editor.current && !(await flushSave())) return;
     dispatch({ type: 'ACTIVATE_TAB', id });
   }, [dispatch, editor, flushSave, state]);
 
   const navigateTo = useCallback(async (name: string, anchor?: string) => {
-    const expectedFolder = state.current.folderPath;
-    const currentFile = getActiveTab(state.current)?.file ?? null;
+    const expectedFolder = state.current.workspace.folderPath;
+    const currentFile = getActiveTab(state.current.workspace)?.file ?? null;
     if (currentFile?.name === name) {
       if (anchor) dispatch({ type: 'PENDING_SCROLL', anchor });
       return;
     }
     if (editor.current && !(await flushSave())) return;
-    if (state.current.folderPath !== expectedFolder) return;
-    const existing = state.current.tabs.find((tab) => isFolderFileTab(tab, name));
+    if (state.current.workspace.folderPath !== expectedFolder) return;
+    const existing = state.current.workspace.tabs.find((tab) => isFolderFileTab(tab, name));
     if (existing) {
-      if (state.current.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
+      if (state.current.workspace.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
       if (anchor) dispatch({ type: 'PENDING_SCROLL', anchor });
       return;
     }
@@ -394,7 +394,7 @@ export function useDocumentActions(
     name: string,
     opts?: { hit?: PendingHighlight; anchor?: string },
   ) => {
-    const startState = state.current;
+    const startState = state.current.workspace;
     if (startState.folderPath && folderRefsEqual(folder, startState.folderPath)) {
       if (opts?.hit) await selectFileWithHighlight(name, opts.hit);
       else if (opts?.anchor) await navigateTo(name, opts.anchor);
@@ -403,18 +403,18 @@ export function useDocumentActions(
     }
     if (editor.current && !(await flushSave())) return;
     const isTarget = () => {
-      const file = getActiveTab(state.current)?.file;
+      const file = getActiveTab(state.current.workspace)?.file;
       return file?.name === name && file.folder != null && folderRefsEqual(file.folder, folder);
     };
-    const existing = state.current.tabs.find((tab) =>
+    const existing = state.current.workspace.tabs.find((tab) =>
       tab.file?.name === name && tab.file.folder != null && folderRefsEqual(tab.file.folder, folder));
     if (existing) {
-      if (state.current.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
+      if (state.current.workspace.activeTabId !== existing.id) dispatch({ type: 'ACTIVATE_TAB', id: existing.id });
       if (opts?.anchor) dispatch({ type: 'PENDING_SCROLL', anchor: opts.anchor });
     } else {
       // Mirror selectFile: fill a blank tab in place, otherwise open a
       // fresh persistent tab.
-      const active = getActiveTab(state.current);
+      const active = getActiveTab(state.current.workspace);
       if (active && !active.file) {
         await loadFile(name, { libraryFolder: folder, anchor: opts?.anchor });
       } else {
@@ -441,7 +441,7 @@ export function useDocumentActions(
   }, [dispatch]);
 
   const toggleEditMode = useCallback(async () => {
-    const tab = getActiveTab(state.current);
+    const tab = getActiveTab(state.current.workspace);
     if (!tab?.file) return;
     // Out-of-folder tabs never edit — their save path would write into
     // the ACTIVE folder.

@@ -4,7 +4,7 @@
  */
 import type { FileMeta } from '@/common/api/api';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
-import type { ChatTab, NameSet, State, Tab } from './state';
+import type { ChatSlice, ChatTab, NameSet, Tab, WorkspaceSlice } from './state';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
 
@@ -106,9 +106,9 @@ export function makeTab(): Tab {
 
 /** Resolve the active tab object, or null if none. Used by both the
  *  reducer and the action thunks. */
-export function getActiveTab(s: State): Tab | null {
-  if (s.activeTabId == null) return null;
-  return s.tabs.find((t) => t.id === s.activeTabId) ?? null;
+export function getActiveTab(w: WorkspaceSlice): Tab | null {
+  if (w.activeTabId == null) return null;
+  return w.tabs.find((t) => t.id === w.activeTabId) ?? null;
 }
 
 /** Create a numbered placeholder tab for a new agent conversation. A new
@@ -117,12 +117,38 @@ export function getActiveTab(s: State): Tab | null {
  *  turn replaces it with the session's derived title. */
 export function makeChatTab(agent: string, tabs: ChatTab[]): ChatTab {
   const sameAgentTabs = tabs.filter((tab) => tab.agent === agent);
-  const title = sameAgentTabs.length === 0 ? 'New Chat' : `New Chat ${sameAgentTabs.length + 1}`;
-  return { id: crypto.randomUUID(), agent, title, blank: true };
+  return {
+    id: crypto.randomUUID(),
+    agent,
+    title: placeholderChatTitle(sameAgentTabs.length),
+    blank: true,
+  };
+}
+
+/** The placeholder title `makeChatTab` hands a fresh tab: `"New Chat"`, or
+ *  `"New Chat N"` once the agent already owns tabs. */
+function placeholderChatTitle(sameAgentTabs: number): string {
+  return sameAgentTabs === 0 ? 'New Chat' : `New Chat ${sameAgentTabs + 1}`;
+}
+
+/** Matches a title that is still `makeChatTab`'s untouched placeholder — a
+ *  session-derived or user-set title never does. */
+const PLACEHOLDER_CHAT_TITLE_RE = /^New Chat( \d+)?$/;
+
+/**
+ * The title a blank tab takes when it switches agent in place
+ * (`CHAT_TAB_SET_AGENT`). Renumbering is UI copy formatting, so it lives
+ * beside `makeChatTab` — the two must agree on the per-agent numbering — and
+ * not inside the reducer. A non-placeholder title is preserved untouched.
+ */
+export function retitledForAgentSwitch(title: string, sameAgentTabs: number): string {
+  return PLACEHOLDER_CHAT_TITLE_RE.test(title.trim())
+    ? placeholderChatTitle(sameAgentTabs)
+    : title;
 }
 
 /** Move a chat tab to the most-recent position for its agent. */
-function rememberChatTab(recency: State['chatTabRecencyByAgent'], tab: ChatTab): State['chatTabRecencyByAgent'] {
+function rememberChatTab(recency: ChatSlice['chatTabRecencyByAgent'], tab: ChatTab): ChatSlice['chatTabRecencyByAgent'] {
   return {
     ...recency,
     [tab.agent]: [...(recency[tab.agent] ?? []).filter((id) => id !== tab.id), tab.id],
@@ -130,7 +156,7 @@ function rememberChatTab(recency: State['chatTabRecencyByAgent'], tab: ChatTab):
 }
 
 /** Drop a closed tab from its agent's recency list. */
-function forgetChatTab(recency: State['chatTabRecencyByAgent'], tab: ChatTab): State['chatTabRecencyByAgent'] {
+function forgetChatTab(recency: ChatSlice['chatTabRecencyByAgent'], tab: ChatTab): ChatSlice['chatTabRecencyByAgent'] {
   const ids = (recency[tab.agent] ?? []).filter((id) => id !== tab.id);
   if (ids.length > 0) return { ...recency, [tab.agent]: ids };
   const { [tab.agent]: _removed, ...rest } = recency;
@@ -150,18 +176,18 @@ function forgetChatTab(recency: State['chatTabRecencyByAgent'], tab: ChatTab): S
  *  is exactly the bucket move `CHAT_TAB_SET_AGENT` needs. Omitted keys are
  *  no-ops, so a case that only activates a tab passes only `remember`. */
 export function updateChatTabRecency(
-  recency: State['chatTabRecencyByAgent'],
+  recency: ChatSlice['chatTabRecencyByAgent'],
   change: { forget?: ChatTab | null; remember?: ChatTab | null },
-): State['chatTabRecencyByAgent'] {
+): ChatSlice['chatTabRecencyByAgent'] {
   const forgotten = change.forget ? forgetChatTab(recency, change.forget) : recency;
   return change.remember ? rememberChatTab(forgotten, change.remember) : forgotten;
 }
 
 /** Return an agent's most recently active tab that is still open. */
-export function mostRecentChatTab(s: State, agent: string): ChatTab | null {
-  const ids = s.chatTabRecencyByAgent[agent] ?? [];
+export function mostRecentChatTab(c: ChatSlice, agent: string): ChatTab | null {
+  const ids = c.chatTabRecencyByAgent[agent] ?? [];
   for (let i = ids.length - 1; i >= 0; i -= 1) {
-    const tab = s.chatTabs.find((candidate) => candidate.id === ids[i]);
+    const tab = c.chatTabs.find((candidate) => candidate.id === ids[i]);
     if (tab) return tab;
   }
   return null;
@@ -199,11 +225,11 @@ export function optimisticKeyBackfillPaths(files: FileMeta[]): string[] {
 /** Merge `patch` into the active tab in place. Returns the state
  *  unchanged when no tab is active — every caller checks `activeTabId`
  *  first, but the no-op guard keeps the reducer cases short. */
-export function patchActiveTab(s: State, patch: Partial<Tab>): State {
-  if (s.activeTabId == null) return s;
+export function patchActiveTab(w: WorkspaceSlice, patch: Partial<Tab>): WorkspaceSlice {
+  if (w.activeTabId == null) return w;
   return {
-    ...s,
-    tabs: s.tabs.map((t) => (t.id === s.activeTabId ? { ...t, ...patch } : t)),
+    ...w,
+    tabs: w.tabs.map((t) => (t.id === w.activeTabId ? { ...t, ...patch } : t)),
   };
 }
 

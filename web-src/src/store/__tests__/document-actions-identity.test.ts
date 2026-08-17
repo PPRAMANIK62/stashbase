@@ -3,12 +3,12 @@ import test from 'node:test';
 import React, { useRef } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import type { EditorHandle } from '@/store/state/editorTypes';
-import { initialState, type Action, type State } from '@/store/state/state';
+import { initialState, type Action, type WorkspaceSlice } from '@/store/state/state';
 import { useDocumentActions } from '@/store/hooks/useDocumentActions';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const loadFiles = async (): Promise<State['files']> => [];
+const loadFiles = async (): Promise<WorkspaceSlice['files']> => [];
 const refreshIndexState = async () => undefined;
 const toast = () => 'toast';
 const primeFind = () => undefined;

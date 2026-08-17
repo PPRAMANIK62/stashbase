@@ -25,7 +25,7 @@ export function useFindActions(stateRef: MutableRefObject<State>, dispatch: Disp
     if (previous && previous !== controller) previous.close();
     findControllerRef.current = controller;
     if (!controller) return;
-    const { query, wholeWord, caseSensitive, open } = stateRef.current.find;
+    const { query, wholeWord, caseSensitive, open } = stateRef.current.uiShell.find;
     if (open && query) {
       void applyMatchInfo((controller.restoreQuery ?? controller.setQuery)(query, { wholeWord, caseSensitive }));
     }
@@ -62,25 +62,25 @@ export function useFindActions(stateRef: MutableRefObject<State>, dispatch: Disp
       dispatch({ type: 'FIND_SET', patch: { current: 0, total: 0 } });
       return;
     }
-    const { wholeWord, caseSensitive } = stateRef.current.find;
+    const { wholeWord, caseSensitive } = stateRef.current.uiShell.find;
     void applyMatchInfo(controller.setQuery(query, { wholeWord, caseSensitive }));
   }, [applyMatchInfo, dispatch, stateRef]);
 
   const toggleFindCaseSensitive = useCallback(() => {
-    const next = !stateRef.current.find.caseSensitive;
+    const next = !stateRef.current.uiShell.find.caseSensitive;
     dispatch({ type: 'FIND_SET', patch: { caseSensitive: next } });
     const controller = findControllerRef.current;
     if (!controller) return;
-    const { query, wholeWord } = stateRef.current.find;
+    const { query, wholeWord } = stateRef.current.uiShell.find;
     void applyMatchInfo(controller.setQuery(query, { wholeWord, caseSensitive: next }));
   }, [applyMatchInfo, dispatch, stateRef]);
 
   const toggleFindWholeWord = useCallback(() => {
-    const next = !stateRef.current.find.wholeWord;
+    const next = !stateRef.current.uiShell.find.wholeWord;
     dispatch({ type: 'FIND_SET', patch: { wholeWord: next } });
     const controller = findControllerRef.current;
     if (!controller) return;
-    const { query, caseSensitive } = stateRef.current.find;
+    const { query, caseSensitive } = stateRef.current.uiShell.find;
     void applyMatchInfo(controller.setQuery(query, { wholeWord: next, caseSensitive }));
   }, [applyMatchInfo, dispatch, stateRef]);
 

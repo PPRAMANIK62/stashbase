@@ -12,11 +12,12 @@ import {
   shouldOpenInitialChatOnWindowEntry,
   switchWelcomeTabPlan,
 } from '@/features/agent-panel/lib/folderState';
-import { makeChatTab, type Action, type State } from '@/store/state/state';
+import { makeChatTab, type Action, type ChatSlice, type WorkspaceSlice } from '@/store/state/state';
 import { shouldAutoCollapseChat } from '@/common/lib/workspaceLayout';
 
 export function useChatLayoutFollowUp(
-  state: Pick<State, 'activeChatTabId' | 'booted' | 'chatOpen' | 'chatTabs' | 'folderPath'>,
+  state: Pick<WorkspaceSlice, 'booted' | 'folderPath'>
+    & Pick<ChatSlice, 'activeChatTabId' | 'chatOpen' | 'chatTabs'>,
   layout: { hasDocument: boolean; compact: boolean },
   dispatch: (action: Action) => void,
 ) {

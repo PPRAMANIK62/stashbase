@@ -140,7 +140,7 @@ async function showCallout(
   dispatch: (action: unknown) => void = () => undefined,
 ): Promise<void> {
   await mountApp(dom, h(UnsupportedFilesCallout), {
-    state: appState({ unsupportedFiles, folderPath }),
+    state: appState({ workspace: { unsupportedFiles, folderPath } }),
     actions: appActions(),
     dispatch: dispatch as never,
   });

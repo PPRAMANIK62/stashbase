@@ -153,7 +153,7 @@ test('the confirmation and settings containers register overlay layers too', asy
   await withDom(async (dom) => {
     await assert.rejects(
       () => mountApp(dom, h(AlertConfirmModal), {
-        state: appState({ modal: { type: 'confirm', message: 'Delete note?' } }),
+        state: appState({ uiShell: { modal: { type: 'confirm', message: 'Delete note?' } } }),
       }),
       /OverlayStackProvider/,
       'AlertConfirmModal must register an overlay layer through LazyManagedModal',
@@ -175,7 +175,7 @@ test('a confirmation is a Base UI alert dialog on the shared column width', asyn
   await withDom(async (dom) => {
     const resolved: boolean[] = [];
     await mountApp(dom, h(OverlayStackProvider, null, h(AlertConfirmModal)), {
-      state: appState({ modal: { type: 'confirm', message: 'Delete note?', confirmLabel: 'Delete' } }),
+      state: appState({ uiShell: { modal: { type: 'confirm', message: 'Delete note?', confirmLabel: 'Delete' } } }),
       actions: appActions({ resolveModal: ((value: boolean) => { resolved.push(value); }) as never }),
     });
 
@@ -192,7 +192,9 @@ test('the cascade prompt dismisses through the shared dialog exactly once', asyn
     const decisions: string[] = [];
     const types = await windowListenerTypes(() => mountApp(dom, h(OverlayStackProvider, null, h(CascadePromptModal)), {
       state: appState({
-        cascadePrompt: { kind: 'file', oldPath: 'a/old.md', newPath: 'a/new.md', files: 2, links: 3 },
+        uiShell: {
+          cascadePrompt: { kind: 'file', oldPath: 'a/old.md', newPath: 'a/new.md', files: 2, links: 3 },
+        },
       }),
       actions: appActions({ resolveCascadePrompt: ((decision: string) => { decisions.push(decision); }) as never }),
     }));

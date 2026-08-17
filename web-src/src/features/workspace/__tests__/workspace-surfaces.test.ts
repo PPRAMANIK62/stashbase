@@ -31,7 +31,7 @@ test('the sidebar handle is a named, keyboard-operable separator reporting its r
   await withDom(async (dom) => {
     const dispatched: Action[] = [];
     await mountApp(dom, h(SidebarSplitter), {
-      state: appState({ sidebarWidth: 280, sidebarCollapsed: false }),
+      state: appState({ workspace: { sidebarWidth: 280, sidebarCollapsed: false } }),
       dispatch: (action) => dispatched.push(action),
     });
 
@@ -56,7 +56,7 @@ test('a collapsed sidebar reports collapsed and reopens from the handle', async 
   await withDom(async (dom) => {
     const dispatched: Action[] = [];
     await mountApp(dom, h(SidebarSplitter), {
-      state: appState({ sidebarWidth: 280, sidebarCollapsed: true }),
+      state: appState({ workspace: { sidebarWidth: 280, sidebarCollapsed: true } }),
       dispatch: (action) => dispatched.push(action),
     });
     const [separator] = dom.byRole('separator');
@@ -76,7 +76,7 @@ test('the chat handle is a named separator bounded by the panel range', async ()
   await withDom(async (dom) => {
     const dispatched: Action[] = [];
     await mountApp(dom, h(ChatSplitter), {
-      state: appState({ chatWidth: 480 }),
+      state: appState({ chat: { chatWidth: 480 } }),
       dispatch: (action) => dispatched.push(action),
     });
 
@@ -96,11 +96,13 @@ test('opening a tree row context menu moves DOM focus to that row first', async 
   // returns focus to the row the user acted on — and it must take that
   // focus without scrolling the tree under the pointer.
   const base = appState({
-    folderPath: '/workspace',
-    folders: [{ path: 'Guides' }],
-    files: [{ name: 'note.md', format: 'md', heading: 'note', snippet: '' }],
-    expanded: toNameSet(['Guides']),
-  } as Partial<State>);
+    workspace: {
+      folderPath: '/workspace',
+      folders: [{ path: 'Guides' }],
+      files: [{ name: 'note.md', format: 'md', heading: 'note', snippet: '' }],
+      expanded: toNameSet(['Guides']),
+    },
+  });
 
   for (const label of ['Guides', 'note.md']) {
     await withDom(async (dom) => {
@@ -129,14 +131,16 @@ test('opening a tree row context menu moves DOM focus to that row first', async 
 /** One folder holding one file, beside a file at the root. */
 function nestedTree(expanded: string[]): State {
   return appState({
-    folderPath: '/workspace',
-    folders: [{ path: 'Guides' }],
-    files: [
-      { name: 'Guides/inner.md', format: 'md', heading: 'inner', snippet: '' },
-      { name: 'top.md', format: 'md', heading: 'top', snippet: '' },
-    ],
-    expanded: toNameSet(expanded),
-  } as Partial<State>);
+    workspace: {
+      folderPath: '/workspace',
+      folders: [{ path: 'Guides' }],
+      files: [
+        { name: 'Guides/inner.md', format: 'md', heading: 'inner', snippet: '' },
+        { name: 'top.md', format: 'md', heading: 'top', snippet: '' },
+      ],
+      expanded: toNameSet(expanded),
+    },
+  });
 }
 
 test('arrow keys rove the tree over the rows that are actually on screen', async () => {

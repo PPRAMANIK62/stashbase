@@ -4,7 +4,7 @@ import { folderRefsEqual, isAbsoluteFolderRef } from '@/store/lib/folderPath';
 import { createFolderMutationQueue } from '@/store/lib/folderTransition';
 import type { EditorHandle } from '@/store/state/editorTypes';
 import { folderScopedResetActions, type FolderResetReason } from '@/store/lib/folderScopedReset';
-import { nameSetSize, type Action, type LibraryFolderStatus, type State } from '@/store/state/state';
+import { nameSetSize, type Action, type LibraryFolderStatus, type State, type WorkspaceSlice } from '@/store/state/state';
 import type { ToastOptions } from './useFeedbackActions';
 
 type Dispatch = (action: Action) => void;
@@ -25,9 +25,9 @@ interface FolderActionRefs {
 
 interface FolderActionDependencies {
   flushSave: () => Promise<boolean>;
-  loadFiles: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<State['files']>;
+  loadFiles: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<WorkspaceSlice['files']>;
   loadFileOrder: (expectedFolderPath?: string, ownsRequest?: () => boolean) => Promise<void>;
-  markVisibleFilesPendingForSearch: (files?: State['files']) => Promise<void>;
+  markVisibleFilesPendingForSearch: (files?: WorkspaceSlice['files']) => Promise<void>;
   refreshIndexState: (folderPath?: string) => Promise<void>;
   toast: Toast;
 }
@@ -80,7 +80,7 @@ export function commitOpenedFolderNavigation(
   });
 }
 
-function libraryStatusFromActiveFolder(state: State): LibraryFolderStatus {
+function libraryStatusFromActiveFolder(state: WorkspaceSlice): LibraryFolderStatus {
   const hasPreparationFailure = state.preparationFailures.some((problem) => problem.status !== 'cancelled');
   if (state.indexWarning || hasPreparationFailure || state.blockedConversions.length > 0) return 'failed';
   const semanticPending = state.embedderHasKey !== false && nameSetSize(state.pendingSemanticNames) > 0;
@@ -117,7 +117,7 @@ export function useFolderActions(
   const folderMutations = useRef(createFolderMutationQueue()).current;
 
   const resetFolderScopedState = useCallback((reason: FolderResetReason) => {
-    const previous = state.current;
+    const previous = state.current.workspace;
     if (previous.folderPath) {
       dispatch({
         type: 'LIBRARY_FOLDER_STATUS',
@@ -181,15 +181,15 @@ export function useFolderActions(
     ]);
     if (
       generation !== openGeneration.current
-      || state.current.folderPath !== expectedFolderPath
+      || state.current.workspace.folderPath !== expectedFolderPath
     ) return;
-    if (opts.optimisticPendingOnOpen && state.current.embedderHasKey !== false) {
+    if (opts.optimisticPendingOnOpen && state.current.workspace.embedderHasKey !== false) {
       await markVisibleFilesPendingForSearch(files);
     }
     setTimeout(() => {
       if (
         generation !== openGeneration.current
-        || state.current.folderPath !== expectedFolderPath
+        || state.current.workspace.folderPath !== expectedFolderPath
       ) return;
       void refreshIndexState(expectedFolderPath);
     }, 500);
@@ -264,14 +264,14 @@ export function useFolderActions(
   }, [editor, flushSave, folderMutations, performFolderOpen]);
 
   const prepareForFolderRemoval = useCallback((removedPath: string) => {
-    if (!state.current.folderPath || !folderRefsEqual(state.current.folderPath, removedPath)) return;
+    if (!state.current.workspace.folderPath || !folderRefsEqual(state.current.workspace.folderPath, removedPath)) return;
     openGeneration.current += 1;
     resetFolderScopedState('folder-lost');
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });
     dispatch({
       type: 'RECENT_LOADED',
-      recent: state.current.recent.filter((entry) => !folderRefsEqual(entry.path, removedPath)),
-      homeDir: state.current.homeDir,
+      recent: state.current.workspace.recent.filter((entry) => !folderRefsEqual(entry.path, removedPath)),
+      homeDir: state.current.workspace.homeDir,
     });
   }, [dispatch, openGeneration, resetFolderScopedState, state]);
 
@@ -290,8 +290,8 @@ export function useFolderActions(
 
   const handleFolderRemoved = useCallback((removedPath: string) => {
     const affected = Boolean(
-      state.current.folderPath
-      && folderRefsEqual(state.current.folderPath, removedPath),
+      state.current.workspace.folderPath
+      && folderRefsEqual(state.current.workspace.folderPath, removedPath),
     );
     if (affected) prepareForFolderRemoval(removedPath);
     // Every window's sidebar shows the library list, so all of them
@@ -333,7 +333,7 @@ export function useFolderActions(
         const restoredFolderPath = result.current.path;
         if (
           generation === openGeneration.current
-          && state.current.folderPath === restoredFolderPath
+          && state.current.workspace.folderPath === restoredFolderPath
         ) {
           void api.sync(restoredFolderPath)
             .catch(() => { /* Surfaced by the next status poll. */ })

@@ -143,7 +143,7 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
     activeFolderPath: folderContextPath.current,
     activeFolderTransitionInProgress: false,
     openGenerationAtStart: openGeneration.current,
-    getCurrentFolderPath: () => state.folderPath,
+    getCurrentFolderPath: () => state.workspace.folderPath,
     getCurrentOpenGeneration: () => openGeneration.current,
     request: () => statusResponse.promise,
   });
@@ -172,7 +172,7 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
     activeFolderPath: folderContextPath.current,
     activeFolderTransitionInProgress: openingFolderGeneration.current != null,
     openGenerationAtStart: openGeneration.current,
-    getCurrentFolderPath: () => state.folderPath,
+    getCurrentFolderPath: () => state.workspace.folderPath,
     getCurrentOpenGeneration: () => openGeneration.current,
     request: async () => {
       throw new ApiError('renderer state has not committed yet', 412, 'NO_FOLDER');
@@ -188,7 +188,7 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
     activeFolderPath: folderContextPath.current,
     activeFolderTransitionInProgress: openingFolderGeneration.current != null,
     openGenerationAtStart: openGeneration.current,
-    getCurrentFolderPath: () => state.folderPath,
+    getCurrentFolderPath: () => state.workspace.folderPath,
     getCurrentOpenGeneration: () => openGeneration.current,
     request: async (folderPath) => ({ folderPath }),
   });
@@ -201,8 +201,8 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
 
   assert.deepEqual(await polling, { kind: 'stale' });
   assert.equal(openGeneration.current, 11);
-  assert.equal(state.folderPath, '/new-library');
-  assert.equal(state.folder, 'new-library');
+  assert.equal(state.workspace.folderPath, '/new-library');
+  assert.equal(state.workspace.folder, 'new-library');
 
   afterNavigation.resolve();
   await opening;

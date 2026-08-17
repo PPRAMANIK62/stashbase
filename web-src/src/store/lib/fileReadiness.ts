@@ -1,5 +1,5 @@
 import type { PreparationFailure } from '@/common/api/api';
-import type { State } from '@/store/state/state';
+import type { WorkspaceSlice } from '@/store/state/state';
 
 export interface FileReadiness {
   preparationFailure: PreparationFailure | undefined;
@@ -14,7 +14,7 @@ export function preparationFailureMatchesTarget(failurePath: string, target: str
   return failurePath === `${dir}.${base}.md`;
 }
 
-type PreparationState = Pick<State, 'preparationFailures'>;
+type PreparationState = Pick<WorkspaceSlice, 'preparationFailures'>;
 
 export function getPreparationProblem(s: PreparationState, path: string): PreparationFailure | undefined {
   return s.preparationFailures.find((f) => preparationFailureMatchesTarget(f.path, path));

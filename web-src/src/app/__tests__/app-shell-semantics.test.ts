@@ -17,10 +17,12 @@ import { DocumentOutlineProvider } from '@/common/components/DocumentOutlineCont
 import { OverlayStackProvider, useOverlayLayer } from '@/common/components/OverlayStack';
 import { makeTab, type State } from '@/store/state/state';
 
-function sidebar(state: Partial<State> = {}) {
+function sidebar(workspace: Partial<State['workspace']> = {}) {
   return {
     element: h(DocumentOutlineProvider, null, h(Sidebar)),
-    state: appState({ folderPath: '/library/workspace', folder: 'workspace', ...state }),
+    state: appState({
+      workspace: { folderPath: '/library/workspace', folder: 'workspace', ...workspace },
+    }),
   };
 }
 
@@ -96,7 +98,7 @@ test('exactly one document panel carries the id the tab strip points at', async 
 
   await withDom(async (dom) => {
     await mountApp(dom, h(DocumentOutlineProvider, null, h(MainPane)), {
-      state: appState({ folderPath: '/library', tabs: [tab], activeTabId: tab.id }),
+      state: appState({ workspace: { folderPath: '/library', tabs: [tab], activeTabId: tab.id } }),
       actions: appActions(),
     });
     const panels = dom.queryAll('#document-panel');
