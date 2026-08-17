@@ -4,10 +4,15 @@
  * wrapper for every branch of the reducer, e.g. `SIDEBAR_WIDTH`,
  * `TOGGLE_FOLDER`, `CTX_MENU`). Both are `useReducer`/`useMemo`-stable
  * across renders, so — unlike the three state-slice contexts — this one
- * doesn't need per-field memoization: its value never needs a slice split,
- * because reading it never causes a re-render on its own.
+ * needs no slice split: no field of it changes on a state change.
+ *
+ * The wrapper object still has to be memoized. `ActionsProvider` re-renders
+ * on every dispatch (it sits under the reducer), and a fresh
+ * `{ actions, dispatch }` literal is a new context value even when both
+ * fields are identical — which re-renders all ~42 `useAppActions()`
+ * consumers on every dispatch. Stable members do not make a stable value.
  */
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { AgentKind } from '@/common/lib/agentCatalog';
 import type { Action, CascadeDecision, PendingHighlight, State } from '../state/state';
 import type { EditorHandle, FindController } from '../state/actionTypes';
@@ -158,8 +163,9 @@ export interface AppActionsValue {
 export const ActionsContext = createContext<AppActionsValue | null>(null);
 
 export function ActionsProvider({ actions, dispatch, children }: AppActionsValue & { children: ReactNode }) {
+  const value = useMemo(() => ({ actions, dispatch }), [actions, dispatch]);
   return (
-    <ActionsContext.Provider value={{ actions, dispatch }}>
+    <ActionsContext.Provider value={value}>
       {children}
     </ActionsContext.Provider>
   );

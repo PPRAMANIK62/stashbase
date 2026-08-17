@@ -5,8 +5,9 @@ import {
   shallowEqualConversionProgress,
   shallowEqualIndexWarning,
   shallowEqualNumberRecord,
+  planSemanticPollDispatches,
   shallowEqualPreparationFailures,
-} from '../lib/appContextHelpers';
+} from '@/store/lib/appContextHelpers';
 import {
   optimisticKeyBackfillPaths,
   type Action,
@@ -320,8 +321,16 @@ export function useSearchActions(
       const treeChanged =
         lastTreeVersion.current >= 0 && newTreeVersion !== lastTreeVersion.current;
       lastTreeVersion.current = newTreeVersion;
-      dispatch({ type: 'PENDING_SEMANTIC_NAMES', names: newPending });
-      dispatch({ type: 'SEMANTIC_INDEXING_STATE', state: s.semanticIndexing ?? null });
+      // Guarded in `planSemanticPollDispatches` rather than inline: both
+      // actions land in the workspace slice and this poll runs every
+      // POLL_PENDING_MS while indexing, so dispatching unconditionally
+      // re-rendered every `useWorkspace()` consumer on each tick.
+      for (const action of planSemanticPollDispatches(prev, {
+        pending: newPending,
+        semanticIndexing: s.semanticIndexing ?? null,
+      })) {
+        dispatch(action);
+      }
       if (convChanged) dispatch({ type: 'PENDING_CONVERSIONS', paths: newConv });
       if (blockedChanged) dispatch({ type: 'BLOCKED_CONVERSIONS', paths: newBlocked });
       const incomingProgress = s.conversionProgress ?? {};

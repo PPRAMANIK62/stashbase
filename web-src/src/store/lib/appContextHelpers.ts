@@ -1,4 +1,4 @@
-import type { State } from '../state/state';
+import type { Action, State } from '@/store/state/state';
 
 export function shallowEqualIndexWarning(
   a: State['indexWarning'],
@@ -47,6 +47,53 @@ export function shallowEqualConversionProgress(
     }
     return true;
   });
+}
+
+/** The index poll re-reads this object every 1.5s while indexing. Without
+ *  an equality guard its identity changes on every tick, which re-renders
+ *  every `useWorkspace()` consumer even when the reported state is
+ *  unchanged. */
+export function shallowEqualSemanticIndexing(
+  a: State['semanticIndexing'],
+  b: State['semanticIndexing'],
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.state === b.state
+    && a.sourceCount === b.sourceCount
+    && a.estimatedBytes === b.estimatedBytes;
+}
+
+export function equalNameSets(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const name of a) if (!b.has(name)) return false;
+  return true;
+}
+
+/**
+ * Which of the two semantic-indexing actions the poll actually needs to
+ * dispatch. Both land in the workspace slice and the poll runs every
+ * `POLL_PENDING_MS` while indexing, so dispatching unconditionally
+ * re-renders all ~37 `useWorkspace()` consumers on every tick — the poll
+ * rebuilds `pendingSemanticNames` as a fresh `Set`, so its identity alone
+ * never indicates a real change.
+ *
+ * Pure and separate from the hook so the guard is testable: a closure-local
+ * `if` can be deleted without any test noticing.
+ */
+export function planSemanticPollDispatches(
+  prev: Pick<State, 'pendingSemanticNames' | 'semanticIndexing'>,
+  incoming: { pending: ReadonlySet<string>; semanticIndexing: State['semanticIndexing'] },
+): Action[] {
+  const actions: Action[] = [];
+  if (!equalNameSets(prev.pendingSemanticNames, incoming.pending)) {
+    actions.push({ type: 'PENDING_SEMANTIC_NAMES', names: new Set(incoming.pending) });
+  }
+  if (!shallowEqualSemanticIndexing(prev.semanticIndexing, incoming.semanticIndexing)) {
+    actions.push({ type: 'SEMANTIC_INDEXING_STATE', state: incoming.semanticIndexing });
+  }
+  return actions;
 }
 
 export function shallowEqualNumberRecord(

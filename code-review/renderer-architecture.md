@@ -30,6 +30,33 @@ its own layer and from every layer below it, never above.
    only layer allowed to import from multiple features, because composing
    them is what it exists to do.
 
+## Context value stability
+
+The four contexts under `store/contexts/` exist to stop one slice's change
+from re-rendering every consumer. Two rules keep that true, and both have
+been violated in shipped code:
+
+- **Every provider memoizes its value object.** The three state slices
+  memoize per field. `ActionsContext` carries no state, but its provider
+  still re-renders on every dispatch — it sits under the reducer — so an
+  unmemoized `{ actions, dispatch }` literal is a new context value each
+  time even though both members are stable. Stable members do not make a
+  stable value.
+- **A poll guards its dispatches.** `useSearchActions` re-reads index status
+  every `POLL_PENDING_MS` while indexing. Dispatching an unchanged payload
+  produces a new `State`, so any workspace-slice field written by the poll
+  must be compared before dispatch. The comparators live in
+  `store/lib/appContextHelpers.ts`; `planSemanticPollDispatches` keeps the
+  guard pure rather than as a closure-local `if`, because an `if` inside the
+  poll can be deleted without any test noticing.
+
+`store/__tests__/context-slice-stability.test.ts` and
+`semantic-poll-dispatches.test.ts` hold both rules. The renderer uses no
+`React.memo`: the context split is the re-render boundary, so a widened
+`useMemo` dep or an unguarded dispatch has no second line of defence. Adding
+`React.memo` is a deliberate non-choice — reach for it only against a
+measured cost, never pre-emptively.
+
 ## Where shared code goes
 
 When a second feature needs something a first one owns, promote it rather
