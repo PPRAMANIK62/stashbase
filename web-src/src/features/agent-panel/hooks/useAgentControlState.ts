@@ -21,17 +21,19 @@ import type { Attachment, Block, EffortLevel, PermMode } from '@/features/agent-
  *
  *  Scope lives here too, but the CONNECTED scope is written by the core's
  *  connect effect and by `scope-changed`: this hook owns the state cell and
- *  the pill derived from it, and hands the core the setter and ref. */
+ *  the pill derived from it, and hands the core the setter and ref.
+ *
+ *  Unsent draft presence is state of this hook rather than the core's: the
+ *  window-folder rule below is its only reader, and the core needs nothing
+ *  but the rendered flag for blank-tab reporting. */
 export function useAgentControlState({
   workspace,
-  folderPathRef,
   capabilities,
   blocks,
   turnActive,
   blocksRef,
   turnActiveRef,
   queuedPromptsRef,
-  hasDraftTextRef,
   attachmentsRef,
   sessionIdRef,
   wsRef,
@@ -39,14 +41,12 @@ export function useAgentControlState({
   resetSessionState,
 }: {
   workspace: WorkspaceState;
-  folderPathRef: RefObject<string>;
   capabilities: AgentPanelCapabilities;
   blocks: Block[];
   turnActive: boolean;
   blocksRef: RefObject<Block[]>;
   turnActiveRef: RefObject<boolean>;
   queuedPromptsRef: RefObject<QueuedPrompt[]>;
-  hasDraftTextRef: RefObject<boolean>;
   attachmentsRef: RefObject<Attachment[]>;
   sessionIdRef: RefObject<string | null>;
   wsRef: RefObject<WebSocket | null>;
@@ -71,6 +71,10 @@ export function useAgentControlState({
   // with — captured per connect and never rebound.
   const [pickedScope, setPickedScope, pickedScopeRef] = useStateWithRef<LibraryScope | undefined>(undefined);
   const [connectedScope, setConnectedScope, connectedScopeRef] = useStateWithRef<LibraryScope | null>(null);
+  // Unsent draft text lifted from the composer: a draft freezes the tab's
+  // scope on a window-folder switch and keeps the tab from counting as a
+  // reusable blank welcome tab.
+  const [hasDraftText, setHasDraftText, hasDraftTextRef] = useStateWithRef(false);
 
   // An unbound tab that is still empty and draft-free follows the window's
   // folder: a sidebar switch reconnects its next (empty) session to the
@@ -98,6 +102,11 @@ export function useAgentControlState({
     reconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- follow-mode only reacts to window-folder changes
   }, [workspace.folderPath]);
+
+  /** Report whether the composer currently holds unsent draft text. */
+  function handleDraftChange(hasText: boolean) {
+    setHasDraftText(hasText);
+  }
 
   /** Switch permission mode and tell the server to apply it live. */
   function changeMode(m: PermMode) {
@@ -131,7 +140,7 @@ export function useAgentControlState({
    * to follow-the-window. */
   function changeScope(next: LibraryScope) {
     if (blocks.length > 0 || turnActive || modelControl.resumedSession) return;
-    setPickedScope(libraryScopesEqual(next, newChatScope(folderPathRef.current)) ? undefined : next);
+    setPickedScope(libraryScopesEqual(next, newChatScope(workspace.folderPath)) ? undefined : next);
     reconnect();
   }
 
@@ -194,5 +203,7 @@ export function useAgentControlState({
     folderLocked,
     sessionScope,
     changeScope,
+    hasDraftText,
+    handleDraftChange,
   };
 }

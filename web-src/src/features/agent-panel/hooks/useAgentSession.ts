@@ -11,15 +11,20 @@ import type { TurnMeta } from '@/features/agent-panel/lib/turnModel';
 import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl';
 import { isBlankChatTab, newChatScope, nextSessionScope } from '@/features/agent-panel/lib/folderState';
 import {
-  folderScope,
   libraryScopesEqual,
-  LIBRARY_SCOPE,
   scopeChangedScope,
   scopeRequestParams,
   type LibraryScope,
 } from '@/common/lib/libraryScope';
-import { shouldConsumePendingResume } from '@/features/agent-panel/lib/sessionHistory';
 import { closeAgentSocketIntentionally, terminalAgentState } from '@/features/agent-panel/lib/connectionLifecycle';
+import {
+  appendToolOutput,
+  applyPermissionReply,
+  completeToolCard,
+  markToolAwaitingPermission,
+  openToolCard,
+  settleRunningTools,
+} from '@/features/agent-panel/lib/transcriptEvents';
 import { applyModelEvent } from '@/features/agent-panel/lib/modelState';
 import { recordFailureBeforeContinuing, TurnErrorTracker } from '@/features/agent-panel/lib/turnFailure';
 import { nextBlockId } from '@/features/agent-panel/lib/blockIds';
@@ -34,7 +39,9 @@ import { useAgentMentionListing } from '@/features/agent-panel/hooks/useAgentMen
 import { useAgentPromptQueue, type QueuedPrompt } from '@/features/agent-panel/hooks/useAgentPromptQueue';
 import { useAgentRuntimeCatalog } from '@/features/agent-panel/hooks/useAgentRuntimeCatalog';
 import { useAgentSkills } from '@/features/agent-panel/hooks/useAgentSkills';
-import type { Attachment, Block, ServerEvent, ToolBlock } from '@/features/agent-panel/lib/types';
+import { useAgentTabRegistration } from '@/features/agent-panel/hooks/useAgentTabRegistration';
+import { useSessionFolderReconcile } from '@/features/agent-panel/hooks/useSessionFolderReconcile';
+import type { Attachment, Block, ServerEvent } from '@/features/agent-panel/lib/types';
 
 /** The whole "talk to the runtime" concern for one AgentView tab: WebSocket
  *  connection lifecycle, server-event routing, session reset/resume, and
@@ -64,11 +71,24 @@ import type { Attachment, Block, ServerEvent, ToolBlock } from '@/features/agent
  *  - `useAgentPromptQueue` — the outbound half (queued follow-ups, wire
  *    prompt building), driven back from `turn-end`/`steer-result`.
  *  - `useAgentSkills` — the one event with no lifecycle consequence.
+ *  - `useSessionFolderReconcile` — the folder-sync policy the tool-result
+ *    and turn-end cases fire and never wait on.
+ *  - `useAgentTabRegistration` — this tab's two writes to the shared tab
+ *    model: its blankness, and claiming a pending History resume.
+ *
+ *  The transcript rules those events imply are pure `Block[] -> Block[]`
+ *  steps in `lib/transcriptEvents.ts`, so `handleEvent` below stays a
+ *  dispatcher over the connection state machine.
  *
  *  Attachments and the runtime-readiness gate (the two pieces that only
  *  read this session read-only, without feeding back into it) split out as
  *  components of their own — see `useAgentAttachments` and
- *  `AgentRuntimeGate`. */
+ *  `AgentRuntimeGate`.
+ *
+ *  The return groups by owner (`controls`, `queue`, `mentions`, `skills`,
+ *  `runtime`, `transcript`) rather than flattening every sub-hook field:
+ *  a flat object made this a re-export barrel and made `AgentView` re-thread
+ *  ~50 props by hand. */
 export function useAgentSession({
   active,
   id,
@@ -119,10 +139,6 @@ export function useAgentSession({
   const [fatal, setFatal, fatalRef] = useStateWithRef<string | null>(null);
   const [fatalRecoveryLabel, setFatalRecoveryLabel] = useState<'Retry' | 'Reconnect'>('Retry');
   const [nonce, setNonce] = useState(0);
-  // Unsent draft text lifted from the composer: a draft freezes the tab's
-  // scope on a window-folder switch and keeps the tab from counting as a
-  // reusable blank welcome tab.
-  const [hasDraftText, setHasDraftText, hasDraftTextRef] = useStateWithRef(false);
   const recentRef = useLatestRef(workspace.recent);
   // `resumeIdRef` holds a session id to resume on the next connect; it
   // rides the connect URL (like effort) and is consumed-and-cleared there.
@@ -145,17 +161,25 @@ export function useAgentSession({
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
   const turnErrorTrackerRef = useRef(new TurnErrorTracker());
 
+  // The sub-hooks below take the refs above only where the core genuinely
+  // co-owns them. `blocksRef`, `turnActiveRef`, `wsRef`, and `sessionIdRef`
+  // are written by the connect effect / `handleEvent` / `resetSessionState`
+  // and read by the pills and the queue, so their home is this closure.
+  // `queuedPromptsRef` is the one ref a sub-hook fully owns and still cannot
+  // hold: `useAgentPromptQueue` mutates it, but it must exist before
+  // `useAgentControlState` (whose follow/freeze rule reads it as content),
+  // and the queue in turn needs that hook's `connectedScopeRef` — a cycle
+  // only a ref created here can break. Everything else a sub-hook alone
+  // reads now lives in that sub-hook.
   const runtimeCatalog = useAgentRuntimeCatalog({ agent, meta, agents: chat.agents, dispatch, actions });
   const controls = useAgentControlState({
     workspace,
-    folderPathRef,
     capabilities: runtimeCatalog.capabilities,
     blocks,
     turnActive,
     blocksRef,
     turnActiveRef,
     queuedPromptsRef,
-    hasDraftTextRef,
     attachmentsRef,
     sessionIdRef,
     wsRef,
@@ -165,9 +189,7 @@ export function useAgentSession({
   const mentions = useAgentMentionListing({ connectedScope: controls.connectedScope, workspace });
   const promptQueue = useAgentPromptQueue({
     agentShortName: meta.shortName,
-    capabilities: runtimeCatalog.capabilities,
     capabilitiesRef: runtimeCatalog.capabilitiesRef,
-    attachments,
     attachmentsRef,
     clearComposerAttachments,
     titleRef,
@@ -179,10 +201,15 @@ export function useAgentSession({
     wsRef,
     stop,
     knownFilePathsRef: mentions.knownFilePathsRef,
-    connectedScopeRef: controls.connectedScopeRef,
-    folderPathRef,
+    sessionFolder,
   });
   const skills = useAgentSkills({ phase, wsRef });
+  const reconcileSessionFolder = useSessionFolderReconcile({
+    sessionFolder,
+    folderPathRef,
+    actions,
+    bumpSessionListing: mentions.bumpSessionListing,
+  });
 
   useEffect(() => {
     return () => {
@@ -199,6 +226,16 @@ export function useAgentSession({
    *  browser dev shell has one window and needs no broadcast. */
   function notifyLibraryFolderAdded(path: string) {
     void electronBridge()?.notifyLibraryFolderAdded?.(path);
+  }
+
+  /** The folder this session's file operations resolve against: the bound
+   *  scope's folder for a folder-scoped tab, else the window's current
+   *  folder. Null for a library chat in a window with no folder open. One
+   *  definition so attachment resolution and folder reconcile can never
+   *  disagree about which folder a cross-folder tab means. */
+  function sessionFolder(): string | null {
+    const boundScope = controls.connectedScopeRef.current;
+    return (boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current) || null;
   }
 
   /** The current turn's identity = its user-message id (stable for the
@@ -488,40 +525,6 @@ export function useAgentSession({
     void maybeNameTab();
   }
 
-  /** The agent may have changed files: sync the folder this session is
-   *  bound to (a library-wide chat has no bound folder — reconcile the
-   *  window's current folder so the visible tree stays fresh), then refresh
-   *  whichever surface shows it. Same-folder windows refresh index state;
-   *  a cross-folder tab instead re-fetches its session-folder listing so
-   *  mentions and attachment validation see the new files. The sync itself
-   *  is best-effort in both callers — a failure falls through to the
-   *  refresh, and the next status poll surfaces it. */
-  async function reconcileSessionFolder({ reloadWindowTree }: {
-    /** Reload the window's visible file tree before the index-state
-     *  refresh. The mid-turn tool-result path turns this on so new files
-     *  appear immediately; the turn-end sweep leaves it off and lets the
-     *  regular poll repaint the tree. */
-    reloadWindowTree: boolean;
-  }): Promise<void> {
-    const boundScope = controls.connectedScopeRef.current;
-    const folder = boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current;
-    if (!folder) return; // library chat in a no-folder window: nothing visible to reconcile
-    await api.sync(folder).catch(() => { /* best-effort; next poll surfaces it */ });
-    if (folderPathRef.current !== folder) {
-      mentions.bumpSessionListing();
-      return;
-    }
-    if (reloadWindowTree) {
-      await actions.loadFiles(folder);
-      // The reload awaited: the window may have switched folders meanwhile.
-      // Re-check before touching index state — this second check is
-      // deliberate, so a stale tab can never refresh another folder's
-      // index chrome.
-      if (folderPathRef.current !== folder) return;
-    }
-    void actions.refreshIndexState();
-  }
-
   function handleEvent(ev: ServerEvent) {
     switch (ev.t) {
       case 'ready':
@@ -574,19 +577,13 @@ export function useAgentSession({
       case 'tool':
         openKind.current = null;
         toolNamesRef.current.set(ev.id, ev.name);
-        setBlocks((bs) => [...bs, { kind: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running' }]);
+        setBlocks((bs) => openToolCard(bs, ev));
         break;
       case 'tool-delta':
-        setBlocks((bs) => bs.map((b) =>
-          b.kind === 'tool' && b.id === ev.id && b.status !== 'denied'
-            ? { ...b, result: (b.result ?? '') + ev.delta }
-            : b));
+        setBlocks((bs) => appendToolOutput(bs, ev));
         break;
       case 'tool-result':
-        setBlocks((bs) => bs.map((b) =>
-          b.kind === 'tool' && b.id === ev.id && b.status !== 'denied'
-            ? { ...b, status: ev.isError ? 'error' : 'done', result: ev.content }
-            : b));
+        setBlocks((bs) => completeToolCard(bs, ev));
         if (!ev.isError) {
           const toolName = toolNamesRef.current.get(ev.id);
           if (shouldRefreshAfterTool(toolName)) {
@@ -601,16 +598,7 @@ export function useAgentSession({
         break;
       case 'permission':
         openKind.current = null;
-        setBlocks((bs) => {
-          const idx = bs.findIndex((b) => b.kind === 'tool' && b.id === ev.toolUseId);
-          if (idx >= 0) {
-            const next = bs.slice();
-            next[idx] = { ...(next[idx] as ToolBlock), status: 'awaiting', permId: ev.id, permTitle: ev.title };
-            return next;
-          }
-          // Race fallback: permission arrived before the tool card.
-          return [...bs, { kind: 'tool', id: ev.toolUseId, name: ev.name, input: ev.input, status: 'awaiting', permId: ev.id, permTitle: ev.title }];
-        });
+        setBlocks((bs) => markToolAwaitingPermission(bs, ev));
         break;
       case 'steer-result':
         promptQueue.setQueuedPromptStatus(ev.id, ev.ok ? 'steered' : 'waiting');
@@ -649,13 +637,7 @@ export function useAgentSession({
         const terminal = turnErrorTrackerRef.current.finish(ev.isError);
         if (terminal.duplicate) break;
         openKind.current = null;
-        // A completed turn cannot retain an in-flight tool. Codex normally
-        // emits `item/completed` for every tool, but an omitted or unmatched
-        // notification must not leave the transcript permanently "Running".
-        setBlocks((bs) => bs.map((block) =>
-          block.kind === 'tool' && block.status === 'running'
-            ? { ...block, status: ev.isError ? 'error' : 'done' }
-            : block));
+        setBlocks((bs) => settleRunningTools(bs, ev.isError));
         toolNamesRef.current.clear();
         // Name the tab from the session's derived title (first prompt /
         // SDK summary) once the first turn lands — keeps it in sync with
@@ -751,10 +733,7 @@ export function useAgentSession({
 
   function replyPermission(toolBlockId: string, permId: string, allow: boolean) {
     wsRef.current?.send(JSON.stringify({ t: 'permission-reply', id: permId, allow }));
-    setBlocks((bs) => bs.map((b) =>
-      b.kind === 'tool' && b.id === toolBlockId
-        ? { ...b, status: allow ? 'running' : 'denied', permId: undefined }
-        : b));
+    setBlocks((bs) => applyPermissionReply(bs, toolBlockId, allow));
   }
 
   /** Cross-file link nav from an assistant message: resolve, then open a
@@ -780,94 +759,42 @@ export function useAgentSession({
     void actions.openFolder(action.folder).then(() => actions.selectFile(action.rel));
   }
 
-  function handleDraftChange(hasText: boolean) {
-    setHasDraftText(hasText);
-  }
-
-  // Report blankness to the tab model: a COMPLETELY blank tab (no
-  // transcript, no active turn, not resumed, no picked scope, no draft
-  // text, no attachments) is the reusable welcome tab for New Chat and
-  // window-folder switches.
-  const storedBlank = chat.chatTabs.find((tab) => tab.id === id)?.blank ?? true;
+  // A COMPLETELY blank tab (no transcript, no active turn, not resumed, no
+  // picked scope, no draft text, no attachments) is the reusable welcome tab
+  // for New Chat and window-folder switches.
   const blankNow = isBlankChatTab({
     hasContent: blocks.length > 0 || promptQueue.queuedTurns.length > 0,
     turnActive,
     resumedSession: controls.modelControl.resumedSession,
     picked: controls.pickedScope,
-    hasDraftText,
+    hasDraftText: controls.hasDraftText,
     attachmentCount: attachments.length,
   });
-  useEffect(() => {
-    if (storedBlank !== blankNow) dispatch({ type: 'CHAT_TAB_SET_BLANK', id, blank: blankNow });
-  }, [blankNow, storedBlank, dispatch, id]);
-
-  // Sidebar History handoff: the sidebar recorded a pending resume and
-  // ensured a suitable tab is active; the ACTIVE, still-blank tab running
-  // the request's agent takes it. Consume-and-clear BEFORE resuming so the
-  // request can never double-fire, and never hijack a non-blank tab.
-  const pendingResume = chat.pendingResume;
-  useEffect(() => {
-    if (!pendingResume) return;
-    if (!shouldConsumePendingResume({ active, tabAgent: agent, requestAgent: pendingResume.agent, blank: blankNow })) return;
-    dispatch({ type: 'CHAT_RESUME_CONSUMED' });
-    void resumeSession(
-      pendingResume.sessionId,
-      pendingResume.folder === null ? LIBRARY_SCOPE : folderScope(pendingResume.folder),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- consume once per request/activation; the guards read latest values
-  }, [pendingResume, active]);
+  useAgentTabRegistration({ id, active, agent, blank: blankNow, chat, dispatch, resumeSession });
 
   return {
     meta,
-    capabilities: runtimeCatalog.capabilities,
-    runtime: runtimeCatalog.runtime,
-    runtimeUnavailable: runtimeCatalog.runtimeUnavailable,
-    bootstrapActive: runtimeCatalog.bootstrapActive,
-    bootstrapFailed: runtimeCatalog.bootstrapFailed,
-    refreshRuntimes: runtimeCatalog.refreshRuntimes,
-    startRuntimeBootstrap: runtimeCatalog.startRuntimeBootstrap,
-    copyInstallHint: runtimeCatalog.copyInstallHint,
-    blocks,
-    turnActive,
-    turnMeta,
-    queuedTurns: promptQueue.queuedTurns,
-    phase,
-    fatal,
-    fatalRecoveryLabel,
-    mode: controls.mode,
-    changeMode: controls.changeMode,
-    effort: controls.effort,
-    effortInherited: controls.effortInherited,
-    effortLocked: controls.effortLocked,
-    changeEffort: controls.changeEffort,
-    supportedEfforts: controls.supportedEfforts,
-    modelControl: controls.modelControl,
-    modelLocked: controls.modelLocked,
-    modelVisible: controls.modelVisible,
-    changeModel: controls.changeModel,
-    connectedScope: controls.connectedScope,
-    sessionScope: controls.sessionScope,
-    folderEntries: controls.folderEntries,
-    folderLocked: controls.folderLocked,
-    changeScope: controls.changeScope,
-    handleDraftChange,
-    skills: skills.skills,
-    skillState: skills.skillState,
-    refreshSkills: skills.refreshSkills,
-    prefill,
-    setPrefill,
-    mentionFiles: mentions.mentionFiles,
-    mentionFolders: mentions.mentionFolders,
-    knownFilePaths: mentions.knownFilePaths,
-    send: promptQueue.send,
-    resend: promptQueue.resend,
-    stop,
-    reconnect,
-    reconnectAfterFatal,
-    replyPermission,
-    steerQueuedPrompt: promptQueue.steerQueuedPrompt,
-    copyUserMessage,
-    openArtifactLink,
-    setAgentComposerFocused,
+    runtime: runtimeCatalog,
+    controls,
+    queue: promptQueue,
+    mentions,
+    skills,
+    transcript: {
+      blocks,
+      turnActive,
+      turnMeta,
+      phase,
+      fatal,
+      fatalRecoveryLabel,
+      prefill,
+      setPrefill,
+      stop,
+      reconnect,
+      reconnectAfterFatal,
+      replyPermission,
+      copyUserMessage,
+      openArtifactLink,
+      setAgentComposerFocused,
+    },
   };
 }

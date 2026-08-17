@@ -63,6 +63,9 @@ export function AgentView({
     clearComposerAttachments: attach.clearComposerAttachments,
     discardAttachmentsForReset: attach.discardAttachmentsForReset,
   });
+  // The session groups its state by owner; destructure the namespaces once
+  // so the JSX below reads as composition rather than prop threading.
+  const { controls, mentions, queue, runtime, skills, transcript } = session;
 
   const [dragOver, setDragOver] = useState(false);
 
@@ -80,7 +83,7 @@ export function AgentView({
     // The sidebar drag source sets effectAllowed='move'; match it so the
     // drop isn't silently cancelled (OS files accept 'copy').
     e.dataTransfer.dropEffect = kinds.internalFile && !kinds.osFiles ? 'move' : 'copy';
-    if (session.phase === 'live') setDragOver(true);
+    if (transcript.phase === 'live') setDragOver(true);
   }
   function onPanelDragLeave(e: React.DragEvent) {
     // Only clear when the pointer actually leaves the panel, not when it
@@ -92,26 +95,26 @@ export function AgentView({
     e.preventDefault();
     e.stopPropagation();
     setDragOver(false);
-    if (session.phase !== 'live') return;
+    if (transcript.phase !== 'live') return;
     const osFiles = Array.from(e.dataTransfer.files ?? []);
     if (osFiles.length) void attach.uploadFiles(osFiles);
     else {
       const filePath = e.dataTransfer.getData(FILE_MIME);
-      if (filePath) attach.addFolderFiles([filePath], session.knownFilePaths);
+      if (filePath) attach.addFolderFiles([filePath], mentions.knownFilePaths);
     }
   }
 
   // Runtime-readiness gates, most fundamental first: discovery has not
   // answered yet, preparation is running, preparation failed, CLI missing.
   // Chat UI below owns the pane once the runtime is usable.
-  const showRuntimeGate = !session.runtime || session.bootstrapActive || session.bootstrapFailed || session.runtimeUnavailable;
+  const showRuntimeGate = !runtime.runtime || runtime.bootstrapActive || runtime.bootstrapFailed || runtime.runtimeUnavailable;
 
   // Empty chat (no turns yet, session usable) renders the hero layout:
   // greeting + centered composer + starter templates. Any transcript
   // content, a queued prompt, or a closed/failed session falls back to the
   // standard transcript-over-bottom-composer layout. The composer keeps its
   // `key` so the same mounted instance moves between the two layouts.
-  const emptyChat = session.blocks.length === 0 && session.queuedTurns.length === 0 && session.phase !== 'closed' && !session.fatal;
+  const emptyChat = transcript.blocks.length === 0 && queue.queuedTurns.length === 0 && transcript.phase !== 'closed' && !transcript.fatal;
 
   return (
     // `agent-view` stays as a routing hook: useGlobalDragDrop uses
@@ -139,14 +142,14 @@ export function AgentView({
         * here was pure noise. */}
       {showRuntimeGate ? (
         <AgentRuntimeGate
-          runtime={session.runtime}
+          runtime={runtime.runtime}
           fallbackName={session.meta.name}
-          bootstrapActive={session.bootstrapActive}
-          bootstrapFailed={session.bootstrapFailed}
-          runtimeUnavailable={session.runtimeUnavailable}
-          onRefresh={() => void session.refreshRuntimes()}
-          onInstall={() => void session.startRuntimeBootstrap()}
-          onCopyInstall={session.copyInstallHint}
+          bootstrapActive={runtime.bootstrapActive}
+          bootstrapFailed={runtime.bootstrapFailed}
+          runtimeUnavailable={runtime.runtimeUnavailable}
+          onRefresh={() => void runtime.refreshRuntimes()}
+          onInstall={() => void runtime.startRuntimeBootstrap()}
+          onCopyInstall={runtime.copyInstallHint}
           onOpenMcpSetup={() => openSettings('mcp')}
         />
       ) : <>
@@ -159,72 +162,72 @@ export function AgentView({
             <div className="mx-auto w-[min(640px,100%)]">
               <EmptyChatGreeting
                 agentShortName={session.meta.shortName}
-                connecting={session.phase === 'connecting'}
+                connecting={transcript.phase === 'connecting'}
               />
             </div>
           </div>
         ) : (
           <MessageList
             key="messages"
-            blocks={session.blocks}
-            queuedTurns={session.queuedTurns}
-            turnActive={session.turnActive}
-            turnMeta={session.turnMeta}
-            phase={session.phase}
-            fatal={session.fatal}
-            fatalRecoveryLabel={session.fatalRecoveryLabel}
+            blocks={transcript.blocks}
+            queuedTurns={queue.queuedTurns}
+            turnActive={transcript.turnActive}
+            turnMeta={transcript.turnMeta}
+            phase={transcript.phase}
+            fatal={transcript.fatal}
+            fatalRecoveryLabel={transcript.fatalRecoveryLabel}
             agentShortName={session.meta.shortName}
-            onPermission={session.replyPermission}
-            onSteerQueued={session.steerQueuedPrompt}
-            onCopyUserMessage={session.copyUserMessage}
-            onResendUserMessage={session.resend}
-            onRetry={session.reconnectAfterFatal}
-            onOpenArtifact={session.openArtifactLink}
+            onPermission={transcript.replyPermission}
+            onSteerQueued={queue.steerQueuedPrompt}
+            onCopyUserMessage={transcript.copyUserMessage}
+            onResendUserMessage={queue.resend}
+            onRetry={transcript.reconnectAfterFatal}
+            onOpenArtifact={transcript.openArtifactLink}
           />
         )}
-        {session.phase === 'closed' && !session.fatal && (
+        {transcript.phase === 'closed' && !transcript.fatal && (
           <div className="flex items-center justify-between gap-2.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
             <span>Session ended.</span>
-            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={session.reconnect}>Reconnect</Button>
+            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={transcript.reconnect}>Reconnect</Button>
           </div>
         )}
       <AgentComposer
         key="composer"
         hero={emptyChat}
-        phase={session.phase}
-        disabled={session.phase !== 'live'}
-        turnActive={session.turnActive}
+        phase={transcript.phase}
+        disabled={transcript.phase !== 'live'}
+        turnActive={transcript.turnActive}
         active={active}
         agentShortName={session.meta.shortName}
-        prefill={session.prefill}
-        mode={{ show: session.capabilities?.modes === true, value: session.mode, onSet: session.changeMode }}
+        prefill={transcript.prefill}
+        mode={{ show: runtime.capabilities?.modes === true, value: controls.mode, onSet: controls.changeMode }}
         effort={{
-          show: session.capabilities?.effort === true,
-          level: session.effort,
-          inherited: session.effortInherited,
-          locked: session.effortLocked,
-          supported: session.supportedEfforts,
-          onSet: session.changeEffort,
+          show: runtime.capabilities?.effort === true,
+          level: controls.effort,
+          inherited: controls.effortInherited,
+          locked: controls.effortLocked,
+          supported: controls.supportedEfforts,
+          onSet: controls.changeEffort,
         }}
         model={{
-          show: session.modelVisible,
-          selected: session.modelControl.selectedModel,
-          active: session.modelControl.activeModel,
-          models: session.modelControl.models,
-          locked: session.modelLocked,
-          notice: session.modelControl.notice,
-          resumedSession: session.modelControl.resumedSession,
-          onSet: session.changeModel,
+          show: controls.modelVisible,
+          selected: controls.modelControl.selectedModel,
+          active: controls.modelControl.activeModel,
+          models: controls.modelControl.models,
+          locked: controls.modelLocked,
+          notice: controls.modelControl.notice,
+          resumedSession: controls.modelControl.resumedSession,
+          onSet: controls.changeModel,
         }}
         scope={{
-          current: session.sessionScope,
-          entries: session.folderEntries,
+          current: controls.sessionScope,
+          entries: controls.folderEntries,
           homeDir: workspace.homeDir,
-          locked: session.folderLocked,
-          onSet: session.changeScope,
+          locked: controls.folderLocked,
+          onSet: controls.changeScope,
         }}
-        mentions={{ files: session.mentionFiles, folders: session.mentionFolders }}
-        skills={{ list: session.skills, state: session.skillState, onRefresh: session.refreshSkills }}
+        mentions={{ files: mentions.mentionFiles, folders: mentions.mentionFolders }}
+        skills={{ list: skills.skills, state: skills.skillState, onRefresh: skills.refreshSkills }}
         attachments={{
           items: attach.attachments,
           uploading: attach.uploading,
@@ -232,10 +235,10 @@ export function AgentView({
           onPasteImages: attach.pasteImages,
           onRemove: attach.removeAttachment,
         }}
-        onDraftChange={session.handleDraftChange}
-        onFocusChange={session.setAgentComposerFocused}
-        onSend={session.send}
-        onStop={session.stop}
+        onDraftChange={controls.handleDraftChange}
+        onFocusChange={transcript.setAgentComposerFocused}
+        onSend={queue.send}
+        onStop={transcript.stop}
       />
       {emptyChat && (
         <div key="empty-below" className="scrollbar-quiet flex min-h-0 flex-[4] flex-col overflow-y-auto px-2">
@@ -244,8 +247,8 @@ export function AgentView({
             * composition; on short panels it simply sits below the composer. */}
           <div className="mt-auto shrink-0">
             <EmptyChatSuggestion
-              onPrefill={(text) => session.setPrefill({ text, nonce: Date.now() })}
-              libraryScoped={session.sessionScope.kind === 'library'}
+              onPrefill={(text) => transcript.setPrefill({ text, nonce: Date.now() })}
+              libraryScoped={controls.sessionScope.kind === 'library'}
             />
           </div>
         </div>

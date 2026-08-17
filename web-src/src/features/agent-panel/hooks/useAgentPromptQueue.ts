@@ -1,7 +1,6 @@
 import { useState, type RefObject } from 'react';
 import { api, type AgentContextFile } from '@/common/api/api';
 import { errorMessage } from '@/common/api/apiTransport';
-import type { LibraryScope } from '@/common/lib/libraryScope';
 import type { AgentPanelCapabilities } from '@/common/lib/agentCatalog';
 import type { QueuedTurnPreview } from '@/features/agent-panel/components/AgentMessages';
 import { nextBlockId } from '@/features/agent-panel/lib/blockIds';
@@ -35,12 +34,14 @@ interface PromptToSend {
  *  its event routing (`turn-end` and `steer-result` call
  *  `runNextQueuedPrompt`/`setQueuedPromptStatus`). `queuedPromptsRef` is
  *  created by the core because the scope-follow rule reads it too; every
- *  mutation still funnels through `mutateQueue` here. */
+ *  mutation still funnels through `mutateQueue` here.
+ *
+ *  Capabilities and attachments arrive only as their always-current refs:
+ *  nothing here reads them during render, so a second render-value
+ *  parameter for each would only be a second way to say the same thing. */
 export function useAgentPromptQueue({
   agentShortName,
-  capabilities,
   capabilitiesRef,
-  attachments,
   attachmentsRef,
   clearComposerAttachments,
   titleRef,
@@ -52,13 +53,10 @@ export function useAgentPromptQueue({
   wsRef,
   stop,
   knownFilePathsRef,
-  connectedScopeRef,
-  folderPathRef,
+  sessionFolder,
 }: {
   agentShortName: string;
-  capabilities: AgentPanelCapabilities;
   capabilitiesRef: RefObject<AgentPanelCapabilities>;
-  attachments: Attachment[];
   attachmentsRef: RefObject<Attachment[]>;
   clearComposerAttachments: () => void;
   titleRef: RefObject<string>;
@@ -72,8 +70,9 @@ export function useAgentPromptQueue({
   wsRef: RefObject<WebSocket | null>;
   stop: () => void;
   knownFilePathsRef: RefObject<Set<string>>;
-  connectedScopeRef: RefObject<LibraryScope | null>;
-  folderPathRef: RefObject<string>;
+  /** The folder an attachment path resolves against — the session's bound
+   *  folder, else the window's. Null for a library chat with no folder. */
+  sessionFolder: () => string | null;
 }) {
   const [queuedTurns, setQueuedTurns] = useState<QueuedTurnPreview[]>([]);
 
@@ -100,8 +99,8 @@ export function useAgentPromptQueue({
   }
 
   function send(text: string, skill?: string) {
-    const atts = attachments;
-    const titleHint = capabilities?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
+    const atts = attachmentsRef.current;
+    const titleHint = capabilitiesRef.current?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
     if (turnActiveRef.current) {
       mutateQueue((queue) => [...queue, { id: nextBlockId(), text, attachments: atts, titleHint, skill, status: 'waiting' }]);
       clearComposerAttachments();
@@ -156,7 +155,7 @@ export function useAgentPromptQueue({
   }
 
   async function steerQueuedPrompt(promptId: string) {
-    if (!capabilities?.steering) return;
+    if (!capabilitiesRef.current?.steering) return;
     const prompt = queuedPromptsRef.current.find((p) => p.id === promptId && p.status === 'waiting');
     const ws = wsRef.current;
     if (!prompt || !ws || ws.readyState !== WebSocket.OPEN) return;
@@ -223,8 +222,7 @@ export function useAgentPromptQueue({
     // Resolve against the session's bound folder — a cross-folder tab must
     // not look the file up under the window's current folder. (A library
     // chat never reaches here: its folder-file listing is empty.)
-    const boundScope = connectedScopeRef.current;
-    const contextFolder = boundScope?.kind === 'folder' ? boundScope.path : folderPathRef.current;
+    const contextFolder = sessionFolder();
     if (!contextFolder) return null;
     try {
       return await api.agentContextFile(contextFolder, path);
