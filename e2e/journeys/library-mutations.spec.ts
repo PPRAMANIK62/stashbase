@@ -186,6 +186,94 @@ test('a failed save blocks document navigation and Electron window close until p
   }
 });
 
+test('J03 exposes both versions and blocks navigation until a save conflict is resolved', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  const source = path.join(fixture.workspaces.projectA, 'Welcome.md');
+  const editorMarker = 'Unsaved editor version remains recoverable.';
+  const diskMarker = 'Newer Agent version remains recoverable.';
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await dismissEmbeddingKeyPrompt(app.page);
+    await fileTreeRow(app.page, 'Welcome.md').click();
+
+    const editor = activeMarkdownEditor(app.page);
+    await editor.click();
+    await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
+    await app.page.keyboard.insertText(`\n${editorMarker}`);
+    await expect(app.page.getByText('Unsaved', { exact: true })).toBeVisible();
+    fs.writeFileSync(source, `# Agent update\n\n${diskMarker}\n`, 'utf8');
+
+    const resolver = app.page.getByTestId('conflict-resolver');
+    await expect(resolver).toBeVisible();
+    await expect(resolver).toContainText(diskMarker);
+    await expect(resolver).toContainText(editorMarker);
+
+    await fileTreeRow(app.page, 'Second Note.md').click();
+    await expect(resolver).toBeVisible();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
+    await app.electron.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.close();
+    });
+    await expect(resolver).toBeVisible();
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
+
+    await resolver.getByRole('button', { name: 'Reload from Disk' }).click();
+    await expect(resolver).toHaveCount(0);
+    await expect(activeMarkdownEditor(app.page)).toContainText(diskMarker);
+    await expect(activeMarkdownEditor(app.page)).not.toContainText(editorMarker);
+    await expect.poll(() => fs.readFileSync(source, 'utf8')).toContain(diskMarker);
+    expect(app.errors.records.filter((record) => !(
+      /console: Failed to load resource: the server responded with a status of 409 \(Conflict\)/
+        .test(`${record.kind}: ${record.text}`)
+    ))).toEqual([]);
+    app.errors.records.splice(0, app.errors.records.length);
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+test('J03 recovery reload flushes a live edit before replacing the renderer', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  const source = path.join(fixture.workspaces.projectA, 'Welcome.md');
+  const marker = 'Saved through the recovery reload barrier.';
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await dismissEmbeddingKeyPrompt(app.page);
+    await fileTreeRow(app.page, 'Welcome.md').click();
+
+    const editor = activeMarkdownEditor(app.page);
+    await editor.click();
+    await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
+    await app.page.keyboard.insertText(`\n${marker}`);
+    await expect(app.page.getByText('Unsaved', { exact: true })).toBeVisible();
+
+    const reloaded = app.page.waitForEvent('load');
+    await app.page.evaluate(() => {
+      const bridge = (window as unknown as {
+        electron?: { reloadWindow?: () => Promise<boolean> };
+      }).electron;
+      void bridge?.reloadWindow?.();
+    });
+    await reloaded;
+    await app.page.waitForFunction(() => document.body.dataset.bootSettled === '1');
+    await dismissEmbeddingKeyPrompt(app.page);
+
+    await expect.poll(() => fs.readFileSync(source, 'utf8')).toContain(marker);
+    await fileTreeRow(app.page, 'Welcome.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
+    await expect(activeMarkdownEditor(app.page)).toContainText(marker);
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
 test('real pointer drag reorders root files and moves a nested file to the target level', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   let app: LaunchedApp | undefined;
