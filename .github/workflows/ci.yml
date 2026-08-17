@@ -50,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check test inventory wiring
+        run: pnpm test:inventory
+
       - name: Install Python sidecar dependencies
         run: pnpm setup:python
 
