@@ -67,7 +67,11 @@ it is not a third scope.
   app quit ends all sessions through the cleanup ladder.
 - `create_project` may migrate only the attributed live library session.
   Persist the session-to-folder override before emitting the scope change so
-  history never lists the session in both scopes.
+  history never lists the session in both scopes. Preserve native session
+  identity while moving subsequent execution to the project cwd: Codex keeps
+  its thread and changes the next turn cwd; Claude lets the creating turn
+  finish, then resumes the same native session from the project cwd before
+  accepting the next prompt.
 
 ## Native Process Ownership
 
@@ -116,7 +120,7 @@ assumed CLI versions.
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
 | Renderer Adapter | `web-src/src/agentCatalog.tsx`, `components/agent/chatActivation.ts`, `components/agent/runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
-| Focused evidence | `server/__tests__/agent-contract.test.ts`, `agent-runtime-installer.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs` |
+| Focused evidence | `server/__tests__/agent-contract.test.ts`, `agent-runtime-installer.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs`; J11 in `e2e/journeys/agent-workflows.spec.ts` proves the first post-rebind MCP write lands in the project |
 
 ## Validation
 
@@ -132,6 +136,9 @@ Run `pnpm test:e2e:agent-protocol` when the Codex vocabulary changes and
 `pnpm test:e2e:functional` for renderer-visible lifecycle changes. Packaged
 discovery and one credentialed real-CLI turn remain release sanity checks.
 
-Related journey: [J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat).
+Related journeys: [J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat)
+and the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
+core loop. Live session attribution and rebind also support
+[J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project).
 Related contracts: [Agent Panel](agent-panel.md), [MCP Access](mcp-access.md),
 and [Window Lifecycle](window-lifecycle.md).

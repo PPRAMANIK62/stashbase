@@ -39,15 +39,35 @@ reason when a platform cannot exercise it.
   the intended import/attachment behavior and rejection feedback.
 - [ ] **J01 / J03** — Exercise native menus and the platform shortcuts for Quick Open, Command
   Palette, search, Settings, window close, and quit. Confirm focus returns to a
-  sensible control after dismissing an overlay. Confirm the packaged View menu
-  has no direct Reload or Force Reload entry.
+  sensible control after dismissing an overlay, and confirm View exposes no
+  Reload or Force Reload bypass.
 - [ ] **J06** — With tester-owned credentials and an installed supported CLI, send one
   harmless Agent turn. Confirm streaming/activity, one permission or stop
   interaction when available, completion, and a clean close. Never use a real
   user workspace or capture credentials in evidence.
+- [ ] **J05 / J07 / J10** — In a disposable project with one non-sensitive source and
+  one Markdown Canvas, confirm Similar Search returns the source, ask the real
+  Agent to use that evidence and write an accepted result into the Canvas,
+  approve the write, review and edit the file, then close and reopen it. Confirm
+  Exact Search can find the new durable content. This is a packaged integration
+  check, not the semantic-quality threshold owned by the J05 Eval.
+- [ ] **J11** — From a Library-scoped Chat, explicitly ask the real Agent to create a
+  disposable project. Decline the first `create_project` approval and confirm no
+  folder or membership appears. Ask again and approve: confirm the ordinary
+  folder is created under the configured owned root, the same Chat transcript
+  remains selected and changes to the new project scope, the originating window
+  enters the folder, and a harmless next turn stays in that scope. Remove its
+  membership in StashBase after the check, then delete the disposable source
+  folder through the external test setup rather than treating membership
+  removal as filesystem deletion.
 - [ ] **J06** — Paste one non-sensitive clipboard image into the Agent composer. Confirm
   the attachment preview appears, accompanying text remains, and the competing
   clipboard library-import offer does not appear.
+- [ ] **J04** — With clipboard screenshot capture disabled in General Settings,
+  copy one non-sensitive screenshot and confirm StashBase does not offer it.
+  Enable capture, copy a new screenshot, explicitly add it, and confirm the
+  visible image enters the chosen folder while its OCR becomes searchable.
+  Disable capture again and confirm a later image creates no offer.
 - [ ] **J09** — Open **Report a Bug…** from the native Help menu. Review the bounded
   screenshot/log previews, exclude one available artifact, prepare the report,
   and use Download. Confirm only the selected files appear in one new Downloads

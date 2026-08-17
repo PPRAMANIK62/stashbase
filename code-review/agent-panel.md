@@ -24,6 +24,12 @@
 - Tab activation and history resume only select renderer state. A missing
   runtime remains on the setup gate until **Install and continue**; activation
   code must not call the preparation endpoint speculatively.
+- A validated `scope-changed` event may migrate only the same live
+  Library-scoped Chat that created a project. Update the tab binding before the
+  owning window enters the new member so the conversation stays selected;
+  other windows receive membership only. If folder entry fails, keep the new
+  project scope visible and report an actionable open failure rather than
+  reverting to an ambiguous Library presentation.
 
 ## Layout and Visibility
 
@@ -120,16 +126,18 @@ pnpm test:agent
 pnpm build:web
 ```
 
-Run `pnpm test:e2e:functional` for
-[J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat)
-behavior and `pnpm test:e2e:visual` for covered composition changes. The
-fake Codex fixture's streamed-math journey deliberately sends consecutive
-text deltas followed immediately by turn completion: queued React state
-updates must use the stream boundary captured when each protocol event
-arrived; completion or tool events must not retroactively change how an
-earlier delta is accumulated. Real
-credentials, packaged discovery, and clipboard/native Seams remain in release
-sanity.
+Run `pnpm test:e2e:functional` for the affected Agent journey and
+`pnpm test:e2e:visual` for covered composition changes. Exact protocol fixture
+sequences belong in tests. Real credentials, packaged discovery, and
+clipboard/native Seams remain in release sanity.
+
+Related journeys: [J01](../design-docs/user-journeys.md#j01-complete-onboarding-and-reach-first-value),
+[J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat), and
+[J07](../design-docs/user-journeys.md#j07-converge-chat-into-a-document), plus
+the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
+core loop and
+[J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
+for the Library-to-project session transition.
 
 Related contracts: [Agent Runtime](agent-runtime.md),
 [MCP Access](mcp-access.md), [Renderer Styling](renderer-styling.md), and

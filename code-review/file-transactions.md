@@ -12,6 +12,12 @@
 - Shared save and library mutation services own content versions and the
   transaction sequence. HTTP and MCP routes are adapters, not alternate
   mutation implementations.
+- Content capability is format- and surface-specific: the Workbench edits
+  Markdown and JSON, while library/Agent operations accept Markdown, HTML, and
+  JSON text. Preview-only binary formats reject content writes. Rename, move,
+  and delete are file mutations and do not imply content editability. The
+  product-facing boundary lives in the
+  [Documents format matrix](../design-docs/design/documents.md#format-capability-matrix).
 - The conversion owner provides the cancellation barrier and post-mutation
   rediscovery/cleanup handoff.
 
@@ -34,6 +40,12 @@
 
 - Text versions are hashes of complete source bytes, not mtimes.
 - Renderer saves and Agent/MCP writes use the same version authority.
+- Every content-write Adapter enforces the same accepted text-format set. A
+  public tool description must not advertise a narrower or broader set than
+  the operation actually accepts.
+- A renderer save barrier compares the live editor value with its accepted
+  source baseline. The asynchronously rendered dirty indicator is not a
+  durability authority and cannot make context release skip a fresh edit.
 - A byte-identical save is a no-op and retains the current version.
 - Markdown and JSON persistence preserves supported BOM and line-ending
   conventions without manufacturing unrelated source changes.
@@ -73,6 +85,21 @@ blocked until that decision succeeds, fails, or is cancelled:
 - Merge opens a dirty draft with conflict markers and saves it against the disk
   snapshot through the ordinary versioned path.
 
+### Known gap — instruction seeding on folder entry
+
+The Shipping `/api/folder` path creates a missing root `AGENTS.md` create-only
+when an ordinary existing folder joins or re-enters the library. The file is
+visible, user-owned, and never overwrites an existing instruction, but the
+write occurs before the user explicitly starts a folder Agent and is therefore
+more invasive than J02's navigation promise and this contract's normal
+explicit-mutation rule.
+
+This exception is accepted for the current release so every opened folder is
+Agent-ready. Future design should move seeding to an attributable Agent-start
+or project-setup decision, or introduce an equally explicit folder-level
+choice. Reviewers must not use this exception to justify other source writes on
+folder open.
+
 ## Mutation Sequence
 
 For rename, move, and delete:
@@ -96,6 +123,9 @@ identity before reporting any optional new-identity indexing lag.
 
 ## Import Publication
 
+- A clipboard image reaches publication only after the default-off capture
+  setting is enabled and the user accepts that specific offer. Dismissal and
+  clipboard observation never create a source file.
 - Multipart import streams into disk-backed OS-temp staging; it does not hold a
   multi-gigabyte body in memory.
 - Publication copies into a hidden same-directory temporary, then uses an
@@ -152,5 +182,12 @@ or conflict UX. Cover POSIX, Windows drive/UNC, case-only rename, symlink
 escape, target collision, disconnect/crash recovery, and the
 `V1 → V2 → conflict` sequence at the lowest deterministic layer.
 
-Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folder)
-and [J03](../design-docs/user-journeys.md#j03-read-and-edit-source-documents).
+Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folder),
+[J03](../design-docs/user-journeys.md#j03-read-and-edit-source-documents),
+[J04](../design-docs/user-journeys.md#j04-prepare-a-hard-to-read-file),
+[J07](../design-docs/user-journeys.md#j07-converge-chat-into-a-document), and
+[J08](../design-docs/user-journeys.md#j08-connect-an-external-agent-through-mcp),
+plus the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
+core loop and
+[J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
+for safe project target creation.
