@@ -351,7 +351,7 @@ const CODEX_INSTALLER = process.platform === 'win32'
   ? 'https://chatgpt.com/codex/install.ps1'
   : 'https://chatgpt.com/codex/install.sh';
 
-async function installCodex(update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void> {
+export async function installCodex(update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void> {
   update({ message: 'Downloading the official Codex installer…' });
   const script = await fetchBoundedText(CODEX_INSTALLER, signal, 2_000_000);
   const binDir = managedCodexBinDir();
@@ -373,7 +373,7 @@ async function installCodex(update: (next: ProgressUpdate) => void, signal: Abor
     if (message) update({ message });
   });
   const executable = path.join(binDir, process.platform === 'win32' ? 'codex.exe' : 'codex');
-  verifyAgentExecutable(executable, 'Codex');
+  verifyAgentExecutable(executable, 'Codex', env);
   update({ progress: 1, message: 'Codex installed.' });
 }
 
@@ -431,12 +431,16 @@ async function downloadVerified(
   onProgress(1);
 }
 
-function verifyAgentExecutable(executable: string, label: string): void {
+function verifyAgentExecutable(
+  executable: string,
+  label: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
   const result = spawnSync(executable, ['--version'], {
     encoding: 'utf8',
     timeout: 20_000,
     windowsHide: true,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+    env: { ...env, ELECTRON_RUN_AS_NODE: undefined },
   });
   if (result.status !== 0) {
     throw new Error(`${label} was downloaded but did not pass its executable check.`);

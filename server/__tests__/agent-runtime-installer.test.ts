@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import { resolveAgentCli, resolveAgentCliWithLoginShell } from '../agent-cli.ts';
 import {
   AgentBootstrapCoordinator,
   claudePlatform,
+  installCodex,
   type AgentBootstrapDependencies,
 } from '../agent-runtime-installer.ts';
 import {
@@ -174,6 +175,50 @@ test('Claude release platform mapping stays provider-shaped', () => {
   assert.equal(claudePlatform('linux', 'arm64', true), 'linux-arm64-musl');
   assert.equal(claudePlatform('win32', 'x64', false), 'win32-x64');
   assert.throws(() => claudePlatform('freebsd', 'x64', false), /does not publish/);
+});
+
+test('Codex post-install verification preserves the isolated installer environment', async () => {
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const previousExpectedHome = process.env.STASHBASE_EXPECTED_CODEX_HOME;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-install-test-'));
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  process.env.STASHBASE_EXPECTED_CODEX_HOME = path.join(root, 'agent-runtimes', 'codex', 'installer-home');
+  const installer = process.platform === 'win32' ? String.raw`
+$source = @'
+using System;
+public static class FakeCodex {
+  public static int Main() {
+    if (!String.Equals(
+      Environment.GetEnvironmentVariable("CODEX_HOME"),
+      Environment.GetEnvironmentVariable("STASHBASE_EXPECTED_CODEX_HOME"),
+      StringComparison.Ordinal
+    )) return 41;
+    Console.WriteLine("codex 1.2.3");
+    return 0;
+  }
+}
+'@
+Add-Type -TypeDefinition $source -OutputAssembly (Join-Path $env:CODEX_INSTALL_DIR "codex.exe") -OutputType ConsoleApplication
+` : `#!/bin/sh
+set -eu
+cat > "$CODEX_INSTALL_DIR/codex" <<'SCRIPT'
+#!/bin/sh
+[ "$CODEX_HOME" = "$STASHBASE_EXPECTED_CODEX_HOME" ] || exit 41
+printf 'codex 1.2.3\\n'
+SCRIPT
+chmod +x "$CODEX_INSTALL_DIR/codex"
+`;
+  mock.method(globalThis, 'fetch', async () => new Response(installer));
+  try {
+    await installCodex(() => {}, new AbortController().signal);
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    if (previousExpectedHome === undefined) delete process.env.STASHBASE_EXPECTED_CODEX_HOME;
+    else process.env.STASHBASE_EXPECTED_CODEX_HOME = previousExpectedHome;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('development fixtures can isolate discovery from developer-installed Agents', () => {

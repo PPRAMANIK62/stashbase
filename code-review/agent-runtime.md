@@ -22,9 +22,11 @@
   and removes only the private install under AppData (the removal path-guards
   to that root). Uninstall is disk reclamation, not deactivation: the next
   explicit New Chat re-runs readiness.
-- Codex uses its official standalone installer in a private target. Claude uses
-  its official release manifest, verifies size and SHA-256, and publishes
-  atomically. Shutdown cancels preparation.
+- Codex uses its official standalone installer in a private target. Its
+  installer process and immediate executable check share that isolated
+  installer environment; native sessions still use the provider's normal
+  account and history home. Claude uses its official release manifest, verifies
+  size and SHA-256, and publishes atomically. Shutdown cancels preparation.
 - Readiness configures the matching CLI's StashBase MCP entry through
   `ensureAgentMcp`, the only writer of the built-in agents' own config files.
   Native attach repeats that idempotent write immediately before process
