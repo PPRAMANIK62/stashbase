@@ -6,7 +6,7 @@
  * lives in.
  *
  * Role/name/selection semantics for the tree and tab strip live in
- * `@/common/__tests__/accessibility-semantics.test.ts`.
+ * `./accessibility-semantics.test.ts`.
  */
 import '@/common/__tests__/domEnvironment';
 import assert from 'node:assert/strict';

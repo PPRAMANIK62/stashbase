@@ -3,7 +3,7 @@ import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '@shared/file-formats';
 import { api, ApiError } from '@/common/api/api';
 import { folderRefsEqual } from '@/store/lib/folderPath';
 import { basename } from '@/common/lib/paths';
-import type { EditorHandle } from '@/store/state/actionTypes';
+import type { EditorHandle } from '@/store/state/editorTypes';
 import {
   isFolderFileTab,
   keywordFindCaseSensitive,

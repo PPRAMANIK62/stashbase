@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React, { useRef } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import type { EditorHandle } from '@/store/state/actionTypes';
+import type { EditorHandle } from '@/store/state/editorTypes';
 import { initialState, type Action, type State } from '@/store/state/state';
 import { useDocumentActions } from '@/store/hooks/useDocumentActions';
 

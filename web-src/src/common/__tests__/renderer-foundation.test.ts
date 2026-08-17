@@ -16,7 +16,8 @@
  * component, and every one of them is invisible to a regex the moment the
  * component moves file, gets split in two, or spells the same output a
  * different way. Component invariants therefore live in tests that RENDER:
- * see `shared-overlays.test.ts`, `accessibility-semantics.test.ts`,
+ * see `shared-overlays.test.ts`,
+ * `@/features/workspace/__tests__/accessibility-semantics.test.ts`,
  * `@/app/__tests__/app-shell-semantics.test.ts`, and the per-feature
  * `__tests__` folders. Do not move a component assertion back into this
  * file, and do not "clean up" the stylesheet reads that remain — they are

@@ -3,7 +3,7 @@ import type {
   AudioTranscriptSegment,
   AudioTranscriptState,
 } from '@/common/api/apiTypes.ts';
-import { preparationWaitCopy } from '@/common/lib/preparationCopy.ts';
+import { preparationWaitCopy } from './preparationCopy';
 
 export function audioPreviewProgressCopy(state: AudioPreviewStatus | null): string {
   if (state?.status === 'queued') {

@@ -79,6 +79,50 @@ reason: it is an imperative resync the sidebar needs without the poll, so
 exporting it meant exporting the module that owns it, not the hook that
 also happens to call it.
 
+## Naming a lazy boundary
+
+`Managed…` means **the lazily-loaded heavy half**, not "store-connected".
+`ManagedQuickOpen` is not a managed version of `QuickOpen`; it *is* Quick Open,
+and `QuickOpen` is the always-mounted gate that pulls it in. Reading the prefix
+the other way inverts which file is the small one.
+
+The preferred idiom is that pair, and `common/components/LazyManaged.tsx`
+carries its skeleton:
+
+- The gate, named for the surface — eager, tiny, mounted unconditionally. It
+  renders nothing until its trigger fires, then renders the managed body
+  through `LazyManaged`, `LazyManagedModal`, or `LazyManagedPicker`, which
+  supply the `Suspense` fallback and (for modals and pickers) the overlay
+  layer and error boundary.
+- The body, the same name under a `Managed` prefix — a `default` export, so the
+  gate's `lazyWithRetry(() => import(…))` needs no `.then` unwrap. That
+  `lazyWithRetry` const sits at module scope in the gate: it must run once per
+  module, not once per render.
+
+`ModalShell`, `Menu`, `Toasts`, `DropVeil`, `TooltipButton`,
+`ClipboardImportModal`, `AlertConfirmModal`, `SettingsModal`, `QuickOpen`, and
+`LibrarySearch` all follow it. Prefer it for a new lazy surface.
+
+Two variants exist and are not defects:
+
+- **`Lazy…` local consts.** Where the heavy half is an existing component that
+  was never split — `LazyPdfPreview` and its four siblings in `DocumentViewer`,
+  `LazyContextMenu` and `LazyImageLightbox` in `App.tsx`,
+  `LazyAgentMathMarkdown` — the const is named for the boundary and the
+  component keeps its own name. Use this when the caller is a dispatch over
+  several already-whole components rather than one gate over one body.
+- **Plain default exports behind a barrel.** `ChatPane`, `SessionHistoryMenu`,
+  `SidebarAccountRow`, `UnsupportedFilesModal`, and the preparation callouts
+  are ordinary components; the `lazyWithRetry` wrapper lives in the feature's
+  `index.ts`, so the barrel export *is* the boundary and the file needs no
+  prefix at all.
+
+The prefix is a reading aid, not a load-bearing contract — nothing dispatches
+on it, and `scripts/check-renderer-chunks.mjs` measures the real chunk split.
+Renaming across the three idioms would touch ten-plus files and the chunk
+manifest for no behavior change, so leave existing names alone and pick the
+idiom that matches the shape of the new boundary.
+
 ## Import specifiers
 
 Only two forms are allowed inside `web-src/src/`: `./sibling` for a module in
@@ -86,7 +130,7 @@ the same directory, and an alias for everything else. `../` never appears in a
 specifier, in any form — including the `@/../../shared/…` spelling, which
 climbs out of `src/` and is a relative path in disguise.
 
-Three aliases carry the rest, declared in both `web-src/tsconfig.json` (which
+Two aliases carry the rest, declared in both `web-src/tsconfig.json` (which
 the renderer test runner reads through `TSX_TSCONFIG_PATH`) and
 `web-src/vite.config.ts` (which the build reads). Both must stay in sync or one
 of the two resolves and the other does not.
@@ -95,7 +139,18 @@ of the two resolves and the other does not.
 |---|---|
 | `@/` | `web-src/src/` |
 | `@shared/` | repo-root `shared/` — cross-process contract types |
-| `@server/` | repo-root `server/` — type-only, and a Known Gap (below) |
+
+There is deliberately no alias for `server/`. Every renderer↔server type the
+renderer needs lives in `shared/`: `conversion.ts`, `transcription.ts`,
+`search-types.ts`, `file-formats.ts`, `html-sanitization.ts`, and
+`agent-protocol.ts` (the Agent panel's wire vocabulary, re-exported by
+`server/agent-contract.ts` so server callers keep one import site). A
+`server/` module is free to `import 'ws'` or reach the filesystem, so a
+renderer import of one is only safe while it stays `import type` — a single
+value import would pull that whole graph into the browser bundle. Removing the
+alias makes that mistake unrepresentable rather than reviewable. When the
+renderer needs a new server-defined type, move the type into `shared/` and
+re-export it from `server/`; do not add the alias back.
 
 Aliased specifiers are extensionless, apart from non-TS assets such as the
 shared links JSON. This is not cosmetic: the boundary regexes below match
@@ -104,15 +159,6 @@ the raw specifier text, so a relative import would evade them silently.
 `new URL('../workers/…', import.meta.url)` is exempt. Vite resolves that form
 against the file's own location at build time and does not apply `resolve.alias`
 to it, so the worker reference stays relative.
-
-**Known Gap — `@server/`.** `features/agent-panel/lib/types.ts` takes
-`AgentModel`, `AgentSkill`, and `AgentServerEvent` from `server/agent-contract.ts`.
-Those three are renderer/server wire types, so they belong in `shared/`
-beside `conversion.ts` and `transcription.ts`; the renderer should not reach
-into `server/` at all. The alias names an existing dependency rather than
-creating one — it previously hid inside a `@/../../server/…` specifier — and
-naming it is what makes it removable. Do not add `@server/` imports; move the
-types into `shared/` instead.
 
 ## Context value stability
 
@@ -156,6 +202,32 @@ the presentational half in `common/`, the rule that feeds it as a
 `store/hooks/` hook. `SemanticIndexingNotice` is the worked example — one
 view, one `useSemanticIndexingNotice`, so the Files panel and the search
 popup cannot disagree about when the notice is due.
+
+Promotion is not one-way. `common/` is the leaf layer *because* several
+callers need it; a module whose consumers have narrowed to a single feature
+belongs back inside that feature, where the feature can change it without
+auditing the whole tree. `preparationWaitCopy` moved to
+`features/documents/lib/preparationCopy.ts` for that reason — four Documents
+previews are its only callers, and a name borrowed from a different feature
+made it look shared when it was not.
+
+Two counts decide it, and both must hold before a module moves down:
+
+- **Exactly one consuming feature.** Two features means it stays in
+  `common/` — a sideways import is what the layer model exists to prevent.
+- **No consumer in `common/` or `store/`.** Either one pins the module in
+  `common/` no matter how few features read it, because neither layer may
+  import a feature. `documentOutline.ts` is pinned by the first
+  (`common/components/DocumentOutline.tsx` renders it);
+  `agentCatalog.ts` and `agentPreference.ts` are pinned by the second
+  (`store/contexts/ActionsContext.tsx` and `AppContext.tsx` read them). Those
+  two look misplaced — every other consumer is in `features/agent-panel/` —
+  but moving them would put a feature import in `store/`, which the boundary
+  rules reject. They are in `common/` because the layer model works, not
+  despite it.
+
+The trigger modules below are pinned for a third reason: being reachable from
+either side without a feature import is their whole purpose.
 
 ## Cross-feature triggers
 
@@ -210,8 +282,8 @@ react, import, and jsx-a11y plugins. Three deliberate calibrations:
 - The `jsx-a11y` rules that require markup changes are warnings. They are
   real and worth addressing, but each is a UX decision rather than a
   mechanical fix, and the renderer's semantics are asserted separately in
-  `common/__tests__/accessibility-semantics.test.ts`. Raising them is a
-  follow-up, not a layering concern.
+  `features/workspace/__tests__/accessibility-semantics.test.ts`. Raising
+  them is a follow-up, not a layering concern.
 
 `**/__tests__/**` is exempt from the boundary rules: a renderer test may
 import a feature component to render it realistically.

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { api, type FolderState } from '@/common/api/api';
 import { folderRefsEqual, isAbsoluteFolderRef } from '@/store/lib/folderPath';
 import { createFolderMutationQueue } from '@/store/lib/folderTransition';
-import type { EditorHandle } from '@/store/state/actionTypes';
+import type { EditorHandle } from '@/store/state/editorTypes';
 import { folderScopedResetActions, type FolderResetReason } from '@/store/lib/folderScopedReset';
 import type { Action, LibraryFolderStatus, State } from '@/store/state/state';
 import type { ToastOptions } from './useFeedbackActions';

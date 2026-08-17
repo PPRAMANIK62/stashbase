@@ -1,3 +1,11 @@
+/**
+ * Imperative handles a rendered document view registers with the store so the
+ * action hooks can drive it. They are passed through actions but never stored
+ * in `State` (a live DOM-bound object is not serializable state), which is why
+ * they sit beside `state.ts` rather than in it. No action types live here — the
+ * whole `Action` union is in `state.ts`.
+ */
+
 /** Imperative handle a Markdown document registers so save, rename, and file
  * switches can pull the live serialized Markdown. */
 export interface EditorHandle {

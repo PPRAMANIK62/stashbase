@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { api, encodePath, getWindowId } from '@/common/api/api';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { getActiveTab, type Action, type PendingHighlight, type State } from '@/store/state/state';
-import type { EditorHandle } from '@/store/state/actionTypes';
+import type { EditorHandle } from '@/store/state/editorTypes';
 import { useDocumentActions } from './useDocumentActions';
 import { useFileActions } from './useFileActions';
 import { useFolderActions } from './useFolderActions';

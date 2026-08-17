@@ -1,3 +1,8 @@
+/** Lives in `common/` because `store/contexts/AppContext.tsx` needs it and
+ * `store/` may not import a feature — not because it is feature-agnostic.
+ * Every other consumer is in `app/` or `features/agent-panel/`. Do not "tidy"
+ * it down into that feature; see "Where shared code goes" in
+ * `code-review/renderer-architecture.md`. */
 import { isAgentKind, type AgentKind } from '@/common/lib/agentCatalog';
 
 const AGENT_PREFERENCE_KEY = 'stashbase.preferred-agent';

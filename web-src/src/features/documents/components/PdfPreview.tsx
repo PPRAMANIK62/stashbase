@@ -13,7 +13,7 @@ import {
 // worker for both dev and the packaged build, unlike a bare `?url`.
 import PdfWorker from '@/features/documents/lib/pdfWorker?worker';
 import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
-import { preparationWaitCopy } from '@/common/lib/preparationCopy.ts';
+import { preparationWaitCopy } from '@/features/documents/lib/preparationCopy';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { getFileReadiness } from '@/store/lib/fileReadiness';

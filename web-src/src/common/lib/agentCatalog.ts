@@ -1,3 +1,8 @@
+/** Lives in `common/` because `store/contexts/ActionsContext.tsx` needs it and
+ * `store/` may not import a feature — not because it is feature-agnostic.
+ * Every other consumer is in `features/agent-panel/`. Do not "tidy" it down
+ * into that feature; see "Where shared code goes" in
+ * `code-review/renderer-architecture.md`. */
 import type { ComponentType } from 'react';
 import { ClaudeIcon, CodexIcon } from '@/common/components/icons';
 

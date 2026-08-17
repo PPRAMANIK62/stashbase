@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import '@/features/documents/documents.css';
 import { api, assetBaseUrl, errorMessage, versionedAssetUrl } from '@/common/api/api';
-import { preparationWaitCopy } from '@/common/lib/preparationCopy.ts';
+import { preparationWaitCopy } from '@/features/documents/lib/preparationCopy';
 import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { previewClickHandler } from '@/features/documents/lib/previewIframe';

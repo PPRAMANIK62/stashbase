@@ -2,9 +2,12 @@
  * Stable renderer-state facade: data types, the action union, initial state,
  * and compatibility exports for the pure reducer and transition helpers.
  *
- * No React or side effects live in this module graph. Action-only interface
- * types remain in `actionTypes.ts` so the dependency direction stays
- * one-way.
+ * No React or side effects live in this module graph. Every action type lives
+ * here, in the `Action` union below. The sibling `editorTypes.ts` holds the
+ * imperative document handles the action hooks and contexts pass around
+ * (`EditorHandle`, `FindController`, `FindOptions`, `MatchInfo`) — they are
+ * registered by a rendered view rather than stored in `State`, so keeping them
+ * out of this file is what keeps the dependency direction one-way.
  *
  * Slice map — every `State` field belongs to exactly one of three contexts
  * (`WorkspaceContext` / `ChatContext` / `UiShellContext`; see those files).

@@ -1,3 +1,10 @@
+/**
+ * Role, name, and selection semantics for the two workspace navigation
+ * surfaces — the tab strip and the file tree — asserted by rendering them.
+ * These are the assertions that let the `jsx-a11y` lint rules stay warnings
+ * (see `code-review/renderer-architecture.md`), so they cover this feature's
+ * surfaces only; other features assert their own.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import React, { createElement } from 'react';

@@ -18,7 +18,7 @@ import { createRoot } from 'react-dom/client';
 import { act, createElement, useCallback, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/common/api/api';
 import { useDocumentActions } from '@/store/hooks/useDocumentActions';
-import type { EditorHandle } from '@/store/state/actionTypes';
+import type { EditorHandle } from '@/store/state/editorTypes';
 
 test('JSON Find supports case and whole-word matching without parsing source', () => {
   const malformed = '{"Alpha": 1, "alpha_beta": 2, "alpha":';

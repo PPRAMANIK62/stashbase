@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { preparationWaitCopy } from '@/common/lib/preparationCopy.ts';
+import { preparationWaitCopy } from '@/features/documents/lib/preparationCopy';
 
 test('wait copy keeps output-specific wording when work can start immediately', () => {
   assert.equal(preparationWaitCopy('transcript', 0), 'Waiting to transcribe…');

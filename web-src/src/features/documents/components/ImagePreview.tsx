@@ -3,7 +3,7 @@ import '@/features/documents/documents.css';
 import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { basename } from '@/common/lib/paths';
-import { preparationWaitCopy } from '@/common/lib/preparationCopy.ts';
+import { preparationWaitCopy } from '@/features/documents/lib/preparationCopy';
 import { useWorkspace } from '@/store/contexts/AppContext';
 import { getPreparationFailure } from '@/store/lib/fileReadiness';
 import { emptyStateClass } from '@/common/lib/emptyState';

@@ -1,7 +1,12 @@
+/**
+ * The generic lazy-load mechanics `common/` owns: chunk-load retry, boundary
+ * reset on resource identity, and the two `Managed…` wrappers. A feature's own
+ * use of a boundary is asserted in that feature — see
+ * `@/features/agent-panel/__tests__/agent-chat-session-boundary.test.ts`.
+ */
 import assert from 'node:assert/strict';
 import { createElement, Suspense, type ReactElement } from 'react';
 import test from 'node:test';
-import { ChatSessionBoundary, chatStatusClass } from '@/features/agent-panel/components/ChatPane';
 import { LazyLoadBoundary, loadWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManaged, LazyManagedPicker } from '@/common/components/LazyManaged';
 
@@ -51,24 +56,6 @@ test('lazy load boundary clears a captured error when its resource identity chan
     LazyLoadBoundary.getDerivedStateFromProps({ ...props, resetKey: state.resetKey }, state),
     null,
   );
-});
-
-test('each chat session gets an independently resettable error boundary', () => {
-  const child = createElement('span', null, 'session');
-  const element = ChatSessionBoundary({
-    tabId: 'chat-1',
-    active: true,
-    children: child,
-  }) as ReactElement<{
-    children: unknown;
-    className: string;
-    resetKey: string;
-  }>;
-
-  assert.equal(element.type, LazyLoadBoundary);
-  assert.equal(element.props.className, chatStatusClass);
-  assert.equal(element.props.resetKey, 'chat-1:active');
-  assert.equal(element.props.children, child);
 });
 
 test('LazyManaged wraps the managed component in Suspense with the given fallback and key', () => {

@@ -61,7 +61,7 @@ export type {
   State,
   Tab,
 } from '@/store/state/state';
-export type { EditorHandle, FindController, FindOptions, MatchInfo } from '@/store/state/actionTypes';
+export type { EditorHandle, FindController, FindOptions, MatchInfo } from '@/store/state/editorTypes';
 export type { AppActions } from './ActionsContext';
 export { useWorkspace, type WorkspaceState } from './WorkspaceContext';
 export { useChat, type ChatState } from './ChatContext';

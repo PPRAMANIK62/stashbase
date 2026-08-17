@@ -29,7 +29,7 @@ import { TooltipButton } from '@/common/components/TooltipButton';
 import { buttonVariants } from '@/common/components/ui/button';
 import { OPEN_SETTINGS_EVENT } from '@/common/lib/settingsTrigger';
 import { pillClass } from '@/common/lib/pillMenuStyles';
-import { SettingsPortal } from '@/features/settings/components/SettingsModal';
+import { SettingsPortal } from '@/features/settings';
 
 function keydown(key: string): KeyboardEvent {
   return new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });

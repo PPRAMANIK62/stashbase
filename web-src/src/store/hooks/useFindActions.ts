@@ -1,5 +1,5 @@
 import { useCallback, useRef, type MutableRefObject } from 'react';
-import type { FindController, MatchInfo } from '@/store/state/actionTypes';
+import type { FindController, MatchInfo } from '@/store/state/editorTypes';
 import type { Action, State } from '@/store/state/state';
 
 type Dispatch = (action: Action) => void;
