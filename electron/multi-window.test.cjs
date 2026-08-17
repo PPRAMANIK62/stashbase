@@ -373,6 +373,28 @@ test('window lifecycle input follows the platform menu mapping without stealing 
     }, 'linux'),
     'block-reload',
   );
+  for (const platform of ['win32', 'linux']) {
+    for (const modifiers of [
+      { control: false, shift: false },
+      { control: false, shift: true },
+      { control: true, shift: false },
+    ]) {
+      assert.equal(
+        windowLifecycleShortcutAction({
+          ...ctrlShiftW,
+          key: 'F5',
+          ...modifiers,
+        }, platform),
+        'block-reload',
+      );
+    }
+  }
+  assert.equal(
+    windowLifecycleShortcutAction({
+      ...ctrlShiftW, key: 'F5', control: false, shift: false, meta: false,
+    }, 'darwin'),
+    null,
+  );
 });
 
 test('last-window behavior follows each desktop platform convention', () => {

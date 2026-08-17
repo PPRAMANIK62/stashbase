@@ -126,7 +126,11 @@ function windowLifecycleShortcutAction(input, platform = process.platform) {
   // Electron's stock View menu and Chromium both expose reload chords. A
   // reload tears down the renderer, so it may only happen through the awaited
   // main-process save barrier used by the recovery UI.
-  if (primary && input.alt !== true && key === 'r') return 'block-reload';
+  const windowsReloadKey = platform !== 'darwin'
+    && key === 'f5'
+    && input.alt !== true
+    && input.meta !== true;
+  if ((primary && input.alt !== true && key === 'r') || windowsReloadKey) return 'block-reload';
   if (input.isAutoRepeat === true) return null;
   if (shiftedPrimary && key === 'n') return 'new-window';
   if (shiftedPrimary && key === 'w') return 'close-window';
