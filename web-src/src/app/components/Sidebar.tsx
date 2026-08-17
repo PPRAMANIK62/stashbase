@@ -1,44 +1,36 @@
 import '@/common/styles/tree.css';
 import {
   ChevronDownIcon,
-  CubeLogoIcon,
   FolderIcon,
   MoreHorizontalIcon,
   NewFileIcon,
   OutlineIcon,
-  PlusIcon,
   StarIcon,
 } from '@/common/components/icons';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { useSemanticIndexingNotice } from '@/store/hooks/useSemanticIndexingNotice';
-import { ALL_HISTORY_SCOPE, folderScope } from '@/common/lib/libraryScope';
-import { AGENT_META, AGENTS, type AgentKind } from '@/common/lib/agentCatalog';
-import {
-  newChatAgentSelectionPlan,
-  readPreferredAgent,
-  rememberPreferredAgent,
-} from '@/common/lib/agentPreference';
-import { electronBridge } from '@/common/lib/electronBridge';
+import { folderScope } from '@/common/lib/libraryScope';
 import { folderRefsEqual } from '@/store/lib/folderPath';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
 import { SidebarAccountRow } from '@/features/account';
+import { NewChatButton, ScopeHistoryButton } from '@/features/agent-panel';
 import { EmbeddingSetupCallout, UnsupportedFilesCallout } from '@/features/preparation';
 import {
   FileTree,
   FolderMenu,
-  refreshLibraryMembership,
   RemoveFolderModal,
+  useFolderFavorite,
   useFolderRemoval,
   useLibraryReconcile,
+  useOpenFolderWindow,
+  ZeroFolderState,
 } from '@/features/workspace';
+import { useOutlineDefaultExpansion } from '@/app/hooks/useOutlineDefaultExpansion';
 import { useDocumentOutline } from '@/common/components/DocumentOutlineContext';
 import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
-import { Menu, type MenuItem } from '@/common/components/Menu';
-import { ScopeHistoryButton } from '@/app/components/ScopeHistoryButton';
 import { Button } from '@/common/components/ui/button';
-import { api, errorMessage } from '@/common/api/api';
 import { FILE_MIME } from '@/common/lib/dragMime';
-import { Suspense, useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import { Suspense, useCallback, useState, type DragEvent } from 'react';
 
 const DocumentOutline = lazyWithRetry(() =>
   import('@/common/components/DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
@@ -104,7 +96,6 @@ function FilesPanel() {
   const state = useWorkspace();
   const { activeTab } = state;
   const { outline } = useDocumentOutline();
-  const [outlineExpanded, setOutlineExpanded] = useState(true);
 
   const hasMarkdownDocument = activeTab?.file?.format === 'md';
   // Tri-state: `null` means the embedder has not been read yet, and only a
@@ -117,28 +108,11 @@ function FilesPanel() {
   // the sections below should hold the eye instead.
   const showOutline = !!state.folderPath && !!activeTab?.file;
 
-  // Switching to another document re-applies the outline's default:
-  // expanded as soon as it actually HAS headings (they load async, so
-  // the switch only marks the intent). A manual fold wins within the
-  // current document — the same "transition resets the default" rule as
-  // the Library's folder-presence effect. Keyed by file identity so an
-  // in-place navigation refreshes the outline for the replacement file.
   const documentKey = hasMarkdownDocument && activeTab?.file
     ? `${activeTab.file.folder ?? ''}:${activeTab.file.name}`
     : null;
-  const documentKeyRef = useRef(documentKey);
-  const outlineDefaultPending = useRef(false);
-  if (documentKeyRef.current !== documentKey) {
-    documentKeyRef.current = documentKey;
-    outlineDefaultPending.current = documentKey != null;
-  }
   const hasHeadings = outline.headings.length > 0;
-  useEffect(() => {
-    if (outlineDefaultPending.current && hasHeadings) {
-      outlineDefaultPending.current = false;
-      setOutlineExpanded(true);
-    }
-  }, [documentKey, hasHeadings]);
+  const [outlineExpanded, setOutlineExpanded] = useOutlineDefaultExpansion(documentKey, hasHeadings);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files">
@@ -219,135 +193,6 @@ function FilesPanel() {
   );
 }
 
-/** Full-width New Chat entry at the sidebar's top (Cursor's "New
- *  Agent" position) — the app's ONE chat-creation entry point, a split
- *  button. The main area starts a chat with the last-selected agent; the
- *  chevron at the row's right edge only chooses the agent the next main-area
- *  click will use. That click reuses the one completely blank tab regardless
- *  of its agent (switching the blank tab's agent in place when it differs —
- *  `newChatPlan`); any content, draft, attachments, or resumed session means
- *  a fresh tab instead. It opens the chat panel when hidden. The
- *  reused/created tab's scope resolves to the window default (current folder,
- *  else Library) on connect, so no scope needs to be threaded here. */
-function NewChatButton() {
-  const { actions } = useAppActions();
-  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
-  const chevronRef = useRef<HTMLButtonElement | null>(null);
-
-  function startChat(agent: AgentKind) {
-    actions.activateChatTab(agent);
-  }
-
-  /** Picking from the chevron only updates the next-chat preference. Chat
-   *  creation stays behind the main New Chat action. */
-  function pickAgent(agent: AgentKind) {
-    const plan = newChatAgentSelectionPlan(agent);
-    rememberPreferredAgent(plan.preferredAgent);
-    if (plan.startAgent) startChat(plan.startAgent);
-    setMenuAnchor(null);
-  }
-
-  /* Agent NAMES, not "New <Agent> Chat": the row itself says New Chat and
-   * now names its agent beside this chevron, so the menu is the picker
-   * that changes that name — repeating the whole action per item read as
-   * three ways to do the same thing. */
-  const agentItems: MenuItem[] = AGENTS.map((agent) => ({
-    label: agent.launcherLabel,
-    icon: <agent.Icon />,
-    onSelect: () => pickAgent(agent.id),
-  }));
-
-  // Read at render time, no state: the picker closes its menu after writing,
-  // while the other rememberPreferredAgent call sites also dispatch a store
-  // update, so this row re-renders with the latest app-wide preference.
-  const preferred = AGENT_META[readPreferredAgent()];
-
-  return (
-    /* A quiet full-width pill row (Cursor's "New Agent" treatment), not a
-     * boxed button — the sidebar's rows carry the hierarchy. The chevron
-     * is a subtle affordance revealed on hover/focus (and while its menu
-     * is open). There is no keyboard shortcut, so no hint is shown. */
-    <div className="flex-none px-1.5 pt-2 pb-3">
-      <div className="group/newchat flex min-h-7 w-full items-center rounded-md hover:bg-muted">
-        <button
-          type="button"
-          className="flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-foreground"
-          title={`Start a ${preferred.launcherLabel} chat in the current folder, or across the whole library`}
-          onClick={() => startChat(readPreferredAgent())}
-        >
-          {/* A PLUS, not the agent's mark: this row's job is "make a new
-            * chat", and leading with a vendor glyph made the action read
-            * as "Codex" with a label attached. Which agent it will use
-            * now rides beside the chevron, where the picker that changes
-            * it lives. 16px slot around the 14px glyph — every row does
-            * this, so the label lands on the shared 38px gutter line. */}
-          <span className="inline-flex size-4 flex-none items-center justify-center">
-            <PlusIcon className="size-3.5 text-muted-foreground" />
-          </span>
-          <span className="min-w-0 truncate">New Chat</span>
-        </button>
-        {/* The agent this row will start, named next to its picker — the
-          * row would otherwise give no clue which of the two runs, and
-          * the menu is where it changes. */}
-        {/* No right margin: the chevron's own 20px box already holds the
-          * glyph 2px off the text, and any more read as two unrelated
-          * controls rather than one label-plus-picker. */}
-        {/* ALL chat history lives on this row since the Library section
-          * retired — with no per-folder rows left, this is the one place
-          * every session (each member folder + the library scope) stays
-          * reachable; rows resume in their own scope. It sits BEFORE the
-          * agent label so the "Codex ⌄" label-plus-picker pair stays
-          * adjacent. */}
-        <ScopeHistoryButton
-          scope={ALL_HISTORY_SCOPE}
-          label="Chat history"
-        />
-        <span className="ml-1 shrink-0 truncate text-xs text-muted-foreground">
-          {preferred.launcherLabel}
-        </span>
-        <button
-          ref={chevronRef}
-          type="button"
-          className={
-            /* Quiet-icon-button canon (TitlebarControls): muted hover
-             * surface; the app-wide `:focus-visible` outline rule paints
-             * the translucent halo, as on every hand-rolled sidebar
-             * button. Compact size-5 keeps the control inside the row;
-             * sub-24px keeps rounded-sm per the corner contract. */
-            'mr-1 inline-flex size-5 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent '
-            + 'text-muted-foreground hover:bg-muted hover:text-foreground '
-            /* size-4, a step up from the sidebar's 14px glyphs: this
-             * chevron sits beside 11px text rather than 13px row text,
-             * so at 14px it read as a speck next to the word it opens. */
-            + '[&_svg]:size-4 '
-            /* Always visible (muted): the arrow IS the discoverability of
-             * the agent menu — hover-only would hide the affordance. */
-            + (menuAnchor ? 'bg-muted text-foreground' : '')
-          }
-          aria-label="Choose agent for new chat"
-          aria-haspopup="menu"
-          aria-expanded={!!menuAnchor}
-          onClick={() => {
-            if (menuAnchor) { setMenuAnchor(null); return; }
-            const rect = chevronRef.current?.getBoundingClientRect();
-            if (rect) setMenuAnchor(rect);
-          }}
-        >
-          <ChevronDownIcon />
-        </button>
-      </div>
-      {menuAnchor && (
-        <Menu
-          anchor={{ rect: menuAnchor, align: 'right' }}
-          minWidth={210}
-          items={agentItems}
-          onClose={() => setMenuAnchor(null)}
-        />
-      )}
-    </div>
-  );
-}
-
 /** The active-folder header's ⋯ trigger (favorite / sync / new window /
  *  remove live in its FolderMenu). */
 function RootMenuButton({
@@ -402,8 +247,9 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
   );
   const { pendingRemoval, removing, requestRemoval, cancelRemoval, removeFolder } =
     useFolderRemoval(dispatch, actions.toast);
+  const toggleFavorite = useFolderFavorite(dispatch, actions.toast);
+  const { canOpenInNewWindow, openInNewWindow } = useOpenFolderWindow(actions.toast);
   const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
-  const bridge = electronBridge();
 
   const isCurrent = useCallback(
     (path: string) => !!state.folderPath && folderRefsEqual(state.folderPath, path),
@@ -419,33 +265,6 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
     .filter((entry) => !isCurrent(entry.path))
     .map((entry) => entry.path)
     .join('\n');
-
-  // Optimistic star toggle: flip in the store immediately, persist in the
-  // background, and re-sync from the server if the write fails.
-  const toggleFavorite = useCallback((path: string) => {
-    setFolderMenu(null);
-    const entry = state.recent.find((r) => r.path === path);
-    if (!entry) return;
-    const favorite = !entry.favorite;
-    dispatch({
-      type: 'RECENT_LOADED',
-      recent: state.recent.map((r) => (r.path === path ? { ...r, favorite } : r)),
-      homeDir: state.homeDir,
-    });
-    void api.setFolderFavorite(path, favorite).catch((e) => {
-      actions.toast(errorMessage(e), { level: 'error' });
-      void refreshLibraryMembership(dispatch)
-        .catch(() => { /* keep the optimistic flip until the next refresh */ });
-    });
-  }, [actions, dispatch, state.homeDir, state.recent]);
-
-  const openRootInNewWindow = useCallback(async (path: string) => {
-    setFolderMenu(null);
-    const opened = await bridge?.openFolderWindow?.(path);
-    if (!opened) {
-      actions.toast('New window is only available in the desktop app.', { level: 'error' });
-    }
-  }, [actions, bridge]);
 
   useLibraryReconcile(true, otherRootPathsKey);
 
@@ -514,9 +333,9 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
           rect={folderMenu.rect}
           isCurrent={isCurrent(folderMenu.path)}
           favorite={!!menuEntry?.favorite}
-          canOpenInNewWindow={!!bridge?.openFolderWindow}
-          onToggleFavorite={() => toggleFavorite(folderMenu.path)}
-          onOpenInNewWindow={() => { void openRootInNewWindow(folderMenu.path); }}
+          canOpenInNewWindow={canOpenInNewWindow}
+          onToggleFavorite={() => { setFolderMenu(null); toggleFavorite(folderMenu.path); }}
+          onOpenInNewWindow={() => { setFolderMenu(null); openInNewWindow(folderMenu.path); }}
           onRemove={() => requestRemoval(folderMenu.path)}
           onClose={() => setFolderMenu(null)}
         />
@@ -651,39 +470,6 @@ function ActiveFolderHeader({
         />
         <RootMenuButton name={name} menuOpen={menuOpen} onMenu={onMenu} />
       </div>
-    </div>
-  );
-}
-
-/** Zero-folder library: the one place sidebar chrome is allowed a small
- *  brand-warmth moment (see visual-style's warmth budget) — the app mark,
- *  a single line of guidance, and the primary add-folder action. */
-function ZeroFolderState() {
-  const { actions } = useAppActions();
-  const bridge = electronBridge();
-
-  async function addFolder() {
-    try {
-      const picked = await bridge!.openFolderDialog!({
-        title: 'Select folder',
-        buttonLabel: 'Select folder',
-        allowCreateDirectory: true,
-      });
-      if (picked) await actions.openFolder(picked);
-    } catch (err) {
-      actions.toast('Could not open the folder: ' + errorMessage(err), { level: 'error' });
-    }
-  }
-
-  return (
-    <div className="flex flex-col items-start gap-3 px-4 pt-5 pb-4">
-      <div className="size-9 *:size-full"><CubeLogoIcon /></div>
-      <p className="m-0 text-sm leading-snug text-muted-foreground">
-        Add a folder to build your searchable library.
-      </p>
-      {typeof bridge?.openFolderDialog === 'function' && (
-        <Button onClick={() => { void addFolder(); }}>Add Folder…</Button>
-      )}
     </div>
   );
 }

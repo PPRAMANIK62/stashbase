@@ -3,9 +3,16 @@ import { HistoryIcon } from '@/common/components/icons';
 import type { AgentKind } from '@/common/lib/agentCatalog';
 import { useAppActions } from '@/store/contexts/AppContext';
 import type { HistoryScope } from '@/common/lib/libraryScope';
-import { SessionHistoryMenu } from '@/features/agent-panel';
+import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { Button } from '@/common/components/ui/button';
 import { PopupLoadingStatus } from '@/common/components/ui/status';
+
+/* The popover carries react-aria, so it loads at the interaction
+ * boundary. The boundary lives here rather than in the feature barrel
+ * because this button is the menu's only caller — an export the barrel
+ * kept would be public API with nothing outside the feature reading it. */
+const SessionHistoryMenu = lazyWithRetry(() =>
+  import('@/features/agent-panel/components/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
 /** History clock on a sidebar scope header: opens the merged
  *  session-history menu for that scope (both agents' sessions, newest
@@ -73,8 +80,6 @@ export function ScopeHistoryButton({
             />
           )}
         >
-          {/* The popover loads at this interaction boundary — react-aria
-            * ships with it, and the Agent Panel owns that lazy split. */}
           <SessionHistoryMenu
             scope={scope}
             ariaLabel={label}

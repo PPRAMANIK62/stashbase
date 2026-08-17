@@ -41,6 +41,17 @@ so every viewer, hook, and helper a feature happened to define was
 load-bearing shell API and could not be moved without touching the
 composition root.
 
+Neither rule catches the third failure: `app/` *implementing* what it should
+compose. Nothing about the New Chat button's agent-preference read, the
+session-history resume, or the optimistic favorite write is composition —
+they were in `app/components/Sidebar.tsx` only because the sidebar is where
+they render. Being legal is not the test; a module belongs in `app/` when it
+lays several features out together, and in the feature otherwise, whichever
+surface happens to host it. `NewChatButton` and `ScopeHistoryButton` moved to
+`features/agent-panel`, `ZeroFolderState`, `useFolderFavorite`, and
+`useOpenFolderWindow` to `features/workspace`, and the sidebar kept only the
+layout that stacks them.
+
 ## What a barrel exports
 
 A feature's `index.ts` lists exactly what a caller outside the feature
@@ -75,9 +86,13 @@ A caller needing something the barrel does not export adds it to the barrel
 — or, where the caller is reaching past a module's real purpose, gets a
 proper entry point instead. `refreshLibraryMembership` was pulled out of
 `useLibraryMembership.ts` into `workspace/lib/libraryMembership.ts` for that
-reason: it is an imperative resync the sidebar needs without the poll, so
-exporting it meant exporting the module that owns it, not the hook that
-also happens to call it.
+reason: it is an imperative resync a caller needs without the poll, so
+reaching it meant reaching the module that owns it, not the hook that also
+happens to call it. It has since left the barrel entirely. Once the sidebar's
+favorite and removal flows became `useFolderFavorite` and `useFolderRemoval`,
+the resync was a consequence those hooks own rather than a step the shell
+sequences, and an export with no consumer outside the feature is surface the
+feature has to keep working for nobody. Barrels shrink as well as grow.
 
 ## Naming a lazy boundary
 
@@ -111,11 +126,14 @@ Two variants exist and are not defects:
   `LazyAgentMathMarkdown` — the const is named for the boundary and the
   component keeps its own name. Use this when the caller is a dispatch over
   several already-whole components rather than one gate over one body.
-- **Plain default exports behind a barrel.** `ChatPane`, `SessionHistoryMenu`,
-  `SidebarAccountRow`, `UnsupportedFilesModal`, and the preparation callouts
-  are ordinary components; the `lazyWithRetry` wrapper lives in the feature's
-  `index.ts`, so the barrel export *is* the boundary and the file needs no
-  prefix at all.
+- **Plain default exports behind a barrel.** `ChatPane`, `SidebarAccountRow`,
+  `UnsupportedFilesModal`, and the preparation callouts are ordinary
+  components; the `lazyWithRetry` wrapper lives in the feature's `index.ts`,
+  so the barrel export *is* the boundary and the file needs no prefix at all.
+  `SessionHistoryMenu` is the same shape one level in: its wrapper sits in
+  `ScopeHistoryButton.tsx`, the button that opens it and its only caller, so
+  the boundary is still owned inside the feature without the barrel carrying
+  an export nothing outside it reads.
 
 The prefix is a reading aid, not a load-bearing contract — nothing dispatches
 on it, and `scripts/check-renderer-chunks.mjs` measures the real chunk split.

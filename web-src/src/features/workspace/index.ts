@@ -7,8 +7,9 @@
  * the stylesheet in the graph, so no consumer has to remember it.
  *
  * Everything here is eager on purpose: each surface is either always
- * mounted (splitters, folder switcher) or mounted as soon as the window
- * has a folder or a tab, so a lazy boundary would only add a flash.
+ * mounted (splitters, folder switcher) or mounted the moment the window
+ * resolves its folder state (the zero-folder landing, the file tree) or
+ * opens a tab, so a lazy boundary would only add a flash.
  */
 import './workspace.css';
 
@@ -19,12 +20,15 @@ export { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
 export { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderModal';
 export { TabStrip } from '@/features/workspace/components/TabStrip';
 export { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
+export { ZeroFolderState } from '@/features/workspace/components/ZeroFolderState';
 
+export { useFolderFavorite } from '@/features/workspace/hooks/useFolderFavorite';
 export { useFolderRemoval } from '@/features/workspace/hooks/useFolderRemoval';
 export { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
 export { useLibraryReconcile } from '@/features/workspace/hooks/useLibraryReconcile';
+export { useOpenFolderWindow } from '@/features/workspace/hooks/useOpenFolderWindow';
 
-/** Imperative membership resync — see `lib/libraryMembership.ts`. It is a
- *  plain async function rather than a hook, so it is exported from the
- *  module that owns it instead of from the poll hook that also calls it. */
-export { refreshLibraryMembership } from '@/features/workspace/lib/libraryMembership';
+/* `refreshLibraryMembership` (lib/libraryMembership.ts) is deliberately
+ * absent: the membership resync is a consequence of a folder mutation,
+ * never a step a caller sequences itself, so the hooks above own it and
+ * the shell reaches it only by using one of them. */
