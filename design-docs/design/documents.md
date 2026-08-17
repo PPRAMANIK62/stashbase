@@ -39,6 +39,10 @@ editor, a media editor, or a proprietary document format.
   duplicate-key, or bounded-out JSON explains why Tree mode is unavailable and
   remains editable and saveable as source. Saving preserves BOM, line endings,
   untouched whitespace, escapes, order, numeric lexemes, and trailing newline.
+- When a source changes on disk during an edit, StashBase keeps both versions,
+  shows their differences, and waits for the user to reload, overwrite, or
+  merge. An unresolved comparison blocks leaving; a merge returns as an
+  unsaved draft.
 - HTML is viewed as source content; the current compatibility preview executes
   local document scripts in a same-origin iframe. PDF uses its source document
   in the native preview surface with page, zoom, fit, and session position
@@ -68,11 +72,6 @@ editor, a media editor, or a proprietary document format.
 
 ## Known Gaps
 
-- When the editor detects that a file changed on disk since it last saved
-  (version mismatch 409), it shows a side-by-side conflict resolver with
-  explicit Reload / Overwrite / Merge choices instead of silently overwriting.
-  The implementation contract lives in
-  [File Transactions](../../code-review/file-transactions.md#renderer-conflict-recovery).
 - Executable local HTML and its remote subresources currently have a weaker
   boundary than the experience contract. The compatibility tradeoff and
   required confinement work are owned by

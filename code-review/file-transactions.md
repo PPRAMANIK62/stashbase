@@ -44,6 +44,13 @@
 - A `FILE_CHANGED` conflict must never automatically retry without
   `baseVersion`. The dirty editor buffer and newer disk source both remain
   recoverable until an explicit reload, merge, or overwrite decision.
+- The live editor value is save authority; the renderer's dirty flag is only
+  presentation state and may lag by one render.
+- Conflict comparison content and version come from one disk read. While the
+  conflict is unresolved, navigation, folder switch, window close, and reload
+  remain behind the failed save barrier.
+- Merge creates a dirty draft against the newer disk version. It is not
+  durable until the normal versioned save path accepts it.
 
 Regression shape:
 
@@ -55,15 +62,13 @@ editor reads V1 → Agent writes V2 with base V1
 
 ### Renderer conflict recovery
 
-`web-src/src/store/useDocumentActions.ts` catches a version-conflict (409)
-response and transitions the tab into a conflicted state. The UI renders a
-`ConflictResolver` component displaying a side-by-side comparison. The user is
-presented with three explicit resolution paths:
-- **Reload from Disk**: discards local edits and syncs with the disk version.
-- **Overwrite Disk**: saves local edits to disk, overwriting the remote version.
-- **Merge and Edit**: combines local and disk changes using standard inline conflict
-  markers (`<<<<<<<`, `=======`, `>>>>>>>`) and returns the user to the editor
-  to resolve the conflict and save.
+Shipping behavior shows the newer disk source beside the unsaved editor source
+and waits for one explicit decision:
+
+- Reload adopts the disk snapshot.
+- Overwrite publishes the editor source without a stale base.
+- Merge opens a dirty draft with conflict markers and saves it against the disk
+  snapshot through the ordinary versioned path.
 
 ## Mutation Sequence
 
@@ -126,7 +131,7 @@ text reads and manifest-known derived-text reads also reject responses above
 | Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
 | Publication Module | `server/import-publication.ts` |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |
-| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, and `library-operations/index.test.ts` |
+| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, `library-operations/index.test.ts`, renderer persistence tests, and the J03 conflict Journey |
 
 ## Validation
 

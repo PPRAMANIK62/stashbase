@@ -39,7 +39,8 @@ reason when a platform cannot exercise it.
   the intended import/attachment behavior and rejection feedback.
 - [ ] **J01 / J03** — Exercise native menus and the platform shortcuts for Quick Open, Command
   Palette, search, Settings, window close, and quit. Confirm focus returns to a
-  sensible control after dismissing an overlay.
+  sensible control after dismissing an overlay. Confirm View has no direct
+  Reload/Force Reload path and recovery reload does not lose a live edit.
 - [ ] **J06** — With tester-owned credentials and an installed supported CLI, send one
   harmless Agent turn. Confirm streaming/activity, one permission or stop
   interaction when available, completion, and a clean close. Never use a real
