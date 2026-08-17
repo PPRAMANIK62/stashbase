@@ -516,11 +516,13 @@ test('Codex post-install verification preserves the isolated installer environme
   const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-install-test-'));
   process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  const fixtureExecutable = path.join(root, 'fixture-codex.exe');
+  if (process.platform === 'win32') fs.writeFileSync(fixtureExecutable, 'installed Codex');
   const installer = process.platform === 'win32'
     ? [
       '$null = [System.IO.Directory]::CreateDirectory($env:CODEX_INSTALL_DIR)',
       '$codexPath = Join-Path $env:CODEX_INSTALL_DIR "codex.exe"',
-      'Copy-Item -LiteralPath (Get-Process -Id $PID).Path -Destination $codexPath',
+      `Move-Item -LiteralPath '${fixtureExecutable.replaceAll("'", "''")}' -Destination $codexPath`,
       'if (-not (Test-Path -LiteralPath $codexPath -PathType Leaf)) { throw "fixture did not create codex.exe" }',
       '',
     ].join('\n')
@@ -534,19 +536,24 @@ chmod +x "$CODEX_INSTALL_DIR/codex"
   let verified = false;
   let selectedShell: ReturnType<typeof resolveCodexInstallerShell> | undefined;
   try {
-    await installCodex(() => {}, new AbortController().signal, {
-      resolveInstallerShell: () => {
-        selectedShell = resolveCodexInstallerShell();
-        return selectedShell;
-      },
-      verifyExecutable: (executable, label, env) => {
-        verified = true;
-        assert.equal(executable, path.join(managedCodexBinDir(), process.platform === 'win32' ? 'codex.exe' : 'codex'));
-        assert.equal(label, 'Codex');
-        assert.equal(env.CODEX_INSTALL_DIR, managedCodexBinDir());
-        assert.equal(env.CODEX_HOME, managedCodexInstallerHome());
-      },
-    });
+    try {
+      await installCodex(() => {}, new AbortController().signal, {
+        resolveInstallerShell: () => {
+          selectedShell = resolveCodexInstallerShell();
+          return selectedShell;
+        },
+        verifyExecutable: (executable, label, env) => {
+          verified = true;
+          assert.equal(executable, path.join(managedCodexBinDir(), process.platform === 'win32' ? 'codex.exe' : 'codex'));
+          assert.equal(label, 'Codex');
+          assert.equal(env.CODEX_INSTALL_DIR, managedCodexBinDir());
+          assert.equal(env.CODEX_HOME, managedCodexInstallerHome());
+        },
+      });
+    } catch (error) {
+      const entries = fs.readdirSync(root, { recursive: true }).map(String).sort().join(', ');
+      throw new Error(`${String(error)} Managed test entries: ${entries || '(empty)'}`, { cause: error });
+    }
     assert.equal(verified, true);
     if (process.platform === 'win32') assert.equal(selectedShell?.kind, 'powershell-7');
   } finally {
