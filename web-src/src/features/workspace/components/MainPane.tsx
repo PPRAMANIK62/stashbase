@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import '@/features/workspace/workspace.css';
 import { EditIcon, PreviewIcon } from '@/common/components/icons';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { EmptyTabLanding } from '@/features/workspace/components/EmptyTabLanding';
 import { FindBar } from '@/features/search/components/FindBar';
 import { HtmlPreview } from '@/features/documents/components/HtmlPreview';

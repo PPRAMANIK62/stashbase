@@ -10,10 +10,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as React from 'react';
 import { act, create } from 'react-test-renderer';
-import { initialState, reducer, type Action } from '../state.ts';
-import { WorkspaceProvider, useWorkspace, type WorkspaceState } from '../WorkspaceContext.tsx';
-import { ChatProvider, useChat, type ChatState } from '../ChatContext.tsx';
-import { UiShellProvider, useUiShell, type UiShellState } from '../UiShellContext.tsx';
+import { initialState, reducer, type Action } from '../state/state.ts';
+import { WorkspaceProvider, useWorkspace, type WorkspaceState } from '../contexts/WorkspaceContext.tsx';
+import { ChatProvider, useChat, type ChatState } from '../contexts/ChatContext.tsx';
+import { UiShellProvider, useUiShell, type UiShellState } from '../contexts/UiShellContext.tsx';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

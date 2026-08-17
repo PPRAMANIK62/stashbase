@@ -5,7 +5,7 @@ import { errorMessage } from '@/common/api/apiTransport';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useStateWithRef } from '@/common/hooks/useStateWithRef';
-import type { Action, AppActions, ChatState, WorkspaceState } from '@/store/AppContext';
+import type { Action, AppActions, ChatState, WorkspaceState } from '@/store/contexts/AppContext';
 import { resolveAssistantLink } from '@/features/agent-panel/lib/assistantLinkTarget';
 import { flattenFileMentions, type QueuedTurnPreview, type TurnMeta } from '@/features/agent-panel/components/AgentMessages';
 import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl';

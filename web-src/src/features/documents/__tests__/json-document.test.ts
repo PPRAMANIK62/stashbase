@@ -12,13 +12,13 @@ import {
 import { analyzeJsonSource } from '@/features/documents/lib/json/sourceModel';
 import { directTreeSearchPatch } from '@/features/documents/components/json/JsonTreeView';
 import { JsonDocument } from '@/features/documents/components/JsonDocument';
-import { AppProviders, canApplyExternalTextRefresh, type AppActions } from '@/store/AppContext';
-import { initialState, makeTab, reducer, type Action, type State } from '@/store/state';
+import { AppProviders, canApplyExternalTextRefresh, type AppActions } from '@/store/contexts/AppContext';
+import { initialState, makeTab, reducer, type Action, type State } from '@/store/state/state';
 import { createRoot } from 'react-dom/client';
 import { act, createElement, useCallback, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/common/api/api';
-import { useDocumentActions } from '@/store/useDocumentActions';
-import type { EditorHandle } from '@/store/actionTypes';
+import { useDocumentActions } from '@/store/hooks/useDocumentActions';
+import type { EditorHandle } from '@/store/state/actionTypes';
 
 test('JSON Find supports case and whole-word matching without parsing source', () => {
   const malformed = '{"Alpha": 1, "alpha_beta": 2, "alpha":';

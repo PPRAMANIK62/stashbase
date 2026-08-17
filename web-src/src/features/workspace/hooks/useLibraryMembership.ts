@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { api } from '@/common/api/api';
-import type { Action, State } from '@/store/state';
+import type { Action, State } from '@/store/state/state';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 
 const MEMBERSHIP_POLL_MS = 4000;

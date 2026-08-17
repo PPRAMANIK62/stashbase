@@ -18,7 +18,7 @@ import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
 import { api, assetBaseUrl } from '@/common/api/api';
 import { resolveMilkdownLink } from '@/features/documents/milkdown/navigation';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { makeIframeFindController } from '@/features/documents/lib/findIframe';
 import { applyChunkHighlight } from '@/features/documents/lib/previewChunkHighlight';
 import { portableImageMarkdownPath, relativeAssetPath } from '@/features/documents/milkdown/paths';

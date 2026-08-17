@@ -12,7 +12,7 @@
  */
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { escapeRegExp } from '@/common/lib/regex';
-import type { FindController, FindOptions, MatchInfo } from '@/store/AppContext';
+import type { FindController, FindOptions, MatchInfo } from '@/store/contexts/AppContext';
 import {
   flattenPageText,
   foldPdfText,

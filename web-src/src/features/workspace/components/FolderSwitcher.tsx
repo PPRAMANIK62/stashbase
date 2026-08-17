@@ -4,7 +4,7 @@ import { electronBridge } from '@/common/lib/electronBridge';
 import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
 import { ChevronDownIcon, FolderIcon, NewFolderIcon } from '@/common/components/icons';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { refreshLibraryMembership, useLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 import { useOpenFolderWatchdog } from '@/features/workspace/hooks/useOpenFolderWatchdog';
 import { Menu, type MenuItem } from '@/common/components/Menu';

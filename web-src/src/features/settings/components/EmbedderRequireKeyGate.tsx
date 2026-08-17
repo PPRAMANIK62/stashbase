@@ -32,7 +32,7 @@
  */
 import { Suspense, useEffect, useState } from 'react';
 import { api, type EmbedderState } from '@/common/api/api';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from '@/features/settings/lib/embedder/embeddingAuth';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { useOverlayLayer } from '@/common/components/OverlayStack';

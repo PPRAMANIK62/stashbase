@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React, { useRef } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import type { EditorHandle } from '../actionTypes';
-import { initialState, type Action, type State } from '../state';
-import { useDocumentActions } from '../useDocumentActions';
+import type { EditorHandle } from '../state/actionTypes';
+import { initialState, type Action, type State } from '../state/state';
+import { useDocumentActions } from '../hooks/useDocumentActions';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

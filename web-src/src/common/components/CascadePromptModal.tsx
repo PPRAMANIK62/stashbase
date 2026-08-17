@@ -1,5 +1,5 @@
 import { basename } from '@/common/lib/paths';
-import { useAppActions, useUiShell } from '@/store/AppContext';
+import { useAppActions, useUiShell } from '@/store/contexts/AppContext';
 import { ModalShell } from '@/common/components/ModalShell';
 import { Button } from '@/common/components/ui/button';
 

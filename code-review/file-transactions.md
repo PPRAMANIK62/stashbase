@@ -55,7 +55,7 @@ editor reads V1 → Agent writes V2 with base V1
 
 ### Known gap — renderer conflict recovery
 
-`web-src/src/store/useDocumentActions.ts` currently catches a version-conflict
+`web-src/src/store/hooks/useDocumentActions.ts` currently catches a version-conflict
 response and immediately retries the save without `baseVersion`, overwriting
 the newer disk copy. This Shipping behavior violates the Required contract
 above. Until explicit reload/merge/overwrite UX and the `V1 → V2 → conflict`

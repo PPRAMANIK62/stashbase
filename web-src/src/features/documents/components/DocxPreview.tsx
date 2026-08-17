@@ -5,8 +5,8 @@ import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.
 import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { previewClickHandler } from '@/features/documents/lib/previewIframe';
-import { useAppActions, useUiShell, useWorkspace } from '@/store/AppContext';
-import { getPreparationFailure } from '@/store/fileReadiness';
+import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
+import { getPreparationFailure } from '@/store/lib/fileReadiness';
 import { makeIframeFindController } from '@/features/documents/lib/findIframe';
 import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
 import { applyChunkHighlight } from '@/features/documents/lib/previewChunkHighlight';

@@ -1,6 +1,6 @@
 import { api } from '@/common/api/api';
-import { useAppActions, useUiShell, useWorkspace } from '@/store/AppContext';
-import { getPreparationProblem } from '@/store/fileReadiness';
+import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
+import { getPreparationProblem } from '@/store/lib/fileReadiness';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 
 /** Right-click menu for file and folder rows. Loaded only after state owns a

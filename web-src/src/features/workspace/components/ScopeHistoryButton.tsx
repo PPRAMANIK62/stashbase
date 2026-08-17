@@ -1,7 +1,7 @@
 import { Suspense, useRef, useState } from 'react';
 import { HistoryIcon } from '@/common/components/icons';
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
-import { useAppActions, useChat } from '@/store/AppContext';
+import { useAppActions, useChat } from '@/store/contexts/AppContext';
 import { activateChatTabForAgent } from '@/features/agent-panel/lib/chatActivation';
 import type { HistoryScope } from '@/features/agent-panel/lib/sessionHistory';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';

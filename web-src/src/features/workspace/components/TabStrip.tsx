@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent } from 'react';
 import '@/features/workspace/workspace.css';
 import { basename } from '@/common/lib/paths';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 
 const TAB_MIME = 'application/x-stashbase-tab';
 

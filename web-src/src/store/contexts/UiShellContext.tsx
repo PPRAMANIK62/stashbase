@@ -7,7 +7,7 @@
  * "something is blocking" group alongside `modal` / `cascadePrompt`.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { State } from './state';
+import type { State } from '../state/state';
 
 export interface UiShellState {
   ctxMenu: State['ctxMenu'];

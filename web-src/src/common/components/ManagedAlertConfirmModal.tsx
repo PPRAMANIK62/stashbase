@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import type { ModalRequest } from '@/store/state';
+import type { ModalRequest } from '@/store/state/state';
 import {
   AlertDialog,
   AlertDialogAction,

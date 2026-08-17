@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getWindowId } from '@/common/api/api';
 import { openExternalUrl } from '@/common/lib/externalLink';
 import { isTrustedPreviewSource } from '@/features/documents/lib/previewMessages';
-import { useAppActions } from '@/store/AppContext';
+import { useAppActions } from '@/store/contexts/AppContext';
 
 /**
  * Bridge from sandboxed preview iframes to the shell. Previews post

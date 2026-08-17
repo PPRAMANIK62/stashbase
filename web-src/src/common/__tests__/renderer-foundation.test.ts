@@ -218,8 +218,8 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
 
   assert.match(read('web-src/src/common/components/Toasts.tsx'), /lazyWithRetry\(\(\) => import\('@\/common\/components\/ManagedToasts'\)\)/);
   assert.match(read('web-src/src/common/components/ManagedToasts.tsx'), /@\/common\/components\/ui\/toast/);
-  assert.doesNotMatch(read('web-src/src/store/state.ts'), /TOAST_(ADD|DISMISS|CLEAR)/);
-  assert.doesNotMatch(read('web-src/src/store/stateReducer.ts'), /case 'TOAST_/);
+  assert.doesNotMatch(read('web-src/src/store/state/state.ts'), /TOAST_(ADD|DISMISS|CLEAR)/);
+  assert.doesNotMatch(read('web-src/src/store/state/stateReducer.ts'), /case 'TOAST_/);
 
   const managedTooltipButton = read('web-src/src/common/components/ManagedTooltipButton.tsx');
   assert.match(managedTooltipButton, /<TooltipTrigger\s+\{\.\.\.triggerProps\}/);

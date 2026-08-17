@@ -10,7 +10,7 @@ import {
 } from '@/features/documents/lib/audioTranscript.ts';
 import { AudioPlaybackPosition } from '@/features/documents/lib/audioPlayback.ts';
 import { basename } from '@/common/lib/paths';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@/../../shared/transcription.ts';

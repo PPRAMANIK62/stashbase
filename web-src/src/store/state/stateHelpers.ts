@@ -3,7 +3,7 @@
  * Runtime dependencies stay browser-safe and free of React side effects.
  */
 import type { FileMeta } from '@/common/api/api';
-import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
+import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
 import type { ChatTab, State, Tab } from './state';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');

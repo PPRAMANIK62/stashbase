@@ -12,7 +12,7 @@ import {
   shouldOpenInitialChatOnWindowEntry,
   switchWelcomeTabPlan,
 } from '@/features/agent-panel/lib/folderState';
-import { makeChatTab, type Action, type State } from '@/store/state';
+import { makeChatTab, type Action, type State } from '@/store/state/state';
 import { shouldAutoCollapseChat } from '@/features/workspace/lib/workspaceLayout';
 
 export function useChatLayoutFollowUp(

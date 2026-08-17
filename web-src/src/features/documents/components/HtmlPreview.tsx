@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { versionedAssetUrl, versionedDerivedAssetUrl } from '@/common/api/api';
-import { useAppActions, useUiShell, useWorkspace, type MatchInfo } from '@/store/AppContext';
+import { useAppActions, useUiShell, useWorkspace, type MatchInfo } from '@/store/contexts/AppContext';
 import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
 import { isTrustedFrameSource } from '@/features/documents/lib/previewMessages';
 

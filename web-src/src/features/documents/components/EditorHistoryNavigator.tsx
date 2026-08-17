@@ -7,7 +7,7 @@ import {
 } from '@/features/documents/lib/editorHistory';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
-import { useAppActions, useUiShell, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import {
   PICKER_LABEL_CLASS,
   PICKER_RESULTS_CLASS,

@@ -15,8 +15,8 @@ import PdfWorker from '@/features/documents/lib/pdfWorker?worker';
 import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
 import { preparationWaitCopy } from '@/features/preparation/lib/preparationCopy.ts';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
-import { getFileReadiness } from '@/store/fileReadiness';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { getFileReadiness } from '@/store/lib/fileReadiness';
 import { makePdfFindController, scanPages } from '@/features/documents/lib/pdfFindController';
 import {
   cleanPdfSearchText,

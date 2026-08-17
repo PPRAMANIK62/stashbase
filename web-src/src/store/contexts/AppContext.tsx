@@ -33,19 +33,19 @@ import {
   makeChatTab,
   reducer,
   type State,
-} from './state';
+} from '../state/state';
 import { rememberPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
-import { useFeedbackActions } from './useFeedbackActions';
-import { useFindActions } from './useFindActions';
-import { useActiveFolderWorkspace } from './useActiveFolderWorkspace';
+import { useFeedbackActions } from '../hooks/useFeedbackActions';
+import { useFindActions } from '../hooks/useFindActions';
+import { useActiveFolderWorkspace } from '../hooks/useActiveFolderWorkspace';
 import { ActionsProvider, type AppActions } from './ActionsContext';
 import { WorkspaceProvider } from './WorkspaceContext';
 import { ChatProvider } from './ChatContext';
 import { UiShellProvider } from './UiShellContext';
 
 // Re-export the state types from a single barrel so consumers that
-// import from `'../store/AppContext'` keep working. The Provider
+// import from `'@/store/contexts/AppContext'` keep working. The Provider
 // itself owns the React-side surface (AppActions, EditorHandle); the
 // data shapes live in `state.ts`.
 export type {
@@ -59,8 +59,8 @@ export type {
   SaveStatus,
   State,
   Tab,
-} from './state';
-export type { EditorHandle, FindController, FindOptions, MatchInfo } from './actionTypes';
+} from '../state/state';
+export type { EditorHandle, FindController, FindOptions, MatchInfo } from '../state/actionTypes';
 export type { AppActions } from './ActionsContext';
 export { useWorkspace, type WorkspaceState } from './WorkspaceContext';
 export { useChat, type ChatState } from './ChatContext';
@@ -94,7 +94,7 @@ export function AppProviders({
 }: {
   state: State;
   actions: AppActions;
-  dispatch: (a: import('./state').Action) => void;
+  dispatch: (a: import('../state/state').Action) => void;
   children: ReactNode;
 }) {
   return (

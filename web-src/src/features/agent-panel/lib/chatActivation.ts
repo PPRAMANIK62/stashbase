@@ -1,5 +1,5 @@
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
-import { makeChatTab, type Action, type State } from '@/store/state';
+import { makeChatTab, type Action, type State } from '@/store/state/state';
 import { newChatPlan } from '@/features/agent-panel/lib/folderState';
 
 /** Open or reuse a chat tab without starting runtime installation. A missing

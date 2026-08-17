@@ -6,8 +6,8 @@ import { BotIcon, ChevronDownIcon, ClaudeIcon } from '@/common/components/icons'
 import type { FileMeta, FolderMeta } from '@/common/api/api';
 import { useTreeRowDrag } from '@/features/workspace/hooks/useTreeRowDrag';
 import { basename } from '@/common/lib/paths';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
-import { getFileReadiness } from '@/store/fileReadiness';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { getFileReadiness } from '@/store/lib/fileReadiness';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { RenameInput, useRenameTarget } from '@/common/components/RenameInput';
 

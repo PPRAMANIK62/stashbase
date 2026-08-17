@@ -19,7 +19,7 @@
  * which covers every Electron version we target. No fallback needed.
  */
 import { escapeRegExp } from '@/common/lib/regex';
-import type { FindController, MatchInfo } from '@/store/AppContext';
+import type { FindController, MatchInfo } from '@/store/contexts/AppContext';
 
 const HL_ALL = 'stash-find';
 const HL_CURRENT = 'stash-find-current';

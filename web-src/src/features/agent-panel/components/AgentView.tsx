@@ -19,7 +19,7 @@ import { useState } from 'react';
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { FILE_MIME } from '@/features/workspace/lib/dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '@/features/workspace/lib/dragRouting';
-import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
 import { Button } from 'react-aria-components';
 import { buttonVariants } from '@/common/components/ui/button';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { folderScopedResetActions } from '../folderScopedReset.ts';
-import { reducer } from '../stateReducer.ts';
-import { initialState, type State } from '../state.ts';
+import { folderScopedResetActions } from '../lib/folderScopedReset.ts';
+import { reducer } from '../state/stateReducer.ts';
+import { initialState, type State } from '../state/state.ts';
 
 function stateWithChatTabs(): State {
   return {

@@ -6,7 +6,7 @@ import {
   isEditorHistoryChord,
   orderEditorHistory,
 } from '@/features/documents/lib/editorHistory';
-import type { Tab } from '@/store/state';
+import type { Tab } from '@/store/state/state';
 
 function tab(id: string, name: string | null): Tab {
   return {

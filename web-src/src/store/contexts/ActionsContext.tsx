@@ -9,8 +9,8 @@
  */
 import { createContext, useContext, type ReactNode } from 'react';
 import type { AgentKind } from '@/features/agent-panel/components/agentCatalog';
-import type { Action, CascadeDecision, PendingHighlight, State } from './state';
-import type { EditorHandle, FindController } from './actionTypes';
+import type { Action, CascadeDecision, PendingHighlight, State } from '../state/state';
+import type { EditorHandle, FindController } from '../state/actionTypes';
 
 export interface AppActions {
   bootstrap: () => Promise<void>;

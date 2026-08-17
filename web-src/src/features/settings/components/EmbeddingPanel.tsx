@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage, type EmbedderProvider, type EmbedderState } from '@/common/api/api';
-import { useAppActions } from '@/store/AppContext';
+import { useAppActions } from '@/store/contexts/AppContext';
 import { EmbeddingAuthChoice } from '@/features/settings/components/embedder/EmbeddingAuthChoice';
 import { KeyModal } from '@/features/settings/components/embedder/KeyModal';
 import { RemoveKeyModal } from '@/features/settings/components/embedder/RemoveKeyModal';

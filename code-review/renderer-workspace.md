@@ -48,9 +48,9 @@ changes, never to make an accidental dependency pass.
 
 | Role | Stable entry points |
 |---|---|
-| Interface | `ActiveFolderWorkspace` in `web-src/src/store/useActiveFolderWorkspace.ts` |
-| Primary owners | `web-src/src/store/state.ts`, `stateReducer.ts`, `stateHelpers.ts`, `folderScopedReset.ts`, and the internal `useDocumentActions.ts`, `useFileActions.ts`, `useFolderActions.ts`, `useSearchActions.ts` Modules |
-| Shell Adapter | `web-src/src/store/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/features/workspace/components/MainPane.tsx` |
+| Interface | `ActiveFolderWorkspace` in `web-src/src/store/hooks/useActiveFolderWorkspace.ts` |
+| Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts`, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
+| Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/features/workspace/components/MainPane.tsx` |
 | Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
 | Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`), `web-src/src/features/workspace/__tests__/folder-transition.test.ts`, `workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, and `scripts/check-renderer-chunks.mjs` |

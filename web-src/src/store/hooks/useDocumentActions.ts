@@ -1,15 +1,15 @@
 import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
-import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '../../../shared/file-formats.ts';
+import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '../../../../shared/file-formats.ts';
 import { api, ApiError } from '@/common/api/api';
 import { folderRefsEqual } from '@/features/workspace/lib/folderPath';
 import { basename } from '@/common/lib/paths';
-import type { EditorHandle } from './actionTypes';
+import type { EditorHandle } from '../state/actionTypes';
 import {
   isFolderFileTab,
   keywordFindCaseSensitive,
   waitForNextFrame,
-} from './appContextHelpers';
-import { getActiveTab, type Action, type PendingHighlight, type State } from './state';
+} from '../lib/appContextHelpers';
+import { getActiveTab, type Action, type PendingHighlight, type State } from '../state/state';
 import type { ToastOptions } from './useFeedbackActions';
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;

@@ -5,8 +5,8 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
 import { AGENT_META } from '@/features/agent-panel/components/agentCatalog';
-import { AppProviders, type AppActions } from '@/store/AppContext';
-import { initialState, type State } from '@/store/state';
+import { AppProviders, type AppActions } from '@/store/contexts/AppContext';
+import { initialState, type State } from '@/store/state/state';
 
 /** Smoke coverage for AgentView's post-decomposition wiring: does the
  *  runtime gate render from `useAgentSession`'s discovery state, and does

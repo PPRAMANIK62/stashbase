@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FILE_MIME } from '@/features/workspace/lib/dragMime';
 import { acceptsKnowledgeBaseDrop } from '@/features/workspace/lib/dragRouting';
-import { useAppActions } from '@/store/AppContext';
+import { useAppActions } from '@/store/contexts/AppContext';
 
 /**
  * Window-level drag/drop coordinator.

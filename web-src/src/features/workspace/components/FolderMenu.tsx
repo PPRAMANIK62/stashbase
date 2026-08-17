@@ -7,7 +7,7 @@ import {
   SyncIcon,
   TrashIcon,
 } from '@/common/components/icons';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 
 /** The ⋯ folder menu shared by the active-folder header and every

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
-import { useUiShell, useWorkspace } from '@/store/AppContext';
+import { useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedPicker } from '@/common/components/LazyManaged';
 import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSettingsBlocking } from '@/features/settings/hooks/useSettingsBlocking';
-import { useUiShell } from '@/store/AppContext';
+import { useUiShell } from '@/store/contexts/AppContext';
 import type { LibrarySearchPrefill } from '@/features/search/lib/librarySearch';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedPicker } from '@/common/components/LazyManaged';

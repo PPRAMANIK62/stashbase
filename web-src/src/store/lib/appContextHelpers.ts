@@ -1,4 +1,4 @@
-import type { State } from './state';
+import type { State } from '../state/state';
 
 export function shallowEqualIndexWarning(
   a: State['indexWarning'],

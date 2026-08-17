@@ -6,15 +6,15 @@ import {
   shallowEqualIndexWarning,
   shallowEqualNumberRecord,
   shallowEqualPreparationFailures,
-} from './appContextHelpers';
+} from '../lib/appContextHelpers';
 import {
   optimisticKeyBackfillPaths,
   type Action,
   type State,
-} from './state';
+} from '../state/state';
 import type { ToastOptions } from './useFeedbackActions';
-import { hasAggregatePreparationFailure } from './fileReadiness';
-import { runIndexStatusRequest } from './indexStatusRequest';
+import { hasAggregatePreparationFailure } from '../lib/fileReadiness';
+import { runIndexStatusRequest } from '../lib/indexStatusRequest';
 
 const POLL_PENDING_MS = 1500;
 const POLL_IDLE_MS = 8000;

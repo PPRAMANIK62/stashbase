@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { api, errorMessage, type KeywordMatch, type LibraryKeywordFile } from '@/common/api/api';
-import type { PendingHighlight } from '@/store/state';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import type { PendingHighlight } from '@/store/state/state';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import { plainSnippetText, searchSnippetText } from '../lib/searchSnippet';
 import { folderRefsEqual } from '@/features/workspace/lib/folderPath';

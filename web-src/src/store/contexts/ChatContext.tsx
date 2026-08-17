@@ -5,7 +5,7 @@
  * and vice versa.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { State } from './state';
+import type { State } from '../state/state';
 
 export interface ChatState {
   chatOpen: State['chatOpen'];

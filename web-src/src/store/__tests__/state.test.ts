@@ -7,8 +7,8 @@ import {
   type ChatTab,
   type State,
   type Tab,
-} from '../state.ts';
-import { folderScopedResetActions } from '../folderScopedReset.ts';
+} from '../state/state.ts';
+import { folderScopedResetActions } from '../lib/folderScopedReset.ts';
 
 function freshState(overrides: Partial<State> = {}): State {
   return {

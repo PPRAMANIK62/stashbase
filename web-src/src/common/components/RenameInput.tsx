@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { useUiShell } from '@/store/AppContext';
+import { useUiShell } from '@/store/contexts/AppContext';
 
 /**
  * Inline VS-Code-style rename — replaces a row's `.label` span with an

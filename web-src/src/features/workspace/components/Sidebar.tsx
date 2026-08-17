@@ -9,7 +9,7 @@ import {
   PlusIcon,
   StarIcon,
 } from '@/common/components/icons';
-import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
 import { folderScope } from '@/features/agent-panel/lib/folderState';
 import { ALL_HISTORY_SCOPE } from '@/features/agent-panel/lib/sessionHistory';
 import { AGENT_META, AGENTS, type AgentKind } from '@/features/agent-panel/components/agentCatalog';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatMiB } from '@/common/lib/format';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { buttonVariants } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
 

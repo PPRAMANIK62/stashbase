@@ -1,4 +1,4 @@
-import { useAppActions, useUiShell } from '@/store/AppContext';
+import { useAppActions, useUiShell } from '@/store/contexts/AppContext';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedModal } from '@/common/components/LazyManaged';
 

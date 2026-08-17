@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { ModalShell } from '@/common/components/ModalShell';
 import { api, type OnboardingPreferences, type UnsupportedFileSummary } from '@/common/api/api';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { Button } from '@/common/components/ui/button';
 
 function formatExtensions(otherExtensions: Array<{ extension: string; count: number }>): string {

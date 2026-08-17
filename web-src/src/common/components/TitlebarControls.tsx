@@ -1,7 +1,7 @@
 import { PanelLeftIcon, PanelRightIcon, SearchIcon } from '@/common/components/icons';
 import { formatPrimaryShiftShortcut } from '@/common/lib/platformShortcuts';
 import { readPreferredAgent } from '@/features/agent-panel/lib/agentPreference';
-import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
 import { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
 import { openLibrarySearch } from '@/features/search/components/LibrarySearch';
 import { activateChatTabForAgent } from '@/features/workspace/components/Sidebar';

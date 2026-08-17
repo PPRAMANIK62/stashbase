@@ -1,5 +1,5 @@
 import type { PreparationFailure } from '@/common/api/api';
-import type { State } from './state';
+import type { State } from '../state/state';
 
 export interface FileReadiness {
   preparationFailure: PreparationFailure | undefined;

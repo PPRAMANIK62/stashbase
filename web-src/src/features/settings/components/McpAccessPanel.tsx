@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type McpHttpStatus } from '@/common/api/api';
-import { useAppActions } from '@/store/AppContext';
+import { useAppActions } from '@/store/contexts/AppContext';
 import { CopyIcon, CheckIcon } from '@/common/components/icons';
 import { MCP_SETUP_EXAMPLES_URL, openExternalUrl } from '@/common/lib/externalLink';
 import { Button } from '@/common/components/ui/button';

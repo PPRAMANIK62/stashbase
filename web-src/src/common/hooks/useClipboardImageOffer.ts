@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ClipboardOffer } from '@/common/components/ClipboardImportModal';
 import { electronBridge } from '@/common/lib/electronBridge';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 
 /**
  * Clipboard-image offer lifecycle. Main pushes de-duped clipboard image

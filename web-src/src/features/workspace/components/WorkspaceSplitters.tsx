@@ -11,7 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import '@/features/workspace/workspace.css';
-import { useAppActions, useChat, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
 import {
   clampChatWidth,
   CHAT_MAX_WIDTH,
@@ -22,7 +22,7 @@ import {
   SIDEBAR_COLLAPSE_AT,
   SIDEBAR_MIN_WIDTH,
   SIDEBAR_MAX_WIDTH,
-} from '@/store/state';
+} from '@/store/state/state';
 
 /** Vertical drag handle on the sidebar's right edge (between the side
  *  panel and the main pane). Drags the panel width within [MIN, MAX];

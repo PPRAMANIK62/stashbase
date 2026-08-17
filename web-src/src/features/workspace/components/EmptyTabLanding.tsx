@@ -1,4 +1,4 @@
-import { useAppActions } from '@/store/AppContext';
+import { useAppActions } from '@/store/contexts/AppContext';
 
 /**
  * Obsidian-style landing inside a blank `+` tab — three vertically-

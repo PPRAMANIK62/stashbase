@@ -7,7 +7,7 @@ import {
   type TranscriptionSettings,
 } from '@/common/api/api';
 import { formatMiB } from '@/common/lib/format';
-import { useAppActions } from '@/store/AppContext';
+import { useAppActions } from '@/store/contexts/AppContext';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@/../../shared/transcription.ts';
 import { Button } from '@/common/components/ui/button';
 import { Select } from '@/common/components/ui/select';

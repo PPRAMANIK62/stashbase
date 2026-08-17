@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '@/features/search/lib/commandPalette';
 import { rankQuickOpen } from '@/features/search/lib/quickOpen';
-import { useAppActions, useWorkspace } from '@/store/AppContext';
+import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { openLibrarySearch } from './LibrarySearch';
 import { openSettings } from '@/features/settings/components/SettingsModal';
 import {

@@ -9,7 +9,7 @@ import {
 } from '@/common/api/api';
 import { AGENT_META, AGENTS, type AgentKind } from '@/features/agent-panel/components/agentCatalog';
 import { ChevronDownIcon, MoreHorizontalIcon } from '@/common/components/icons';
-import { useAppActions } from '@/store/AppContext';
+import { useAppActions } from '@/store/contexts/AppContext';
 import { Button } from '@/common/components/ui/button';
 import {
   Menu,
