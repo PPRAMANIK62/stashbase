@@ -11,7 +11,7 @@
 import '@/common/__tests__/domEnvironment';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createElement as h } from 'react';
+import { act, createElement as h } from 'react';
 import { appState, mountApp, withDom } from '@/common/__tests__/renderHarness';
 import { FileTree } from '@/features/workspace/components/FileTree';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
@@ -20,6 +20,11 @@ import type { Action, State } from '@/store/state/state';
 
 function keydown(key: string): KeyboardEvent {
   return new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+}
+
+/** Moves real DOM focus, letting the roving state it updates settle. */
+async function focus(element: HTMLElement): Promise<void> {
+  await act(async () => { element.focus(); });
 }
 
 test('the sidebar handle is a named, keyboard-operable separator reporting its range', async () => {
@@ -119,4 +124,66 @@ test('opening a tree row context menu moves DOM focus to that row first', async 
       assert.equal(dispatched.at(-1)?.type, 'CTX_MENU');
     });
   }
+});
+
+/** One folder holding one file, beside a file at the root. */
+function nestedTree(expanded: string[]): State {
+  return appState({
+    folderPath: '/workspace',
+    folders: [{ path: 'Guides' }],
+    files: [
+      { name: 'Guides/inner.md', format: 'md', heading: 'inner', snippet: '' },
+      { name: 'top.md', format: 'md', heading: 'top', snippet: '' },
+    ],
+    expanded: new Set(expanded),
+  } as Partial<State>);
+}
+
+test('arrow keys rove the tree over the rows that are actually on screen', async () => {
+  // Every row is rendered whether or not its folder is open — collapsing
+  // only hides a subtree with CSS — so "which rows can I reach" is a real
+  // question. It is answered by the visible-path list the tree renders
+  // from (`useTreeRoving`), not by re-reading the DOM for a class name.
+  await withDom(async (dom) => {
+    await mountApp(dom, h(FileTree), { state: nestedTree(['Guides']) });
+    const row = (label: string) => {
+      const [element] = dom.byLabel(label);
+      assert.ok(element, `${label} renders a row`);
+      return element;
+    };
+
+    await focus(row('Guides'));
+    await dom.fire(document.activeElement!, keydown('ArrowDown'));
+    assert.equal(document.activeElement, row('inner.md'), 'ArrowDown enters the open folder');
+    await dom.fire(document.activeElement!, keydown('ArrowDown'));
+    assert.equal(document.activeElement, row('top.md'));
+    await dom.fire(document.activeElement!, keydown('ArrowDown'));
+    assert.equal(document.activeElement, row('top.md'), 'the last row is the end of the line');
+
+    await dom.fire(document.activeElement!, keydown('Home'));
+    assert.equal(document.activeElement, row('Guides'));
+    await dom.fire(document.activeElement!, keydown('ArrowUp'));
+    assert.equal(document.activeElement, row('Guides'), 'and the first row is the start');
+    await dom.fire(document.activeElement!, keydown('End'));
+    assert.equal(document.activeElement, row('top.md'));
+
+    // ArrowLeft climbs out of a folder rather than moving one row up.
+    await focus(row('inner.md'));
+    await dom.fire(document.activeElement!, keydown('ArrowLeft'));
+    assert.equal(document.activeElement, row('Guides'));
+  });
+
+  await withDom(async (dom) => {
+    await mountApp(dom, h(FileTree), { state: nestedTree([]) });
+    const [folder] = dom.byLabel('Guides');
+    assert.ok(dom.byLabel('inner.md')[0], 'a collapsed folder still renders its children');
+
+    await focus(folder);
+    await dom.fire(document.activeElement!, keydown('ArrowDown'));
+    assert.equal(
+      document.activeElement,
+      dom.byLabel('top.md')[0],
+      'ArrowDown steps over the collapsed subtree, not into it',
+    );
+  });
 });

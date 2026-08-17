@@ -18,8 +18,9 @@
  * package is a devDependency, and `scripts/gen-icons.mjs` regenerates this
  * file from it — edit the map there, not the paths here.
  *
- * Product brand marks (Claude, Codex, the StashBase cube) have no Phosphor
- * equivalent and stay hand-authored at the bottom.
+ * Product brand marks (Claude, Codex, the StashBase cube) and the two
+ * 16-box preparation status glyphs have no Phosphor equivalent and stay
+ * hand-authored at the bottom; the generator lifts them across verbatim.
  */
 
 import * as React from 'react';
@@ -451,6 +452,31 @@ export function CubeLogoIcon({ className }: IconProps) {
         <path d="M256 436 L420 342" />
         <path d="M256 342 L256 436" />
       </g>
+    </svg>
+  );
+}
+
+/** Cancelled preparation — a "no entry" bar in a ring. Hand-authored on a
+ *  16-box because it is a status mark sized to sit inside a tree row, not a
+ *  chrome glyph; Phosphor's `prohibit` reads far heavier at 14px. */
+export function CancelledIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M5.25 8h5.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Failed preparation — a knocked-out "!" in a solid triangle. The two parts
+ *  are class-tagged rather than painted here so the owning row can key the
+ *  knockout to its own surface (see `.warning-mark-*` in `workspace.css`);
+ *  no Phosphor asset offers that split. */
+export function WarningIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" aria-hidden="true">
+      <path className="warning-mark-shape" d="M8 2.2 14.4 13.2H1.6L8 2.2Z" />
+      <text className="warning-mark-text" x="8" y="12" textAnchor="middle">!</text>
     </svg>
   );
 }

@@ -147,7 +147,7 @@ function FilesPanel() {
         * folder zones and the active document's outline intentionally share
         * one navigation surface; neither becomes a floating editor
         * companion. */}
-      <LibrarySections>
+      <ActiveFolderSection>
         {/* Shown for as long as SOME document is open (see
           * `showOutline`) — not just Markdown ones — so switching tabs
           * never shifts the sections below under the pointer; a file
@@ -198,7 +198,7 @@ function FilesPanel() {
           </div>
         </section>
         )}
-      </LibrarySections>
+      </ActiveFolderSection>
       {/* AI Index authorization is APP-WIDE, not a property of the
         * open folder, so it sits in the bottom chrome above the account
         * row rather than inside the file tree. Wedged between a folder header
@@ -377,24 +377,23 @@ function RootMenuButton({
   );
 }
 
-/** The sidebar's two folder zones.
+/** The sidebar's folder zone — exactly one of two states, plus the folder
+ *  menu and removal dialog they share.
  *
- *  ACTIVE ZONE — only when this window has a folder open: the current
- *  folder's header row (explorer toolbar, drop target, ⋯ menu) with its
- *  file tree beneath. It shares the sidebar's one pane surface — the
- *  inset pill rows, not a surface split, carry the hierarchy.
+ *  ACTIVE ZONE — when this window has a folder open: the current folder's
+ *  header row (explorer toolbar, drop target, ⋯ menu) with its file tree
+ *  beneath. It shares the sidebar's one pane surface — the inset pill rows,
+ *  not a surface split, carry the hierarchy.
  *
- *  LIBRARY — every OTHER member folder as a single compact row: favorites
- *  (all of them) pinned first, then the rest in recents order. The list
- *  caps at a fixed height and scrolls internally — a half-row peek at the
- *  cap hints at the overflow. Clicking a row switches this window's folder
- *  in place — the clicked folder moves up into the active zone and the
- *  previous one drops back into the list.
+ *  NO-FOLDER ZONE — otherwise: the zero-folder brand moment, or one quiet
+ *  line pointing at the titlebar's "Library ⌄" switcher. Membership lives
+ *  in that switcher, so the sidebar renders NO list of other member
+ *  folders; it keeps a single anchor rather than a competing list.
  *
- *  `children` (the Document Outline section) slots BETWEEN the two: it
- *  belongs to the working context above, while Library stays the
- *  bottom-most global section. */
-function LibrarySections({ children }: { children?: React.ReactNode }) {
+ *  `children` (the Document Outline section) renders after the zone, which
+ *  is what puts it below the working context and above the bottom-most
+ *  global chrome. */
+function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
   const state = useWorkspace();
   const { actions, dispatch } = useAppActions();
   const semanticNotice = useSemanticIndexingNotice();

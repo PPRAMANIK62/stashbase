@@ -1,133 +1,23 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useMemo, type MouseEvent } from 'react';
 import '@/common/styles/tree.css';
 import '@/features/workspace/workspace.css';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
-import { BotIcon, ChevronDownIcon, ClaudeIcon } from '@/common/components/icons';
-import type { FileMeta, FolderMeta } from '@/common/api/api';
+import { BotIcon, CancelledIcon, ChevronDownIcon, ClaudeIcon, WarningIcon } from '@/common/components/icons';
 import { useTreeRowDrag } from '@/features/workspace/hooks/useTreeRowDrag';
+import { TreeRovingContext, useTreeRoving, useTreeRow } from '@/features/workspace/hooks/useTreeRoving';
+import { buildTree, visibleNodePaths, type FolderNode, type TreeNode } from '@/features/workspace/lib/fileTreeModel';
 import { basename } from '@/common/lib/paths';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { getFileReadiness } from '@/store/lib/fileReadiness';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import { FileTypeIcon } from '@/common/components/FileTypeIcon';
+import { NewFolderInput } from '@/features/workspace/components/NewFolderInput';
 import { RenameInput, useRenameTarget } from '@/features/workspace/components/RenameInput';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
 
-interface FolderNode {
-  type: 'folder';
-  name: string;
-  path: string;
-  children: TreeNode[];
-}
-
-interface FileNode {
-  type: 'file';
-  name: string;
-  path: string;
-  meta: FileMeta;
-}
-
-type TreeNode = FolderNode | FileNode;
-
-const TreeFocusContext = createContext<{
-  rovingPath: string | null;
-  setRovingPath: (path: string) => void;
-}>({ rovingPath: null, setRovingPath: () => undefined });
-
-function buildTree(
-  files: FileMeta[],
-  folders: FolderMeta[],
-  fileOrder: Record<string, string[]>,
-): FolderNode {
-  const root: FolderNode = { type: 'folder', name: '', path: '', children: [] };
-  const folderMap = new Map<string, FolderNode>();
-  folderMap.set('', root);
-
-  const ensureFolder = (folderPath: string): FolderNode => {
-    const cached = folderMap.get(folderPath);
-    if (cached) return cached;
-    const segs = folderPath.split('/');
-    const parentPath = segs.slice(0, -1).join('/');
-    const parent = ensureFolder(parentPath);
-    const node: FolderNode = {
-      type: 'folder',
-      name: segs[segs.length - 1],
-      path: folderPath,
-      children: [],
-    };
-    parent.children.push(node);
-    folderMap.set(folderPath, node);
-    return node;
-  };
-  for (const f of folders) ensureFolder(f.path);
-
-  for (const f of files) {
-    const segs = f.name.split('/');
-    const parentPath = segs.slice(0, -1).join('/');
-    const parent = ensureFolder(parentPath);
-    parent.children.push({
-      type: 'file',
-      name: segs[segs.length - 1],
-      path: f.name,
-      meta: f,
-    });
-  }
-
-  // Sort: items the user has manually ordered come first (in the
-  // recorded order), unranked items follow in folders-first +
-  // alphabetical order. Names in `fileOrder` that no longer exist on
-  // disk are dropped silently (renamed / deleted files don't keep
-  // their slot).
-  const sortNodes = (nodes: TreeNode[], parentPath: string) => {
-    const order = fileOrder[parentPath];
-    if (order && order.length > 0) {
-      const rank = new Map<string, number>();
-      order.forEach((name, i) => rank.set(name, i));
-      nodes.sort((a, b) => {
-        const ai = rank.get(a.name);
-        const bi = rank.get(b.name);
-        if (ai != null && bi != null) return ai - bi;
-        if (ai != null) return -1;
-        if (bi != null) return 1;
-        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-    } else {
-      nodes.sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-    }
-    for (const n of nodes) if (n.type === 'folder') sortNodes(n.children, n.path);
-  };
-  sortNodes(root.children, '');
-  return root;
-}
-
-function displayName(name: string): string {
-  // Show the extension. Three viewer formats (md / html / pdf) coexist
-  // — PDF-derived notes ship as a `paper.pdf` + `paper.html` pair, and
-  // collapsing both to "paper" leaves them visually indistinguishable.
-  // ICP is developers who already read extensions everywhere (IDE /
-  // Finder / git), so the noise cost is small. Kept as a hook so we
-  // can flip back to stripping later without churning call sites.
-  return name;
-}
-
-function visibleNodePaths(nodes: TreeNode[], expanded: Set<string>, paths: string[] = []): string[] {
-  for (const node of nodes) {
-    paths.push(node.path);
-    if (node.type === 'folder' && expanded.has(node.path)) {
-      visibleNodePaths(node.children, expanded, paths);
-    }
-  }
-  return paths;
-}
-
 export function FileTree() {
   const state = useWorkspace();
-  const [rovingPath, setRovingPath] = useState<string | null>(null);
   const root = useMemo(
     () => buildTree(state.files, state.folders, state.fileOrder),
     [state.files, state.folders, state.fileOrder],
@@ -136,15 +26,7 @@ export function FileTree() {
     () => visibleNodePaths(root.children, state.expanded),
     [root, state.expanded],
   );
-  const effectiveRovingPath = rovingPath && visiblePaths.includes(rovingPath)
-    ? rovingPath
-    : state.selectedPath && visiblePaths.includes(state.selectedPath)
-      ? state.selectedPath
-      : visiblePaths[0] ?? null;
-  const focusContext = useMemo(
-    () => ({ rovingPath: effectiveRovingPath, setRovingPath }),
-    [effectiveRovingPath],
-  );
+  const roving = useTreeRoving(visiblePaths, state.selectedPath);
 
   const inputAtRoot = state.newFolderInputOpen && state.activeFolder === '';
   if (root.children.length === 0 && !inputAtRoot) {
@@ -165,12 +47,12 @@ export function FileTree() {
     return <div className={emptyStateClass}>No notes yet — click + to create one</div>;
   }
   return (
-    <TreeFocusContext.Provider value={focusContext}>
+    <TreeRovingContext.Provider value={roving}>
       <div role="tree" aria-label="Files">
         {inputAtRoot && <NewFolderInput parentPath="" depth={0} />}
         <TreeNodes nodes={root.children} depth={0} parent="" />
       </div>
-    </TreeFocusContext.Provider>
+    </TreeRovingContext.Provider>
   );
 }
 
@@ -206,34 +88,6 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
   );
 }
 
-function visibleTreeItems(current: HTMLElement): HTMLElement[] {
-  const tree = current.closest('[role="tree"]');
-  if (!tree) return [];
-  return Array.from(tree.querySelectorAll<HTMLElement>('[role="treeitem"]'))
-    .filter((item) => !item.closest('.tree-children.collapsed'));
-}
-
-function moveTreeFocus(event: KeyboardEvent<HTMLDivElement>): boolean {
-  const items = visibleTreeItems(event.currentTarget);
-  const index = items.indexOf(event.currentTarget);
-  let target: HTMLElement | undefined;
-  if (event.key === 'ArrowDown') target = items[index + 1];
-  else if (event.key === 'ArrowUp') target = items[index - 1];
-  else if (event.key === 'Home') target = items[0];
-  else if (event.key === 'End') target = items.at(-1);
-  if (!target) return false;
-  event.preventDefault();
-  target.focus();
-  return true;
-}
-
-function focusParentTreeItem(current: HTMLElement, parentPath: string): boolean {
-  if (!parentPath) return false;
-  const parent = visibleTreeItems(current).find((item) => item.dataset.path === parentPath);
-  parent?.focus();
-  return !!parent;
-}
-
 function FolderRow({
   node,
   depth,
@@ -247,7 +101,7 @@ function FolderRow({
 }) {
   const state = useWorkspace();
   const { dispatch, actions } = useAppActions();
-  const treeFocus = useContext(TreeFocusContext);
+  const row = useTreeRow(node.path, parent);
   const isExpanded = state.expanded.has(node.path);
   const isActive = state.selectedPath === node.path;
   const renaming = useRenameTarget(node.path, 'folder');
@@ -280,38 +134,36 @@ function FolderRow({
   return (
     <>
       <div
+        ref={row.ref}
         className={rowClass}
         role="treeitem"
         aria-label={node.name}
         aria-level={depth + 1}
         aria-expanded={isExpanded}
         aria-selected={isActive}
-        tabIndex={treeFocus.rovingPath === node.path ? 0 : -1}
+        tabIndex={row.tabIndex}
         style={{ paddingLeft: depth * 14 + 26 }}
         data-path={node.path}
         draggable={!renaming}
         {...dragProps}
-        onFocus={() => treeFocus.setRovingPath(node.path)}
+        onFocus={row.onFocus}
         onClick={() => {
           if (renaming) return;
           dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
         }}
         onKeyDown={(e) => {
-          if (moveTreeFocus(e)) return;
+          if (row.moveFocus(e)) return;
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             if (!renaming) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
           } else if (e.key === 'ArrowRight') {
             e.preventDefault();
             if (!isExpanded) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
-            else {
-              const items = visibleTreeItems(e.currentTarget);
-              items[items.indexOf(e.currentTarget) + 1]?.focus();
-            }
+            else row.focusNext();
           } else if (e.key === 'ArrowLeft') {
             e.preventDefault();
             if (isExpanded) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
-            else focusParentTreeItem(e.currentTarget, parent);
+            else row.focusParent();
           }
         }}
         onContextMenu={onContextMenu}
@@ -361,11 +213,15 @@ function FileRow({
 }) {
   const state = useWorkspace();
   const { actions, dispatch } = useAppActions();
-  const treeFocus = useContext(TreeFocusContext);
+  const row = useTreeRow(path, parent);
   const isActive = state.selectedPath === path;
   const readiness = getFileReadiness(state, path);
   const renaming = useRenameTarget(path, 'file');
 
+  // Names keep their extension. Three viewer formats (md / html / pdf)
+  // coexist — PDF-derived notes ship as a `paper.pdf` + `paper.html` pair,
+  // and collapsing both to "paper" leaves them indistinguishable. The ICP
+  // is developers who already read extensions in the IDE, Finder, and git.
   const name = basename(path);
   // Named agent rules-books are tagged by their owner's logo. They are still
   // ordinary Markdown files in the tree; only the glyph changes.
@@ -386,7 +242,6 @@ function FileRow({
     (dropEdge === 'above' ? ' drop-edge-above' : '') +
     (dropEdge === 'below' ? ' drop-edge-below' : '');
 
-  const display = displayName(name);
   const title = readiness.preparationFailure
     ? `File preparation failed; this file may not be searchable. ${path}`
     : readiness.preparationCancellation
@@ -422,18 +277,19 @@ function FileRow({
 
   return (
     <div
+      ref={row.ref}
       className={rowClass}
       role="treeitem"
-      aria-label={display}
+      aria-label={name}
       aria-level={depth + 1}
       aria-selected={isActive}
-      tabIndex={treeFocus.rovingPath === path ? 0 : -1}
+      tabIndex={row.tabIndex}
       style={{ paddingLeft }}
       data-path={path}
       title={title}
       draggable={!renaming}
       {...dragProps}
-      onFocus={() => treeFocus.setRovingPath(path)}
+      onFocus={row.onFocus}
       onClick={() => {
         if (renaming) return;
         // Single-click → open the file in its own persistent tab (or
@@ -445,9 +301,9 @@ function FileRow({
         openFile();
       }}
       onKeyDown={(e) => {
-        if (moveTreeFocus(e)) return;
+        if (row.moveFocus(e)) return;
         if (e.key === 'ArrowLeft') {
-          if (focusParentTreeItem(e.currentTarget, parent)) e.preventDefault();
+          if (row.focusParent()) e.preventDefault();
           return;
         }
         if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -468,7 +324,7 @@ function FileRow({
           onCancel={() => dispatch({ type: 'RENAMING', renaming: null })}
         />
       ) : (
-        <span className="label">{display}</span>
+        <span className="label">{name}</span>
       )}
       {readiness.preparationFailure ? (
         <span
@@ -476,7 +332,7 @@ function FileRow({
           aria-label="File preparation failed"
           title="File preparation failed; this file may not be searchable."
         >
-          <WarningGlyph />
+          <WarningIcon />
         </span>
       ) : readiness.preparationCancellation ? (
         <span
@@ -484,19 +340,10 @@ function FileRow({
           aria-label="File preparation cancelled"
           title="File preparation was cancelled. Reprocess it when you want searchable text."
         >
-          <CancelledGlyph />
+          <CancelledIcon />
         </span>
       ) : null}
     </div>
-  );
-}
-
-function CancelledGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M5.25 8h5.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -511,68 +358,4 @@ function agentRulesIcon(basename: string) {
   if (normalized === 'claude.md') return <ClaudeIcon />;
   if (normalized === 'agents.md') return <BotIcon className="agent-rules-icon" />;
   return null;
-}
-
-function WarningGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path className="warning-mark-shape" d="M8 2.2 14.4 13.2H1.6L8 2.2Z" />
-      <text className="warning-mark-text" x="8" y="12" textAnchor="middle">!</text>
-    </svg>
-  );
-}
-
-/** Inline input for naming a new folder. Mounts inside the parent
- *  folder's children area (or at the top level when `parentPath`
- *  is `''`), so the affordance reads "the new folder will live
- *  here". Same Enter/Esc/blur/IME semantics as `<RenameInput>`. */
-function NewFolderInput({ parentPath, depth }: { parentPath: string; depth: number }) {
-  const { actions, dispatch } = useAppActions();
-  const ref = useRef<HTMLInputElement | null>(null);
-  const doneRef = useRef(false);
-
-  useEffect(() => { ref.current?.focus(); }, []);
-
-  function commit() {
-    if (doneRef.current) return;
-    doneRef.current = true;
-    const name = ref.current?.value.trim() ?? '';
-    dispatch({ type: 'NEW_FOLDER_INPUT', open: false });
-    if (!name) return;
-    const full = parentPath ? `${parentPath}/${name}` : name;
-    void actions.newFolder(full);
-  }
-  function cancel() {
-    if (doneRef.current) return;
-    doneRef.current = true;
-    dispatch({ type: 'NEW_FOLDER_INPUT', open: false });
-  }
-
-  return (
-    <div
-      className="tree-row folder new-folder-row"
-      style={{ paddingLeft: depth * 14 + 26 }}
-    >
-      <span className="chev new-folder-spacer" aria-hidden="true" />
-      <input
-        ref={ref}
-        type="text"
-        aria-label={parentPath ? `New folder in ${parentPath}` : 'New folder in folder root'}
-        className="tree-create-input"
-        placeholder="New folder name…"
-        onKeyDown={(e) => {
-          // Skip while IME is composing — Chinese / Japanese / Korean
-          // users press Enter to pick a candidate, not to commit.
-          if (e.nativeEvent.isComposing) return;
-          if (e.key === 'Enter') { e.preventDefault(); commit(); }
-          else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-        }}
-        onBlur={() => {
-          if (doneRef.current) return;
-          const name = ref.current?.value.trim() ?? '';
-          if (name) commit(); else cancel();
-        }}
-      />
-    </div>
-  );
 }
