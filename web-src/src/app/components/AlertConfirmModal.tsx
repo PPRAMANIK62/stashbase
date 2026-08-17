@@ -2,7 +2,7 @@ import { useAppActions, useUiShell } from '@/store/contexts/AppContext';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedModal } from '@/common/components/LazyManaged';
 
-const ManagedAlertConfirmModal = lazyWithRetry(() => import('@/app/ManagedAlertConfirmModal'));
+const ManagedAlertConfirmModal = lazyWithRetry(() => import('@/app/components/ManagedAlertConfirmModal'));
 
 export function AlertConfirmModal() {
   const { actions } = useAppActions();

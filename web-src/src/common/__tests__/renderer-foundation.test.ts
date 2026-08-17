@@ -208,7 +208,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   assert.match(modal, /LazyManagedModal/);
   assert.doesNotMatch(modal, /createPortal|addEventListener/);
   assert.doesNotMatch(read('web-src/src/features/settings/components/SettingsModal.tsx'), /addEventListener\('keydown'/);
-  assert.doesNotMatch(read('web-src/src/app/CascadePromptModal.tsx'), /addEventListener/);
+  assert.doesNotMatch(read('web-src/src/app/components/CascadePromptModal.tsx'), /addEventListener/);
 
   const menu = read('web-src/src/common/components/Menu.tsx');
   assert.match(menu, /lazyWithRetry\(\(\) => import\('@\/common\/components\/ManagedMenu'\)\)/);
@@ -245,7 +245,7 @@ test('shared interaction surfaces delegate behavior to the renderer UI layer', (
   assert.doesNotMatch(appShellChrome, /app-chrome/);
   assert.match(appShellChrome, /platform-darwin \.sidebar-drag-zone/);
   assert.match(appShellChrome, /platform-darwin \.tab-strip/);
-  assert.match(read('web-src/src/app/Sidebar.tsx'), /className="sidebar-drag-zone"/);
+  assert.match(read('web-src/src/app/components/Sidebar.tsx'), /className="sidebar-drag-zone"/);
 });
 
 test('shared overlays own loading modality, popup positioning, and focus return', () => {
@@ -255,7 +255,7 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   for (const file of [
     'web-src/src/common/components/ModalShell.tsx',
     'web-src/src/features/settings/components/SettingsModal.tsx',
-    'web-src/src/app/AlertConfirmModal.tsx',
+    'web-src/src/app/components/AlertConfirmModal.tsx',
     'web-src/src/common/components/ClipboardImportModal.tsx',
   ]) {
     assert.match(read(file), /LazyManagedModal/);
@@ -286,10 +286,10 @@ test('shared overlays own loading modality, popup positioning, and focus return'
   assert.match(tabs, /aria-controls="document-panel"/);
   assert.doesNotMatch(tabs, /aria-controls=\{`document-panel-\$\{t\.id\}`\}/);
 
-  const mainPane = read('web-src/src/app/MainPane.tsx');
+  const mainPane = read('web-src/src/app/components/MainPane.tsx');
   assert.match(mainPane, /id=\{activeTab \? 'document-panel' : undefined\}/);
 
-  const sidebar = read('web-src/src/app/Sidebar.tsx');
+  const sidebar = read('web-src/src/app/components/Sidebar.tsx');
   assert.match(sidebar, /aria-label=\{`Select \$\{name\} folder root`\}/);
   assert.match(sidebar, /aria-label=\{'New note in ' \+ target\}/);
   assert.match(sidebar, /<Button\s+type="button"\s+variant="ghost"[\s\S]{0,400}aria-label=\{`Select \$\{name\} folder root`\}/);

@@ -27,7 +27,7 @@ import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBounda
 import { FolderMenu } from '@/features/workspace/components/FolderMenu';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 import { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderModal';
-import { ScopeHistoryButton } from '@/app/ScopeHistoryButton';
+import { ScopeHistoryButton } from '@/app/components/ScopeHistoryButton';
 import { Button } from '@/common/components/ui/button';
 import { api, errorMessage } from '@/common/api/api';
 import { FILE_MIME } from '@/common/lib/dragMime';

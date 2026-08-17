@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isCommandPaletteShortcut, isWindowLifecycleShortcut } from '@/app/Hotkeys';
+import { isCommandPaletteShortcut, isWindowLifecycleShortcut } from '@/app/components/Hotkeys';
 
 test('Command Palette owns F1 and Cmd/Ctrl+Shift+P only', () => {
   assert.equal(isCommandPaletteShortcut({ key: 'F1', metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }), true);

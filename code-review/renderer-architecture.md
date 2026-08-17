@@ -104,7 +104,7 @@ import a feature component to render it realistically.
 | Role | Stable entry points |
 |---|---|
 | Layer roots | `web-src/src/common/`, `web-src/src/store/`, `web-src/src/features/<area>/`, `web-src/src/app/` |
-| Composition root | `web-src/src/app/App.tsx`, `MainPane.tsx`, `Sidebar.tsx` |
+| Composition root | `web-src/src/app/App.tsx` over `app/components/` (including `MainPane.tsx` and `Sidebar.tsx`) and `app/hooks/` |
 | Cross-feature triggers | `web-src/src/common/lib/settingsTrigger.ts`, `librarySearchTrigger.ts`, `embeddingSetupTrigger.ts` |
 | Boundary enforcement | `.oxlintrc.json` and the `lint:web` script |
 
