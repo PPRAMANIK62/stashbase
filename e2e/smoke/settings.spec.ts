@@ -5,6 +5,8 @@ import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
 import {
   appearanceChoice,
+  dismissEmbeddingKeyPrompt,
+  openLibraryFolder,
   settingsButton,
   settingsDialog,
   settingsTab,
@@ -19,7 +21,7 @@ test('user can navigate Settings and persist appearance across relaunch', async 
     await expect(settingsDialog(app.page)).toBeVisible();
     await expect(settingsTab(app.page, 'Appearance')).toHaveAttribute('aria-selected', 'true');
 
-    for (const section of ['AI Index', 'Transcription', 'MCP', 'Appearance']) {
+    for (const section of ['General', 'AI Index', 'Transcription', 'MCP', 'Appearance']) {
       await settingsTab(app.page, section).click();
       await expect(settingsTab(app.page, section)).toHaveAttribute('aria-selected', 'true');
     }
@@ -44,6 +46,53 @@ test('user can navigate Settings and persist appearance across relaunch', async 
     await expect(appearanceChoice(app.page, 'Interface size', 'Large')).toHaveAttribute('data-pressed');
     app.errors.assertNone();
   } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+test('clipboard screenshot offers are default-off and require an explicit General setting', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await dismissEmbeddingKeyPrompt(app.page);
+
+    const imageReady = await app.electron.evaluate(({ clipboard, nativeImage }) => {
+      const image = nativeImage.createFromDataURL(
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      );
+      clipboard.writeImage(image);
+      return !image.isEmpty();
+    });
+    expect(imageReady).toBe(true);
+    await app.page.bringToFront();
+    await app.page.waitForTimeout(800);
+    await expect(app.page.getByRole('dialog', { name: 'Add image to StashBase?' })).toHaveCount(0);
+
+    await settingsButton(app.page).click();
+    await settingsTab(app.page, 'General').click();
+    const clipboardCapture = settingsDialog(app.page).getByRole('checkbox', {
+      name: 'Offer to add clipboard screenshots',
+    });
+    await expect(clipboardCapture).not.toBeChecked();
+    await clipboardCapture.check();
+
+    const offer = app.page.getByRole('dialog', { name: 'Add image to StashBase?' });
+    await expect(offer).toBeVisible();
+    await offer.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(offer).toBeHidden();
+
+    const persisted = JSON.parse(fs.readFileSync(fixture.configFile, 'utf8')) as {
+      capture?: { clipboardImageImport?: boolean };
+    };
+    expect(persisted.capture?.clipboardImageImport).toBe(true);
+    app.errors.assertNone();
+  } finally {
+    try {
+      await app?.electron.evaluate(({ clipboard }) => clipboard.clear());
+    } catch { /* Electron may already be closed after a failed assertion. */ }
     await app?.close();
     await fixture.cleanup();
   }

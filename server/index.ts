@@ -53,6 +53,7 @@ import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
 import { mount as mountLibraryRoutes } from './routes/library.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountAppearanceRoutes } from './routes/appearance.ts';
+import { mount as mountCaptureRoutes } from './routes/capture.ts';
 import { mount as mountTranscriptionRoutes } from './routes/transcription.ts';
 import { mount as mountFilesRoutes } from './routes/files.ts';
 import { mount as mountFoldersRoutes } from './routes/folders.ts';
@@ -323,6 +324,7 @@ app.use([
 
 // ----- mount routes -------------------------------------------------------
 mountAppearanceRoutes(app);
+mountCaptureRoutes(app);
 mountAccountRoutes(app, {
   appReturnToken: process.env.STASHBASE_OAUTH_RETURN_TOKEN ?? '',
 });
@@ -543,7 +545,9 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 
 // Agent sessions are pinned to an explicit scope (a member folder, or
 // the whole library), so a window switching folders does NOT tear them
-// down — the chat tabs and their running sessions survive the switch.
+// down — the chat tabs and their running sessions survive the switch. An
+// attributed Library Chat's explicit create_project action is the one scope
+// migration and is owned inside the runtime/session registry.
 // Teardown remains on window close/retire (below), library folder
 // removal (routes/library.ts via stopAgentRuntimeForFolder — which only
 // matches folder-bound sessions, never library-scoped ones), and app

@@ -7,6 +7,7 @@ import type {
   AgentContextFile,
   AgentsResponse,
   AppearancePreferences,
+  CapturePreferences,
   ApiKeySaveResult,
   EmbedderState,
   EmbedderProvider,
@@ -267,6 +268,9 @@ export const api = {
   appearance: () => getJson<AppearancePreferences>('/api/appearance'),
   setAppearance: (preferences: Partial<AppearancePreferences>) =>
     send<AppearancePreferences>('PUT', '/api/appearance', preferences),
+  capturePreferences: () => getJson<CapturePreferences>('/api/capture'),
+  setCapturePreferences: (preferences: Partial<CapturePreferences>) =>
+    send<CapturePreferences>('PUT', '/api/capture', preferences),
   setTranscriptionPreferences: (preferences: { providerId?: string; modelId?: string; language?: string }) =>
     send<{ providerId: string; modelId: string; language: string }>('PUT', '/api/transcription/preferences', preferences),
   downloadTranscriptionModel: (id: TranscriptionModelId) =>

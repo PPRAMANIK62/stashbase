@@ -25,9 +25,6 @@ export interface RecentFolder {
   openedAt: string;
   /** User-starred in the Welcome library list. Absent = not a favorite. */
   favorite?: boolean;
-  description?: string;
-  descriptionSource?: 'user' | 'ai';
-  descriptionUpdatedAt?: string;
 }
 
 export type EmbedderProvider = 'openai' | 'openrouter';
@@ -42,10 +39,19 @@ export interface AppearancePreferences {
   readingTextSize: AppearanceScale;
 }
 
+export interface CapturePreferences {
+  /** Offer focused-window clipboard images for explicit library import. */
+  clipboardImageImport: boolean;
+}
+
 export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
   theme: 'system',
   uiScale: 'default',
   readingTextSize: 'default',
+};
+
+export const DEFAULT_CAPTURE_PREFERENCES: CapturePreferences = {
+  clipboardImageImport: false,
 };
 
 export interface EmbedderConfig {
@@ -139,6 +145,9 @@ export interface AppConfigFile {
   /** Bounded, user-wide presentation preferences. These deliberately avoid
    * arbitrary theme, font, spacing, and layout customization. */
   appearance?: Partial<AppearancePreferences>;
+  /** Explicit opt-ins for ambient capture. Absent and invalid values fail
+   * closed so upgrades never begin reading the clipboard automatically. */
+  capture?: Partial<CapturePreferences>;
   onboarding?: OnboardingPreferences;
 }
 
@@ -245,10 +254,6 @@ export function writeAppConfigStrict(cfg: AppConfigFile): void {
     if (!isConfigAccessError(err)) throw err;
     throw configAccessError(err);
   }
-}
-
-export function getApiKey(): string | undefined {
-  return getEmbedderConfig().apiKey;
 }
 
 export function getHostedAccountSession(): HostedAccountSession | undefined {
@@ -452,6 +457,61 @@ export function setAppearancePreferences(next: Partial<AppearancePreferences>): 
   const current = normalizeAppearancePreferences(cfg.appearance);
   const resolved = normalizeAppearancePreferences({ ...current, ...next });
   cfg.appearance = resolved;
+  writeAppConfigStrict(cfg);
+  return resolved;
+}
+
+export function normalizeCapturePreferences(value: unknown): CapturePreferences {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<CapturePreferences>
+    : {};
+  return {
+    clipboardImageImport: typeof raw.clipboardImageImport === 'boolean'
+      ? raw.clipboardImageImport
+      : DEFAULT_CAPTURE_PREFERENCES.clipboardImageImport,
+  };
+}
+
+export interface CapturePreferencesStore {
+  get(): CapturePreferences;
+  set(next: Partial<CapturePreferences>): CapturePreferences;
+}
+
+export function createCapturePreferencesStore(io: {
+  read(): AppConfigFile;
+  write(config: AppConfigFile): void;
+}): CapturePreferencesStore {
+  return {
+    get: () => normalizeCapturePreferences(io.read().capture),
+    set(next) {
+      const config = io.read();
+      const resolved = normalizeCapturePreferences({
+        ...normalizeCapturePreferences(config.capture),
+        ...next,
+      });
+      config.capture = resolved;
+      io.write(config);
+      return resolved;
+    },
+  };
+}
+
+const capturePreferences = createCapturePreferencesStore({
+  read: readAppConfig,
+  write: writeAppConfigStrict,
+});
+
+export function getCapturePreferences(): CapturePreferences {
+  return capturePreferences.get();
+}
+
+export function setCapturePreferences(next: Partial<CapturePreferences>): CapturePreferences {
+  const cfg = readAppConfigStrict();
+  const resolved = normalizeCapturePreferences({
+    ...normalizeCapturePreferences(cfg.capture),
+    ...next,
+  });
+  cfg.capture = resolved;
   writeAppConfigStrict(cfg);
   return resolved;
 }

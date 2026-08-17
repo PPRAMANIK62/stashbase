@@ -120,8 +120,8 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('clipboard:image-available', wrapped);
     return () => ipcRenderer.removeListener('clipboard:image-available', wrapped);
   },
-  /** Enable / disable clipboard-image watching (privacy toggle). */
-  setClipboardWatch: (enabled) => ipcRenderer.invoke('clipboard:setWatch', enabled),
+  /** Refresh clipboard-image watching from the durable server setting. */
+  refreshClipboardWatch: () => ipcRenderer.invoke('clipboard:refreshWatch'),
   /** Tell main an offered clipboard image was handled so it isn't
    *  re-offered on the next focus. */
   markClipboardHandled: (hash) => ipcRenderer.send('clipboard:markHandled', hash),

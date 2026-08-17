@@ -29,6 +29,7 @@ const { captureWindowScreenshot } = require('./bug-report-screenshot.cjs');
 const { createBugReportHandoff } = require('./bug-report-handoff.cjs');
 const { registerBugReportReviewIpc } = require('./bug-report-review-ipc.cjs');
 const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
+const { shouldOfferClipboardImage } = require('./clipboard-watch-policy.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
   classifyProtocolLaunch,
@@ -703,8 +704,9 @@ async function openBugReportReview(win) {
 // back), we ping the renderer to ask "add this to the library?". Reading
 // the clipboard is cheap; we hash the PNG bytes so the same image is only
 // offered once — dismiss is final until the clipboard content changes.
-// Default-on; toggleable from the renderer via `clipboard:setWatch`.
-let clipboardWatchEnabled = true;
+// Fail closed. The renderer enables this only after reading the durable,
+// explicit Settings opt-in from the server.
+let clipboardWatchEnabled = false;
 let lastClipboardOfferHash = null;
 const agentComposerFocusedContents = new Set();
 
@@ -732,12 +734,15 @@ function markCurrentClipboardImageHandled() {
   return true;
 }
 
-function offerClipboardImage(win) {
-  if (!clipboardWatchEnabled) return;
+function offerClipboardImage(win, focused = win?.isFocused?.() === true) {
   if (!win || win.isDestroyed()) return;
   // A focused Agent composer claims clipboard images as transient chat
   // context, so do not race the explicit paste with a library-import offer.
-  if (agentComposerFocusedContents.has(win.webContents.id)) return;
+  if (!shouldOfferClipboardImage({
+    enabled: clipboardWatchEnabled,
+    focused,
+    composerFocused: agentComposerFocusedContents.has(win.webContents.id),
+  })) return;
   let img;
   try {
     img = clipboard.readImage();
@@ -783,7 +788,7 @@ function startClipboardPolling() {
   if (clipboardPollTimer || !clipboardWatchEnabled) return;
   clipboardPollTimer = setInterval(() => {
     const win = BrowserWindow.getFocusedWindow();
-    if (win && mainWindows.has(win) && !win.isDestroyed()) offerClipboardImage(win);
+    if (win && mainWindows.has(win) && !win.isDestroyed()) offerClipboardImage(win, true);
     else stopClipboardPolling();
   }, CLIPBOARD_POLL_MS);
 }
@@ -835,7 +840,7 @@ async function createWindow(initialFolder) {
   lastMainWindow = win;
   win.on('focus', () => {
     lastMainWindow = win;
-    offerClipboardImage(win);
+    offerClipboardImage(win, true);
     startClipboardPolling();
   });
   win.on('close', (event) => {
@@ -1115,15 +1120,32 @@ ipcMain.handle('window:notifyLibraryFolderAdded', (event, folder) => {
   return true;
 });
 
-// Renderer toggles clipboard-image watching (privacy switch). When
-// turning it back on we clear the last-offered hash so the current
-// clipboard image becomes eligible again.
-ipcMain.handle('clipboard:setWatch', (_event, enabled) => {
-  clipboardWatchEnabled = enabled !== false;
+// Renderer asks main to refresh clipboard-image watching after startup or a
+// Settings write. Main re-reads server-owned durable truth so a slow renderer
+// cannot overwrite a newer choice made in another window.
+ipcMain.handle('clipboard:refreshWatch', async (event) => {
+  const wasEnabled = clipboardWatchEnabled;
+  let enabled = false;
+  try {
+    const response = await fetch(`${SERVER_URL}/api/capture`);
+    if (response.ok) {
+      const preferences = await response.json();
+      enabled = preferences?.clipboardImageImport === true;
+    }
+  } catch {
+    // Ambient capture fails closed when config cannot be read.
+  }
+  clipboardWatchEnabled = enabled;
   if (clipboardWatchEnabled) {
-    lastClipboardOfferHash = null;
-    const win = BrowserWindow.getFocusedWindow();
-    if (win && mainWindows.has(win)) { offerClipboardImage(win); startClipboardPolling(); }
+    if (!wasEnabled) lastClipboardOfferHash = null;
+    // The Settings click can momentarily race Electron's global focus sample.
+    // The invoking renderer is stable authority for where to surface the first
+    // offer; later focus events continue to move polling between windows.
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (isLiveMainWindow(win) && win.isFocused()) {
+      offerClipboardImage(win, true);
+      startClipboardPolling();
+    }
   } else {
     stopClipboardPolling();
   }

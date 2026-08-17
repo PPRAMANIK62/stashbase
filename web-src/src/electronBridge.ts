@@ -28,7 +28,7 @@ export interface ElectronBridge {
   onFolderRemoved?: (handler: (folder: string) => void) => (() => void);
   onLibraryFolderAdded?: (handler: (folder: string) => void) => (() => void);
   onClipboardImage?: (handler: (offer: ClipboardOffer) => void) => (() => void);
-  setClipboardWatch?: (enabled: boolean) => Promise<boolean>;
+  refreshClipboardWatch?: () => Promise<boolean>;
   markClipboardHandled?: (hash: string) => void;
   markCurrentClipboardImageHandled?: () => void;
   setAgentComposerFocused?: (focused: boolean) => void;

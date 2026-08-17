@@ -34,6 +34,10 @@ export interface AppearancePreferences {
   readingTextSize: AppearanceScale;
 }
 
+export interface CapturePreferences {
+  clipboardImageImport: boolean;
+}
+
 /** Viewer format the renderer uses for tab routing. `md` / `html` / `json` are
  *  text formats loaded from `/api/files/*`; `pdf`, `image`, and `docx` load
  *  their source bytes from `/asset/*`. DOCX visible preview conversion happens
