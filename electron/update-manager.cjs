@@ -1,6 +1,13 @@
 const DEFAULT_RELEASE_URL = 'https://github.com/liliu-z/stashbase/releases/latest';
 const DEFAULT_STARTUP_DELAY_MS = 30_000;
 const DEFAULT_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const UPDATE_SIMULATIONS = new Set(['off', 'available', 'downloading', 'ready', 'installing', 'error']);
+
+function nextPatchVersion(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version));
+  if (!match) return '9.9.9';
+  return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
+}
 
 function errorMessage(error) {
   if (error instanceof Error && error.message) return error.message;
@@ -27,6 +34,7 @@ function createUpdateManager(options) {
     clearTimer = clearTimeout,
     startupDelayMs = DEFAULT_STARTUP_DELAY_MS,
     checkIntervalMs = DEFAULT_CHECK_INTERVAL_MS,
+    debugEnabled = false,
   } = options;
 
   let state = {
@@ -40,9 +48,29 @@ function createUpdateManager(options) {
   let timer = null;
   let disposed = false;
   let started = false;
+  let updateSimulation = 'off';
 
   function snapshot() {
-    return { ...state };
+    const simulation = { enabled: debugEnabled, value: updateSimulation };
+    if (!debugEnabled || updateSimulation === 'off') return { ...state, simulation };
+
+    const availableVersion = nextPatchVersion(currentVersion);
+    const simulated = {
+      ...state,
+      availableVersion,
+      releaseName: 'Development update simulation',
+      releaseDate: undefined,
+      percent: undefined,
+      message: undefined,
+      simulation,
+    };
+    switch (updateSimulation) {
+      case 'downloading': return { ...simulated, phase: 'downloading', percent: 42 };
+      case 'ready': return { ...simulated, phase: 'ready', percent: 100 };
+      case 'installing': return { ...simulated, phase: 'installing', percent: 100 };
+      case 'error': return { ...simulated, phase: 'error', message: 'Simulated update failure.' };
+      default: return { ...simulated, phase: 'available' };
+    }
   }
 
   function publish(patch) {
@@ -232,6 +260,15 @@ function createUpdateManager(options) {
     return true;
   }
 
+  function setUpdateSimulation(simulation) {
+    if (!debugEnabled) throw new Error('Update test controls are available in development builds only.');
+    if (!UPDATE_SIMULATIONS.has(simulation)) throw new Error('Invalid update simulation.');
+    updateSimulation = simulation;
+    const next = snapshot();
+    onStateChange(next);
+    return next;
+  }
+
   function dispose() {
     disposed = true;
     cancelScheduledCheck();
@@ -244,6 +281,7 @@ function createUpdateManager(options) {
     refreshPreference,
     primaryAction,
     openDownloadPage,
+    setUpdateSimulation,
     getState: snapshot,
     dispose,
   };

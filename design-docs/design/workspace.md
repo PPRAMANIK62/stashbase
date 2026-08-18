@@ -32,10 +32,12 @@ manager, or a primary graph-navigation tool.
   empty-library invitation appears only once the library is confirmed empty,
   never as a launch flash on a populated library.
 - Packaged builds check the official stable release channel when the default-on
-  preference permits it. An available update replaces the secondary Discord
-  and bug-report shortcuts beside the account control with one compact Update
-  action; Settings remains visible as the recovery and preference surface, and
-  native **Help → Report a Bug…** preserves deliberate report entry.
+  preference permits it. An available update floats a dismissible announcement
+  above the account row with one explicit Update action; the Discord,
+  bug-report, and Settings utilities keep their places beneath it. Dismissing
+  hides that announcement only — a newer release, or a download becoming ready
+  to install, announces again, and Settings remains the standing update and
+  preference surface.
 - Users can open or create a local folder, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
   A created folder is an ordinary directory. Removing membership clears only
@@ -89,8 +91,9 @@ manager, or a primary graph-navigation tool.
 - Quick Open stays active-folder navigation. Command Palette exposes existing
   safe actions; neither surface becomes search, Agent permission, or hidden
   destructive automation.
-- Update discovery is quiet and never blocks local work. One explicit Update
-  action consents to download, installation, and relaunch; every open renderer
+- Update discovery is quiet, dismissible, and never blocks local work. One
+  explicit Update action consents to download, installation, and relaunch;
+  every open renderer
   crosses the normal save barrier before an installer may retire the
   application. Linux package installs may also require system administrator
   approval.

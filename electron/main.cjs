@@ -221,6 +221,7 @@ const desktopUpdates = createUpdateManager({
   afterInstallFailure: updateWindowBarrier.revoke,
   openReleasePage: (url) => openHttpExternal(url, 'update release URL'),
   onStateChange: broadcastUpdateState,
+  debugEnabled: !app.isPackaged,
 });
 const bugReports = createBugReportService({
   captureScreenshot: async ({ webContentsId }) => {
@@ -1241,6 +1242,12 @@ ipcMain.handle('updates:refreshPreference', async (event) => {
   const senderWindow = BrowserWindow.fromWebContents(event.sender);
   if (!isLiveMainWindow(senderWindow)) return null;
   return desktopUpdates.refreshPreference();
+});
+
+ipcMain.handle('updates:setSimulation', (event, simulation) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!isLiveMainWindow(senderWindow)) return null;
+  return desktopUpdates.setUpdateSimulation(simulation);
 });
 
 // Renderer confirms it imported (or chose to keep ignoring) a clipboard

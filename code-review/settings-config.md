@@ -75,7 +75,15 @@ access surface external clients copy from.
   a download already requested by the user. Enabling it refreshes Electron from
   server-owned durable truth; an automatic check never grants download or
   installation. Clicking Update explicitly grants the bounded
-  download/install/relaunch operation.
+  download/install/relaunch operation. Dismissing the update banner is
+  renderer-local per announcement (version plus phase): it never changes the
+  persisted preference or an in-flight download, and a newer version or a
+  ready installer announces again.
+- Source Electron launches expose an in-memory update-state simulator beside
+  General Settings so maintainers can inspect the update banner and Settings
+  states without a release. The simulator never contacts the release channel,
+  downloads, installs, or changes the persisted update preference; packaged
+  builds reject simulation calls and never show the controls.
 - Migration is idempotent and loss-averse. Invalid legacy state must not erase
   a valid current value or silently select a different provider.
 - Updating configuration invalidates or reconciles only the dependent runtime:
@@ -93,7 +101,7 @@ access surface external clients copy from.
 | HTTP Adapters | `server/routes/appearance.ts`, `capture.ts`, `updates.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
 | Renderer Adapters | `web-src/src/components/SettingsModal.tsx`, `components/settings/GeneralPanel.tsx`, `AppearancePanel.tsx`, `EmbeddingPanel.tsx`, `TranscriptionPanel.tsx`, `McpAccessPanel.tsx`, `AgentRuntimePanel.tsx` |
 | Capture runtime Adapter | `web-src/src/hooks/useClipboardImageOffer.ts`, `electron/preload.cjs`, and the clipboard boundary in `electron/main.cjs` |
-| Update runtime Adapter | `electron/update-manager.cjs`, `electron/main.cjs`, `electron/preload.cjs`, and `web-src/src/hooks/useDesktopUpdate.ts` |
+| Update runtime Adapter | `electron/update-manager.cjs`, `electron/main.cjs`, `electron/preload.cjs`, `web-src/src/hooks/useDesktopUpdate.ts`, and `web-src/src/components/DesktopUpdateBanner.tsx` |
 | Appearance Adapter | `web-src/src/appearance.ts` |
 | Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, `web-src/src/__tests__/desktop-update-hook.test.ts`, `web-src/src/__tests__/appearance.test.ts`, `web-src/src/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts`, and J04 in `e2e/journeys/preparation-capture.spec.ts` |
 

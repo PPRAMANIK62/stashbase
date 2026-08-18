@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api, errorMessage, type CapturePreferences, type UpdatePreferences } from '../../api';
-import { electronBridge } from '../../electronBridge';
+import { electronBridge, type DesktopUpdateSimulation } from '../../electronBridge';
 import { useDesktopUpdate } from '../../hooks/useDesktopUpdate';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
+import { Select } from '../ui/select';
 
 export function GeneralPanel() {
   const [preferences, setPreferences] = useState<CapturePreferences | null>(null);
@@ -12,7 +13,7 @@ export function GeneralPanel() {
   const [updatePreferences, setUpdatePreferences] = useState<UpdatePreferences | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [savingUpdates, setSavingUpdates] = useState(false);
-  const { state: updateState, check, runPrimaryAction, openDownloadPage, refreshPreference } = useDesktopUpdate();
+  const { state: updateState, check, runPrimaryAction, openDownloadPage, refreshPreference, setSimulation } = useDesktopUpdate();
 
   useEffect(() => {
     let cancelled = false;
@@ -197,6 +198,34 @@ export function GeneralPanel() {
           <div className="mt-1 text-xs leading-normal text-muted-foreground">
             Linux package installs may ask for administrator approval before StashBase can restart.
           </div>
+        )}
+        {updateState?.simulation?.enabled && (
+          <section className="mt-5 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <div className="text-base font-semibold">Desktop update testing</div>
+              <span className="rounded-xs border border-status-warning/30 bg-background px-1.5 py-0.5 text-2xs font-semibold tracking-wide text-status-warning uppercase">
+                Development only
+              </span>
+            </div>
+            <p className="mt-0 mb-3 text-sm leading-normal text-muted-foreground">
+              Preview update states in Settings and the sidebar without contacting the release channel, downloading, or installing anything.
+            </p>
+            <label className="flex items-center justify-between gap-3 text-sm text-foreground">
+              <span>Simulated update state</span>
+              <Select
+                className="min-w-48"
+                value={updateState.simulation.value}
+                onChange={(event) => { void setSimulation(event.target.value as DesktopUpdateSimulation); }}
+              >
+                <option value="off">Off — real updater</option>
+                <option value="available">Update available</option>
+                <option value="downloading">Downloading — 42%</option>
+                <option value="ready">Ready to install</option>
+                <option value="installing">Installing</option>
+                <option value="error">Update error</option>
+              </Select>
+            </label>
+          </section>
         )}
       </div>
     </div>

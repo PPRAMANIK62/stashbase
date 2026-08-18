@@ -134,6 +134,7 @@ contextBridge.exposeInMainWorld('electron', {
   runUpdateAction: () => ipcRenderer.invoke('updates:primaryAction'),
   openUpdateDownloadPage: () => ipcRenderer.invoke('updates:openDownloadPage'),
   refreshUpdatePreference: () => ipcRenderer.invoke('updates:refreshPreference'),
+  setUpdateSimulation: (simulation) => ipcRenderer.invoke('updates:setSimulation', simulation),
   onUpdateState: (handler) => {
     updateStateHandlers.add(handler);
     return () => updateStateHandlers.delete(handler);

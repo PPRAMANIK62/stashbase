@@ -72,6 +72,11 @@ aliases, and Journey E2E owns representative composition.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
   library membership, so a failed or pending membership load cannot claim the
   library is empty.
+  The Settings smoke drives the development-only update simulator through the
+  production update-state bridge to verify available and ready update-banner
+  behavior without claiming a packaged installation; the Linux workspace
+  visual suite owns the floating banner's composition above persistent account
+  utilities.
 - **Journey E2E:** [launch smoke](../e2e/smoke/launch.spec.ts) and
   [library navigation](../e2e/journeys/library-navigation.spec.ts) exercise
   blank-workspace entry, AI Index skip behavior, folder selection, and local

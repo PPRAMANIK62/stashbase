@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { electronBridge, type DesktopUpdateState } from '../electronBridge';
+import { electronBridge, type DesktopUpdateSimulation, type DesktopUpdateState } from '../electronBridge';
 
 export function useDesktopUpdate() {
   const [state, setState] = useState<DesktopUpdateState | null>(null);
@@ -45,5 +45,11 @@ export function useDesktopUpdate() {
     return next;
   }, []);
 
-  return { state, check, runPrimaryAction, openDownloadPage, refreshPreference };
+  const setSimulation = useCallback(async (simulation: DesktopUpdateSimulation) => {
+    const next = await electronBridge()?.setUpdateSimulation?.(simulation);
+    if (next) setState(next);
+    return next;
+  }, []);
+
+  return { state, check, runPrimaryAction, openDownloadPage, refreshPreference, setSimulation };
 }

@@ -126,51 +126,79 @@ test('J04: clipboard screenshot offers are default-off and require an explicit G
   }
 });
 
-test('J01: an available update replaces secondary account-row utilities', async ({}, testInfo) => {
+test('J01: an available update floats a dismissible banner above the account row', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'empty' });
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
-    await app.electron.evaluate(({ BrowserWindow, app: electronApp }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.send('updates:state', {
-        phase: 'available',
-        currentVersion: electronApp.getVersion(),
-        autoCheckEnabled: true,
-        availableVersion: '9.9.9',
-        releaseUrl: 'https://github.com/liliu-z/stashbase/releases/latest',
-      });
-    });
+    const sendUpdateState = (phase: string, autoCheckEnabled: boolean) =>
+      app!.electron.evaluate(({ BrowserWindow, app: electronApp }, args) => {
+        BrowserWindow.getAllWindows()[0]?.webContents.send('updates:state', {
+          phase: args.phase,
+          currentVersion: electronApp.getVersion(),
+          autoCheckEnabled: args.autoCheckEnabled,
+          availableVersion: '9.9.9',
+          releaseUrl: 'https://github.com/liliu-z/stashbase/releases/latest',
+        });
+      }, { phase, autoCheckEnabled });
 
-    const accountButton = app.page.getByRole('button', { name: 'Account: Anonymous' });
+    await sendUpdateState('available', true);
+
+    // The banner floats above the account row; no utility yields its place.
     const updateButton = app.page.getByRole('button', { name: 'Update to StashBase 9.9.9' });
-    const settings = settingsButton(app.page);
     await expect(updateButton).toBeVisible();
-    await expect(app.page.getByRole('button', { name: 'Join the StashBase Discord' })).toHaveCount(0);
-    await expect(app.page.getByRole('button', { name: 'Report a bug' })).toHaveCount(0);
-    await expect(settings).toBeVisible();
+    await expect(app.page.getByRole('button', { name: 'Join the StashBase Discord' })).toBeVisible();
+    await expect(app.page.getByRole('button', { name: 'Report a bug' })).toBeVisible();
+    await expect(settingsButton(app.page)).toBeVisible();
 
-    const [accountBox, updateBox, settingsBox] = await Promise.all([
-      accountButton.boundingBox(),
-      updateButton.boundingBox(),
-      settings.boundingBox(),
-    ]);
-    expect(accountBox).not.toBeNull();
-    expect(updateBox).not.toBeNull();
-    expect(settingsBox).not.toBeNull();
-    expect(accountBox!.x + accountBox!.width).toBeLessThanOrEqual(updateBox!.x + 1);
-    expect(updateBox!.x + updateBox!.width).toBeLessThanOrEqual(settingsBox!.x + 1);
+    // Dismissal hides only the current announcement; the phase advancing to
+    // ready is a new announcement and brings the banner back.
+    await app.page.getByRole('button', { name: 'Dismiss update notice' }).click();
+    await expect(updateButton).toHaveCount(0);
+    await expect(app.page.getByRole('button', { name: 'Join the StashBase Discord' })).toBeVisible();
+    await sendUpdateState('ready', true);
+    await expect(app.page.getByRole('button', { name: 'Install update to StashBase 9.9.9' })).toBeVisible();
 
-    await app.electron.evaluate(({ BrowserWindow, app: electronApp }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.send('updates:state', {
-        phase: 'available',
-        currentVersion: electronApp.getVersion(),
-        autoCheckEnabled: false,
-        availableVersion: '9.9.9',
-        releaseUrl: 'https://github.com/liliu-z/stashbase/releases/latest',
-      });
-    });
+    // Disabling the automatic-check preference gates the banner entirely.
+    await sendUpdateState('available', false);
     await expect(app.page.getByRole('button', { name: 'Update to StashBase 9.9.9' })).toHaveCount(0);
     await expect(app.page.getByRole('button', { name: 'Join the StashBase Discord' })).toBeVisible();
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+test('J01: development controls preview update states without a release', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'empty' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    const currentVersion = await app.electron.evaluate(({ app: electronApp }) => electronApp.getVersion());
+    const [major, minor, patch] = currentVersion.split('.').map(Number);
+    const simulatedVersion = `${major}.${minor}.${patch + 1}`;
+    await settingsButton(app.page).click();
+    await settingsTab(app.page, 'General').click();
+
+    const simulation = settingsDialog(app.page).getByLabel('Simulated update state');
+    await expect(simulation).toHaveValue('off');
+    await simulation.selectOption('available');
+    await expect(settingsDialog(app.page).getByText(`StashBase ${simulatedVersion} is available.`)).toBeVisible();
+    await app.page.getByRole('button', { name: 'Close settings' }).click();
+    await expect(app.page.getByRole('button', { name: `Update to StashBase ${simulatedVersion}` })).toBeVisible();
+
+    await settingsButton(app.page).click();
+    await settingsTab(app.page, 'General').click();
+    await settingsDialog(app.page).getByLabel('Simulated update state').selectOption('ready');
+    await app.page.getByRole('button', { name: 'Close settings' }).click();
+    await expect(app.page.getByRole('button', { name: `Install update to StashBase ${simulatedVersion}` })).toBeVisible();
+
+    await settingsButton(app.page).click();
+    await settingsTab(app.page, 'General').click();
+    await settingsDialog(app.page).getByLabel('Simulated update state').selectOption('off');
+    await app.page.getByRole('button', { name: 'Close settings' }).click();
+    await expect(app.page.getByRole('button', { name: `Update to StashBase ${simulatedVersion}` })).toHaveCount(0);
     app.errors.assertNone();
   } finally {
     await app?.close();

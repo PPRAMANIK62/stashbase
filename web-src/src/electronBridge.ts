@@ -11,6 +11,8 @@ export type DesktopUpdatePhase =
   | 'error'
   | 'unsupported';
 
+export type DesktopUpdateSimulation = 'off' | 'available' | 'downloading' | 'ready' | 'installing' | 'error';
+
 export interface DesktopUpdateState {
   phase: DesktopUpdatePhase;
   currentVersion: string;
@@ -22,6 +24,10 @@ export interface DesktopUpdateState {
   releaseDate?: string;
   percent?: number;
   message?: string;
+  simulation?: {
+    enabled: boolean;
+    value: DesktopUpdateSimulation;
+  };
 }
 
 /** The renderer-visible surface of `electron/preload.cjs`. One declaration
@@ -58,6 +64,7 @@ export interface ElectronBridge {
   runUpdateAction?: () => Promise<DesktopUpdateState | null>;
   openUpdateDownloadPage?: () => Promise<boolean>;
   refreshUpdatePreference?: () => Promise<DesktopUpdateState | null>;
+  setUpdateSimulation?: (simulation: DesktopUpdateSimulation) => Promise<DesktopUpdateState | null>;
   onUpdateState?: (handler: (state: DesktopUpdateState) => void) => (() => void);
   markClipboardHandled?: (hash: string) => void;
   markCurrentClipboardImageHandled?: () => void;

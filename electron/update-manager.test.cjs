@@ -138,4 +138,47 @@ test('development builds report unsupported and can open the release page', asyn
   assert.equal(manager.getState().phase, 'unsupported');
   await manager.openDownloadPage();
   assert.match(opened, /github\.com\/liliu-z\/stashbase\/releases\/latest/);
+  assert.throws(
+    () => manager.setUpdateSimulation('available'),
+    /development builds only/,
+  );
+});
+
+test('development update simulation previews states without touching the real updater', async () => {
+  const { updater, manager, states } = harness({
+    isPackaged: false,
+    debugEnabled: true,
+  });
+  await manager.start();
+
+  assert.deepEqual(manager.getState().simulation, { enabled: true, value: 'off' });
+  assert.equal(manager.getState().phase, 'unsupported');
+
+  manager.setUpdateSimulation('available');
+  assert.equal(manager.getState().phase, 'available');
+  assert.equal(manager.getState().availableVersion, '2.0.1');
+
+  manager.setUpdateSimulation('downloading');
+  assert.equal(manager.getState().phase, 'downloading');
+  assert.equal(manager.getState().percent, 42);
+
+  manager.setUpdateSimulation('ready');
+  assert.equal(manager.getState().phase, 'ready');
+  assert.equal(manager.getState().percent, 100);
+
+  manager.setUpdateSimulation('error');
+  assert.equal(manager.getState().phase, 'error');
+  assert.match(manager.getState().message, /Simulated update failure/);
+
+  await manager.primaryAction();
+  assert.equal(updater.downloads, 0);
+  assert.equal(updater.installs, 0);
+  assert.equal(manager.getState().phase, 'error');
+
+  manager.setUpdateSimulation('off');
+  assert.equal(manager.getState().phase, 'unsupported');
+  assert.equal(manager.getState().availableVersion, undefined);
+  assert.equal(states.at(-1).simulation.value, 'off');
+
+  assert.throws(() => manager.setUpdateSimulation('bogus'), /Invalid update simulation/);
 });
