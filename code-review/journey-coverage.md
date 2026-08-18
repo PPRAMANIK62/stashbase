@@ -69,6 +69,9 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
   `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
+  Renderer state evidence keeps bootstrap settlement distinct from confirmed
+  library membership, so a failed or pending membership load cannot claim the
+  library is empty.
 - **Journey E2E:** [launch smoke](../e2e/smoke/launch.spec.ts) and
   [library navigation](../e2e/journeys/library-navigation.spec.ts) exercise
   blank-workspace entry, AI Index skip behavior, folder selection, and local

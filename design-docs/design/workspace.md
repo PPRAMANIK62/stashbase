@@ -28,7 +28,9 @@ manager, or a primary graph-navigation tool.
 - Files exposes Chat, the active folder tree, and account utilities without
   making sign-in a condition of local work. With no active folder, the
   workspace distinguishes an empty library from an existing library awaiting
-  selection.
+  selection, and claims neither while membership is still loading: the
+  empty-library invitation appears only once the library is confirmed empty,
+  never as a launch flash on a populated library.
 - Packaged builds check the official stable release channel when the default-on
   preference permits it. An available update replaces the secondary Discord
   and bug-report shortcuts beside the account control with one compact Update

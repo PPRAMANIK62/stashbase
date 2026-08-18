@@ -39,6 +39,16 @@ test('Chat is expanded from the first renderer state', () => {
   assert.equal(initialState.chatOpen, true);
 });
 
+test('bootstrap settlement never fabricates an empty library membership', () => {
+  let state = reducer(freshState(), { type: 'BOOTED' });
+  assert.equal(state.booted, true);
+  assert.equal(state.membershipLoaded, false);
+
+  state = reducer(state, { type: 'RECENT_LOADED', recent: [], homeDir: '/home' });
+  assert.equal(state.membershipLoaded, true);
+  assert.deepEqual(state.recent, []);
+});
+
 test('document tab lifecycle reuses a blank tab and selects a neighbor on close', () => {
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',

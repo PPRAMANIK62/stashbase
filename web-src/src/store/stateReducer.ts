@@ -34,6 +34,7 @@ export function reducer(s: State, a: Action): State {
     case 'RECENT_LOADED':
       return {
         ...s,
+        membershipLoaded: true,
         recent: a.recent,
         homeDir: a.homeDir ?? s.homeDir,
       };

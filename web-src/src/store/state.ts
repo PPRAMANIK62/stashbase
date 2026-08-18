@@ -200,6 +200,11 @@ export interface State {
    *  window-folder registration back to Electron. */
   booted: boolean;
 
+  /** True only after the server has returned an initial or refreshed library
+   *  membership. Bootstrap settlement alone is not evidence that an empty
+   *  `recent` list is authoritative. */
+  membershipLoaded: boolean;
+
   /** Human-facing active folder label. Use `folderPath` for API scope /
    *  identity; this value is for titles, sidebar headings, and empty-state
    *  copy. */
@@ -351,6 +356,7 @@ export interface State {
 
 export const initialState: State = {
   booted: false,
+  membershipLoaded: false,
   folder: '',
   folderPath: '',
   recent: [],
