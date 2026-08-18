@@ -45,7 +45,10 @@
   bootstrap inserted after the official parameter declaration pins the private
   install and package homes inside that same file, and StashBase does not
   pre-create the visible bin path that the official Windows installer owns as
-  a junction. Temporary script cleanup never replaces that result.
+  a junction. The Windows PowerShell child remains attached so its close event
+  cannot report success before the script host completes; Windows cancellation
+  still terminates the full tree through `taskkill /T`. Temporary script
+  cleanup never replaces that result.
   Download status warns that the progress-silent package may take several
   minutes, while any eventual installer stderr remains the primary failure.
   System discovery also checks the official Windows standalone bin under

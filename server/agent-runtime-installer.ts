@@ -785,7 +785,10 @@ async function runInstallerScript(
     await new Promise<void>((resolve, reject) => {
       const child = spawn(shell.command, scriptFile ? [...shell.args, scriptFile] : shell.args, {
         env,
-        detached: true,
+        // POSIX cancellation addresses the installer process group by negative
+        // PID. Windows uses taskkill /T instead, so keeping pwsh attached makes
+        // its close event represent the script host that actually ran -File.
+        detached: shell.kind === 'posix',
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
       });
