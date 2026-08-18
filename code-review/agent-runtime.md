@@ -10,14 +10,24 @@
   already installed runtimes. They never install an Agent, start login, or run
   a login-shell probe.
 - New Chat opens readiness for the selected Agent but does not itself authorize
-  a download. Discovery prefers a supported system executable, then a managed
-  executable under AppData. If neither exists, the Agent gate waits for
-  **Install and continue** (or the explicit Settings install action) before
-  installing only that Agent's official runtime. Opening, switching, or
-  resuming a tab never installs another runtime as a side effect.
-- Managed runtimes never modify `PATH` and continue using the provider's normal
-  account and history home. Resetting a managed executable never clears login
-  or native history.
+  a download. Discovery prefers a supported system executable (including the
+  official user-level locations such as `~/.local/bin` and the official
+  Windows standalone bin), then a legacy managed executable under AppData.
+  If neither exists, the Agent gate waits for **Install and continue** (or
+  the explicit Settings install action) before installing only that Agent's
+  official runtime. Opening, switching, or resuming a tab never installs
+  another runtime as a side effect.
+- **Install and continue** runs the provider's official user-level installer —
+  the same command the install hint prints — so the installed CLI is usable
+  from the user's own terminal afterwards. The official installer owns its
+  standard install layout and the user's shell-profile `PATH` entry;
+  StashBase itself never edits shell profiles, never pins the install into a
+  private directory, and strips any stale private pinning inherited from
+  older versions before the installer runs. Installs continue using the
+  provider's normal account and history home, so terminal and StashBase
+  sessions share one login and one history. Legacy private installs under
+  AppData (from older StashBase versions) remain discovered and usable; they
+  never modified `PATH`.
 - Codex readiness checks the selected executable with `codex login status`.
   A signed-out runtime is installed but not ready: it stops at the structured
   authentication stage before MCP configuration. The explicit sign-in action
@@ -27,47 +37,46 @@
   cancellation, timeout, and native exit remain retryable authentication
   failures. Claude continues to report authentication through its native SDK
   connection.
-- Settings offers Uninstall only for a StashBase-managed runtime, never for a
-  system executable. It stops that agent's sessions, resets preparation state,
-  and removes only the private install under AppData (the removal path-guards
-  to that root). Uninstall is disk reclamation, not deactivation: the next
-  explicit New Chat re-runs readiness.
-- Codex uses its official standalone installer in a private target. Its
-  installer process and immediate executable check share that isolated
-  installer environment. On Windows, installation prefers PowerShell 7 from
-  the inherited PATH or its standard Program Files location, then falls back
-  to Windows PowerShell; a known legacy-shell architecture failure names the
-  PowerShell 7 recovery instead of becoming a generic executable-check error.
-  The downloaded PowerShell installer runs from one temporary `.ps1` file
-  rather than as a statement stream or nested script, so a failed download,
-  extraction, or verification cannot be followed by a successful stdin
-  statement or outer script that masks the failure with exit code zero. A
-  bootstrap inserted after the official parameter declaration pins the private
-  install and package homes inside that same file, and StashBase does not
-  pre-create the visible bin path that the official Windows installer owns as
-  a junction. The Windows PowerShell child remains attached so its close event
-  cannot report success before the script host completes; Windows cancellation
-  still terminates the full tree through `taskkill /T`. Temporary script
-  cleanup never replaces that result.
+- Settings offers Uninstall only for a legacy StashBase-managed runtime under
+  AppData, never for a system executable — official user-level installs are
+  the user's own and are never removed by StashBase. Uninstall stops that
+  agent's sessions, resets preparation state, and removes only the private
+  install under AppData (the removal path-guards to that root). Uninstall is
+  disk reclamation, not deactivation: the next explicit New Chat re-runs
+  readiness.
+- Both installs fetch and run the provider's official installer script. On
+  Windows, installation prefers PowerShell 7 from the inherited PATH or its
+  standard Program Files location, then falls back to Windows PowerShell; a
+  known legacy-shell architecture failure names the PowerShell 7 recovery
+  instead of becoming a generic executable-check error. The downloaded
+  PowerShell installer runs from one temporary `.ps1` file rather than as a
+  statement stream or nested script, so a failed download, extraction, or
+  verification cannot be followed by a successful stdin statement or outer
+  script that masks the failure with exit code zero. A bootstrap inserted
+  after the official parameter declaration strips redirecting environment
+  (stale private pinning, the Electron node marker) and pins non-interactive
+  mode — it never assigns install paths. The Windows PowerShell child remains
+  attached so its close event cannot report success before the script host
+  completes; Windows cancellation still terminates the full tree through
+  `taskkill /T`. Temporary script cleanup never replaces that result.
   Download status warns that the progress-silent package may take several
   minutes, while any eventual installer stderr remains the primary failure.
-  System discovery also checks the official Windows standalone bin under
-  LocalAppData, so an install completed outside StashBase is visible even when
-  the already-running desktop process still has the previous user PATH.
-  Managed discovery accepts the installer's visible bin junction, its official
-  standalone `current` package layout, and a versioned release executable when
-  either junction is unavailable. A successful installer exit without any
-  managed executable is reported as missing output, never verified through a
-  fabricated path that can collapse into ENOENT.
-  Native sessions still use the provider's normal account and history home.
-  Claude uses its official release manifest, verifies size and SHA-256, and
-  publishes atomically. Publishing retries the same verified staging directory
-  with bounded backoff when Windows temporarily retains the just-executed
-  binary; it never downloads or executes a second copy for that recovery.
-  Disposable staging cleanup likewise retries transient Windows locks and never
-  replaces the primary download or executable-check failure; failed executable
-  checks retain bounded timeout, exit-code, and stderr diagnostics. Shutdown
-  cancels preparation, including a pending publish retry.
+  Claude's official script checksum-verifies the release and runs the
+  binary's own `claude install`, which sets up the user-level launcher; its
+  POSIX form requires bash, so the Claude installer shell resolves to
+  `/bin/bash` where Codex uses `/bin/sh`.
+  System discovery checks the official user-level locations directly
+  (`~/.local/bin` on every platform, the official Windows standalone bin
+  under LocalAppData), so both a StashBase-run install and one completed
+  outside StashBase are visible even while the already-running desktop
+  process still has the previous user PATH. Legacy managed discovery accepts
+  the private bin, the installer's visible bin junction, its official
+  standalone `current` package layout, and a versioned release executable.
+  A successful installer exit without a discoverable executable in the
+  official locations is reported as missing output, never verified through a
+  fabricated path that can collapse into ENOENT; failed executable checks
+  retain bounded timeout, exit-code, and stderr diagnostics. Shutdown cancels
+  preparation.
 - Readiness configures the matching CLI's StashBase MCP entry through
   `ensureAgentMcp`, the only writer of the built-in agents' own config files.
   Native attach repeats that idempotent write immediately before process

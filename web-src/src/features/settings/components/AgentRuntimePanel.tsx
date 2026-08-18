@@ -37,7 +37,7 @@ export function AgentRuntimePanel() {
     <div>
       <div className="mb-1 text-base font-semibold">Agent runtimes</div>
       <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
-        StashBase uses an existing system Agent when available, or installs an official runtime privately on first New Chat.
+        StashBase uses an existing system Agent when available, or runs the provider’s official installer on first New Chat — the installed CLI also works from your terminal.
       </div>
       <div className="overflow-hidden rounded-lg border border-border bg-background">
         {AGENTS.map((definition) => {

@@ -16,8 +16,8 @@ Automatic desktop update checks are default-on: app config owns the preference,
 while Electron main reads it through the local route and owns the release
 runtime. Manual checks remain available when automatic checks are disabled.
 
-Managed Agent runtimes, models, derived data, and caches live under AppData and
-are not app-config fields. The built-in Chat agents' own configuration files
+Models, derived data, caches, and legacy managed Agent runtimes live under
+AppData and are not app-config fields. The built-in Chat agents' own configuration files
 are rewritten only by Agent readiness (`ensureAgentMcp`); StashBase never
 writes any other client's configuration — the MCP Settings page is a read-only
 access surface external clients copy from.

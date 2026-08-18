@@ -5,19 +5,13 @@
  * bootstrap state machine can be tested without downloading a 300 MB binary,
  * touching provider credentials, or rewriting a real MCP config.
  */
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { setTimeout as delay } from 'node:timers/promises';
 import {
   consumeAgentSetupFailure,
   managedAgentExecutable,
   managedAgentRuntimeRoot,
-  managedClaudeReleasesDir,
-  managedCodexBinDir,
-  managedCodexInstallerHome,
-  writeManagedClaudeManifest,
   type ManagedAgentId,
 } from './agent-runtime-paths.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
@@ -434,29 +428,6 @@ export function cancelAgentRuntimeInstalls(): Promise<ManagedAgentId[]> {
   return agentBootstrapCoordinator.cancelAll();
 }
 
-export function claudePlatform(
-  platform: NodeJS.Platform = process.platform,
-  arch: string = process.arch,
-  musl = platform === 'linux' && isMuslLinux(),
-): string {
-  const normalizedArch = arch === 'arm64' ? 'arm64' : arch === 'x64' ? 'x64' : '';
-  if (!normalizedArch || !['darwin', 'linux', 'win32'].includes(platform)) {
-    throw new Error(`Claude Code does not publish a managed runtime for ${platform}/${arch}.`);
-  }
-  return `${platform}-${normalizedArch}${platform === 'linux' && musl ? '-musl' : ''}`;
-}
-
-function isMuslLinux(): boolean {
-  if (process.platform !== 'linux') return false;
-  if (fs.existsSync('/lib/libc.musl-x86_64.so.1') || fs.existsSync('/lib/libc.musl-aarch64.so.1')) return true;
-  try {
-    const report = process.report?.getReport() as { header?: { glibcVersionRuntime?: string } };
-    return !report.header?.glibcVersionRuntime;
-  } catch {
-    return false;
-  }
-}
-
 async function installManagedRuntime(
   id: ManagedAgentId,
   update: (next: ProgressUpdate) => void,
@@ -466,106 +437,66 @@ async function installManagedRuntime(
   return installCodex(update, signal);
 }
 
-const CLAUDE_RELEASES = 'https://downloads.claude.ai/claude-code-releases';
+const CLAUDE_INSTALLER = process.platform === 'win32'
+  ? 'https://claude.ai/install.ps1'
+  : 'https://claude.ai/install.sh';
 
-interface ClaudeManifest {
-  version: string;
-  platforms: Record<string, { binary: string; checksum: string; size: number }>;
-}
-
-function removeInstallerStaging(staging: string): void {
-  try {
-    fs.rmSync(staging, {
-      recursive: true,
-      force: true,
-      maxRetries: 5,
-      retryDelay: 100,
-    });
-  } catch {
-    // A just-executed Windows binary may remain transiently locked by the OS
-    // or endpoint protection. Staging is disposable; never let its cleanup
-    // hide the installation or executable-verification failure that matters.
-  }
-}
-
-const CLAUDE_PUBLISH_RETRY_DELAYS_MS = [100, 200, 400, 800, 1_600] as const;
-const TRANSIENT_RENAME_ERROR_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
-
-async function publishClaudeRelease(
-  staging: string,
-  releaseRoot: string,
-  signal: AbortSignal,
-): Promise<void> {
-  for (let attempt = 0; ; attempt += 1) {
-    if (fs.existsSync(releaseRoot)) {
-      removeInstallerStaging(staging);
-      return;
-    }
-    try {
-      fs.renameSync(staging, releaseRoot);
-      return;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      const retryDelay = CLAUDE_PUBLISH_RETRY_DELAYS_MS[attempt];
-      if (!retryDelay || !code || !TRANSIENT_RENAME_ERROR_CODES.has(code)) throw error;
-      await delay(retryDelay, undefined, { signal });
-    }
-  }
+/** Claude's official installer script is written for bash (it relies on
+ * `[[ ]]` and regex matching); Windows shares the Codex PowerShell
+ * selection. */
+export function resolveClaudeInstallerShell(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  isFile: (candidate: string) => boolean = regularFile,
+): CodexInstallerShell {
+  const shell = resolveCodexInstallerShell(platform, env, isFile);
+  return shell.kind === 'posix' ? { ...shell, command: '/bin/bash' } : shell;
 }
 
 export async function installClaude(
   update: (next: ProgressUpdate) => void,
   signal: AbortSignal,
-  verifyExecutable: AgentExecutableVerifier = verifyAgentExecutable,
+  dependencies: Partial<AgentInstallDependencies> = {},
 ): Promise<void> {
-  update({ progress: 0, message: 'Resolving the latest Claude Code release…' });
-  const version = (await fetchBoundedText(`${CLAUDE_RELEASES}/latest`, signal, 200)).trim();
-  if (!/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(version)) {
-    throw new Error('Claude Code returned an invalid release version.');
+  const verifyExecutable = dependencies.verifyExecutable ?? verifyAgentExecutable;
+  const resolveInstallerShell = dependencies.resolveInstallerShell ?? resolveClaudeInstallerShell;
+  const runScript = dependencies.runInstallerScript ?? claudeInstallerScriptRunner;
+  const resolveInstalled = dependencies.resolveInstalledExecutable
+    ?? (() => resolveManagedOrSystemExecutable('claude'));
+  update({ message: 'Downloading the official Claude Code installer…' });
+  const script = await fetchBoundedText(CLAUDE_INSTALLER, signal, 2_000_000);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ELECTRON_RUN_AS_NODE: undefined,
+  };
+  const shell = resolveInstallerShell();
+  await runScript(shell, script, env, signal, (line) => {
+    const message = line.trim();
+    if (message) update({ message });
+  });
+  const executable = resolveInstalled();
+  if (!executable) {
+    throw new Error(
+      "The official Claude Code installer exited successfully but no 'claude' executable "
+      + 'was found in its standard install locations (such as ~/.local/bin). '
+      + 'Check whether security software quarantined Claude Code, then retry the installation.',
+    );
   }
-  const manifest = JSON.parse(
-    await fetchBoundedText(`${CLAUDE_RELEASES}/${version}/manifest.json`, signal, 1_000_000),
-  ) as ClaudeManifest;
-  const platform = claudePlatform();
-  const asset = manifest.platforms?.[platform];
-  if (
-    manifest.version !== version
-    || !asset
-    || !/^[a-f0-9]{64}$/.test(asset.checksum)
-    || !Number.isSafeInteger(asset.size)
-    || asset.size <= 0
-    || asset.size > 1_000_000_000
-  ) throw new Error(`Claude Code has no valid release manifest for ${platform}.`);
-
-  const releaseRoot = path.join(managedClaudeReleasesDir(), version, platform);
-  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
-  const finalBinary = path.join(releaseRoot, binaryName);
-  if (!fs.existsSync(finalBinary)) {
-    const staging = `${releaseRoot}.staging.${process.pid}.${Date.now()}`;
-    fs.mkdirSync(staging, { recursive: true, mode: 0o700 });
-    const stagingBinary = path.join(staging, binaryName);
-    try {
-      await downloadVerified(
-        `${CLAUDE_RELEASES}/${version}/${platform}/${asset.binary}`,
-        stagingBinary,
-        asset.size,
-        asset.checksum,
-        signal,
-        (progress) => update({ progress, message: `Downloading Claude Code… ${Math.round(progress * 100)}%` }),
-      );
-      if (process.platform !== 'win32') fs.chmodSync(stagingBinary, 0o755);
-      verifyExecutable(stagingBinary, 'Claude Code', process.env);
-      fs.mkdirSync(path.dirname(releaseRoot), { recursive: true, mode: 0o700 });
-      await publishClaudeRelease(staging, releaseRoot, signal);
-    } catch (error) {
-      removeInstallerStaging(staging);
-      throw error;
-    }
-  }
-  verifyExecutable(finalBinary, 'Claude Code', process.env);
-  const relative = path.relative(managedAgentRuntimeRoot('claude'), finalBinary);
-  writeManagedClaudeManifest({ version, platform, executable: relative });
+  verifyExecutable(executable, 'Claude Code', agentCliEnv());
   update({ progress: 1, message: 'Claude Code installed.' });
+}
+
+function claudeInstallerScriptRunner(
+  shell: CodexInstallerShell,
+  script: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+  onLine: (line: string) => void,
+): Promise<void> {
+  return runInstallerScript(shell, script, env, signal, onLine, {
+    tempRoot: managedAgentRuntimeRoot('claude'),
+    bootstrap: CLAUDE_PS1_BOOTSTRAP,
+  });
 }
 
 const CODEX_INSTALLER = process.platform === 'win32'
@@ -592,10 +523,16 @@ type InstallerScriptRunner = (
   onLine: (line: string) => void,
 ) => Promise<void>;
 
-export interface CodexInstallDependencies {
+export interface AgentInstallDependencies {
   verifyExecutable: AgentExecutableVerifier;
   resolveInstallerShell: () => CodexInstallerShell;
   runInstallerScript: InstallerScriptRunner;
+  /** Post-install discovery of the freshly installed executable. Defaults to
+   * the same system-then-managed resolution the coordinator uses, which
+   * covers the official user-level locations (`~/.local/bin`, the official
+   * Windows standalone bin). Injected by tests so a developer machine's own
+   * CLIs can never satisfy an install check. */
+  resolveInstalledExecutable: () => string | null;
 }
 
 function environmentValue(env: NodeJS.ProcessEnv, name: string): string {
@@ -667,21 +604,23 @@ function codexInstallerFailure(error: unknown, shell: CodexInstallerShell): Erro
 export async function installCodex(
   update: (next: ProgressUpdate) => void,
   signal: AbortSignal,
-  dependencies: Partial<CodexInstallDependencies> = {},
+  dependencies: Partial<AgentInstallDependencies> = {},
 ): Promise<void> {
   const verifyExecutable = dependencies.verifyExecutable ?? verifyAgentExecutable;
   const resolveInstallerShell = dependencies.resolveInstallerShell ?? resolveCodexInstallerShell;
-  const runScript = dependencies.runInstallerScript ?? runInstallerScript;
+  const runScript = dependencies.runInstallerScript ?? codexInstallerScriptRunner;
+  const resolveInstalled = dependencies.resolveInstalledExecutable
+    ?? (() => resolveManagedOrSystemExecutable('codex'));
   update({ message: 'Downloading the official Codex installer…' });
   const script = await fetchBoundedText(CODEX_INSTALLER, signal, 2_000_000);
-  const binDir = managedCodexBinDir();
-  fs.mkdirSync(managedAgentRuntimeRoot('codex'), { recursive: true, mode: 0o700 });
+  // The official installer owns its layout and the user's PATH profile:
+  // strip any inherited pinning so a stale desktop environment can never
+  // redirect it into a private, terminal-invisible location.
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    CODEX_INSTALL_DIR: binDir,
-    CODEX_HOME: managedCodexInstallerHome(),
+    CODEX_INSTALL_DIR: undefined,
+    CODEX_HOME: undefined,
     CODEX_NON_INTERACTIVE: 'true',
-    PATH: [binDir, process.env.PATH ?? ''].filter(Boolean).join(path.delimiter),
     ELECTRON_RUN_AS_NODE: undefined,
   };
   const shell = resolveInstallerShell();
@@ -698,16 +637,29 @@ export async function installCodex(
   } catch (error) {
     throw codexInstallerFailure(error, shell);
   }
-  const executable = managedAgentExecutable('codex');
+  const executable = resolveInstalled();
   if (!executable) {
     throw new Error(
-      'The official Codex installer exited successfully but did not create an executable '
-      + `under StashBase's managed runtime directory (${managedAgentRuntimeRoot('codex')}). `
+      "The official Codex installer exited successfully but no 'codex' executable "
+      + 'was found in its standard install locations (such as ~/.local/bin). '
       + 'Check whether security software quarantined Codex, then retry the installation.',
     );
   }
-  verifyExecutable(executable, 'Codex', env);
+  verifyExecutable(executable, 'Codex', agentCliEnv());
   update({ progress: 1, message: 'Codex installed.' });
+}
+
+function codexInstallerScriptRunner(
+  shell: CodexInstallerShell,
+  script: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+  onLine: (line: string) => void,
+): Promise<void> {
+  return runInstallerScript(shell, script, env, signal, onLine, {
+    tempRoot: managedAgentRuntimeRoot('codex'),
+    bootstrap: CODEX_PS1_BOOTSTRAP,
+  });
 }
 
 async function fetchBoundedText(url: string, signal: AbortSignal, maxBytes: number): Promise<string> {
@@ -724,44 +676,6 @@ async function fetchBoundedText(url: string, signal: AbortSignal, maxBytes: numb
     chunks.push(value);
   }
   return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8');
-}
-
-async function downloadVerified(
-  url: string,
-  destination: string,
-  expectedSize: number,
-  expectedSha256: string,
-  signal: AbortSignal,
-  onProgress: (progress: number) => void,
-): Promise<void> {
-  const response = await fetch(url, { signal, redirect: 'follow' });
-  if (!response.ok || !response.body) throw new Error(`Download failed (${response.status}) from ${new URL(url).host}.`);
-  const handle = await fs.promises.open(destination, 'wx', 0o700);
-  const hash = crypto.createHash('sha256');
-  let received = 0;
-  try {
-    const reader = response.body.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = Buffer.from(value);
-      let offset = 0;
-      while (offset < chunk.length) {
-        const result = await handle.write(chunk, offset, chunk.length - offset);
-        offset += result.bytesWritten;
-      }
-      hash.update(chunk);
-      received += chunk.length;
-      if (received > expectedSize) throw new Error('Agent download exceeded the signed manifest size.');
-      onProgress(Math.min(0.99, received / expectedSize));
-    }
-  } finally {
-    await handle.close();
-  }
-  const actual = hash.digest('hex');
-  if (received !== expectedSize) throw new Error(`Agent download was incomplete (${received} of ${expectedSize} bytes).`);
-  if (actual !== expectedSha256) throw new Error('Agent download failed SHA-256 verification.');
-  onProgress(1);
 }
 
 export function verifyAgentExecutable(
@@ -799,15 +713,15 @@ async function runInstallerScript(
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
   onLine: (line: string) => void,
+  options: { tempRoot: string; bootstrap: readonly string[] },
 ): Promise<void> {
   let scriptDir: string | null = null;
   let scriptFile: string | null = null;
   if (shell.kind !== 'posix') {
-    const runtimeRoot = managedAgentRuntimeRoot('codex');
-    fs.mkdirSync(runtimeRoot, { recursive: true, mode: 0o700 });
-    scriptDir = fs.mkdtempSync(path.join(runtimeRoot, '.installer-script.'));
+    fs.mkdirSync(options.tempRoot, { recursive: true, mode: 0o700 });
+    scriptDir = fs.mkdtempSync(path.join(options.tempRoot, '.installer-script.'));
     scriptFile = path.join(scriptDir, 'install.ps1');
-    fs.writeFileSync(scriptFile, codexPowerShellInstallerScript(script, env), { mode: 0o600 });
+    fs.writeFileSync(scriptFile, agentPowerShellInstallerScript(script, options.bootstrap), { mode: 0o600 });
   }
   try {
     await new Promise<void>((resolve, reject) => {
@@ -859,32 +773,33 @@ async function runInstallerScript(
   }
 }
 
-function powerShellSingleQuoted(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
-}
+/** The official installers own their standard install layout and the user's
+ * PATH. The Windows bootstrap only enforces failure propagation, strips
+ * environment that could redirect or derail the install (stale managed
+ * pinning from older StashBase versions, the Electron node marker), and pins
+ * non-interactive mode. Windows environment keys are case-insensitive and
+ * packaged desktop processes can inherit stale or duplicate variants.
+ * Executing one file also avoids a nested script invocation that can return
+ * success without running its target on some packaged Windows
+ * environments. */
+export const CODEX_PS1_BOOTSTRAP = [
+  '$ErrorActionPreference = "Stop"',
+  'Remove-Item Env:\\CODEX_INSTALL_DIR -ErrorAction SilentlyContinue',
+  'Remove-Item Env:\\CODEX_HOME -ErrorAction SilentlyContinue',
+  '$env:CODEX_NON_INTERACTIVE = "true"',
+  'Remove-Item Env:\\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue',
+] as const;
 
-/** Pin installer-owned paths inside the official PowerShell file itself.
- * Windows environment keys are case-insensitive and packaged desktop
- * processes can inherit stale or duplicate variants. Executing one file also
- * avoids a nested script invocation that can return success without running
- * its target on some packaged Windows environments. */
-export function codexPowerShellInstallerScript(
+export const CLAUDE_PS1_BOOTSTRAP = [
+  '$ErrorActionPreference = "Stop"',
+  'Remove-Item Env:\\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue',
+] as const;
+
+export function agentPowerShellInstallerScript(
   installerScript: string,
-  env: NodeJS.ProcessEnv,
+  bootstrapLines: readonly string[],
 ): string {
-  const installDir = env.CODEX_INSTALL_DIR;
-  const codexHome = env.CODEX_HOME;
-  if (!installDir || !codexHome) {
-    throw new Error('Codex installer wrapper requires managed install and home directories.');
-  }
-  const bootstrap = [
-    '$ErrorActionPreference = "Stop"',
-    `$env:CODEX_INSTALL_DIR = ${powerShellSingleQuoted(installDir)}`,
-    `$env:CODEX_HOME = ${powerShellSingleQuoted(codexHome)}`,
-    '$env:CODEX_NON_INTERACTIVE = "true"',
-    'Remove-Item Env:\\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue',
-    '',
-  ].join('\r\n');
+  const bootstrap = [...bootstrapLines, ''].join('\r\n');
   const parameterBlock = installerScript.match(
     /^(?:\uFEFF)?\s*\[CmdletBinding\(\)\]\s*\r?\nparam\([\s\S]*?\r?\n\)\s*\r?\n/,
   )?.[0];
