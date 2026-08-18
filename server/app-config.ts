@@ -12,8 +12,27 @@ import os from 'node:os';
 import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
 import { normalizeTranscriptionLanguage } from '../shared/transcription.ts';
-import type { LocalTranscriptionModelId } from '../shared/transcription.ts';
 import transcriptionToolchain from '../native/transcription/toolchain.json' with { type: 'json' };
+import type {
+  AppearancePreferences,
+  AppearanceScale,
+  AppearanceTheme,
+  CapturePreferences,
+  OnboardingPreferences,
+  UpdatePreferences,
+} from '../shared/preferences.ts';
+import type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
+import type { LocalTranscriptionModelId } from '../shared/transcription.ts';
+
+export type {
+  AppearancePreferences,
+  AppearanceScale,
+  AppearanceTheme,
+  CapturePreferences,
+  OnboardingPreferences,
+  UpdatePreferences,
+} from '../shared/preferences.ts';
+export type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
 
 const log = logger('app-config');
 
@@ -27,28 +46,7 @@ export interface RecentFolder {
   favorite?: boolean;
 }
 
-export type EmbedderProvider = 'openai' | 'openrouter';
-export type EmbeddingSource = EmbedderProvider | 'stashbase-account';
 export type TranscriptionModelId = LocalTranscriptionModelId;
-export type AppearanceTheme = 'system' | 'light' | 'dark';
-export type AppearanceScale = 'small' | 'default' | 'large';
-
-export interface AppearancePreferences {
-  theme: AppearanceTheme;
-  uiScale: AppearanceScale;
-  readingTextSize: AppearanceScale;
-}
-
-export interface CapturePreferences {
-  /** Offer focused-window clipboard images for explicit library import. */
-  clipboardImageImport: boolean;
-}
-
-export interface UpdatePreferences {
-  /** Check the official desktop release channel after launch and periodically. */
-  autoCheck: boolean;
-}
-
 export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
   theme: 'system',
   uiScale: 'default',
@@ -162,11 +160,6 @@ export interface AppConfigFile {
    * config writer. */
   updates?: Partial<UpdatePreferences>;
   onboarding?: OnboardingPreferences;
-}
-
-export interface OnboardingPreferences {
-  sourceCodeNoticeVersion?: number;
-  unsupportedFormatsNoticeVersion?: number;
 }
 
 export function readAppConfigStrict(): AppConfigFile {

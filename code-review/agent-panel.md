@@ -66,6 +66,9 @@
   sanitizes and uniquifies every supplied display name before writing.
 - A selected skill appears as an inline display token and applies only to the
   next turn; it is not serialized as ordinary prompt text.
+- Text, an attachment, or a selected skill each make a draft sendable. The
+  send control's enablement and the submit path must decide that from one
+  predicate, so the button can never offer a send the composer refuses.
 
 ## Transcript and Turn Lifecycle
 
@@ -114,13 +117,16 @@
 
 | Role | Stable entry points |
 |---|---|
-| Panel boundary | `web-src/src/components/ChatPane.tsx` and `AgentView.tsx` |
-| Transcript/composer Modules | `web-src/src/components/agent/AgentMessages.tsx`, `AgentComposer.tsx`, `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` |
-| State Interfaces | Chat tab state/actions in `web-src/src/store/state.ts` and `stateReducer.ts`; activation consent in `components/agent/chatActivation.ts`; focused pure state Modules under `components/agent/` |
-| Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `components/agent/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
-| Attachment HTTP Adapter | `web-src/src/api.ts` and `server/routes/attach.ts` |
-| Markdown Adapter | `web-src/src/components/agent/AgentMarkdown.tsx` |
-| Focused evidence | `web-src/src/__tests__/agent-*.test.ts`, `e2e/fixtures/fake-codex-app-server.test.mjs`, and `e2e/journeys/agent-panel.spec.ts` |
+| Panel boundary | `web-src/src/features/agent-panel/components/ChatPane.tsx` and `AgentView.tsx` |
+| Window-level catalog prime | `web-src/src/features/agent-panel/hooks/useAgentCatalogPrime.ts` — the one eager runtime read, called from `app/App.tsx` because every chat surface is lazy |
+| Sidebar entry points | `web-src/src/features/agent-panel/components/NewChatButton.tsx` (the split button, and the only reader of the next-chat agent preference) and `ScopeHistoryButton.tsx` (the per-scope history clock, which owns the `SessionHistoryMenu` lazy boundary). Both are exported from the feature barrel and merely placed by `app/components/Sidebar.tsx`; the sidebar holds no Agent logic of its own |
+| Session state Interface | `web-src/src/features/agent-panel/hooks/useAgentSession.ts` owns transport, event routing, and session reset/resume, and composes the focused sub-hooks beside it in `web-src/src/features/agent-panel/hooks/`. It returns those sub-hooks as owner-named groups (controls, queue, mentions, skills, runtime, transcript) rather than one flat surface; the transcript rules its events imply are pure Modules in `lib/transcriptEvents.ts` |
+| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx` owns the block list and turn layout over the pure turn model in `lib/turnModel.ts`, with the user half in `AgentUserTurn.tsx` and the tool surface in `AgentToolActivity.tsx`; `AgentComposer.tsx` owns the draft and its send predicate, with the suggestion popup in `MentionSuggestions.tsx` and the session pills in `ComposerPills.tsx`; `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` over `hooks/useSessionHistory.ts`, which merges both agents' listings and routes a rename or delete through the row's own agent and scope |
+| State Interfaces | Chat tab state/actions in `web-src/src/store/state/state.ts` and `state/stateReducer.ts`; activation consent in the `activateChatTab` action (`store/contexts/AppContext.tsx`) over `store/lib/chatTabPlan.ts`; focused pure state Modules under `features/agent-panel/lib/` |
+| Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `features/agent-panel/lib/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
+| Attachment HTTP Adapter | `web-src/src/common/api/api.ts` and `server/routes/attach.ts` |
+| Markdown Adapter | `web-src/src/features/agent-panel/components/AgentMarkdown.tsx` |
+| Focused evidence | `web-src/src/features/agent-panel/__tests__/agent-*.test.ts`, `e2e/fixtures/fake-codex-app-server.test.mjs`, and `e2e/journeys/agent-panel.spec.ts` |
 
 ## Validation
 

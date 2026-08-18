@@ -268,7 +268,7 @@ aliases, and Journey E2E owns representative composition.
   attribution, history override ordering, and rebind-race rollback.
   [MCP transport tests](../server/__tests__/mcp-http-transport.test.ts) prove
   attributed built-in calls and unattributed external calls remain distinct.
-  [renderer scope tests](../web-src/src/__tests__/agent-folder-pill.test.ts)
+  [renderer scope tests](../web-src/src/features/agent-panel/__tests__/agent-folder-pill.test.ts)
   prove the Library-to-folder scope presentation.
 - **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
   rejects one visible `create_project` approval and proves no directory or

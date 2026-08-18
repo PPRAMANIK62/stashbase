@@ -99,11 +99,13 @@ access surface external clients copy from.
 | Persistent Interface | strict/fallback read and write plus domain getters/setters in `server/app-config.ts` |
 | Domain owners | `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-embedding-broker.ts`, embedding and transcription configuration Modules |
 | HTTP Adapters | `server/routes/appearance.ts`, `capture.ts`, `updates.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
-| Renderer Adapters | `web-src/src/components/SettingsModal.tsx`, `components/settings/GeneralPanel.tsx`, `AppearancePanel.tsx`, `EmbeddingPanel.tsx`, `TranscriptionPanel.tsx`, `McpAccessPanel.tsx`, `AgentRuntimePanel.tsx` |
-| Capture runtime Adapter | `web-src/src/hooks/useClipboardImageOffer.ts`, `electron/preload.cjs`, and the clipboard boundary in `electron/main.cjs` |
-| Update runtime Adapter | `electron/update-manager.cjs`, `electron/main.cjs`, `electron/preload.cjs`, `web-src/src/hooks/useDesktopUpdate.ts`, and `web-src/src/components/DesktopUpdateBanner.tsx` |
-| Appearance Adapter | `web-src/src/appearance.ts` |
-| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, `web-src/src/__tests__/desktop-update-hook.test.ts`, `web-src/src/__tests__/appearance.test.ts`, `web-src/src/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts`, and J04 in `e2e/journeys/preparation-capture.spec.ts` |
+| Renderer Adapters | `web-src/src/features/settings/hooks/` — one controller per panel (`useGeneralSettings.ts`, `useEmbedderSettings.ts`, `useTranscriptionSettings.ts`, `useMcpAccess.ts`, `useAgentRuntimes.ts`, `useAppearanceSettings.ts`, `useApiKeyEntry.ts`), each owning its reads, its optimistic writes, and their ordering guards. The panels under `components/` render what a controller returns and hold only which dialog is open |
+| Authorization read | `web-src/src/common/hooks/useEmbedderState.ts` — shared with the Files-panel callout, which may not import this feature |
+| Appearance Adapter | `web-src/src/features/settings/lib/appearance.ts`, applied to a window by `hooks/useAppliedAppearance.ts` |
+| Capture runtime Adapter | `web-src/src/app/hooks/useClipboardImageOffer.ts`, `electron/preload.cjs`, and the clipboard boundary in `electron/main.cjs` |
+| Update runtime Adapter | `electron/update-manager.cjs`, `electron/main.cjs`, `electron/preload.cjs`, `web-src/src/common/hooks/useDesktopUpdate.ts`, and `web-src/src/common/components/DesktopUpdateBanner.tsx` — the hook and banner sit in `common/` because Settings and the sidebar account row both render update state, and a feature may not import a sibling |
+| Open-request Interfaces | `web-src/src/common/lib/settingsTrigger.ts` (Settings), `web-src/src/common/lib/embeddingSetupTrigger.ts` (AI Index setup), `web-src/src/common/lib/embeddingAuth.ts` (authorization and basic-mode facts) — shared so no surface reaches into the Settings feature to ask it to open |
+| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, `web-src/src/common/__tests__/desktop-update-hook.test.ts`, `web-src/src/features/settings/__tests__/appearance.test.ts`, `web-src/src/common/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts`, and J04 in `e2e/journeys/preparation-capture.spec.ts` |
 
 ## Validation
 
