@@ -26,11 +26,13 @@ export type Block =
   | { kind: 'user'; id: string; text: string; attachments?: Attachment[] }
   | { kind: 'assistant'; id: string; text: string }
   | { kind: 'thinking'; id: string; text: string }
-  | { kind: 'error'; id: string; text: string }
+  /** `failureKind` is the adapter's classification of a live turn failure;
+   * replayed history renders the same error without it (plain message). */
+  | { kind: 'error'; id: string; text: string; failureKind?: AgentTurnFailureKind }
   | ToolBlock;
 
 export type ServerEvent = AgentServerEvent;
 
 export type AgentKind = 'claude' | 'codex';
-export type { AgentModel, AgentSkill } from '@shared/agent-protocol';
-import type { AgentServerEvent } from '@shared/agent-protocol';
+export type { AgentModel, AgentSkill, AgentTurnFailureKind } from '@shared/agent-protocol';
+import type { AgentServerEvent, AgentTurnFailureKind } from '@shared/agent-protocol';

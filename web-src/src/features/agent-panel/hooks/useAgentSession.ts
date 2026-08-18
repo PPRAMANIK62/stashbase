@@ -26,7 +26,7 @@ import {
   settleRunningTools,
 } from '@/features/agent-panel/lib/transcriptEvents';
 import { applyModelEvent } from '@/features/agent-panel/lib/modelState';
-import { recordFailureBeforeContinuing, TurnErrorTracker } from '@/features/agent-panel/lib/turnFailure';
+import { recordFailureBeforeContinuing, TurnErrorTracker, type TurnFailureActionId } from '@/features/agent-panel/lib/turnFailure';
 import { nextBlockId } from '@/features/agent-panel/lib/blockIds';
 import {
   isDefaultChatTitle,
@@ -143,6 +143,16 @@ export function useAgentSession({
   // `resumeIdRef` holds a session id to resume on the next connect; it
   // rides the connect URL (like effort) and is consumed-and-cleared there.
   const resumeIdRef = useRef<string | null>(null);
+  // The failed prompt to auto-resend once the replacement session is ready,
+  // armed only by an acted-on failure card (sign-in / reconnect). Firing it
+  // makes the recovery's outcome visible immediately: an answer when the
+  // recovery stuck, a fresh failure card when it did not. Any other session
+  // reset clears it so a stale retry can never land in a different session.
+  const pendingRetryRef = useRef<{ text: string; attachments: Attachment[] } | null>(null);
+  // The permission mode the live connection was opened with (rode the
+  // connect URL); `ready` re-sends `set-mode` only when the mode moved
+  // while the connection was coming up.
+  const connectAccessRef = useRef<string>('auto');
   // Refs mirror the live session id + this tab's id/title so the WS
   // message handler (bound once per connection) reads current values
   // when it renames the tab on the first turn-end.
@@ -345,6 +355,7 @@ export function useAgentSession({
       });
     }
     promptQueue.clearQueue();
+    pendingRetryRef.current = null;
     toolNamesRef.current.clear();
     openKind.current = null;
     setTurnBusy(turnStillActive);
@@ -435,6 +446,7 @@ export function useAgentSession({
       folder: sessionScopeForConnect.kind === 'folder' ? sessionScopeForConnect.path : null,
     });
     const endpoint = runtimeCatalog.runtime?.endpoint ?? '/ws/agent';
+    connectAccessRef.current = controls.modeRef.current;
     const wsUrl = agentConnectionUrl({
       protocol: location.protocol, host: location.host, endpoint,
       windowId: getWindowId(), effort: controls.effortRef.current, access: controls.modeRef.current,
@@ -484,6 +496,50 @@ export function useAgentSession({
    * the user retries the send, not the setup. */
   function reconnectAfterFatal() {
     resetSessionState({ resumeId: sessionIdRef.current });
+  }
+
+  /** In-transcript recovery for an expired Codex sign-in. Starting the login
+   * flips the bootstrap phase, which closes the live socket and reopens one
+   * when the runtime is ready again (`runtimeBlocked` gates the connect
+   * effect). Stashing the session id first makes that reopen resume the same
+   * native thread — with the transcript kept — instead of starting blank. */
+  function signInToCodexFromTurnFailure() {
+    if (agent !== 'codex') return;
+    resumeIdRef.current = sessionIdRef.current;
+    void runtimeCatalog.loginToCodex();
+  }
+
+  /** An acted-on failure card first settles to a plain message — its button
+   * and guidance describe a state the action is about to change, and a stale
+   * "Sign in"/"Reconnect"/"Try again" must not outlive it. The failed prompt
+   * is then auto-resent — immediately for `resend` (quota, rate, network
+   * clear on the provider side), or once the replacement session is ready
+   * for the sign-in/reconnect recoveries — so the outcome is visible without
+   * retyping: an answer when the recovery stuck, a fresh card when not. */
+  function handleTurnFailureAction(blockId: string, action: TurnFailureActionId) {
+    setBlocks((bs) => bs.map((b) => (
+      b.kind === 'error' && b.id === blockId ? { kind: 'error', id: b.id, text: b.text } : b
+    )));
+    // The retry is the prompt of the turn THIS card settled — the nearest
+    // user block above the card, not the transcript's newest. A failure
+    // never ends the session, so the user may have kept chatting before
+    // acting on an older card.
+    const bs = blocksRef.current;
+    const cardIndex = bs.findIndex((b) => b.id === blockId);
+    let cardUser: Extract<Block, { kind: 'user' }> | null = null;
+    for (let i = (cardIndex >= 0 ? cardIndex : bs.length) - 1; i >= 0; i--) {
+      const candidate = bs[i];
+      if (candidate.kind === 'user') { cardUser = candidate; break; }
+    }
+    const retry = cardUser ? { text: cardUser.text, attachments: cardUser.attachments ?? [] } : null;
+    if (action === 'resend') {
+      if (retry) promptQueue.resendFailedPrompt(retry);
+      return;
+    }
+    if (action === 'codex-sign-in') signInToCodexFromTurnFailure();
+    else reconnectAfterFatal();
+    // Arm AFTER the reset: resetSessionState clears any pending retry.
+    if (retry) pendingRetryRef.current = retry;
   }
 
   /** Open a past session from the sidebar's History menu: paint its
@@ -541,13 +597,21 @@ export function useAgentSession({
         if (controls.connectedScopeRef.current?.kind === 'folder' && controls.connectedScopeRef.current.path !== folderPathRef.current) {
           mentions.bumpSessionListing();
         }
-        // A fresh session always starts at permissionMode 'default'; if the
-        // user had picked a non-default mode, re-apply it so a reconnect
-        // (Retry / effort change) doesn't silently reset it. Read through
+        // The session came up with the mode that rode the connect URL; if
+        // the user switched modes while the connection was coming up,
+        // re-apply the current pick so it isn't silently lost. Read through
         // the ref: this handler is bound once per connection and must see
         // the mode as of ready time, not connect time.
-        if (controls.modeRef.current !== 'default') {
+        if (controls.modeRef.current !== connectAccessRef.current) {
           wsRef.current?.send(JSON.stringify({ t: 'set-mode', mode: controls.modeRef.current }));
+        }
+        // A recovery action armed the failed prompt for one auto-retry on
+        // the replacement session; send it through the normal prompt path
+        // so its outcome (answer or fresh failure card) is a regular turn.
+        {
+          const retry = pendingRetryRef.current;
+          pendingRetryRef.current = null;
+          if (retry) promptQueue.resendFailedPrompt(retry);
         }
         break;
       case 'session-id':
@@ -669,7 +733,10 @@ export function useAgentSession({
           resetSessionState({ nextFatal: ev.message, nextPhase: 'closed', startConnection: false });
         } else {
           turnErrorTrackerRef.current.explain();
-          setBlocks((bs) => [...bs, { kind: 'error', id: nextBlockId(), text: ev.message }]);
+          setBlocks((bs) => [...bs, {
+            kind: 'error', id: nextBlockId(), text: ev.message,
+            ...(ev.failure ? { failureKind: ev.failure.kind } : {}),
+          }]);
         }
         break;
       case 'exit':
@@ -791,6 +858,7 @@ export function useAgentSession({
       stop,
       reconnect,
       reconnectAfterFatal,
+      handleTurnFailureAction,
       replyPermission,
       copyUserMessage,
       openArtifactLink,

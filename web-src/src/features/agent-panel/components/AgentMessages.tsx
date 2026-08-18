@@ -16,7 +16,8 @@ import { ToolActivityGroup, PermissionCard } from '@/features/agent-panel/compon
 import { MessageAttachments, UserMessageText, UserTurnHead } from '@/features/agent-panel/components/AgentUserTurn';
 import { accentDotClass, outlineSmClass, spinnerClass } from '@/features/agent-panel/lib/panelStyles';
 import { groupTurns, settledReplySections, tailBlockSpeaks, turnReplyText, workTraceLabel, type TurnMeta } from '@/features/agent-panel/lib/turnModel';
-import type { Attachment, Block, ToolBlock } from '@/features/agent-panel/lib/types';
+import { turnFailureGuidance, type TurnFailureActionId } from '@/features/agent-panel/lib/turnFailure';
+import type { AgentKind, Attachment, Block, ToolBlock } from '@/features/agent-panel/lib/types';
 
 /** Accent status dot used by working/queued indicators. */
 function Dot() {
@@ -32,7 +33,7 @@ export interface QueuedTurnPreview {
 }
 
 export function MessageList({
-  blocks, queuedTurns, turnActive, turnMeta, phase, fatal, fatalRecoveryLabel, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact,
+  blocks, queuedTurns, turnActive, turnMeta, phase, fatal, fatalRecoveryLabel, agentKind, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact, onTurnFailureAction,
 }: {
   blocks: Block[];
   queuedTurns: QueuedTurnPreview[];
@@ -41,6 +42,7 @@ export function MessageList({
   phase: 'connecting' | 'live' | 'closed';
   fatal: string | null;
   fatalRecoveryLabel: 'Retry' | 'Reconnect';
+  agentKind: AgentKind;
   agentShortName: string;
   onPermission: (toolBlockId: string, permId: string, allow: boolean) => void;
   onSteerQueued: (id: string) => void;
@@ -48,6 +50,7 @@ export function MessageList({
   onResendUserMessage: (text: string) => void;
   onRetry: () => void;
   onOpenArtifact: (path: string) => void;
+  onTurnFailureAction: (blockId: string, action: TurnFailureActionId) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -71,8 +74,8 @@ export function MessageList({
   // The reply handlers travel as ONE object from here down through
   // TurnBody/WorkTrace/BlockView instead of four parallel props per layer.
   const handlers: ReplyHandlers = useMemo(
-    () => ({ onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact }),
-    [onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact],
+    () => ({ agentKind, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact, onTurnFailureAction }),
+    [agentKind, onPermission, onCopyUserMessage, onResendUserMessage, onOpenArtifact, onTurnFailureAction],
   );
 
   return (
@@ -156,10 +159,12 @@ export function MessageList({
 }
 
 interface ReplyHandlers {
+  agentKind: AgentKind;
   onPermission: (t: string, p: string, a: boolean) => void;
   onCopyUserMessage: (text: string) => void;
   onResendUserMessage: (text: string) => void;
   onOpenArtifact: (path: string) => void;
+  onTurnFailureAction: (blockId: string, action: TurnFailureActionId) => void;
 }
 
 /** Render a run of reply blocks: consecutive completed/running tool blocks
@@ -352,12 +357,32 @@ function BlockView({ block, live, handlers }: {
       return <AssistantBlock text={block.text} onOpenArtifact={handlers.onOpenArtifact} />;
     case 'thinking':
       return <ThinkingView text={block.text} active={live} />;
-    case 'error':
+    case 'error': {
+      // A classified live failure explains its recovery; anything else —
+      // including replayed history, which carries no kind — stays a plain
+      // message. The kind is adapter-assigned; no prose is parsed here.
+      const guidance = block.failureKind ? turnFailureGuidance(block.failureKind, handlers.agentKind) : null;
+      if (!guidance) {
+        return (
+          <StatusMessage tone="error" className="text-sm leading-normal whitespace-pre-wrap">
+            {block.text}
+          </StatusMessage>
+        );
+      }
       return (
-        <StatusMessage tone="error" className="text-sm leading-normal whitespace-pre-wrap">
-          {block.text}
+        <StatusMessage tone="error" className="flex flex-col items-start gap-1.5 rounded-xl p-3">
+          <div className="text-sm font-semibold">{guidance.title}</div>
+          <div className={fatalDetailClass}>{block.text}</div>
+          <div className="text-sm leading-normal">{guidance.guidance}</div>
+          <Button
+            className={outlineSmClass}
+            onPress={() => handlers.onTurnFailureAction(block.id, guidance.action.id)}
+          >
+            {guidance.action.label}
+          </Button>
         </StatusMessage>
       );
+    }
     case 'tool':
       // A tool block only reaches BlockView while it is awaiting approval;
       // completed/running tools are grouped into ToolActivityGroup.

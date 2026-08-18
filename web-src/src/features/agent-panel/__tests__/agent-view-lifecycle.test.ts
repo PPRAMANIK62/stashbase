@@ -70,7 +70,7 @@ function buttonNamed(root: ReactTestInstance, label: string): ReactTestInstance 
   return button;
 }
 
-async function mountAgentView(t: TestContext, state = rendererState()) {
+async function mountAgentView(t: TestContext, state = rendererState(), agent: 'claude' | 'codex' = 'codex') {
   const previousWebSocket = globalThis.WebSocket;
   const previousWindow = globalThis.window;
   const previousLocation = globalThis.location;
@@ -133,7 +133,7 @@ async function mountAgentView(t: TestContext, state = rendererState()) {
         state,
         dispatch: () => {},
         actions: actionsStub(),
-        children: React.createElement(AgentView, { active: true, id: 'tab-1', title: 'Untitled', agent: 'codex' }),
+        children: React.createElement(AgentView, { active: true, id: 'tab-1', title: 'Untitled', agent }),
       },
     ));
   });
@@ -232,6 +232,173 @@ test('Codex authentication recovery starts login with the installed runtime', as
   assert.ok(signIn);
   await act(async () => { signIn.props.onPress(); });
   assert.equal(logins, 1);
+});
+
+test('a classified turn failure explains its recovery and offers Codex sign-in in place', async (t) => {
+  let logins = 0;
+  t.mock.method(api, 'prepareAgent', async (
+    _agent: 'claude' | 'codex',
+    action: 'check' | 'bootstrap' | 'login',
+  ) => {
+    if (action === 'login') logins += 1;
+    return { clis: rendererState().chat.agents };
+  });
+  const { renderer, first } = await mountAgentView(t);
+  await act(async () => {
+    first.event({ t: 'ready' });
+    first.event({ t: 'session-id', id: 'thread-9' });
+    first.event({ t: 'turn-start' });
+    first.event({
+      t: 'error',
+      message: 'Simulated failure: 401 authentication_error — the session token has expired. Sign in again.',
+      failure: { kind: 'auth-expired' },
+    });
+    first.event({ t: 'turn-end', isError: true });
+  });
+
+  let output = renderedText(renderer);
+  assert.match(output, /Signed out of Codex/);
+  assert.match(output, /Sign in with ChatGPT/);
+  // The classified error already explained the turn; the generic fallback
+  // must not repeat it, and the failure never blocks the panel.
+  assert.doesNotMatch(output, /The Agent turn failed before returning a response/);
+
+  const signIn = renderer.root.findAll((node) => (
+    node.props.children === 'Sign in with ChatGPT' && typeof node.props.onPress === 'function'
+  ))[0];
+  assert.ok(signIn);
+  await act(async () => { signIn.props.onPress(); });
+  assert.equal(logins, 1);
+
+  // Acting on the card settles it: the button and guidance title are gone,
+  // while the provider message stays as a plain record of the failed turn.
+  output = renderedText(renderer);
+  assert.doesNotMatch(output, /Sign in with ChatGPT/);
+  assert.doesNotMatch(output, /Signed out of Codex/);
+  assert.match(output, /the session token has expired/);
+
+  // Plan exhaustion explains the provider-side reset and offers Try again,
+  // which resends the failed prompt on the live session — no reconnect.
+  await act(async () => {
+    renderer.root.findByType(AgentComposer).props.onSend('Ping');
+  });
+  await act(async () => {
+    first.event({ t: 'turn-start' });
+    first.event({
+      t: 'error',
+      message: 'Simulated failure: usage limit reached - this plan usage window is exhausted.',
+      failure: { kind: 'quota' },
+    });
+    first.event({ t: 'turn-end', isError: true });
+  });
+  output = renderedText(renderer);
+  assert.match(output, /Usage limit reached/);
+  assert.match(output, /ChatGPT plan/);
+
+  const promptsBefore = first.sent.map((entry) => JSON.parse(entry) as { t: string }).filter((m) => m.t === 'prompt').length;
+  const tryAgain = renderer.root.findAll((node) => (
+    node.props.children === 'Try again' && typeof node.props.onPress === 'function'
+  ))[0];
+  assert.ok(tryAgain);
+  await act(async () => { tryAgain.props.onPress(); });
+  output = renderedText(renderer);
+  assert.doesNotMatch(output, /Usage limit reached/);
+  const prompts = first.sent.map((entry) => JSON.parse(entry) as { t: string; text?: string }).filter((m) => m.t === 'prompt');
+  assert.equal(prompts.length, promptsBefore + 1);
+  assert.equal(prompts.at(-1)?.text, 'Ping');
+
+  // An unclassified error stays a plain message with no invented recovery.
+  await act(async () => {
+    first.event({ t: 'turn-start' });
+    first.event({ t: 'error', message: 'Codex failed before completing the turn.' });
+    first.event({ t: 'turn-end', isError: true });
+  });
+  output = renderedText(renderer);
+  assert.match(output, /Codex failed before completing the turn/);
+  assert.doesNotMatch(output, /Rate limited|Connection problem/);
+});
+
+test('an old card acted on after later turns resends its own prompt, not the newest', async (t) => {
+  const { renderer, first } = await mountAgentView(t);
+  await act(async () => {
+    first.event({ t: 'ready' });
+    renderer.root.findByType(AgentComposer).props.onSend('First question');
+  });
+  await act(async () => {
+    first.event({ t: 'turn-start' });
+    first.event({ t: 'error', message: 'Simulated failure: usage limit reached.', failure: { kind: 'quota' } });
+    first.event({ t: 'turn-end', isError: true });
+  });
+  // A failure never ends the session: the user chats past the open card.
+  await act(async () => {
+    renderer.root.findByType(AgentComposer).props.onSend('Second question');
+  });
+  await act(async () => {
+    first.event({ t: 'turn-start' });
+    first.event({ t: 'text', delta: 'An answer.' });
+    first.event({ t: 'turn-end', isError: false });
+  });
+
+  const tryAgain = renderer.root.findAll((node) => (
+    node.props.children === 'Try again' && typeof node.props.onPress === 'function'
+  ))[0];
+  assert.ok(tryAgain);
+  await act(async () => { tryAgain.props.onPress(); });
+  const prompts = first.sent.map((entry) => JSON.parse(entry) as { t: string; text?: string })
+    .filter((message) => message.t === 'prompt');
+  assert.equal(prompts.at(-1)?.text, 'First question');
+});
+
+test('Claude reconnect resumes the session and auto-retries the failed prompt', async (t) => {
+  const state = rendererState();
+  state.chat.agents = [{
+    ...state.chat.agents[0]!,
+    id: 'claude',
+    label: 'Claude Code',
+    vendor: 'Anthropic',
+    launchCommand: 'claude',
+    capabilities: AGENT_META.claude.capabilities,
+  }];
+  const { renderer, first } = await mountAgentView(t, state, 'claude');
+  await act(async () => {
+    first.event({ t: 'ready' });
+    first.event({ t: 'session-id', id: 'sess-1' });
+    renderer.root.findByType(AgentComposer).props.onSend('Hello Claude');
+  });
+  await act(async () => {
+    first.event({ t: 'turn-start' });
+    first.event({ t: 'error', message: 'Not logged in · Please run /login', failure: { kind: 'auth-expired' } });
+    first.event({ t: 'turn-end', isError: true });
+  });
+
+  let output = renderedText(renderer);
+  assert.match(output, /Signed out of Claude Code/);
+  const reconnect = renderer.root.findAll((node) => (
+    node.props.children === 'Reconnect' && typeof node.props.onPress === 'function'
+  ))[0];
+  assert.ok(reconnect);
+  await act(async () => { reconnect.props.onPress(); });
+
+  // The card settled (message kept, action gone) and a replacement
+  // connection resumed the same native session.
+  output = renderedText(renderer);
+  assert.doesNotMatch(output, /Signed out of Claude Code/);
+  assert.match(output, /Not logged in/);
+  assert.equal(LifecycleWebSocket.instances.length, 2);
+  const second = LifecycleWebSocket.instances[1]!;
+  assert.match(second.url, /[?&]resume=sess-1(?:&|$)/);
+
+  // Ready on the replacement fires exactly one auto-retry of the failed
+  // prompt, making the recovery's outcome visible without retyping.
+  await act(async () => { second.event({ t: 'ready' }); });
+  const prompts = second.sent.map((entry) => JSON.parse(entry) as { t: string; text?: string })
+    .filter((message) => message.t === 'prompt');
+  assert.deepEqual(prompts, [{ t: 'prompt', text: 'Hello Claude' }]);
+  assert.ok((renderedText(renderer).match(/Hello Claude/g) ?? []).length >= 2);
+
+  // A later settled turn must not replay it again.
+  await act(async () => { second.event({ t: 'turn-start' }); second.event({ t: 'turn-end', isError: false }); });
+  assert.equal(second.sent.map((entry) => JSON.parse(entry) as { t: string }).filter((m) => m.t === 'prompt').length, 1);
 });
 
 test('mounted AgentView ready → raw close renders recovery and reconnects with transcript + resume', async (t) => {

@@ -5,6 +5,9 @@
  */
 import type {
   AgentContextFile,
+  AgentDiscoveryPolicy,
+  AgentSetupFailureSimulation,
+  AgentTurnFailureSimulation,
   AgentsResponse,
   AppearancePreferences,
   CapturePreferences,
@@ -305,8 +308,9 @@ export const api = {
   prepareAgent: (agent: 'claude' | 'codex', action: 'check' | 'bootstrap' | 'login') =>
     send<AgentsResponse>('POST', `/api/terminal/clis/${encodeURIComponent(agent)}/${action}`),
   setAgentRuntimeDebug: (patch: Partial<{
-    discoveryPolicy: 'auto' | 'managed-only' | 'system-only';
-    nextFailure: 'none' | 'installation' | 'mcp';
+    discoveryPolicy: AgentDiscoveryPolicy;
+    nextFailure: AgentSetupFailureSimulation;
+    nextTurnFailure: AgentTurnFailureSimulation;
   }>) => send<AgentsResponse>('PUT', '/api/terminal/debug', patch),
   resetManagedAgent: (agent: 'claude' | 'codex') =>
     send<AgentsResponse>('DELETE', `/api/terminal/clis/${encodeURIComponent(agent)}/managed`),

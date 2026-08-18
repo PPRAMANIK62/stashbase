@@ -53,7 +53,7 @@ export interface AgentBootstrapDependencies {
   isAuthenticated(id: ManagedAgentId, executable: string): boolean;
   login(id: ManagedAgentId, executable: string, signal: AbortSignal): Promise<void>;
   configureMcp(id: ManagedAgentId): void;
-  consumeFailure(stage: 'installation' | 'mcp'): boolean;
+  consumeFailure(stage: 'installation' | 'authentication' | 'mcp'): boolean;
 }
 
 const IDLE_STATUS: AgentBootstrapStatus = { phase: 'idle' };
@@ -158,7 +158,9 @@ export class AgentBootstrapCoordinator {
       message: 'Finish signing in to Codex in your browser…',
     });
     const run = this.dependencies.login(id, executable, controller.signal).then(() => {
-      if (!this.checkAuthentication(id, executable)) return;
+      // A completed login is verified for real; the development signed-out
+      // simulation targets only the readiness gate, not the login result.
+      if (!this.checkAuthentication(id, executable, false)) return;
       this.statuses.set(id, { phase: 'configuring', progress: 1, message: 'Connecting StashBase MCP…' });
       this.configure(id);
     }).catch((error) => {
@@ -172,11 +174,22 @@ export class AgentBootstrapCoordinator {
   }
 
   private prepare(id: ManagedAgentId, executable: string, allowSimulation = true): void {
-    if (!this.checkAuthentication(id, executable)) return;
+    if (!this.checkAuthentication(id, executable, allowSimulation)) return;
     this.configure(id, allowSimulation);
   }
 
-  private checkAuthentication(id: ManagedAgentId, executable: string): boolean {
+  private checkAuthentication(id: ManagedAgentId, executable: string, allowSimulation = true): boolean {
+    // Only Codex has a provider sign-in gate; the simulation is scoped the
+    // same way so it cannot arm a login surface Claude does not have.
+    if (allowSimulation && id === 'codex' && this.dependencies.consumeFailure('authentication')) {
+      this.fail(
+        id,
+        'authentication',
+        'authentication-required',
+        new Error('Simulated signed-out Codex runtime.'),
+      );
+      return false;
+    }
     try {
       if (this.dependencies.isAuthenticated(id, executable)) return true;
       this.fail(

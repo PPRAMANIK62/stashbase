@@ -12,6 +12,7 @@ const DEFAULT_DEBUG: AgentRuntimeDebugState = {
   enabled: false,
   discoveryPolicy: 'auto',
   nextFailure: 'none',
+  nextTurnFailure: 'none',
 };
 
 export interface AgentRuntimeStatus {

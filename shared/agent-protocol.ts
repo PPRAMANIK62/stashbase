@@ -18,6 +18,15 @@
  * vocabulary.
  */
 
+/** The adapter's classification of a turn-scoped runtime failure. Assigned
+ * once, server-side, by `server/agent-turn-failure.ts`; the renderer switches
+ * on the kind to offer the matching recovery and never parses message prose. */
+export type AgentTurnFailureKind = 'rate-limit' | 'quota' | 'auth-expired' | 'network';
+
+export interface AgentTurnFailure {
+  kind: AgentTurnFailureKind;
+}
+
 /** A model is always advertised by the native runtime, never a StashBase list. */
 export interface AgentModel {
   id: string;
@@ -57,5 +66,7 @@ export type AgentServerEvent =
    * updates its connected scope and the owning window selects the folder. */
   | { t: 'scope-changed'; scope: { kind: 'folder'; path: string } }
   | { t: 'turn-end'; isError: boolean }
-  | { t: 'error'; message: string }
+  /** `failure` is present only when the adapter classified the message into
+   * a turn-failure kind; unclassified errors keep the bare shape. */
+  | { t: 'error'; message: string; failure?: AgentTurnFailure }
   | { t: 'exit'; message?: string };

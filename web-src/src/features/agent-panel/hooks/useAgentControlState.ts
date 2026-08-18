@@ -55,7 +55,8 @@ export function useAgentControlState({
 }) {
   // Permission mode for this session — drives the composer's Modes
   // dropdown. Switching it sends `set-mode` so the agent applies it live.
-  const [mode, setMode, modeRef] = useStateWithRef<PermMode>('default');
+  // Sessions start in Auto; picking Ask ('default') is an explicit choice.
+  const [mode, setMode, modeRef] = useStateWithRef<PermMode>('auto');
   // Thinking effort is opt-in. Undefined preserves the native runtime
   // default; an explicit choice rides the connect URL for a new session.
   const [effort, setEffort, effortRef] = useStateWithRef<EffortLevel | undefined>(undefined);

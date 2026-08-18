@@ -19,6 +19,7 @@ import {
 } from '../agent-runtime-installer.ts';
 import {
   consumeAgentSetupFailure,
+  consumeAgentTurnFailure,
   getAgentRuntimeDebugState,
   initialAgentDiscoveryPolicy,
   managedAgentRuntimeRoot,
@@ -26,6 +27,8 @@ import {
   managedCodexInstallerHome,
   managedCodexReleasesDir,
   setAgentRuntimeDebugState,
+  simulatedTurnFailureScript,
+  type AgentTurnFailureSimulation,
 } from '../agent-runtime-paths.ts';
 
 function fakeDependencies(overrides: Partial<AgentBootstrapDependencies> = {}) {
@@ -255,6 +258,60 @@ test('an injected MCP failure retries only MCP when the runtime exists', () => {
   assert.equal(coordinator.begin('codex').phase, 'ready');
   assert.equal(installs, 0);
   assert.equal(configured, 1);
+});
+
+test('an injected signed-out simulation stops Codex at the sign-in gate once', () => {
+  let nextFailure: 'authentication' | null = 'authentication';
+  let configured = 0;
+  const fake = fakeDependencies({
+    resolveExecutable: () => '/system/codex',
+    configureMcp: () => { configured += 1; },
+    consumeFailure: (stage) => {
+      if (nextFailure !== stage) return false;
+      nextFailure = null;
+      return true;
+    },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+
+  const failed = coordinator.begin('codex');
+  assert.equal(failed.phase, 'failed');
+  assert.equal(failed.failure?.stage, 'authentication');
+  assert.equal(failed.failure?.code, 'authentication-required');
+  assert.match(failed.failure?.message ?? '', /Simulated signed-out/);
+  assert.equal(configured, 0);
+
+  assert.equal(coordinator.begin('codex').phase, 'ready');
+  assert.equal(configured, 1);
+});
+
+test('the signed-out simulation never arms Claude and is not consumed by login verification', async () => {
+  let consumed = 0;
+  const claude = fakeDependencies({
+    resolveExecutable: () => '/system/claude',
+    consumeFailure: (stage) => {
+      if (stage !== 'authentication') return false;
+      consumed += 1;
+      return true;
+    },
+  });
+  assert.equal(new AgentBootstrapCoordinator(claude.dependencies).begin('claude').phase, 'ready');
+  assert.equal(consumed, 0);
+
+  // A completed Codex login verifies for real instead of consuming the gate
+  // simulation, so signing in cannot appear to fail because of a stale toggle.
+  const codex = fakeDependencies({
+    resolveExecutable: () => '/system/codex',
+    consumeFailure: (stage) => {
+      if (stage !== 'authentication') return false;
+      consumed += 1;
+      return true;
+    },
+  });
+  const coordinator = new AgentBootstrapCoordinator(codex.dependencies);
+  assert.equal(coordinator.login('codex').phase, 'authenticating');
+  assert.equal((await coordinator.wait('codex')).phase, 'ready');
+  assert.equal(consumed, 0);
 });
 
 test('real installation and MCP errors advertise only their relevant manual recovery', async () => {
@@ -793,6 +850,37 @@ test('development failure injection is mutually exclusive and one-shot', () => {
     setAgentRuntimeDebugState({ nextFailure: 'none' });
     if (previousDebug === undefined) delete process.env.STASHBASE_AGENT_DEBUG;
     else process.env.STASHBASE_AGENT_DEBUG = previousDebug;
+  }
+});
+
+test('development turn failure injection is one-shot and independent of setup injection', () => {
+  const previousDebug = process.env.STASHBASE_AGENT_DEBUG;
+  process.env.STASHBASE_AGENT_DEBUG = '1';
+  try {
+    setAgentRuntimeDebugState({ nextFailure: 'mcp', nextTurnFailure: 'rate-limit' });
+    assert.equal(getAgentRuntimeDebugState().nextTurnFailure, 'rate-limit');
+    assert.equal(consumeAgentTurnFailure(), 'rate-limit');
+    assert.equal(consumeAgentTurnFailure(), null);
+    assert.equal(getAgentRuntimeDebugState().nextTurnFailure, 'none');
+    // The setup simulation is a separate one-shot value.
+    assert.equal(getAgentRuntimeDebugState().nextFailure, 'mcp');
+    assert.throws(
+      () => setAgentRuntimeDebugState({ nextTurnFailure: 'invalid' as AgentTurnFailureSimulation }),
+      /Invalid Agent turn failure simulation/,
+    );
+  } finally {
+    setAgentRuntimeDebugState({ nextFailure: 'none', nextTurnFailure: 'none' });
+    if (previousDebug === undefined) delete process.env.STASHBASE_AGENT_DEBUG;
+    else process.env.STASHBASE_AGENT_DEBUG = previousDebug;
+  }
+});
+
+test('every turn failure script is bounded prose and only crash is session-fatal', () => {
+  const kinds = ['rate-limit', 'quota', 'auth-expired', 'network', 'crash'] as const;
+  for (const kind of kinds) {
+    const script = simulatedTurnFailureScript(kind);
+    assert.match(script.message, /^Simulated failure: /);
+    assert.equal(script.fatal, kind === 'crash');
   }
 });
 

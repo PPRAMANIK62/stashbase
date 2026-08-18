@@ -26,6 +26,7 @@ export type {
   AgentDiscoveryPolicy,
   AgentRuntimeDebugState,
   AgentSetupFailureSimulation,
+  AgentTurnFailureSimulation,
 } from '@shared/agent-runtime';
 export type {
   HostedAccountActivation,

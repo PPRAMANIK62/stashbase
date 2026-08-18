@@ -134,6 +134,17 @@ export function useAgentPromptQueue({
     stop();
   }
 
+  /** Resend a failed prompt on a recovery card's behalf: explicit historical
+   *  attachments (not the composer's chips), queued behind an active turn so
+   *  an old card acted on mid-turn never races a concurrent prompt. */
+  function resendFailedPrompt(retry: { text: string; attachments: Attachment[] }) {
+    if (turnActiveRef.current) {
+      mutateQueue((queue) => [...queue, { id: nextBlockId(), ...retry, status: 'waiting' }]);
+      return;
+    }
+    void sendPromptNow({ ...retry, appendBlock: true });
+  }
+
   function runNextQueuedPrompt() {
     let next: QueuedPrompt | undefined;
     mutateQueue((queue) => {
@@ -250,5 +261,6 @@ export function useAgentPromptQueue({
     steerQueuedPrompt,
     send,
     resend,
+    resendFailedPrompt,
   };
 }

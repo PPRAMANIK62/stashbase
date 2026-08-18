@@ -39,7 +39,15 @@ export interface AgentBootstrapStatus {
 
 export type AgentDiscoveryPolicy = 'auto' | 'managed-only' | 'system-only';
 
-export type AgentSetupFailureSimulation = 'none' | 'installation' | 'mcp';
+export type AgentSetupFailureSimulation = 'none' | 'installation' | 'authentication' | 'mcp';
+
+export type AgentTurnFailureSimulation =
+  | 'none'
+  | 'rate-limit'
+  | 'quota'
+  | 'auth-expired'
+  | 'network'
+  | 'crash';
 
 export interface AgentRuntimeDebugState {
   enabled: boolean;
@@ -47,6 +55,9 @@ export interface AgentRuntimeDebugState {
   /** Development-only, mutually exclusive failure for the next matching
    * readiness stage. A consumed failure resets this field to `none`. */
   nextFailure: AgentSetupFailureSimulation;
+  /** Development-only failure for the next prompt in any live Agent session.
+   * One-shot like `nextFailure`; independent of the setup simulation. */
+  nextTurnFailure: AgentTurnFailureSimulation;
 }
 
 export interface Agent {

@@ -3,6 +3,7 @@ import {
   type Agent,
   type AgentDiscoveryPolicy,
   type AgentSetupFailureSimulation,
+  type AgentTurnFailureSimulation,
 } from '@/common/api/apiTypes';
 import { AGENTS } from '@/common/lib/agentCatalog';
 import { ChevronDownIcon, MoreHorizontalIcon } from '@/common/components/icons';
@@ -126,11 +127,30 @@ export function AgentRuntimePanel() {
             >
               <option value="none">Normal</option>
               <option value="installation">Fail installation</option>
+              <option value="authentication">Signed-out Codex</option>
               <option value="mcp">Fail MCP connection</option>
             </AgentDebugSelect>
           </label>
           <p className="mt-2 mb-0 text-xs leading-normal text-muted-foreground">
-            The failure is injected once, then resets to Normal. Installation failure applies only when setup reaches an install; reset first run to test it with an existing runtime.
+            The failure is injected once, then resets to Normal. Installation failure applies only when setup reaches an install; reset first run to test it with an existing runtime. Signed-out applies when Codex setup reaches its sign-in check; Claude has no setup sign-in gate — test its signed-out state with Auth token expired below, in a Claude chat.
+          </p>
+          <label className="mt-3 flex items-center justify-between gap-3 text-sm text-foreground">
+            <span>Next turn result</span>
+            <AgentDebugSelect
+              value={debug.nextTurnFailure}
+              disabled={busy != null}
+              onChange={(event) => void updateDebug({ nextTurnFailure: event.target.value as AgentTurnFailureSimulation })}
+            >
+              <option value="none">Normal</option>
+              <option value="rate-limit">Rate limited (429)</option>
+              <option value="quota">Usage limit reached</option>
+              <option value="auth-expired">Auth token expired</option>
+              <option value="network">Network unreachable</option>
+              <option value="crash">Runtime crash</option>
+            </AgentDebugSelect>
+          </label>
+          <p className="mt-2 mb-0 text-xs leading-normal text-muted-foreground">
+            Applies to the next prompt sent in any open chat, once. The prompt never reaches the native runtime; Runtime crash ends that session like a real process exit.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="outline" size="sm" disabled={busy != null} onClick={() => void resetFirstRun('codex')}>

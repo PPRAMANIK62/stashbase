@@ -178,7 +178,9 @@ export function AgentView({
             phase={transcript.phase}
             fatal={transcript.fatal}
             fatalRecoveryLabel={transcript.fatalRecoveryLabel}
+            agentKind={agent}
             agentShortName={session.meta.shortName}
+            onTurnFailureAction={transcript.handleTurnFailureAction}
             onPermission={transcript.replyPermission}
             onSteerQueued={queue.steerQueuedPrompt}
             onCopyUserMessage={transcript.copyUserMessage}

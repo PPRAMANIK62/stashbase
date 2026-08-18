@@ -76,6 +76,13 @@
   jump-to-latest control appears.
 - A terminal failure creates at most one persistent turn explanation, preferring
   the runtime's specific message. Record it before advancing queued follow-ups.
+- A classified turn failure renders as a recovery card whose action follows the
+  adapter-assigned kind only (see the turn-failure contract in
+  [Agent Runtime](agent-runtime.md#protocol-boundary)); guidance copy and the
+  settle-then-auto-retry behavior live in
+  `web-src/src/features/agent-panel/lib/turnFailure.ts` and
+  `hooks/useAgentSession.ts`. The retry belongs to the card's own turn — the
+  nearest user prompt above the card, never the transcript's newest.
 - Completed thinking, interim narration, and tool activity fold under one
   working-trace header while the final answer remains visible. Interrupted work
   stays expanded. Resumed history has no invented duration.

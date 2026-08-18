@@ -21,6 +21,7 @@ const emptyList = {
   phase: 'live' as const,
   fatal: null,
   fatalRecoveryLabel: 'Retry' as const,
+  agentKind: 'codex' as const,
   agentShortName: 'Codex',
   onPermission: () => {},
   onSteerQueued: () => {},
@@ -28,6 +29,7 @@ const emptyList = {
   onResendUserMessage: () => {},
   onRetry: () => {},
   onOpenArtifact: () => {},
+  onTurnFailureAction: () => {},
 };
 
 test('chat sessions are a named tab list whose tabs and panels reference each other', async () => {

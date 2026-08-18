@@ -93,10 +93,22 @@
   `nextFailure` value. It is consumed only when explicit readiness reaches that
   stage and immediately resets to normal; background startup repair never
   consumes it, and an installation injection stays pending when an existing
-  runtime skips installation. Settings presents these controls inside a
-  visually distinct development-only surface; production omits the surface.
-  Availability follows the general development-runtime marker and does not
-  depend on whether the renderer is served through Vite.
+  runtime skips installation. The authentication injection arms only the Codex
+  sign-in gate — never Claude, which has no login surface — and a completed
+  login is verified for real rather than consuming it. Settings presents these
+  controls inside a visually distinct development-only surface; production
+  omits the surface. Availability follows the general development-runtime
+  marker and does not depend on whether the renderer is served through Vite.
+- Development turn failure injection is a separate one-shot `nextTurnFailure`
+  value consumed by the next prompt of any live session, in either runtime.
+  The adapter plays a scripted failure through its normal event path — a
+  turn-scoped error for rate-limit, quota, auth-expired, and network shapes, or
+  a session-ending exit for crash — and the prompt never reaches the native
+  runtime. Script messages are provider-shaped but always prefixed
+  `Simulated failure:` so a developer cannot mistake one for a live error.
+  Each non-fatal script classifies to its own turn-failure kind through the
+  live classifier, so an injected failure exercises exactly the recovery
+  presentation a real one gets; a pinning test fails if either side drifts.
 - A discovery, installation, authentication, or MCP failure is visible and
   retryable but never blocks the workspace or silently substitutes another
   Agent.
@@ -155,6 +167,26 @@ assumed CLI versions.
 - Runtime errors settle only the matching active turn once. Retry-in-progress
   signals do not become permanent failures; repeated or late terminal events
   are ignored.
+- Turn-scoped runtime errors carry a structured failure kind — rate-limit,
+  quota, auth-expired, or network — classified once in the adapters through
+  the shared classifier; an unmatched message stays a plain error. The
+  renderer maps the kind to recovery copy and actions without parsing
+  messages, and every card carries a truthful action. Rate, network, and
+  quota failures clear on the provider side, so their Try again resends the
+  failed prompt on the live session. An expired sign-in offers Codex's
+  in-app browser sign-in (stashing the session id so the post-login
+  reconnect resumes the same native thread) or names Claude's terminal
+  `/login` steps with an in-place Reconnect — these two replace the
+  session's native process, because credentials are read at process start
+  and an external login is invisible to the running process until it is
+  replaced; never require an app restart for this. Acting on any recovery
+  settles its card to a plain message — a stale button must not outlive the
+  state it described — and auto-resends the failed prompt (immediately for
+  Try again, on session readiness for sign-in and Reconnect), so the
+  outcome is visible without retyping: an answer when the recovery stuck, a
+  fresh card when it did not. The armed retry is one-shot and cleared by
+  every other session reset. A turn failure never gates the panel and never
+  ends the session.
 - Skills are discovered and invoked through native capability paths. The
   runtime never exposes or concatenates skill-file contents into a prompt.
 
@@ -164,13 +196,14 @@ assumed CLI versions.
 |---|---|
 | Agent Interface | `AgentAdapter`, normalized client/server events, scope resolution, attach, and stop in `server/agent-contract.ts` |
 | Adapter registry | `server/agent-adapters.ts` |
+| Turn failure classification | `classifyAgentTurnFailure` in `server/agent-turn-failure.ts` over the shared kinds in `shared/agent-protocol.ts`; renderer recovery guidance in `web-src/src/features/agent-panel/lib/turnFailure.ts` |
 | Preparation Interface | `AgentBootstrapCoordinator` and its structured failure contract in `server/agent-runtime-installer.ts`; discovery and one-shot debug controls in `server/agent-cli.ts` and `server/agent-runtime-paths.ts` |
 | MCP wiring | `ensureAgentMcp` and the launcher writer in `server/agent-mcp.ts` |
 | Claude Adapter | `server/agent.ts` and its SDK/native-process helpers |
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
 | Renderer Adapter | `web-src/src/common/lib/agentCatalog.ts`, the `activateChatTab` action in `web-src/src/store/contexts/AppContext.tsx`, `runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
-| Focused evidence | `server/__tests__/agent-contract.test.ts`, `agent-runtime-installer.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs`; J11 in `e2e/journeys/agent-workflows.spec.ts` proves the first post-rebind MCP write lands in the project |
+| Focused evidence | `server/__tests__/agent-contract.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs`; J11 in `e2e/journeys/agent-workflows.spec.ts` proves the first post-rebind MCP write lands in the project |
 
 ## Validation
 
