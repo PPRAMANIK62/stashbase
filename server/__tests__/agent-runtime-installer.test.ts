@@ -522,6 +522,7 @@ test('Codex post-install verification preserves the isolated installer environme
   if (process.platform === 'win32') fs.writeFileSync(fixtureExecutable, 'installed Codex');
   const installer = process.platform === 'win32'
     ? [
+      'Write-Output "stashbase fixture installer started"',
       '$null = [System.IO.Directory]::CreateDirectory($env:CODEX_INSTALL_DIR)',
       '$codexPath = Join-Path $env:CODEX_INSTALL_DIR "codex.exe"',
       `Move-Item -LiteralPath '${fixtureExecutable.replaceAll("'", "''")}' -Destination $codexPath`,
@@ -537,9 +538,12 @@ chmod +x "$CODEX_INSTALL_DIR/codex"
   mock.method(globalThis, 'fetch', async () => new Response(installer));
   let verified = false;
   let selectedShell: ReturnType<typeof resolveCodexInstallerShell> | undefined;
+  const updates: string[] = [];
   try {
     try {
-      await installCodex(() => {}, new AbortController().signal, {
+      await installCodex((update) => {
+        if (update.message) updates.push(update.message);
+      }, new AbortController().signal, {
         resolveInstallerShell: () => {
           selectedShell = resolveCodexInstallerShell();
           return selectedShell;
@@ -554,7 +558,11 @@ chmod +x "$CODEX_INSTALL_DIR/codex"
       });
     } catch (error) {
       const entries = fs.readdirSync(root, { recursive: true }).map(String).sort().join(', ');
-      throw new Error(`${String(error)} Managed test entries: ${entries || '(empty)'}`, { cause: error });
+      throw new Error(
+        `${String(error)} Managed test entries: ${entries || '(empty)'}. `
+        + `Selected shell: ${JSON.stringify(selectedShell)}. Updates: ${JSON.stringify(updates)}`,
+        { cause: error },
+      );
     }
     assert.equal(verified, true);
     if (process.platform === 'win32') assert.equal(selectedShell?.kind, 'powershell-7');
