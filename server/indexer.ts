@@ -144,16 +144,19 @@ export interface IndexerStatus {
   orphanedCount: number;
   /** Full list of orphaned absolute paths. */
   orphaned: string[];
-  /** True iff pending = 0 and orphaned = 0. */
+  /** True iff pending = 0 and orphaned = 0. Computed over the unfiltered
+   *  lists above, so it can disagree with the visible pending count the
+   *  HTTP layer reports beside it. */
   upToDate: boolean;
-  /** False when semantic indexing/retrieval is unavailable, e.g. no API key. */
-  semanticEnabled?: boolean;
-  /** False while a configured hosted source is blocked by its shared quota. */
-  semanticAvailable?: boolean;
-  /** Human-readable reason when semantic indexing/retrieval is disabled. */
-  semanticDisabledReason?: string;
   /** False until the folder has received at least one daemon status response. */
-  indexReady?: boolean;
-  /** PDFs currently being converted to a readable note + bundle. */
-  pendingConversions?: string[];
+  indexReady: boolean;
 }
+
+/*
+ * Semantic availability, its disabled reason, and conversion progress are
+ * deliberately absent. They are HTTP-layer concerns that `buildIndexStatus`
+ * computes and puts on the response; no indexer knows them. They used to sit
+ * here unset, where the response's `...status` spread could have carried a
+ * stale `semanticDisabledReason` past the guard that only sets one when
+ * semantic is actually unavailable — a payload claiming both at once.
+ */

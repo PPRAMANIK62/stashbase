@@ -83,7 +83,7 @@ export interface IndexStatus {
   semanticIndexing: SemanticIndexingStatus;
   /** False until the folder has received at least one daemon status
    *  response. Optional because the indexer interface leaves it optional. */
-  indexReady?: boolean;
+  indexReady: boolean;
   /** Folder-relative paths of sources that are queued or running. */
   pendingConversions: string[];
   /** Incomplete convertible sources that cannot be queued until setup is
