@@ -343,6 +343,20 @@ react, import, and jsx-a11y plugins. Three deliberate calibrations:
 `**/__tests__/**` is exempt from the boundary rules: a renderer test may
 import a feature component to render it realistically.
 
+The API-access rule is a script rather than a tenth override block, and the
+reason is the merge behavior above read from the other side. The ban applies
+to component directories only — a feature's `hooks/` and `lib/` modules are
+exactly where `api` belongs — so it would need a block scoped to
+`**/components/**`. A second block matching a file REPLACES the first's
+options for the same rule, so that block would silently drop each feature's
+sibling-import patterns for every component in the tree, and keeping both
+would mean duplicating all seven boundary regexes into a second set that has
+to stay in sync with the first. `scripts/check-renderer-api-access.mjs` reads
+the import declarations instead: it flags the `api` binding under any
+`components/` directory (and the composition root's own modules), under any
+alias, and passes `import type`. `pnpm lint:web` runs its unit test and then
+the check, the same pairing `test:e2e:check-focus` uses.
+
 ## Implementation Map
 
 | Role | Stable entry points |
@@ -353,6 +367,7 @@ import a feature component to render it realistically.
 | Composition root | `web-src/src/app/App.tsx` over `app/components/` (including `MainPane.tsx` and `Sidebar.tsx`) and `app/hooks/` |
 | Cross-feature triggers | `web-src/src/common/lib/settingsTrigger.ts`, `librarySearchTrigger.ts`, `embeddingSetupTrigger.ts` |
 | Boundary enforcement | `.oxlintrc.json` (direction per layer/feature, depth under `app/**`) and the `lint:web` script |
+| API-access enforcement | `scripts/check-renderer-api-access.mjs` — the `api` client binding is not importable from a component |
 | Lazy-surface guard | `scripts/check-renderer-chunks.mjs` — the pinned dynamic-entry set and the initial-JS budget |
 | Path aliases | `web-src/tsconfig.json` `compilerOptions.paths`, `web-src/vite.config.ts` `resolve.alias` |
 
@@ -363,6 +378,9 @@ pnpm lint:web
 pnpm typecheck
 pnpm build:web
 ```
+
+`pnpm lint:web` also runs `scripts/check-renderer-api-access.mjs` and its
+unit test, which hold the component/hook boundary above.
 
 `pnpm build:web` also runs `scripts/check-renderer-chunks.mjs`, which holds
 the initial-JS budget and the required dynamic-entry set. Moving a lazy
