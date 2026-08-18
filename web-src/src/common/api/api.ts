@@ -10,6 +10,7 @@ import type {
   ApiKeySaveResult,
   EmbedderState,
   EmbedderProvider,
+  HostedAccountActivation,
   HostedAccountState,
   HostedOAuthProvider,
   HostedOAuthStart,
@@ -285,7 +286,7 @@ export const api = {
     send<HostedOAuthStart>('POST', '/api/account/oauth/start', { provider }),
   getAccountOAuthStatus: (flowId: string) =>
     getJson<HostedOAuthStatus>(`/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`),
-  useAccountAllowance: () => send<HostedAccountState>('PUT', '/api/account/source'),
+  useAccountAllowance: () => send<HostedAccountActivation>('PUT', '/api/account/source'),
   signOutAccount: () => send<HostedAccountState>('DELETE', '/api/account'),
 
   // Agents (chat-panel CLIs) -----------------------------------

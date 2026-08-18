@@ -158,17 +158,33 @@ of the two resolves and the other does not.
 | `@/` | `web-src/src/` |
 | `@shared/` | repo-root `shared/` — cross-process contract types |
 
-There is deliberately no alias for `server/`. Every renderer↔server type the
-renderer needs lives in `shared/`: `conversion.ts`, `transcription.ts`,
-`search-types.ts`, `file-formats.ts`, `html-sanitization.ts`, and
-`agent-protocol.ts` (the Agent panel's wire vocabulary, re-exported by
-`server/agent-contract.ts` so server callers keep one import site). A
-`server/` module is free to `import 'ws'` or reach the filesystem, so a
-renderer import of one is only safe while it stays `import type` — a single
-value import would pull that whole graph into the browser bundle. Removing the
-alias makes that mistake unrepresentable rather than reviewable. When the
-renderer needs a new server-defined type, move the type into `shared/` and
-re-export it from `server/`; do not add the alias back.
+There is deliberately no alias for `server/`. Every renderer↔server contract
+lives in `shared/`, one module per domain: `account.ts`, `agent-protocol.ts`,
+`agent-runtime.ts`, `agent-sessions.ts`, `conversion.ts`, `embedding.ts`,
+`file-formats.ts`, `html-sanitization.ts`, `index-status.ts`,
+`library-files.ts`, `mcp.ts`, `preferences.ts`, `search-results.ts`,
+`search-types.ts`, `sync.ts`, and `transcription.ts`. The owning `server/`
+module re-exports its half so server callers keep one import site, and
+`web-src/src/common/api/apiTypes.ts` re-exports the whole set so renderer
+callers keep theirs — that file declares nothing of its own, because a
+contract written on one side of the wire is one only that side has agreed to.
+
+Two pairs deliberately keep separate names for what looks like one concept.
+`IndexStatus` in `shared/` is the `/api/index-status` response;
+`IndexerStatus` in `server/indexer.ts` is the narrower thing the indexer
+itself reports, and the route composes the first from the second.
+`KeywordSearchResult` in `shared/` is the wire response; `KeywordScanResult`
+in `server/search-display.ts` is the raw scan before the route echoes the
+query and folder back onto it. Collapsing either pair would widen an internal
+type into a promise the server does not keep.
+
+A `server/` module is free to `import 'ws'` or reach the
+filesystem, so a renderer import of one is only safe while it stays
+`import type` — a single value import would pull that whole graph into the
+browser bundle. Removing the alias makes that mistake unrepresentable rather
+than reviewable. When the renderer needs a new server-defined type, move the
+type into `shared/` and re-export it from `server/`; do not add the alias
+back.
 
 Aliased specifiers are extensionless, apart from non-TS assets such as the
 shared links JSON. This is not cosmetic: the boundary regexes below match

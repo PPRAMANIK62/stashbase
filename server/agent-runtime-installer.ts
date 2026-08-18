@@ -22,26 +22,21 @@ import {
 import { ensureAgentMcp } from './agent-mcp.ts';
 import { resolveAgentCli, resolveAgentCliWithLoginShell } from './agent-cli.ts';
 import { terminateExtractorTree as terminateInstallerTree } from './extractor-process.ts';
+import type {
+  AgentBootstrapFailureCode,
+  AgentBootstrapFailureStage,
+  AgentBootstrapManualRecovery,
+  AgentBootstrapStatus,
+} from '../shared/agent-runtime.ts';
 
-export type AgentBootstrapPhase = 'idle' | 'installing' | 'configuring' | 'ready' | 'failed';
-export type AgentBootstrapFailureStage = 'discovery' | 'installation' | 'mcp';
-export type AgentBootstrapFailureCode = 'simulated' | 'operation-failed' | 'runtime-unavailable';
-export type AgentBootstrapManualRecovery = 'install-command' | 'mcp-settings';
-
-export interface AgentBootstrapFailure {
-  stage: AgentBootstrapFailureStage;
-  code: AgentBootstrapFailureCode;
-  message: string;
-  retryable: boolean;
-  manualRecovery?: AgentBootstrapManualRecovery;
-}
-
-export interface AgentBootstrapStatus {
-  phase: AgentBootstrapPhase;
-  progress?: number;
-  message?: string;
-  failure?: AgentBootstrapFailure;
-}
+export type {
+  AgentBootstrapFailure,
+  AgentBootstrapFailureCode,
+  AgentBootstrapFailureStage,
+  AgentBootstrapManualRecovery,
+  AgentBootstrapPhase,
+  AgentBootstrapStatus,
+} from '../shared/agent-runtime.ts';
 
 type ProgressUpdate = Pick<AgentBootstrapStatus, 'progress' | 'message'>;
 

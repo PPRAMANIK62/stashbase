@@ -196,7 +196,12 @@ export function useEmbedderSettings(): EmbedderSettingsController {
 
   const applySignedIn = useCallback((account: HostedAccountState) => {
     setState((current) => current ? { ...current, authorized: true, source: 'stashbase-account', account } : current);
-    authorized({ backfillStarted: account.backfillStarted });
+    // No backfill mark: sign-in resolves through `GET /api/account`, which
+    // does not report whether activating the account started one. The
+    // server computes that flag on the OAuth path but keeps it out of every
+    // response the renderer reads — see the Known Gap on
+    // `HostedAccountActivation` in `shared/account.ts`.
+    authorized();
   }, [authorized]);
 
   return {

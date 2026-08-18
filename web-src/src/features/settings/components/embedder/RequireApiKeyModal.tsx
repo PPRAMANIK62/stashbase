@@ -139,7 +139,9 @@ export function RequireApiKeyModal({
         <div ref={choiceRef} tabIndex={-1} className="outline-none">
           <AccountSignInForm
             onBack={() => setView('choice')}
-            onSignedIn={(account) => onSignedIn(account.backfillStarted)}
+            // The signed-in account carries no backfill flag: see the Known
+            // Gap on `HostedAccountActivation` in `shared/account.ts`.
+            onSignedIn={() => onSignedIn(undefined)}
           />
         </div>
       )}

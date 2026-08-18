@@ -10,19 +10,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDataRoot } from './local-data.ts';
 import { isDevelopmentRuntime } from './development-runtime.ts';
+import type { AgentDiscoveryPolicy, AgentRuntimeDebugState, AgentSetupFailureSimulation } from '../shared/agent-runtime.ts';
+
+export type {
+  AgentDiscoveryPolicy,
+  AgentRuntimeDebugState,
+  AgentSetupFailureSimulation,
+} from '../shared/agent-runtime.ts';
 
 export type ManagedAgentId = 'claude' | 'codex';
-export type AgentDiscoveryPolicy = 'auto' | 'managed-only' | 'system-only';
-export type AgentSetupFailureSimulation = 'none' | 'installation' | 'mcp';
-
-export interface AgentRuntimeDebugState {
-  enabled: boolean;
-  discoveryPolicy: AgentDiscoveryPolicy;
-  /** Development-only, mutually exclusive failure for the next matching
-   * readiness stage. A consumed failure resets this field to `none`. */
-  nextFailure: AgentSetupFailureSimulation;
-}
-
 interface ManagedRuntimeManifest {
   version: string;
   platform: string;

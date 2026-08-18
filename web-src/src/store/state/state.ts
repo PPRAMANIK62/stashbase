@@ -29,6 +29,7 @@
  * `activeFolder` field, and nothing outside workspace treats it as a
  * blocking overlay the way it does `renaming`.
  */
+import type { ViewerFormat } from '@shared/file-formats';
 import type {
   FileBody,
   FileMeta,
@@ -121,7 +122,7 @@ export interface PendingChatResume {
 
 export interface OpenFile {
   name: string;
-  format: 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio';
+  format: ViewerFormat;
   /** Last on-disk content — diff target for the autosave path. Empty
    *  string for binary files (PDF / image / DOCX / audio; the viewer loads them
    *  directly from `/asset/*`). */
