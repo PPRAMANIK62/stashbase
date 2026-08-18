@@ -195,7 +195,7 @@ export function workspaceReducer(w: WorkspaceSlice, a: Action): WorkspaceSlice |
     case 'BOOTED':
       return w.booted ? w : { ...w, booted: true };
     case 'RECENT_LOADED':
-      return { ...w, recent: a.recent, homeDir: a.homeDir ?? w.homeDir };
+      return { ...w, membershipLoaded: true, recent: a.recent, homeDir: a.homeDir ?? w.homeDir };
     case 'LIBRARY_FOLDER_STATUS':
       return w.libraryFolderStatuses[a.path] === a.status
         ? w
@@ -346,6 +346,25 @@ export function workspaceReducer(w: WorkspaceSlice, a: Action): WorkspaceSlice |
       return { ...w, conversionRevision: a.revision, conversionVersions: a.versions };
     case 'SAVE_STATUS':
       return patchActiveTab(w, { saveStatus: a.status });
+    case 'SET_CONFLICT':
+      return {
+        ...w,
+        tabs: w.tabs.map((t) => (t.id === a.id ? { ...t, conflict: a.conflict } : t)),
+      };
+    case 'SET_CONFLICT_RESOLVING':
+      return {
+        ...w,
+        tabs: w.tabs.map((t) => (
+          t.id === a.id && t.conflict
+            ? { ...t, conflict: { ...t.conflict, resolving: a.resolving } }
+            : t
+        )),
+      };
+    case 'RESOLVE_CONFLICT_DISCARD':
+      return {
+        ...w,
+        tabs: w.tabs.map((t) => (t.id === a.id ? { ...t, conflict: null, dirty: false } : t)),
+      };
     case 'SYNC_RUNNING':
       return { ...w, syncRunning: a.running };
     case 'EMBEDDER_KEY_STATE':

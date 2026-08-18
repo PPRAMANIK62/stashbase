@@ -5,12 +5,14 @@ import type { SettingsModalProps } from '@/features/settings/components/Settings
 import { AppearancePanel } from '@/features/settings/components/AppearancePanel';
 import { AgentRuntimePanel } from '@/features/settings/components/AgentRuntimePanel';
 import { EmbeddingPanel } from '@/features/settings/components/EmbeddingPanel';
+import { GeneralPanel } from '@/features/settings/components/GeneralPanel';
 import { McpAccessPanel } from '@/features/settings/components/McpAccessPanel';
 import { TranscriptionPanel } from '@/features/settings/components/TranscriptionPanel';
 import { Button } from '@/common/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/common/components/ui/dialog';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
+  { id: 'general', label: 'General', render: () => <GeneralPanel /> },
   { id: 'appearance', label: 'Appearance', render: () => <AppearancePanel /> },
   { id: 'agents', label: 'Agents', render: () => <AgentRuntimePanel /> },
   { id: 'embedding', label: 'AI Index', render: () => <EmbeddingPanel /> },

@@ -7,10 +7,11 @@ import { copyText } from '@/features/agent-panel/lib/agentSessionText';
 
 /** Runtime discovery for one Chat tab: which descriptor backs this tab's
  *  Agent, whether it is usable yet, what it can do, and the two catalog
- *  writes (a plain refresh and an explicit bootstrap) that change any of
- *  that. Read-only towards the session — nothing here touches the socket —
- *  so it composes ahead of `useAgentSession`'s connect effect, which gates
- *  on `runtimeBlocked` and calls `refreshRuntimes` from its event routing. */
+ *  writes (a plain refresh and the explicit check/bootstrap/login
+ *  preparations) that change any of that. Read-only towards the session —
+ *  nothing here touches the socket — so it composes ahead of
+ *  `useAgentSession`'s connect effect, which gates on `runtimeBlocked` and
+ *  calls `refreshRuntimes` from its event routing. */
 export function useAgentRuntimeCatalog({
   agent,
   meta,
@@ -27,7 +28,9 @@ export function useAgentRuntimeCatalog({
   const runtime: Agent | undefined = agents.find((candidate) => candidate.id === agent);
   const runtimeUnavailable = runtime?.state === 'unavailable';
   const bootstrapPhase = runtime?.bootstrap?.phase ?? 'idle';
-  const bootstrapActive = bootstrapPhase === 'installing' || bootstrapPhase === 'configuring';
+  const bootstrapActive = bootstrapPhase === 'installing'
+    || bootstrapPhase === 'authenticating'
+    || bootstrapPhase === 'configuring';
   const bootstrapFailed = bootstrapPhase === 'failed';
   const runtimeBlocked = runtimeUnavailable || bootstrapActive || bootstrapFailed;
   const capabilities: AgentPanelCapabilities = runtime?.capabilities ?? meta.capabilities;
@@ -48,13 +51,28 @@ export function useAgentRuntimeCatalog({
     }
   }
 
-  async function startRuntimeBootstrap() {
+  /** Every explicit runtime preparation lands the same way: publish the
+   *  returned catalog, or surface the failure as a toast. */
+  async function applyRuntimeAction(request: () => Promise<AgentsResponse>) {
     try {
-      const result = await api.bootstrapAgent(agent);
+      const result = await request();
       dispatch({ type: 'AGENTS_LOADED', agents: result.clis });
     } catch (error) {
       actions.toast(error instanceof Error ? error.message : String(error), { level: 'error' });
     }
+  }
+
+  function startRuntimeBootstrap() {
+    return applyRuntimeAction(() => api.prepareAgent(agent, 'bootstrap'));
+  }
+
+  function checkRuntime() {
+    return applyRuntimeAction(() => api.prepareAgent(agent, 'check'));
+  }
+
+  function loginToCodex() {
+    if (agent !== 'codex') return;
+    return applyRuntimeAction(() => api.prepareAgent(agent, 'login'));
   }
 
   function copyInstallHint() {
@@ -87,6 +105,8 @@ export function useAgentRuntimeCatalog({
     capabilitiesRef,
     refreshRuntimes,
     startRuntimeBootstrap,
+    checkRuntime,
+    loginToCodex,
     copyInstallHint,
   };
 }

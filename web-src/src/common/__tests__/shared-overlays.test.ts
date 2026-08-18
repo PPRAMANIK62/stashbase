@@ -27,6 +27,7 @@ import { OverlayStackProvider } from '@/common/components/OverlayStack';
 import { Toasts } from '@/common/components/Toasts';
 import { TooltipButton } from '@/common/components/TooltipButton';
 import { buttonVariants } from '@/common/components/ui/button';
+import { Checkbox } from '@/common/components/ui/checkbox';
 import { OPEN_SETTINGS_EVENT } from '@/common/lib/settingsTrigger';
 import { pillClass } from '@/common/lib/pillMenuStyles';
 import { SettingsPortal } from '@/features/settings';
@@ -484,6 +485,21 @@ test('buttons are items on the control corner step, never container boxes', () =
       assert.match(classes, /rounded-md/, `${variant}/${size} lost the control corner`);
     }
   }
+});
+
+test('a checkbox is a Base UI control that sits on its label\'s baseline', async () => {
+  await withDom(async (dom) => {
+    await dom.render(h('label', null, h(Checkbox, { name: 'clipboardImageImport' }), 'Import clipboard images'));
+    // Base UI renders the real control; a hand-rolled div would carry no
+    // checkbox role and no checked state for a screen reader to announce.
+    const box = dom.query('[role="checkbox"]');
+    assert.ok(box, 'the checkbox renders a Base UI checkbox');
+    assert.equal(box.getAttribute('data-slot'), 'checkbox');
+    // Settings rows align the control with its label through the row's own
+    // flex baseline. A margin baked into the primitive would nudge it out of
+    // alignment in every row that does NOT expect one.
+    assert.doesNotMatch(box.className, /\bmt-/, 'the checkbox bakes in a vertical offset');
+  });
 });
 
 test('composer pills yield width under pressure instead of clipping Send', () => {

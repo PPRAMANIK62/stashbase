@@ -58,7 +58,9 @@ export type {
   AppearancePreferences,
   AppearanceScale,
   AppearanceTheme,
+  CapturePreferences,
   OnboardingPreferences,
+  UpdatePreferences,
 } from '@shared/preferences';
 export type {
   KeywordHitFile,

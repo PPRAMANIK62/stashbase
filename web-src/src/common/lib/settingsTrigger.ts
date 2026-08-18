@@ -3,7 +3,7 @@
  * the request entry point is shared, so no feature has to reach into another
  * to offer "Open Settings". */
 
-export type SettingsSection = 'appearance' | 'agents' | 'embedding' | 'transcription' | 'mcp';
+export type SettingsSection = 'general' | 'appearance' | 'agents' | 'embedding' | 'transcription' | 'mcp';
 
 export const OPEN_SETTINGS_EVENT = 'stashbase-open-settings';
 

@@ -50,6 +50,16 @@ test('Chat is expanded from the first renderer state', () => {
   assert.equal(initialState.chat.chatOpen, true);
 });
 
+test('bootstrap settlement never fabricates an empty library membership', () => {
+  let state = reducer(freshState(), { type: 'BOOTED' });
+  assert.equal(state.workspace.booted, true);
+  assert.equal(state.workspace.membershipLoaded, false);
+
+  state = reducer(state, { type: 'RECENT_LOADED', recent: [], homeDir: '/home' });
+  assert.equal(state.workspace.membershipLoaded, true);
+  assert.deepEqual(state.workspace.recent, []);
+});
+
 test('document tab lifecycle reuses a blank tab and selects a neighbor on close', () => {
   let state = reducer(freshState(), {
     type: 'FILE_OPEN',
@@ -505,4 +515,39 @@ test('UNSUPPORTED_MODAL toggle action updates state', () => {
 
   state = reducer(state, { type: 'UNSUPPORTED_MODAL', open: false });
   assert.equal(state.workspace.unsupportedModalOpen, false);
+});
+
+test('SET_CONFLICT and RESOLVE_CONFLICT_DISCARD reducer actions', () => {
+  let state = freshState();
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'conflict.md', format: 'md', content: 'V1' },
+  });
+  const tabId = state.workspace.activeTabId!;
+
+  // Set conflict state
+  state = reducer(state, {
+    type: 'SET_CONFLICT',
+    id: tabId,
+    conflict: {
+      diskContent: 'V2',
+      diskVersion: 'version-v2',
+      editorContent: 'V1-edit',
+    },
+  });
+
+  assert.deepEqual(state.workspace.tabs[0].conflict, {
+    diskContent: 'V2',
+    diskVersion: 'version-v2',
+    editorContent: 'V1-edit',
+  });
+
+  // Resolve conflict by discarding changes
+  state = reducer(state, {
+    type: 'RESOLVE_CONFLICT_DISCARD',
+    id: tabId,
+  });
+
+  assert.equal(state.workspace.tabs[0].conflict, null);
+  assert.equal(state.workspace.tabs[0].dirty, false);
 });

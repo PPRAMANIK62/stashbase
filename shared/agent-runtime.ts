@@ -9,11 +9,16 @@
  * than an implementation detail of either side.
  */
 
-export type AgentBootstrapPhase = 'idle' | 'installing' | 'configuring' | 'ready' | 'failed';
+export type AgentBootstrapPhase = 'idle' | 'installing' | 'authenticating' | 'configuring' | 'ready' | 'failed';
 
-export type AgentBootstrapFailureStage = 'discovery' | 'installation' | 'mcp';
+export type AgentBootstrapFailureStage = 'discovery' | 'installation' | 'authentication' | 'mcp';
 
-export type AgentBootstrapFailureCode = 'simulated' | 'operation-failed' | 'runtime-unavailable';
+export type AgentBootstrapFailureCode =
+  | 'simulated'
+  | 'operation-failed'
+  | 'runtime-unavailable'
+  | 'authentication-required'
+  | 'authentication-check-failed';
 
 export type AgentBootstrapManualRecovery = 'install-command' | 'mcp-settings';
 

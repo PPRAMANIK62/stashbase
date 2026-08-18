@@ -320,7 +320,13 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
          * switcher. One anchor, no competing list (visual-style: empty
          * states name one deliberate anchor). */
         <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {state.recent.length === 0 ? <ZeroFolderState /> : (
+          {/* Nothing before membership succeeds: `recent` starts [] while the
+            * real list is still in flight, and rendering ZeroFolderState on
+            * that unknown flashed the accent Add Folder invitation at every
+            * launch on machines whose library is NOT empty. Bootstrap failure
+            * may settle the rest of the shell, but the membership poll keeps
+            * retrying until this branch can make an authoritative claim. */}
+          {!state.membershipLoaded ? null : state.recent.length === 0 ? <ZeroFolderState /> : (
             <p className="m-0 px-4 pt-5 text-sm leading-snug text-muted-foreground">
               Pick a folder from the Library menu in the top bar.
             </p>

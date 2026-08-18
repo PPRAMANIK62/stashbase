@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createElement, Suspense, type ReactElement } from 'react';
 import test from 'node:test';
-import { LazyLoadBoundary, loadWithRetry } from '@/common/components/ErrorBoundary';
+import { LazyLoadBoundary, loadWithRetry, reloadForRecovery } from '@/common/components/ErrorBoundary';
 import { LazyManaged, LazyManagedPicker } from '@/common/components/LazyManaged';
 
 function StubComponent(props: Record<string, unknown>) {
@@ -56,6 +56,27 @@ test('lazy load boundary clears a captured error when its resource identity chan
     LazyLoadBoundary.getDerivedStateFromProps({ ...props, resetKey: state.resetKey }, state),
     null,
   );
+});
+
+test('Electron error recovery delegates reload to the main-process save barrier', async () => {
+  let bridgeCalls = 0;
+  let browserCalls = 0;
+  const reloaded = await reloadForRecovery(
+    { reloadWindow: async () => { bridgeCalls += 1; return true; } },
+    () => { browserCalls += 1; },
+  );
+
+  assert.equal(reloaded, true);
+  assert.equal(bridgeCalls, 1);
+  assert.equal(browserCalls, 0);
+});
+
+test('browser error recovery retains its unload-aware fallback', async () => {
+  let browserCalls = 0;
+  const reloaded = await reloadForRecovery({}, () => { browserCalls += 1; });
+
+  assert.equal(reloaded, true);
+  assert.equal(browserCalls, 1);
 });
 
 test('LazyManaged wraps the managed component in Suspense with the given fallback and key', () => {

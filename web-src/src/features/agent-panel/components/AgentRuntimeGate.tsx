@@ -67,12 +67,16 @@ function AgentRuntimeFailure({
   runtime,
   fallbackName,
   onRetry,
+  onLogin,
+  onCheck,
   onCopyInstall,
   onOpenMcpSetup,
 }: {
   runtime: Agent;
   fallbackName: string;
   onRetry: () => void;
+  onLogin: () => void;
+  onCheck: () => void;
   onCopyInstall: () => void;
   onOpenMcpSetup: () => void;
 }) {
@@ -83,6 +87,7 @@ function AgentRuntimeFailure({
     : presentation.manualAction === 'open-mcp-settings'
       ? onOpenMcpSetup
       : null;
+  const primaryAction = presentation.primaryAction === 'start-codex-login' ? onLogin : onRetry;
   return (
     <div className={runtimeCardWrapClass} role="alert">
       <div className={runtimeCardClass}>
@@ -94,7 +99,15 @@ function AgentRuntimeFailure({
               {presentation.manualLabel}
             </Button>
           )}
-          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onRetry}>
+          {/* An MCP failure is downstream of a runtime that already
+            * answered, so re-probing it proves nothing. Every earlier stage
+            * can be settled by re-checking the local CLI. */}
+          {runtime.bootstrap?.failure?.stage !== 'mcp' && (
+            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onCheck}>
+              Check again
+            </Button>
+          )}
+          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={primaryAction}>
             {presentation.retryLabel}
           </Button>
         </div>
@@ -130,7 +143,9 @@ export function AgentRuntimeGate({
   bootstrapFailed,
   runtimeUnavailable,
   onRefresh,
+  onCheck,
   onInstall,
+  onLogin,
   onCopyInstall,
   onOpenMcpSetup,
 }: {
@@ -139,8 +154,14 @@ export function AgentRuntimeGate({
   bootstrapActive: boolean;
   bootstrapFailed: boolean;
   runtimeUnavailable: boolean;
+  /** Re-read the catalog. Only the pre-discovery card uses it: there is no
+   *  runtime yet to prepare. */
   onRefresh: () => void;
+  /** Re-run preparation's read-only probe — install state and, for Codex,
+   *  sign-in — so a fix made outside StashBase is picked up. */
+  onCheck: () => void;
   onInstall: () => void;
+  onLogin: () => void;
   onCopyInstall: () => void;
   onOpenMcpSetup: () => void;
 }) {
@@ -156,6 +177,8 @@ export function AgentRuntimeGate({
         runtime={runtime}
         fallbackName={fallbackName}
         onRetry={onInstall}
+        onLogin={onLogin}
+        onCheck={onCheck}
         onCopyInstall={onCopyInstall}
         onOpenMcpSetup={onOpenMcpSetup}
       />
@@ -167,7 +190,7 @@ export function AgentRuntimeGate({
         runtime={runtime}
         fallbackName={fallbackName}
         onInstall={onInstall}
-        onRefresh={onRefresh}
+        onRefresh={onCheck}
       />
     );
   }

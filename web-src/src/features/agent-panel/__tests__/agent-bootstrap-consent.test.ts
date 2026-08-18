@@ -4,9 +4,9 @@ import { api, type AgentsResponse } from '@/common/api/api';
 import { newChatPlan } from '@/store/lib/chatTabPlan';
 
 test('switching a blank Codex tab to Claude does not install Claude before confirmation', async () => {
-  const originalBootstrap = api.bootstrapAgent;
+  const originalBootstrap = api.prepareAgent;
   const requested: string[] = [];
-  api.bootstrapAgent = async (agent): Promise<AgentsResponse> => {
+  api.prepareAgent = async (agent): Promise<AgentsResponse> => {
     requested.push(agent);
     return { clis: [] };
   };
@@ -20,6 +20,6 @@ test('switching a blank Codex tab to Claude does not install Claude before confi
     assert.deepEqual(plan, { kind: 'reuse', id: 'codex-blank', switchAgent: true });
     assert.deepEqual(requested, []);
   } finally {
-    api.bootstrapAgent = originalBootstrap;
+    api.prepareAgent = originalBootstrap;
   }
 });

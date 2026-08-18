@@ -5,6 +5,11 @@
 
 ## Viewer Contract
 
+- The [Documents format capability matrix](../design-docs/design/documents.md#format-capability-matrix)
+  owns the user-visible distinction among preview, Workbench authoring,
+  retrieval text, and Agent/MCP access. Viewer dispatch and affordances must
+  match it; previewability never implies content editing or text-readable MCP
+  access.
 - A viewer is selected from the visible source format and retains that source
   as tab identity. Prepared text is evidence and fallback, never a replacement
   tab.
@@ -21,8 +26,9 @@
 
 ## Trust Boundary
 
-Markdown, Agent Markdown, and DOCX-derived HTML are sanitized by their owning
-renderers. Viewer messages validate the expected frame Window before applying
+Markdown and Agent Markdown render structured node trees and never inject a
+raw HTML string; DOCX-derived HTML is sanitized by its owning renderer through
+`shared/html-sanitization.ts`. Viewer messages validate the expected frame Window before applying
 navigation, Find, or highlight events. HTTP(S) navigation goes through the
 system browser; relative source links stay within authorized library paths.
 
@@ -74,6 +80,7 @@ forwarding, and script confinement.
 
 | Role | Stable entry points |
 |---|---|
+| Shared format vocabulary | `shared/file-formats.ts` and dispatch policy in `server/format.ts` |
 | Viewer dispatch | `web-src/src/app/components/MainPane.tsx`, `web-src/src/features/documents/components/DocumentViewer.tsx` |
 | Primary viewers | `web-src/src/features/documents/components/PdfViewerPane.tsx` (the PDF dynamic entry, composing preparation policy onto the viewer) over `PdfPreview.tsx` with its `PdfChrome.tsx` / `PdfPage.tsx` presenters, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, the lazy `json/JsonTreeView.tsx` controller, and the shared `web-src/src/common/components/ImageLightbox.tsx` |
 | Preview-control Modules | `web-src/src/features/documents/hooks/usePdfDocument.ts`, `usePdfZoom.ts`, `usePdfPageTracking.ts`, `usePdfFindRegistration.ts`, `usePdfPreparation.ts`, `useFileReprocess.ts` (the Reprocess command and its stale-reply guard, shared by the PDF chrome row and the image and DOCX banners), `useAudioFallbackController.ts`, `useAudioTranscriptController.ts`, `web-src/src/features/documents/lib/audioPlayback.ts`, `audioTranscript.ts`, `findIframe.ts`, `previewChunkHighlight.ts`, `pdfText.ts`, `pdfFindController.ts`, `previewIframe.ts`, and `previewMessages.ts` |
@@ -95,6 +102,12 @@ pnpm build:web
 Run `pnpm test:e2e:functional` for viewer selection, valid fixtures, failure
 identity, navigation, or Find changes. Packaged complex PDF/DOCX/media and
 native codec behavior remain release checks.
+
+Review at least one representative fixture for each behavior class rather than
+inferring every capability from one extension: editable prose, editable
+structured text, direct preview-only text, binary preview with prepared text,
+OCR image, and transcript media. Extension aliases remain lower-level format
+detection evidence.
 
 Related journeys: [J03](../design-docs/user-journeys.md#j03-read-and-edit-source-documents)
 and [J04](../design-docs/user-journeys.md#j04-prepare-a-hard-to-read-file).

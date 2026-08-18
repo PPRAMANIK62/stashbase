@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { api, type FolderState } from '@/common/api/api';
 import { folderRefsEqual, isAbsoluteFolderRef } from '@/store/lib/folderPath';
 import { createFolderMutationQueue } from '@/store/lib/folderTransition';
-import type { EditorHandle } from '@/store/state/editorTypes';
 import { folderScopedResetActions, type FolderResetReason } from '@/store/lib/folderScopedReset';
 import { nameSetSize, type Action, type LibraryFolderStatus, type State, type WorkspaceSlice } from '@/store/state/state';
 import type { ToastOptions } from './useFeedbackActions';
@@ -13,7 +12,6 @@ type Toast = (message: string, opts?: ToastOptions) => string;
 interface FolderActionRefs {
   state: MutableRefObject<State>;
   folderContextPath: MutableRefObject<string>;
-  editor: MutableRefObject<EditorHandle | null>;
   openGeneration: MutableRefObject<number>;
   openingFolderGeneration: MutableRefObject<number | null>;
   syncGeneration: MutableRefObject<number>;
@@ -95,7 +93,6 @@ export function useFolderActions(
   dispatch: Dispatch,
 ) {
   const {
-    editor,
     folderContextPath,
     importConversionGrace,
     importIndexGrace,
@@ -242,17 +239,17 @@ export function useFolderActions(
   ]);
 
   const openFolder = useCallback(async (path: string) => {
-    if (editor.current && !(await flushSave())) {
+    if (!(await flushSave())) {
       throw new Error('Current file could not be saved. Resolve the save error before switching folders.');
     }
     await performFolderOpen(() => folderMutations.run(() => api.openFolder(path)));
-  }, [editor, flushSave, folderMutations, performFolderOpen]);
+  }, [flushSave, folderMutations, performFolderOpen]);
 
   const openFolderByName = useCallback(async (
     name: string,
     opts?: { create?: boolean; exclusiveCreate?: boolean; optimisticPendingOnOpen?: boolean },
   ) => {
-    if (editor.current && !(await flushSave())) {
+    if (!(await flushSave())) {
       throw new Error('Current file could not be saved. Resolve the save error before switching folders.');
     }
     await performFolderOpen(() => folderMutations.run(() => api.openFolderByName(name, {
@@ -261,7 +258,7 @@ export function useFolderActions(
     })), {
       optimisticPendingOnOpen: opts?.optimisticPendingOnOpen,
     });
-  }, [editor, flushSave, folderMutations, performFolderOpen]);
+  }, [flushSave, folderMutations, performFolderOpen]);
 
   const prepareForFolderRemoval = useCallback((removedPath: string) => {
     if (!state.current.workspace.folderPath || !folderRefsEqual(state.current.workspace.folderPath, removedPath)) return;

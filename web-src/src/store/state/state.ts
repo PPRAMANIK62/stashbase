@@ -145,6 +145,14 @@ export interface CtxMenu {
   kind: 'file' | 'folder';
 }
 
+export interface TabConflict {
+  diskContent: string;
+  diskVersion: string;
+  editorContent: string;
+  /** One explicit resolution owns the conflict until it settles. */
+  resolving?: boolean;
+}
+
 /** One open tab. Everything that varies per-document lives here so
  *  switching tabs is just a pointer swap. `file === null` is a blank
  *  tab created by the `+` button — empty pane until the user clicks
@@ -171,6 +179,7 @@ export interface Tab {
   /** Last page viewed in this PDF tab for the renderer session. A different
    *  file or source version clears it before the viewer reloads. */
   pdfPage?: number;
+  conflict?: TabConflict | null;
 }
 
 /** Search-hit-derived highlight signal: which lines (for HTML / MD /
@@ -234,6 +243,11 @@ export interface WorkspaceSlice {
    *  "booted with no folder" — e.g. before releasing a pending
    *  window-folder registration back to Electron. */
   booted: boolean;
+
+  /** True only after the server has returned an initial or refreshed library
+   *  membership. Bootstrap settlement alone is not evidence that an empty
+   *  `recent` list is authoritative. */
+  membershipLoaded: boolean;
 
   /** Human-facing active folder label. Use `folderPath` for API scope /
    *  identity; this value is for titles, sidebar headings, and empty-state
@@ -416,6 +430,7 @@ export interface State {
 
 const initialWorkspace: WorkspaceSlice = {
   booted: false,
+  membershipLoaded: false,
   folder: '',
   folderPath: '',
   recent: [],
@@ -576,4 +591,7 @@ export type Action =
   | { type: 'FIND_OPEN' }
   | { type: 'FIND_CLOSE' }
   | { type: 'FIND_SET'; patch: Partial<FindState> }
-  | { type: 'UNSUPPORTED_MODAL'; open: boolean };
+  | { type: 'UNSUPPORTED_MODAL'; open: boolean }
+  | { type: 'SET_CONFLICT'; id: string; conflict: TabConflict | null }
+  | { type: 'SET_CONFLICT_RESOLVING'; id: string; resolving: boolean }
+  | { type: 'RESOLVE_CONFLICT_DISCARD'; id: string };

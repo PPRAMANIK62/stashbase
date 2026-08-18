@@ -148,7 +148,9 @@ export function AgentView({
           bootstrapFailed={runtime.bootstrapFailed}
           runtimeUnavailable={runtime.runtimeUnavailable}
           onRefresh={() => void runtime.refreshRuntimes()}
+          onCheck={() => void runtime.checkRuntime()}
           onInstall={() => void runtime.startRuntimeBootstrap()}
+          onLogin={() => void runtime.loginToCodex()}
           onCopyInstall={runtime.copyInstallHint}
           onOpenMcpSetup={() => openSettings('mcp')}
         />

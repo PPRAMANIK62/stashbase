@@ -151,6 +151,7 @@ test('chrome type scale and radius scale are the only visual values', () => {
     const source = read(file);
     assert.doesNotMatch(source, /text-\[calc\(/, `${file} uses an arbitrary scaled font size — use the text-* ramp`);
     assert.doesNotMatch(source, /bg-\[var\(--hover\)\]/, `${file} uses bg-[var(--hover)] — use bg-muted`);
+    assert.doesNotMatch(source, /rounded-\[\d+(?:\.\d+)?px\]/, `${file} uses a literal radius — use the rounded-* role scale`);
     // Placeholders are one role, not a per-field opacity guess. Four
     // fields had drifted to three different values before this landed.
     assert.doesNotMatch(source, /placeholder:text-(?!placeholder\b)/, `${file} styles a placeholder off-role — use placeholder:text-placeholder`);

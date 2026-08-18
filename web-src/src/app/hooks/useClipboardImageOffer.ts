@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { api } from '@/common/api/api';
 import type { ClipboardOffer } from '@/common/components/ClipboardImportModal';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
@@ -21,6 +22,22 @@ export function useClipboardImageOffer(): {
   const { actions } = useAppActions();
   const [clipboardOffer, setClipboardOffer] = useState<ClipboardOffer | null>(null);
   const [pendingClipboardOffer, setPendingClipboardOffer] = useState<ClipboardOffer | null>(null);
+
+  useEffect(() => {
+    const refreshClipboardWatch = electronBridge()?.refreshClipboardWatch;
+    if (!refreshClipboardWatch) return;
+    let cancelled = false;
+    void api.capturePreferences()
+      .then(() => {
+        if (!cancelled) void refreshClipboardWatch().catch(() => undefined);
+      })
+      .catch(() => {
+        // A missing or unreadable preference must never leave ambient capture
+        // enabled from stale main-process state.
+        if (!cancelled) void refreshClipboardWatch().catch(() => undefined);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     return electronBridge()?.onClipboardImage?.((offer) => {

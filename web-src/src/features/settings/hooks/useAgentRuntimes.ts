@@ -26,6 +26,8 @@ export interface AgentRuntimesController {
   busy: string | null;
   status: AgentRuntimeStatus | null;
   install: (agent: AgentKind) => Promise<void>;
+  /** Start Codex's in-app browser sign-in. No-op for any other runtime. */
+  login: (agent: AgentKind) => Promise<void>;
   uninstall: (agent: AgentKind) => Promise<void>;
   updateDebug: (patch: Partial<Omit<AgentRuntimeDebugState, 'enabled'>>) => Promise<void>;
   resetFirstRun: (agent: AgentKind) => Promise<void>;
@@ -40,7 +42,7 @@ export interface AgentRuntimesController {
  * installing has to reach the chat surfaces too.
  *
  * An install is asynchronous on the server side: while any agent reports an
- * `installing` or `configuring` phase the catalog re-reads on a short timer,
+ * `installing`, `authenticating`, or `configuring` phase the catalog re-reads on a short timer,
  * silently, so a failed background poll never overwrites the status line a
  * user's own action just produced.
  */
@@ -51,7 +53,11 @@ export function useAgentRuntimes(): AgentRuntimesController {
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<AgentRuntimeStatus | null>(null);
   const activeInstall = useMemo(
-    () => agents.some((agent) => agent.bootstrap?.phase === 'installing' || agent.bootstrap?.phase === 'configuring'),
+    () => agents.some((agent) => (
+      agent.bootstrap?.phase === 'installing'
+      || agent.bootstrap?.phase === 'authenticating'
+      || agent.bootstrap?.phase === 'configuring'
+    )),
     [agents],
   );
 
@@ -84,7 +90,20 @@ export function useAgentRuntimes(): AgentRuntimesController {
     setBusy(`install:${agent}`);
     setStatus(null);
     try {
-      applyResponse(await api.bootstrapAgent(agent));
+      applyResponse(await api.prepareAgent(agent, 'bootstrap'));
+    } catch (error) {
+      fail(error);
+    } finally {
+      setBusy(null);
+    }
+  }, [applyResponse, fail]);
+
+  const login = useCallback(async (agent: AgentKind) => {
+    if (agent !== 'codex') return;
+    setBusy(`login:${agent}`);
+    setStatus(null);
+    try {
+      applyResponse(await api.prepareAgent(agent, 'login'));
     } catch (error) {
       fail(error);
     } finally {
@@ -143,5 +162,5 @@ export function useAgentRuntimes(): AgentRuntimesController {
     }
   }, [actions, applyResponse, fail]);
 
-  return { agents, debug, busy, status, install, uninstall, updateDebug, resetFirstRun };
+  return { agents, debug, busy, status, install, login, uninstall, updateDebug, resetFirstRun };
 }

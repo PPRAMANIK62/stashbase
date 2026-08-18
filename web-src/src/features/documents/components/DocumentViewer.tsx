@@ -21,6 +21,7 @@ const LazyPdfViewerPane = lazyWithRetry(() => import('@/features/documents/compo
 const LazyDocxPreview = lazyWithRetry(() => import('@/features/documents/components/DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
 const LazyAudioPreview = lazyWithRetry(() => import('@/features/documents/components/AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
 const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/components/JsonDocument').then((mod) => ({ default: mod.JsonDocument })));
+const LazyConflictResolver = lazyWithRetry(() => import('@/features/documents/components/ConflictResolver').then((mod) => ({ default: mod.ConflictResolver })));
 
 /**
  * The file-format → viewer dispatch, and the only Documents surface the
@@ -35,6 +36,12 @@ const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/compon
  * survive). Every other format renders the single active file.
  *
  * Adding a format means one `lazyWithRetry` and one branch in this file.
+ *
+ * A tab whose save hit a disk conflict routes to the resolver instead of
+ * its editor, for the two editable formats. That substitution belongs here
+ * rather than in the shell for the same reason the format switch does: the
+ * shell supplies tab state and a cell, and never learns which surface a tab
+ * is currently showing.
  *
  * Every branch here is a lazy boundary, and this file is eager — it is the
  * component `MainPane` renders. So nothing format-specific may be computed
@@ -71,38 +78,50 @@ export function DocumentViewer({
             className="markdown-tab-layer"
             hidden={!active}
           >
-            <LazyLoadBoundary
-              className={VIEWER_LOADING_CLASS}
-              label="Markdown document"
-              resetKey={`${file.folder ?? ''}:${file.name}:${file.version ?? ''}`}
-            >
-              <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Opening document…</div>}>
-                <LazyCrepeDocument
-                  tabId={tab.id}
-                  name={file.name}
-                  content={file.content}
-                  readOnly={!tab.editMode}
-                  active={active}
-                  dirty={tab.dirty}
-                  folder={file.folder}
-                />
+            {tab.conflict ? (
+              <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Loading conflict view…</div>}>
+                <LazyConflictResolver tabId={tab.id} />
               </Suspense>
-            </LazyLoadBoundary>
+            ) : (
+              <LazyLoadBoundary
+                className={VIEWER_LOADING_CLASS}
+                label="Markdown document"
+                resetKey={`${file.folder ?? ''}:${file.name}:${file.version ?? ''}`}
+              >
+                <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Opening document…</div>}>
+                  <LazyCrepeDocument
+                    tabId={tab.id}
+                    name={file.name}
+                    content={file.content}
+                    readOnly={!tab.editMode}
+                    active={active}
+                    dirty={tab.dirty}
+                    folder={file.folder}
+                  />
+                </Suspense>
+              </LazyLoadBoundary>
+            )}
           </div>
         );
       })}
       {cur && cur.format === 'json' && (
-        <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="JSON document" resetKey={resourceResetKey}>
-          <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening JSON…</div>}>
-            <LazyJsonDocument
-              key={activeTab?.id ?? cur.name}
-              tabId={activeTab?.id ?? ''}
-              content={cur.content}
-              readOnly={!editMode}
-              active
-            />
+        activeTab?.conflict ? (
+          <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Loading conflict view…</div>}>
+            <LazyConflictResolver tabId={activeTab.id} />
           </Suspense>
-        </LazyLoadBoundary>
+        ) : (
+          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="JSON document" resetKey={resourceResetKey}>
+            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening JSON…</div>}>
+              <LazyJsonDocument
+                key={activeTab?.id ?? cur.name}
+                tabId={activeTab?.id ?? ''}
+                content={cur.content}
+                readOnly={!editMode}
+                active
+              />
+            </Suspense>
+          </LazyLoadBoundary>
+        )
       )}
       {cur && !editMode && cur.format === 'html' && (
         <HtmlPreview name={cur.name} />
