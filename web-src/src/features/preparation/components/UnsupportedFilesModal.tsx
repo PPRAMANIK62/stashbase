@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
 import { ModalShell } from '@/common/components/ModalShell';
-import { api, type OnboardingPreferences, type UnsupportedFileSummary } from '@/common/api/api';
-import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { type UnsupportedFileSummary } from '@/common/api/apiTypes';
+import { useWorkspace } from '@/store/contexts/AppContext';
+import { useUnsupportedNotice } from '@/features/preparation/hooks/useUnsupportedNotice';
 import { Button } from '@/common/components/ui/button';
 
 function formatExtensions(otherExtensions: Array<{ extension: string; count: number }>): string {
@@ -93,39 +93,13 @@ export function UnsupportedFilesModal({ unsupportedFiles, onClose }: {
 
 export default function UnsupportedFilesModalGate() {
   const state = useWorkspace();
-  const { dispatch } = useAppActions();
   const { sourceCode = 0, other = 0 } = state.unsupportedFiles || {};
-  const total = sourceCode + other;
+  const onClose = useUnsupportedNotice(
+    { sourceCode, other },
+    `${state.folderPath}|${state.folder}`,
+  );
 
-  useEffect(() => {
-    if (total === 0) return;
-    let mounted = true;
-    api.getOnboarding().then((prefs) => {
-      if (!mounted) return;
-      const needsSourceNotice = sourceCode > 0 && (prefs.sourceCodeNoticeVersion ?? 0) < 1;
-      const needsOtherNotice = other > 0 && (prefs.unsupportedFormatsNoticeVersion ?? 0) < 1;
-      if (needsSourceNotice || needsOtherNotice) {
-        dispatch({ type: 'UNSUPPORTED_MODAL', open: true });
-      }
-    }).catch(() => {});
-    return () => { mounted = false; };
-  }, [dispatch, state.folderPath, state.folder, total, sourceCode, other]);
-
-  if (!state.unsupportedModalOpen || total === 0) return null;
-
-  async function onClose() {
-    dispatch({ type: 'UNSUPPORTED_MODAL', open: false });
-    const patch: Partial<OnboardingPreferences> = {};
-    if (sourceCode > 0) patch.sourceCodeNoticeVersion = 1;
-    if (other > 0) patch.unsupportedFormatsNoticeVersion = 1;
-    if (Object.keys(patch).length > 0) {
-      try {
-        await api.putOnboarding(patch);
-      } catch (err) {
-        console.warn('Failed to update onboarding preferences', err);
-      }
-    }
-  }
+  if (!state.unsupportedModalOpen || sourceCode + other === 0) return null;
 
   return (
     <UnsupportedFilesModal

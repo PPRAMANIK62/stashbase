@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, errorMessage } from '@/common/api/api';
-import { useLatestRef } from '@/common/hooks/useLatestRef';
+import { useFileReprocess } from '@/features/documents/hooks/useFileReprocess';
 import { preparationWaitCopy } from '@/features/documents/lib/preparationCopy';
 import { useWorkspace } from '@/store/contexts/AppContext';
 import { getFileReadiness } from '@/store/lib/fileReadiness';
@@ -42,21 +41,17 @@ export interface PdfPreparation {
 export function usePdfPreparation(name: string | null): PdfPreparation {
   const state = useWorkspace();
   const { activeTab } = state;
-  const [retryBusy, setRetryBusy] = useState(false);
   const [retryStarted, setRetryStarted] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
-  const currentRef = useLatestRef({ folderPath: state.folderPath, name });
   const failure = name ? getFileReadiness(state, name).preparationFailure : undefined;
   const conversionProgress = name ? state.conversionProgress[name] : undefined;
   // Same source identity the viewer keys its binary on: a version bump after
   // a successful reprocess is a new file, and retries start from scratch.
   const sourceVersion = name && activeTab?.file?.name === name ? activeTab.file.version ?? '' : '';
   const sourceFolder = name && activeTab?.file?.name === name ? activeTab.file.folder : undefined;
+  const { retryBusy, retryError, retry } = useFileReprocess(name, { folder: sourceFolder, version: sourceVersion });
 
   useEffect(() => {
-    setRetryBusy(false);
     setRetryStarted(false);
-    setRetryError(null);
   }, [name, sourceVersion, sourceFolder]);
 
   useEffect(() => {
@@ -86,24 +81,7 @@ export function usePdfPreparation(name: string | null): PdfPreparation {
   }
 
   async function onRetry() {
-    if (!name) return;
-    setRetryBusy(true);
-    setRetryError(null);
-    const folderPathAtStart = state.folderPath;
-    const nameAtStart = name;
-    const stillCurrent = () =>
-      currentRef.current.folderPath === folderPathAtStart && currentRef.current.name === nameAtStart;
-    try {
-      await api.reprocessFile(name, { folder: sourceFolder ?? (folderPathAtStart || undefined) });
-      if (!stillCurrent()) return;
-      setRetryStarted(true);
-    } catch (err: unknown) {
-      if (!stillCurrent()) return;
-      setRetryError(errorMessage(err));
-      setRetryStarted(false);
-    } finally {
-      if (stillCurrent()) setRetryBusy(false);
-    }
+    setRetryStarted(await retry());
   }
 
   return {

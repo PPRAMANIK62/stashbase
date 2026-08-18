@@ -247,6 +247,43 @@ Two counts decide it, and both must hold before a module moves down:
 The trigger modules below are pinned for a third reason: being reachable from
 either side without a feature import is their whole purpose.
 
+## Where API access lives
+
+A component renders; a hook talks to the server. `api` is importable from
+`common/hooks/`, `store/`, and any feature's `hooks/` or `lib/` module, and
+not from a component.
+
+The rule is about what a request drags in behind it. Every call here carries
+a lifecycle the JSX cannot hold: a cancel on unmount, a guard so a reply that
+lands after the user moved on does not repaint the surface they moved to, and
+the consequences a write owes the rest of the app. `useEmbedderSettings` is
+the worked example — six commands authorize an index source, and each owes
+the same three things (the shared `embedderHasKey` flag, a backfill mark, an
+index refresh). As six handlers in the panel that was six chances to forget
+one; as one hook it is one `authorized()` a seventh command cannot
+half-apply. `useMcpAccess` is the same argument for ordering: one sequence
+number decides which of several in-flight reads and mutations owns `http`, so
+a status response cannot resurrect a bearer token that was just rotated away.
+
+Where the hook goes follows the same two counts as any other shared module.
+One consuming feature means the feature's own `hooks/`. Two means `common/` —
+`useEmbedderState` is there because Settings gates its setup dialog on
+authorization while the Files-panel callout offers to open that dialog, and
+neither feature may import the other. A hook that reads `State` or dispatches
+belongs in `store/hooks/`, which is also where a command the composition root
+needs goes: `app/` composes features and never calls the server, so the
+context menu's Reveal and Reprocess are `AppActions` members rather than an
+import reaching past a barrel.
+
+Three things are deliberately not restricted. `errorMessage`, `ApiError`, and
+the asset-URL builders stay importable in components: they are pure, and a
+component formatting a failure is not a component performing a request.
+Contract types come from `@/common/api/apiTypes` — the same module `api.ts`
+re-exports — so a view needing a payload's shape does not import the client to
+get it. And `store/contexts/AppContext.tsx` reads the API directly because it
+is the store, not a component: `store/` is where the workspace's own reads
+belong.
+
 ## Cross-feature triggers
 
 A feature asks another feature's surface to open through a `common/lib/`

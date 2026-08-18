@@ -15,18 +15,17 @@ import { ClipboardImportModal } from '@/common/components/ClipboardImportModal';
 import { CascadePromptModal } from '@/app/components/CascadePromptModal';
 import { AlertConfirmModal } from '@/app/components/AlertConfirmModal';
 import { Toasts } from '@/common/components/Toasts';
-import { ChatPane, useChatLayoutFollowUp } from '@/features/agent-panel';
+import { ChatPane, useAgentCatalogPrime, useChatLayoutFollowUp } from '@/features/agent-panel';
 import { EditorHistoryNavigator, usePreviewMessages } from '@/features/documents';
 import { UnsupportedFilesModal } from '@/features/preparation';
 import { LibrarySearch, QuickOpen } from '@/features/search';
-import { applyAppearance, EmbedderRequireKeyGate, SettingsPortal, subscribeToAppearance } from '@/features/settings';
+import { EmbedderRequireKeyGate, SettingsPortal, useAppliedAppearance } from '@/features/settings';
 import { ChatSplitter, SidebarSplitter, useGlobalDragDrop } from '@/features/workspace';
 import { DocumentOutlineProvider } from '@/common/components/DocumentOutlineContext';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { OverlayStackProvider } from '@/common/components/OverlayStack';
 import { AppProvider, useAppActions, useChat, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import { useClipboardImageOffer } from '@/app/hooks/useClipboardImageOffer';
-import { api } from '@/common/api/api';
 import { electronBridge } from '@/common/lib/electronBridge';
 import {
   COMPACT_WORKSPACE_QUERY,
@@ -89,32 +88,8 @@ function AppBody() {
   // (and also reopens the hidden panel).
   const [chatMounted, setChatMounted] = useState(state.chatOpen);
   useChatLayoutFollowUp(state, { hasDocument, compact: compactWorkspace }, dispatch);
-  // Prime the agent registry once per window (always-mounted home: the
-  // chat surfaces are lazy/conditional). Each AgentView refreshes the
-  // catalog after every connection outcome so runtime failures and
-  // retries stay visible; this initial fetch keeps runtime states
-  // loading before any chat surface mounts.
-  useEffect(() => {
-    let cancelled = false;
-    api.listAgents().then((r) => {
-      if (!cancelled) dispatch({ type: 'AGENTS_LOADED', agents: r.clis });
-    }).catch(() => { /* renderer falls back to local defaults */ });
-    return () => { cancelled = true; };
-  }, [dispatch]);
-  useEffect(() => {
-    let receivedWindowUpdate = false;
-    const unsubscribe = subscribeToAppearance((preferences) => {
-      receivedWindowUpdate = true;
-      applyAppearance(preferences);
-    });
-    void api.appearance().then((preferences) => {
-      if (!receivedWindowUpdate) applyAppearance(preferences);
-    }).catch(() => {
-      // The initial light/system-safe CSS remains usable if config is absent
-      // or temporarily unreadable; Settings exposes the recoverable error.
-    });
-    return unsubscribe;
-  }, []);
+  useAgentCatalogPrime(dispatch);
+  useAppliedAppearance();
   useEffect(() => {
     if (state.chatOpen) setChatMounted(true);
   }, [state.chatOpen]);

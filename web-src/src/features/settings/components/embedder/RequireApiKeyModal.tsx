@@ -27,8 +27,9 @@
  *   • Skip AI Index for now — the caller records the choice for this window;
  *     the Files panel keeps a quiet "Set up AI Index" entry for later.
  */
-import { useRef, useState } from 'react';
-import { api, ApiError, errorMessage, type EmbedderProvider } from '@/common/api/api';
+import { useCallback, useRef, useState } from 'react';
+import { type EmbedderProvider } from '@/common/api/apiTypes';
+import { useApiKeyEntry } from '@/features/settings/hooks/useApiKeyEntry';
 import ManagedModalShell from '@/common/components/ManagedModalShell';
 import { EmbeddingAuthChoice } from '@/features/settings/components/embedder/EmbeddingAuthChoice';
 import { Button } from '@/common/components/ui/button';
@@ -84,10 +85,17 @@ export function RequireApiKeyModal({
   onSkip: () => void;
 }) {
   const [provider, setProvider] = useState<EmbedderProvider>(initialProvider);
-  const [key, setKey] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>('choice');
+  const { key, busy, error, setKey, clearError, submit } = useApiKeyEntry(
+    provider,
+    // `changeApiKey` server-side rejects definite provider auth failures,
+    // persists to `~/.stashbase/config.json`, and rebinds so the next
+    // search uses the new key (creating the collection on first key).
+    useCallback(
+      (result) => onSaved(result.provider, result.model, result.backfillStarted, result.warning),
+      [onSaved],
+    ),
+  );
   const inputRef = useRef<HTMLInputElement | null>(null);
   // Opening focus for the choice view. Base UI otherwise hands focus to
   // the first enabled control — here the second card, because the first
@@ -97,24 +105,6 @@ export function RequireApiKeyModal({
   // ring for elements the keyboard cannot tab to) and Tab still steps
   // into the cards from there.
   const choiceRef = useRef<HTMLDivElement | null>(null);
-
-  async function submit() {
-    const k = key.trim();
-    if (!k) { setError('Key required'); return; }
-    setBusy(true);
-    setError(null);
-    try {
-      // `changeApiKey` server-side rejects definite provider auth failures,
-      // persists to `~/.stashbase/config.json`, and rebinds so the next
-      // search uses the new key (creating the collection on first key).
-      const result = await api.changeApiKey(k, provider);
-      onSaved(result.provider, result.model, result.backfillStarted, result.warning);
-    } catch (err: unknown) {
-      const msg = err instanceof ApiError ? err.message : errorMessage(err);
-      setError(msg);
-      setBusy(false);
-    }
-  }
 
   return (
     <ManagedModalShell
@@ -170,7 +160,7 @@ export function RequireApiKeyModal({
           if (!picked || picked === provider) return;
           setProvider(picked);
           setKey('');
-          setError(null);
+          clearError();
         }}
       >
         {PROVIDER_ORDER.map((optionProvider) => (
@@ -212,7 +202,7 @@ export function RequireApiKeyModal({
         <button
           type="button"
           className="cursor-pointer border-0 bg-transparent p-0 text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:cursor-default disabled:opacity-60"
-          onClick={() => { setView('choice'); setError(null); }}
+          onClick={() => { setView('choice'); clearError(); }}
           disabled={busy}
         >Back</button>
         <Button

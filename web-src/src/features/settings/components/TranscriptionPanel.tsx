@@ -1,129 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import '@/features/settings/settings.css';
-import {
-  api,
-  errorMessage,
-  type TranscriptionModelId,
-  type TranscriptionSettings,
-} from '@/common/api/api';
+import { type TranscriptionModelId } from '@/common/api/apiTypes';
 import { formatMiB } from '@/common/lib/format';
-import { useAppActions } from '@/store/contexts/AppContext';
+import { useTranscriptionSettings } from '@/features/settings/hooks/useTranscriptionSettings';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@shared/transcription';
 import { Button } from '@/common/components/ui/button';
 import { Select } from '@/common/components/ui/select';
 
 export function TranscriptionPanel() {
-  const { actions } = useAppActions();
-  const [settings, setSettings] = useState<TranscriptionSettings | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busyModel, setBusyModel] = useState<TranscriptionModelId | null>(null);
-  const [nonce, setNonce] = useState(0);
-  const preferenceGeneration = useRef(0);
-
-  const load = useCallback(async (expectedGeneration = preferenceGeneration.current) => {
-    const next = await api.transcriptionSettings();
-    if (expectedGeneration !== preferenceGeneration.current) return next;
-    setSettings(next);
-    setError(null);
-    return next;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const refresh = async () => {
-      const expectedGeneration = preferenceGeneration.current;
-      try {
-        const next = await api.transcriptionSettings();
-        if (cancelled) return;
-        if (expectedGeneration === preferenceGeneration.current) {
-          setSettings(next);
-          setError(null);
-        }
-        if (next.providers.some((provider) => provider.models.some((model) => (
-          model.operation?.status === 'downloading' || model.operation?.status === 'verifying'
-        )))) {
-          timer = setTimeout(refresh, 700);
-        }
-      } catch (err: unknown) {
-        if (!cancelled) setError(errorMessage(err));
-      }
-    };
-    void refresh();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [nonce]);
-
-  async function chooseModel(providerId: string, modelId: string) {
-    if (!settings || (settings.providerId === providerId && modelId === settings.modelId)) return;
-    const generation = ++preferenceGeneration.current;
-    setSettings({ ...settings, providerId, modelId });
-    try {
-      await api.setTranscriptionPreferences({ providerId, modelId });
-      if (generation === preferenceGeneration.current) setNonce((value) => value + 1);
-    } catch (err: unknown) {
-      if (generation !== preferenceGeneration.current) return;
-      setError(errorMessage(err));
-      void load(generation).catch(() => undefined);
-    }
-  }
-
-  async function chooseLanguage(language: string) {
-    if (!settings) return;
-    const generation = ++preferenceGeneration.current;
-    const previous = settings.language;
-    setSettings({ ...settings, language });
-    try {
-      await api.setTranscriptionPreferences({ language });
-      if (generation === preferenceGeneration.current) setNonce((value) => value + 1);
-    } catch (err: unknown) {
-      if (generation !== preferenceGeneration.current) return;
-      setSettings((current) => current ? { ...current, language: previous } : current);
-      setError(errorMessage(err));
-    }
-  }
-
-  async function download(modelId: TranscriptionModelId) {
-    setBusyModel(modelId);
-    setError(null);
-    try {
-      await api.downloadTranscriptionModel(modelId);
-      setNonce((value) => value + 1);
-    } catch (err: unknown) {
-      setError(errorMessage(err));
-    } finally {
-      setBusyModel(null);
-    }
-  }
-
-  async function remove(modelId: TranscriptionModelId, confirmRemoval = true) {
-    if (confirmRemoval) {
-      const confirmed = await actions.confirm(
-        `Remove the downloaded ${modelId} transcription model? Existing transcripts stay available.`,
-        { title: 'Remove transcription model?', confirmLabel: 'Remove', destructive: true },
-      );
-      if (!confirmed) return;
-    }
-    setBusyModel(modelId);
-    setError(null);
-    try {
-      await api.removeTranscriptionModel(modelId);
-      setNonce((value) => value + 1);
-    } catch (err: unknown) {
-      setError(errorMessage(err));
-    } finally {
-      setBusyModel(null);
-    }
-  }
+  const {
+    settings,
+    error,
+    busyModel,
+    retry,
+    chooseModel,
+    chooseLanguage,
+    download,
+    remove,
+  } = useTranscriptionSettings();
 
   if (!settings && !error) return <div className="py-3 text-base text-muted-foreground">Loading…</div>;
   if (!settings) {
     return (
       <div className="flex flex-col items-start gap-2.5">
         <div className="text-sm text-destructive">Couldn’t load transcription settings: {error}</div>
-        <Button variant="outline" size="sm" onClick={() => setNonce((value) => value + 1)}>Retry</Button>
+        <Button variant="outline" size="sm" onClick={retry}>Retry</Button>
       </div>
     );
   }

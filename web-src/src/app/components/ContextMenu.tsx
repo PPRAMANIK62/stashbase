@@ -1,4 +1,3 @@
-import { api } from '@/common/api/api';
 import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import { getPreparationProblem } from '@/store/lib/fileReadiness';
 import { Menu, type MenuItem } from '@/common/components/Menu';
@@ -20,21 +19,12 @@ export default function ContextMenu() {
       returnFocus: false,
       onSelect: () => dispatch({ type: 'RENAMING', renaming: { path: target, kind } }),
     },
-    { label: revealLabel(), onSelect: () => void api.revealFile(target) },
+    { label: revealLabel(), onSelect: () => actions.revealFile(target) },
     ...(canReprocess
       ? [{
           label: 'Reprocess',
           title: 'Rebuild the searchable version of this file',
-          onSelect: () => {
-            actions.toast('Reprocessing…', { level: 'info' });
-            void api.reprocessFile(target, { folder: folderPathAtOpen || undefined })
-              .then(() => actions.refreshIndexState())
-              .catch((err) => {
-                const msg = err instanceof Error ? err.message : String(err);
-                actions.toast('Reprocess could not start. Try again.', { level: 'error' });
-                console.warn('[ctxmenu] reprocess failed:', msg);
-              });
-          },
+          onSelect: () => { void actions.reprocessFile(target, folderPathAtOpen || undefined); },
         } satisfies MenuItem]
       : []),
     { separator: true },

@@ -58,6 +58,8 @@ export interface ActiveFolderWorkspace {
   renameFile: (oldName: string, newBaseName: string) => Promise<void>;
   renameFolder: (oldPath: string, newName: string) => Promise<void>;
   moveFile: (oldPath: string, targetDir: string) => Promise<boolean>;
+  reprocessFile: (name: string, folder?: string) => Promise<void>;
+  revealFile: (name: string) => void;
   upload: (items: { file: File; relPath: string }[], dir: string) => Promise<boolean>;
   scheduleSave: () => void;
   flushSave: () => Promise<boolean>;

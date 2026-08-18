@@ -1,9 +1,6 @@
-import { useEffect, useState } from 'react';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '@/common/components/icons';
-import { api, errorMessage, type HostedAccountState } from '@/common/api/api';
-import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '@/common/lib/accountEvents';
-import { signInWithStashBase } from '@/common/lib/accountOAuth';
+import { useHostedAccount } from '@/features/account/hooks/useHostedAccount';
 import { DISCORD_INVITE_URL, openExternalUrl } from '@/common/lib/externalLink';
 import { openSettings } from '@/common/lib/settingsTrigger';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
@@ -24,44 +21,13 @@ import {
  * sign-in and hosted-usage details without gating files or Exact search.
  */
 export function SidebarAccountRow() {
-  const [account, setAccount] = useState<HostedAccountState | null>(null);
-  const [signingIn, setSigningIn] = useState(false);
-  const [signInError, setSignInError] = useState<string | null>(null);
-
-  function refresh(refreshUsage = false) {
-    api.getAccount(refreshUsage).then(setAccount).catch(() => { /* local server startup race */ });
-  }
-
-  useEffect(() => {
-    refresh(false);
-    const onChanged = () => refresh(false);
-    window.addEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
-    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
-  }, []);
+  const { account, signingIn, signInError, refresh, signIn, signOut } = useHostedAccount();
 
   const email = account?.signedIn ? account.email ?? '' : '';
   const label = email || 'Anonymous';
   const monogram = email ? email.slice(0, 2).toUpperCase() : '';
   const quota = account?.quota;
   const remainingPercent = quota ? hostedQuotaRemainingPercent(quota) : null;
-
-  function signOut() {
-    void api.signOutAccount()
-      .then(() => {
-        notifyAccountChanged();
-        refresh(false);
-      })
-      .catch(() => { /* Settings remains the recovery surface */ });
-  }
-
-  function signIn() {
-    setSigningIn(true);
-    setSignInError(null);
-    void signInWithStashBase('google')
-      .then(setAccount)
-      .catch((error: unknown) => setSignInError(errorMessage(error)))
-      .finally(() => setSigningIn(false));
-  }
 
   return (
     <div className="flex flex-none items-center gap-1 border-t border-border px-1.5 pt-2 pb-2.5">

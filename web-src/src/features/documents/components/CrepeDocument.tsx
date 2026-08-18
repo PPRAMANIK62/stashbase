@@ -16,12 +16,12 @@ import { table } from '@milkdown/crepe/feature/table';
 import { toolbar } from '@milkdown/crepe/feature/toolbar';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
-import { api, assetBaseUrl } from '@/common/api/api';
+import { assetBaseUrl } from '@/common/api/api';
 import { resolveMilkdownLink } from '@/features/documents/milkdown/navigation';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { makeIframeFindController } from '@/features/documents/lib/findIframe';
 import { applyChunkHighlight } from '@/features/documents/lib/previewChunkHighlight';
-import { portableImageMarkdownPath, relativeAssetPath } from '@/features/documents/milkdown/paths';
+import { uploadLocalImage } from '@/features/documents/milkdown/imageUpload';
 import { splitLeadingYamlFrontmatter } from '@/features/documents/milkdown/frontmatter';
 import { planIncomingMarkdownSync, startCrepeCreation } from '@/features/documents/milkdown/crepeLifecycle';
 import { resolveLocalImageUrl } from '@/features/documents/milkdown/imageUrls';
@@ -408,16 +408,6 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, dirty, f
   );
 }
 
-async function uploadLocalImage(file: File, noteName: string): Promise<string> {
-  const parts = noteName.split('/');
-  parts.pop();
-  const dir = parts.join('/');
-  const result = await api.upload([{ file, relPath: file.name }], dir);
-  const saved = result.files[0];
-  if (!saved || saved.error) throw new Error(saved?.error ?? 'The image could not be saved.');
-  const relative = relativeAssetPath(noteName, saved.file);
-  return portableImageMarkdownPath(relative);
-}
 
 /** Milkdown may finish replacing read-only node views one frame after React's
  * effects. Decorate on the following frame so alerts and local assets attach

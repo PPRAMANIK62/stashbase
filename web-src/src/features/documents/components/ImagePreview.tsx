@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import '@/features/documents/documents.css';
-import { api, errorMessage, versionedAssetUrl } from '@/common/api/api';
-import { useLatestRef } from '@/common/hooks/useLatestRef';
+import { versionedAssetUrl } from '@/common/api/api';
+import { useFileReprocess } from '@/features/documents/hooks/useFileReprocess';
 import { basename } from '@/common/lib/paths';
 import { preparationWaitCopy } from '@/features/documents/lib/preparationCopy';
 import { useWorkspace } from '@/store/contexts/AppContext';
@@ -47,7 +47,6 @@ export function ImagePreview({ name }: { name: string }) {
   const sourceFolder = activeTab?.file?.name === name ? activeTab.file.folder : undefined;
   const src = useMemo(() => versionedAssetUrl(name, sourceVersion, sourceFolder), [name, sourceVersion, sourceFolder]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const currentRef = useLatestRef({ folderPath: state.folderPath, name });
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [scale, setScale] = useState(1);
   // Fit is a mode like PdfPreview's autoFit: pressed from the moment the
@@ -55,8 +54,7 @@ export function ImagePreview({ name }: { name: string }) {
   // takes over. Unlike the PDF viewer it does not re-fit on pane resize —
   // the image view is anchored to actual size by design.
   const [fitMode, setFitMode] = useState(false);
-  const [retryBusy, setRetryBusy] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
+  const { retryBusy, retryError, retry } = useFileReprocess(name, { folder: sourceFolder, version: sourceVersion });
   const [loadError, setLoadError] = useState(false);
   const alt = basename(name);
   const failure = getPreparationFailure(state, name);
@@ -80,8 +78,6 @@ export function ImagePreview({ name }: { name: string }) {
     setScale(1);
     setFitMode(false);
     setLoadError(false);
-    setRetryBusy(false);
-    setRetryError(null);
   }, [src]);
 
   // Native wheel listener (passive:false) so ⌘/Ctrl-scroll — and trackpad
@@ -111,23 +107,6 @@ export function ImagePreview({ name }: { name: string }) {
     return clampScale(Math.min(1, (availW * dpr) / natural.w, (availH * dpr) / natural.h));
   }
 
-  async function onRetry() {
-    setRetryBusy(true);
-    setRetryError(null);
-    const folderPathAtStart = state.folderPath;
-    const nameAtStart = name;
-    const stillCurrent = () =>
-      currentRef.current.folderPath === folderPathAtStart && currentRef.current.name === nameAtStart;
-    try {
-      await api.reprocessFile(name, { folder: sourceFolder ?? (folderPathAtStart || undefined) });
-      // The failures list / banner clear on the next index-status poll.
-    } catch (err: unknown) {
-      if (!stillCurrent()) return;
-      setRetryError(errorMessage(err));
-    } finally {
-      if (stillCurrent()) setRetryBusy(false);
-    }
-  }
 
   const displayW = natural ? Math.round((natural.w / dpr) * scale) : undefined;
 
@@ -148,7 +127,7 @@ export function ImagePreview({ name }: { name: string }) {
             size="xs"
             className="shrink-0"
             disabled={retryBusy}
-            onClick={() => { void onRetry(); }}
+            onClick={() => { void retry(); }}
           >
             {retryBusy ? 'Reprocessing…' : 'Reprocess'}
           </Button>

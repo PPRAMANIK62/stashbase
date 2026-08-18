@@ -21,29 +21,12 @@
  * waved off. A dismiss here would only hide the calm route and leave the
  * interrupting one.
  */
-import { useEffect, useState } from 'react';
-import { api, type EmbedderState } from '@/common/api/api';
 import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
 import { isEmbeddingAuthorized } from '@/common/lib/embeddingAuth';
-import { ACCOUNT_CHANGED_EVENT } from '@/common/lib/accountEvents';
+import { useEmbedderState } from '@/common/hooks/useEmbedderState';
 
 export default function EmbeddingSetupCallout() {
-  const [embedder, setEmbedder] = useState<EmbedderState | null>(null);
-  const [authRevision, setAuthRevision] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.getEmbedder()
-      .then((state) => { if (!cancelled) setEmbedder(state); })
-      .catch(() => { /* startup race with server boot — stay hidden */ });
-    return () => { cancelled = true; };
-  }, [authRevision]);
-
-  useEffect(() => {
-    const onChanged = () => setAuthRevision((value) => value + 1);
-    window.addEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
-    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
-  }, []);
+  const { embedder } = useEmbedderState();
 
   if (isEmbeddingAuthorized(embedder)) return null;
   if (!embedder) return null;

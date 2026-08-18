@@ -14,9 +14,8 @@
  * chunk), so the popover is standalone: `triggerRef` anchors it and it is
  * open for exactly as long as it is mounted.
  */
-import { useEffect, useMemo, useState, type RefObject } from 'react';
+import { useMemo, useState, type RefObject } from 'react';
 import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } from 'react-aria-components';
-import { api } from '@/common/api/api';
 import { AGENTS, AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { EditIcon, TrashIcon } from '@/common/components/icons';
 import { basename } from '@/common/lib/paths';
@@ -24,7 +23,8 @@ import { buttonVariants } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 import { emptyStateClass } from '@/common/lib/emptyState';
 import type { HistoryScope } from '@/common/lib/libraryScope';
-import { historyRequestParams, mergeAgentSessions, rowResumeFolder, rowScopeParams, type MergedSessionRow } from '@/features/agent-panel/lib/sessionHistory';
+import { rowResumeFolder, type MergedSessionRow } from '@/features/agent-panel/lib/sessionHistory';
+import { useSessionHistory } from '@/features/agent-panel/hooks/useSessionHistory';
 
 function relTime(ms: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
@@ -53,32 +53,11 @@ export function SessionHistoryMenu({
   onClose: () => void;
   onResume: (agent: AgentKind, sessionId: string, folder: string | null) => void;
 }) {
-  const [rows, setRows] = useState<MergedSessionRow[]>([]);
-  const [failedAgents, setFailedAgents] = useState<AgentKind[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { rows, failedAgents, loading, rename, remove } = useSessionHistory(scope);
   const [q, setQ] = useState('');
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      // Both agents fetch in parallel; one failing must not blank the
-      // other's history — the failed agent surfaces as a quiet inline note.
-      const lists = await Promise.all(AGENTS.map(async (agent) => ({
-        agent: agent.id,
-        sessions: await api.listSessions(agent.id, historyRequestParams(scope)).catch(() => null),
-      })));
-      if (cancelled) return;
-      const merged = mergeAgentSessions(lists);
-      setRows(merged.rows);
-      setFailedAgents(merged.failed);
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when the scope identity changes
-  }, [scope.kind, scope.kind === 'folder' ? scope.path : '']);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -91,20 +70,13 @@ export function SessionHistoryMenu({
     const title = editText.trim();
     setEditingKey(null);
     if (!title) return;
-    try {
-      const updated = await api.renameSession(row.id, title, row.agent, rowScopeParams(scope, row));
-      setRows((rs) => rs.map((r) => (rowKey(r) === rowKey(row) ? { ...r, ...updated } : r)));
-    } catch { /* leave list as-is */ }
+    await rename(row, title);
   }
 
-  async function remove(row: MergedSessionRow): Promise<boolean> {
-    try { await api.deleteSession(row.id, row.agent, rowScopeParams(scope, row)); }
-    catch {
-      setDeleteError('Could not delete this session. Try again.');
-      return false;
-    }
-    setRows((rs) => rs.filter((r) => rowKey(r) !== rowKey(row)));
-    return true;
+  async function removeRow(row: MergedSessionRow): Promise<boolean> {
+    const ok = await remove(row);
+    if (!ok) setDeleteError('Could not delete this session. Try again.');
+    return ok;
   }
 
   return (
@@ -203,7 +175,7 @@ export function SessionHistoryMenu({
                                 <Button className={buttonVariants({ variant: 'outline' })} onPress={close}>Cancel</Button>
                                 <Button
                                   className={buttonVariants({ variant: 'destructive' })}
-                                  onPress={() => { void remove(row).then((deleted) => { if (deleted) close(); }); }}
+                                  onPress={() => { void removeRow(row).then((deleted) => { if (deleted) close(); }); }}
                                 >
                                   Delete
                                 </Button>

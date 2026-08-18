@@ -132,6 +132,10 @@ export interface AppActions {
   renameFile: (oldName: string, newBaseName: string) => Promise<void>;
   renameFolder: (oldPath: string, newName: string) => Promise<void>;
   moveFile: (oldPath: string, targetDir: string) => Promise<boolean>;
+  /** Rebuild a file's searchable version. `folder` defaults to the open one. */
+  reprocessFile: (name: string, folder?: string) => Promise<void>;
+  /** Show the file in the OS file manager. */
+  revealFile: (name: string) => void;
   upload: (items: { file: File; relPath: string }[], dir: string) => Promise<boolean>;
 
   scheduleSave: () => void;

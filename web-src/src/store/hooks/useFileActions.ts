@@ -93,6 +93,28 @@ export function useFileActions(
     }
   }, [flushSave, loadFiles, refreshIndexState, toast]);
 
+  /** Show the file in Finder / Explorer. Fire-and-forget: the OS surfaces
+   *  its own failure, and there is nothing for the renderer to undo. */
+  const revealFile = useCallback((name: string) => {
+    void api.revealFile(name);
+  }, []);
+
+  /** Rebuild a file's searchable version. The folder is captured at the
+   *  call, so a reprocess started from a context menu still targets the
+   *  file it was opened on if the workspace moves while the request runs.
+   *  Progress arrives through the next index-status poll, not the reply. */
+  const reprocessFile = useCallback(async (name: string, folder?: string) => {
+    const targetFolder = folder ?? (stateRef.current.workspace.folderPath || undefined);
+    toast('Reprocessing…', { level: 'info' });
+    try {
+      await api.reprocessFile(name, { folder: targetFolder });
+      void refreshIndexState();
+    } catch (e: unknown) {
+      toast('Reprocess could not start. Try again.', { level: 'error' });
+      console.warn('[reprocess] failed:', e instanceof Error ? e.message : String(e));
+    }
+  }, [refreshIndexState, toast]);
+
   const newFolder = useCallback(async (path: string) => {
     if (!path) return;
     const targetFolderPath = stateRef.current.workspace.folderPath;
@@ -465,6 +487,8 @@ export function useFileActions(
     newNote,
     renameFile,
     renameFolder,
+    reprocessFile,
+    revealFile,
     upload,
   }), [
     deleteFile,
@@ -474,6 +498,8 @@ export function useFileActions(
     newNote,
     renameFile,
     renameFolder,
+    reprocessFile,
+    revealFile,
     upload,
   ]);
 }

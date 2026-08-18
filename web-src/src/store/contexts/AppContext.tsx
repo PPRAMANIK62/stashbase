@@ -352,7 +352,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!current.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
     },
     newNote: workspace.newNote, newFolder: workspace.newFolder, deleteFile: workspace.deleteFile, deleteFolder: workspace.deleteFolder,
-    renameFile: workspace.renameFile, renameFolder: workspace.renameFolder, moveFile: workspace.moveFile, upload: workspace.upload,
+    renameFile: workspace.renameFile, renameFolder: workspace.renameFolder, moveFile: workspace.moveFile,
+    reprocessFile: workspace.reprocessFile, revealFile: workspace.revealFile, upload: workspace.upload,
     scheduleSave: workspace.scheduleSave, flushSave: workspace.flushSave,
     registerEditor: workspace.registerEditor,
     registerFindController, openFind, closeFind, setFindQuery,

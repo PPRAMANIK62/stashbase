@@ -5,9 +5,9 @@
  * still save, preview, and Exact search); the setup modal on folder load lives in
  * `EmbedderRequireKeyGate` so it fires whether or not Settings is open.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, errorMessage, type EmbedderProvider, type EmbedderState } from '@/common/api/api';
-import { useAppActions } from '@/store/contexts/AppContext';
+import { useState } from 'react';
+import { type EmbedderProvider } from '@/common/api/apiTypes';
+import { useEmbedderSettings } from '@/features/settings/hooks/useEmbedderSettings';
 import { EmbeddingAuthChoice } from '@/features/settings/components/embedder/EmbeddingAuthChoice';
 import { KeyModal } from '@/features/settings/components/embedder/KeyModal';
 import { RemoveKeyModal } from '@/features/settings/components/embedder/RemoveKeyModal';
@@ -15,7 +15,6 @@ import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
 import { AccountSignInForm } from '@/common/components/AccountSignInForm';
-import { notifyAccountChanged } from '@/common/lib/accountEvents';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string; costHint: string }> = {
@@ -36,18 +35,28 @@ const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeh
 const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
 
 export function EmbeddingPanel() {
-  const { dispatch, actions } = useAppActions();
-  const [state, setState] = useState<EmbedderState | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<EmbedderProvider>('openai');
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loadNonce, setLoadNonce] = useState(0);
+  const {
+    state,
+    loadError,
+    retryLoad,
+    selectedProvider,
+    selectProvider,
+    addKey,
+    addBusy,
+    addError,
+    setAddKey,
+    submitAddKey,
+    accountBusy,
+    saveKey,
+    removeKey,
+    refreshAccount,
+    signOut,
+    useAccountAllowance,
+    useApiKeySource,
+    applySignedIn,
+  } = useEmbedderSettings();
   const [keyEditOpen, setKeyEditOpen] = useState(false);
   const [keyRemoveOpen, setKeyRemoveOpen] = useState(false);
-  // Inline "Add key" (no-key state): no modal — the input lives in the
-  // panel. Change/Remove still use modals (rarer / needs confirm).
-  const [addKey, setAddKey] = useState('');
-  const [addBusy, setAddBusy] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
   // Whether the bring-your-own-key form is revealed. Only relevant when
   // nothing is authorized yet: that is the one state where Settings shows
   // the same fork the Files-panel callout does, so a user who arrived here
@@ -55,80 +64,6 @@ export function EmbeddingPanel() {
   // a key field plus a footnote about accounts.
   const [keyFormOpen, setKeyFormOpen] = useState(false);
   const [signInFormOpen, setSignInFormOpen] = useState(false);
-  const [accountBusy, setAccountBusy] = useState(false);
-  const mountedRef = useRef(false);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoadError(null);
-    api.getEmbedder()
-      .then((s) => {
-        if (cancelled) return;
-        setState(s);
-        setSelectedProvider(s.provider);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        setLoadError(msg || 'Failed to load embedder settings');
-      });
-    return () => { cancelled = true; };
-  }, [loadNonce]);
-
-  const retryLoad = useCallback(() => setLoadNonce((n) => n + 1), []);
-
-  async function onKeyChanged(key: string) {
-    const result = await api.changeApiKey(key, selectedProvider);
-    if (!mountedRef.current) return;
-    setKeyEditOpen(false);
-    setState((s) => (s ? { ...s, provider: result.provider, model: result.model, hasKey: true, authorized: true, source: result.provider } : s));
-    setSelectedProvider(result.provider);
-    dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-    if (result.warning) actions.toast(`API key saved, but validation could not reach the provider: ${result.warning}`, { level: 'warning' });
-    if (result.backfillStarted) void actions.markVisibleFilesPendingForSearch();
-    void actions.refreshIndexState();
-  }
-
-  async function addKeySubmit() {
-    const trimmed = addKey.trim();
-    if (!trimmed) { setAddError('Key required'); return; }
-    setAddBusy(true);
-    setAddError(null);
-    try {
-      // changeApiKey rejects definite provider auth failures server-side,
-      // so the success path only does one validation round trip.
-      const result = await api.changeApiKey(trimmed, selectedProvider);
-      if (!mountedRef.current) return;
-      setAddKey('');
-      setState((s) => (s ? { ...s, provider: result.provider, model: result.model, hasKey: true, authorized: true, source: result.provider } : s));
-      setSelectedProvider(result.provider);
-      dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-      if (result.warning) actions.toast(`API key saved, but validation could not reach the provider: ${result.warning}`, { level: 'warning' });
-      if (result.backfillStarted) void actions.markVisibleFilesPendingForSearch();
-      void actions.refreshIndexState();
-    } catch (err: unknown) {
-      if (!mountedRef.current) return;
-      setAddError(errorMessage(err));
-    } finally {
-      if (mountedRef.current) setAddBusy(false);
-    }
-  }
-
-  async function onKeyRemoveConfirmed() {
-    await api.removeApiKey();
-    if (!mountedRef.current) return;
-    setKeyRemoveOpen(false);
-    setLoadNonce((n) => n + 1);
-    // The search popup re-checks the embedder before every semantic run, so
-    // flipping the shared key state here is all it needs.
-    dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: false });
-    void actions.refreshIndexState();
-  }
 
   if (loadError) {
     return (
@@ -151,34 +86,6 @@ export function EmbeddingPanel() {
   const hostedActive = state.source === 'stashbase-account' && state.account.signedIn;
   const showingHostedSummary = hostedActive && !keyFormOpen && !signInFormOpen;
   const showingAuthChoice = !state.authorized && !keyFormOpen && !signInFormOpen;
-
-  async function refreshAccount() {
-    setAccountBusy(true);
-    try {
-      const account = await api.getAccount(true);
-      if (mountedRef.current) setState((current) => current ? { ...current, account } : current);
-    } catch (err: unknown) {
-      actions.toast(errorMessage(err), { level: 'error' });
-    } finally {
-      if (mountedRef.current) setAccountBusy(false);
-    }
-  }
-
-  async function signOut() {
-    setAccountBusy(true);
-    try {
-      await api.signOutAccount();
-      notifyAccountChanged();
-      if (!mountedRef.current) return;
-      setLoadNonce((n) => n + 1);
-      dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: false });
-      void actions.refreshIndexState();
-    } catch (err: unknown) {
-      actions.toast(errorMessage(err), { level: 'error' });
-    } finally {
-      if (mountedRef.current) setAccountBusy(false);
-    }
-  }
 
   return (
     <>
@@ -225,11 +132,8 @@ export function EmbeddingPanel() {
             <AccountSignInForm
               onBack={() => setSignInFormOpen(false)}
               onSignedIn={(account) => {
-                setState((current) => current ? { ...current, authorized: true, source: 'stashbase-account', account } : current);
+                applySignedIn(account);
                 setSignInFormOpen(false);
-                dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-                if (account.backfillStarted) void actions.markVisibleFilesPendingForSearch();
-                void actions.refreshIndexState();
               }}
             />
           )}
@@ -244,18 +148,8 @@ export function EmbeddingPanel() {
                 size="sm"
                 disabled={accountBusy}
                 onClick={() => {
-                  setAccountBusy(true);
-                  api.useAccountAllowance()
-                    .then((account) => {
-                      if (!mountedRef.current) return;
-                      setState((current) => current ? { ...current, source: 'stashbase-account', authorized: true, account } : current);
-                      setKeyFormOpen(false);
-                      dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-                      if (account.backfillStarted) void actions.markVisibleFilesPendingForSearch();
-                      void actions.refreshIndexState();
-                    })
-                    .catch((err: unknown) => actions.toast(errorMessage(err), { level: 'error' }))
-                    .finally(() => { if (mountedRef.current) setAccountBusy(false); });
+                  setKeyFormOpen(false);
+                  void useAccountAllowance();
                 }}
               >Use account allowance</Button>
             </div>
@@ -269,9 +163,7 @@ export function EmbeddingPanel() {
               onValueChange={(next) => {
                 const picked = next[0] as EmbedderProvider | undefined;
                 if (!picked || picked === selectedProvider) return;
-                setSelectedProvider(picked);
-                setAddKey('');
-                setAddError(null);
+                selectProvider(picked);
               }}
             >
               {PROVIDER_ORDER.map((provider) => (
@@ -297,17 +189,8 @@ export function EmbeddingPanel() {
                     size="sm"
                     disabled={accountBusy}
                     onClick={() => {
-                      setAccountBusy(true);
-                      api.useApiKeySource(selectedProvider)
-                        .then((next) => {
-                          if (!mountedRef.current) return;
-                          setState(next);
-                          setKeyFormOpen(false);
-                          dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-                          void actions.refreshIndexState();
-                        })
-                        .catch((err: unknown) => actions.toast(errorMessage(err), { level: 'error' }))
-                        .finally(() => { if (mountedRef.current) setAccountBusy(false); });
+                      setKeyFormOpen(false);
+                      void useApiKeySource();
                     }}
                   >Use this key</Button>
                 )}
@@ -345,11 +228,11 @@ export function EmbeddingPanel() {
                   spellCheck={false}
                   value={addKey}
                   disabled={addBusy}
-                  onChange={(e) => { setAddKey(e.target.value); setAddError(null); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addKeySubmit(); } }}
+                  onChange={(e) => setAddKey(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void submitAddKey(); } }}
                 />
                 <Button
-                  onClick={() => { void addKeySubmit(); }}
+                  onClick={() => { void submitAddKey(); }}
                   disabled={addBusy || !addKey.trim()}
                 >{addBusy ? 'Validating…' : 'Add key'}</Button>
               </div>
@@ -372,13 +255,13 @@ export function EmbeddingPanel() {
           model={selected.model}
           placeholder={selected.placeholder}
           onCancel={() => setKeyEditOpen(false)}
-          onSaved={onKeyChanged}
+          onSaved={async (key) => { setKeyEditOpen(false); await saveKey(key); }}
         />
       )}
       {keyRemoveOpen && (
         <RemoveKeyModal
           onCancel={() => setKeyRemoveOpen(false)}
-          onConfirm={onKeyRemoveConfirmed}
+          onConfirm={async () => { setKeyRemoveOpen(false); await removeKey(); }}
         />
       )}
     </>

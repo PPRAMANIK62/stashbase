@@ -1,15 +1,12 @@
-import { type ComponentProps, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ComponentProps } from 'react';
 import {
-  api,
   type Agent,
   type AgentDiscoveryPolicy,
-  type AgentRuntimeDebugState,
   type AgentSetupFailureSimulation,
-  type AgentsResponse,
-} from '@/common/api/api';
-import { AGENT_META, AGENTS, type AgentKind } from '@/common/lib/agentCatalog';
+} from '@/common/api/apiTypes';
+import { AGENTS } from '@/common/lib/agentCatalog';
 import { ChevronDownIcon, MoreHorizontalIcon } from '@/common/components/icons';
-import { useAppActions } from '@/store/contexts/AppContext';
+import { useAgentRuntimes } from '@/features/settings/hooks/useAgentRuntimes';
 import { Button } from '@/common/components/ui/button';
 import {
   Menu,
@@ -22,106 +19,17 @@ import {
 import { Select } from '@/common/components/ui/select';
 import { StatusMessage } from '@/common/components/ui/status';
 
-const DEFAULT_DEBUG: AgentRuntimeDebugState = {
-  enabled: false,
-  discoveryPolicy: 'auto',
-  nextFailure: 'none',
-};
-
 export function AgentRuntimePanel() {
-  const { actions, dispatch } = useAppActions();
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [debug, setDebug] = useState<AgentRuntimeDebugState>(DEFAULT_DEBUG);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
-  const activeInstall = useMemo(
-    () => agents.some((agent) => agent.bootstrap?.phase === 'installing' || agent.bootstrap?.phase === 'configuring'),
-    [agents],
-  );
-
-  const applyResponse = useCallback((response: AgentsResponse) => {
-    setAgents(response.clis);
-    setDebug(response.debug ?? DEFAULT_DEBUG);
-    dispatch({ type: 'AGENTS_LOADED', agents: response.clis });
-  }, [dispatch]);
-
-  const refresh = useCallback(async (silent = false) => {
-    try {
-      applyResponse(await api.listAgents());
-    } catch (error) {
-      if (!silent) setStatus({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
-    }
-  }, [applyResponse]);
-
-  useEffect(() => { void refresh(true); }, [refresh]);
-  useEffect(() => {
-    if (!activeInstall) return;
-    const timer = window.setInterval(() => { void refresh(true); }, 500);
-    return () => window.clearInterval(timer);
-  }, [activeInstall, refresh]);
-
-  async function install(agent: AgentKind) {
-    setBusy(`install:${agent}`);
-    setStatus(null);
-    try {
-      applyResponse(await api.bootstrapAgent(agent));
-    } catch (error) {
-      setStatus({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function uninstall(agent: AgentKind) {
-    const label = AGENT_META[agent].name;
-    const confirmed = await actions.confirm(
-      `Uninstall the StashBase-managed ${label} runtime to free disk space? Any active ${label} chat ends now. Your provider login and history are not affected; the next New Chat prepares the runtime again.`,
-      { title: `Uninstall ${label} runtime?`, confirmLabel: 'Uninstall', destructive: true },
-    );
-    if (!confirmed) return;
-    setBusy(`uninstall:${agent}`);
-    setStatus(null);
-    try {
-      applyResponse(await api.resetManagedAgent(agent));
-      setStatus({ tone: 'success', text: `${label} managed runtime removed.` });
-    } catch (error) {
-      setStatus({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function updateDebug(patch: Partial<Omit<AgentRuntimeDebugState, 'enabled'>>) {
-    setBusy('debug');
-    setStatus(null);
-    try {
-      applyResponse(await api.setAgentRuntimeDebug(patch));
-    } catch (error) {
-      setStatus({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function resetFirstRun(agent: AgentKind) {
-    const label = AGENT_META[agent].name;
-    const confirmed = await actions.confirm(
-      `Reset the StashBase-managed ${label} runtime? Your global installation and provider login are not changed.`,
-      { title: `Reset ${label} runtime?`, confirmLabel: 'Reset', destructive: true },
-    );
-    if (!confirmed) return;
-    setBusy(`reset:${agent}`);
-    setStatus(null);
-    try {
-      applyResponse(await api.setAgentRuntimeDebug({ discoveryPolicy: 'managed-only' }));
-      applyResponse(await api.resetManagedAgent(agent));
-      setStatus({ tone: 'success', text: `${label} now simulates a first-time user. Click New Chat to test installation, then return discovery to Auto when finished.` });
-    } catch (error) {
-      setStatus({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setBusy(null);
-    }
-  }
+  const {
+    agents,
+    debug,
+    busy,
+    status,
+    install,
+    uninstall,
+    updateDebug,
+    resetFirstRun,
+  } = useAgentRuntimes();
 
   return (
     <div>

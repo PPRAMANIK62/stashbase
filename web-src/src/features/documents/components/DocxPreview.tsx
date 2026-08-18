@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import '@/features/documents/documents.css';
-import { api, assetBaseUrl, errorMessage, versionedAssetUrl } from '@/common/api/api';
+import { assetBaseUrl, versionedAssetUrl } from '@/common/api/api';
 import { preparationWaitCopy } from '@/features/documents/lib/preparationCopy';
-import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
+import { useIframeDropForward } from '@/features/documents/hooks/useIframeDropForward';
+import { useFileReprocess } from '@/features/documents/hooks/useFileReprocess';
 import { previewClickHandler } from '@/features/documents/lib/previewIframe';
 import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import { getPreparationFailure } from '@/store/lib/fileReadiness';
@@ -35,11 +36,9 @@ export function DocxPreview({ name }: { name: string }) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const loadedHtmlRef = useRef('');
   const findAtMount = useLatestRef(find);
-  const currentRef = useLatestRef({ folderPath: state.folderPath, name });
   const [html, setHtml] = useState<string | null>(null);
   const [directFailed, setDirectFailed] = useState(false);
-  const [retryBusy, setRetryBusy] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
+  const { retryBusy, retryError, retry } = useFileReprocess(name, { folder: sourceFolder, version: sourceVersion });
   const failure = getPreparationFailure(state, name);
   const progress = state.conversionProgress[name];
   const preparationStatus = progress
@@ -59,8 +58,6 @@ export function DocxPreview({ name }: { name: string }) {
     let timedOut = false;
     setHtml(null);
     setDirectFailed(false);
-    setRetryBusy(false);
-    setRetryError(null);
     loadedHtmlRef.current = '';
 
     const timeout = setTimeout(() => {
@@ -181,21 +178,6 @@ export function DocxPreview({ name }: { name: string }) {
     if (applyChunkHighlight(doc, pendingHighlight.chunkText)) actions.consumePendingHighlight();
   }
 
-  async function onRetry() {
-    setRetryBusy(true);
-    setRetryError(null);
-    const folderPathAtStart = state.folderPath;
-    const nameAtStart = name;
-    const stillCurrent = () =>
-      currentRef.current.folderPath === folderPathAtStart && currentRef.current.name === nameAtStart;
-    try {
-      await api.reprocessFile(name, { folder: sourceFolder ?? (folderPathAtStart || undefined) });
-    } catch (err: unknown) {
-      if (stillCurrent()) setRetryError(errorMessage(err));
-    } finally {
-      if (stillCurrent()) setRetryBusy(false);
-    }
-  }
 
   return (
     /* DOCX renders directly from the source in the renderer. Search/Agent
@@ -214,7 +196,7 @@ export function DocxPreview({ name }: { name: string }) {
             size="xs"
             className="shrink-0"
             disabled={retryBusy}
-            onClick={() => { void onRetry(); }}
+            onClick={() => { void retry(); }}
           >
             {retryBusy ? 'Reprocessing…' : 'Reprocess'}
           </Button>

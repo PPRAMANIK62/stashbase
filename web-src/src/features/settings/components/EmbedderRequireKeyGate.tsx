@@ -30,14 +30,14 @@
  *   • Skip for now — records basic mode; dialog closes. The
  *     Files-panel "Set up AI Index" entry (and Settings) reopen it later.
  */
-import { Suspense, useEffect, useState } from 'react';
-import { api, type EmbedderState } from '@/common/api/api';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { useEmbedderState } from '@/common/hooks/useEmbedderState';
 import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from '@/common/lib/embeddingAuth';
+import { type EmbedderState } from '@/common/api/apiTypes';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { useOverlayLayer } from '@/common/components/OverlayStack';
 import { ModalLoadingStatus } from '@/common/components/ui/status';
-import { ACCOUNT_CHANGED_EVENT } from '@/common/lib/accountEvents';
 import { OPEN_EMBEDDING_SETUP_EVENT } from '@/common/lib/embeddingSetupTrigger';
 
 const RequireApiKeyModal = lazyWithRetry(() =>
@@ -48,40 +48,27 @@ export function EmbedderRequireKeyGate() {
   const appState = useWorkspace();
   const { dispatch, actions } = useAppActions();
   const folder = appState.folder;
-  const [state, setState] = useState<EmbedderState | null>(null);
   const [open, setOpen] = useState(false);
-  const [authRevision, setAuthRevision] = useState(0);
   const layer = useOverlayLayer(open);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Fetch regardless of folder so `embedderHasKey` is an app-wide fact: the
-    // Files-panel callout must be able to show (and its "Set up" must work)
-    // even in a bare window with nothing open yet.
-    api.getEmbedder()
-      .then((embedder) => {
-        if (cancelled) return;
-        setState(embedder);
-        dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.authorized });
-        // Recommend, don't force. Auto-open in the bare window too — the
-        // first open of a new window makes the offer without waiting for a
-        // folder. The skip is per context within the window (see
-        // embeddingAuth), so a different folder — or a fresh window —
-        // re-offers rather than staying silently skipped.
-        setOpen(!isEmbeddingAuthorized(embedder) && !hasSkippedAiIndexing(folder));
-      })
-      .catch(() => { /* startup race with server boot — silent */ });
-    return () => { cancelled = true; };
-    // embedderHasKey: removing the key in Settings must re-gate right away
-    // ("removing a key later re-gates cleanly"), not wait for the next
-    // folder switch to refire this effect.
-  }, [folder, appState.embedderHasKey, authRevision]);
-
-  useEffect(() => {
-    const onChanged = () => setAuthRevision((value) => value + 1);
-    window.addEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
-    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, onChanged);
-  }, []);
+  // Fetch regardless of folder so `embedderHasKey` is an app-wide fact: the
+  // Files-panel callout must be able to show (and its "Set up" must work)
+  // even in a bare window with nothing open yet. embedderHasKey is part of
+  // the key: removing the key in Settings must re-gate right away
+  // ("removing a key later re-gates cleanly"), not wait for the next folder
+  // switch.
+  const onLoaded = useCallback((embedder: EmbedderState) => {
+    dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.authorized });
+    // Recommend, don't force. Auto-open in the bare window too — the first
+    // open of a new window makes the offer without waiting for a folder.
+    // The skip is per context within the window (see embeddingAuth), so a
+    // different folder — or a fresh window — re-offers rather than staying
+    // silently skipped.
+    setOpen(!isEmbeddingAuthorized(embedder) && !hasSkippedAiIndexing(folder));
+  }, [dispatch, folder]);
+  const { embedder: state, patchEmbedder } = useEmbedderState({
+    refreshKey: `${folder ?? ''}|${appState.embedderHasKey}`,
+    onLoaded,
+  });
 
   useEffect(() => {
     function onOpen() { setOpen(true); }
@@ -97,7 +84,7 @@ export function EmbedderRequireKeyGate() {
         initialProvider={state?.provider}
         isTopmost={layer.isTopmost}
         onSaved={(provider, model, backfillStarted, warning) => {
-          setState((s) => (s ? { ...s, provider, model, hasKey: true, authorized: true, source: provider } : s));
+          patchEmbedder((s) => ({ ...s, provider, model, hasKey: true, authorized: true, source: provider }));
           dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
           // Activated: clear any prior basic-mode choice so a future key
           // removal re-gates from a clean state instead of staying skipped.
@@ -108,12 +95,12 @@ export function EmbedderRequireKeyGate() {
           void actions.refreshIndexState();
         }}
         onSignedIn={(backfillStarted) => {
-          setState((s) => (s ? {
+          patchEmbedder((s) => ({
             ...s,
             authorized: true,
             source: 'stashbase-account',
             account: { ...s.account, signedIn: true, active: true },
-          } : s));
+          }));
           dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
           setAiIndexingSkipped(false, folder);
           setOpen(false);

@@ -5,9 +5,8 @@
  * external client's configuration here — the built-in Chat agents are
  * wired automatically by Agent readiness (Settings → Agents).
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, type McpHttpStatus } from '@/common/api/api';
-import { useAppActions } from '@/store/contexts/AppContext';
+import { useState } from 'react';
+import { useMcpAccess } from '@/features/settings/hooks/useMcpAccess';
 import { CopyIcon, CheckIcon } from '@/common/components/icons';
 import { MCP_SETUP_EXAMPLES_URL, openExternalUrl } from '@/common/lib/externalLink';
 import { Button } from '@/common/components/ui/button';
@@ -15,166 +14,22 @@ import { Input } from '@/common/components/ui/input';
 import { StatusMessage } from '@/common/components/ui/status';
 
 export function McpAccessPanel() {
-  const { actions } = useAppActions();
-  const mountedRef = useRef(true);
-  const copyResetTimerRef = useRef<number | null>(null);
-  const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
-  const [config, setConfig] = useState<string>('');
-  const [copied, setCopied] = useState<'stdio' | 'loopback' | 'token' | 'docker' | null>(null);
-  const [http, setHttp] = useState<McpHttpStatus | null>(null);
-  const [httpBusy, setHttpBusy] = useState(false);
+  const {
+    config,
+    http,
+    status,
+    loadError,
+    httpBusy,
+    copied,
+    dockerPortInput,
+    setDockerPortInput,
+    reload,
+    copyText,
+    rotateToken,
+    setDockerAccess,
+    saveDockerPort,
+  } = useMcpAccess();
   const [showToken, setShowToken] = useState(false);
-  const [dockerPortInput, setDockerPortInput] = useState('');
-  const [loadError, setLoadError] = useState<string | null>(null);
-  /** Bumped by every status read AND every mutation that applies fresh
-   *  `http` state, so an in-flight (possibly pre-mutation) status response
-   *  can never clobber newer server truth — e.g. resurrect a rotated
-   *  bearer token into the Copy-able field. */
-  const loadSeqRef = useRef(0);
-
-  useEffect(() => () => {
-    mountedRef.current = false;
-    if (copyResetTimerRef.current != null) {
-      window.clearTimeout(copyResetTimerRef.current);
-    }
-  }, []);
-
-  const loadStatus = useCallback(async (opts: { silent?: boolean } = {}) => {
-    const seq = ++loadSeqRef.current;
-    try {
-      const res = await api.mcpStatus();
-      if (!mountedRef.current || seq !== loadSeqRef.current) return;
-      setLoadError(null);
-      setConfig(JSON.stringify(res.config ?? {}, null, 2));
-      setHttp(res.http);
-      setDockerPortInput(String(res.http.dockerPort));
-    } catch (err: unknown) {
-      if (!mountedRef.current || seq !== loadSeqRef.current) return;
-      const text = err instanceof Error ? err.message : String(err);
-      // Always record the failure: a silently swallowed initial load left
-      // the panel stuck on "Loading server connection…" with no error and
-      // no retry. Silent callers just skip the shared status line.
-      setLoadError(text);
-      if (!opts.silent) setStatus({ kind: 'error', text });
-    }
-  }, []);
-
-  /** Apply a mutation response's `http` snapshot as the newest truth. */
-  const applyHttp = useCallback((next: McpHttpStatus) => {
-    loadSeqRef.current++;
-    setLoadError(null);
-    setHttp(next);
-    setDockerPortInput(String(next.dockerPort));
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    void loadStatus({ silent: true });
-  }, [loadStatus]);
-
-  // The app listener starts immediately after the loopback web server. A
-  // Settings request can land during that short transition, so refresh until
-  // the opted-in Docker listener reaches a terminal active/error state.
-  useEffect(() => {
-    if (!http?.dockerAccess || http.dockerActive || http.dockerError || http.settingsError) return;
-    const timer = window.setInterval(() => void loadStatus({ silent: true }), 750);
-    return () => window.clearInterval(timer);
-  }, [http?.dockerAccess, http?.dockerActive, http?.dockerError, http?.settingsError, loadStatus]);
-
-  async function copyText(value: string, target: 'stdio' | 'loopback' | 'token' | 'docker') {
-    let ok = false;
-    try {
-      await navigator.clipboard.writeText(value);
-      ok = true;
-    } catch {
-      // navigator.clipboard can reject in an unfocused / restricted
-      // Electron webview — fall back to the legacy execCommand path.
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = value;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        ok = document.execCommand('copy');
-        document.body.removeChild(ta);
-      } catch { ok = false; }
-    }
-    if (ok) {
-      if (!mountedRef.current) return;
-      setCopied(target);
-      if (copyResetTimerRef.current != null) {
-        window.clearTimeout(copyResetTimerRef.current);
-      }
-      copyResetTimerRef.current = window.setTimeout(() => {
-        copyResetTimerRef.current = null;
-        if (mountedRef.current) setCopied(null);
-      }, 1500);
-    } else {
-      if (!mountedRef.current) return;
-      setStatus({ kind: 'error', text: 'Couldn’t copy — select the text and copy manually.' });
-    }
-  }
-
-  async function rotateToken() {
-    const confirmed = await actions.confirm(
-      'Rotate the MCP bearer token? URL-based clients using the current token will stop working.',
-      { title: 'Rotate MCP token?', confirmLabel: 'Rotate', destructive: true },
-    );
-    if (!confirmed) return;
-    setHttpBusy(true);
-    setStatus(null);
-    try {
-      const result = await api.rotateMcpHttpToken();
-      if (!mountedRef.current) return;
-      applyHttp(result.http);
-      setStatus({ kind: 'ok', text: 'MCP bearer token rotated. Update every URL-based client.' });
-    } catch (err: unknown) {
-      if (mountedRef.current) setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
-    } finally {
-      if (mountedRef.current) setHttpBusy(false);
-    }
-  }
-
-  async function setDockerAccess(enabled: boolean) {
-    setHttpBusy(true);
-    setStatus(null);
-    try {
-      const result = await api.setMcpDockerAccess(enabled);
-      if (!mountedRef.current) return;
-      applyHttp(result.http);
-      setStatus({
-        kind: 'ok',
-        text: enabled ? 'Docker MCP access enabled.' : 'Docker MCP access disabled.',
-      });
-    } catch (err: unknown) {
-      if (!mountedRef.current) return;
-      setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
-      void loadStatus({ silent: true });
-    } finally {
-      if (mountedRef.current) setHttpBusy(false);
-    }
-  }
-
-  async function saveDockerPort() {
-    const port = Number(dockerPortInput);
-    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
-      setStatus({ kind: 'error', text: 'Docker MCP port must be an integer from 1024 to 65535.' });
-      return;
-    }
-    setHttpBusy(true);
-    setStatus(null);
-    try {
-      const result = await api.setMcpDockerPort(port);
-      if (!mountedRef.current) return;
-      applyHttp(result.http);
-      setStatus({ kind: 'ok', text: `Docker MCP port changed to ${result.http.dockerPort}.` });
-    } catch (err: unknown) {
-      if (mountedRef.current) setStatus({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
-    } finally {
-      if (mountedRef.current) setHttpBusy(false);
-    }
-  }
 
   return (
     <div>
@@ -325,7 +180,7 @@ export function McpAccessPanel() {
             <StatusMessage tone="error" className="wrap-anywhere">
               Couldn’t load MCP access settings: {loadError}
             </StatusMessage>
-            <Button variant="outline" className="mt-2.5" onClick={() => void loadStatus()}>
+            <Button variant="outline" className="mt-2.5" onClick={() => void reload()}>
               Retry
             </Button>
           </div>
