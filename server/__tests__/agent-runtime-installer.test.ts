@@ -338,6 +338,61 @@ test('Claude staging cleanup never masks the executable verification failure', a
   }
 });
 
+test('Claude release publish retries a transient Windows rename lock', async () => {
+  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-publish-test-'));
+  const version = '2.1.234';
+  const platform = claudePlatform();
+  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  const binary = Buffer.from('fake Claude executable');
+  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
+  mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0]) => {
+    const url = String(input);
+    if (url.endsWith('/latest')) return new Response(version);
+    if (url.endsWith('/manifest.json')) {
+      return new Response(JSON.stringify({
+        version,
+        platforms: {
+          [platform]: {
+            binary: binaryName,
+            checksum: crypto.createHash('sha256').update(binary).digest('hex'),
+            size: binary.length,
+          },
+        },
+      }));
+    }
+    return new Response(binary);
+  });
+  const originalRenameSync = fs.renameSync;
+  const stagingSources: string[] = [];
+  mock.method(fs, 'renameSync', ((source: fs.PathLike, destination: fs.PathLike) => {
+    if (String(source).includes('.staging.')) {
+      stagingSources.push(String(source));
+      if (stagingSources.length === 1) {
+        throw Object.assign(
+          new Error(`EPERM: operation not permitted, rename '${source}' -> '${destination}'`),
+          { code: 'EPERM', syscall: 'rename' },
+        );
+      }
+    }
+    return originalRenameSync(source, destination);
+  }) as typeof fs.renameSync);
+  try {
+    await installClaude(() => {}, new AbortController().signal, () => {});
+    assert.equal(stagingSources.length, 2);
+    assert.equal(stagingSources[0], stagingSources[1]);
+    assert.deepEqual(
+      fs.readFileSync(path.join(managedAgentRuntimeRoot('claude'), 'releases', version, platform, binaryName)),
+      binary,
+    );
+  } finally {
+    mock.restoreAll();
+    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('Agent executable verification reports the native exit code and stderr', {
   skip: process.platform === 'win32',
 }, () => {

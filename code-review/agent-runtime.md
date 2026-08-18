@@ -61,10 +61,13 @@
   fabricated path that can collapse into ENOENT.
   Native sessions still use the provider's normal account and history home.
   Claude uses its official release manifest, verifies size and SHA-256, and
-  publishes atomically. Disposable staging cleanup retries transient Windows
-  locks and never replaces the primary download or executable-check failure;
-  failed executable checks retain bounded timeout, exit-code, and stderr
-  diagnostics. Shutdown cancels preparation.
+  publishes atomically. Publishing retries the same verified staging directory
+  with bounded backoff when Windows temporarily retains the just-executed
+  binary; it never downloads or executes a second copy for that recovery.
+  Disposable staging cleanup likewise retries transient Windows locks and never
+  replaces the primary download or executable-check failure; failed executable
+  checks retain bounded timeout, exit-code, and stderr diagnostics. Shutdown
+  cancels preparation, including a pending publish retry.
 - Readiness configures the matching CLI's StashBase MCP entry through
   `ensureAgentMcp`, the only writer of the built-in agents' own config files.
   Native attach repeats that idempotent write immediately before process

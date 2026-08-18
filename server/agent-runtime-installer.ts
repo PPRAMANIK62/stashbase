@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   consumeAgentSetupFailure,
   managedAgentExecutable,
@@ -484,6 +485,31 @@ function removeInstallerStaging(staging: string): void {
   }
 }
 
+const CLAUDE_PUBLISH_RETRY_DELAYS_MS = [100, 200, 400, 800, 1_600] as const;
+const TRANSIENT_RENAME_ERROR_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
+
+async function publishClaudeRelease(
+  staging: string,
+  releaseRoot: string,
+  signal: AbortSignal,
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    if (fs.existsSync(releaseRoot)) {
+      removeInstallerStaging(staging);
+      return;
+    }
+    try {
+      fs.renameSync(staging, releaseRoot);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const retryDelay = CLAUDE_PUBLISH_RETRY_DELAYS_MS[attempt];
+      if (!retryDelay || !code || !TRANSIENT_RENAME_ERROR_CODES.has(code)) throw error;
+      await delay(retryDelay, undefined, { signal });
+    }
+  }
+}
+
 export async function installClaude(
   update: (next: ProgressUpdate) => void,
   signal: AbortSignal,
@@ -527,8 +553,7 @@ export async function installClaude(
       if (process.platform !== 'win32') fs.chmodSync(stagingBinary, 0o755);
       verifyExecutable(stagingBinary, 'Claude Code', process.env);
       fs.mkdirSync(path.dirname(releaseRoot), { recursive: true, mode: 0o700 });
-      if (!fs.existsSync(releaseRoot)) fs.renameSync(staging, releaseRoot);
-      else removeInstallerStaging(staging);
+      await publishClaudeRelease(staging, releaseRoot, signal);
     } catch (error) {
       removeInstallerStaging(staging);
       throw error;
