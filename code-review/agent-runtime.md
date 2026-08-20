@@ -188,6 +188,12 @@ assumed CLI versions.
 - Runtime errors settle only the matching active turn once. Retry-in-progress
   signals do not become permanent failures; repeated or late terminal events
   are ignored.
+- Native advisory notifications normalize to the shared non-fatal `notice`
+  event, never `error`. Codex `warning`, `guardianWarning`, and
+  `configWarning` preserve their message (including structured configuration
+  summary/details) without settling a turn or changing session readiness.
+  The Adapter assigns this classification from native event structure; the
+  renderer never parses provider prose to recover severity.
 - Turn-scoped runtime errors carry a structured failure kind — rate-limit,
   quota, auth-expired, or network — classified once in the adapters through
   the shared classifier; an unmatched message stays a plain error. The
