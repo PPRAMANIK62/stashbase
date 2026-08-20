@@ -70,10 +70,10 @@ export function LazyManagedModal<P extends { isTopmost: boolean }>({
 }
 
 /**
- * The "event-triggered picker" fallback recipe shared by LibrarySearch and
- * QuickOpen: an error boundary keyed to the request id (so a retry after a
- * failed dynamic import gets a clean remount), plus a plain status line
- * while the picker's own chunk loads.
+ * The "event-triggered picker" fallback recipe shared by LibrarySearch,
+ * QuickOpen, and LinkFilePicker: an error boundary keyed to the request id
+ * (so a retry after a failed dynamic import gets a clean remount), plus a
+ * plain status line while the picker's own chunk loads.
  */
 export function LazyManagedPicker<P extends object>({
   as: Component,

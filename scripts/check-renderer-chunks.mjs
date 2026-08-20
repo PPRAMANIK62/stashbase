@@ -15,10 +15,19 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * update banner, and the General settings panel are all lazy, but the parts
  * that decide WHETHER to show them are not — the conflict actions live in
  * the document action set, and the clipboard-capture handoff lives in the
- * shell's own hook. Raise it only for shell UI that must load with the
- * window — anything a user can open on demand belongs in a dynamic entry
- * above. */
-const initialJsBudgetBytes = 424 * 1024;
+ * shell's own hook. 424 → 425 for the "Link to file…" picker: its body
+ * (ManagedLinkFilePicker, listed as a required dynamic entry below) stays
+ * lazy, but the always-mounted gate that owns the open/close event and its
+ * slash-menu trigger wiring is eager by the same shell-UI rule as Quick
+ * Open's own gate. 425 → 426 when this branch merged main's
+ * Choose-Folder-on-bare-windows work: `ChooseFolderButton` sits below the
+ * always-mounted New Chat button and `FolderSwitcher`'s menu-item builder
+ * moved into the shared `libraryMenuItems` module — both eager chrome by
+ * the same rule as the folder-switcher trigger above, landing on top of
+ * this branch's own Link-to-file picker gate rather than instead of it.
+ * Raise it only for shell UI that must load with the window — anything a
+ * user can open on demand belongs in a dynamic entry above. */
+const initialJsBudgetBytes = 426 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
@@ -30,6 +39,7 @@ const expectedEntries = [
   'src/features/documents/components/AudioPreview.tsx',
   'src/features/search/components/ManagedLibrarySearch.tsx',
   'src/features/search/components/ManagedQuickOpen.tsx',
+  'src/features/documents/components/ManagedLinkFilePicker.tsx',
   'src/app/components/ContextMenu.tsx',
   'src/common/components/DocumentOutline.tsx',
   'src/common/components/SemanticIndexingNotice.tsx',

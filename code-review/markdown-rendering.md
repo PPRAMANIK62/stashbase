@@ -98,10 +98,18 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   click forwarding, the injected HTML bootstrap) must strip or capture both
   tokens in step.
 - Relative Markdown links navigate inside the app. Decode path segments only
-  after splitting, reject empty/dot/parent/embedded-separator segments, ignore
-  non-note workspace assets, and hand only original HTTP(S) URLs to the system
-  browser. Links inside an out-of-folder document inherit its `__folder` token
-  and open in that same member folder, never the window's active folder. The edit and preview popovers share one compact, viewport-safe
+  after splitting, reject empty/dot/parent/embedded-separator segments, and
+  hand only original HTTP(S) URLs to the system browser. A workspace-relative
+  target resolves (`kind: 'library-file'`) when its extension matches a format
+  the app can already open in a viewer tab — notes plus PDF, image, DOCX,
+  audio/video, and JSON, sourced from `shared/file-formats.ts`, the same
+  vocabulary `useDocumentActions.ts`'s `loadFile` dispatch draws its
+  audio/video matching from; its PDF, DOCX, and image branches remain
+  separate hardcoded checks today, so only that one format family's parity
+  with the classifier is import-enforced rather than convention-maintained —
+  and is ignored otherwise. Links inside an out-of-folder document inherit its
+  `__folder` token and open in that same member folder, never the window's
+  active folder. The edit and preview popovers share one compact, viewport-safe
   width. The link field must keep its URL-or-note-path guidance readable, and
   switching between states must not resize the surrounding document.
 - Preserve valid leading YAML frontmatter verbatim outside the Milkdown body.

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '@/features/search/lib/commandPalette';
-import { rankQuickOpen } from '@/features/search/lib/quickOpen';
+import { rankQuickOpen } from '@/common/lib/quickOpen';
+import { usePickerListNav } from '@/common/hooks/usePickerListNav';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
 import { openSettings } from '@/common/lib/settingsTrigger';
@@ -29,7 +30,6 @@ export default function ManagedQuickOpen({
   const { activeTab } = state;
   const { actions } = useAppActions();
   const [query, setQuery] = useState(commandsOnly ? '>' : '');
-  const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const paths = useMemo(() => state.files.map((file) => file.name), [state.files]);
   const recentPaths = state.recentFilePaths;
@@ -74,23 +74,21 @@ export default function ManagedQuickOpen({
       case 'settings.open': openSettings(); break;
     }
   };
+  const { active, setActive, onKeyDown } = usePickerListNav(itemCount, {
+    onCancel: close,
+    onAccept: (index) => {
+      if (route.provider === 'files' && fileItems[index]) accept(fileItems[index].path);
+      else if (route.provider === 'commands' && commands[index]) runCommand(commands[index].id);
+    },
+  });
 
   useEffect(() => { inputRef.current?.focus(); }, []);
-  useEffect(() => { if (active >= itemCount) setActive(Math.max(0, itemCount - 1)); }, [active, itemCount]);
 
   return <div className={`quick-open-veil ${PICKER_VEIL_CLASS}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
     <div className={pickerPanelClass('wide')} role="dialog" aria-label={route.provider === 'commands' ? 'Command Palette' : 'Quick Open'}>
       <input ref={inputRef} className="w-full border-0 border-b border-solid border-border bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder" role="combobox" aria-autocomplete="list" aria-controls="quick-open-results" aria-expanded="true" aria-activedescendant={itemCount ? `quick-open-${active}` : undefined} placeholder={route.provider === 'commands' ? 'Type a command' : 'Search files by name or path'} value={query}
         onChange={(event) => { setQuery(event.target.value); setActive(0); }}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
-          else if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index) => Math.min(index + 1, itemCount - 1)); }
-          else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)); }
-          else if (event.key === 'Home') { event.preventDefault(); setActive(0); }
-          else if (event.key === 'End') { event.preventDefault(); setActive(Math.max(0, itemCount - 1)); }
-          else if (event.key === 'Enter' && route.provider === 'files' && fileItems[active]) { event.preventDefault(); accept(fileItems[active].path); }
-          else if (event.key === 'Enter' && route.provider === 'commands' && commands[active]) { event.preventDefault(); runCommand(commands[active].id); }
-        }} />
+        onKeyDown={onKeyDown} />
       <div className={PICKER_LABEL_CLASS}>{route.provider === 'files' ? (route.query.trim() ? 'Files' : 'Recent editors') : route.provider === 'commands' ? 'Commands' : 'Quick Access'}</div>
       <ul id="quick-open-results" className={PICKER_RESULTS_CLASS} role="listbox" aria-label="Quick Open results">
         {route.provider === 'files' && fileItems.map((item, index) => <li key={item.path} id={`quick-open-${index}`} role="option" aria-selected={index === active} className={PICKER_ROW_CLASS} onMouseMove={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); accept(item.path); }}><span>{item.basename}</span><small className={PICKER_ROW_DETAIL_CLASS}>{item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Active Library'}</small></li>)}

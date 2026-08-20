@@ -5,8 +5,4 @@ export function relativeAssetPath(noteName: string, uploadedPath: string): strin
   return uploadedPath.startsWith(prefix) ? uploadedPath.slice(prefix.length) : uploadedPath;
 }
 
-/** Keep image Markdown portable; DOM rendering resolves this path against the
- * active note's asset URL only after Milkdown has parsed it. */
-export function portableImageMarkdownPath(relativePath: string): string {
-  return relativePath.split('/').map(encodeURIComponent).join('/');
-}
+export { portableImageMarkdownPath } from '@/common/lib/relativeLinkPath';

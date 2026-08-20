@@ -4,6 +4,10 @@
  * host (image lightbox / in-app nav / external open) via `postMessage`.
  */
 
+import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
+
+const VIEWABLE_FILE_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
+
 /** Click handler for a preview iframe's document: a clicked image opens
  *  the shared lightbox; a clicked link forwards to in-app nav (relative
  *  notes) or external open (`http(s)`). Other schemes fall through.
@@ -47,9 +51,12 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
   if (url.origin === window.location.origin && url.pathname.startsWith('/asset/')) {
     let decoded: { path: string; folder?: string };
     try { decoded = decodeAssetPathname(url.pathname); } catch { return; }
-    if (/\.(md|markdown|html|htm)$/i.test(decoded.path)) {
-      // Notes navigate in-app; a `__folder/` token keeps the target inside
-      // an out-of-folder document's own member folder.
+    if (VIEWABLE_FILE_RE.test(decoded.path)) {
+      // A target the app can already open in a viewer tab (notes plus PDF,
+      // image, DOCX, audio/video, JSON — same vocabulary Milkdown link
+      // navigation uses, see markdown-rendering.md) navigates in-app; a
+      // `__folder/` token keeps the target inside an out-of-folder
+      // document's own member folder.
       e.preventDefault();
       const hash = url.hash.startsWith('#') ? url.hash.slice(1) : '';
       window.postMessage({
@@ -60,12 +67,11 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
       }, window.location.origin);
       return;
     }
-    // Non-note assets (recording webm, PDFs, images linked explicitly)
-    // open in the system browser — the same-origin /asset/ URL streams
-    // from our local server, and the browser can play/preview formats the
-    // in-app viewers don't (notably MediaRecorder webm, which lacks the
-    // header duration an inline <video> needs). Without this they'd fall
-    // through and navigate the app shell away from the workspace.
+    // An asset outside the viewer's format matrix opens in the system
+    // browser — the same-origin /asset/ URL streams from our local server,
+    // and the browser can play/preview a format none of the in-app viewers
+    // handle. Without this it would fall through and navigate the app
+    // shell away from the workspace.
     e.preventDefault();
     window.postMessage({ type: 'stashbase-open-external', href: url.href }, window.location.origin);
     return;
