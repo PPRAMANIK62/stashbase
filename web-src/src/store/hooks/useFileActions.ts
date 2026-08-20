@@ -5,6 +5,7 @@ import {
 } from '@shared/file-formats';
 import { api, ApiError, errorMessage } from '@/common/api/api';
 import { basename } from '@/common/lib/paths';
+import { portableImageMarkdownPath, relativeLinkPath } from '@/common/lib/relativeLinkPath';
 import { isFolderFileTab } from '@/store/lib/appContextHelpers';
 import {
   getActiveTab,
@@ -97,6 +98,29 @@ export function useFileActions(
    *  its own failure, and there is nothing for the renderer to undo. */
   const revealFile = useCallback((name: string) => {
     void api.revealFile(name);
+  }, []);
+
+  /** Copy a pasteable Markdown link to a file in the tree. Pure client-side
+   *  path math + clipboard write — no server round-trip, so this skips the
+   *  request/toast machinery the mutating actions above need. */
+  const copyFileLink = useCallback((targetPath: string) => {
+    const activeFile = getActiveTab(stateRef.current.workspace)?.file;
+    // Only an in-folder (not out-of-folder-tab) Markdown note gives a valid
+    // "from" side: relativeLinkPath assumes both paths share one folder
+    // root, which an out-of-folder tab's `file.folder` breaks.
+    const hasActiveNote = !!activeFile && !activeFile.folder && activeFile.format === 'md';
+    const relativePath = hasActiveNote
+      ? relativeLinkPath(activeFile.name, targetPath)
+      // No active note tab means there is no "from" side to resolve a
+      // relative path against, so this isn't truly relative to anything —
+      // fall back to the target's own workspace-relative path (still valid
+      // Markdown link syntax) rather than blocking the action.
+      : targetPath;
+    // Percent-encode each segment so the link survives round-tripping through
+    // Markdown/URL parsing (matches how image uploads and every other
+    // relative link in this app are already encoded — see
+    // navigation.test.ts's '%20'-encoded fixtures).
+    void navigator.clipboard?.writeText(`[${basename(targetPath)}](${portableImageMarkdownPath(relativePath)})`);
   }, []);
 
   /** Rebuild a file's searchable version. The folder is captured at the
@@ -480,6 +504,7 @@ export function useFileActions(
   // not on individually listed members, so a new action added here is
   // tracked automatically.
   return useMemo(() => ({
+    copyFileLink,
     deleteFile,
     deleteFolder,
     moveFile,
@@ -491,6 +516,7 @@ export function useFileActions(
     revealFile,
     upload,
   }), [
+    copyFileLink,
     deleteFile,
     deleteFolder,
     moveFile,

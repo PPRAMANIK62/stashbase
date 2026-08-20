@@ -353,7 +353,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     newNote: workspace.newNote, newFolder: workspace.newFolder, deleteFile: workspace.deleteFile, deleteFolder: workspace.deleteFolder,
     renameFile: workspace.renameFile, renameFolder: workspace.renameFolder, moveFile: workspace.moveFile,
-    reprocessFile: workspace.reprocessFile, revealFile: workspace.revealFile, upload: workspace.upload,
+    reprocessFile: workspace.reprocessFile, revealFile: workspace.revealFile, copyFileLink: workspace.copyFileLink, upload: workspace.upload,
     scheduleSave: workspace.scheduleSave, flushSave: workspace.flushSave,
     resolveConflictOverwrite: workspace.resolveConflictOverwrite,
     resolveConflictReload: workspace.resolveConflictReload,

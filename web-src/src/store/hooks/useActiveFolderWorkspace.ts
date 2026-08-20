@@ -60,6 +60,7 @@ export interface ActiveFolderWorkspace {
   moveFile: (oldPath: string, targetDir: string) => Promise<boolean>;
   reprocessFile: (name: string, folder?: string) => Promise<void>;
   revealFile: (name: string) => void;
+  copyFileLink: (targetPath: string) => void;
   upload: (items: { file: File; relPath: string }[], dir: string) => Promise<boolean>;
   scheduleSave: () => void;
   flushSave: () => Promise<boolean>;

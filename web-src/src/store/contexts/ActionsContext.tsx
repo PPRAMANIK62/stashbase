@@ -136,6 +136,10 @@ export interface AppActions {
   reprocessFile: (name: string, folder?: string) => Promise<void>;
   /** Show the file in the OS file manager. */
   revealFile: (name: string) => void;
+  /** Copy a pasteable Markdown link to the file at `targetPath` to the
+   *  clipboard. Relative to the active Markdown note when one is open, else
+   *  falls back to `targetPath`'s own workspace-relative form. */
+  copyFileLink: (targetPath: string) => void;
   upload: (items: { file: File; relPath: string }[], dir: string) => Promise<boolean>;
 
   scheduleSave: () => void;

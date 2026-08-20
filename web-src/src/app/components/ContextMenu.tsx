@@ -19,6 +19,13 @@ export default function ContextMenu() {
       returnFocus: false,
       onSelect: () => dispatch({ type: 'RENAMING', renaming: { path: target, kind } }),
     },
+    ...(kind === 'file'
+      ? [{
+          label: 'Copy Link',
+          title: 'Copy a Markdown link to this file',
+          onSelect: () => actions.copyFileLink(target),
+        } satisfies MenuItem]
+      : []),
     { label: revealLabel(), onSelect: () => actions.revealFile(target) },
     ...(canReprocess
       ? [{

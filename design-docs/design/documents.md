@@ -44,6 +44,8 @@ editor, a media editor, or a proprietary document format.
 - Safe workspace-relative links stay in StashBase. HTTP(S) links use the
   system browser. Markdown, DOCX, and Agent-rendered executable content stays
   inert.
+- The file tree's Copy Link action puts a ready-to-paste Markdown link to a
+  file on the clipboard, relative to the open note when one exists.
 
 ## Format Capability Matrix
 
