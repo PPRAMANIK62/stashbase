@@ -339,7 +339,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, dirty, f
       const link = resolveMilkdownLink(anchor.getAttribute('href') ?? '', nameRef.current, folderRef.current);
       if (link.kind === 'anchor') {
         host.querySelector<HTMLElement>(`#${CSS.escape(link.id)}`)?.scrollIntoView({ block: 'start' });
-      } else if (link.kind === 'note') {
+      } else if (link.kind === 'library-file') {
         // A link inside an out-of-folder document resolves within that same
         // member folder — never against the window's active folder.
         if (link.folder) void actions.openLibraryFile(link.folder, link.path, { anchor: link.anchor });

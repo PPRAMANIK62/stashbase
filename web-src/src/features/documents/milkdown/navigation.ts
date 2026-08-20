@@ -1,8 +1,11 @@
+import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
 import { assetBaseUrl } from '@/common/api/api';
+
+const VIEWABLE_FILE_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
 
 export type MilkdownLinkTarget =
   | { kind: 'anchor'; id: string }
-  | { kind: 'note'; path: string; anchor?: string; folder?: string }
+  | { kind: 'library-file'; path: string; anchor?: string; folder?: string }
   | { kind: 'external'; href: string }
   | { kind: 'ignore' };
 
@@ -25,8 +28,8 @@ export function resolveMilkdownLink(raw: string, noteName: string, noteFolder?: 
       const decoded = asset[2].split('/').map(decodeURIComponent);
       if (decoded.some((segment) => !segment || segment === '.' || segment === '..' || /[\\/]/.test(segment))) return { kind: 'ignore' };
       const path = decoded.join('/');
-      if (/\.(md|markdown|html|htm)$/i.test(path)) {
-        return { kind: 'note', path, anchor: url.hash.slice(1) || undefined, ...(folder ? { folder } : {}) };
+      if (VIEWABLE_FILE_RE.test(path)) {
+        return { kind: 'library-file', path, anchor: url.hash.slice(1) || undefined, ...(folder ? { folder } : {}) };
       }
       return { kind: 'ignore' };
     } catch { return { kind: 'ignore' }; }
