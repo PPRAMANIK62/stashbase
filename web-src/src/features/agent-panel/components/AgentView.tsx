@@ -1,8 +1,9 @@
 /**
  * Structured chat view for an agent tab — the VSCode-extension-style
- * panel. Both Claude (Agent SDK) and Codex (app-server) connect through the
- * Shared Agent Contract at `/ws/agent`; their adapters live in server.
- * Both render the event stream as ordered blocks:
+ * panel. StashBase Agent (OpenCode), Claude (Agent SDK), and Codex
+ * (app-server) connect through the Shared Agent Contract at `/ws/agent`;
+ * their adapters live in server.
+ * All adapters render the event stream as ordered blocks:
  * user / assistant bubbles, collapsible thinking, tool cards with
  * inline diffs + approve/reject, and error notices. A composer at the
  * bottom sends prompts, stops a running turn, takes dropped files, and
@@ -150,6 +151,7 @@ export function AgentView({
           onCheck={() => void runtime.checkRuntime()}
           onInstall={() => void runtime.startRuntimeBootstrap()}
           onLogin={() => void runtime.loginToCodex()}
+          onOpenAccount={() => openSettings('agents')}
           onCopyInstall={runtime.copyInstallHint}
           onOpenMcpSetup={() => openSettings('mcp')}
         />

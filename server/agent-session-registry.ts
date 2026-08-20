@@ -17,7 +17,7 @@
 
 export const AGENT_SESSION_ID_HEADER = 'x-stashbase-agent-session-id';
 
-export type AttributedAgentId = 'claude' | 'codex';
+export type AttributedAgentId = 'stashbase' | 'claude' | 'codex';
 
 /** The narrow live-session surface `create_project` needs. */
 export interface AttributedAgentSession {

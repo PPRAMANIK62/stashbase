@@ -119,6 +119,11 @@ test('OAuth PKCE session persists locally and authenticates quota requests', () 
         plan: 'free', grantedTokens: 1000000, usedTokens: 12, reservedTokens: 0,
         remainingTokens: 999988, periodStartedAt: '2026-08-01T00:00:00.000Z', periodEndsAt: '2026-09-01T00:00:00.000Z',
       });
+      if (String(url).endsWith('/v1/agent/usage')) return Response.json({
+        plan: 'free', currency: 'USD', grantedMicros: 1000000, usedMicros: 250000,
+        reservedMicros: 0, remainingMicros: 750000, inputTokens: 100, outputTokens: 25,
+        cacheReadTokens: 10, periodStartedAt: '2026-08-01T00:00:00.000Z', periodEndsAt: '2026-09-01T00:00:00.000Z',
+      });
       throw new Error('unexpected URL ' + url);
     };
     const account = await import('./server/hosted-account.ts');
@@ -129,8 +134,9 @@ test('OAuth PKCE session persists locally and authenticates quota requests', () 
     account.noteHostedOAuthAppReturn();
     config.setEmbeddingSource('stashbase-account');
     const quota = await account.fetchHostedQuota();
+    const agentAllowance = await account.fetchHostedAgentAllowance();
     const state = await account.hostedAccountState();
-    process.stdout.write(JSON.stringify({ started, status: account.hostedOAuthStatus(started.flowId), calls, quota, state, session: config.getHostedAccountSession(), source: config.getEmbeddingSource() }));
+    process.stdout.write(JSON.stringify({ started, status: account.hostedOAuthStatus(started.flowId), calls, quota, agentAllowance, state, session: config.getHostedAccountSession(), source: config.getEmbeddingSource() }));
   `);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
@@ -146,7 +152,9 @@ test('OAuth PKCE session persists locally and authenticates quota requests', () 
   assert.equal(output.status.state, 'complete');
   assert.equal(output.status.appReturned, true);
   assert.equal(output.calls[1].authorization, 'Bearer access-1');
+  assert.equal(output.calls[2].authorization, 'Bearer access-1');
   assert.equal(output.quota.remainingTokens, 999_988);
+  assert.equal(output.agentAllowance.remainingMicros, 750_000);
   assert.equal(output.session.refreshToken, 'refresh-1');
   assert.equal(output.source, 'stashbase-account');
   assert.equal(output.state.email, 'person@example.com');

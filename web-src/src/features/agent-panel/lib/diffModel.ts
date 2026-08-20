@@ -7,6 +7,9 @@ export type DiffRow = { type: 'ctx' | 'del' | 'add'; text: string };
 
 export function buildDiff(name: string, input: Record<string, unknown>): { file: string; rows: DiffRow[] } | null {
   const file = String(input.file_path ?? input.path ?? '');
+  if (name === 'FileDiff') {
+    return { file, rows: lineDiff(String(input.before ?? ''), String(input.after ?? '')) };
+  }
   if (name === 'Edit') {
     return { file, rows: lineDiff(String(input.old_string ?? ''), String(input.new_string ?? '')) };
   }

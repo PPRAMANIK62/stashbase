@@ -15,24 +15,24 @@ function memoryStorage(initial: string | null = null) {
   };
 }
 
-test('Codex is the default until the user chooses another Agent', () => {
+test('StashBase Agent is the default until the user chooses another Agent', () => {
   const storage = memoryStorage();
 
-  assert.equal(DEFAULT_AGENT, 'codex');
-  assert.equal(readPreferredAgent(storage), 'codex');
+  assert.equal(DEFAULT_AGENT, 'stashbase');
+  assert.equal(readPreferredAgent(storage), 'stashbase');
 
   rememberPreferredAgent('claude', storage);
   assert.equal(readPreferredAgent(storage), 'claude');
 });
 
-test('invalid or inaccessible Agent preferences recover to Codex', () => {
-  assert.equal(readPreferredAgent(memoryStorage('other-agent')), 'codex');
+test('invalid or inaccessible Agent preferences recover to StashBase Agent', () => {
+  assert.equal(readPreferredAgent(memoryStorage('other-agent')), 'stashbase');
 
   const inaccessible = {
     getItem: () => { throw new Error('blocked'); },
     setItem: () => { throw new Error('blocked'); },
   };
-  assert.equal(readPreferredAgent(inaccessible), 'codex');
+  assert.equal(readPreferredAgent(inaccessible), 'stashbase');
   assert.doesNotThrow(() => rememberPreferredAgent('claude', inaccessible));
 });
 

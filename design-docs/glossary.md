@@ -17,8 +17,8 @@ Avoid: `global store`, `app state` when this narrower meaning is intended.
 The built-in Agent capability for working against an explicit library or
 folder scope. **Chat** is the Agent Panel's visible conversation surface: it
 leads before a document is opened and docks beside the Document Workbench when
-a source is active. The Agent Panel may run Claude or Codex; it is not itself
-synonymous with either runtime.
+a source is active. The Agent Panel may run StashBase Agent, Claude Code, or
+Codex; it is not itself synonymous with any runtime.
 
 ## AI Index
 

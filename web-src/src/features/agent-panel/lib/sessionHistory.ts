@@ -5,7 +5,7 @@
  *
  * History anchors on the active folder's header row (that folder's
  * sessions) and the New Chat row (ALL sessions across the library).
- * Each menu merges BOTH agents' sessions; a row remembers its agent so
+ * Each menu merges every Agent's sessions; a row remembers its Agent so
  * rename/delete/resume route through the right runtime, and under the
  * all-scope listing its own member folder so actions bind its scope.
  *

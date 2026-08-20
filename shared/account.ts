@@ -19,6 +19,23 @@ export interface HostedQuota {
   periodEndsAt: string | null;
 }
 
+/** Agent allowance is cost-denominated because model input, cached input,
+ * reasoning, and output tokens have different prices. Integer micro-dollars
+ * keep accounting exact across the local API boundary. */
+export interface HostedAgentAllowance {
+  plan: string;
+  currency: 'USD';
+  grantedMicros: number;
+  usedMicros: number;
+  reservedMicros: number;
+  remainingMicros: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  periodStartedAt: string | null;
+  periodEndsAt: string | null;
+}
+
 export interface HostedAccountState {
   signedIn: boolean;
   active: boolean;

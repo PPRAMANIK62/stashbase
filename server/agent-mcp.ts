@@ -1,9 +1,10 @@
 /**
  * StashBase MCP launcher and built-in Agent MCP configuration.
  *
- * Owns the platform launcher script under `~/.stashbase/bin` and the
- * idempotent config writes for the two built-in Chat runtimes (Claude Code,
- * Codex). Only Agent readiness calls `ensureAgentMcp`; every other
+ * Owns the platform launcher script under `~/.stashbase/bin`, the
+ * per-process launcher used by StashBase Agent, and idempotent config writes
+ * for the bring-your-own Chat runtimes (Claude Code, Codex). Only Agent
+ * readiness calls `ensureAgentMcp`; every other
  * MCP-compatible client configures itself from the standard config that
  * Settings → MCP exposes read-only.
  */

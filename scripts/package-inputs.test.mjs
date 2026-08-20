@@ -73,3 +73,19 @@ test('Windows extractor build wires PyInstaller hide-console without switching o
   assert.match(source, /'stashbase-extract',\s*\.\.\.extractorConsoleArgs,/);
   assert.doesNotMatch(source, /'--(?:no)?console'/);
 });
+
+test('bundled OpenCode runtime and SDK are pinned and executable outside asar', () => {
+  assert.equal(pkg.dependencies?.['@opencode-ai/sdk'], '1.18.19');
+  assert.equal(pkg.dependencies?.['opencode-ai'], '1.18.19');
+  assert.ok(
+    pkg.build?.asarUnpack?.includes('node_modules/opencode-ai/bin/**/*'),
+    'OpenCode binary must be unpacked from app.asar',
+  );
+  assert.ok(
+    pkg.build?.asarUnpack?.includes('node_modules/.pnpm/opencode-ai*/node_modules/opencode-ai/bin/**/*'),
+    'pnpm OpenCode binary target must be unpacked from app.asar',
+  );
+  const workspace = fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8');
+  assert.match(workspace, /^\s*opencode-ai:\s+true\s*$/m);
+  assert.ok(fs.existsSync(path.join(root, 'node_modules', 'opencode-ai', 'bin', 'opencode.exe')));
+});

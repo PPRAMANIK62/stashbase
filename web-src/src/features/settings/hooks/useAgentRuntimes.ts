@@ -4,8 +4,10 @@ import {
   type Agent,
   type AgentRuntimeDebugState,
   type AgentsResponse,
+  type HostedAgentAllowance,
 } from '@/common/api/api';
 import { AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
+import { ACCOUNT_CHANGED_EVENT } from '@/common/lib/accountEvents';
 import { useAppActions } from '@/store/contexts/AppContext';
 
 const DEFAULT_DEBUG: AgentRuntimeDebugState = {
@@ -26,6 +28,9 @@ export interface AgentRuntimesController {
   /** `install:<kind>`, `uninstall:<kind>`, `reset:<kind>`, or `debug`. */
   busy: string | null;
   status: AgentRuntimeStatus | null;
+  allowance: HostedAgentAllowance | null;
+  allowanceUnavailable: boolean;
+  refreshAllowance: () => void;
   install: (agent: AgentKind) => Promise<void>;
   /** Start Codex's in-app browser sign-in. No-op for any other runtime. */
   login: (agent: AgentKind) => Promise<void>;
@@ -53,6 +58,12 @@ export function useAgentRuntimes(): AgentRuntimesController {
   const [debug, setDebug] = useState<AgentRuntimeDebugState>(DEFAULT_DEBUG);
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<AgentRuntimeStatus | null>(null);
+  const [allowance, setAllowance] = useState<HostedAgentAllowance | null>(null);
+  const [allowanceUnavailable, setAllowanceUnavailable] = useState(false);
+  const hostedAgentReady = useMemo(
+    () => agents.some((agent) => agent.id === 'stashbase' && agent.state === 'available'),
+    [agents],
+  );
   const activeInstall = useMemo(
     () => agents.some((agent) => (
       agent.bootstrap?.phase === 'installing'
@@ -80,7 +91,29 @@ export function useAgentRuntimes(): AgentRuntimesController {
     }
   }, [applyResponse, fail]);
 
+  const refreshAllowance = useCallback(() => {
+    void api.getAgentAllowance().then((next) => {
+      setAllowance(next);
+      setAllowanceUnavailable(false);
+    }).catch(() => {
+      setAllowance(null);
+      setAllowanceUnavailable(true);
+    });
+  }, []);
+
   useEffect(() => { void refresh(true); }, [refresh]);
+  useEffect(() => {
+    if (hostedAgentReady) refreshAllowance();
+    else {
+      setAllowance(null);
+      setAllowanceUnavailable(false);
+    }
+  }, [hostedAgentReady, refreshAllowance]);
+  useEffect(() => {
+    const onAccountChanged = () => { void refresh(true); };
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, onAccountChanged);
+    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, onAccountChanged);
+  }, [refresh]);
   useEffect(() => {
     if (!activeInstall) return;
     const timer = window.setInterval(() => { void refresh(true); }, 500);
@@ -113,6 +146,7 @@ export function useAgentRuntimes(): AgentRuntimesController {
   }, [applyResponse, fail]);
 
   const uninstall = useCallback(async (agent: AgentKind) => {
+    if (agent === 'stashbase') return;
     const label = AGENT_META[agent].name;
     const confirmed = await actions.confirm(
       `Uninstall the StashBase-managed ${label} runtime to free disk space? Any active ${label} chat ends now. Your provider login and history are not affected; the next New Chat prepares the runtime again.`,
@@ -144,6 +178,7 @@ export function useAgentRuntimes(): AgentRuntimesController {
   }, [applyResponse, fail]);
 
   const resetFirstRun = useCallback(async (agent: AgentKind) => {
+    if (agent === 'stashbase') return;
     const label = AGENT_META[agent].name;
     const confirmed = await actions.confirm(
       `Reset the StashBase-managed ${label} runtime? Your global installation and provider login are not changed.`,
@@ -163,5 +198,18 @@ export function useAgentRuntimes(): AgentRuntimesController {
     }
   }, [actions, applyResponse, fail]);
 
-  return { agents, debug, busy, status, install, login, uninstall, updateDebug, resetFirstRun };
+  return {
+    agents,
+    debug,
+    busy,
+    status,
+    allowance,
+    allowanceUnavailable,
+    refreshAllowance,
+    install,
+    login,
+    uninstall,
+    updateDebug,
+    resetFirstRun,
+  };
 }

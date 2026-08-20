@@ -9,6 +9,7 @@ import {
   exchangeHostedOAuthCode,
   failHostedOAuth,
   finishHostedOAuth,
+  fetchHostedAgentAllowance,
   hostedAccountState,
   hostedAccountAvatar,
   hostedOAuthStatus,
@@ -24,6 +25,8 @@ import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from
 import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { processPrivateTokenMatches } from '../process-private-token.ts';
 import { currentWindowId } from '../folder.ts';
+import { stopAgentRuntime } from '../agent-contract.ts';
+import { stopOpenCodeRuntime } from '../opencode-runtime.ts';
 
 const log = logger('routes/account');
 const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google']);
@@ -78,6 +81,15 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
       // Avatar display is optional. Fail closed to the renderer fallback
       // without exposing provider URLs or upstream diagnostics.
       res.status(404).end();
+    }
+  });
+
+  app.get('/api/account/agent-usage', async (_req, res) => {
+    try {
+      if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
+      res.json(await fetchHostedAgentAllowance());
+    } catch (error: unknown) {
+      res.status(502).json({ error: errorMessage(error) });
     }
   });
 
@@ -172,6 +184,8 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
 
   app.delete('/api/account', async (_req, res) => {
     const wasActive = (await hostedAccountState(false)).active;
+    stopAgentRuntime('stashbase');
+    await stopOpenCodeRuntime();
     await signOutHostedAccount();
     if (wasActive) {
       try {

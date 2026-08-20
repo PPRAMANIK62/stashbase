@@ -21,7 +21,9 @@
 /** The adapter's classification of a turn-scoped runtime failure. Assigned
  * once, server-side, by `server/agent-turn-failure.ts`; the renderer switches
  * on the kind to offer the matching recovery and never parses message prose. */
-export type AgentTurnFailureKind = 'rate-limit' | 'quota' | 'auth-expired' | 'network';
+export type AgentId = 'stashbase' | 'claude' | 'codex';
+
+export type AgentTurnFailureKind = 'rate-limit' | 'quota' | 'allowance-exhausted' | 'auth-expired' | 'network';
 
 export interface AgentTurnFailure {
   kind: AgentTurnFailureKind;
@@ -62,6 +64,10 @@ export type AgentServerEvent =
   | { t: 'tool'; id: string; name: string; input: Record<string, unknown> }
   | { t: 'tool-delta'; id: string; delta: string }
   | { t: 'tool-result'; id: string; content: string; isError: boolean }
+  /** A native session diff whose before/after content is already known.
+   * Kept separate from tool input because OpenCode edit calls do not expose
+   * the same Edit/Write payload shape as Claude and Codex. */
+  | { t: 'file-diff'; id: string; file: string; before: string; after: string; additions: number; deletions: number }
   | { t: 'permission'; id: string; toolUseId: string; name: string; title: string | null; input: Record<string, unknown> }
   | { t: 'steer-result'; id: string; ok: boolean; message?: string }
   /** The server migrated this session's scope binding (create_project

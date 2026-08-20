@@ -17,6 +17,7 @@ export type AgentBootstrapFailureCode =
   | 'simulated'
   | 'operation-failed'
   | 'runtime-unavailable'
+  | 'account-required'
   | 'authentication-required'
   | 'authentication-check-failed';
 
@@ -61,14 +62,14 @@ export interface AgentRuntimeDebugState {
 }
 
 export interface Agent {
-  id: string;
+  id: import('./agent-protocol.ts').AgentId;
   label: string;
   vendor: string;
   installHint: string;
   installed: boolean;
-  /** Which executable discovery selected. `managed` lives under StashBase
-   * AppData; `system` is an existing user installation. */
-  source?: 'system' | 'managed' | null;
+  /** Runtime ownership. `bundled` ships with StashBase, `managed` is a legacy
+   * private install under AppData, and `system` is a user installation. */
+  source?: 'bundled' | 'system' | 'managed' | null;
   bootstrap?: AgentBootstrapStatus;
   /** Full shell command the panel feeds to the shell once it's ready
    *  (e.g. `claude --theme light`). Built by the server from the agent

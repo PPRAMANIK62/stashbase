@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import {
   type Agent,
   type AgentDiscoveryPolicy,
   type AgentSetupFailureSimulation,
   type AgentTurnFailureSimulation,
+  type HostedAgentAllowance,
 } from '@/common/api/apiTypes';
 import { AGENTS } from '@/common/lib/agentCatalog';
 import { MoreHorizontalIcon } from '@/common/components/icons';
@@ -21,6 +23,7 @@ import { Select, type SelectOption } from '@/common/components/ui/select';
 import { StatusMessage } from '@/common/components/ui/status';
 import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
 import { Badge } from '@/common/components/ui/badge';
+import { AccountSignInForm } from '@/common/components/AccountSignInForm';
 
 /* The dev panel's option tables. Data, not markup: the trigger's label and
  * the popup's rows both come off one array, so they cannot disagree. */
@@ -54,19 +57,40 @@ export function AgentRuntimePanel() {
     debug,
     busy,
     status,
+    allowance,
+    allowanceUnavailable,
+    refreshAllowance,
     install,
     login,
     uninstall,
     updateDebug,
     resetFirstRun,
   } = useAgentRuntimes();
+  const [accountSignInOpen, setAccountSignInOpen] = useState(false);
 
   return (
     <div>
       <SectionHeading level={3} className="mb-1">Agent runtimes</SectionHeading>
       <SectionDescription className="mb-2.5">
-        StashBase uses an existing system Agent when available, or runs the provider’s official installer on first New Chat — the installed CLI also works from your terminal.
+        StashBase Agent is included and uses your monthly account allowance. Codex and Claude Code remain available as bring-your-own runtimes.
       </SectionDescription>
+      {accountSignInOpen && (
+        <div className="mb-2.5 rounded-lg border border-border bg-card p-3">
+          <AccountSignInForm
+            onBack={() => setAccountSignInOpen(false)}
+            onSignedIn={() => {
+              setAccountSignInOpen(false);
+              refreshAllowance();
+            }}
+          />
+        </div>
+      )}
+      {allowance && <AgentAllowanceCard allowance={allowance} onRefresh={refreshAllowance} />}
+      {!allowance && allowanceUnavailable && agents.some((agent) => agent.id === 'stashbase' && agent.state === 'available') && (
+        <div className="mb-2.5 rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-muted-foreground">
+          Agent usage is temporarily unavailable. <Button variant="ghost" size="sm" onClick={refreshAllowance}>Retry</Button>
+        </div>
+      )}
       <ul className="m-0 list-none overflow-hidden rounded-lg border border-border bg-background p-0">
         {AGENTS.map((definition) => {
           const runtime = agents.find((candidate) => candidate.id === definition.id);
@@ -87,7 +111,10 @@ export function AgentRuntimePanel() {
                   variant="outline"
                   size="sm"
                   disabled={busy != null || working}
-                  onClick={() => void (action.kind === 'login' ? login(definition.id) : install(definition.id))}
+                  onClick={() => {
+                    if (action.kind === 'account') setAccountSignInOpen(true);
+                    else void (action.kind === 'login' ? login(definition.id) : install(definition.id));
+                  }}
                 >
                   {action.label}
                 </Button>
@@ -192,14 +219,42 @@ export function AgentRuntimePanel() {
   );
 }
 
+function AgentAllowanceCard({ allowance, onRefresh }: { allowance: HostedAgentAllowance; onRefresh: () => void }) {
+  const percent = Math.max(0, Math.min(100, Math.round(
+    (allowance.remainingMicros / Math.max(1, allowance.grantedMicros)) * 100,
+  )));
+  const amount = (allowance.remainingMicros / 1_000_000).toLocaleString(undefined, {
+    style: 'currency', currency: allowance.currency, maximumFractionDigits: 2,
+  });
+  const reset = allowance.periodEndsAt ? new Date(allowance.periodEndsAt).toLocaleDateString() : null;
+  return (
+    <div className="mb-2.5 rounded-lg border border-border bg-card px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium text-foreground">Monthly Agent allowance</div>
+          <div className="text-xs text-muted-foreground">{amount} remaining{reset ? ` · Resets ${reset}` : ''}</div>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onRefresh}>Refresh</Button>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
+      </div>
+      <div className="mt-1.5 text-xs text-muted-foreground">
+        {allowance.inputTokens.toLocaleString()} input · {allowance.outputTokens.toLocaleString()} output tokens
+      </div>
+    </div>
+  );
+}
+
 /** MCP setup is automatic (startup auto-connect, repeated before native
  * attach), so the healthy states carry no button at all. An affordance
  * appears only when the user must act: nothing is installed or a bootstrap
  * explicitly failed. */
-function runtimeAction(runtime: Agent | undefined, working: boolean): { label: string; kind: 'prepare' | 'login' } | null {
+function runtimeAction(runtime: Agent | undefined, working: boolean): { label: string; kind: 'prepare' | 'login' | 'account' } | null {
   if (working) return { label: 'Preparing…', kind: 'prepare' };
   if (!runtime) return null;
   if (runtime.bootstrap?.phase === 'failed') {
+    if (runtime.bootstrap.failure?.code === 'account-required') return { label: 'Sign in', kind: 'account' };
     if (runtime.bootstrap.failure?.stage === 'authentication') return { label: 'Sign in', kind: 'login' };
     return { label: runtime.bootstrap.failure?.stage === 'mcp' ? 'Retry connection' : 'Retry', kind: 'prepare' };
   }
@@ -213,6 +268,8 @@ function runtimeDescription(runtime: Agent | undefined): string {
   if (bootstrap?.phase === 'failed') return bootstrap.failure?.message ?? 'Setup failed';
   if (bootstrap?.phase === 'installing' || bootstrap?.phase === 'authenticating' || bootstrap?.phase === 'configuring') return bootstrap.message ?? 'Preparing…';
   if (!runtime.installed) return 'Not installed';
-  const source = runtime.source === 'managed' ? 'StashBase-managed runtime' : 'System runtime';
+  const source = runtime.source === 'bundled'
+    ? 'Included with StashBase'
+    : runtime.source === 'managed' ? 'StashBase-managed runtime' : 'System runtime';
   return bootstrap?.phase === 'ready' ? `Ready for Chat · ${source}` : source;
 }

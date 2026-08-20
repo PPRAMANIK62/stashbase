@@ -19,11 +19,11 @@ import {
 import { smokeNativeAgentCli } from '../agent-native-smoke.ts';
 
 const REQUIRED_SHARED_CAPABILITIES = [
-  'connection', 'prompts', 'interrupt', 'transcript', 'approvals', 'history', 'modes', 'effort', 'models',
+  'connection', 'prompts', 'interrupt', 'transcript', 'approvals', 'history',
 ] as const;
 
-test('Claude and Codex declare every Shared Agent Contract panel behavior', () => {
-  assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => adapter.id), ['claude', 'codex']);
+test('every built-in runtime declares the fundamental Shared Agent Contract behavior', () => {
+  assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => adapter.id), ['stashbase', 'claude', 'codex']);
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
     for (const capability of REQUIRED_SHARED_CAPABILITIES) {
       assert.equal(adapter.capabilities[capability], true, `${adapter.id} must support ${capability}`);
@@ -44,6 +44,9 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.equal(capabilities.claude!.titleHint, false);
   assert.equal(capabilities.codex!.steering, true);
   assert.equal(capabilities.codex!.titleHint, true);
+  assert.equal(capabilities.stashbase!.modes, false);
+  assert.equal(capabilities.stashbase!.models, false);
+  assert.equal(capabilities.stashbase!.skills, false);
 });
 
 test('Agent effort identifiers stay runtime-owned while the URL boundary remains bounded', () => {
@@ -67,6 +70,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'turn-start' }, { t: 'text', delta: 'text' }, { t: 'thinking', delta: 'thinking' },
     { t: 'tool', id: 'tool', name: 'Read', input: {} }, { t: 'tool-delta', id: 'tool', delta: 'input' },
     { t: 'tool-result', id: 'tool', content: 'done', isError: false },
+    { t: 'file-diff', id: 'diff', file: 'notes.md', before: 'old', after: 'new', additions: 1, deletions: 1 },
     { t: 'permission', id: 'approval', toolUseId: 'tool', name: 'Write', title: null, input: {} },
     { t: 'steer-result', id: 'queued', ok: true },
     // create_project rebinding a library-scoped chat to the new project.
@@ -76,7 +80,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'exit', message: 'runtime stopped unexpectedly' },
   ];
   assert.equal(clientEvents.length, 7);
-  assert.equal(events.length, 17);
+  assert.equal(events.length, 18);
 });
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {
@@ -89,6 +93,7 @@ test('capability discovery reports supported, unavailable, and failed runtimes w
       : 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
   } as const;
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
+    if (adapter.id === 'stashbase') continue;
     const available = runtimeDescriptorFor(adapter, `/native/${adapter.id}`);
     assert.equal(available.state, 'available');
     assert.equal(available.source, 'system');
@@ -98,7 +103,7 @@ test('capability discovery reports supported, unavailable, and failed runtimes w
     assert.equal(unavailable.source, null);
     assert.equal(unavailable.installHint, expectedInstallHints[adapter.id]);
   }
-  const adapter = BUILT_IN_AGENT_ADAPTERS[0]!;
+  const adapter = BUILT_IN_AGENT_ADAPTERS.find((candidate) => candidate.id === 'claude')!;
 
   reportAgentRuntimeFailure(adapter.id, new Error('native protocol changed'));
   const failed = runtimeDescriptorFor(adapter, '/native/claude');
@@ -111,7 +116,7 @@ test('capability discovery reports supported, unavailable, and failed runtimes w
 test('capability discovery publishes the registered adapter catalog', () => {
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) registerAgentAdapter(adapter);
   const discovered = discoverAgentRuntimes();
-  assert.deepEqual(discovered.map((runtime) => runtime.id), ['claude', 'codex']);
+  assert.deepEqual(discovered.map((runtime) => runtime.id), ['stashbase', 'claude', 'codex']);
   for (const runtime of discovered) {
     const adapter = BUILT_IN_AGENT_ADAPTERS.find((candidate) => candidate.id === runtime.id)!;
     assert.equal(runtime.endpoint, '/ws/agent');

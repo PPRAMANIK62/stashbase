@@ -4,6 +4,7 @@ import type { AgentKind, AgentMeta, AgentPanelCapabilities } from '@/common/lib/
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import type { Action, AppActions, ChatState } from '@/store/contexts/AppContext';
 import { copyText } from '@/features/agent-panel/lib/agentSessionText';
+import { ACCOUNT_CHANGED_EVENT } from '@/common/lib/accountEvents';
 
 /** Runtime discovery for one Chat tab: which descriptor backs this tab's
  *  Agent, whether it is usable yet, what it can do, and the two catalog
@@ -88,6 +89,12 @@ export function useAgentRuntimeCatalog({
   useEffect(() => {
     if (!runtime) void refreshRuntimes();
   }, [runtime]);
+
+  useEffect(() => {
+    const refresh = () => { void refreshRuntimes(); };
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(ACCOUNT_CHANGED_EVENT, refresh);
+  }, []);
 
   useEffect(() => {
     if (!bootstrapActive) return;

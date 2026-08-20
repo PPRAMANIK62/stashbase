@@ -17,6 +17,7 @@ import type {
   EmbedderProvider,
   HostedAccountActivation,
   HostedAccountState,
+  HostedAgentAllowance,
   HostedOAuthProvider,
   HostedOAuthStart,
   HostedOAuthStatus,
@@ -293,6 +294,7 @@ export const api = {
   useApiKeySource: (provider: EmbedderProvider) =>
     send<EmbedderState>('PUT', '/api/embedder/source', { provider }),
   getAccount: (refresh = false) => getJson<HostedAccountState>(`/api/account${refresh ? '?refresh=1' : ''}`),
+  getAgentAllowance: () => getJson<HostedAgentAllowance>('/api/account/agent-usage'),
   startAccountOAuth: (provider: HostedOAuthProvider = 'google') =>
     send<HostedOAuthStart>('POST', '/api/account/oauth/start', { provider }),
   getAccountOAuthStatus: (flowId: string) =>
@@ -305,14 +307,14 @@ export const api = {
   // the renderer just calls them "agents". `listAgents` populates the
   // launcher registry / installed-state.
   listAgents: () => getJson<AgentsResponse>('/api/terminal/clis'),
-  prepareAgent: (agent: 'claude' | 'codex', action: 'check' | 'bootstrap' | 'login') =>
+  prepareAgent: (agent: import('@shared/agent-protocol').AgentId, action: 'check' | 'bootstrap' | 'login') =>
     send<AgentsResponse>('POST', `/api/terminal/clis/${encodeURIComponent(agent)}/${action}`),
   setAgentRuntimeDebug: (patch: Partial<{
     discoveryPolicy: AgentDiscoveryPolicy;
     nextFailure: AgentSetupFailureSimulation;
     nextTurnFailure: AgentTurnFailureSimulation;
   }>) => send<AgentsResponse>('PUT', '/api/terminal/debug', patch),
-  resetManagedAgent: (agent: 'claude' | 'codex') =>
+  resetManagedAgent: (agent: Exclude<import('@shared/agent-protocol').AgentId, 'stashbase'>) =>
     send<AgentsResponse>('DELETE', `/api/terminal/clis/${encodeURIComponent(agent)}/managed`),
   mcpStatus: () =>
     getJson<{
@@ -338,14 +340,14 @@ export const api = {
   /** Local agent sessions for the given scope (a library folder, or the
    *  reserved library scope; defaults to the window's current folder),
    *  newest first. */
-  listSessions: (agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+  listSessions: (agent: import('@shared/agent-protocol').AgentId = 'stashbase', scope?: SessionScopeParams) =>
     getJson<SessionInfo[]>(agentSessionBase(agent) + sessionScopeQuery(scope)),
   /** A session's transcript as renderable blocks (for resume replay). */
-  getSessionMessages: (id: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+  getSessionMessages: (id: string, agent: import('@shared/agent-protocol').AgentId = 'stashbase', scope?: SessionScopeParams) =>
     getJson<SessionBlock[]>(agentSessionBase(agent) + '/' + encodeURIComponent(id) + '/messages' + sessionScopeQuery(scope)),
   /** Prefer protocol-v2 metadata, but tolerate a protocol-v1 server retained
    * across an application restart/update. */
-  getSessionReplay: async (id: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams): Promise<SessionReplay> => {
+  getSessionReplay: async (id: string, agent: import('@shared/agent-protocol').AgentId = 'stashbase', scope?: SessionScopeParams): Promise<SessionReplay> => {
     const base = agentSessionBase(agent) + '/' + encodeURIComponent(id);
     const query = sessionScopeQuery(scope);
     try {
@@ -357,13 +359,13 @@ export const api = {
     }
     return { protocol: 2, messages: await getJson<SessionBlock[]>(base + '/messages' + query), effort: null };
   },
-  renameSession: (id: string, title: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+  renameSession: (id: string, title: string, agent: import('@shared/agent-protocol').AgentId = 'stashbase', scope?: SessionScopeParams) =>
     send<SessionInfo>('PATCH', agentSessionBase(agent) + '/' + encodeURIComponent(id) + sessionScopeQuery(scope), { title }),
-  deleteSession: (id: string, agent: 'claude' | 'codex' = 'claude', scope?: SessionScopeParams) =>
+  deleteSession: (id: string, agent: import('@shared/agent-protocol').AgentId = 'stashbase', scope?: SessionScopeParams) =>
     send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id) + sessionScopeQuery(scope)),
 };
 
-function agentSessionBase(agent: 'claude' | 'codex'): string {
+function agentSessionBase(agent: import('@shared/agent-protocol').AgentId): string {
   return `/api/agents/${encodeURIComponent(agent)}/sessions`;
 }
 

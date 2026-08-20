@@ -1,8 +1,8 @@
 /**
- * StashBase orientation preamble for the built-in Claude panel.
+ * StashBase orientation preamble for every built-in Agent adapter.
  *
- * Appended to the SDK's `claude_code` system prompt in server/agent.ts.
- * Without it the panel runs *bare*: cwd happens to be a folder, but the
+ * Appended to Claude's SDK prompt and injected into OpenCode's custom Agent
+ * profiles. Without it the panel runs *bare*: cwd happens to be a folder, but the
  * model has no idea it's inside StashBase, what the library MCP tools are for,
  * or what the house rules are — so it behaves exactly like a `claude`
  * launched in a random folder (architecture.md §8.4).
@@ -30,8 +30,8 @@ export function buildStashbasePreamble(cwd: string, scope: 'folder' | 'library' 
     '',
     'Use the StashBase MCP tools when they fit:',
     '- `search_library` finds relevant library content by meaning across folders; pass `folder` or `path_prefix` to narrow the search.',
-    '- `mcp__stashbase__read_file` reads files through StashBase; for PDFs it returns extracted Markdown when available.',
-    '- For PDF, DOCX, and audio text context, prefer `mcp__stashbase__read_file` on the visible source path. Use Claude native `Read` only when the user explicitly needs the original source file or visual/binary detail.',
+    '- The StashBase MCP `read_file` tool reads files through StashBase; for PDFs it returns extracted Markdown when available.',
+    '- For PDF, DOCX, and audio text context, prefer the StashBase MCP `read_file` tool on the visible source path. Use a runtime-native file reader only when the user explicitly needs the original source file or visual/binary detail.',
     '- `reindex` refreshes the index after you create, edit, delete, or move files so search reflects the latest content on disk.',
   ];
 

@@ -33,6 +33,7 @@ test('live provider messages classify by their vocabulary', () => {
   // Plan exhaustion wins over an accompanying 429.
   assert.equal(classifyAgentTurnFailure("You've reached your usage limit. It resets at 5pm."), 'quota');
   assert.equal(classifyAgentTurnFailure('429 insufficient_quota: You exceeded your current quota'), 'quota');
+  assert.equal(classifyAgentTurnFailure('quota_exhausted: StashBase monthly Agent allowance exhausted'), 'allowance-exhausted');
   // Transient rate limiting.
   assert.equal(classifyAgentTurnFailure('429 rate_limit_error: Too many requests'), 'rate-limit');
   assert.equal(classifyAgentTurnFailure('Rate limit reached for requests'), 'rate-limit');

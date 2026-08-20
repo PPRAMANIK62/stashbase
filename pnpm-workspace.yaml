@@ -4,3 +4,21 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   node-pty: true
+  # Copies the matching optional platform binary into opencode-ai/bin.
+  # The exact package versions are pinned below and verified by package tests.
+  opencode-ai: true
+minimumReleaseAgeExclude:
+  - '@opencode-ai/sdk@1.18.19'
+  - opencode-ai@1.18.19
+  - opencode-darwin-arm64@1.18.19
+  - opencode-darwin-x64-baseline@1.18.19
+  - opencode-darwin-x64@1.18.19
+  - opencode-linux-arm64-musl@1.18.19
+  - opencode-linux-arm64@1.18.19
+  - opencode-linux-x64-baseline-musl@1.18.19
+  - opencode-linux-x64-baseline@1.18.19
+  - opencode-linux-x64-musl@1.18.19
+  - opencode-linux-x64@1.18.19
+  - opencode-windows-arm64@1.18.19
+  - opencode-windows-x64-baseline@1.18.19
+  - opencode-windows-x64@1.18.19

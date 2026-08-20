@@ -1,5 +1,5 @@
 /**
- * Turn-scoped runtime failure classification, shared by both adapters.
+ * Turn-scoped runtime failure classification shared by Agent adapters.
  *
  * A live turn error reaches the renderer as provider prose. The renderer must
  * never infer a recovery from that prose, so the adapter — the one place that
@@ -35,6 +35,7 @@ const NETWORK_PATTERN =
 
 export function classifyAgentTurnFailure(message: string): AgentTurnFailureKind | null {
   if (AUTH_PATTERN.test(message)) return 'auth-expired';
+  if (/quota_exhausted|stashbase.{0,30}(agent )?allowance|monthly agent allowance/i.test(message)) return 'allowance-exhausted';
   if (QUOTA_PATTERN.test(message)) return 'quota';
   if (RATE_LIMIT_PATTERN.test(message)) return 'rate-limit';
   if (NETWORK_PATTERN.test(message)) return 'network';
@@ -49,7 +50,7 @@ export function agentTurnFailureFor(message: string): AgentTurnFailure | undefin
 }
 
 /** The wire `error` event for a turn-scoped runtime failure — message plus
- * its classified kind when one matches. Both adapters send exactly this
+ * its classified kind when one matches. Every adapter sends exactly this
  * shape, so classification cannot drift between them. */
 export function agentTurnErrorEvent(
   message: string,
