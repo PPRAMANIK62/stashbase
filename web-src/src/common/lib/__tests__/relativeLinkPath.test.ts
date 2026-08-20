@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { relativeLinkPath } from '@/features/documents/milkdown/paths.ts';
+import { relativeLinkPath } from '@/common/lib/relativeLinkPath.ts';
 
 test('relativeLinkPath: same directory has no leading ./ segment', () => {
   assert.equal(relativeLinkPath('notes/current.md', 'notes/other.pdf'), 'other.pdf');
