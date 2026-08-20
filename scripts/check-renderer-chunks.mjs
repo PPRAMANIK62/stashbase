@@ -19,10 +19,15 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * (ManagedLinkFilePicker, listed as a required dynamic entry below) stays
  * lazy, but the always-mounted gate that owns the open/close event and its
  * slash-menu trigger wiring is eager by the same shell-UI rule as Quick
- * Open's own gate. Raise it only for shell UI that must load with the
- * window — anything a user can open on demand belongs in a dynamic entry
- * above. */
-const initialJsBudgetBytes = 425 * 1024;
+ * Open's own gate. 425 → 426 when this branch merged main's
+ * Choose-Folder-on-bare-windows work: `ChooseFolderButton` sits below the
+ * always-mounted New Chat button and `FolderSwitcher`'s menu-item builder
+ * moved into the shared `libraryMenuItems` module — both eager chrome by
+ * the same rule as the folder-switcher trigger above, landing on top of
+ * this branch's own Link-to-file picker gate rather than instead of it.
+ * Raise it only for shell UI that must load with the window — anything a
+ * user can open on demand belongs in a dynamic entry above. */
+const initialJsBudgetBytes = 426 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
