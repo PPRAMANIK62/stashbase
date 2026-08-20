@@ -14,6 +14,8 @@
  * it doesn't natively parse HTML.
  */
 
+import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '../shared/file-formats.ts';
+
 export interface Heading {
   level: number;          // 1-6
   text: string;
@@ -449,9 +451,11 @@ document.addEventListener('click', function(e) {
   }
   try {
     var url = new URL(raw, document.baseURI);
-    // Same-origin /asset/ links to .md / .html files = cross-file
-    // navigation inside the folder. Hand off to the parent so the
-    // back/forward stack records the jump.
+    // Same-origin /asset/ links to a format the app can already open in a
+    // viewer tab (notes plus PDF, image, DOCX, audio/video, JSON — same
+    // vocabulary Milkdown link navigation uses) = cross-file navigation
+    // inside the folder. Hand off to the parent so the back/forward stack
+    // records the jump.
     if (url.origin === location.origin && url.pathname.indexOf('/asset/') === 0) {
       var encoded = url.pathname.slice('/asset/'.length);
       if (encoded.indexOf('__window/') === 0) {
@@ -470,7 +474,7 @@ document.addEventListener('click', function(e) {
       try {
         decoded = encoded.split('/').map(decodeURIComponent).join('/');
       } catch (_) { return; }
-      if (/\\.(md|markdown|html|htm)$/i.test(decoded)) {
+      if (/\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$/i.test(decoded)) {
         e.preventDefault();
         var anchor = url.hash && url.hash.charAt(0) === '#' ? url.hash.slice(1) : '';
         window.parent.postMessage({
