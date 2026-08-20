@@ -121,6 +121,29 @@ transport-specific arguments and map results. A delete acknowledgement waits
 for old source and derived index identities; rename/move removes the old
 identity before reporting any optional new-identity indexing lag.
 
+### Link Cascade
+
+Rename and move can rewrite other files' Markdown/HTML relative links so they
+keep resolving after the identity change.
+
+- `server/links.ts` plans the affected link set against pre-rename disk state
+  (`planRenameLinks`), then rewrites and saves affected files after the
+  filesystem mutation (`applyRenamePlan`); a write failure rolls back both the
+  rewrites and the disk rename.
+- Cascade defaults on for every rename/move except a JSON target. The UI
+  (`POST /api/rename-preview` in `server/routes/file-mutations.ts`, and folder
+  rename in `server/routes/folders.ts`) previews the affected file/link count
+  and lets the user opt out per rename; the MCP `move_file` tool applies
+  cascade silently unless the caller passes `cascade: false`, with no preview
+  step.
+- Rewrite scope is inline Markdown link and image syntax plus HTML anchor
+  `href` attributes only; reference-style links (a separate `[id]:` target
+  definition) and non-anchor tags such as `img src` are not tracked and go
+  stale silently on rename.
+- Cross-folder moves and folder-level rename/move through MCP are out of
+  scope: `moveLibraryFile` only supports moves within one member folder root,
+  and only file-level moves are exposed to MCP.
+
 ## Import Publication
 
 - A clipboard image reaches publication only after the default-off capture
@@ -161,6 +184,7 @@ text reads and manifest-known derived-text reads also reject responses above
 | Save Interface | `validateEditableFileWrite`, `upsertSavedFile`, and `saveFileContent` in `server/file-save.ts` |
 | Active-folder Adapter | `server/routes/files.ts`, `server/routes/file-mutations.ts`, and `server/routes/upload.ts` |
 | Source Mutation Module | `server/library-file-mutations.ts` |
+| Link Cascade Module | `server/links.ts` (`planRenameLinks`, `cascadeRenameLinks`, `applyRenamePlan`) |
 | Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
 | Publication Module | `server/import-publication.ts` |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |
