@@ -39,8 +39,10 @@ a transcript-centered file manager.
   keeps its selected model fixed after the conversation has content.
   Suggestions prefill rather than send.
 - Streaming, tool activity, permissions, attachments, skills, recovery, and
-  file artifacts remain inspectable. Editing and resending an earlier prompt
-  stops conflicting active work before beginning the new turn.
+  file artifacts remain inspectable. Collapsed tool summaries omit exact
+  counts while using grammatical singular or plural category labels. Editing
+  and resending an earlier prompt stops conflicting active work before
+  beginning the new turn.
 - Successful automatic approval reviews stay quiet in Auto. A blocked,
   interrupted, or failed automatic review remains inspectable alongside
   skill-context and configuration warnings as a non-fatal notice. These

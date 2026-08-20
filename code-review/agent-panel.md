@@ -115,8 +115,10 @@
   live renderer for this session's messages, or the history source's own
   per-message/turn times (Claude native transcript lines; Codex turn
   boundaries).
-- Tool activity is compact and inspectable. Intermediate failure may tint its
-  row but does not turn the whole summary into a terminal error.
+- Tool activity is compact and inspectable. Its collapsed category summary
+  omits exact counts but preserves singular/plural grammar from the underlying
+  actions. Intermediate failure may tint its row but does not turn the whole
+  summary into a terminal error.
 - Permission requests and recovery actions never enter collapsed activity.
 - Every settled reply exposes one standing Copy Reply control — always
   visible, never hover- or menu-gated — carrying the untouched assistant
