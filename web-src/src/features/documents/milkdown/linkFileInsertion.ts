@@ -1,5 +1,5 @@
 import { basename } from '@/common/lib/paths';
-import { portableImageMarkdownPath, relativeLinkPath } from '@/features/documents/milkdown/paths';
+import { portableImageMarkdownPath, relativeLinkPath } from '@/common/lib/relativeLinkPath';
 
 /** The Markdown link text and href the "Link to file…" slash-menu item
  * inserts once a target is chosen: `displayName` is the target's basename,

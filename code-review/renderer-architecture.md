@@ -115,8 +115,9 @@ carries its skeleton:
   module, not once per render.
 
 `ModalShell`, `Menu`, `Toasts`, `DropVeil`, `TooltipButton`,
-`ClipboardImportModal`, `AlertConfirmModal`, `SettingsModal`, `QuickOpen`, and
-`LibrarySearch` all follow it. Prefer it for a new lazy surface.
+`ClipboardImportModal`, `AlertConfirmModal`, `SettingsModal`, `QuickOpen`,
+`LibrarySearch`, and `LinkFilePicker` all follow it. Prefer it for a new lazy
+surface.
 
 Two variants exist and are not defects:
 

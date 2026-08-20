@@ -102,8 +102,11 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   hand only original HTTP(S) URLs to the system browser. A workspace-relative
   target resolves (`kind: 'library-file'`) when its extension matches a format
   the app can already open in a viewer tab — notes plus PDF, image, DOCX,
-  audio/video, and JSON, sourced from `shared/file-formats.ts` so this
-  classifier and `useDocumentActions.ts`'s `loadFile` dispatch cannot drift —
+  audio/video, and JSON, sourced from `shared/file-formats.ts`, the same
+  vocabulary `useDocumentActions.ts`'s `loadFile` dispatch draws its
+  audio/video matching from; its PDF, DOCX, and image branches remain
+  separate hardcoded checks today, so only that one format family's parity
+  with the classifier is import-enforced rather than convention-maintained —
   and is ignored otherwise. Links inside an out-of-folder document inherit its
   `__folder` token and open in that same member folder, never the window's
   active folder. The edit and preview popovers share one compact, viewport-safe

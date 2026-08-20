@@ -20,3 +20,11 @@ test('relativeLinkPath: target several levels up from a deeply nested note', () 
   assert.equal(relativeLinkPath('a/b/c/note.md', 'x.pdf'), '../../../x.pdf');
   assert.equal(relativeLinkPath('a/b/c/note.md', 'a/x.pdf'), '../../x.pdf');
 });
+
+test('relativeLinkPath: a directory name that is a prefix of another is not treated as shared', () => {
+  assert.equal(relativeLinkPath('notes/project/a.md', 'notes/project2/b.md'), '../project2/b.md');
+});
+
+test('relativeLinkPath: linking a note to itself resolves to its own basename', () => {
+  assert.equal(relativeLinkPath('notes/current.md', 'notes/current.md'), 'current.md');
+});

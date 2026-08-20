@@ -102,26 +102,42 @@ export function useFileActions(
 
   /** Copy a pasteable Markdown link to a file in the tree. Pure client-side
    *  path math + clipboard write — no server round-trip, so this skips the
-   *  request/toast machinery the mutating actions above need. */
+   *  request machinery the mutating actions above need, but still toasts a
+   *  result: a silent clipboard write gives the user no way to confirm it
+   *  worked, or that a fallback link may need adjusting before it's usable. */
   const copyFileLink = useCallback((targetPath: string) => {
     const activeFile = getActiveTab(stateRef.current.workspace)?.file;
     // Only an in-folder (not out-of-folder-tab) Markdown note gives a valid
     // "from" side: relativeLinkPath assumes both paths share one folder
-    // root, which an out-of-folder tab's `file.folder` breaks.
+    // root, which an out-of-folder tab's `file.folder` breaks. This is also
+    // false whenever the active tab is a non-Markdown viewer (PDF, image,
+    // audio, …), not just when no note is open at all.
     const hasActiveNote = !!activeFile && !activeFile.folder && activeFile.format === 'md';
     const relativePath = hasActiveNote
       ? relativeLinkPath(activeFile.name, targetPath)
-      // No active note tab means there is no "from" side to resolve a
-      // relative path against, so this isn't truly relative to anything —
-      // fall back to the target's own workspace-relative path (still valid
-      // Markdown link syntax) rather than blocking the action.
+      // No active note gives no "from" side to resolve a relative path
+      // against, so this isn't truly relative to anything — fall back to
+      // the target's own workspace-relative path (still valid Markdown link
+      // syntax, but only correct if pasted into a note at the folder root)
+      // rather than blocking the action.
       : targetPath;
     // Percent-encode each segment so the link survives round-tripping through
     // Markdown/URL parsing (matches how image uploads and every other
     // relative link in this app are already encoded — see
     // navigation.test.ts's '%20'-encoded fixtures).
-    void navigator.clipboard?.writeText(`[${basename(targetPath)}](${portableImageMarkdownPath(relativePath)})`);
-  }, []);
+    const link = `[${basename(targetPath)}](${portableImageMarkdownPath(relativePath)})`;
+    if (!navigator.clipboard) {
+      toast('Could not copy link to clipboard.', { level: 'error' });
+      return;
+    }
+    navigator.clipboard.writeText(link).then(
+      () => {
+        if (hasActiveNote) toast('Link copied.', { level: 'success' });
+        else toast('Link copied — relative to the library, adjust if pasting elsewhere.', { level: 'info' });
+      },
+      () => toast('Could not copy link to clipboard.', { level: 'error' }),
+    );
+  }, [toast]);
 
   /** Rebuild a file's searchable version. The folder is captured at the
    *  call, so a reprocess started from a context menu still targets the
