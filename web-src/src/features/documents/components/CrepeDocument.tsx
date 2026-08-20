@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import '@/features/documents/documents.css';
 import { languages } from '@codemirror/language-data';
-import { editorViewCtx } from '@milkdown/kit/core';
+import { commandsCtx, editorViewCtx } from '@milkdown/kit/core';
+import { clearTextInCurrentBlockCommand } from '@milkdown/kit/preset/commonmark';
 import { replaceAll } from '@milkdown/kit/utils';
 import { CrepeBuilder } from '@milkdown/crepe/builder';
 import { blockEdit } from '@milkdown/crepe/feature/block-edit';
@@ -22,6 +23,9 @@ import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { makeIframeFindController } from '@/features/documents/lib/findIframe';
 import { applyChunkHighlight } from '@/features/documents/lib/previewChunkHighlight';
 import { uploadLocalImage } from '@/features/documents/milkdown/imageUpload';
+import { insertLinkText } from '@/features/documents/milkdown/linkInsertion';
+import { linkFileInsertionText } from '@/features/documents/milkdown/linkFileInsertion';
+import { openLinkFilePicker } from '@/features/documents/milkdown/linkFilePickerTrigger';
 import { splitLeadingYamlFrontmatter } from '@/features/documents/milkdown/frontmatter';
 import { planIncomingMarkdownSync, startCrepeCreation } from '@/features/documents/milkdown/crepeLifecycle';
 import { resolveLocalImageUrl } from '@/features/documents/milkdown/imageUrls';
@@ -31,6 +35,14 @@ import { documentScroller, headingElementAtPosition, scrollOutlineToHeading, typ
 import { useDocumentOutline } from '@/common/components/DocumentOutlineContext';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
+
+/** Chain-link glyph for the "Link to file…" slash-menu item, matching the
+ *  bare-svg-string shape Crepe's own built-in item icons use. */
+const LINK_TO_FILE_ICON = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+    <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />
+  </svg>
+`;
 
 type CreationState = 'creating' | 'ready' | 'failed';
 type RegistrationKind = 'editor' | 'find' | 'outline';
@@ -158,7 +170,33 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, dirty, f
         blockCaptionPlaceholderText: 'Describe this image…',
         proxyDomURL: (source) => resolveLocalImageUrl(source, assetBaseUrl(nameRef.current, folderRef.current), window.location.origin),
       })
-      .addFeature(blockEdit)
+      .addFeature(blockEdit, {
+        buildMenu: (builder) => {
+          // Out-of-folder tabs have no per-folder file listing to pick
+          // from — `state.files` is only ever the active folder's files —
+          // so the item is omitted outright rather than opening a picker
+          // with the wrong or an empty result set. Known, accepted V1 gap.
+          if (folderRef.current) return;
+          builder.addGroup('stashbase-link', 'Link').addItem('link-to-file', {
+            label: 'Link to file…',
+            icon: LINK_TO_FILE_ICON,
+            onRun: (ctx) => {
+              // Same cleanup Crepe's own built-in items perform before
+              // acting: clear the typed `/query` text first.
+              ctx.get(commandsCtx).call(clearTextInCurrentBlockCommand.key);
+              const view = ctx.get(editorViewCtx);
+              const insertPos = view.state.selection.from;
+              openLinkFilePicker({
+                onSelect: (targetPath) => {
+                  const { displayName, href } = linkFileInsertionText(nameRef.current, targetPath);
+                  insertLinkText(ctx, insertPos, displayName, href);
+                },
+                onCancel: () => { view.focus(); },
+              });
+            },
+          });
+        },
+      })
       .addFeature(toolbar)
       .addFeature(table)
       .addFeature(codeMirror, { languages, copyText: 'Copy code' })

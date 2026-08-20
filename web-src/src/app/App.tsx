@@ -16,7 +16,7 @@ import { CascadePromptModal } from '@/app/components/CascadePromptModal';
 import { AlertConfirmModal } from '@/app/components/AlertConfirmModal';
 import { Toasts } from '@/common/components/Toasts';
 import { ChatPane, useAgentCatalogPrime, useChatLayoutFollowUp } from '@/features/agent-panel';
-import { EditorHistoryNavigator, usePreviewMessages } from '@/features/documents';
+import { EditorHistoryNavigator, LinkFilePicker, usePreviewMessages } from '@/features/documents';
 import { UnsupportedFilesModal } from '@/features/preparation';
 import { LibrarySearch, QuickOpen } from '@/features/search';
 import { EmbedderRequireKeyGate, SettingsPortal, useAppliedAppearance } from '@/features/settings';
@@ -173,6 +173,7 @@ function AppBody() {
       <QuickOpen />
       <LibrarySearch />
       <EditorHistoryNavigator />
+      <LinkFilePicker />
       {previewImage && (
         <LazyLoadBoundary
           className="quick-open-blocking fixed inset-0 z-90 bg-scrim text-white"

@@ -46,6 +46,9 @@ editor, a media editor, or a proprietary document format.
   inert.
 - The file tree's Copy Link action puts a ready-to-paste Markdown link to a
   file on the clipboard, relative to the open note when one exists.
+- The Markdown editor's slash menu offers a **Link to file…** item that
+  inserts a ready Markdown link to a picked library file, relative to the
+  open note; it is not offered on out-of-folder tabs.
 
 ## Format Capability Matrix
 
