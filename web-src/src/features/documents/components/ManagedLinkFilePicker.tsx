@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { rankQuickOpen } from '@/common/lib/quickOpen';
+import { usePickerListNav } from '@/common/hooks/usePickerListNav';
 import { useWorkspace } from '@/store/contexts/AppContext';
 import {
   PICKER_EMPTY_ROW_CLASS,
@@ -27,16 +28,18 @@ export default function ManagedLinkFilePicker({
 }) {
   const state = useWorkspace();
   const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const paths = useMemo(() => state.files.map((file) => file.name), [state.files]);
   const items = useMemo(
     () => rankQuickOpen(paths, query, state.recentFilePaths),
     [paths, query, state.recentFilePaths],
   );
+  const { active, setActive, onKeyDown } = usePickerListNav(items.length, {
+    onCancel,
+    onAccept: (index) => onSelect(items[index].path),
+  });
 
   useEffect(() => { inputRef.current?.focus(); }, []);
-  useEffect(() => { if (active >= items.length) setActive(Math.max(0, items.length - 1)); }, [active, items.length]);
 
   return (
     <div
@@ -56,14 +59,7 @@ export default function ManagedLinkFilePicker({
           placeholder="Search files to link"
           value={query}
           onChange={(event) => { setQuery(event.target.value); setActive(0); }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onCancel(); }
-            else if (event.key === 'ArrowDown') { event.preventDefault(); setActive((index) => Math.min(index + 1, items.length - 1)); }
-            else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((index) => Math.max(index - 1, 0)); }
-            else if (event.key === 'Home') { event.preventDefault(); setActive(0); }
-            else if (event.key === 'End') { event.preventDefault(); setActive(Math.max(0, items.length - 1)); }
-            else if (event.key === 'Enter' && items[active]) { event.preventDefault(); onSelect(items[active].path); }
-          }}
+          onKeyDown={onKeyDown}
         />
         <div className={PICKER_LABEL_CLASS}>{query.trim() ? 'Files' : 'Recent editors'}</div>
         <ul id="link-file-picker-results" className={PICKER_RESULTS_CLASS} role="listbox" aria-label="Link to file results">

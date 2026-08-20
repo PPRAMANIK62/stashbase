@@ -5,7 +5,7 @@ import {
 } from '@shared/file-formats';
 import { api, ApiError, errorMessage } from '@/common/api/api';
 import { basename } from '@/common/lib/paths';
-import { portableImageMarkdownPath, relativeLinkPath } from '@/common/lib/relativeLinkPath';
+import { fileLinkTarget } from '@/common/lib/relativeLinkPath';
 import { isFolderFileTab } from '@/store/lib/appContextHelpers';
 import {
   getActiveTab,
@@ -113,19 +113,13 @@ export function useFileActions(
     // false whenever the active tab is a non-Markdown viewer (PDF, image,
     // audio, …), not just when no note is open at all.
     const hasActiveNote = !!activeFile && !activeFile.folder && activeFile.format === 'md';
-    const relativePath = hasActiveNote
-      ? relativeLinkPath(activeFile.name, targetPath)
-      // No active note gives no "from" side to resolve a relative path
-      // against, so this isn't truly relative to anything — fall back to
-      // the target's own workspace-relative path (still valid Markdown link
-      // syntax, but only correct if pasted into a note at the folder root)
-      // rather than blocking the action.
-      : targetPath;
-    // Percent-encode each segment so the link survives round-tripping through
-    // Markdown/URL parsing (matches how image uploads and every other
-    // relative link in this app are already encoded — see
-    // navigation.test.ts's '%20'-encoded fixtures).
-    const link = `[${basename(targetPath)}](${portableImageMarkdownPath(relativePath)})`;
+    // No active note gives no "from" side to resolve a relative path
+    // against; fileLinkTarget falls back to the target's own
+    // workspace-relative path (still valid Markdown link syntax, but only
+    // correct if pasted into a note at the folder root) rather than
+    // blocking the action.
+    const { displayName, href } = fileLinkTarget(hasActiveNote ? activeFile.name : null, targetPath);
+    const link = `[${displayName}](${href})`;
     if (!navigator.clipboard) {
       toast('Could not copy link to clipboard.', { level: 'error' });
       return;

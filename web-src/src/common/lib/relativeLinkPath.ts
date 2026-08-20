@@ -3,6 +3,8 @@
  * store/ may depend only on common/, so this cannot live under
  * features/documents/ even though the editor is its main consumer. */
 
+import { basename } from '@/common/lib/paths';
+
 /** Return `targetPath` relative to the directory containing `noteName`, both
  * workspace-relative POSIX file paths within the same member folder root.
  * A real `path.relative`-style resolution — producing `../` segments when
@@ -38,4 +40,18 @@ export function relativeLinkPath(noteName: string, targetPath: string): string {
  * parsed it. */
 export function portableImageMarkdownPath(relativePath: string): string {
   return relativePath.split('/').map(encodeURIComponent).join('/');
+}
+
+/** The Markdown link text and href for a link to `targetPath`: `displayName`
+ * is the target's basename, `href` is portable and percent-encoded, relative
+ * to `noteName`'s directory when a note context exists. With no `noteName`
+ * (no active note to resolve a relative path against), `href` falls back to
+ * `targetPath`'s own workspace-relative form — still valid link syntax, but
+ * only correct when pasted into a note at the folder root. */
+export function fileLinkTarget(noteName: string | null, targetPath: string): { displayName: string; href: string } {
+  const relativePath = noteName ? relativeLinkPath(noteName, targetPath) : targetPath;
+  return {
+    displayName: basename(targetPath),
+    href: portableImageMarkdownPath(relativePath),
+  };
 }

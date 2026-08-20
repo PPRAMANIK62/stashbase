@@ -5,4 +5,4 @@ export function relativeAssetPath(noteName: string, uploadedPath: string): strin
   return uploadedPath.startsWith(prefix) ? uploadedPath.slice(prefix.length) : uploadedPath;
 }
 
-export { portableImageMarkdownPath, relativeLinkPath } from '@/common/lib/relativeLinkPath';
+export { portableImageMarkdownPath } from '@/common/lib/relativeLinkPath';
