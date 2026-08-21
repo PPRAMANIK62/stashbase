@@ -25,8 +25,10 @@ uses a hosted service only as its metered model provider.
   last source expands an open Chat again.
 - New users default to StashBase Agent. Its pinned OpenCode runtime is included
   with the app, requires no Agent installation or model API key, and becomes
-  ready after StashBase account sign-in. Settings shows the current monthly
-  allowance and keeps Codex and Claude Code as explicit alternatives.
+  ready after StashBase account sign-in. Settings shows the remaining percent
+  and reset time for the current fixed seven-day allowance window, with token
+  detail available on demand, and keeps Codex and Claude Code as explicit
+  alternatives. It never exposes the allowance's dollar value.
 - New Chat is the deliberate creation entry and reuses a completely blank tab.
   Opening the app, a folder, a tab, or history never grants runtime-installation
   consent; a missing bring-your-own runtime waits for **Install and continue**.
@@ -52,7 +54,9 @@ uses a hosted service only as its metered model provider.
 - StashBase Agent normalizes OpenCode streaming, tools, permission requests,
   native session history, and file Diffs into the same panel contract. Each
   live panel session has an independently attributed local runtime and MCP
-  connection.
+  connection. Each user-submitted prompt also establishes one turn identity;
+  every model call caused by that prompt, including tool-follow-up calls, is
+  attributed to that turn until it settles.
 - Successful automatic approval reviews stay quiet in Auto. A blocked,
   interrupted, or failed automatic review remains inspectable alongside
   skill-context and configuration warnings as a non-fatal notice. These
@@ -110,6 +114,9 @@ uses a hosted service only as its metered model provider.
   automatic approval is routine activity rather than a notice; other notices
   use a polite warning presentation and stay visible when no final answer
   follows. Only failures enter startup, turn, or session recovery.
+- StashBase Agent uses a service-owned model profile. The first release hides
+  model selection, while the stable profile alias keeps later model choice and
+  provider changes compatible with existing desktop builds.
 - The selected permission mode governs which actions the runtime approves on
   its own. Every approval it surfaces — permission, deletion, command, network,
   or broader filesystem — is an explicit user decision; the panel never answers

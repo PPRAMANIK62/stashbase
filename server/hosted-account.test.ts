@@ -120,9 +120,9 @@ test('OAuth PKCE session persists locally and authenticates quota requests', () 
         remainingTokens: 999988, periodStartedAt: '2026-08-01T00:00:00.000Z', periodEndsAt: '2026-09-01T00:00:00.000Z',
       });
       if (String(url).endsWith('/v1/agent/usage')) return Response.json({
-        plan: 'free', currency: 'USD', grantedMicros: 1000000, usedMicros: 250000,
-        reservedMicros: 0, remainingMicros: 750000, inputTokens: 100, outputTokens: 25,
-        cacheReadTokens: 10, periodStartedAt: '2026-08-01T00:00:00.000Z', periodEndsAt: '2026-09-01T00:00:00.000Z',
+        profile: 'stashbase-agent-default', remainingPercent: 75,
+        inputTokens: 100, outputTokens: 25, cacheReadTokens: 10,
+        windowStartedAt: '2026-08-01T00:00:00.000Z', windowEndsAt: '2026-08-08T00:00:00.000Z',
       });
       throw new Error('unexpected URL ' + url);
     };
@@ -154,7 +154,7 @@ test('OAuth PKCE session persists locally and authenticates quota requests', () 
   assert.equal(output.calls[1].authorization, 'Bearer access-1');
   assert.equal(output.calls[2].authorization, 'Bearer access-1');
   assert.equal(output.quota.remainingTokens, 999_988);
-  assert.equal(output.agentAllowance.remainingMicros, 750_000);
+  assert.equal(output.agentAllowance.remainingPercent, 75);
   assert.equal(output.session.refreshToken, 'refresh-1');
   assert.equal(output.source, 'stashbase-account');
   assert.equal(output.state.email, 'person@example.com');

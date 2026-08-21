@@ -58,9 +58,10 @@ access surface external clients copy from.
   raster content type; failure remains an ordinary initials/icon fallback and
   never becomes a general URL proxy or account failure.
 - The OpenCode provider config likewise receives only a random process-local
-  broker key. The hosted Agent allowance response may cross to Settings as
-  bounded plan, currency, USD microunits, token totals, and period timestamps;
-  no account token or model request is returned to the renderer.
+  broker key scoped to one live Agent session. The hosted Agent allowance
+  response may cross to Settings only as profile alias, remaining percentage,
+  token totals, and seven-day window timestamps; no monetary amount, provider
+  pricing, account token, or model request is returned to the renderer.
 - Refresh demand for one account session is single-flight. A refresh may
   update or clear only the exact session it started from; a stale completion
   cannot overwrite or sign out a newer session.

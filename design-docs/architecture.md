@@ -43,8 +43,11 @@ hosted AI Index, Node may send extracted text through the hosted Adapter. When
 the user runs StashBase Agent, the Node broker sends prompts and necessary model
 context through the hosted model Adapter; sessions, tool execution, permissions,
 Diffs, and files remain local. The hosted service owns model routing and usage
-accounting, not Agent execution or session storage. The visible source and
-durable library remain local.
+accounting, not Agent execution or session storage. Agent accounting is a
+separate cost ledger from AI Index: the service atomically reserves and settles
+each model request against its prompt turn, fixed seven-day account window,
+short-term limits, and UTC-day provider budget. Model and policy versions are
+pinned when a turn begins. The visible source and durable library remain local.
 Detailed persistence, refresh, and broker invariants live in
 [Settings and Config](../code-review/settings-config.md).
 

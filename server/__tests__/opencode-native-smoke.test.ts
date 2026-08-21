@@ -44,7 +44,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     gatewayRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>);
     response.writeHead(200, { 'content-type': 'text/event-stream' });
-    const base = { id: 'chatcmpl-stashbase-smoke', object: 'chat.completion.chunk', created: 1, model: 'deepseek-chat' };
+    const base = { id: 'chatcmpl-stashbase-smoke', object: 'chat.completion.chunk', created: 1, model: 'stashbase-agent-default' };
     response.write(`data: ${JSON.stringify({
       ...base,
       choices: [{ index: 0, delta: { role: 'assistant', content: 'probe ok' }, finish_reason: null }],
@@ -63,7 +63,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   const config = buildOpenCodeConfig({
     apiKey: 'fake-loopback-key',
     baseUrl: `http://127.0.0.1:${gatewayPort}/v1`,
-    model: 'deepseek-chat',
+    model: 'stashbase-agent-default',
   }, '/unused/stashbase-mcp');
   config.mcp = {
     stashbase: {
@@ -163,7 +163,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     throwOnError: true,
     path: { id: session.id },
     body: {
-      model: { providerID: 'stashbase', modelID: 'deepseek-chat' },
+      model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
       agent: 'stashbase-folder',
       parts: [{ type: 'text', text: 'Reply with probe ok.' }],
     },
@@ -199,7 +199,7 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     throwOnError: true,
     path: { id: librarySession.id },
     body: {
-      model: { providerID: 'stashbase', modelID: 'deepseek-chat' },
+      model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
       agent: 'stashbase-library',
       parts: [{ type: 'text', text: 'Reply with probe ok.' }],
     },

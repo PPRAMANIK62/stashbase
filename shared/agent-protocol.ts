@@ -23,7 +23,13 @@
  * on the kind to offer the matching recovery and never parses message prose. */
 export type AgentId = 'stashbase' | 'claude' | 'codex';
 
-export type AgentTurnFailureKind = 'rate-limit' | 'quota' | 'allowance-exhausted' | 'auth-expired' | 'network';
+export type AgentTurnFailureKind =
+  | 'rate-limit'
+  | 'quota'
+  | 'allowance-exhausted'
+  | 'access-restricted'
+  | 'auth-expired'
+  | 'network';
 
 export interface AgentTurnFailure {
   kind: AgentTurnFailureKind;

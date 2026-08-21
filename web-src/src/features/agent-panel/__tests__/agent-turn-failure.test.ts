@@ -26,7 +26,10 @@ test('every failure kind offers a truthful in-place action', () => {
   }
   const allowance = turnFailureGuidance('allowance-exhausted', 'stashbase');
   assert.equal(allowance.action.id, 'open-agent-settings');
-  assert.match(allowance.guidance, /monthly reset/i);
+  assert.match(allowance.guidance, /7-day window/i);
+  const restricted = turnFailureGuidance('access-restricted', 'stashbase');
+  assert.equal(restricted.action.id, 'open-agent-settings');
+  assert.match(restricted.guidance, /support/i);
 });
 
 test('a bare failed terminal event adds one generic explanation', () => {

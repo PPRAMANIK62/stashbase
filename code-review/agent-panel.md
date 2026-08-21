@@ -25,8 +25,10 @@
   action; it calls the no-download discovery path so external recovery does not
   silently grant installation consent or start another login.
 - StashBase Agent is the default blank-chat preference. Its gate distinguishes
-  account-required from runtime installation, and Settings shows its monthly
-  cost allowance beside the Codex and Claude Code alternatives.
+  account-required from runtime installation, and Settings shows its fixed
+  seven-day allowance as remaining percentage and reset time beside the Codex
+  and Claude Code alternatives. Dollar values and model selection remain
+  hidden in the first release.
 - Tab activation and history resume only select renderer state. A missing
   runtime remains on the setup gate until **Install and continue**; activation
   code must not call the preparation endpoint speculatively.

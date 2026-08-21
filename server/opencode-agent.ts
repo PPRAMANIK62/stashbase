@@ -280,6 +280,7 @@ class OpenCodePanelSession {
     if (this.disposed) return;
     this.disposed = true;
     this.abort.abort();
+    this.runtime.endTurn();
     this.ws.off('message', this.onMessage);
     this.ws.off('close', this.onClose);
     unregisterAttributedAgentSession(this.attributionId);
@@ -322,7 +323,9 @@ class OpenCodePanelSession {
     try {
       for await (const event of stream) {
         if (this.disposed) return;
-        for (const translated of this.translator.translate(event)) send(this.ws, translated);
+        const translated = this.translator.translate(event);
+        for (const item of translated) send(this.ws, item);
+        if (translated.some((item) => item.t === 'turn-end')) this.runtime.endTurn();
       }
     } catch (error) {
       if (!this.abort.signal.aborted) this.fail(error, true);
@@ -338,6 +341,7 @@ class OpenCodePanelSession {
     try {
       switch (event.t) {
         case 'prompt':
+          this.runtime.beginTurn(randomUUID());
           for (const translated of this.translator.beginTurn()) send(this.ws, translated);
           if (event.titleHint) {
             void this.client.session.update({
@@ -350,7 +354,7 @@ class OpenCodePanelSession {
             ...DATA_REQUEST,
             path: { id: this.sessionId },
             body: {
-              model: { providerID: 'stashbase', modelID: 'deepseek-chat' },
+              model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
               agent: this.libraryScoped ? 'stashbase-library' : 'stashbase-folder',
               parts: [{ type: 'text', text: event.text }],
             },
@@ -381,6 +385,7 @@ class OpenCodePanelSession {
   private fail(error: unknown, terminal: boolean): void {
     const message = errorMessage(error);
     send(this.ws, agentTurnErrorEvent(message));
+    this.runtime.endTurn();
     if (terminal) {
       send(this.ws, { t: 'exit', message });
       this.dispose();

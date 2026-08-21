@@ -19,21 +19,16 @@ export interface HostedQuota {
   periodEndsAt: string | null;
 }
 
-/** Agent allowance is cost-denominated because model input, cached input,
- * reasoning, and output tokens have different prices. Integer micro-dollars
- * keep accounting exact across the local API boundary. */
+/** Public Agent allowance intentionally exposes only the user-facing weekly
+ * percentage and token detail. Picodollar accounting stays server-side. */
 export interface HostedAgentAllowance {
-  plan: string;
-  currency: 'USD';
-  grantedMicros: number;
-  usedMicros: number;
-  reservedMicros: number;
-  remainingMicros: number;
+  profile: string;
+  remainingPercent: number;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
-  periodStartedAt: string | null;
-  periodEndsAt: string | null;
+  windowStartedAt: string | null;
+  windowEndsAt: string | null;
 }
 
 export interface HostedAccountState {

@@ -6,7 +6,7 @@ import { buildOpenCodeConfig } from '../opencode-runtime.ts';
 
 test('bundled OpenCode config disables sharing and updates while asking for every risky local action', () => {
   const config = buildOpenCodeConfig({
-    apiKey: 'loopback-secret', baseUrl: 'http://127.0.0.1:1234/v1', model: 'deepseek-chat',
+    apiKey: 'loopback-secret', baseUrl: 'http://127.0.0.1:1234/v1', model: 'stashbase-agent-default',
   }, '/private/stashbase-mcp');
   assert.equal(config.autoupdate, false);
   assert.equal(config.share, 'disabled');
@@ -32,7 +32,7 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
   assert.equal(config.provider?.stashbase.options?.baseURL, 'http://127.0.0.1:1234/v1');
 
   const attributed = buildOpenCodeConfig({
-    apiKey: 'loopback-secret', baseUrl: 'http://127.0.0.1:1234/v1', model: 'deepseek-chat',
+    apiKey: 'loopback-secret', baseUrl: 'http://127.0.0.1:1234/v1', model: 'stashbase-agent-default',
   }, '/private/stashbase-mcp', { STASHBASE_WINDOW_ID: 'window-1', STASHBASE_AGENT_SESSION_ID: 'session-1' }, 'Use StashBase tools.');
   assert.deepEqual(attributed.mcp?.stashbase, {
     type: 'local',
@@ -159,11 +159,11 @@ test('OpenCode translator isolates sessions and classifies hosted allowance fail
     type: 'session.error',
     properties: {
       sessionID: 'ours',
-      error: { name: 'APIError', data: { message: 'StashBase monthly Agent allowance exhausted', isRetryable: false } },
+      error: { name: 'APIError', data: { message: 'StashBase weekly Agent allowance exhausted', isRetryable: false } },
     },
   });
   assert.deepEqual(events, [
-    { t: 'error', message: 'StashBase monthly Agent allowance exhausted', failure: { kind: 'allowance-exhausted' } },
+    { t: 'error', message: 'StashBase weekly Agent allowance exhausted', failure: { kind: 'allowance-exhausted' } },
     { t: 'turn-end', isError: true },
   ]);
 });

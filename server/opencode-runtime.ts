@@ -25,6 +25,9 @@ import { appDataRoot } from './local-data.ts';
 import { logger } from './log.ts';
 import {
   hostedAgentRuntime,
+  beginHostedAgentTurn,
+  endHostedAgentTurn,
+  releaseHostedAgentChannel,
   startHostedAgentBroker,
   stopHostedAgentBroker,
 } from './hosted-agent-broker.ts';
@@ -190,9 +193,11 @@ export function buildOpenCodeConfig(
   };
 }
 
-function openCodeConfig(mcpEnvironment: Record<string, string>, preamble?: string): Config {
-  const model = hostedAgentRuntime();
-  if (!model) throw new Error('The StashBase Agent model broker is not running.');
+function openCodeConfig(
+  model: { apiKey: string; baseUrl: string; model: string },
+  mcpEnvironment: Record<string, string>,
+  preamble?: string,
+): Config {
   return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, preamble);
 }
 
@@ -206,6 +211,7 @@ class OpenCodeRuntime {
     private readonly mcpEnvironment: Record<string, string> = {},
     private readonly preamble?: string,
     private readonly requireAccount = true,
+    private readonly agentSessionId = 'history',
   ) {
     runtimes.add(this);
   }
@@ -243,7 +249,7 @@ class OpenCodeRuntime {
           failure: {
             stage: 'authentication',
             code: 'account-required',
-            message: 'Sign in to StashBase to use the included monthly Agent allowance.',
+            message: 'Sign in to StashBase to use the included weekly Agent allowance.',
             retryable: true,
           },
         },
@@ -277,6 +283,7 @@ class OpenCodeRuntime {
     this.running = null;
     this.startingProcess = null;
     runtimes.delete(this);
+    releaseHostedAgentChannel(this.agentSessionId);
     if (process) {
       process.kill('SIGTERM');
       const timeout = setTimeout(() => {
@@ -313,6 +320,8 @@ class OpenCodeRuntime {
     const username = 'stashbase';
     const password = cryptoRandomSecret();
     const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+    const model = hostedAgentRuntime(this.agentSessionId);
+    if (!model) throw new Error('The StashBase Agent model broker is not running.');
     const child = spawn(executable, [
       'serve',
       '--hostname=127.0.0.1',
@@ -320,7 +329,7 @@ class OpenCodeRuntime {
       '--pure',
       '--log-level=WARN',
     ], {
-      env: privateRuntimeEnvironment(openCodeConfig(this.mcpEnvironment, this.preamble), username, password),
+      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.preamble), username, password),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -389,6 +398,8 @@ const historyRuntime = new OpenCodeRuntime({}, undefined, false);
 
 export interface OpenCodeSessionRuntime {
   client(directory: string): Promise<OpencodeClient>;
+  beginTurn(turnId: string, profile?: string): void;
+  endTurn(): void;
   close(): Promise<void>;
 }
 
@@ -406,9 +417,11 @@ export function createOpenCodeSessionRuntime(
   const sessionRuntime = new OpenCodeRuntime({
     STASHBASE_WINDOW_ID: context.windowId,
     STASHBASE_AGENT_SESSION_ID: context.agentSessionId,
-  }, buildStashbasePreamble(context.cwd, context.scope));
+  }, buildStashbasePreamble(context.cwd, context.scope), true, context.agentSessionId);
   return {
     client: (directory) => sessionRuntime.client(directory),
+    beginTurn: (turnId, profile) => beginHostedAgentTurn(context.agentSessionId, turnId, profile),
+    endTurn: () => endHostedAgentTurn(context.agentSessionId),
     close: () => sessionRuntime.close(),
   };
 }

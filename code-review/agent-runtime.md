@@ -21,16 +21,31 @@
   and remain available while signed out because native sessions are local;
   app shutdown closes every process and the model broker.
 - OpenCode receives only a random loopback model credential. The Node broker
-  authenticates the account, retries one 401 after token refresh, preserves one
-  idempotency key, and streams to the hosted OpenAI-compatible contract at
+  issues that credential per live Agent session, requires an active
+  user-submitted turn, authenticates the account, retries one 401 after token
+  refresh, preserves one idempotency key, and streams to the hosted
+  OpenAI-compatible contract at
   `POST /v1/agent/chat/completions`. The account usage contract is
-  `GET /v1/agent/usage` and reports integer USD microunits plus token totals.
-  Neither endpoint exposes account tokens to the renderer or OpenCode state.
-- The hosted service owns DeepSeek routing, token/cost accounting, monthly
-  reset, and allowance enforcement. It does not own Agent processes, sessions,
-  tools, permission decisions, or files. A 402 becomes the structured
+  `GET /v1/agent/usage` and reports remaining percentage, token totals, and the
+  fixed seven-day window timestamps. Neither endpoint exposes account tokens,
+  model pricing, or monetary balances to the renderer or OpenCode state.
+- The hosted service owns DeepSeek routing, picodollar cost accounting,
+  fixed seven-day windows, and allowance enforcement in a ledger separate
+  from AI Index. It pre-reserves before every call and settles provider usage
+  exactly once without making an account balance negative. The first call of
+  a submitted prompt pins policy and model versions for that turn; all later
+  model calls caused by the same prompt reuse its turn identity and $0.20
+  ceiling. It does not own Agent processes, sessions, tools, permission
+  decisions, or files. A 402 becomes the structured
   `allowance-exhausted` turn failure and routes recovery to Agent Settings.
-- The configured provider and model are fixed to `stashbase/deepseek-chat`.
+  Active hosted-account restrictions block Agent reservations atomically.
+  Reset or expiry closes a window to new calls immediately; reservations
+  already in flight still settle against that original window, while a later
+  call must use a fresh prompt-turn identity.
+- The desktop targets the stable `stashbase-agent-default` profile alias and
+  does not expose model selection in the first release. The hosted service
+  resolves the alias through an immutable, versioned model profile registered
+  to a code-owned provider Adapter; arbitrary provider URLs are never accepted.
   File Diffs, cumulative text/reasoning, tool states, permissions, titles,
   history, abort, and errors normalize through the shared protocol. OpenCode
   tool names are normalized once at this Adapter boundary.
@@ -250,7 +265,8 @@ assumed CLI versions.
   assigns this classification from native event structure; the renderer never
   parses provider prose to recover severity.
 - Turn-scoped runtime errors carry a structured failure kind — rate-limit,
-  quota, included-allowance exhaustion, auth-expired, or network — classified once in the adapters through
+  quota, included-allowance exhaustion, hosted access restriction,
+  auth-expired, or network — classified once in the adapters through
   the shared classifier; an unmatched message stays a plain error. The
   renderer maps the kind to recovery copy and actions without parsing
   messages, and every card carries a truthful action. Rate, network, and

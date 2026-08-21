@@ -72,7 +72,7 @@ export function AgentRuntimePanel() {
     <div>
       <SectionHeading level={3} className="mb-1">Agent runtimes</SectionHeading>
       <SectionDescription className="mb-2.5">
-        StashBase Agent is included and uses your monthly account allowance. Codex and Claude Code remain available as bring-your-own runtimes.
+        StashBase Agent is included and uses your fixed 7-day account allowance. Codex and Claude Code remain available as bring-your-own runtimes.
       </SectionDescription>
       {accountSignInOpen && (
         <div className="mb-2.5 rounded-lg border border-border bg-card p-3">
@@ -220,28 +220,26 @@ export function AgentRuntimePanel() {
 }
 
 function AgentAllowanceCard({ allowance, onRefresh }: { allowance: HostedAgentAllowance; onRefresh: () => void }) {
-  const percent = Math.max(0, Math.min(100, Math.round(
-    (allowance.remainingMicros / Math.max(1, allowance.grantedMicros)) * 100,
-  )));
-  const amount = (allowance.remainingMicros / 1_000_000).toLocaleString(undefined, {
-    style: 'currency', currency: allowance.currency, maximumFractionDigits: 2,
-  });
-  const reset = allowance.periodEndsAt ? new Date(allowance.periodEndsAt).toLocaleDateString() : null;
+  const percent = Math.max(0, Math.min(100, allowance.remainingPercent));
+  const reset = allowance.windowEndsAt ? new Date(allowance.windowEndsAt).toLocaleDateString() : null;
   return (
     <div className="mb-2.5 rounded-lg border border-border bg-card px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-medium text-foreground">Monthly Agent allowance</div>
-          <div className="text-xs text-muted-foreground">{amount} remaining{reset ? ` · Resets ${reset}` : ''}</div>
+          <div className="text-sm font-medium text-foreground">7-day Agent allowance</div>
+          <div className="text-xs text-muted-foreground">{percent}% remaining{reset ? ` · Resets ${reset}` : ' · Starts on first use'}</div>
         </div>
         <Button variant="ghost" size="sm" onClick={onRefresh}>Refresh</Button>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
       </div>
-      <div className="mt-1.5 text-xs text-muted-foreground">
-        {allowance.inputTokens.toLocaleString()} input · {allowance.outputTokens.toLocaleString()} output tokens
-      </div>
+      <details className="mt-1.5 text-xs text-muted-foreground">
+        <summary className="cursor-pointer">Token detail</summary>
+        <div className="mt-1">
+          {allowance.inputTokens.toLocaleString()} input · {allowance.outputTokens.toLocaleString()} output · {allowance.cacheReadTokens.toLocaleString()} cached
+        </div>
+      </details>
     </div>
   );
 }

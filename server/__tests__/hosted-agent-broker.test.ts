@@ -4,7 +4,7 @@ import { HostedAgentBroker } from '../hosted-agent-broker.ts';
 
 test('hosted Agent broker keeps the account credential upstream and streams an OpenAI-compatible response', async (t) => {
   const accessCalls: boolean[] = [];
-  const upstream: Array<{ url: string; authorization: string | null; idempotencyKey: string | null; body: string }> = [];
+  const upstream: Array<{ url: string; authorization: string | null; idempotencyKey: string | null; turnId: string | null; profile: string | null; body: string }> = [];
   const broker = new HostedAgentBroker({
     accessToken: async ({ forceRefresh = false } = {}) => {
       accessCalls.push(forceRefresh);
@@ -15,6 +15,8 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
         url: String(input),
         authorization: new Headers(init?.headers).get('authorization'),
         idempotencyKey: new Headers(init?.headers).get('idempotency-key'),
+        turnId: new Headers(init?.headers).get('x-stashbase-agent-turn-id'),
+        profile: new Headers(init?.headers).get('x-stashbase-agent-profile'),
         body: String(init?.body),
       });
       if (upstream.length === 1) return new Response('{}', { status: 401 });
@@ -27,7 +29,8 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   });
   await broker.start();
   t.after(() => broker.close());
-  const runtime = broker.runtime()!;
+  const runtime = broker.runtime('agent-session-1')!;
+  broker.beginTurn('agent-session-1', '00000000-0000-4000-8000-000000000001');
 
   const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -43,6 +46,9 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   assert.equal(upstream[1].authorization, 'Bearer fresh-account-token');
   assert.ok(upstream[0].idempotencyKey);
   assert.equal(upstream[1].idempotencyKey, upstream[0].idempotencyKey);
+  assert.equal(upstream[0].turnId, '00000000-0000-4000-8000-000000000001');
+  assert.equal(upstream[0].profile, 'stashbase-agent-default');
+  assert.equal(runtime.model, 'stashbase-agent-default');
   assert.equal(upstream[0].url, 'https://gateway.invalid/v1/agent/chat/completions');
   assert.doesNotMatch(upstream[0].body, /account-token/);
 });
@@ -50,13 +56,14 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
 test('hosted Agent broker translates exhausted allowance into the stable local error', async (t) => {
   const broker = new HostedAgentBroker({
     accessToken: async () => 'account-token',
-    fetch: async () => Response.json({ error: { code: 'quota_exhausted', message: 'Reset next month.' } }, { status: 402 }),
+    fetch: async () => Response.json({ code: 'agent_allowance_exhausted', message: 'Reset next week.' }, { status: 402 }),
     upstreamUrl: 'https://gateway.invalid/v1/agent/chat/completions',
     clientVersion: () => 'test-version',
   });
   await broker.start();
   t.after(() => broker.close());
-  const runtime = broker.runtime()!;
+  const runtime = broker.runtime('agent-session-2')!;
+  broker.beginTurn('agent-session-2', '00000000-0000-4000-8000-000000000002');
   const response = await fetch(`${runtime.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { authorization: `Bearer ${runtime.apiKey}`, 'content-type': 'application/json' },
@@ -64,8 +71,8 @@ test('hosted Agent broker translates exhausted allowance into the stable local e
   });
   const payload = await response.json() as { error: { message: string; code: string } };
   assert.equal(response.status, 402);
-  assert.match(payload.error.message, /^StashBase monthly Agent allowance exhausted\./);
-  assert.equal(payload.error.code, 'quota_exhausted');
+  assert.match(payload.error.message, /^StashBase weekly Agent allowance exhausted\./);
+  assert.equal(payload.error.code, 'agent_allowance_exhausted');
 });
 
 test('hosted Agent broker rejects non-broker credentials before contacting the gateway', async (t) => {
@@ -84,5 +91,30 @@ test('hosted Agent broker rejects non-broker credentials before contacting the g
     body: '{}',
   });
   assert.equal(response.status, 401);
+  assert.equal(called, false);
+});
+
+test('hosted Agent broker isolates session credentials and rejects calls outside an active turn', async (t) => {
+  let called = false;
+  const broker = new HostedAgentBroker({
+    accessToken: async () => 'account-token',
+    fetch: async () => { called = true; return new Response('{}'); },
+    upstreamUrl: 'https://gateway.invalid/v1/agent/chat/completions',
+    clientVersion: () => 'test-version',
+  });
+  await broker.start();
+  t.after(() => broker.close());
+  const first = broker.runtime('agent-session-a')!;
+  const second = broker.runtime('agent-session-b')!;
+  assert.notEqual(first.apiKey, second.apiKey);
+
+  const response = await fetch(`${first.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${first.apiKey}`, 'content-type': 'application/json' },
+    body: '{}',
+  });
+  const payload = await response.json() as { error: { code: string } };
+  assert.equal(response.status, 409);
+  assert.equal(payload.error.code, 'agent_turn_required');
   assert.equal(called, false);
 });

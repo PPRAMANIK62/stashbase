@@ -309,7 +309,8 @@ disconnected, or recoverable.
 1. Use New Chat with StashBase Agent, or choose another Agent, and select the
    Library or folder scope.
 2. For StashBase Agent, sign in to the StashBase account when needed; no Agent
-   install, model API key, or separate recharge is required within allowance.
+   install, model API key, or separate recharge is required within the fixed
+   seven-day included allowance.
 3. When a bring-your-own runtime is missing, explicitly choose **Install and
    continue**. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
    finish the provider-owned browser flow started by that same runtime.
@@ -325,6 +326,9 @@ disconnected, or recoverable.
   consent.
 - StashBase Agent uses only its included pinned runtime and account allowance;
   its account token is absent from the renderer and OpenCode state.
+- Settings reports the current seven-day window as a remaining percentage and
+  reset time, with optional token detail but no monetary balance. A submitted
+  prompt and its auxiliary model calls share one server-enforced turn limit.
 - Codex authentication uses the executable StashBase already discovered or
   installed. StashBase neither installs a second copy nor receives the
   provider credential.

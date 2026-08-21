@@ -40,8 +40,14 @@ export function turnFailureGuidance(kind: AgentTurnFailureKind, agent: AgentKind
       };
     case 'allowance-exhausted':
       return {
-        title: 'Monthly Agent allowance used',
-        guidance: 'Wait for the monthly reset, choose your own Codex or Claude Code runtime, or review plan options in Settings.',
+        title: '7-day Agent allowance used',
+        guidance: 'Wait for the current 7-day window to reset, choose your own Codex or Claude Code runtime, or review Agent usage in Settings.',
+        action: { id: 'open-agent-settings', label: 'Open Agent settings' },
+      };
+    case 'access-restricted':
+      return {
+        title: 'Hosted Agent access restricted',
+        guidance: 'This account cannot use hosted Agent capacity. Review Agent Settings for alternatives or contact StashBase support.',
         action: { id: 'open-agent-settings', label: 'Open Agent settings' },
       };
     case 'auth-expired':

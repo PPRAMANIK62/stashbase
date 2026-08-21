@@ -206,7 +206,8 @@ aliases, and Journey E2E owns representative composition.
   recovery, transcript, and layout state. `pnpm test:opencode:native` starts the
   exact bundled OpenCode binary and completes an SDK session against a local
   fake OpenAI-compatible gateway; broker tests cover token isolation, streaming,
-  refresh retry, and allowance classification.
+  refresh retry, per-session credentials, turn attribution, stable model
+  profile routing, and allowance classification.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
   the default included-Agent account gate and bring-your-own choices, then
   exercises the built-in panel against the deterministic fake Codex runtime.

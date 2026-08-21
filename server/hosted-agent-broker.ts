@@ -66,7 +66,12 @@ export class HostedAgentBroker {
   private server: http.Server | null = null;
   private startPromise: Promise<void> | null = null;
   private port = 0;
-  private readonly secret = crypto.randomBytes(32).toString('base64url');
+  private readonly channels = new Map<string, {
+    agentSessionId: string;
+    turnId: string | null;
+    profile: string;
+  }>();
+  private readonly channelBySession = new Map<string, string>();
 
   constructor(private readonly dependencies: HostedAgentBrokerDependencies = {
     accessToken: hostedAccessToken,
@@ -118,13 +123,44 @@ export class HostedAgentBroker {
     return this.startPromise;
   }
 
-  runtime(): { apiKey: string; baseUrl: string; model: string } | null {
+  runtime(agentSessionId = 'history'): { apiKey: string; baseUrl: string; model: string } | null {
     if (!this.server) return null;
+    let apiKey = this.channelBySession.get(agentSessionId);
+    if (!apiKey) {
+      apiKey = crypto.randomBytes(32).toString('base64url');
+      this.channelBySession.set(agentSessionId, apiKey);
+      this.channels.set(apiKey, {
+        agentSessionId,
+        turnId: null,
+        profile: 'stashbase-agent-default',
+      });
+    }
     return {
-      apiKey: this.secret,
+      apiKey,
       baseUrl: `http://127.0.0.1:${this.port}/v1`,
-      model: 'deepseek-chat',
+      model: 'stashbase-agent-default',
     };
+  }
+
+  beginTurn(agentSessionId: string, turnId: string, profile = 'stashbase-agent-default'): void {
+    const apiKey = this.channelBySession.get(agentSessionId);
+    const channel = apiKey ? this.channels.get(apiKey) : undefined;
+    if (!channel) throw new Error('The hosted Agent broker channel is unavailable.');
+    channel.turnId = turnId;
+    channel.profile = profile;
+  }
+
+  endTurn(agentSessionId: string): void {
+    const apiKey = this.channelBySession.get(agentSessionId);
+    const channel = apiKey ? this.channels.get(apiKey) : undefined;
+    if (channel) channel.turnId = null;
+  }
+
+  releaseChannel(agentSessionId: string): void {
+    const apiKey = this.channelBySession.get(agentSessionId);
+    if (!apiKey) return;
+    this.channelBySession.delete(agentSessionId);
+    this.channels.delete(apiKey);
   }
 
   async close(): Promise<void> {
@@ -135,6 +171,8 @@ export class HostedAgentBroker {
     const server = this.server;
     this.server = null;
     this.port = 0;
+    this.channels.clear();
+    this.channelBySession.clear();
     if (!server) return;
     server.closeIdleConnections();
     server.closeAllConnections();
@@ -150,10 +188,19 @@ export class HostedAgentBroker {
       writeJson(response, 404, { error: { message: 'Not found.', code: 'not_found' } });
       return;
     }
-    if (request.headers.authorization !== `Bearer ${this.secret}`) {
+    const authorization = request.headers.authorization;
+    const apiKey = /^Bearer (.+)$/.exec(authorization ?? '')?.[1];
+    const channel = apiKey ? this.channels.get(apiKey) : undefined;
+    if (!channel) {
       writeJson(response, 401, { error: { message: 'Invalid broker credential.', code: 'invalid_api_key' } });
       return;
     }
+    if (!channel.turnId) {
+      writeJson(response, 409, { error: { message: 'The Agent model call is not bound to an active turn.', code: 'agent_turn_required' } });
+      return;
+    }
+    const turnId = channel.turnId;
+    const profile = channel.profile;
 
     const body = await readBody(request);
     const abort = new AbortController();
@@ -172,6 +219,8 @@ export class HostedAgentBroker {
           'content-type': 'application/json',
           accept: request.headers.accept ?? 'text/event-stream, application/json',
           'idempotency-key': idempotencyKey,
+          'x-stashbase-agent-turn-id': turnId,
+          'x-stashbase-agent-profile': profile,
           'x-stashbase-client-version': this.dependencies.clientVersion(),
         },
         body,
@@ -188,13 +237,17 @@ export class HostedAgentBroker {
       const payload = await upstream.json().catch(() => null) as GatewayError | null;
       const nested = payload?.error;
       const upstreamMessage = nested?.message ?? payload?.message ?? `StashBase Agent gateway failed (HTTP ${upstream.status}).`;
+      const upstreamCode = nested?.code ?? payload?.code;
+      const allowanceMessage = upstreamCode === 'agent_turn_budget_exhausted'
+        ? `This Agent turn reached its spending limit. ${upstreamMessage}`
+        : `StashBase weekly Agent allowance exhausted. ${upstreamMessage}`;
       writeJson(response, upstream.status, {
         error: {
           message: upstream.status === 402
-            ? `StashBase monthly Agent allowance exhausted. ${upstreamMessage}`
+            ? allowanceMessage
             : upstreamMessage,
           type: 'stashbase_hosted_error',
-          code: nested?.code ?? payload?.code ?? (upstream.status === 402 ? 'quota_exhausted' : 'hosted_error'),
+          code: upstreamCode ?? (upstream.status === 402 ? 'agent_allowance_exhausted' : 'hosted_error'),
         },
       });
       return;
@@ -216,4 +269,8 @@ const broker = new HostedAgentBroker();
 
 export const startHostedAgentBroker = (): Promise<void> => broker.start();
 export const stopHostedAgentBroker = (): Promise<void> => broker.close();
-export const hostedAgentRuntime = () => broker.runtime();
+export const hostedAgentRuntime = (agentSessionId?: string) => broker.runtime(agentSessionId);
+export const beginHostedAgentTurn = (agentSessionId: string, turnId: string, profile?: string) =>
+  broker.beginTurn(agentSessionId, turnId, profile);
+export const endHostedAgentTurn = (agentSessionId: string) => broker.endTurn(agentSessionId);
+export const releaseHostedAgentChannel = (agentSessionId: string) => broker.releaseChannel(agentSessionId);
