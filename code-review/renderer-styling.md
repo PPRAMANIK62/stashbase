@@ -442,6 +442,15 @@ this file records the mechanics a change must respect.
    Base UI defaults it off, and without it arrow keys move focus without
    selecting.
 
+   **A `keepMounted` panel that overrides `display` must state its own
+   `aria-hidden`.** Base UI hides a kept-mounted panel with the `hidden`
+   ATTRIBUTE, whose entire effect is the UA's `display: none` — so a panel
+   class that sets `flex` to preserve layout and scroll position also
+   cancels the hiding, and every inactive pane stays in the accessibility
+   tree answering as though it were on screen. The chat pane hides the
+   inactive panes with `invisible pointer-events-none` and says
+   `aria-hidden` explicitly for exactly this reason.
+
    **The document `TabStrip` is the third, and it stays hand-rolled — the
    `menu-radio` exception again, for bundle reasons only.** The two
    consumers above load behind an interaction boundary, so Tabs costs them

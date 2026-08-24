@@ -169,6 +169,18 @@ export default function ChatPane() {
               // scroll position) instead of collapsing — `invisible` is
               // what actually hides them, exactly as before.
               keepMounted
+              // ...which is also why the inactive panes need `aria-hidden`
+              // stated here. Base UI hides a kept-mounted panel with the
+              // `hidden` ATTRIBUTE, whose entire effect is the UA's
+              // `display: none` — and the `flex` above is precisely what
+              // outranks that. So the pane stays laid out AND stays in the
+              // accessibility tree, and every mounted session's transcript
+              // and composer answer as though they were on screen. The
+              // hand-rolled panel this replaced stamped `aria-hidden` for
+              // this reason; the conversion dropped it, and the functional
+              // journeys caught it as `[aria-label="Message agent"]`
+              // resolving to one composer per open chat.
+              aria-hidden={tab.id === activeId ? undefined : true}
               // One tab body. Inactive panes stay mounted (preserving each
               // session's state) but render invisible and inert.
               className={cn('absolute inset-0 flex flex-col', tab.id === activeId ? 'visible' : 'invisible pointer-events-none')}
