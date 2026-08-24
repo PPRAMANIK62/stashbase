@@ -250,21 +250,37 @@ jobs:
           STASHBASE_E2E_SUMMARY_LABEL: Functional journeys
         run: xvfb-run -a pnpm test:e2e:functional
 
+      # Both suites write to the same report paths, and the visual step
+      # now runs even when this one failed, so move the functional
+      # evidence aside before it is overwritten.
+      - name: Preserve functional diagnostics
+        if: ${{ !cancelled() && steps.functional.outcome == 'failure' }}
+        run: |
+          if [[ -d playwright-report ]]; then mv playwright-report playwright-report-functional; fi
+          if [[ -d test-results/e2e ]]; then mv test-results/e2e test-results/e2e-functional; fi
+
+      # Runs even when the journeys failed. Sequencing these two suites in
+      # one job made a red or FLAKY journey silently cancel every visual
+      # assertion — and with it the candidate-baseline patch below, which
+      # is the whole recovery path for an intentional visual change. The
+      # job still fails on either suite; this only stops one failure from
+      # hiding the other.
       - name: Run visual regression tests
         id: visual
+        if: ${{ !cancelled() }}
         env:
           STASHBASE_E2E_SUMMARY_LABEL: Visual baselines
         run: xvfb-run -a pnpm test:e2e:visual
 
       - name: Preserve visual comparison diagnostics
-        if: failure() && steps.visual.outcome == 'failure'
+        if: ${{ !cancelled() && steps.visual.outcome == 'failure' }}
         run: |
           if [[ -d playwright-report ]]; then mv playwright-report playwright-report-comparison; fi
           if [[ -d test-results/e2e ]]; then mv test-results/e2e test-results/e2e-comparison; fi
 
       - name: Generate candidate Linux visual baselines
         id: visual_candidates
-        if: failure() && steps.visual.outcome == 'failure'
+        if: ${{ !cancelled() && steps.visual.outcome == 'failure' }}
         env:
           STASHBASE_E2E_SUMMARY_LABEL: Candidate visual baselines
         run: xvfb-run -a pnpm test:e2e:visual:update
@@ -292,8 +308,10 @@ jobs:
             e2e/visual/**/*-snapshots/**/*.png
             playwright-report/
             playwright-report-comparison/
+            playwright-report-functional/
             test-results/e2e/
             test-results/e2e-comparison/
+            test-results/e2e-functional/
           if-no-files-found: ignore
           retention-days: 14
 

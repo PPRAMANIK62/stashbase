@@ -188,6 +188,13 @@ viewport, theme, content, Agent availability, and reduced motion. A missing
 baseline is failure, not approval; masks are narrow, explained, and limited to
 unavoidable dynamic values.
 
+The functional and visual suites share one CI job but not one fate: the visual
+step runs even when the journeys failed. Sequencing them without that let one
+red or flaky journey cancel every visual assertion, and with it the candidate
+baseline patch that is the recovery path for an intentional visual change. Each
+suite's diagnostics are preserved under its own name, because both write to the
+same report paths. Either suite failing still fails the job.
+
 For an intentional visual change:
 
 1. Dispatch **Generate visual baselines** for the exact branch or commit.
