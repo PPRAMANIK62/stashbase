@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ChevronDownIcon, PlusIcon } from '@/common/components/icons';
 import { Menu, type MenuItem } from '@/common/components/Menu';
+import { Button } from '@/common/components/ui/button';
 import { AGENT_META, AGENTS, type AgentKind } from '@/common/lib/agentCatalog';
 import {
   newChatAgentSelectionPlan,
@@ -61,9 +62,13 @@ export function NewChatButton() {
      * is open). There is no keyboard shortcut, so no hint is shown. */
     <div className="flex-none px-1.5 pt-2 pb-3">
       <div className="group/newchat flex min-h-7 w-full items-center rounded-md hover:bg-muted">
-        <button
-          type="button"
-          className="flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-foreground"
+        <Button
+          variant="ghost"
+          size="sm"
+          // The ROW carries the hover surface, and `muted` is opaque, so the
+          // ghost tint under the pointer repaints the same colour the row
+          // already shows. h-auto/min-h-7 keeps the row's own height rule.
+          className="h-auto min-h-7 min-w-0 flex-1 justify-start gap-2 px-2 text-left text-base font-normal text-foreground"
           title={`Start a ${preferred.launcherLabel} chat in the current folder, or across the whole library`}
           onClick={() => startChat(readPreferredAgent())}
         >
@@ -77,7 +82,7 @@ export function NewChatButton() {
             <PlusIcon className="size-3.5 text-muted-foreground" />
           </span>
           <span className="min-w-0 truncate">New Chat</span>
-        </button>
+        </Button>
         {/* ALL chat history lives on this row since the Library section
           * retired — with no per-folder rows left, this is the one place
           * every session (each member folder + the library scope) stays
@@ -94,26 +99,20 @@ export function NewChatButton() {
         <span className="ml-1 shrink-0 truncate text-xs text-muted-foreground">
           {preferred.launcherLabel}
         </span>
-        <button
+        <Button
           ref={chevronRef}
-          type="button"
-          className={
-            /* Quiet-icon-button canon (TitlebarControls): muted hover
-             * surface; the app-wide `:focus-visible` outline rule paints
-             * the translucent halo. Compact size-5 keeps the control
-             * inside the row; sub-24px keeps rounded-sm per the corner
-             * contract. No right margin beyond mr-1: the chevron's own
-             * 20px box already holds the glyph 2px off the agent label,
-             * and more read as two unrelated controls rather than one
-             * label-plus-picker. size-4 (a step up from the sidebar's
-             * 14px glyphs) because this chevron sits beside 11px text.
-             * Always visible, muted: the arrow IS the discoverability of
-             * the agent menu — hover-only would hide the affordance. */
-            'mr-1 inline-flex size-5 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent '
-            + 'text-muted-foreground hover:bg-muted hover:text-foreground '
-            + '[&_svg]:size-4 '
-            + (menuAnchor ? 'bg-muted text-foreground' : '')
-          }
+          variant="ghost"
+          size="icon-xs"
+          /* Compact size-5 keeps the control inside the row; sub-24px keeps
+           * rounded-sm per the corner contract. No right margin beyond mr-1:
+           * the chevron's own 20px box already holds the glyph 2px off the
+           * agent label, and more read as two unrelated controls rather than
+           * one label-plus-picker. size-4 (a step up from the sidebar's 14px
+           * glyphs) because this chevron sits beside 11px text. Always
+           * visible, muted: the arrow IS the discoverability of the agent
+           * menu — hover-only would hide the affordance. The open state is
+           * the ghost variant's own `aria-expanded` treatment. */
+          className="mr-1 size-5 flex-none rounded-sm text-muted-foreground [&_svg]:size-4"
           aria-label="Choose agent for new chat"
           aria-haspopup="menu"
           aria-expanded={!!menuAnchor}
@@ -124,7 +123,7 @@ export function NewChatButton() {
           }}
         >
           <ChevronDownIcon />
-        </button>
+        </Button>
       </div>
       {menuAnchor && (
         <Menu

@@ -20,8 +20,7 @@ import type { AgentKind } from '@/common/lib/agentCatalog';
 import { FILE_MIME } from '@/common/lib/dragMime';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '@/common/lib/dragRouting';
 import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
-import { Button } from 'react-aria-components';
-import { buttonVariants } from '@/common/components/ui/button';
+import { Button } from '@/common/components/ui/button';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
 import { AgentRuntimeGate } from '@/features/agent-panel/components/AgentRuntimeGate';
 import { EmptyChatGreeting, EmptyChatSuggestion } from '@/features/agent-panel/components/AgentEmptyState';
@@ -133,8 +132,8 @@ export function AgentView({
       {dragOver && (
         // pointer-events-none so the overlay never steals the drop or
         // flickers dragenter/leave; the panel's own handlers take the drop.
-        <div className="pointer-events-none absolute inset-1.5 z-20 grid place-items-center rounded-xl border-2 border-dashed border-accent/55 bg-accent/7 backdrop-blur-[1.5px]">
-          <div className="rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground shadow-elevation">Drop files to add as context</div>
+        <div className="pointer-events-none absolute inset-1.5 z-chrome grid place-items-center rounded-xl border-2 border-dashed border-accent/55 bg-accent/7 backdrop-blur-[1.5px]">
+          <div className="rounded-lg border border-border bg-popover px-3.5 py-2 text-sm font-medium text-popover-foreground shadow-elevation">Drop files to add as context</div>
         </div>
       )}
       {/* No pane header: the chat tab already names the conversation and
@@ -161,7 +160,7 @@ export function AgentView({
           // flex-[4] band below the composer, so the input rests just above
           // the vertical center (Cursor-style) at every panel height.
           <div key="empty-above" className="flex min-h-0 flex-[3] flex-col justify-end overflow-hidden px-2">
-            <div className="mx-auto w-[min(640px,100%)]">
+            <div className="mx-auto w-measure-md">
               <EmptyChatGreeting
                 agentShortName={session.meta.shortName}
                 connecting={transcript.phase === 'connecting'}
@@ -192,7 +191,7 @@ export function AgentView({
         {transcript.phase === 'closed' && !transcript.fatal && (
           <div className="flex items-center justify-between gap-2.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
             <span>Session ended.</span>
-            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={transcript.reconnect}>Reconnect</Button>
+            <Button variant="outline" size="sm" onClick={transcript.reconnect}>Reconnect</Button>
           </div>
         )}
       <AgentComposer

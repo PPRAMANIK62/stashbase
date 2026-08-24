@@ -25,9 +25,31 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * moved into the shared `libraryMenuItems` module — both eager chrome by
  * the same rule as the folder-switcher trigger above, landing on top of
  * this branch's own Link-to-file picker gate rather than instead of it.
+ * 426 → 427 when the agent panel moved off `react-aria-components` onto the
+ * same Base UI primitives the rest of the app uses. This one is not a new
+ * feature: consolidating on one component library hoists Base UI's shared
+ * internals (useRenderElement, useButton, event details) out of the lazy
+ * chat chunk and into the shared graph the entry already pulls, costing
+ * ~300 bytes here. It buys a 55 KB cut to the ChatPane chunk (144 → 89) and
+ * removes the dependency outright, so the app ships less code overall — the
+ * initial slice just carries a slightly larger share of the shared runtime
+ * every eager surface was already using.
+ * Not raised for the design-system pass that moved the app's hand-rolled
+ * markup onto the shared primitive layer: it lands ~400 bytes UNDER the
+ * figure above, because a primitive whose internals the entry already
+ * pulls is cheaper than the bespoke recipe it replaces. That is thin
+ * enough to matter — the next eager surface to convert should expect to
+ * measure, not to assume it fits. One conversion in
+ * that pass did not survive this check and is worth knowing about before
+ * anyone retries it — putting the document `TabStrip` on the shared `Tabs`
+ * primitive added 22,780 bytes here (Base UI's `Tabs*`/`Composite*`
+ * modules plus the `react-dom` and `useOpenChangeComplete` chunks they
+ * pull), 5% of this budget, for a keyboard contract that strip already
+ * implemented. It stays hand-rolled; `code-review/renderer-styling.md`
+ * carries the rule and `TabStrip.tsx` the reason.
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 426 * 1024;
+const initialJsBudgetBytes = 427 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',

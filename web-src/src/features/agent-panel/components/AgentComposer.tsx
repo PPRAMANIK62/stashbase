@@ -9,10 +9,10 @@
  * decides whether that state can be sent.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Button } from 'react-aria-components';
+import { Button } from '@/common/components/ui/button';
 import { ArrowUpIcon, PlusIcon, StopIcon } from '@/common/components/icons';
 import { cn } from '@/common/lib/utils';
-import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from '@/features/agent-panel/components/FileAttachmentChip';
+import { AttachmentChip, AttachmentLightbox } from '@/features/agent-panel/components/AttachmentChip';
 import {
   scopePillAriaLabel,
   type LibraryScope,
@@ -20,9 +20,6 @@ import {
 } from '@/common/lib/libraryScope';
 import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { MentionComposer, type MentionComposerHandle } from '@/features/agent-panel/components/MentionComposer';
-import {
-  attachImageRemoveClass, attachRemoveClass, iconGhostButtonClass,
-} from '@/features/agent-panel/lib/panelStyles';
 import {
   ModelMenu, ModeMenu, nextPermMode,
   type ComposerEffortControl, type ComposerModeControl, type ComposerModelControl,
@@ -42,17 +39,55 @@ export type {
   ComposerMentionSources, ComposerSkillSource,
 } from '@/features/agent-panel/components/MentionSuggestions';
 
-/* Neutral send button — accent only on hover-when-ready (VSCode-style).
- * Circular, not squircular: it is the terminal action on the bar, and a
- * true circle is the one shape that reads as a button rather than as a
- * smaller copy of the composer around it. `rounded-full` also opts out of
- * the app-wide squircle (see globals.css), which is what keeps it a
- * circle instead of a bulged superellipse. */
-const sendClass =
-  'grid size-7 shrink-0 cursor-pointer place-items-center rounded-full border p-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4.5';
-const sendReadyClass =
-  'border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:cursor-default disabled:opacity-40';
-const sendStopClass = 'border-destructive bg-destructive text-primary-foreground';
+/**
+ * The terminal action on the composer bar. One control with two states, so
+ * it is one component: the three class strings it replaced described a
+ * single button whose shape was stated once and whose two skins were
+ * stated apart from it, which is exactly the split that lets one drift.
+ *
+ * Neutral by default — accent only on hover-when-ready (VSCode-style). The
+ * Button primitive (variant `ghost`, size `icon-sm`) already owns the 28px
+ * box, the focus halo, and the icon sizing; what stays here is the one
+ * thing no variant expresses: a circle that tints ACCENT on hover rather
+ * than muted. Circular, not squircular: a true circle is the one shape
+ * that reads as a button rather than as a smaller copy of the composer
+ * around it. `rounded-full` also opts out of the app-wide squircle (see
+ * globals.css), which is what keeps it a circle instead of a bulged
+ * superellipse. Stop holds its red under the pointer — the ghost variant's
+ * muted hover would read as the button going inert mid-turn.
+ */
+function SendButton({ turnActive, disabled, onStop, onSend }: {
+  turnActive: boolean;
+  disabled: boolean;
+  onStop: () => void;
+  onSend: () => void;
+}) {
+  if (turnActive) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="rounded-full border-destructive bg-destructive text-primary-foreground hover:bg-destructive hover:text-primary-foreground"
+        aria-label="Stop agent"
+        onClick={onStop}
+      >
+        <StopIcon />
+      </Button>
+    );
+  }
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="rounded-full border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:opacity-40"
+      aria-label="Send message"
+      disabled={disabled}
+      onClick={onSend}
+    >
+      <ArrowUpIcon />
+    </Button>
+  );
+}
 
 /** The scope this tab's session is (or will be) bound to. */
 export interface ComposerScopeControl {
@@ -165,7 +200,7 @@ export function AgentComposer({
     // the turn cards above share one column edge (the wrapper's
     // chat-primary width budgets for it — see `.agent-composer`).
     <div
-      className={cn('relative', hero ? 'mx-auto w-[min(656px,100%)] p-2' : 'agent-composer p-2 px-3')}
+      className={cn('relative', hero ? 'mx-auto w-measure-md p-2' : 'agent-composer p-2 px-3')}
       data-draft-empty={text.trim() ? 'false' : 'true'}
     >
       <MentionSuggestions state={suggestions} skills={skills} />
@@ -189,33 +224,15 @@ export function AgentComposer({
       )}>
         {(attachments.items.length > 0 || attachments.uploading) && (
           <div className="flex flex-wrap items-center gap-1">
-            {attachments.items.map((a) => a.previewUrl ? (
-              <ImageAttachmentChip
+            {attachments.items.map((a) => (
+              <AttachmentChip
                 key={a.path}
-                name={a.name}
-                previewUrl={a.previewUrl}
+                attachment={a}
                 onPreview={() => setPreviewAttachment(a)}
-                trailing={
-                  <Button
-                    className={attachImageRemoveClass}
-                    aria-label={`Remove ${a.name}`}
-                    onPress={() => {
-                      if (previewAttachment?.path === a.path) setPreviewAttachment(null);
-                      attachments.onRemove(a.path);
-                    }}
-                  >
-                    <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-                      <path d="m2.25 2.25 7.5 7.5M9.75 2.25l-7.5 7.5" />
-                    </svg>
-                  </Button>
-                }
-              />
-            ) : (
-              <FileAttachmentChip
-                key={a.path}
-                name={a.name}
-                path={a.path}
-                trailing={<Button className={attachRemoveClass} aria-label={`Remove ${a.name}`} onPress={() => attachments.onRemove(a.path)}>×</Button>}
+                onRemove={() => {
+                  if (previewAttachment?.path === a.path) setPreviewAttachment(null);
+                  attachments.onRemove(a.path);
+                }}
               />
             ))}
             {attachments.uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
@@ -246,7 +263,12 @@ export function AgentComposer({
           onFocusChange={onFocusChange}
           mentionOpen={suggestions.open}
           mentionListboxId={suggestions.composerListboxId}
+          mentionActiveOptionId={suggestions.composerActiveOptionId}
         />
+        {/* NOT the `Input` primitive: this is a hidden file picker with no
+          * rendered surface at all — the `+` button below opens it. A text
+          * field's box treatment would be dead weight, and `Input` is typed
+          * for Base UI's text input, not `type="file"`. */}
         <input
           ref={fileInputRef}
           type="file"
@@ -265,10 +287,12 @@ export function AgentComposer({
           * would double up with the card's own border. */}
         <div className="flex items-center gap-1 pt-0.5">
           <Button
-            className={iconGhostButtonClass}
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
             aria-label={attachments.uploading ? 'Uploading files' : 'Upload local files'}
-            isDisabled={attachments.uploading}
-            onPress={() => fileInputRef.current?.click()}
+            disabled={attachments.uploading}
+            onClick={() => fileInputRef.current?.click()}
           >
             <PlusIcon />
           </Button>
@@ -288,20 +312,12 @@ export function AgentComposer({
           <span className="flex-1" />
           {model.show && <ModelMenu model={model} disabled={disabled} />}
           {(mode.show || effort.show) && <ModeMenu mode={mode} effort={effort} disabled={disabled} />}
-          {turnActive ? (
-            <Button className={cn(sendClass, sendStopClass)} aria-label="Stop agent" onPress={onStop}>
-              <StopIcon />
-            </Button>
-          ) : (
-            <Button
-              className={cn(sendClass, sendReadyClass)}
-              aria-label="Send message"
-              isDisabled={!canSend(text)}
-              onPress={() => composerRef.current?.submit()}
-            >
-              <ArrowUpIcon />
-            </Button>
-          )}
+          <SendButton
+            turnActive={turnActive}
+            disabled={!canSend(text)}
+            onStop={onStop}
+            onSend={() => composerRef.current?.submit()}
+          />
         </div>
         {model.notice && <div className="pt-1.5 text-xs leading-snug text-muted-foreground" role="status">{model.notice}</div>}
       </div>

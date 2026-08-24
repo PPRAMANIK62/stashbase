@@ -6,18 +6,24 @@
  * `lib/diffModel`; this module only renders it.
  */
 import { useMemo, useRef, useState } from 'react';
-import { Button } from 'react-aria-components';
+import { Button } from '@/common/components/ui/button';
 import { ChevronDownIcon, CodeIcon, EditIcon, FileGenericIcon, FolderIcon, NewFileIcon, SearchIcon } from '@/common/components/icons';
 import { cn } from '@/common/lib/utils';
 import { buildDiff, type DiffRow } from '@/features/agent-panel/lib/diffModel';
-import { accentDotClass, outlineSmClass, primarySmClass } from '@/features/agent-panel/lib/panelStyles';
+import { accentDotClass } from '@/features/agent-panel/lib/panelStyles';
 import { activitySummary, askTitle, classifyTool, fileChanges, toolRowParts } from '@/features/agent-panel/lib/toolActivity';
 import { clipResult, payloadPreview } from '@/features/agent-panel/lib/toolPayload';
 import type { ToolBlock } from '@/features/agent-panel/lib/types';
+import { Card } from '@/common/components/ui/card';
+import { SectionHeading } from '@/common/components/ui/section';
 
-/** Mono detail blocks inside tool cards (input JSON, results, commands). */
+/** Mono detail blocks inside tool cards (input JSON, results, commands).
+ *  A class string, not a component: its three call sites are three
+ *  different `<pre>` bodies in this file — a truncated payload, a clipped
+ *  result, a raw command — and the only thing they share is the block's
+ *  shape. A `<ToolPre>` would forward children and nothing else. */
 const toolPreClass =
-  'mt-1.5 mb-0 max-h-70 overflow-x-auto overflow-y-auto rounded-md border border-border bg-pane px-2.25 py-1.75 font-mono text-xs leading-normal break-words whitespace-pre-wrap';
+  'mt-1.5 mb-0 max-h-70 overflow-x-auto overflow-y-auto rounded-md border border-border bg-pane px-2.5 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap';
 
 export function ToolActivityGroup({ tools, live = false, onOpenArtifact }: {
   tools: ToolBlock[];
@@ -44,8 +50,9 @@ export function ToolActivityGroup({ tools, live = false, onOpenArtifact }: {
     // hide behind the collapse.
     <section className="agent-activity">
       <Button
-        className="group/row flex w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left text-sm hover:bg-muted"
-        onPress={() => setOpen((value) => !value)}
+        variant="ghost"
+        className="group/row w-full justify-start gap-1.5 px-1.5 py-1 text-left text-sm"
+        onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
         {/* One leading glyph, Codex-style: the pulsing liveness dot while the
@@ -54,9 +61,12 @@ export function ToolActivityGroup({ tools, live = false, onOpenArtifact }: {
           * in on hover (or while open), so a resting row is just icon + text. */}
         {active ? <span className={accentDotClass} aria-hidden="true" /> : <ToolTypeIcon name={tools[0].name} input={tools[0].input} />}
         <span className={cn('min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground', active && 'agent-shimmer')}>{summary}</span>
-        <ChevronDownIcon className={cn('ml-auto size-3 shrink-0 text-muted-foreground transition-opacity', open ? 'opacity-60' : 'opacity-0 group-hover/row:opacity-60', !open && '-rotate-90')} />
+        <ChevronDownIcon className={cn('ml-auto size-3 shrink-0 text-muted-foreground transition-opacity duration-fast ease-out', open ? 'opacity-60' : 'opacity-0 group-hover/row:opacity-60', !open && '-rotate-90')} />
       </Button>
-      {open && <div className="grid gap-0.5 pb-0.5 pl-5">{tools.map((tool) => <ToolRow key={tool.id} block={tool} />)}</div>}
+      {/* The expanded steps are a list, not a run of rows: a screen reader
+        * announces "5 items" and each step's boundary instead of one
+        * undifferentiated paragraph of narration. */}
+      {open && <ul className="m-0 grid list-none gap-0.5 pb-0.5 pl-5">{tools.map((tool) => <ToolRow key={tool.id} block={tool} />)}</ul>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
     </section>
   );
@@ -102,13 +112,14 @@ function ToolRow({ block }: { block: ToolBlock }) {
   const running = block.status === 'running';
   const failed = block.status === 'error' || block.status === 'denied';
   return (
-    <div className="group/row">
+    <li className="group/row">
       <Button
+        variant="ghost"
         className={cn(
-          'flex w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left text-sm hover:bg-muted',
+          'w-full justify-start gap-1.5 px-1.5 py-1 text-left text-sm',
           failed ? 'text-status-danger' : 'text-muted-foreground',
         )}
-        onPress={() => setOpen((o) => !o)}
+        onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
         <ToolTypeIcon name={block.name} input={block.input} failed={failed} />
@@ -119,7 +130,7 @@ function ToolRow({ block }: { block: ToolBlock }) {
             mono ? 'font-mono text-xs' : 'underline decoration-1 underline-offset-2',
           )}>{target}</span>
         )}
-        <ChevronDownIcon className={cn('ml-auto size-3 shrink-0 transition-opacity', open ? 'opacity-60' : 'opacity-0 group-hover/row:opacity-60', !open && '-rotate-90')} />
+        <ChevronDownIcon className={cn('ml-auto size-3 shrink-0 transition-opacity duration-fast ease-out', open ? 'opacity-60' : 'opacity-0 group-hover/row:opacity-60', !open && '-rotate-90')} />
       </Button>
       {open && (
         <div className="pb-1 pl-6">
@@ -129,7 +140,7 @@ function ToolRow({ block }: { block: ToolBlock }) {
           )}
         </div>
       )}
-    </div>
+    </li>
   );
 }
 
@@ -138,7 +149,7 @@ function ToolRow({ block }: { block: ToolBlock }) {
  * chrome — the ask is the title, the payload renders once, and the single
  * primary button is the only emphasis. Approval stays an explicit click. */
 export function PermissionCard({ block, onPermission }: { block: ToolBlock; onPermission: (t: string, p: string, a: boolean) => void }) {
-  const headRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLHeadingElement>(null);
   function replyPermission(allow: boolean) {
     onPermission(block.id, block.permId!, allow);
     // The buttons vanish once the Agent updates this block; keep keyboard
@@ -146,20 +157,20 @@ export function PermissionCard({ block, onPermission }: { block: ToolBlock; onPe
     requestAnimationFrame(() => headRef.current?.focus());
   }
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-background">
-      <div ref={headRef} tabIndex={-1} className="px-2.5 py-1.75 text-sm font-semibold text-foreground outline-none">
+    <Card className="overflow-hidden">
+      <SectionHeading level={3} ref={headRef} tabIndex={-1} className="px-2.5 py-2 text-sm outline-none">
         {block.permTitle ?? askTitle(block.name)}
-      </div>
+      </SectionHeading>
       {block.permId && (
         <div className="px-2.5 pb-2.5">
           <ToolPayloadBody block={block} />
-          <div className="mt-2.25 flex justify-end gap-2">
-            <Button className={outlineSmClass} onPress={() => replyPermission(false)}>Reject</Button>
-            <Button className={primarySmClass} onPress={() => replyPermission(true)}>Allow</Button>
+          <div className="mt-2.5 flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => replyPermission(false)}>Reject</Button>
+            <Button size="sm" onClick={() => replyPermission(true)}>Allow</Button>
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -168,31 +179,42 @@ function ArtifactCards({ changes, onOpen }: { changes: Array<{ path: string; kin
   // One card per file — a path written repeatedly in one activity group
   // keeps its latest kind.
   const unique = [...new Map(changes.map((change) => [change.path, change])).values()];
-  return <div className="grid gap-1 px-2.5 pb-2.25">{unique.map((change) => (
-    <div
-      className="grid grid-cols-[15px_minmax(0,1fr)_auto_auto] items-center gap-1.5 rounded-md border border-border bg-pane px-1.75 py-1.5 text-xs"
+  return <ul className="m-0 grid list-none gap-1 px-2.5 pb-2.5">{unique.map((change) => (
+    <li
+      className="grid grid-cols-[15px_minmax(0,1fr)_auto_auto] items-center gap-1.5 rounded-md border border-border bg-pane px-2 py-1.5 text-xs"
       key={change.path}
     >
       <FileGenericIcon className="size-3.5 text-accent" />
       <span className="overflow-hidden text-ellipsis whitespace-nowrap text-foreground" title={change.path}>{change.path}</span>
       <span className="capitalize text-muted-foreground">{change.kind}</span>
       <Button
-        className="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent"
-        onPress={() => onOpen(change.path)}
+        variant="link"
+        size="xs"
+        className="h-auto p-0 text-xs text-accent"
+        onClick={() => onOpen(change.path)}
       >Open</Button>
-    </div>
-  ))}</div>;
+    </li>
+  ))}</ul>;
 }
 
 function DiffView({ diff }: { diff: { file: string; rows: DiffRow[] } }) {
   return (
-    <div className="agent-diff">
-      <div className="agent-diff-file">{diff.file}</div>
-      <div className="agent-diff-body">
+    /* Frame, file strip and mono type are chrome and live here; only the
+     * add/del row tints and their gutter glyph colours stay in
+     * agent-panel.css, because those are the editor's One-Dark palette
+     * rather than a theme role. `agent-diff-row` and `agent-diff-gutter`
+     * survive as the hooks those two rules key on; the frame needed no
+     * class of its own once its look moved here. */
+    <div className="mt-1 overflow-hidden rounded-xl border border-border">
+      <div className="border-b border-border bg-pane px-2 py-1 font-mono text-xs text-muted-foreground">{diff.file}</div>
+      {/* 320px: enough for a readable hunk, capped so one large diff cannot
+        * push the rest of the turn off the transcript. */}
+      <div className="max-h-80 overflow-auto font-mono text-xs leading-normal">
         {diff.rows.map((r, i) => (
-          <div key={i} className={'agent-diff-row ' + r.type}>
-            <span className="agent-diff-gutter">{r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' '}</span>
-            <span className="agent-diff-text">{r.text || ' '}</span>
+          <div key={i} className={cn('agent-diff-row flex whitespace-pre', r.type)}>
+            {/* 16px holds the one +/- glyph the mono column needs. */}
+            <span className="agent-diff-gutter w-4 shrink-0 text-center text-muted-foreground select-none">{r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' '}</span>
+            <span className="flex-1 pr-2">{r.text || ' '}</span>
           </div>
         ))}
       </div>

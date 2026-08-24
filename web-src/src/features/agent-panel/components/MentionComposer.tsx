@@ -44,7 +44,16 @@ class MentionWidget extends WidgetType {
     token.className = this.kind === 'skill' ? 'agent-skill-mention' : 'agent-file-mention';
     token.textContent = this.kind === 'skill' ? `/${this.path}` : basename(this.path);
     token.title = this.path;
-    token.setAttribute('aria-label', this.kind === 'skill' ? `Selected skill: ${this.path}` : `File mention: ${this.path}`);
+    // The chip shows a basename; the full path belongs in the TEXT layer,
+    // not an `aria-label`. This span carries no role, so a label on it is
+    // dropped outright — the same silence the transcript's own file chip
+    // (`renderUserFileMentions`) fixed with an `sr-only` run.
+    const spoken = document.createElement('span');
+    spoken.className = 'sr-only';
+    spoken.textContent = this.kind === 'skill'
+      ? ` (selected skill: ${this.path})`
+      : ` (file mention: ${this.path})`;
+    token.append(spoken);
     return token;
   }
 }
@@ -159,6 +168,7 @@ export function MentionComposer({
   onFocusChange,
   onSkillMarkerRemoved,
   mentionListboxId,
+  mentionActiveOptionId,
   mentionOpen,
   ref,
 }: {
@@ -175,6 +185,7 @@ export function MentionComposer({
   onFocusChange: (focused: boolean) => void;
   onSkillMarkerRemoved: () => void;
   mentionListboxId?: string;
+  mentionActiveOptionId?: string;
   mentionOpen: boolean;
   ref: React.Ref<MentionComposerHandle>;
 }) {
@@ -413,6 +424,7 @@ export function MentionComposer({
       input.removeAttribute('aria-haspopup');
       input.removeAttribute('aria-controls');
       input.removeAttribute('aria-expanded');
+      input.removeAttribute('aria-activedescendant');
       return;
     }
     input.setAttribute('role', 'combobox');
@@ -420,7 +432,11 @@ export function MentionComposer({
     input.setAttribute('aria-haspopup', 'listbox');
     input.setAttribute('aria-expanded', String(Boolean(mentionListboxId)));
     if (mentionListboxId) input.setAttribute('aria-controls', mentionListboxId);
-  }, [mentionListboxId, mentionOpen]);
+    // Focus stays in the editor, so the active row is announced through
+    // activedescendant rather than by moving focus into the list.
+    if (mentionActiveOptionId) input.setAttribute('aria-activedescendant', mentionActiveOptionId);
+    else input.removeAttribute('aria-activedescendant');
+  }, [mentionActiveOptionId, mentionListboxId, mentionOpen]);
 
   return <div ref={hostRef} className="agent-input" />;
 }

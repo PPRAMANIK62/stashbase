@@ -5,13 +5,15 @@
  * resends an edited prompt. Mention parsing is pure and lives in
  * `lib/mentionText`.
  */
+import { cn } from '@/common/lib/utils';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button } from 'react-aria-components';
+import { Button } from '@/common/components/ui/button';
+import { Textarea } from '@/common/components/ui/textarea';
 import { ChevronDownIcon, CopyIcon, EditIcon } from '@/common/components/icons';
 import { basename } from '@/common/lib/paths';
-import { AttachmentLightbox, FileAttachmentChip, ImageAttachmentChip } from '@/features/agent-panel/components/FileAttachmentChip';
+import { AttachmentChip, AttachmentLightbox } from '@/features/agent-panel/components/AttachmentChip';
 import { segmentFileMentions } from '@/features/agent-panel/lib/mentionText';
-import { outlineSmClass, primarySmClass } from '@/features/agent-panel/lib/panelStyles';
+import { turnHeadClass } from '@/features/agent-panel/lib/panelStyles';
 import type { Attachment, Block } from '@/features/agent-panel/lib/types';
 
 export function UserTurnHead({
@@ -30,7 +32,7 @@ export function UserTurnHead({
 
   return (
     <>
-      <div className="agent-turn-head">
+      <div className={turnHeadClass}>
         {block.attachments && block.attachments.length > 0 && <MessageAttachments attachments={block.attachments} />}
         {editing ? (
           <InlineUserMessageEditor
@@ -77,16 +79,15 @@ export function MessageAttachments({ attachments }: { attachments: Attachment[] 
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   return (
     <>
-      <div className="agent-turn-attach">
-        {attachments.map((attachment) => attachment.previewUrl ? (
-          <ImageAttachmentChip
+      {/* Chips wrap inside the bubble and sit a step clear of the message
+        * text below them. */}
+      <div className="mb-1.5 flex flex-wrap gap-1">
+        {attachments.map((attachment) => (
+          <AttachmentChip
             key={attachment.path}
-            name={attachment.name}
-            previewUrl={attachment.previewUrl}
+            attachment={attachment}
             onPreview={() => setPreviewAttachment(attachment)}
           />
-        ) : (
-          <FileAttachmentChip key={attachment.path} name={attachment.name} path={attachment.path} meta={attachment.dims} />
         ))}
       </div>
       <AttachmentLightbox attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
@@ -115,8 +116,15 @@ function InlineUserMessageEditor({
     });
   }, []);
   return (
-    <div className="agent-turn-edit">
-      <textarea
+    <div className="agent-turn-edit flex flex-col gap-3.5">
+      {/* `.agent-turn-edit textarea` (agent-panel.css) still owns the
+        * composer-idiom look — no border, no background, inherited type,
+        * and the auto-grow bounds. It cannot clear the primitive's focus
+        * halo, which is a box-shadow, so `ring-0` does that here: a text
+        * field always matches :focus-visible, and the bubble turning into
+        * an edit card IS the focus affordance. */}
+      <Textarea
+        className="p-0 focus-visible:ring-0"
         ref={textareaRef}
         value={text}
         onChange={(e) => {
@@ -136,8 +144,8 @@ function InlineUserMessageEditor({
         }}
       />
       <div className="flex justify-end gap-2">
-        <Button className={outlineSmClass} onPress={onCancel}>Cancel</Button>
-        <Button className={primarySmClass} onPress={onSave}>{saveLabel}</Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={onSave}>{saveLabel}</Button>
       </div>
     </div>
   );
@@ -151,16 +159,17 @@ export function UserMessageText({ text, attachmentPaths }: { text: string; attac
   const preview = userTextPreview(text);
   const collapsible = preview !== text;
   return (
-    <span className="agent-turn-text">
+    <span className="block min-w-0 flex-1">
       {renderUserFileMentions(open || !collapsible ? text : preview, attachmentPaths)}
-      {collapsible && !open && <span className="agent-turn-ellipsis">…</span>}
+      {collapsible && !open && <span className="text-muted-foreground">…</span>}
       {collapsible && (
         <Button
-          className="agent-turn-expand"
-          onPress={() => setOpen((v) => !v)}
+          variant="ghost"
+          className="mt-1.5 h-auto w-max gap-1 p-0 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
+          onClick={() => setOpen((v) => !v)}
         >
           {open ? 'Show less' : 'Show more'}
-          <ChevronDownIcon className={'agent-turn-expand-icon' + (open ? ' open' : '')} />
+          <ChevronDownIcon className={cn('size-3 transition-transform duration-fast ease-out', open && 'rotate-180')} />
         </Button>
       )}
     </span>
@@ -173,8 +182,9 @@ export function UserMessageText({ text, attachmentPaths }: { text: string; attac
 function renderUserFileMentions(text: string, attachmentPaths?: string[]): ReactNode[] {
   return segmentFileMentions(text, attachmentPaths).map((segment) => segment.kind === 'mention'
     ? (
-      <span key={`${segment.start}:${segment.path}`} className="agent-file-mention" title={segment.path} aria-label={`File mention: ${segment.path}`}>
+      <span key={`${segment.start}:${segment.path}`} className="agent-file-mention" title={segment.path}>
         {basename(segment.path)}
+        <span className="sr-only">{` (file mention: ${segment.path})`}</span>
       </span>
     )
     : segment.text);
@@ -190,13 +200,29 @@ function UserMessageActions({
   onCopy: (text: string) => void;
   onEdit: () => void;
 }) {
+  /* `role="group"`, not a bare div: an aria-label on a role-less element is
+   * not exposed at all, so this row of actions was announcing nothing.
+   * Group rather than toolbar — toolbar promises roving arrow-key
+   * navigation these two buttons do not implement. */
   return (
-    <div className="agent-turn-user-actions" aria-label="Message actions">
-      <Button aria-label="Copy message" onPress={() => onCopy(text)}>
-        <CopyIcon />
+    <div
+      /* Revealed on hover or keyboard focus of the whole turn, which is
+       * `group/turn` on the turn wrapper in AgentMessages. The reserved
+       * row also opens a little space between the user message and the
+       * agent's reply. The -2px lift closes the gap the transcript's own
+       * 10px turn gap would otherwise leave above a row that is mostly
+       * empty space. */
+      className="-mt-0.5 flex items-center justify-end gap-0.5 text-muted-foreground opacity-0 transition-surface group-hover/turn:opacity-100 group-focus-within/turn:opacity-100"
+      role="group"
+      aria-label="Message actions"
+    >
+      {/* 14, the app-wide chrome glyph size, over `icon-xs`'s 12: at 12
+        * these two sat a step below every other icon in the panel. */}
+      <Button variant="ghost" size="icon-xs" aria-label="Copy message" onClick={() => onCopy(text)}>
+        <CopyIcon className="size-3.5" />
       </Button>
-      <Button aria-label="Edit and resend" onPress={onEdit}>
-        <EditIcon />
+      <Button variant="ghost" size="icon-xs" aria-label="Edit and resend" onClick={onEdit}>
+        <EditIcon className="size-3.5" />
       </Button>
     </div>
   );
