@@ -54,7 +54,10 @@
 ## Composer and Controls
 
 - The sidebar New Chat split button is the only creation/Agent-selection
-  surface. Its chevron changes preference without creating a chat.
+  surface. Its agent picker — the named agent and its chevron form one
+  control — changes preference without creating a chat. The row carries no
+  hover surface of its own: each target in it highlights only its own box,
+  and a rule separates the New Chat/agent pair from chat history.
 - The scope picker is available before session binding and remains visible but
   locked after binding. Model and effort come from runtime capabilities;
   Default remains an omitted override. Locked controls stay legible and inert —
