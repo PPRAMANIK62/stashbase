@@ -335,7 +335,9 @@ failures remain distinguishable and preserve the transcript. An installation
 failure retains a no-download recheck so a CLI installed or repaired outside
 StashBase can resume preparation without repeating the managed install. The
 same recheck accepts a Codex login completed elsewhere. Abandoned or
-interrupted output cannot arrive in a newer turn or session.
+interrupted output cannot arrive in a newer turn or session. A Stop racing a
+native turn that has already ended clears the stale working state without
+presenting a turn failure.
 
 ### Evidence
 

@@ -638,6 +638,15 @@ export class CodexSession implements AttributedAgentSession {
     try {
       await this.request('turn/interrupt', { threadId: this.threadId, turnId });
     } catch (err: unknown) {
+      // The app-server can finish a turn just before it handles our Stop RPC.
+      // It has no structured discriminator for this invalid-request case, so
+      // normalize its stable compatibility message here at the Adapter
+      // boundary. The requested outcome is already true: settle local state
+      // as a successful stop and ignore a later duplicate terminal event.
+      if (isAlreadyIdleInterruptError(err)) {
+        this.settleActiveTurn(turnId, false);
+        return;
+      }
       if (!this.closed) this.send({ t: 'error', message: errorMessage(err) });
     }
   }
@@ -1078,6 +1087,10 @@ function autoApprovalReviewNotice(params: JsonObject): string {
         : 'Automatic approval review needs attention.';
   const rationale = usefulMessage(value.rationale);
   return rationale ? `${title}\n\n${rationale}` : title;
+}
+
+function isAlreadyIdleInterruptError(err: unknown): boolean {
+  return errorMessage(err).trim().toLowerCase() === 'no active turn to interrupt';
 }
 
 function usefulMessage(value: unknown): string {

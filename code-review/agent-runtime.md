@@ -188,6 +188,12 @@ assumed CLI versions.
 - Runtime errors settle only the matching active turn once. Retry-in-progress
   signals do not become permanent failures; repeated or late terminal events
   are ignored.
+- Turn interruption is idempotent at the Adapter boundary. Codex currently
+  exposes its already-idle interrupt race only through the stable
+  `no active turn to interrupt` invalid-request message, without structured
+  error data; the Adapter recognizes that compatibility case, settles only the
+  matching local turn as non-error, and lets the ordinary turn-id guard ignore
+  a later terminal notification. Other interrupt failures remain visible.
 - Native advisory notifications normalize to the shared non-fatal `notice`
   event, never `error`. Codex initialization opts out of the legacy
   `guardianWarning` prose summary and consumes the structured automatic-review

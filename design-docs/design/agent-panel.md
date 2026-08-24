@@ -82,6 +82,9 @@ a transcript-centered file manager.
   does not — and automatically retries the failed message, answering when
   the recovery worked and showing a fresh card when it did not. Recovery
   follows the failure's classified kind, never message prose.
+- Stop is idempotent at the user boundary. If the native runtime has already
+  finished the selected turn when it receives the interrupt request, Chat
+  settles the stale working state without adding a failure card.
 - Runtime notices and failures remain distinct protocol facts. Successful
   automatic approval is routine activity rather than a notice; other notices
   use a polite warning presentation and stay visible when no final answer

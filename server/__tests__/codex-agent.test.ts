@@ -48,6 +48,7 @@ function catalogProcess(
     skillsListError?: string;
     threadModel?: string;
     selectedTurnError?: string;
+    interruptError?: string;
     turnIds?: string[];
   } = {},
 ): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
@@ -70,6 +71,8 @@ function catalogProcess(
     } else if (request.method === 'turn/start' && options.selectedTurnError && request.params.model && !rejected) {
       rejected = true;
       proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.selectedTurnError } })}\n`);
+    } else if (request.method === 'turn/interrupt' && options.interruptError) {
+      proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.interruptError } })}\n`);
     } else {
       proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
     }
@@ -1284,5 +1287,74 @@ test('Codex Session user interruption stays non-error across terminal notificati
     { t: 'turn-end', isError: false },
   ]);
 
+  session.dispose();
+});
+
+test('Codex Session treats an already-idle interrupt rejection as a completed stop', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-already-idle-'));
+  runWithWindowId('already-idle-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('already-idle-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { interruptError: 'no active turn to interrupt' });
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'already-idle-window',
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  ws.sent = [];
+
+  ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string; isError?: boolean });
+  assert.deepEqual(events.filter((event) => event.t === 'error'), []);
+  assert.deepEqual(events.filter((event) => event.t === 'turn-end'), [{ t: 'turn-end', isError: false }]);
+  const runtime = session as unknown as { busy: boolean; activeTurnId: string | null };
+  assert.equal(runtime.busy, false);
+  assert.equal(runtime.activeTurnId, null);
+  session.dispose();
+});
+
+test('Codex Session keeps other interrupt rejections visible', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-interrupt-failure-'));
+  runWithWindowId('interrupt-failure-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('interrupt-failure-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { interruptError: 'interrupt transport unavailable' });
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'interrupt-failure-window',
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  ws.sent = [];
+
+  ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
+  assert.deepEqual(events.filter((event) => event.t === 'error'), [
+    { t: 'error', message: 'interrupt transport unavailable' },
+  ]);
+  assert.deepEqual(events.filter((event) => event.t === 'turn-end'), []);
+  assert.equal((session as unknown as { busy: boolean }).busy, true);
   session.dispose();
 });
