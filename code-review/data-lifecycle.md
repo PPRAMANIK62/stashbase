@@ -54,6 +54,10 @@
   interruptions unless their owner explicitly records a failure.
 - Cancelling native work owns the descendant process tree and waits for
   process/output-handle retirement before reporting the task released.
+- PDF/OCR preparation never owns a visible console window. POSIX extractors use
+  a detached process group for tree signals; Windows PDF/OCR extractors stay
+  attached, hide their console, and use `taskkill /T` for descendant
+  cancellation.
 
 ## Reconcile
 
@@ -169,7 +173,7 @@ of the resource tradeoff.
 | Daemon Adapter | `server/mfs-daemon.ts` ↔ `python/stashbase_daemon.py` |
 | Retrieval Interface | `server/retrieval/index.ts`, with keyword, semantic, and evidence Modules beside it |
 | Format owners | PDF, OCR, DOCX, and audio Modules under `server/` plus their native/Python Adapters |
-| Focused evidence | `server/conversion-scheduler.test.ts`, `server/conversion.test.ts`, `server/conversion-status.test.ts`, `server/semantic-workload.test.ts`, `server/index-status.test.ts`, `server/indexer-mfs-path.test.ts`, `server/audio-transcription.test.ts`, `server/retrieval/index.test.ts`, and `python/stashbase_daemon_test.py` |
+| Focused evidence | `server/conversion-scheduler.test.ts`, `server/conversion.test.ts`, `server/conversion-status.test.ts`, `server/extractor-process.test.ts`, `server/semantic-workload.test.ts`, `server/index-status.test.ts`, `server/indexer-mfs-path.test.ts`, `server/audio-transcription.test.ts`, `server/retrieval/index.test.ts`, and `python/stashbase_daemon_test.py` |
 
 ## Review Checklist
 

@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { spawnOptionsForExtractor, terminateExtractorTree } from './extractor-process.ts';
+import {
+  spawnOptionsForExtractor,
+  spawnOptionsForPdfOcr,
+  terminateExtractorTree,
+} from './extractor-process.ts';
 
 const CHILD_SOURCE = 'setInterval(() => undefined, 1000)';
 const PARENT_SOURCE = [
@@ -23,6 +27,15 @@ function processExists(pid: number): boolean {
     return false;
   }
 }
+
+test('PDF/OCR subprocess configuration stays hidden on Windows', () => {
+  const windowsOptions = spawnOptionsForPdfOcr('win32');
+  assert.equal(windowsOptions.detached, false);
+  assert.equal(windowsOptions.windowsHide, true);
+
+  assert.equal(spawnOptionsForPdfOcr('linux').detached, true);
+  assert.equal(spawnOptionsForExtractor().detached, true);
+});
 
 async function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;

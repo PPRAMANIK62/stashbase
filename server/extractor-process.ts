@@ -4,11 +4,13 @@ import os from 'node:os';
 const KILL_GRACE_MS = 1500;
 const EXTRACTOR_NICE_PRIORITY = 15;
 
-export function spawnOptionsForExtractor(): {
+interface ExtractorSpawnOptions {
   detached: boolean;
   stdio: ['ignore', 'pipe', 'pipe'];
   env: NodeJS.ProcessEnv;
-} {
+}
+
+export function spawnOptionsForExtractor(): ExtractorSpawnOptions {
   return {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -22,6 +24,19 @@ export function spawnOptionsForExtractor(): {
       NUMEXPR_NUM_THREADS: process.env.STASHBASE_EXTRACTOR_THREADS ?? '1',
       OMP_WAIT_POLICY: 'PASSIVE',
     },
+  };
+}
+
+/** PDF/OCR use a console-enabled Python sidecar for progress reporting.
+ * Windows cancellation already uses taskkill /T, so detaching is unnecessary
+ * there and would allocate a console window for every extractor launch. */
+export function spawnOptionsForPdfOcr(
+  platform: NodeJS.Platform = process.platform,
+): ExtractorSpawnOptions & { windowsHide: boolean } {
+  return {
+    ...spawnOptionsForExtractor(),
+    detached: platform !== 'win32',
+    windowsHide: true,
   };
 }
 

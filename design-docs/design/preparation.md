@@ -57,6 +57,8 @@ artifacts.
   interruption is rediscoverable.
 - Optional native tools and state stores degrade to actionable status rather
   than blocking folder entry.
+- PDF and image OCR helpers must not surface console windows or take focus from
+  the user's current work.
 - Ambient capture remains opt-in and reversible. Failure to read the setting or
   clipboard fails closed rather than enabling monitoring or creating a source.
 

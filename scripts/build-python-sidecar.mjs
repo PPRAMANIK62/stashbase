@@ -22,6 +22,12 @@ const extractReqs = path.join(root, 'python', 'requirements-extract.txt');
 const setupPython = path.join(root, 'scripts', 'setup-python.mjs');
 const args = process.argv.slice(2);
 const buildExtractor = args.includes('--with-extract') || process.env.STASHBASE_BUILD_EXTRACT === '1';
+// Keep the console-enabled bootloader so Node can capture stderr progress and
+// failures, but hide consoles owned by the Windows extractor and its frozen
+// multiprocessing workers before they can flash or steal focus.
+const extractorConsoleArgs = process.platform === 'win32'
+  ? ['--hide-console', 'hide-early']
+  : [];
 const pyinstallerEnv = {
   ...process.env,
   PYINSTALLER_CONFIG_DIR: cachePath,
@@ -252,6 +258,7 @@ if (!buildExtractor) {
       '--noconfirm',
       '--name',
       'stashbase-extract',
+      ...extractorConsoleArgs,
       // pdf_extract.py / ocr_extract.py are sibling modules imported lazily
       // by extract_main; put `python/` on the analysis path and pin them as
       // hidden imports so PyInstaller bundles both branches.
