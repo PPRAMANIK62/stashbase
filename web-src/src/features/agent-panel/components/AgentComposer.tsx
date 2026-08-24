@@ -21,7 +21,7 @@ import {
 import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { MentionComposer, type MentionComposerHandle } from '@/features/agent-panel/components/MentionComposer';
 import {
-  ModelMenu, ModeMenu, nextPermMode,
+  EffortMenu, ModelMenu, ModeMenu, nextPermMode,
   type ComposerEffortControl, type ComposerModeControl, type ComposerModelControl,
 } from '@/features/agent-panel/components/ComposerPills';
 import {
@@ -311,7 +311,8 @@ export function AgentComposer({
           />
           <span className="flex-1" />
           {model.show && <ModelMenu model={model} disabled={disabled} />}
-          {(mode.show || effort.show) && <ModeMenu mode={mode} effort={effort} disabled={disabled} />}
+          {mode.show && <ModeMenu mode={mode} disabled={disabled} />}
+          {effort.show && <EffortMenu effort={effort} disabled={disabled} />}
           <SendButton
             turnActive={turnActive}
             disabled={!canSend(text)}

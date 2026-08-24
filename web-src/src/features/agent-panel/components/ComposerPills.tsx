@@ -14,7 +14,7 @@
  */
 import { useState } from 'react';
 import {
-  Menu, MenuPopup, MenuPortal, MenuPositioner, MenuSeparator, MenuTrigger,
+  Menu, MenuPopup, MenuPortal, MenuPositioner, MenuTrigger,
 } from '@/common/components/ui/menu';
 import {
   MenuGroupLabel, MenuRadioGroup, MenuRadioItem,
@@ -61,7 +61,7 @@ export interface ComposerModeControl {
   onSet: (mode: PermMode) => void;
 }
 
-/** Thinking-effort control, sharing the Mode pill's popover. */
+/** Thinking-effort control behind its own pill. */
 export interface ComposerEffortControl {
   show: boolean;
   /** Explicit override; undefined preserves the runtime default. */
@@ -107,11 +107,16 @@ export function ModelMenu({ model, disabled }: { model: ComposerModelControl; di
       <MenuPortal>
         <MenuPositioner side="top" align="end" sideOffset={6}>
           <MenuPopup className={cn(menuPopupClass, 'max-h-overlay-sm')}>
-            <MenuGroupLabel>Model</MenuGroupLabel>
             {/* A radio group, not a stack of buttons: each row becomes a
               * `menuitemradio` carrying its own checked state, and the
               * check glyph comes from the primitive rather than being
-              * drawn per row. */}
+              * drawn per row.
+              *
+              * The heading lives INSIDE the group: `MenuGroupLabel` reads
+              * the group's context to register itself as the group's
+              * accessible name, and throws outright when rendered without
+              * one — a sibling heading above the group took the whole
+              * chat pane to its error boundary the moment a pill opened. */}
             <MenuRadioGroup
               value={model.selected ?? DEFAULT_VALUE}
               onValueChange={(value) => {
@@ -119,6 +124,7 @@ export function ModelMenu({ model, disabled }: { model: ComposerModelControl; di
                 setOpen(false);
               }}
             >
+              <MenuGroupLabel>Model</MenuGroupLabel>
               <MenuRadioItem value={DEFAULT_VALUE}>
                 <MenuOptionContent title="Default" description="Use this runtime’s configured model" />
               </MenuRadioItem>
@@ -135,64 +141,44 @@ export function ModelMenu({ model, disabled }: { model: ComposerModelControl; di
   );
 }
 
-/** Mode pill — the permission-mode list with the effort bar at the bottom
- * of the same panel (the Claude Code treatment): mode stays visible on the
- * bar, effort lives one click away and echoes on the trigger only when
- * non-default ("Ask · High"). If the runtime has no mode control the pill
- * degrades to an effort-only trigger. */
-export function ModeMenu({ mode, effort, disabled }: {
+/** Mode pill — the permission-mode list, and nothing else.
+ *
+ * Mode and effort are independent session settings, so they are two pills
+ * with two menus. Stacking effort under the mode list in one popup made a
+ * panel tall enough to scroll, put two headings in one card so it read as
+ * two menus anyway, and left the trigger trying to name both at once
+ * ("Ask · High") — a label that grew a second value the moment either
+ * setting moved off its default. */
+export function ModeMenu({ mode, disabled }: {
   mode: ComposerModeControl;
-  effort: ComposerEffortControl;
   disabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const activeMode = MODES.find((m) => m.id === mode.value) ?? MODES[0];
-  const efforts = effortOptions(effort.supported);
-  const effortName = effort.level ? effortLabel(effort.level) : effort.inherited ? 'Inherited' : 'Default';
-  const effortSuffix = effort.show && (effort.level || effort.inherited) ? ` · ${effortName}` : '';
-  const label = mode.show
-    ? `${activeMode.label}${effortSuffix}`
-    : `Effort: ${effortName}`;
   return (
     <Menu open={open} onOpenChange={setOpen}>
       <MenuTrigger
-        render={<Pill />}
+        render={<Pill className="max-w-40" />}
         disabled={disabled}
-        aria-label={mode.show
-          ? `Permission mode: ${activeMode.label} — ${activeMode.desc}${effort.show && effort.level ? `; reasoning effort ${effortLabel(effort.level)}` : ''}`
-          : `Reasoning effort: ${effortName}`}
+        aria-label={`Permission mode: ${activeMode.label} — ${activeMode.desc}`}
+        title={`Permission mode — ${activeMode.label}`}
       >
-        {label}
+        {activeMode.label}
       </MenuTrigger>
       <MenuPortal>
         <MenuPositioner side="top" align="end" sideOffset={6}>
           <MenuPopup className={menuPopupClass}>
-            {mode.show && (
-              <>
-                <MenuGroupLabel>Mode</MenuGroupLabel>
-                <MenuRadioGroup
-                  value={mode.value}
-                  onValueChange={(value) => { mode.onSet(value as PermMode); setOpen(false); }}
-                >
-                  {MODES.map((m) => (
-                    <MenuRadioItem key={m.id} value={m.id}>
-                      <MenuOptionContent icon={m.Icon} title={m.label} description={m.desc} />
-                    </MenuRadioItem>
-                  ))}
-                </MenuRadioGroup>
-              </>
-            )}
-            {effort.show && (
-              <>
-                {mode.show && <MenuSeparator />}
-                <div
-                  className={effort.locked ? 'pointer-events-none opacity-60' : undefined}
-                  title={effort.locked ? 'Effort is fixed for this session' : undefined}
-                >
-                  <EffortList effort={effort.level} efforts={efforts} inherited={effort.inherited} onSet={effort.onSet} />
-                </div>
-              </>
-            )}
+            <MenuRadioGroup
+              value={mode.value}
+              onValueChange={(value) => { mode.onSet(value as PermMode); setOpen(false); }}
+            >
+              <MenuGroupLabel>Mode</MenuGroupLabel>
+              {MODES.map((m) => (
+                <MenuRadioItem key={m.id} value={m.id}>
+                  <MenuOptionContent icon={m.Icon} title={m.label} description={m.desc} />
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
           </MenuPopup>
         </MenuPositioner>
       </MenuPortal>
@@ -200,38 +186,64 @@ export function ModeMenu({ mode, effort, disabled }: {
   );
 }
 
-/** Effort as a vertical list — the same row idiom as the Mode and Model
- * lists above it, so the whole popover reads as one control. The Default
- * row (clears any override) leads, then each level the runtime advertises,
- * in its own order. Being data-driven rows, it renders any agent's set —
- * Claude's Low…Max, Codex's Light…Ultra — with no wrapping or layout risk. */
-function EffortList({ effort, efforts, inherited, onSet }: { effort?: EffortLevel; efforts: EffortLevel[]; inherited: boolean; onSet: (l?: EffortLevel) => void }) {
+/** Effort pill — reasoning effort as a vertical list, the same row idiom
+ * as the Mode and Model pills beside it. The Default row (clears any
+ * override) leads, then each level the runtime advertises, in its own
+ * order. Being data-driven rows, it renders any agent's set — Claude's
+ * Low…Max, Codex's Light…Ultra — with no wrapping or layout risk.
+ *
+ * Locked works the way the Model pill's does: the trigger itself goes
+ * inert and says why, rather than the popup opening onto a dimmed list. */
+export function EffortMenu({ effort, disabled }: {
+  effort: ComposerEffortControl;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const efforts = effortOptions(effort.supported);
+  const name = effort.level ? effortLabel(effort.level) : effort.inherited ? 'Inherited' : 'Default';
   return (
-    <>
-      <MenuGroupLabel>Effort</MenuGroupLabel>
-      <MenuRadioGroup
-        value={effort ?? DEFAULT_VALUE}
-        onValueChange={(value) => onSet(value === DEFAULT_VALUE ? undefined : (value as EffortLevel))}
+    <Menu open={open} onOpenChange={setOpen}>
+      <MenuTrigger
+        render={<Pill locked={effort.locked} className="max-w-40" />}
+        disabled={disabled || effort.locked}
+        aria-label={`Reasoning effort: ${name}${effort.locked ? ' — fixed for this conversation' : ''}`}
+        title={effort.locked ? `Effort — ${name} (fixed for this session)` : `Effort — ${name}`}
       >
-        <MenuRadioItem value={DEFAULT_VALUE} className="text-sm">
-          <span className={cn('min-w-0 truncate', !effort && 'font-medium')}>
-            Default
-            {/* The session inherited a non-default effort from a resumed
-              * transcript; the Default row is where you'd clear it, so it's
-              * where the current inherited state reads. */}
-            {inherited && !effort && (
-              <span className="ml-1.5 text-xs font-normal text-muted-foreground">inherited</span>
-            )}
-          </span>
-        </MenuRadioItem>
-        {efforts.map((level) => (
-          <MenuRadioItem key={level} value={level} className="text-sm">
-            <span className={cn('min-w-0 truncate', effort === level && 'font-medium')}>
-              {effortLabel(level)}
-            </span>
-          </MenuRadioItem>
-        ))}
-      </MenuRadioGroup>
-    </>
+        {name === 'Default' ? 'Effort: Default' : name}
+      </MenuTrigger>
+      <MenuPortal>
+        <MenuPositioner side="top" align="end" sideOffset={6}>
+          <MenuPopup className={menuPopupClass}>
+            <MenuRadioGroup
+              value={effort.level ?? DEFAULT_VALUE}
+              onValueChange={(value) => {
+                effort.onSet(value === DEFAULT_VALUE ? undefined : (value as EffortLevel));
+                setOpen(false);
+              }}
+            >
+              <MenuGroupLabel>Effort</MenuGroupLabel>
+              <MenuRadioItem value={DEFAULT_VALUE} className="text-sm">
+                <span className={cn('min-w-0 truncate', !effort.level && 'font-medium')}>
+                  Default
+                  {/* The session inherited a non-default effort from a resumed
+                    * transcript; the Default row is where you'd clear it, so it's
+                    * where the current inherited state reads. */}
+                  {effort.inherited && !effort.level && (
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">inherited</span>
+                  )}
+                </span>
+              </MenuRadioItem>
+              {efforts.map((level) => (
+                <MenuRadioItem key={level} value={level} className="text-sm">
+                  <span className={cn('min-w-0 truncate', effort.level === level && 'font-medium')}>
+                    {effortLabel(level)}
+                  </span>
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </MenuPopup>
+        </MenuPositioner>
+      </MenuPortal>
+    </Menu>
   );
 }

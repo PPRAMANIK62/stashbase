@@ -57,7 +57,12 @@
   surface. Its chevron changes preference without creating a chat.
 - The scope picker is available before session binding and remains visible but
   locked after binding. Model and effort come from runtime capabilities;
-  Default remains an omitted override. Locked controls stay legible and inert.
+  Default remains an omitted override. Locked controls stay legible and inert —
+  the locked PILL goes inert and says why, rather than opening onto a dimmed
+  list.
+- One session setting is one pill over one menu. Model, mode, and effort are
+  independent, so none of them shares another's popup or appends its value to
+  another's trigger label; a pill names only the setting it changes.
 - CodeMirror owns composer text, selection, undo, and `@`/`/` key handoff. The
   UI remains a capped-height chat input, not an editor workbench.
 - Suggestions only prefill a draft; they never send. Their rotation pauses

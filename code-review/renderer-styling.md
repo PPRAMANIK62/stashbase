@@ -314,6 +314,18 @@ this file records the mechanics a change must respect.
    because a hairline directly under the default row cuts a menu in half
    and reads as two.
 
+   **`MenuGroupLabel` must render INSIDE its group.** It is the group's
+   accessible name, not a heading that happens to sit above one: it
+   registers its id through the group's context and Base UI THROWS when
+   that context is missing, so a heading placed as the group's sibling
+   turns opening the menu into a thrown render. In the composer that
+   reached the user as the chat pane's error boundary — the whole session
+   replaced by "Could not open chat session." the moment a pill was
+   clicked. Either put the label inside the `MenuRadioGroup`/`MenuGroup`,
+   or use `MenuSectionLabel`, which needs no group. Guarded by
+   `agent-composer-pills.test.ts`, which opens each pill and reads the
+   group's name back.
+
    The agent panel's `AttachmentChip` is the same absorption one layer out,
    and it deliberately stayed a feature component rather than moving here:
    it knows what an attachment is, which is a fact about the panel and not
