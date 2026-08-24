@@ -189,11 +189,16 @@ assumed CLI versions.
   signals do not become permanent failures; repeated or late terminal events
   are ignored.
 - Native advisory notifications normalize to the shared non-fatal `notice`
-  event, never `error`. Codex `warning`, `guardianWarning`, and
-  `configWarning` preserve their message (including structured configuration
-  summary/details) without settling a turn or changing session readiness.
-  The Adapter assigns this classification from native event structure; the
-  renderer never parses provider prose to recover severity.
+  event, never `error`. Codex initialization opts out of the legacy
+  `guardianWarning` prose summary and consumes the structured automatic-review
+  completion instead: `approved` is routine and silent, while denied,
+  interrupted, timed-out, or unknown outcomes preserve their rationale as a
+  notice. An older runtime that ignores the opt-out continues through the
+  legacy `guardianWarning` fallback. Ordinary `warning` and `configWarning`
+  messages, including structured configuration summary/details, remain
+  visible without settling a turn or changing session readiness. The Adapter
+  assigns this classification from native event structure; the renderer never
+  parses provider prose to recover severity.
 - Turn-scoped runtime errors carry a structured failure kind — rate-limit,
   quota, auth-expired, or network — classified once in the adapters through
   the shared classifier; an unmatched message stays a plain error. The

@@ -898,7 +898,7 @@ test('Codex Session failed turn completed with message preserves it', async (t) 
   session.dispose();
 });
 
-test('Codex Session preserves native warnings as non-fatal notices', async (t) => {
+test('Codex Session suppresses successful automatic approval reviews but preserves actionable native warnings', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-notice-'));
   runWithWindowId('notice-window', () => setCurrentFolder(folder));
   t.after(() => {
@@ -917,11 +917,43 @@ test('Codex Session preserves native warnings as non-fatal notices', async (t) =
   session.begin();
   await settle();
 
+  assert.deepEqual(
+    (native.requests.find((request) => request.method === 'initialize')?.params.capabilities as Record<string, unknown>)
+      ?.optOutNotificationMethods,
+    ['guardianWarning'],
+    'the structured auto-review event replaces the duplicate prose summary',
+  );
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'item/autoApprovalReview/completed',
+    params: {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      review: {
+        status: 'approved',
+        riskLevel: 'low',
+        userAuthorization: 'high',
+        rationale: 'The user explicitly requested this reversible documentation edit.',
+      },
+    },
+  })}\n`);
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'item/autoApprovalReview/completed',
+    params: {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      review: {
+        status: 'denied',
+        riskLevel: 'high',
+        userAuthorization: 'low',
+        rationale: 'The requested action could remove unrelated files.',
+      },
+    },
+  })}\n`);
   native.proc.stdout.write(`${JSON.stringify({
     method: 'guardianWarning',
     params: {
       threadId: 'thread-1',
-      message: 'Automatic approval review approved (risk: low, authorization: high).',
+      message: 'Legacy automatic approval review denied an unsafe action.',
     },
   })}\n`);
   native.proc.stdout.write(`${JSON.stringify({
@@ -942,7 +974,8 @@ test('Codex Session preserves native warnings as non-fatal notices', async (t) =
 
   const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
   assert.deepEqual(events.filter((event) => event.t === 'notice'), [
-    { t: 'notice', message: 'Automatic approval review approved (risk: low, authorization: high).' },
+    { t: 'notice', message: 'Automatic approval blocked an action.\n\nThe requested action could remove unrelated files.' },
+    { t: 'notice', message: 'Legacy automatic approval review denied an unsafe action.' },
     { t: 'notice', message: 'Skill descriptions were shortened to fit the skills context budget.' },
     { t: 'notice', message: 'Configuration needs attention.\n\nOne setting was ignored.' },
   ]);

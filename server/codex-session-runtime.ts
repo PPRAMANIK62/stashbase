@@ -239,7 +239,12 @@ export class CodexSession implements AttributedAgentSession {
         capabilities: {
           experimentalApi: true,
           requestAttestation: false,
-          optOutNotificationMethods: null,
+          // Guardian also emits a prose summary for every automatic review.
+          // Prefer the structured completion event below so successful Auto
+          // reviews stay quiet while denied or interrupted reviews remain
+          // visible. Older app-servers that ignore this capability continue
+          // through the legacy guardianWarning handler.
+          optOutNotificationMethods: ['guardianWarning'],
         },
       });
       this.appServerReady = true;
@@ -840,6 +845,11 @@ export class CodexSession implements AttributedAgentSession {
       case 'turn/completed':
         this.onTurnCompleted(params);
         break;
+      case 'item/autoApprovalReview/completed': {
+        const message = autoApprovalReviewNotice(params);
+        if (message) this.send({ t: 'notice', message });
+        break;
+      }
       case 'error':
         this.onErrorNotification(params);
         break;
@@ -1050,6 +1060,24 @@ function notificationMessage(params: JsonObject): string {
   if (summary && details && details !== summary) return `${summary}\n\n${details}`;
   if (summary || details) return summary || details;
   return '';
+}
+
+function autoApprovalReviewNotice(params: JsonObject): string {
+  const review = params.review;
+  if (!review || typeof review !== 'object') return '';
+  const value = review as JsonObject;
+  const status = stringValue(value.status);
+  if (status === 'approved' || status === 'inProgress') return '';
+
+  const title = status === 'denied'
+    ? 'Automatic approval blocked an action.'
+    : status === 'timedOut'
+      ? 'Automatic approval review timed out.'
+      : status === 'aborted'
+        ? 'Automatic approval review was interrupted.'
+        : 'Automatic approval review needs attention.';
+  const rationale = usefulMessage(value.rationale);
+  return rationale ? `${title}\n\n${rationale}` : title;
 }
 
 function usefulMessage(value: unknown): string {

@@ -319,6 +319,9 @@ ready, missing, disconnected, or recoverable.
   state.
 - Commands, network, deletion, and broader filesystem access remain explicit
   permission decisions.
+- Successful Auto reviews do not interrupt the transcript; a blocked,
+  interrupted, or failed automatic review remains visible without becoming a
+  turn failure.
 - Tool and source use remain inspectable without turning generated artifacts
   or transcripts into hidden product state.
 - A source is presented as Agent-readable only when the selected Agent surface
