@@ -36,11 +36,22 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * every eager surface was already using.
  * Not raised for the design-system pass that moved the app's hand-rolled
  * markup onto the shared primitive layer: it lands ~400 bytes UNDER the
- * figure above, because a primitive whose internals the entry already
- * pulls is cheaper than the bespoke recipe it replaces. That is thin
- * enough to matter — the next eager surface to convert should expect to
- * measure, not to assume it fits. One conversion in
- * that pass did not survive this check and is worth knowing about before
+ * 427 figure, because a primitive whose internals the entry already pulls
+ * is cheaper than the bespoke recipe it replaces.
+ * 427 → 428 when the last native `<select>` became the Base UI one. Every
+ * caller is lazy (Settings, the audio viewer), and the entry chunk itself
+ * got 1,925 bytes SMALLER — the raise is pure chunk-splitting overhead.
+ * `useRegisterFieldControl`, `useControlled` and `useBaseUiId` were already
+ * in the eager graph, inlined into the entry by the primitives that use
+ * them; the moment a lazy chunk shared them too, Rolldown extracted all
+ * three into shared chunks (+2,859 bytes) that are counted separately. So
+ * this one buys no new eager code, only a different arrangement of the
+ * same code — and unlike the raise above it does NOT make the app ship
+ * less overall, since Base UI's select is genuinely larger than the native
+ * element it replaces. What it buys is a select that follows `data-theme`,
+ * which a native popup painted in the OS palette never could.
+ * One conversion in the design-system pass did not survive this check and
+ * is worth knowing about before
  * anyone retries it — putting the document `TabStrip` on the shared `Tabs`
  * primitive added 22,780 bytes here (Base UI's `Tabs*`/`Composite*`
  * modules plus the `react-dom` and `useOpenChangeComplete` chunks they
@@ -49,7 +60,7 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * carries the rule and `TabStrip.tsx` the reason.
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 427 * 1024;
+const initialJsBudgetBytes = 428 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',

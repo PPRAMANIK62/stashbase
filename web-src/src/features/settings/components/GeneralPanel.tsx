@@ -3,10 +3,21 @@ import { useGeneralSettings } from '@/features/settings/hooks/useGeneralSettings
 import { Button } from '@/common/components/ui/button';
 import { Checkbox } from '@/common/components/ui/checkbox';
 import { Field, FieldDescription, FieldLabel } from '@/common/components/ui/field';
-import { Select } from '@/common/components/ui/select';
+import { Select, type SelectOption } from '@/common/components/ui/select';
 import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
 import { Badge } from '@/common/components/ui/badge';
 import { cn } from '@/common/lib/utils';
+
+/* The dev panel's simulated update states. One array feeds the trigger's
+ * label and the popup's rows, so the two cannot disagree. */
+const UPDATE_SIMULATIONS: readonly SelectOption<DesktopUpdateSimulation>[] = [
+  { value: 'off', label: 'Off — real updater' },
+  { value: 'available', label: 'Update available' },
+  { value: 'downloading', label: 'Downloading — 42%' },
+  { value: 'ready', label: 'Ready to install' },
+  { value: 'installing', label: 'Installing' },
+  { value: 'error', label: 'Update error' },
+];
 
 export function GeneralPanel() {
   const {
@@ -162,16 +173,10 @@ export function GeneralPanel() {
               <Select
                 id="desktop-update-simulation"
                 className="min-w-48"
+                items={UPDATE_SIMULATIONS}
                 value={updateState.simulation.value}
-                onChange={(event) => { void setSimulation(event.target.value as DesktopUpdateSimulation); }}
-              >
-                <option value="off">Off — real updater</option>
-                <option value="available">Update available</option>
-                <option value="downloading">Downloading — 42%</option>
-                <option value="ready">Ready to install</option>
-                <option value="installing">Installing</option>
-                <option value="error">Update error</option>
-              </Select>
+                onValueChange={(simulation) => { void setSimulation(simulation); }}
+              />
             </Field>
           </section>
         )}

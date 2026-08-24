@@ -97,6 +97,26 @@ export function settingsTab(page: Page, name: string): Locator {
   return settingsDialog(page).getByRole('tab', { name, exact: true });
 }
 
+/**
+ * A `Select` trigger, by its accessible name.
+ *
+ * The app's selects are Base UI listboxes, not native `<select>`s, so
+ * Playwright's `selectOption()` does not apply and `toHaveValue()` reads
+ * nothing — the trigger is a button whose TEXT is the current value. Use
+ * `chooseSelectOption` to change one and `toHaveText` to assert one.
+ */
+export function selectTrigger(page: Page, name: string): Locator {
+  return page.getByRole('combobox', { name, exact: true });
+}
+
+/** Open a `Select` and pick one of its rows by visible label. */
+export async function chooseSelectOption(page: Page, name: string, option: string): Promise<void> {
+  await selectTrigger(page, name).click();
+  // The popup portals to <body>, so it is NOT inside the settings dialog —
+  // scope to the listbox rather than to whatever opened it.
+  await page.getByRole('listbox').getByRole('option', { name: option, exact: true }).click();
+}
+
 export function appearanceGroup(page: Page, name: string): Locator {
   return settingsDialog(page).getByRole('group', { name, exact: true });
 }

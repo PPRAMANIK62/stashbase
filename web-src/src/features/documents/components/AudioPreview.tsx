@@ -18,9 +18,18 @@ import { useAudioFallbackController } from '@/features/documents/hooks/useAudioF
 import { useAudioTranscriptController } from '@/features/documents/hooks/useAudioTranscriptController.ts';
 import { Button } from '@/common/components/ui/button';
 import { SectionHeading } from '@/common/components/ui/section';
-import { Select } from '@/common/components/ui/select';
+import { Select, type SelectOption } from '@/common/components/ui/select';
 import { StatusMessage } from '@/common/components/ui/status';
 import { cn } from '@/common/lib/utils';
+
+/* The Reprocess picker's own list: the shared language table plus a
+ * leading "inherit" row. `''` is the absence of an override, which is what
+ * `retryLanguage` already stores — the row makes that state selectable
+ * rather than only reachable by never having chosen. */
+const RETRY_LANGUAGES: readonly SelectOption<string>[] = [
+  { value: '', label: 'Use Settings default' },
+  ...TRANSCRIPTION_LANGUAGE_OPTIONS,
+];
 
 export function AudioPreview({ name }: { name: string }) {
   const state = useWorkspace();
@@ -147,13 +156,11 @@ export function AudioPreview({ name }: { name: string }) {
             <div className="flex items-center gap-1.5">
               <Select
                 aria-label="Transcript language"
+                items={RETRY_LANGUAGES}
                 value={transcription.retryLanguage}
-                onChange={(event) => transcription.setRetryLanguage(event.target.value)}
+                onValueChange={(language) => transcription.setRetryLanguage(language)}
                 disabled={transcription.retryBusy}
-              >
-                <option value="">Use Settings default</option>
-                {TRANSCRIPTION_LANGUAGE_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-              </Select>
+              />
               <Button variant="outline" size="sm" disabled={transcription.retryBusy} onClick={() => { void transcription.reprocess(); }}>
                 {transcription.retryBusy ? 'Starting…' : 'Reprocess'}
               </Button>

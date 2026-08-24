@@ -43,16 +43,16 @@ export function TranscriptionPanel() {
         </SectionDescription>
         {settings.providers.length > 1 && (
           <Select
+            aria-label="Transcription provider"
             className="min-w-45 self-start"
+            items={settings.providers.map((provider) => ({ value: provider.id, label: provider.label }))}
             value={selectedProvider?.id ?? ''}
-            onChange={(event) => {
-              const provider = settings.providers.find((candidate) => candidate.id === event.target.value);
+            onValueChange={(id) => {
+              const provider = settings.providers.find((candidate) => candidate.id === id);
               const model = provider?.models[0];
               if (provider && model) void chooseModel(provider.id, model.id);
             }}
-          >
-            {settings.providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
-          </Select>
+          />
         )}
         {selectedProvider?.runtimeError && (
           <div className="text-sm text-destructive">Transcription runtime unavailable: {selectedProvider.runtimeError}</div>
@@ -146,12 +146,12 @@ export function TranscriptionPanel() {
           Auto-detect evaluates every long-recording chunk independently. A different language can be chosen for an individual Reprocess attempt.
         </SectionDescription>
         <Select
+          aria-label="Preferred language"
           className="min-w-45 self-start"
+          items={TRANSCRIPTION_LANGUAGE_OPTIONS}
           value={settings.language}
-          onChange={(event) => { void chooseLanguage(event.target.value); }}
-        >
-          {TRANSCRIPTION_LANGUAGE_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-        </Select>
+          onValueChange={(language) => { void chooseLanguage(language); }}
+        />
       </Section>
       {error && <div className="text-sm text-destructive">{error}</div>}
     </div>

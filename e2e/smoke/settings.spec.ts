@@ -5,7 +5,9 @@ import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
 import {
   appearanceChoice,
+  chooseSelectOption,
   dismissEmbeddingKeyPrompt,
+  selectTrigger,
   openLibraryFolder,
   settingsButton,
   settingsDialog,
@@ -181,22 +183,24 @@ test('J01: development controls preview update states without a release', async 
     await settingsButton(app.page).click();
     await settingsTab(app.page, 'General').click();
 
-    const simulation = settingsDialog(app.page).getByLabel('Simulated update state');
-    await expect(simulation).toHaveValue('off');
-    await simulation.selectOption('available');
+    // A Base UI listbox, not a native select: the trigger is a combobox
+    // button whose TEXT is the current value, so this asserts text rather
+    // than `toHaveValue`, and picks by clicking a row in the portalled popup.
+    await expect(selectTrigger(app.page, 'Simulated update state')).toHaveText('Off — real updater');
+    await chooseSelectOption(app.page, 'Simulated update state', 'Update available');
     await expect(settingsDialog(app.page).getByText(`StashBase ${simulatedVersion} is available.`)).toBeVisible();
     await app.page.getByRole('button', { name: 'Close settings' }).click();
     await expect(app.page.getByRole('button', { name: `Update to StashBase ${simulatedVersion}` })).toBeVisible();
 
     await settingsButton(app.page).click();
     await settingsTab(app.page, 'General').click();
-    await settingsDialog(app.page).getByLabel('Simulated update state').selectOption('ready');
+    await chooseSelectOption(app.page, 'Simulated update state', 'Ready to install');
     await app.page.getByRole('button', { name: 'Close settings' }).click();
     await expect(app.page.getByRole('button', { name: `Install update to StashBase ${simulatedVersion}` })).toBeVisible();
 
     await settingsButton(app.page).click();
     await settingsTab(app.page, 'General').click();
-    await settingsDialog(app.page).getByLabel('Simulated update state').selectOption('off');
+    await chooseSelectOption(app.page, 'Simulated update state', 'Off — real updater');
     await app.page.getByRole('button', { name: 'Close settings' }).click();
     await expect(app.page.getByRole('button', { name: `Update to StashBase ${simulatedVersion}` })).toHaveCount(0);
     app.errors.assertNone();

@@ -1,4 +1,3 @@
-import { type ComponentProps } from 'react';
 import {
   type Agent,
   type AgentDiscoveryPolicy,
@@ -6,7 +5,7 @@ import {
   type AgentTurnFailureSimulation,
 } from '@/common/api/apiTypes';
 import { AGENTS } from '@/common/lib/agentCatalog';
-import { ChevronDownIcon, MoreHorizontalIcon } from '@/common/components/icons';
+import { MoreHorizontalIcon } from '@/common/components/icons';
 import { useAgentRuntimes } from '@/features/settings/hooks/useAgentRuntimes';
 import { Button } from '@/common/components/ui/button';
 import {
@@ -18,10 +17,36 @@ import {
   MenuTrigger,
 } from '@/common/components/ui/menu';
 import { Field, FieldLabel } from '@/common/components/ui/field';
-import { Select } from '@/common/components/ui/select';
+import { Select, type SelectOption } from '@/common/components/ui/select';
 import { StatusMessage } from '@/common/components/ui/status';
 import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
 import { Badge } from '@/common/components/ui/badge';
+
+/* The dev panel's option tables. Data, not markup: the trigger's label and
+ * the popup's rows both come off one array, so they cannot disagree. */
+const DEBUG_SELECT_CLASS = 'min-w-44';
+
+const DISCOVERY_POLICIES: readonly SelectOption<AgentDiscoveryPolicy>[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'managed-only', label: 'Managed only' },
+  { value: 'system-only', label: 'System only' },
+];
+
+const SETUP_FAILURES: readonly SelectOption<AgentSetupFailureSimulation>[] = [
+  { value: 'none', label: 'Normal' },
+  { value: 'installation', label: 'Fail installation' },
+  { value: 'authentication', label: 'Signed-out Codex' },
+  { value: 'mcp', label: 'Fail MCP connection' },
+];
+
+const TURN_FAILURES: readonly SelectOption<AgentTurnFailureSimulation>[] = [
+  { value: 'none', label: 'Normal' },
+  { value: 'rate-limit', label: 'Rate limited (429)' },
+  { value: 'quota', label: 'Usage limit reached' },
+  { value: 'auth-expired', label: 'Auth token expired' },
+  { value: 'network', label: 'Network unreachable' },
+  { value: 'crash', label: 'Runtime crash' },
+];
 
 export function AgentRuntimePanel() {
   const {
@@ -112,49 +137,39 @@ export function AgentRuntimePanel() {
             * association depended on that markup staying a subtree. */}
           <Field className="flex-row items-center justify-between gap-3">
             <FieldLabel htmlFor="agent-debug-discovery-policy" className="text-sm font-normal">Discovery source</FieldLabel>
-            <AgentDebugSelect
+            <Select
               id="agent-debug-discovery-policy"
+              className={DEBUG_SELECT_CLASS}
+              items={DISCOVERY_POLICIES}
               value={debug.discoveryPolicy}
               disabled={busy != null}
-              onChange={(event) => void updateDebug({ discoveryPolicy: event.target.value as AgentDiscoveryPolicy })}
-            >
-              <option value="auto">Auto</option>
-              <option value="managed-only">Managed only</option>
-              <option value="system-only">System only</option>
-            </AgentDebugSelect>
+              onValueChange={(discoveryPolicy) => void updateDebug({ discoveryPolicy })}
+            />
           </Field>
           <Field className="mt-3 flex-row items-center justify-between gap-3">
             <FieldLabel htmlFor="agent-debug-next-failure" className="text-sm font-normal">Next setup result</FieldLabel>
-            <AgentDebugSelect
+            <Select
               id="agent-debug-next-failure"
+              className={DEBUG_SELECT_CLASS}
+              items={SETUP_FAILURES}
               value={debug.nextFailure}
               disabled={busy != null}
-              onChange={(event) => void updateDebug({ nextFailure: event.target.value as AgentSetupFailureSimulation })}
-            >
-              <option value="none">Normal</option>
-              <option value="installation">Fail installation</option>
-              <option value="authentication">Signed-out Codex</option>
-              <option value="mcp">Fail MCP connection</option>
-            </AgentDebugSelect>
+              onValueChange={(nextFailure) => void updateDebug({ nextFailure })}
+            />
           </Field>
           <p className="mt-2 mb-0 text-xs leading-normal text-muted-foreground">
             The failure is injected once, then resets to Normal. Installation failure applies only when setup reaches an install; reset first run to test it with an existing runtime. Signed-out applies when Codex setup reaches its sign-in check; Claude has no setup sign-in gate — test its signed-out state with Auth token expired below, in a Claude chat.
           </p>
           <Field className="mt-3 flex-row items-center justify-between gap-3">
             <FieldLabel htmlFor="agent-debug-next-turn-failure" className="text-sm font-normal">Next turn result</FieldLabel>
-            <AgentDebugSelect
+            <Select
               id="agent-debug-next-turn-failure"
+              className={DEBUG_SELECT_CLASS}
+              items={TURN_FAILURES}
               value={debug.nextTurnFailure}
               disabled={busy != null}
-              onChange={(event) => void updateDebug({ nextTurnFailure: event.target.value as AgentTurnFailureSimulation })}
-            >
-              <option value="none">Normal</option>
-              <option value="rate-limit">Rate limited (429)</option>
-              <option value="quota">Usage limit reached</option>
-              <option value="auth-expired">Auth token expired</option>
-              <option value="network">Network unreachable</option>
-              <option value="crash">Runtime crash</option>
-            </AgentDebugSelect>
+              onValueChange={(nextTurnFailure) => void updateDebug({ nextTurnFailure })}
+            />
           </Field>
           <p className="mt-2 mb-0 text-xs leading-normal text-muted-foreground">
             Applies to the next prompt sent in any open chat, once. The prompt never reaches the native runtime; Runtime crash ends that session like a real process exit.
@@ -174,20 +189,6 @@ export function AgentRuntimePanel() {
         <StatusMessage tone={status.tone} className="mt-3 wrap-anywhere">{status.text}</StatusMessage>
       )}
     </div>
-  );
-}
-
-/** The dev panel's wide selects use an explicit caret so its inset can match
- * the roomy testing surface without changing compact selects elsewhere. */
-function AgentDebugSelect(props: ComponentProps<typeof Select>) {
-  return (
-    <span className="relative min-w-44">
-      <Select {...props} className="w-full appearance-none pr-10" />
-      <ChevronDownIcon
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 right-4 size-3.5 -translate-y-1/2 text-muted-foreground"
-      />
-    </span>
   );
 }
 

@@ -142,6 +142,11 @@ MCP write inside the new project.
   behavior. A programmatic click is not evidence for native pointer handling.
 - Keep assertions at the product or Interface level. Exact fixture events and
   internal intermediate state belong in focused tests.
+- The app's selects are Base UI listboxes, not native `<select>` elements, so
+  `selectOption()` does not apply and `toHaveValue()` reads nothing. Drive one
+  through `chooseSelectOption` in `locators.ts` and assert its current value
+  with `toHaveText` on `selectTrigger`. The popup portals to `<body>`, so it is
+  not inside the dialog that opened it — scope to the listbox.
 
 ## Validation Commands
 

@@ -270,6 +270,26 @@ this file records the mechanics a change must respect.
    here. Every primitive has a caller: one with no caller is a guess about
    the next feature, not a design system.
 
+   `select` is the one that takes DATA rather than parts, and the one that
+   no longer wraps a native element. The native `<select>` was a deliberate
+   choice once — the OS popup brings collision handling, typeahead and
+   accessibility for free — and the cost was that a native popup paints in
+   the OS palette, so the app's six selects were the only surfaces that did
+   not follow `data-theme`: a light popup dropping out of a dark app. They
+   could not take the corner, the focus halo, the entrance motion, or the
+   layer ramp either, and the caret had to be faked with an
+   `appearance-none` box under an absolutely-positioned chevron, which is
+   the tell that the element was being fought rather than used. Base UI
+   supplies what the native control was being kept for.
+
+   It takes `items` instead of Trigger/Content/Item parts because every
+   select here is a flat list of value/label pairs, and because Base UI
+   resolves the CLOSED trigger's label from `items` — the popup is
+   unmounted, so its rows cannot answer. A parts version would therefore
+   have to pass the same array twice, once for the label and once for the
+   rows, and those two can drift. One prop cannot. Export the parts when a
+   grouped or decorated select actually lands, not before.
+
    `pill` and `menu-option` are one idiom in two halves — a quiet
    "pick a value" trigger and the choice rows it opens onto — and they
    arrived by absorbing a shared module of twelve exported class strings
