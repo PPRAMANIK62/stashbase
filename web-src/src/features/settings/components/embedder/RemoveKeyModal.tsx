@@ -35,7 +35,7 @@ export function RemoveKeyModal({
       onCancel={busy ? () => { /* wait for removal */ } : onCancel}
     >
       {error && (
-        <StatusMessage tone="error" className="mt-2.5 max-h-[min(180px,32vh)] overflow-y-auto wrap-anywhere">
+        <StatusMessage tone="error" className="mt-2.5 max-h-overlay-xs overflow-y-auto wrap-anywhere">
           {error}
         </StatusMessage>
       )}

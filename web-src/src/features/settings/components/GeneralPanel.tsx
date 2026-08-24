@@ -2,7 +2,11 @@ import { electronBridge, type DesktopUpdateSimulation } from '@/common/lib/elect
 import { useGeneralSettings } from '@/features/settings/hooks/useGeneralSettings';
 import { Button } from '@/common/components/ui/button';
 import { Checkbox } from '@/common/components/ui/checkbox';
+import { Field, FieldDescription, FieldLabel } from '@/common/components/ui/field';
 import { Select } from '@/common/components/ui/select';
+import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
+import { Badge } from '@/common/components/ui/badge';
+import { cn } from '@/common/lib/utils';
 
 export function GeneralPanel() {
   const {
@@ -44,48 +48,60 @@ export function GeneralPanel() {
 
   return (
     <div>
-      <div className="mb-1 text-base font-semibold">Knowledge capture</div>
-      <div className="text-sm leading-normal text-muted-foreground">
+      <SectionHeading level={3} className="mb-1">Knowledge capture</SectionHeading>
+      <SectionDescription>
         Choose which ambient sources StashBase may notice. Nothing is added to a folder without confirmation.
-      </div>
-      <div className="mt-5.5 flex items-start gap-2 text-sm text-foreground">
+      </SectionDescription>
+      {/* `Field` + `FieldLabel htmlFor` + `FieldDescription`, not a label
+        * wrapping both lines. The wrapping form did associate — the browser
+        * binds the first labelable descendant at any depth — but it also
+        * swept the explanatory sentence into the control's accessible name,
+        * so the checkbox announced a paragraph. Split, the label names it
+        * and `aria-describedby` carries the rest as description. */}
+      <Field className="mt-5 flex-row items-start gap-2 text-sm text-foreground">
         <Checkbox
           id="clipboard-image-import"
           className="mt-0.5"
+          aria-describedby="clipboard-image-import-description"
           checked={preferences.clipboardImageImport}
           disabled={saving}
           onCheckedChange={(checked) => { void setClipboardImageImport(checked); }}
         />
-        <label htmlFor="clipboard-image-import" className="cursor-pointer">
-          <span className="block font-semibold">Offer to add clipboard screenshots</span>
-          <span className="mt-0.5 block leading-normal text-muted-foreground">
+        <div className="min-w-0">
+          <FieldLabel htmlFor="clipboard-image-import" className="cursor-pointer text-sm">
+            Offer to add clipboard screenshots
+          </FieldLabel>
+          <FieldDescription id="clipboard-image-import-description" className="mt-0.5">
             While a StashBase window is focused, notice copied images and ask before adding one to the current folder for OCR and search.
-          </span>
-        </label>
-      </div>
+          </FieldDescription>
+        </div>
+      </Field>
       {error && <div className="mt-2.5 text-sm text-destructive">Couldn’t save capture settings: {error}</div>}
 
       <div className="mt-7 border-t border-border pt-6">
-        <div className="mb-1 text-base font-semibold">Application updates</div>
-        <div className="text-sm leading-normal text-muted-foreground">
+        <SectionHeading level={3} className="mb-1">Application updates</SectionHeading>
+        <SectionDescription>
           StashBase verifies updates published through the official GitHub release channel. Clicking Update downloads, installs, and restarts the app after open edits are saved.
-        </div>
+        </SectionDescription>
         {updatePreferences ? (
-          <div className="mt-5.5 flex items-start gap-2 text-sm text-foreground">
+          <Field className="mt-5 flex-row items-start gap-2 text-sm text-foreground">
             <Checkbox
               id="automatic-update-checks"
               className="mt-0.5"
+              aria-describedby="automatic-update-checks-description"
               checked={updatePreferences.autoCheck}
               disabled={savingUpdates}
               onCheckedChange={(checked) => { void setAutomaticUpdateChecks(checked); }}
             />
-            <label htmlFor="automatic-update-checks" className="cursor-pointer">
-              <span className="block font-semibold">Automatically check for updates</span>
-              <span className="mt-0.5 block leading-normal text-muted-foreground">
+            <div className="min-w-0">
+              <FieldLabel htmlFor="automatic-update-checks" className="cursor-pointer text-sm">
+                Automatically check for updates
+              </FieldLabel>
+              <FieldDescription id="automatic-update-checks-description" className="mt-0.5">
                 Check shortly after launch and periodically while StashBase is running. This is enabled by default.
-              </span>
-            </label>
-          </div>
+              </FieldDescription>
+            </div>
+          </Field>
         ) : (
           <div className="mt-5 text-sm text-muted-foreground">Loading update preferences…</div>
         )}
@@ -119,7 +135,7 @@ export function GeneralPanel() {
             </Button>
           )}
         </div>
-        <div className={`mt-2.5 text-sm ${updateState?.phase === 'error' || updateError ? 'text-destructive' : 'text-muted-foreground'}`}>
+        <div className={cn('mt-2.5 text-sm', updateState?.phase === 'error' || updateError ? 'text-destructive' : 'text-muted-foreground')}>
           {updateError || updateStatus()}
         </div>
         {updateState?.platform === 'linux' && (
@@ -130,17 +146,21 @@ export function GeneralPanel() {
         {updateState?.simulation?.enabled && (
           <section className="mt-5 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3">
             <div className="mb-1 flex flex-wrap items-center gap-2">
-              <div className="text-base font-semibold">Desktop update testing</div>
-              <span className="rounded-xs border border-status-warning/30 bg-background px-1.5 py-0.5 text-2xs font-semibold tracking-wide text-status-warning uppercase">
-                Development only
-              </span>
+              <SectionHeading level={4}>Desktop update testing</SectionHeading>
+              <Badge tone="warning">Development only</Badge>
             </div>
             <p className="mt-0 mb-3 text-sm leading-normal text-muted-foreground">
               Preview update states in Settings and the sidebar without contacting the release channel, downloading, or installing anything.
             </p>
-            <label className="flex items-center justify-between gap-3 text-sm text-foreground">
-              <span>Simulated update state</span>
+            {/* Explicit `htmlFor`, not a wrapping label: the association is
+              * then visible at both ends and survives the control moving
+              * out of the label's subtree. */}
+            <Field className="flex-row items-center justify-between gap-3">
+              <FieldLabel htmlFor="desktop-update-simulation" className="text-sm font-normal">
+                Simulated update state
+              </FieldLabel>
               <Select
+                id="desktop-update-simulation"
                 className="min-w-48"
                 value={updateState.simulation.value}
                 onChange={(event) => { void setSimulation(event.target.value as DesktopUpdateSimulation); }}
@@ -152,7 +172,7 @@ export function GeneralPanel() {
                 <option value="installing">Installing</option>
                 <option value="error">Update error</option>
               </Select>
-            </label>
+            </Field>
           </section>
         )}
       </div>

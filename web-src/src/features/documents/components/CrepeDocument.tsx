@@ -35,6 +35,7 @@ import { documentScroller, headingElementAtPosition, scrollOutlineToHeading, typ
 import { useDocumentOutline } from '@/common/components/DocumentOutlineContext';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
+import { cn } from '@/common/lib/utils';
 
 /** Chain-link glyph for the "Link to file…" slash-menu item, matching the
  *  bare-svg-string shape Crepe's own built-in item icons use. */
@@ -441,7 +442,7 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, dirty, f
           </Button>
         </StatusMessage>
       )}
-      <div ref={hostRef} className={'crepe-shell' + (readOnly ? ' crepe-readonly' : '')} />
+      <div ref={hostRef} className={cn('crepe-shell', readOnly && 'crepe-readonly')} />
     </div>
   );
 }

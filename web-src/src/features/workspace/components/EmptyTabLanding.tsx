@@ -1,4 +1,6 @@
+import { Button } from '@/common/components/ui/button';
 import { useAppActions } from '@/store/contexts/AppContext';
+import { cn } from '@/common/lib/utils';
 
 /**
  * Obsidian-style landing inside a blank `+` tab — three vertically-
@@ -6,34 +8,51 @@ import { useAppActions } from '@/store/contexts/AppContext';
  * through stable AppContext actions (no DOM queries here), so this
  * component is a pure render of the available actions.
  */
+/**
+ * The landing-specific deltas on top of `Button variant="ghost"
+ * size="sm"`. The press scale, the transition, the hover tint, and the
+ * 28px row are the primitive's now — this used to re-declare all four,
+ * which is exactly the drift `Button` exists to prevent. What is left is
+ * the shortcut hint: a `kbd` inside these rows is a quiet annotation, not
+ * a keycap, so it drops the monospace face and the medium weight the row
+ * label carries.
+ *
+ * Deltas handed to an existing component are what a class string is FOR: a
+ * wrapper here would re-declare `Button`'s props to pass them straight
+ * through, and the three rows already differ in ink (two accent, one
+ * muted) on top of it.
+ */
 const ACTION_CLASS =
-  'inline-flex cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-1 text-base font-medium hover:bg-muted [&_kbd]:[font-family:inherit] [&_kbd]:text-sm [&_kbd]:font-normal [&_kbd]:tracking-wide [&_kbd]:text-muted-foreground';
+  'gap-2.5 text-base [&_kbd]:[font-family:inherit] [&_kbd]:text-sm [&_kbd]:font-normal [&_kbd]:tracking-wider [&_kbd]:text-muted-foreground';
 
 export function EmptyTabLanding() {
   const { actions } = useAppActions();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 p-10">
-      <button
-        type="button"
-        className={`${ACTION_CLASS} text-accent`}
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn(ACTION_CLASS, 'text-accent hover:text-accent')}
         onClick={() => { void actions.newNote(); }}
       >
         Create new note <kbd>⌘N</kbd>
-      </button>
-      <button
-        type="button"
-        className={`${ACTION_CLASS} text-accent`}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn(ACTION_CLASS, 'text-accent hover:text-accent')}
         onClick={() => { window.dispatchEvent(new Event('stashbase-open-quick-open')); }}
       >
         Open notes <kbd>⌘O</kbd>
-      </button>
-      <button
-        type="button"
-        className={`${ACTION_CLASS} text-muted-foreground hover:text-foreground`}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn(ACTION_CLASS, 'text-muted-foreground hover:text-foreground')}
         onClick={() => { void actions.closeActiveTab(); }}
       >
         Close tab
-      </button>
+      </Button>
     </div>
   );
 }

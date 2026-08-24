@@ -49,7 +49,7 @@ export function SemanticHitRow({ hit, isActive, rowProps }: {
       {/* No match-strength bar: hybrid scores carry no absolute meaning,
         * so a per-hit gauge invited comparisons it could not support.
         * Rank order alone communicates relative strength. */}
-      <div className="mt-0.5 line-clamp-2 pl-5.5 text-sm text-muted-foreground">{snippet}</div>
+      <div className="mt-0.5 line-clamp-2 pl-5 text-sm text-muted-foreground">{snippet}</div>
     </div>
   );
 }

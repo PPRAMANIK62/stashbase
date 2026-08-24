@@ -1,9 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './json-tree.css';
+import { Button } from '@/common/components/ui/button';
+import { Field, FieldLabel } from '@/common/components/ui/field';
+import { Input } from '@/common/components/ui/input';
+import { SectionHeading } from '@/common/components/ui/section';
+import { Textarea } from '@/common/components/ui/textarea';
 import {
   addJsonChild, analyzeJsonSource, deleteJsonPath, formatPath, renameJsonProperty,
   matchingJsonTreeNodes, reorderJsonArrayItem, replaceJsonNode, type JsonSourceNode,
 } from '@/features/documents/lib/json/sourceModel';
+import { cn } from '@/common/lib/utils';
+
+/* The editor panel's label look, which used to live as a `.json-tree-editor
+ * label` element selector in the colocated stylesheet — a rule that stopped
+ * describing the markup the moment the wrapping labels became `Field` +
+ * `FieldLabel` pairs. Held here so the class does the styling and the CSS
+ * file keeps the panel's own layout. */
+const JSON_FIELD_LABEL_CLASS = 'text-sm font-normal text-muted-foreground';
 
 type EditIntent =
   | { kind: 'value' | 'subtree'; node: JsonSourceNode }
@@ -35,12 +48,16 @@ export function JsonTreeView({ source, editable, session, onSessionChange, onSou
   const [keyDraft, setKeyDraft] = useState('');
   const [error, setError] = useState('');
   const selectedRef = useRef<HTMLDivElement | null>(null);
+  // Every open JSON tab keeps its tree mounted (inactive ones are `hidden`),
+  // so a literal id would repeat across tabs and each `htmlFor` would bind
+  // to whichever copy the document happened to reach first.
+  const fieldIds = React.useId();
   const query = session.search;
 
   useEffect(() => { selectedRef.current?.focus(); }, [session.selectedPath, source]);
   useEffect(() => { if (!intent) selectedRef.current?.focus(); }, [intent]);
   if (!analysis.available) {
-    return <div className="json-tree-unavailable" role="status"><p>{analysis.message}</p><button type="button" onClick={onRequestSource}>Open Source mode</button></div>;
+    return <div className="json-tree-unavailable" role="status"><p>{analysis.message}</p><Button type="button" variant="outline" size="xs" onClick={onRequestSource}>Open Source mode</Button></div>;
   }
   const matches = matchingJsonTreeNodes(analysis.root, query, session.searchOptions);
   const visibleNodes = visibleTreeNodes(analysis.root, session.expanded);
@@ -90,12 +107,19 @@ export function JsonTreeView({ source, editable, session, onSessionChange, onSou
   return (
     <section className="json-tree" aria-label="JSON tree">
       <div className="json-tree-search" role="search">
-        <label><span className="sr-only">Search JSON keys and values</span><input value={session.search} placeholder="Search keys and values" onChange={(event) => updateSession(directTreeSearchPatch(event.target.value))} /></label>
+        {/* The name is invisible, not absent: the field sits in a labelled
+          * search row, so the text is `sr-only` rather than an `aria-label`
+          * — it still binds through `htmlFor`, so it cannot drift from the
+          * control the way a floating label string can. */}
+        <Field className="flex-1">
+          <FieldLabel htmlFor={`${fieldIds}-search`} className="sr-only">Search JSON keys and values</FieldLabel>
+          <Input id={`${fieldIds}-search`} className="h-8 text-sm" value={session.search} placeholder="Search keys and values" onChange={(event) => updateSession(directTreeSearchPatch(event.target.value))} />
+        </Field>
         <span aria-live="polite">{query ? `${Math.max(0, selectedMatch + 1)} of ${matches.length}` : `${analysis.nodeCount.toLocaleString()} nodes`}</span>
-        <button type="button" disabled={!matches.length} aria-label="Previous JSON tree match" onClick={() => moveMatch(-1)}>↑</button>
-        <button type="button" disabled={!matches.length} aria-label="Next JSON tree match" onClick={() => moveMatch(1)}>↓</button>
+        <Button type="button" variant="ghost" size="icon-xs" disabled={!matches.length} aria-label="Previous JSON tree match" onClick={() => moveMatch(-1)}>↑</Button>
+        <Button type="button" variant="ghost" size="icon-xs" disabled={!matches.length} aria-label="Next JSON tree match" onClick={() => moveMatch(1)}>↓</Button>
       </div>
-      {error && <div className="json-tree-error" role="alert">{error} <button type="button" onClick={onRequestSource}>Use Source mode</button></div>}
+      {error && <div className="json-tree-error" role="alert">{error} <Button type="button" variant="outline" size="xs" onClick={onRequestSource}>Use Source mode</Button></div>}
       <div className="json-tree-scroll" role="tree" aria-label="JSON values">
         <TreeNode node={analysis.root} source={source} editable={editable} expanded={session.expanded} selectedPath={session.selectedPath} selectedRef={selectedRef}
           siblingCount={1}
@@ -107,11 +131,24 @@ export function JsonTreeView({ source, editable, session, onSessionChange, onSou
           onMove={(node, delta) => mutate(() => reorderJsonArrayItem(source, node.path.slice(0, -1), Number(node.path.at(-1)), Number(node.path.at(-1)) + delta), formatPath(node.path.slice(0, -1).concat(Number(node.path.at(-1)) + delta)))}
         />
       </div>
-      {intent && <div className="json-tree-editor" role="group" aria-label={intentLabel(intent)}>
-        <strong>{intentLabel(intent)}</strong>
-        {(intent.kind === 'rename' || (intent.kind === 'add' && intent.node.type === 'object')) && <label>Key<input autoFocus value={keyDraft} onChange={(event) => setKeyDraft(event.target.value)} /></label>}
-        {intent.kind !== 'rename' && <label>JSON value<textarea autoFocus={intent.kind !== 'add' || intent.node.type !== 'object'} value={draft} onChange={(event) => setDraft(event.target.value)} rows={Math.min(10, Math.max(2, draft.split(/\r?\n/u).length))} /></label>}
-        <div><button type="button" onClick={applyIntent}>Apply</button><button type="button" onClick={() => { setIntent(null); setError(''); }}>Cancel</button></div>
+      {/* The panel's visible title IS its accessible name — `aria-labelledby`
+        * rather than an `aria-label` repeating the same string, which would
+        * be free to drift from the text beside it. */}
+      {intent && <div className="json-tree-editor" role="group" aria-labelledby={`${fieldIds}-intent`}>
+        <SectionHeading level={3} id={`${fieldIds}-intent`}>{intentLabel(intent)}</SectionHeading>
+        {(intent.kind === 'rename' || (intent.kind === 'add' && intent.node.type === 'object')) && (
+          <Field className="gap-1">
+            <FieldLabel htmlFor={`${fieldIds}-key`} className={JSON_FIELD_LABEL_CLASS}>Key</FieldLabel>
+            <Input id={`${fieldIds}-key`} className="h-8 font-mono text-sm" autoFocus value={keyDraft} onChange={(event) => setKeyDraft(event.target.value)} />
+          </Field>
+        )}
+        {intent.kind !== 'rename' && (
+          <Field className="gap-1">
+            <FieldLabel htmlFor={`${fieldIds}-value`} className={JSON_FIELD_LABEL_CLASS}>JSON value</FieldLabel>
+            <Textarea id={`${fieldIds}-value`} className="font-mono text-sm" autoFocus={intent.kind !== 'add' || intent.node.type !== 'object'} value={draft} onChange={(event) => setDraft(event.target.value)} rows={Math.min(10, Math.max(2, draft.split(/\r?\n/u).length))} />
+          </Field>
+        )}
+        <div className="flex gap-1.5"><Button type="button" size="xs" onClick={applyIntent}>Apply</Button><Button type="button" variant="ghost" size="xs" onClick={() => { setIntent(null); setError(''); }}>Cancel</Button></div>
       </div>}
     </section>
   );
@@ -140,17 +177,17 @@ function TreeNode({ node, source, editable, expanded, selectedPath, selectedRef,
         else if (event.key === 'ArrowLeft') { event.preventDefault(); if (container && isExpanded && node.path.length) onToggle(path); else if (node.path.length) onNavigate(node, 'parent'); }
         if (event.key === 'Enter' && editable) { event.preventDefault(); onEdit({ kind: container ? 'subtree' : 'value', node }); }
       }}>
-      {container ? <button type="button" className="json-tree-disclosure" tabIndex={-1} aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${path}`} onClick={() => onToggle(path)}>{isExpanded ? '▾' : '▸'}</button> : <span className="json-tree-leaf">•</span>}
+      {container ? <Button type="button" variant="ghost" size="icon-xs" className="json-tree-disclosure" tabIndex={-1} aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${path}`} onClick={() => onToggle(path)}>{isExpanded ? '▾' : '▸'}</Button> : <span className="json-tree-leaf">•</span>}
       <code className="json-tree-key">{node.key !== undefined ? JSON.stringify(node.key) : typeof node.path.at(-1) === 'number' ? `[${node.path.at(-1)}]` : '$'}</code>
-      <span className={`json-tree-type json-tree-type-${node.type}`}>{node.type}</span>
+      <span className={cn('json-tree-type', `json-tree-type-${node.type}`)}>{node.type}</span>
       <code className="json-tree-value" title={path}>{container ? `${node.type === 'object' ? '{' : '['}${node.children.length}${node.type === 'object' ? '}' : ']'}` : node.raw}</code>
       {editable && <span className="json-tree-actions">
-        <button type="button" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: container ? 'subtree' : 'value', node })}>{container ? 'Edit JSON' : 'Edit'}</button>
-        {node.key !== undefined && <button type="button" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: 'rename', node })}>Rename</button>}
-        {container && <button type="button" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: 'add', node })}>Add</button>}
-        {node.path.length > 0 && <button type="button" tabIndex={selected ? 0 : -1} onClick={() => onDelete(node)}>Delete</button>}
-        {index > 0 && <button type="button" tabIndex={selected ? 0 : -1} aria-label={`Move ${path} up`} onClick={() => onMove(node, -1)}>↑</button>}
-        {index >= 0 && index < siblingCount - 1 && <button type="button" tabIndex={selected ? 0 : -1} aria-label={`Move ${path} down`} onClick={() => onMove(node, 1)}>↓</button>}
+        <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: container ? 'subtree' : 'value', node })}>{container ? 'Edit JSON' : 'Edit'}</Button>
+        {node.key !== undefined && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: 'rename', node })}>Rename</Button>}
+        {container && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: 'add', node })}>Add</Button>}
+        {node.path.length > 0 && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} onClick={() => onDelete(node)}>Delete</Button>}
+        {index > 0 && <Button type="button" variant="ghost" size="icon-xs" tabIndex={selected ? 0 : -1} aria-label={`Move ${path} up`} onClick={() => onMove(node, -1)}>↑</Button>}
+        {index >= 0 && index < siblingCount - 1 && <Button type="button" variant="ghost" size="icon-xs" tabIndex={selected ? 0 : -1} aria-label={`Move ${path} down`} onClick={() => onMove(node, 1)}>↓</Button>}
       </span>}
     </div>
     {container && isExpanded && <div role="group" className="json-tree-children">{node.children.map((child) => <TreeNode key={formatPath(child.path)} siblingCount={node.children.length} {...{ node: child, source, editable, expanded, selectedPath, selectedRef, onSelect, onNavigate, onToggle, onEdit, onDelete, onMove }} />)}</div>}

@@ -3,14 +3,13 @@ import { rankQuickOpen } from '@/common/lib/quickOpen';
 import { usePickerListNav } from '@/common/hooks/usePickerListNav';
 import { useWorkspace } from '@/store/contexts/AppContext';
 import {
-  PICKER_EMPTY_ROW_CLASS,
   PICKER_LABEL_CLASS,
   PICKER_RESULTS_CLASS,
-  PICKER_ROW_CLASS,
-  PICKER_ROW_DETAIL_CLASS,
   PICKER_VEIL_CLASS,
   pickerPanelClass,
 } from '@/common/lib/pickerChrome';
+import { PickerEmptyRow, PickerRow } from '@/common/components/PickerRow';
+import { cn } from '@/common/lib/utils';
 
 /**
  * Body of the "Link to file…" slash-menu picker. Lists the active folder's
@@ -43,14 +42,21 @@ export default function ManagedLinkFilePicker({
 
   return (
     <div
-      className={`link-file-picker-veil quick-open-blocking ${PICKER_VEIL_CLASS}`}
+      className={cn('link-file-picker-veil quick-open-blocking', PICKER_VEIL_CLASS)}
       role="presentation"
       onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}
     >
       <div className={pickerPanelClass('wide')} role="dialog" aria-label="Link to file">
+        {/* Deliberately NOT the `Input` primitive — the same palette-field
+          * exemption as Quick Open and library search: `Input` is the box
+          * role, and this is a seam across a panel that is itself the box
+          * and the focus affordance. `.link-file-picker-veil` is listed
+          * alongside the other two palette veils in the focus-suppression
+          * rule in `web-src/src/styles/globals.css`, so the panel's
+          * `overflow-hidden` corners never clip the ring into a stray bar. */}
         <input
           ref={inputRef}
-          className="w-full border-0 border-b border-solid border-border bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder"
+          className="w-full border-0 border-b border-solid border-border bg-transparent px-3.5 py-3.5 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder"
           role="combobox"
           aria-autocomplete="list"
           aria-controls="link-file-picker-results"
@@ -64,23 +70,20 @@ export default function ManagedLinkFilePicker({
         <div className={PICKER_LABEL_CLASS}>{query.trim() ? 'Files' : 'Recent editors'}</div>
         <ul id="link-file-picker-results" className={PICKER_RESULTS_CLASS} role="listbox" aria-label="Link to file results">
           {items.map((item, index) => (
-            <li
+            <PickerRow
               key={item.path}
               id={`link-file-picker-${index}`}
-              role="option"
-              aria-selected={index === active}
-              className={PICKER_ROW_CLASS}
-              onMouseMove={() => setActive(index)}
-              onMouseDown={(event) => { event.preventDefault(); onSelect(item.path); }}
-            >
-              <span>{item.basename}</span>
-              <small className={PICKER_ROW_DETAIL_CLASS}>{item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Active Library'}</small>
-            </li>
+              selected={index === active}
+              label={item.basename}
+              detail={item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Active Library'}
+              onHover={() => setActive(index)}
+              onPick={() => onSelect(item.path)}
+            />
           ))}
           {items.length === 0 && (
-            <li className={PICKER_EMPTY_ROW_CLASS} role="option" aria-disabled="true">
+            <PickerEmptyRow>
               {query.trim() ? 'No matching files' : 'No files to link yet'}
-            </li>
+            </PickerEmptyRow>
           )}
         </ul>
       </div>

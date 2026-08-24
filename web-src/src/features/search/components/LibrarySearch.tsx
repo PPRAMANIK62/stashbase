@@ -5,6 +5,7 @@ import { OPEN_LIBRARY_SEARCH_EVENT, type LibrarySearchPrefill } from '@/common/l
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedPicker } from '@/common/components/LazyManaged';
 import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
+import { cn } from '@/common/lib/utils';
 
 const ManagedLibrarySearch = lazyWithRetry(() => import('./ManagedLibrarySearch'));
 
@@ -48,7 +49,7 @@ export function LibrarySearch() {
     setRequest(null);
     requestAnimationFrame(() => restoreRef.current?.focus());
   };
-  const loadingClass = `${PICKER_VEIL_CLASS} quick-open-blocking text-sm text-muted-foreground`;
+  const loadingClass = cn(PICKER_VEIL_CLASS, 'quick-open-blocking text-sm text-muted-foreground');
   return (
     <LazyManagedPicker
       as={ManagedLibrarySearch}

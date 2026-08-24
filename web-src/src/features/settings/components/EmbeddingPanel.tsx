@@ -14,8 +14,12 @@ import { RemoveKeyModal } from '@/features/settings/components/embedder/RemoveKe
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
+import { FieldLegend, FieldSet } from '@/common/components/ui/field';
+import { Progress, ProgressIndicator, ProgressTrack } from '@/common/components/ui/progress';
 import { AccountSignInForm } from '@/common/components/AccountSignInForm';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
+import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
+import { Card } from '@/common/components/ui/card';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string; costHint: string }> = {
   openai: {
@@ -91,15 +95,18 @@ export function EmbeddingPanel() {
     <>
       <div>
         <div>
-          <div className="mb-1 text-base font-semibold">AI Index</div>
-          <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
+          <SectionHeading level={3} className="mb-1">AI Index</SectionHeading>
+          <SectionDescription className="mb-2.5">
             Powers meaning-based search and Agent retrieval. The model stays fixed so the local index remains compatible.
-          </div>
+          </SectionDescription>
           {showingHostedSummary && (
-            <div className="rounded-xl border border-border bg-card p-4">
+            <Card surface="raised" className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="truncate text-base font-semibold">{state.account.email}</div>
+                  {/* The card's own title, so a heading rather than a bold
+                    * line: level 4 sits under the panel's level 3, which in
+                    * turn sits under the Settings dialog title's h2. */}
+                  <SectionHeading level={4} className="truncate">{state.account.email}</SectionHeading>
                   <div className="mt-0.5 text-xs text-muted-foreground">Using the StashBase account allowance</div>
                 </div>
                 {state.account.quota && (
@@ -111,9 +118,20 @@ export function EmbeddingPanel() {
               </div>
               {state.account.quota && (
                 <div className="mt-3">
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-accent" style={{ width: `${hostedQuotaRemainingPercent(state.account.quota)}%` }} />
-                  </div>
+                  {/* The primitive, not an inline-width div: Root carries
+                    * role="progressbar" with aria-valuenow/max, so the
+                    * remaining allowance is a number and not only a
+                    * coloured rectangle. The track takes the card's full
+                    * width instead of the primitive's inline step. */}
+                  <Progress
+                    className="block"
+                    aria-label="Remaining AI Index allowance"
+                    value={hostedQuotaRemainingPercent(state.account.quota)}
+                  >
+                    <ProgressTrack className="w-full">
+                      <ProgressIndicator className="bg-accent" />
+                    </ProgressTrack>
+                  </Progress>
                   <div className="mt-1.5 flex justify-between text-xs text-muted-foreground">
                     <span>{state.account.quota.remainingTokens.toLocaleString()} tokens left</span>
                     <span>{hostedQuotaResetLabel(state.account.quota)}</span>
@@ -126,7 +144,7 @@ export function EmbeddingPanel() {
                 <Button variant="outline" size="sm" disabled={accountBusy} onClick={() => setKeyFormOpen(true)}>Use your own key</Button>
                 <Button variant="ghost" size="sm" disabled={accountBusy} onClick={() => { void signOut(); }}>Sign out</Button>
               </div>
-            </div>
+            </Card>
           )}
           {signInFormOpen && (
             <AccountSignInForm
@@ -138,7 +156,7 @@ export function EmbeddingPanel() {
             />
           )}
           {state.account.signedIn && !hostedActive && !signInFormOpen && (
-            <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+            <Card surface="raised" className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">Signed in as {state.account.email}</div>
                 <div className="text-xs text-muted-foreground">Your own API key is currently active.</div>
@@ -152,12 +170,16 @@ export function EmbeddingPanel() {
                   void useAccountAllowance();
                 }}
               >Use account allowance</Button>
-            </div>
+            </Card>
           )}
           {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
+            <FieldSet className="mt-0.5 mb-2 w-fit">
+            {/* A single-choice group, so fieldset/legend rather than an
+              * aria-label on the control. The legend is hidden because the
+              * panel heading above already carries the visible name for
+              * this block; the fieldset still announces the grouping. */}
+            <FieldLegend className="sr-only">Embedding provider</FieldLegend>
             <SegmentedControl
-              aria-label="Embedding provider"
-              className="mt-0.5 mb-2 w-fit"
               disabled={addBusy}
               value={[selectedProvider]}
               onValueChange={(next) => {
@@ -172,6 +194,7 @@ export function EmbeddingPanel() {
                 </SegmentedControlItem>
               ))}
             </SegmentedControl>
+            </FieldSet>
           )}
           {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
           <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
@@ -207,9 +230,9 @@ export function EmbeddingPanel() {
           ) : (
             <>
               {state.hasKey && !activeProviderSelected && (
-                <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
+                <SectionDescription className="mb-2.5">
                   Save a {selected.label} key to switch from {PROVIDERS[state.provider].label}.
-                </div>
+                </SectionDescription>
               )}
               {/* Nothing authorized yet: lead with the fork, the same one
                 * the Files-panel callout shows. Switching providers with a
@@ -219,31 +242,43 @@ export function EmbeddingPanel() {
                 <EmbeddingAuthChoice onSignIn={() => setSignInFormOpen(true)} onUseOwnKey={() => setKeyFormOpen(true)} />
               )}
               {!showingAuthChoice && (
-              <div className="flex min-w-0 items-center gap-2">
+              /* A real `form`, so Enter in the field submits through the
+               * browser's own implicit-submission rule rather than through a
+               * hand-rolled keydown branch that had to re-decide preventDefault
+               * and IME composition for itself. `type="submit"` is spelled out
+               * because Base UI's `useButton` sets `type="button"` on every
+               * Button — a converted confirm action does NOT submit without
+               * it. There is no visible label for this field (the panel
+               * heading names the feature, not the control), so `aria-label`
+               * is the honest naming here. */
+              <form
+                className="flex min-w-0 items-center gap-2"
+                onSubmit={(event) => { event.preventDefault(); void submitAddKey(); }}
+              >
                 <Input
                   type="password"
                   className="h-8 flex-1 font-mono text-sm"
+                  aria-label={`${selected.label} API key`}
                   placeholder={selected.placeholder}
                   autoComplete="off"
                   spellCheck={false}
                   value={addKey}
                   disabled={addBusy}
                   onChange={(e) => setAddKey(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void submitAddKey(); } }}
                 />
                 <Button
-                  onClick={() => { void submitAddKey(); }}
+                  type="submit"
                   disabled={addBusy || !addKey.trim()}
                 >{addBusy ? 'Validating…' : 'Add key'}</Button>
-              </div>
+              </form>
               )}
               {addError && <div className="mt-1.5 text-sm text-destructive">{addError}</div>}
             </>
           ))}
           {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
-            <div className="mt-3.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
+            <SectionDescription className="mt-3.5 [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
               Stored locally in <code>~/.stashbase/config.json</code>. Used only for embeddings, never chat.
-            </div>
+            </SectionDescription>
           )}
         </div>
       </div>

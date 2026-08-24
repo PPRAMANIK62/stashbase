@@ -17,11 +17,19 @@
   align-items: center;
   gap: 4px;
   min-height: 28px;
-  padding: 3px 8px 3px 0;
+  /* 4, not the 3 this carried: the row's height is DECLARED by
+   * `min-height: 28px` and the padding is only the floor under
+   * over-tall content, so at the default and small interface sizes
+   * (18.9px and 17px of line box) nothing moves — 4 + 18.9 + 4 is
+   * still under 28. Snapping down to the 2px half-step instead would
+   * have removed air that exists today at Large, where the line box
+   * reaches 21.7px and the padding is what keeps the label off the
+   * pill's edge. */
+  padding: 4px 8px 4px 0;
   cursor: pointer;
   border-left: 2px solid transparent;
   border-radius: var(--radius-ui);
-  font-size: calc(13px * var(--ui-scale));
+  font-size: var(--text-base);
   color: var(--fg);
   min-width: 0;
   user-select: none;
@@ -84,7 +92,7 @@
   color: var(--muted);
   display: grid;
   place-items: center;
-  transition: transform .12s;
+  transition: transform var(--motion-fast) var(--motion-ease-out);
 }
 
 .tree-row.collapsed .chev {
@@ -168,6 +176,6 @@
   background: var(--bg);
   color: var(--fg);
   font: inherit;
-  font-size: calc(13px * var(--ui-scale));
+  font-size: var(--text-base);
   outline: none;
 }

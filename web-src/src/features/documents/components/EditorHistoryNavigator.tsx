@@ -11,10 +11,11 @@ import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppCon
 import {
   PICKER_LABEL_CLASS,
   PICKER_RESULTS_CLASS,
-  PICKER_ROW_CLASS,
   PICKER_VEIL_CLASS,
   pickerPanelClass,
 } from '@/common/lib/pickerChrome';
+import { PickerRow } from '@/common/components/PickerRow';
+import { cn } from '@/common/lib/utils';
 
 /** How long Control must stay down before the overlay actually renders. A
  *  quick tap-release resolves inside this window and never paints — only a
@@ -232,7 +233,7 @@ export function EditorHistoryNavigator() {
     <div
       /* `quick-open-blocking` is a topmost-surface marker class other
        * overlays query — it carries no styles of its own. */
-      className={`quick-open-blocking ${PICKER_VEIL_CLASS}`}
+      className={cn('quick-open-blocking', PICKER_VEIL_CLASS)}
       role="presentation"
       onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}
     >
@@ -241,7 +242,9 @@ export function EditorHistoryNavigator() {
         className={pickerPanelClass('narrow')}
         role="dialog"
         aria-modal="true"
-        aria-label="Editor History"
+        /* The panel already shows its name; `aria-labelledby` points at that
+         * text instead of repeating it as a second, silently-drifting copy. */
+        aria-labelledby="editor-history-title"
         tabIndex={-1}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
@@ -264,7 +267,7 @@ export function EditorHistoryNavigator() {
         }}
         onBlur={() => close()}
       >
-        <div className={PICKER_LABEL_CLASS}>Editor History</div>
+        <div id="editor-history-title" className={PICKER_LABEL_CLASS}>Editor History</div>
         <ul
           className={PICKER_RESULTS_CLASS}
           role="listbox"
@@ -272,17 +275,14 @@ export function EditorHistoryNavigator() {
           aria-activedescendant={entries[active] ? `editor-history-${active}` : undefined}
         >
           {entries.map((entry, index) => (
-            <li
+            <PickerRow
               key={entry.id}
               id={`editor-history-${index}`}
-              role="option"
-              aria-selected={index === active}
-              className={PICKER_ROW_CLASS}
-              onMouseMove={() => setActive(index)}
-              onMouseDown={(event) => { event.preventDefault(); commit(entry.id); }}
-            >
-              <span>{entry.label}</span>
-            </li>
+              selected={index === active}
+              label={entry.label}
+              onHover={() => setActive(index)}
+              onPick={() => commit(entry.id)}
+            />
           ))}
         </ul>
       </div>

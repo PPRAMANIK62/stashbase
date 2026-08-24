@@ -4,6 +4,8 @@ import {
 } from '@/common/api/apiTypes';
 import { useAppearanceSettings } from '@/features/settings/hooks/useAppearanceSettings';
 import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
+import { FieldDescription, FieldLegend, FieldSet } from '@/common/components/ui/field';
+import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
 
 const THEMES: Array<{ value: AppearanceTheme; label: string; hint: string }> = [
   { value: 'system', label: 'System', hint: 'Follow your operating system.' },
@@ -33,10 +35,14 @@ function PresetGroup<T extends string>({
   hint?: string;
 }) {
   return (
-    <div className="mt-5.5">
-      <div className="mb-1.5 text-base font-semibold">{label}</div>
+    /* A single-choice group, so `fieldset`/`legend` rather than a div and a
+     * bold line that only looks like a label. The legend NAMES the group,
+     * which is why the segmented control no longer repeats the string as an
+     * aria-label: one visible label doing both jobs beats a hidden copy
+     * that can drift out of step with the text beside it. */
+    <FieldSet className="mt-5">
+      <FieldLegend>{label}</FieldLegend>
       <SegmentedControl
-        aria-label={label}
         disabled={disabled}
         value={[value]}
         onValueChange={(next) => {
@@ -55,8 +61,8 @@ function PresetGroup<T extends string>({
           </SegmentedControlItem>
         ))}
       </SegmentedControl>
-      {hint && <div className="mt-1.5 text-sm leading-normal text-muted-foreground">{hint}</div>}
-    </div>
+      {hint && <FieldDescription className="mt-1.5">{hint}</FieldDescription>}
+    </FieldSet>
   );
 }
 
@@ -70,10 +76,10 @@ export function AppearancePanel() {
   }
   return (
     <div>
-      <div className="mb-1 text-base font-semibold">Appearance</div>
-      <div className="text-sm leading-normal text-muted-foreground">
+      <SectionHeading level={3} className="mb-1">Appearance</SectionHeading>
+      <SectionDescription>
         Choose a clear, durable presentation preset. Changes apply immediately and are saved for every window.
-      </div>
+      </SectionDescription>
       <PresetGroup label="Theme" value={preferences.theme} choices={THEMES} disabled={saving} onChange={(theme) => { void save({ theme }); }} />
       <PresetGroup label="Interface size" value={preferences.uiScale} choices={SCALES} disabled={saving} onChange={(uiScale) => { void save({ uiScale }); }} hint="Scales app controls and chrome without changing document text." />
       <PresetGroup label="Reading text size" value={preferences.readingTextSize} choices={SCALES} disabled={saving} onChange={(readingTextSize) => { void save({ readingTextSize }); }} hint="Changes Markdown reading and editing text without affecting the interface." />

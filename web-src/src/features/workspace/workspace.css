@@ -64,7 +64,7 @@
    * in both themes where a literal white fails on light. */
   fill: var(--bg);
   stroke: none;
-  font-size: calc(10px * var(--ui-scale));
+  font-size: var(--text-2xs);
   font-weight: 700;
   font-family: var(--font-sans);
   dominant-baseline: auto;
@@ -76,6 +76,18 @@
  * + breadcrumb row. Layout is a horizontal flex row of chips. */
 .tab-strip {
   flex: 0 0 auto;
+  /* The strip is the row now: the scrolling tab list and the New-tab
+   * control sit side by side in it, so the control stays put while the
+   * list scrolls under it. `flex-end` plus the control's own
+   * `align-self: center` keeps its centre on the tab-close centre —
+   * asserted by electron/tab-strip-layout-smoke.cjs. */
+  display: flex;
+  /* Spelled out rather than left to the flex default: this is the one
+   * declaration that decides the strip's axis, and it belongs next to
+   * the rest of the strip's metrics that the layout smoke reads. */
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 2px;
   background: var(--pane);
   padding: 6px 8px 0;
 }
@@ -94,6 +106,7 @@
   overflow-y: visible;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .tab {
@@ -115,17 +128,24 @@
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  /* 12 (text-sm), the scale's dense-repeating-chip step — a tab strip
+  /* text-sm (12), the scale's dense-repeating-chip step — a tab strip
    * is exactly that, not body text. The chat strip matches
    * (ChatPane.tsx); the two are one role at one size. */
-  font-size: calc(12px * var(--ui-scale));
+  font-size: var(--text-sm);
   user-select: none;
 }
 .tab:hover {
   background: var(--hover);
   color: var(--fg);
 }
-.tab.active {
+/* `[data-active]`, not a hand-set `.active` class: this is how Base UI
+ * spells tab selection in `ui/tabs.tsx`, so every tab set in the app —
+ * including this hand-rolled strip, which sets the attribute itself —
+ * signals selection one way. (The static fixture in
+ * electron/tab-strip-layout-smoke.cjs still writes `class="tab active"`; it
+ * only measures control centre lines, and selection changes colour, never
+ * geometry.) */
+.tab[data-active] {
   background: var(--bg);
   color: var(--fg);
   border-color: var(--border);
@@ -151,13 +171,31 @@
   box-shadow: inset -2px 0 0 0 var(--accent);
 }
 
+/* The close and new-tab controls are `Button variant="ghost"` — the
+ * primitive owns the press scale, the focus ring, and the hover tint
+ * shorthand. Their BOX stays here: electron/tab-strip-layout-smoke.cjs
+ * reads this file raw to assert the two share a centre line, and this
+ * box is deliberately below the smallest icon-button step the recipe
+ * offers.
+ *
+ * 16, not the 18 this carried. 18 is a 4.5 step — an eyeballed value
+ * wearing scale notation — and the two ramp neighbours are not
+ * interchangeable here: the tab's content box is the taller of the
+ * label's line box (18.6px at text-sm) and this control, so 20 would
+ * push every tab, and with it the whole strip, 1.4px taller and eat
+ * into the air `--chrome-top` reserves below it, while 16 stays under
+ * the label and leaves the strip's height exactly where it is at all
+ * three interface sizes. 16 is also the icon-slot size the tree rows
+ * use, so the app has one small-glyph box rather than two. The smoke's
+ * centre-line assertion is unaffected either way — both controls are
+ * centred, so the deltas cancel. */
 .tab-close {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: calc(14px * var(--ui-scale));
+  font-size: var(--text-lg);
   line-height: 1;
   border-radius: var(--radius-control);
   cursor: pointer;
@@ -173,14 +211,17 @@
 .tab-new {
   width: 28px;
   height: 28px;
-  /* Pin to the right of the visible row even when tabs scroll —
-   * never grows or shrinks with them. */
+  /* Pinned beside the scroller rather than inside it, so it never
+   * scrolls away with the tabs it sits next to. Centred against the
+   * strip row: `flex-end` instead puts it a pixel low, because the
+   * scroller reserves a gutter below the tabs that this control does
+   * not have. electron/tab-strip-layout-smoke.cjs asserts the result. */
   flex: 0 0 28px;
   align-self: center;
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: calc(16px * var(--ui-scale));
+  font-size: var(--text-xl);
   line-height: 1;
   border-radius: var(--radius-ui);
   cursor: pointer;
@@ -205,8 +246,16 @@
   top: 0;
   bottom: 0;
   width: 6px;
+  /* NOT a spacing decision, so not on the spacing ramp: this is
+   * -width/2, the offset that straddles the hit area evenly across the
+   * sidebar/main boundary `left` puts it on. Any other value would put
+   * more of the grab zone on one pane than the other. It is the same
+   * centring the `::after` line does with `left: 50%` +
+   * `translateX(-50%)`; a negative margin is used here instead so the
+   * splitter keeps its own transform free for future press feedback.
+   * Recorded in CSS_OFF_RAMP_EXEMPTIONS. */
   margin-left: -3px;
-  z-index: 5;
+  z-index: var(--layer-chrome);
   cursor: col-resize;
   background: transparent;
 }
@@ -219,7 +268,7 @@
   transform: translateX(-50%);
   width: 2px;
   background: transparent;
-  transition: background .12s;
+  transition: background var(--motion-fast) var(--motion-ease-hover);
 }
 .sidebar-splitter:hover::after,
 .sidebar-splitter:active::after,
@@ -252,7 +301,7 @@
   left: 0;
   width: 1px;
   background: var(--border);
-  transition: background .12s, width .12s;
+  transition: background var(--motion-fast) var(--motion-ease-hover), width var(--motion-fast) var(--motion-ease-hover);
 }
 .chat-splitter:hover::after,
 .chat-splitter:active::after,

@@ -73,6 +73,14 @@ export function RenameInput({
   }
 
   return (
+    /* The bordered box here is the SPAN, not the field: the extension
+     * suffix has to sit inside the same stroke as the editable text.
+     * That rules the `Input` primitive out — it is a self-contained box
+     * (own fill, own stroke, 36px tall, container corner, focus ring),
+     * and the element it would have to become is a transparent,
+     * borderless, row-height run of text inside someone else's box.
+     * Every one of the primitive's decisions would need an override to
+     * get there, so this stays a raw field. */
     <span
       className="flex min-w-0 flex-1 items-center rounded-md border border-accent bg-background text-base"
       onClick={(e) => e.stopPropagation()}

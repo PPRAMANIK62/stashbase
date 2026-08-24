@@ -81,7 +81,11 @@
  * package win and blow the gutters out to 120px. */
 .crepe-shell .milkdown .ProseMirror {
   max-width: 820px;
-  min-height: calc(100vh - 150px);
+  /* A floor so the document fills the pane and a click below the last
+   * paragraph still lands in the editor. The subtrahend is the pane
+   * chrome allowance, on the ramp (38 steps) rather than the eyeballed
+   * 150 it replaces — 2px on a min-height nothing measures against. */
+  min-height: calc(100vh - 152px);
   margin: 0 auto;
   /* Side gutters are container-relative (the shell is a size
    * container): ~6% of the pane, clamped to 20-48px, so a docked
@@ -244,9 +248,12 @@
     display: none;
   }
 }
-/* Below the fluid-gutter floor the vertical rhythm tightens too. */
+/* Below the fluid-gutter floor the vertical rhythm tightens too: one
+ * ramp step off the top (28 -> 20) against four off the bottom
+ * (88 -> 72), because the bottom inset is scroll runway rather than a
+ * margin anyone reads against. 22 was the same intent off the ramp. */
 @container (max-width: 480px) {
-  .crepe-shell .milkdown .ProseMirror { padding-top: 22px; padding-bottom: 72px; }
+  .crepe-shell .milkdown .ProseMirror { padding-top: 20px; padding-bottom: 72px; }
 }
 
 /* Preparation-status pulse — the dot itself is utility-styled in

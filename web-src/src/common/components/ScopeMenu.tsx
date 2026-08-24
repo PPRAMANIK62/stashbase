@@ -1,13 +1,17 @@
-import { CheckIcon, ChevronDownIcon, FolderIcon, LibraryIcon } from '@/common/components/icons';
+import { useId } from 'react';
+
+import { FolderIcon, LibraryIcon } from '@/common/components/icons';
 import { cn } from '@/common/lib/utils';
 import {
   Menu,
-  MenuItem,
   MenuPopup,
   MenuPortal,
   MenuPositioner,
   MenuTrigger,
 } from '@/common/components/ui/menu';
+import { MenuOption } from '@/common/components/ui/menu-option';
+import { MenuSectionLabel } from '@/common/components/ui/menu-radio';
+import { Pill } from '@/common/components/ui/pill';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
 import {
   folderScope,
@@ -16,10 +20,6 @@ import {
   type LibraryFolderOption,
   type LibraryScope,
 } from '@/common/lib/libraryScope';
-import {
-  menuHeadClass, menuSectionClass, optActiveClass, optCheckClass, optClass, optDescClass,
-  optIconClass, optTextClass, optTitleClass, pillChevronClass, pillClass, pillLockedClass,
-} from '@/common/lib/pillMenuStyles';
 
 /**
  * The app's ONE scope picker: the whole Library, or one library folder.
@@ -59,43 +59,57 @@ export function ScopeMenu({
   triggerClassName?: string;
   onSetScope: (scope: LibraryScope) => void;
 }) {
+  const headingId = useId();
   const isLibrary = scope.kind === 'library';
   return (
     <Menu>
       <MenuTrigger
-        className={cn(pillClass, 'max-w-40', locked && pillLockedClass, triggerClassName)}
+        render={<Pill locked={locked} className={cn('max-w-40', triggerClassName)} />}
         disabled={disabled || locked}
         aria-label={ariaLabel ?? heading}
         title={isLibrary
           ? `${heading} — the whole library`
           : `${heading} — ${shortenFolderPath(scope.path, homeDir)}`}
       >
-        {/* No leading glyph on the trigger: the scope NAME is the content
-          * (often carrying the user's own emoji), and a folder icon next
-          * to it reads as a double mark. The menu's rows keep icons. */}
-        <span className="truncate">{scopeDisplayName(scope)}</span>
-        <ChevronDownIcon className={pillChevronClass} />
+        {scopeDisplayName(scope)}
       </MenuTrigger>
       <MenuPortal>
         <MenuPositioner side={side} align="start" sideOffset={6} collisionPadding={8}>
-          <MenuPopup className="max-h-[min(360px,55vh)] w-85 max-w-[calc(100vw-24px)] overflow-auto p-1.5" aria-label={heading}>
-            <div className={menuHeadClass}><span className="font-semibold text-foreground">{heading}</span></div>
-            <MenuItem label="Library" className={cn(optClass, isLibrary && optActiveClass)} onClick={() => onSetScope(LIBRARY_SCOPE)}>
-              <LibraryIcon className={optIconClass} />
-              <span className={optTextClass}><span className={optTitleClass}>Library</span><span className={optDescClass}>{libraryDetail}</span></span>
-              {isLibrary && <CheckIcon className={optCheckClass} />}
-            </MenuItem>
-            {entries.length > 0 && <div className={menuSectionClass}>Folders</div>}
-            {entries.map((entry) => {
-              const active = scope.kind === 'folder' && scope.path === entry.path;
-              return (
-                <MenuItem key={entry.path} label={basename(entry.path)} className={cn(optClass, active && optActiveClass)} onClick={() => onSetScope(folderScope(entry.path))}>
-                  <FolderIcon className={optIconClass} />
-                  <span className={optTextClass}><span className={optTitleClass}>{basename(entry.path)}</span><span className={optDescClass}>{shortenFolderPath(entry.path, homeDir)}</span></span>
-                  {active && <CheckIcon className={optCheckClass} />}
-                </MenuItem>
-              );
-            })}
+          {/* `w-overlay-md` is the menu step (the rows carry a folder name
+            * over its shortened path, so this is a dialog-column measure,
+            * not an anchored strip). It replaces a hand-typed `w-85` plus
+            * its own `calc(100vw-24px)` clamp — a fourth spelling of the
+            * 16px-a-side margin every other floating surface gets free
+            * from `--overlay-fit`, and 4px tighter than all of them. */}
+          {/* The popup is named BY its own visible title rather than by a
+            * second copy of the same string in an `aria-label`: one label
+            * doing both jobs cannot drift out of step with the text beside
+            * it. The trigger keeps its `aria-label` — its visible text is
+            * the current scope, not the question. */}
+          <MenuPopup className="max-h-overlay-sm w-overlay-md overflow-auto p-1.5" aria-labelledby={headingId}>
+            <div className="flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm">
+              <span id={headingId} className="font-semibold text-foreground">{heading}</span>
+            </div>
+            <MenuOption
+              label="Library"
+              active={isLibrary}
+              icon={LibraryIcon}
+              title="Library"
+              description={libraryDetail}
+              onClick={() => onSetScope(LIBRARY_SCOPE)}
+            />
+            {entries.length > 0 && <MenuSectionLabel>Folders</MenuSectionLabel>}
+            {entries.map((entry) => (
+              <MenuOption
+                key={entry.path}
+                label={basename(entry.path)}
+                active={scope.kind === 'folder' && scope.path === entry.path}
+                icon={FolderIcon}
+                title={basename(entry.path)}
+                description={shortenFolderPath(entry.path, homeDir)}
+                onClick={() => onSetScope(folderScope(entry.path))}
+              />
+            ))}
           </MenuPopup>
         </MenuPositioner>
       </MenuPortal>

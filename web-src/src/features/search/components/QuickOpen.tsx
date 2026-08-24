@@ -4,6 +4,7 @@ import { useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedPicker } from '@/common/components/LazyManaged';
 import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
+import { cn } from '@/common/lib/utils';
 
 const ManagedQuickOpen = lazyWithRetry(() => import('./ManagedQuickOpen'));
 
@@ -44,7 +45,7 @@ export function QuickOpen() {
     setRequest(null);
     requestAnimationFrame(() => restoreRef.current?.focus());
   };
-  const loadingClass = `${PICKER_VEIL_CLASS} quick-open-blocking text-sm text-muted-foreground`;
+  const loadingClass = cn(PICKER_VEIL_CLASS, 'quick-open-blocking text-sm text-muted-foreground');
   return (
     <LazyManagedPicker
       as={ManagedQuickOpen}

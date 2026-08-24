@@ -1,12 +1,8 @@
 import React from 'react';
 import { formatMiB } from '@/common/lib/format';
-import { buttonVariants } from '@/common/components/ui/button';
+import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
 import { StatusMessage } from '@/common/components/ui/status';
-
-/** Plain <button> + the shared outline-button recipe: the node test loader
- *  compiles this module graph with the classic JSX transform, under which
- *  the ui/button component module (no explicit React import) cannot load. */
-const noticeButtonClass = buttonVariants({ variant: 'outline', size: 'xs' });
 
 /** The AI Index workload notice. Presentational: the surfaces that show it
  *  (the Files panel and the search popup) read the workload through
@@ -28,9 +24,12 @@ export function SemanticIndexingNoticeView({
 }) {
   const size = estimatedBytes ? ` · about ${formatMiB(estimatedBytes)}` : '';
   return (
-    <StatusMessage tone="warning" className="mx-3 mb-2 flex items-start justify-between gap-2.5 px-2.25 py-2">
+    <StatusMessage tone="warning" className="mx-3 mb-2 flex items-start justify-between gap-2.5 px-2.5 py-2">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="font-semibold">{awaiting ? 'Large AI Index workload' : 'AI Index paused'}</div>
+        {/* The line that NAMES this card, so a real heading rather than a
+          * bold div. The type is pinned back to the card's own step: the
+          * level is what changed, not the look. */}
+        <SectionHeading level={2} className="text-sm">{awaiting ? 'Large AI Index workload' : 'AI Index paused'}</SectionHeading>
         <div className="leading-snug opacity-90">
           About {count.toLocaleString()} file{count === 1 ? '' : 's'} waiting{size}. Building AI Index may take a while and use provider quota. Exact text search remains available.
         </div>
@@ -41,10 +40,10 @@ export function SemanticIndexingNoticeView({
         )}
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <button type="button" className={noticeButtonClass} onClick={onStart}>
+        <Button variant="outline" size="xs" onClick={onStart}>
           {awaiting ? 'Build AI Index' : 'Resume AI Index'}
-        </button>
-        {awaiting && <button type="button" className={noticeButtonClass} onClick={onDefer}>Not now</button>}
+        </Button>
+        {awaiting && <Button variant="outline" size="xs" onClick={onDefer}>Not now</Button>}
       </div>
     </StatusMessage>
   );

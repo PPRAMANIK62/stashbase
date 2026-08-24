@@ -66,9 +66,26 @@ body.is-electron.platform-darwin.is-fullscreen {
 /* Shell-level controls in the titlebar band. Absolute over the
  * `.app` grid (NOT inside the panel columns) so collapsing either
  * panel leaves its toggle in place — always the way back in.
- * z-index above the sidebar drag zone (6) so they stay clickable on
- * macOS. Left cluster: sidebar toggle + search; right cluster: the
- * mirrored chat-panel toggle. */
+ * Left cluster: sidebar toggle + search; right cluster: the mirrored
+ * chat-panel toggle.
+ *
+ * `chrome` is the role — globals.css spells it "floating pane chrome,
+ * drag zones", which is these controls and the drag zone below them
+ * exactly. Neither element creates a stacking context between itself
+ * and the root (`.app` and `.sidebar` are both `position: relative`
+ * with `z-index: auto`), so the pair really does compare against the
+ * rest of the app's chrome and belongs on the app's ramp rather than
+ * on the 7-over-6 they carried, which ordered them against each other
+ * and against nothing else.
+ *
+ * The `+ 1` is the ordinal that keeps the documented order: the
+ * controls render BEFORE the sidebar in App.tsx, so at an equal
+ * z-index the drag zone — later in the DOM — would paint over them and
+ * the whole control band would go dead on macOS. That is a backstop,
+ * not the guarantee. The guarantee is geometry: the drag zone stops
+ * where these controls begin (see `.sidebar-drag-zone`), and the two
+ * rects never overlap, which is the fix that replaced the
+ * intermittently-stale `-webkit-app-region` carve-outs. */
 .titlebar-controls,
 .titlebar-controls-right {
   position: absolute;
@@ -77,7 +94,7 @@ body.is-electron.platform-darwin.is-fullscreen {
   display: flex;
   align-items: center;
   gap: 2px;
-  z-index: 7;
+  z-index: calc(var(--layer-chrome) + 1);
 }
 
 .titlebar-controls {
@@ -121,8 +138,12 @@ body.is-electron.platform-darwin .sidebar-drag-zone {
    * needs no carving. The band right of the controls stops being a
    * drag handle; the tab strip remains the wide drag surface. */
   width: var(--titlebar-controls-left);
-  height: 36px;
-  z-index: 6;
+  height: var(--titlebar-clearance);
+  /* The ramp's "drag zones" role, named rather than numbered. The
+   * titlebar controls sit one ordinal above it — see the reasoning
+   * there; the two rects do not overlap, so that ordinal is only the
+   * backstop behind the geometry. */
+  z-index: var(--layer-chrome);
   -webkit-app-region: drag;
 }
 
@@ -179,7 +200,7 @@ body.is-electron .titlebar-controls-right {
    * of shrinking to its content — the file list grows into the full
    * column height and depends on the column being tall. */
   grid-template-rows: minmax(0, 1fr);
-  transition: grid-template-columns var(--motion-standard) var(--motion-ease);
+  transition: grid-template-columns var(--motion-standard) var(--motion-ease-in-out);
 }
 
 /* While dragging either splitter, the column must track the

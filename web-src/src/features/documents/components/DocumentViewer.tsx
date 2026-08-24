@@ -1,14 +1,18 @@
 import { Suspense } from 'react';
 import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { EmptyState, emptyStateVariants } from '@/common/components/ui/empty-state';
 import { HtmlPreview } from '@/features/documents/components/HtmlPreview';
 import { ImagePreview } from '@/features/documents/components/ImagePreview';
 import { retainedMarkdownTabs } from '@/features/documents/milkdown/retainedTabs';
 import type { Tab } from '@/store/state/state';
 
-/** Muted "Loading…" bodies shared by the lazy viewer fallbacks. */
-const VIEWER_LOADING_CLASS = 'p-4 text-base text-muted-foreground';
-const VIEWER_PADDED_LOADING_CLASS = 'p-6 text-base text-muted-foreground';
-const VIEWER_CENTERED_LOADING_CLASS = 'grid h-full place-items-center text-base text-muted-foreground';
+/* The one "Opening…" body every lazy viewer fallback wears, and the same
+ * class `LazyLoadBoundary` builds its retry panel on. It is the EmptyState
+ * `fill` layout in class form because a boundary takes a className rather
+ * than a child: three hand-written spellings preceded it (p-4, p-6, and a
+ * centred grid), so which corner the message appeared in, and at what
+ * size, depended on which format you happened to open. */
+const VIEWER_FALLBACK_CLASS = emptyStateVariants({ layout: 'fill' });
 
 /* Every viewer heavy enough to have its own runtime (Milkdown, pdf.js,
  * mammoth, the JSON tree) loads at the moment a file of that format is
@@ -79,16 +83,16 @@ export function DocumentViewer({
             hidden={!active}
           >
             {tab.conflict ? (
-              <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Loading conflict view…</div>}>
+              <Suspense fallback={<EmptyState layout="fill" role="status">Loading conflict view…</EmptyState>}>
                 <LazyConflictResolver tabId={tab.id} />
               </Suspense>
             ) : (
               <LazyLoadBoundary
-                className={VIEWER_LOADING_CLASS}
+                className={VIEWER_FALLBACK_CLASS}
                 label="Markdown document"
                 resetKey={`${file.folder ?? ''}:${file.name}:${file.version ?? ''}`}
               >
-                <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Opening document…</div>}>
+                <Suspense fallback={<EmptyState layout="fill" role="status">Opening document…</EmptyState>}>
                   <LazyCrepeDocument
                     tabId={tab.id}
                     name={file.name}
@@ -106,12 +110,12 @@ export function DocumentViewer({
       })}
       {cur && cur.format === 'json' && (
         activeTab?.conflict ? (
-          <Suspense fallback={<div className={VIEWER_LOADING_CLASS} role="status">Loading conflict view…</div>}>
+          <Suspense fallback={<EmptyState layout="fill" role="status">Loading conflict view…</EmptyState>}>
             <LazyConflictResolver tabId={activeTab.id} />
           </Suspense>
         ) : (
-          <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="JSON document" resetKey={resourceResetKey}>
-            <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Opening JSON…</div>}>
+          <LazyLoadBoundary className={VIEWER_FALLBACK_CLASS} label="JSON document" resetKey={resourceResetKey}>
+            <Suspense fallback={<EmptyState layout="fill">Opening JSON…</EmptyState>}>
               <LazyJsonDocument
                 key={activeTab?.id ?? cur.name}
                 tabId={activeTab?.id ?? ''}
@@ -127,8 +131,8 @@ export function DocumentViewer({
         <HtmlPreview name={cur.name} />
       )}
       {cur && cur.format === 'docx' && (
-        <LazyLoadBoundary className={VIEWER_CENTERED_LOADING_CLASS} label="document preview" resetKey={resourceResetKey}>
-          <Suspense fallback={<div className={VIEWER_CENTERED_LOADING_CLASS}>Opening document…</div>}>
+        <LazyLoadBoundary className={VIEWER_FALLBACK_CLASS} label="document preview" resetKey={resourceResetKey}>
+          <Suspense fallback={<EmptyState layout="fill">Opening document…</EmptyState>}>
             <LazyDocxPreview name={cur.name} />
           </Suspense>
         </LazyLoadBoundary>
@@ -141,8 +145,8 @@ export function DocumentViewer({
         // preparation failure banner + Reprocess are decided inside the
         // lazy chunk (PdfViewerPane) and handed to the viewer, which only
         // draws them — that policy is PDF-only and must not ship eagerly.
-        <LazyLoadBoundary className={VIEWER_LOADING_CLASS} label="PDF preview" resetKey={resourceResetKey}>
-          <Suspense fallback={<div className={VIEWER_LOADING_CLASS}>Loading PDF…</div>}>
+        <LazyLoadBoundary className={VIEWER_FALLBACK_CLASS} label="PDF preview" resetKey={resourceResetKey}>
+          <Suspense fallback={<EmptyState layout="fill">Loading PDF…</EmptyState>}>
             <LazyPdfViewerPane key={activeTab?.id} name={cur.name} />
           </Suspense>
         </LazyLoadBoundary>
@@ -152,8 +156,8 @@ export function DocumentViewer({
         <ImagePreview name={cur.name} />
       )}
       {cur && cur.format === 'audio' && (
-        <LazyLoadBoundary className={VIEWER_PADDED_LOADING_CLASS} label="audio preview" resetKey={resourceResetKey}>
-          <Suspense fallback={<div className={VIEWER_PADDED_LOADING_CLASS}>Opening audio…</div>}>
+        <LazyLoadBoundary className={VIEWER_FALLBACK_CLASS} label="audio preview" resetKey={resourceResetKey}>
+          <Suspense fallback={<EmptyState layout="fill">Opening audio…</EmptyState>}>
             <LazyAudioPreview name={cur.name} />
           </Suspense>
         </LazyLoadBoundary>

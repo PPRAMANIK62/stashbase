@@ -3,6 +3,7 @@ import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppCon
 import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
+import { cn } from '@/common/lib/utils';
 
 /**
  * Chrome-style in-document find bar. Floats over the top-right of the
@@ -22,9 +23,12 @@ import { Input } from '@/common/components/ui/input';
  */
 
 /** Aa / Word latch buttons — ghost until pressed, then the accent state
- *  ladder (thin accent stroke + tinted fill) driven off aria-pressed. */
+ *  ladder (thin accent stroke + tinted fill) driven off aria-pressed.
+ *  Two `Button`s in this one bar wear it; it is a className on a primitive
+ *  that already owns the box, so there is nothing left for a component of
+ *  its own to hold. */
 const FIND_TOGGLE_CLASS =
-  'px-1.5 font-semibold tracking-wide text-muted-foreground aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent';
+  'px-1.5 font-semibold tracking-wider text-muted-foreground aria-pressed:border-accent aria-pressed:bg-accent/10 aria-pressed:text-accent';
 
 export function FindBar() {
   const { find } = useUiShell();
@@ -67,20 +71,21 @@ export function FindBar() {
 
   return (
     <div
-      /* Sits at the top of the document area, just below the back/forward
-       * + breadcrumb + edit-toggle chrome row (which itself sits at
-       * `top: 44px`). Right-aligned to mirror Chrome's placement and so
-       * it doesn't fight the centered breadcrumb. */
-      className="absolute top-[78px] right-3.5 z-10 flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-1 shadow-elevation"
+      /* Sits at the top of the document area, on the deeper of the two
+       * pane-chrome offsets: it has to clear the out-of-folder identity
+       * banner as well as the tab strip, because a library-search hit is
+       * exactly the kind of document someone searches within.
+       * `top-chrome-banner` is the shared token (globals.css) — this used
+       * to be a hand-typed 78px that disagreed with the PDF control slot's
+       * 76px by two pixels nobody chose. Right-aligned to mirror Chrome's
+       * placement and so it doesn't fight the centered breadcrumb. */
+      className="absolute top-chrome-banner right-3.5 z-sticky flex items-center gap-1 rounded-md border border-border bg-popover px-1.5 py-1 shadow-elevation"
       role="search"
       aria-label="Find in document"
     >
       <Input
         ref={inputRef}
-        className={
-          'h-6 w-45 px-1.5 text-sm' +
-          (noMatch ? ' border-destructive text-destructive' : '')
-        }
+        className={cn('h-6 w-45 px-1.5 text-sm', noMatch && 'border-destructive text-destructive')}
         type="text"
         placeholder="Find"
         value={query}
@@ -95,7 +100,7 @@ export function FindBar() {
           }
         }}
       />
-      <span className="min-w-9.5 px-1 text-right text-xs text-muted-foreground tabular-nums">
+      <span className="min-w-10 px-1 text-right text-xs text-muted-foreground tabular-nums">
         {hasQuery ? (total === 0 ? '0/0' : `${current || '?'}/${total}`) : ''}
       </span>
       <Button

@@ -11,14 +11,16 @@ import {
 import { AudioPlaybackPosition } from '@/features/documents/lib/audioPlayback.ts';
 import { basename } from '@/common/lib/paths';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
-import { emptyStateClass } from '@/common/lib/emptyState';
+import { EmptyState } from '@/common/components/ui/empty-state';
 import { openSettings } from '@/common/lib/settingsTrigger';
 import { TRANSCRIPTION_LANGUAGE_OPTIONS } from '@shared/transcription';
 import { useAudioFallbackController } from '@/features/documents/hooks/useAudioFallbackController.ts';
 import { useAudioTranscriptController } from '@/features/documents/hooks/useAudioTranscriptController.ts';
 import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
 import { Select } from '@/common/components/ui/select';
 import { StatusMessage } from '@/common/components/ui/status';
+import { cn } from '@/common/lib/utils';
 
 export function AudioPreview({ name }: { name: string }) {
   const state = useWorkspace();
@@ -85,11 +87,11 @@ export function AudioPreview({ name }: { name: string }) {
   return (
     <div className="grid h-full w-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-pane">
       <div className="border-b border-border bg-card px-6 pt-5 pb-4">
-        <div className="mb-2.5 truncate font-semibold">{basename(name)}</div>
+        <SectionHeading className="mb-2.5 truncate">{basename(name)}</SectionHeading>
         <audio
           key={`${state.folderPath}:${fallback.playbackSrc}`}
           ref={audioRef}
-          className="block w-[min(760px,100%)]"
+          className="block w-measure-lg"
           controls
           preload="metadata"
           src={fallback.playbackSrc}
@@ -111,7 +113,7 @@ export function AudioPreview({ name }: { name: string }) {
                * take the track/fill roles; accent-accent stays as the
                * fallback should appearance ever revert to native. */
               <progress
-                className="h-1.5 w-[min(180px,28vw)] appearance-none overflow-hidden rounded-full accent-accent [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-accent"
+                className="h-1.5 w-measure-xs appearance-none overflow-hidden rounded-full accent-accent [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-accent"
                 max={100}
                 value={fallback.progress.percent}
                 aria-label="Compatible audio preview progress"
@@ -124,17 +126,17 @@ export function AudioPreview({ name }: { name: string }) {
           <div className={HINT_CLASS}>Using a browser-compatible local preview.</div>
         )}
         {fallback.error && (
-          <div className={`${HINT_CLASS} text-destructive`}>
+          <div className={cn(HINT_CLASS, 'text-destructive')}>
             <span>{fallback.error}</span>
             <Button variant="outline" size="xs" onClick={() => { void fallback.prepare(); }}>Retry</Button>
           </div>
         )}
       </div>
 
-      <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden px-6 pt-4.5 pb-6">
+      <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden px-6 pt-4 pb-6">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <strong>Transcript</strong>
+            <SectionHeading level={3} className="inline">Transcript</SectionHeading>
             {transcript && (
               <span className="ml-2.5 text-xs text-muted-foreground">
                 {transcript.language} · {transcript.provider.model} · {formatTimestamp(transcript.source.durationMs)}
@@ -144,6 +146,7 @@ export function AudioPreview({ name }: { name: string }) {
           {(transcription.state?.status === 'ready' || transcription.state?.status === 'failed' || transcription.state?.status === 'cancelled') && (
             <div className="flex items-center gap-1.5">
               <Select
+                aria-label="Transcript language"
                 value={transcription.retryLanguage}
                 onChange={(event) => transcription.setRetryLanguage(event.target.value)}
                 disabled={transcription.retryBusy}
@@ -180,36 +183,49 @@ export function AudioPreview({ name }: { name: string }) {
           </StatusMessage>
         )}
         {transcript && transcript.segments.length === 0 && (
-          <div className={`${emptyStateClass} row-start-3`}>No speech was detected.</div>
+          <EmptyState className="row-start-3">No speech was detected.</EmptyState>
         )}
         {transcript && transcript.segments.length > 0 && (
-          <div className="row-start-3 grid min-h-0 content-start gap-0.5 overflow-auto">
+          <ul className="row-start-3 m-0 grid min-h-0 list-none content-start gap-0.5 overflow-auto p-0">
             {transcript.segments.map((segment) => (
-              <button
-                key={segment.id}
-                type="button"
-                className={
-                  'grid w-full cursor-pointer grid-cols-[68px_minmax(0,1fr)] gap-3 rounded-md border-0 px-2.5 py-2 text-left [font:inherit] text-foreground' +
-                  /* Playing reads from the surface like selection — the
-                   * neutral active wash, not an accent tint; the timestamp
-                   * column already carries the accent moment. */
-                  (positionMs >= segment.startMs && positionMs < segment.endMs
-                    ? ' bg-active'
-                    : ' bg-transparent hover:bg-muted')
-                }
-                onClick={() => seek(segment.startMs)}
-              >
-                <span className="text-sm text-accent tabular-nums">{formatTimestamp(segment.startMs)}</span>
-                <span className="leading-[1.55]">{segment.text}</span>
-              </button>
+              <li key={segment.id}>
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    /* A two-column transcript row, not a label you hit: it
+                     * takes the ghost tint and the press feedback from the
+                     * primitive, then re-decides display, height, and wrap
+                     * because the segment text runs to several lines.
+                     * `text-base` restores the ambient UI size the row had
+                     * before (the Button recipe's own step is text-sm). */
+                    'grid h-auto w-full cursor-pointer grid-cols-[68px_minmax(0,1fr)] items-start gap-3 py-2 text-left text-base font-normal whitespace-normal text-foreground',
+                    /* Playing reads from the surface like selection — the
+                     * neutral active wash, not an accent tint; the timestamp
+                     * column already carries the accent moment, and it holds
+                     * under the pointer so hovering the playing row does not
+                     * demote it to the plain hover tint. */
+                    positionMs >= segment.startMs && positionMs < segment.endMs && 'bg-active hover:bg-active',
+                  )}
+                  onClick={() => seek(segment.startMs)}
+                >
+                  <span className="text-sm text-accent tabular-nums">{formatTimestamp(segment.startMs)}</span>
+                  <span className="leading-snug">{segment.text}</span>
+                </Button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </div>
   );
 }
 
+/* Two one-surface layout recipes for THIS preview, named so the three
+ * hint lines and the two transcript state rows cannot drift apart from
+ * each other. Neither is a component: the hint is a bare line of muted
+ * text under the player (once tinted `text-destructive` for the fallback
+ * warning), and the transcript row is a className handed to
+ * `StatusMessage`, which already owns the element. */
 const HINT_CLASS = 'mt-1.5 flex items-center gap-2 text-xs text-muted-foreground';
 const TRANSCRIPT_STATE_CLASS = 'flex items-center justify-between gap-3 px-3 py-2.5';
 

@@ -2,6 +2,7 @@ import { useReducer } from 'react';
 import { useDesktopUpdate } from '@/common/hooks/useDesktopUpdate';
 import { CloseIcon } from '@/common/components/icons';
 import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
 
 const DISMISS_KEY = 'stashbase.update-banner-dismissed';
 
@@ -81,9 +82,13 @@ export function DesktopUpdateBanner() {
     <div className="relative flex-none">
       <section
         aria-label="Application update"
-        className="absolute inset-x-1.5 bottom-1.5 z-30 rounded-xl border border-border bg-card px-3 py-2.5 text-xs leading-snug shadow-elevation"
+        className="absolute inset-x-1.5 bottom-1.5 z-banner rounded-xl border border-border bg-popover px-3 py-2.5 text-xs leading-snug shadow-elevation"
       >
-        <div className="pr-5 font-semibold text-foreground">{title}</div>
+        {/* The card's title, so a heading. The region keeps its own stable
+          * `aria-label`: the heading text names the VERSION and the phase and
+          * changes under the user, which is exactly what a landmark name must
+          * not do. */}
+        <SectionHeading level={2} className="pr-5 text-xs">{title}</SectionHeading>
         {state.phase === 'error' && state.message && (
           <div className="mt-0.5 pr-5 text-muted-foreground">{state.message}</div>
         )}

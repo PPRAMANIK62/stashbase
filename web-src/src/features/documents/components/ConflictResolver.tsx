@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { computeLineDiff } from '@/store/lib/conflictDiff';
 import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
+import { cn } from '@/common/lib/utils';
 
 export function ConflictResolver({ tabId }: { tabId: string }) {
   const { tabs } = useWorkspace();
@@ -31,9 +33,9 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
       {/* Banner bar */}
       <div className="flex items-center justify-between border-b border-muted bg-accent/5 px-4 py-3 shrink-0">
         <div className="min-w-0 flex-1">
-          <h3 id={`conflict-title-${tabId}`} className="text-sm font-semibold truncate text-foreground">
+          <SectionHeading level={3} id={`conflict-title-${tabId}`} className="truncate text-sm">
             Conflict detected in {fileName}
-          </h3>
+          </SectionHeading>
           <p className="text-xs text-muted-foreground mt-0.5">
             This file has been modified on disk by another program or agent. Choose how to resolve the conflict.
           </p>
@@ -70,7 +72,7 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
       <div className="flex-1 overflow-auto font-mono text-xs select-text">
         <table className="w-full border-collapse table-fixed min-w-[800px]">
           <thead>
-            <tr className="sticky top-0 bg-muted/20 border-b border-muted font-sans font-semibold text-muted-foreground text-[10px] uppercase tracking-wider select-none">
+            <tr className="sticky top-0 bg-muted/20 border-b border-muted font-sans font-semibold text-muted-foreground text-2xs uppercase tracking-wider select-none">
               <th className="w-12 border-r border-muted/30 py-1.5 bg-background"></th>
               <th className="w-[calc(50%-24px)] text-left pl-3 py-1.5 bg-background">On Disk (Newer)</th>
               <th className="w-12 border-l border-muted border-r border-muted/30 py-1.5 bg-background"></th>
@@ -93,19 +95,19 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
               return (
                 <tr key={idx} className="border-b border-muted/10 hover:bg-muted/5 leading-relaxed">
                   {/* Left Line Num */}
-                  <td className="w-12 select-none border-r border-muted/30 text-right pr-2 text-[10px] text-muted-foreground/60 py-0.5 font-light align-top bg-muted/5">
+                  <td className="w-12 select-none border-r border-muted/30 text-right pr-2 text-2xs text-muted-foreground/60 py-0.5 font-light align-top bg-muted/5">
                     {row.diskLineNumber ?? ''}
                   </td>
                   {/* Left Content (Disk Version) */}
-                  <td className={`pl-3 pr-2 py-0.5 whitespace-pre-wrap break-all align-top ${leftBg}`}>
+                  <td className={cn('pl-3 pr-2 py-0.5 whitespace-pre-wrap break-all align-top', leftBg)}>
                     {row.diskText ?? ''}
                   </td>
                   {/* Right Line Num */}
-                  <td className="w-12 select-none border-l border-muted border-r border-muted/30 text-right pr-2 text-[10px] text-muted-foreground/60 py-0.5 font-light align-top bg-muted/5">
+                  <td className="w-12 select-none border-l border-muted border-r border-muted/30 text-right pr-2 text-2xs text-muted-foreground/60 py-0.5 font-light align-top bg-muted/5">
                     {row.editorLineNumber ?? ''}
                   </td>
                   {/* Right Content (Editor/Your Version) */}
-                  <td className={`pl-3 pr-2 py-0.5 whitespace-pre-wrap break-all align-top ${rightBg}`}>
+                  <td className={cn('pl-3 pr-2 py-0.5 whitespace-pre-wrap break-all align-top', rightBg)}>
                     {row.editorText ?? ''}
                   </td>
                 </tr>

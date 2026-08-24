@@ -9,8 +9,8 @@
   align-items: center;
   justify-content: center;
   color: var(--accent);
-  font-size: calc(16px * var(--ui-scale));
-  z-index: 100;
+  font-size: var(--text-xl);
+  z-index: var(--layer-veil);
 }
 
 .drop-veil.hot {

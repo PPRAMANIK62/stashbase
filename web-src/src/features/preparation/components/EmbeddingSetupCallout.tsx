@@ -21,6 +21,7 @@
  * waved off. A dismiss here would only hide the calm route and leave the
  * interrupting one.
  */
+import { Button } from '@/common/components/ui/button';
 import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
 import { isEmbeddingAuthorized } from '@/common/lib/embeddingAuth';
 import { useEmbedderState } from '@/common/hooks/useEmbedderState';
@@ -42,11 +43,16 @@ export default function EmbeddingSetupCallout() {
     // tree squeezes this to nothing.
     <div className="mx-1.5 mb-1 flex flex-none items-center gap-2 px-2 py-1 text-xs leading-snug text-muted-foreground">
       <span className="min-w-0 flex-1 truncate">AI Index isn’t enabled</span>
-      <button
-        type="button"
-        className="flex-none cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent underline underline-offset-2"
+      {/* `size="xs"` for the type step only — the band's own padding places
+        * the control, so height and padding come back off. Accent rather
+        * than the link variant's primary: this is the one accent in the
+        * strip. */}
+      <Button
+        variant="link"
+        size="xs"
+        className="h-auto flex-none cursor-pointer border-0 p-0 font-semibold text-accent underline underline-offset-2"
         onClick={openEmbeddingSetup}
-      >Set up</button>
+      >Set up</Button>
     </div>
   );
 }

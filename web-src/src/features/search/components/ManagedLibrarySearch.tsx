@@ -4,7 +4,7 @@ import type { LibrarySearchMode, LibrarySearchPrefill } from '@/common/lib/libra
 import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
 import { basename } from '@/common/lib/paths';
 import { cn } from '@/common/lib/utils';
-import { emptyStateClass } from '@/common/lib/emptyState';
+import { EmptyState } from '@/common/components/ui/empty-state';
 import { fileGlyphFormat } from '@/common/lib/fileGlyphFormat';
 import { folderMenuEntries } from '@/common/lib/libraryScope';
 import { ScopeMenu } from '@/common/components/ScopeMenu';
@@ -38,16 +38,23 @@ import { SemanticHitRow } from '@/features/search/components/SemanticHitRow';
  * no context to preserve there.
  */
 
+/* The results scroller's inset, named once because the semantic and the
+ * keyword branch each render their own list and the two must not drift
+ * apart. Two padding utilities are not a component. */
 const HIT_LIST_CLASS = 'px-1.5 py-1';
 
 /** Search-mode segments: the primitive's chunky pressed treatment (bold +
- *  raised shadow) turned down to a quiet swap of surface and colour. */
+ *  raised shadow) turned down to a quiet swap of surface and colour. It is
+ *  a className on `SegmentedControlItem`, which already owns the control —
+ *  this is the turn-down, not a control of its own. */
 const SEARCH_MODE_SEGMENT_CLASS =
   'px-2 py-0.5 text-xs font-normal data-pressed:font-normal data-pressed:shadow-none';
 
 /** Folder band above each group — the quiet section-strip treatment the
  *  sidebar uses, so "this run of results lives here" reads as structure
- *  rather than as another result. */
+ *  rather than as another result. A `<div>` with one text child in two
+ *  branches of this file: a component would add an element that forwards
+ *  a string. */
 const FOLDER_HEADER_CLASS =
   'sticky top-0 z-1 -mx-1.5 bg-card/95 px-4 pt-2 pb-1 text-xs font-medium text-muted-foreground backdrop-blur-sm';
 
@@ -73,7 +80,7 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
   /** Muted centered notice filling the results area (loading, errors,
    *  no matches); `flex-col items-center` keeps multi-line copy stacked. */
   function renderEmpty(children: ReactNode) {
-    return <div className={cn(emptyStateClass, 'flex-col items-center')}>{children}</div>;
+    return <EmptyState className="flex-col items-center">{children}</EmptyState>;
   }
 
   function renderKeywordResults(): ReactNode {
@@ -117,7 +124,7 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
                     title={`Line ${match.line}`}
                     {...rowProps(index)}
                   >
-                    <span className="min-w-6.5 shrink-0 text-right text-muted-foreground tabular-nums select-none">{match.line}</span>
+                    <span className="min-w-6 shrink-0 text-right text-muted-foreground tabular-nums select-none">{match.line}</span>
                     <span className="min-w-0 flex-1 truncate text-foreground [&_mark]:rounded-xs [&_mark]:bg-accent-amber/30 [&_mark]:px-px [&_mark]:text-inherit">
                       {highlightRanges(match.text, match.ranges)}
                     </span>
@@ -189,7 +196,7 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
 
   return (
     <div
-      className={`library-search-veil quick-open-blocking ${PICKER_VEIL_CLASS}`}
+      className={cn('library-search-veil quick-open-blocking', PICKER_VEIL_CLASS)}
       role="presentation"
       onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
       // Escape must dismiss from ANY focus inside the popup — the mode
@@ -214,12 +221,19 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
           * how much came back, and a live count next to the caret is
           * movement the eye must ignore on every keystroke. */}
         <div className="flex items-center gap-1 border-b border-border pr-3">
+          {/* Deliberately NOT the `Input` primitive — same exemption as Quick
+            * Open. `Input` is the box role (own fill, border, container
+            * corner, h-9); this field is a seam across the top of the panel,
+            * and the panel is the box AND the focus affordance. Its
+            * `overflow-hidden` corners clip a focus ring into a stray bar,
+            * which is why `.library-search-veil input:focus-visible` in
+            * `web-src/src/styles/globals.css` is unlayered. */}
           <input
             ref={inputRef}
             /* Placeholder at 55% of muted: at this 20px size a full-strength
                muted line reads as typed text and the empty popup looks
                pre-filled. */
-            className="min-w-0 flex-1 border-0 bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder"
+            className="min-w-0 flex-1 border-0 bg-transparent px-3.5 py-3.5 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder"
             role="combobox"
             aria-autocomplete="list"
             aria-controls="library-search-results"

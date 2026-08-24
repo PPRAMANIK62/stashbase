@@ -12,7 +12,6 @@ export interface ModalShellProps {
   /** Tighter column for short, choice-style dialogs (e.g. the indexing
    *  setup gate) where the default width lets prose run long. */
   narrow?: boolean;
-  top?: boolean;
   children?: ReactNode;
 }
 

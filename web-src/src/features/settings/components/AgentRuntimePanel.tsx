@@ -17,8 +17,11 @@ import {
   MenuPositioner,
   MenuTrigger,
 } from '@/common/components/ui/menu';
+import { Field, FieldLabel } from '@/common/components/ui/field';
 import { Select } from '@/common/components/ui/select';
 import { StatusMessage } from '@/common/components/ui/status';
+import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
+import { Badge } from '@/common/components/ui/badge';
 
 export function AgentRuntimePanel() {
   const {
@@ -35,11 +38,11 @@ export function AgentRuntimePanel() {
 
   return (
     <div>
-      <div className="mb-1 text-base font-semibold">Agent runtimes</div>
-      <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
+      <SectionHeading level={3} className="mb-1">Agent runtimes</SectionHeading>
+      <SectionDescription className="mb-2.5">
         StashBase uses an existing system Agent when available, or runs the provider’s official installer on first New Chat — the installed CLI also works from your terminal.
-      </div>
-      <div className="overflow-hidden rounded-lg border border-border bg-background">
+      </SectionDescription>
+      <ul className="m-0 list-none overflow-hidden rounded-lg border border-border bg-background p-0">
         {AGENTS.map((definition) => {
           const runtime = agents.find((candidate) => candidate.id === definition.id);
           const phase = runtime?.bootstrap?.phase;
@@ -48,7 +51,7 @@ export function AgentRuntimePanel() {
           const action = runtimeAction(runtime, working);
           const Icon = definition.Icon;
           return (
-            <div key={definition.id} className="flex items-center gap-3 border-t border-border px-3 py-2.5 first:border-t-0">
+            <li key={definition.id} className="flex items-center gap-3 border-t border-border px-3 py-2.5 first:border-t-0">
               <span className="inline-grid size-7 flex-none place-items-center rounded-md border border-border bg-pane [&_svg]:size-4"><Icon /></span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-base font-semibold text-foreground">{definition.launcherLabel}</span>
@@ -90,25 +93,27 @@ export function AgentRuntimePanel() {
                   </MenuPortal>
                 </Menu>
               )}
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
       {debug.enabled && (
         <section className="mt-5 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <div className="text-base font-semibold">Agent bootstrap testing</div>
-            <span className="rounded-xs border border-status-warning/30 bg-background px-1.5 py-0.5 text-2xs font-semibold tracking-wide text-status-warning uppercase">
-              Development only
-            </span>
+            <SectionHeading level={4}>Agent bootstrap testing</SectionHeading>
+            <Badge tone="warning">Development only</Badge>
           </div>
           <p className="mt-0 mb-3 text-sm leading-normal text-muted-foreground">
             These development-only controls change discovery inside StashBase. They never uninstall a global Agent or clear provider credentials.
           </p>
-          <label className="flex items-center justify-between gap-3 text-sm text-foreground">
-            <span>Discovery source</span>
+          {/* Explicit `htmlFor`, not a wrapping label: `AgentDebugSelect`
+            * nests its `select` inside a caret wrapper, so the implicit
+            * association depended on that markup staying a subtree. */}
+          <Field className="flex-row items-center justify-between gap-3">
+            <FieldLabel htmlFor="agent-debug-discovery-policy" className="text-sm font-normal">Discovery source</FieldLabel>
             <AgentDebugSelect
+              id="agent-debug-discovery-policy"
               value={debug.discoveryPolicy}
               disabled={busy != null}
               onChange={(event) => void updateDebug({ discoveryPolicy: event.target.value as AgentDiscoveryPolicy })}
@@ -117,10 +122,11 @@ export function AgentRuntimePanel() {
               <option value="managed-only">Managed only</option>
               <option value="system-only">System only</option>
             </AgentDebugSelect>
-          </label>
-          <label className="mt-3 flex items-center justify-between gap-3 text-sm text-foreground">
-            <span>Next setup result</span>
+          </Field>
+          <Field className="mt-3 flex-row items-center justify-between gap-3">
+            <FieldLabel htmlFor="agent-debug-next-failure" className="text-sm font-normal">Next setup result</FieldLabel>
             <AgentDebugSelect
+              id="agent-debug-next-failure"
               value={debug.nextFailure}
               disabled={busy != null}
               onChange={(event) => void updateDebug({ nextFailure: event.target.value as AgentSetupFailureSimulation })}
@@ -130,13 +136,14 @@ export function AgentRuntimePanel() {
               <option value="authentication">Signed-out Codex</option>
               <option value="mcp">Fail MCP connection</option>
             </AgentDebugSelect>
-          </label>
+          </Field>
           <p className="mt-2 mb-0 text-xs leading-normal text-muted-foreground">
             The failure is injected once, then resets to Normal. Installation failure applies only when setup reaches an install; reset first run to test it with an existing runtime. Signed-out applies when Codex setup reaches its sign-in check; Claude has no setup sign-in gate — test its signed-out state with Auth token expired below, in a Claude chat.
           </p>
-          <label className="mt-3 flex items-center justify-between gap-3 text-sm text-foreground">
-            <span>Next turn result</span>
+          <Field className="mt-3 flex-row items-center justify-between gap-3">
+            <FieldLabel htmlFor="agent-debug-next-turn-failure" className="text-sm font-normal">Next turn result</FieldLabel>
             <AgentDebugSelect
+              id="agent-debug-next-turn-failure"
               value={debug.nextTurnFailure}
               disabled={busy != null}
               onChange={(event) => void updateDebug({ nextTurnFailure: event.target.value as AgentTurnFailureSimulation })}
@@ -148,7 +155,7 @@ export function AgentRuntimePanel() {
               <option value="network">Network unreachable</option>
               <option value="crash">Runtime crash</option>
             </AgentDebugSelect>
-          </label>
+          </Field>
           <p className="mt-2 mb-0 text-xs leading-normal text-muted-foreground">
             Applies to the next prompt sent in any open chat, once. The prompt never reaches the native runtime; Runtime crash ends that session like a real process exit.
           </p>
