@@ -5,10 +5,12 @@
  * (see `code-review/renderer-architecture.md`), so they cover this feature's
  * surfaces only; other features assert their own.
  */
+import '@/common/__tests__/domEnvironment';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import React, { createElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { appActions as stubActions, appState, mountApp, withDom } from '@/common/__tests__/renderHarness';
 import { FileTree } from '@/features/workspace/components/FileTree';
 import { TabStrip } from '@/features/workspace/components/TabStrip';
 import { AppProviders, type AppActions } from '@/store/contexts/AppContext';
@@ -43,29 +45,52 @@ function byRole(root: ReactTestInstance, role: string): ReactTestInstance[] {
   return root.findAll((node) => node.props.role === role);
 }
 
+/**
+ * The tab strip is asserted against a real DOM rather than against React
+ * props: it moves focus by id and reads `document.activeElement`, which a
+ * renderer with no elements cannot answer. This is also the test that holds
+ * the strip's keyboard contract in place — the strip stays off the shared
+ * `Tabs` primitive for bundle reasons (see `TabStrip.tsx`), so nothing else
+ * guarantees it behaves like the tab sets that are on it.
+ */
 test('document tabs expose their selected tab and named close action', async () => {
   const first = makeTab();
   first.file = { name: 'First.md', format: 'md', content: '' };
   const second = makeTab();
   second.file = { name: 'Second.md', format: 'md', content: '' };
-  const activated: string[] = [];
-  const renderer = await renderWithState(
-    { ...initialState, workspace: { ...initialState.workspace, tabs: [first, second], activeTabId: first.id } },
-    createElement(TabStrip),
-    actions({ activateTab: async (id) => { activated.push(id); } }),
-  );
 
-  assert.equal(byRole(renderer.root, 'tablist')[0]?.props['aria-label'], 'Open documents');
-  const tabs = byRole(renderer.root, 'tab');
-  assert.deepEqual(tabs.map((tab) => tab.props['aria-selected']), [true, false]);
-  assert.deepEqual(tabs.map((tab) => tab.props.tabIndex), [0, -1]);
-  assert.deepEqual(tabs.map((tab) => tab.props['aria-controls']), ['document-panel', 'document-panel']);
-  const close = renderer.root.findAll((node) => node.type === 'button' && node.props['aria-label'] === 'Close First.md');
-  assert.equal(close.length, 1);
+  await withDom(async (dom) => {
+    const activated: string[] = [];
+    await mountApp(dom, createElement(TabStrip), {
+      state: appState({ workspace: { tabs: [first, second], activeTabId: first.id } }),
+      actions: stubActions({ activateTab: async (id) => { activated.push(id); } }),
+    });
 
-  await act(async () => tabs[1].props.onKeyDown({ key: 'Enter', preventDefault() {} }));
-  assert.deepEqual(activated, [second.id]);
-  await act(async () => renderer.unmount());
+    assert.equal(dom.byRole('tablist')[0]?.getAttribute('aria-label'), 'Open documents');
+    const tabs = dom.byRole('tab');
+    assert.deepEqual(tabs.map((tab) => tab.getAttribute('aria-selected')), ['true', 'false']);
+    // Roving tabindex: one tab stop for the whole strip.
+    assert.deepEqual(tabs.map((tab) => tab.tabIndex), [0, -1]);
+    // Every tab points at the ONE panel MainPane renders, which names the
+    // active tab back through this id — not at a per-tab panel.
+    assert.deepEqual(tabs.map((tab) => tab.getAttribute('aria-controls')), ['document-panel', 'document-panel']);
+    assert.deepEqual(tabs.map((tab) => tab.id), [`document-tab-${first.id}`, `document-tab-${second.id}`]);
+    assert.equal(dom.byLabel('Close First.md').length, 1);
+    // The New-tab control is deliberately NOT one of the tabs.
+    assert.equal(dom.byRole('tablist')[0]?.contains(dom.byLabel('New tab')[0]), false);
+
+    await dom.fire(tabs[1], new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    assert.deepEqual(activated, [second.id]);
+
+    // Moving the caret SELECTS as it goes, matching the chat session strip
+    // (which opts into Base UI's `activateOnFocus`; the primitive does not
+    // default it, and Settings deliberately leaves it off). This strip is
+    // hand-rolled, so this assertion is the only thing holding it to that.
+    activated.length = 0;
+    tabs[0].focus();
+    await dom.fire(tabs[0], new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    assert.deepEqual(activated, [second.id]);
+  });
 });
 
 test('file explorer exposes expandable and selected items plus named edit fields', async () => {
