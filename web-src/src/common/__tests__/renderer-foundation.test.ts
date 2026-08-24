@@ -482,6 +482,10 @@ const NOT_A_SPACING_DECISION = /shadow|^font(-size)?$|^--text-|^--(ui|reading)-f
  * is precisely the reasoning that produced px-2.25 and py-1.75.
  */
 const CSS_OFF_RAMP_EXEMPTIONS: Record<string, { values: string[]; why: string }> = {
+  'common/styles/tree.css': {
+    values: ['3px', '3px'],
+    why: 'The tree row’s vertical padding is the largest value that keeps `min-height: 28px` the thing that DECLARES the row height. The line box is 20.15px at the default interface size and 21.7px at Large, so 3+20.15+3 and 3+21.7+3 both stay under 28 and every row lands on a whole pixel; the ramp’s 4 makes the content box 28.15px, which wins over the min-height and leaves each row a fraction taller than the last one’s offset. Not an amount of air: it is 28 minus the tallest line box the size preference can produce, halved.',
+  },
   'features/workspace/workspace.css': {
     values: ['-3px'],
     why: 'The sidebar splitter’s `margin-left` is -width/2, the offset that straddles its 6px grab area evenly across the sidebar/main boundary that `left` puts it on. Not an amount of air: any other value hands more of the grab zone to one pane than the other.',

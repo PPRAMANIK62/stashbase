@@ -17,15 +17,21 @@
   align-items: center;
   gap: 4px;
   min-height: 28px;
-  /* 4, not the 3 this carried: the row's height is DECLARED by
-   * `min-height: 28px` and the padding is only the floor under
-   * over-tall content, so at the default and small interface sizes
-   * (18.9px and 17px of line box) nothing moves — 4 + 18.9 + 4 is
-   * still under 28. Snapping down to the 2px half-step instead would
-   * have removed air that exists today at Large, where the line box
-   * reaches 21.7px and the padding is what keeps the label off the
-   * pill's edge. */
-  padding: 4px 8px 4px 0;
+  /* 3, off the ramp on purpose, and pinned in
+   * `CSS_OFF_RAMP_EXEMPTIONS`. This is not an amount of air: it is the
+   * largest padding that leaves `min-height` the thing DECLARING the
+   * row height. The line box is 20.15px here and 21.7px at Large, so
+   * 3+20.15+3 and 3+21.7+3 both stay under 28 and every row is exactly
+   * 28px tall.
+   *
+   * The ramp's 4 makes the content box 28.15px, which beats the
+   * min-height — so rows go fractional and each one's top carries the
+   * accumulated remainder. That is not only a blurry pill: the file
+   * tree's drop target splits at the row's midpoint, and a midpoint
+   * that is no longer on a whole pixel resolves a drop AT the middle to
+   * the wrong side. `real pointer drag reorders root files` is the
+   * regression test. */
+  padding: 3px 8px 3px 0;
   cursor: pointer;
   border-left: 2px solid transparent;
   border-radius: var(--radius-ui);
