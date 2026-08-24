@@ -46,3 +46,14 @@ test('electron-builder includes local CommonJS dependencies outside electron/', 
     `package.json build.files omits Electron runtime dependencies:\n${missing.join('\n')}`,
   );
 });
+
+test('Windows extractor build wires PyInstaller hide-console without switching off stderr', () => {
+  const source = fs.readFileSync(path.join(root, 'scripts', 'build-python-sidecar.mjs'), 'utf8');
+
+  assert.match(
+    source,
+    /const extractorConsoleArgs = process\.platform === 'win32'[\s\S]*?'--hide-console',[\s\S]*?'hide-early'/,
+  );
+  assert.match(source, /'stashbase-extract',\s*\.\.\.extractorConsoleArgs,/);
+  assert.doesNotMatch(source, /'--(?:no)?console'/);
+});
