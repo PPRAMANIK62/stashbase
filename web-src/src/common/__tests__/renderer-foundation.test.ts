@@ -125,7 +125,7 @@ test('chrome type scale and radius scale are the only visual values', () => {
   // moving to a new feature folder without silently going stale.
   const walkCss = (dir: string): string[] =>
     fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((entry) => {
-      const rel = path.join(dir, entry.name);
+      const rel = `${dir}/${entry.name}`;
       if (entry.isDirectory()) return entry.name === '__tests__' ? [] : walkCss(rel);
       return entry.name.endsWith('.css') ? [rel] : [];
     });
@@ -141,7 +141,7 @@ test('chrome type scale and radius scale are the only visual values', () => {
   // scan could not see it.
   const walkSources = (dir: string): string[] =>
     fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((entry) => {
-      const rel = path.join(dir, entry.name);
+      const rel = `${dir}/${entry.name}`;
       if (entry.isDirectory()) return entry.name === '__tests__' ? [] : walkSources(rel);
       return /\.tsx?$/.test(entry.name) ? [rel] : [];
     });
@@ -296,9 +296,19 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
 const stripComments = (source: string): string =>
   source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
+/** Every walked path is repo-relative and POSIX-separated on EVERY
+ * platform, which is why these join with `/` rather than `path.join`.
+ *
+ * The exemption tables below are keyed by path, and a key is written the
+ * way the repo spells it — `features/workspace/workspace.css`. Under
+ * `path.join` a Windows runner produced `features\workspace\workspace.css`,
+ * so every lookup missed and one file was reported BOTH as carrying an
+ * unexempted value and as a stale exemption in the same run. `read()`
+ * takes forward slashes on Windows, so nothing is lost by keeping one
+ * dialect; keep any new path constant in this file spelled the same way. */
 function walkFiles(dir: string, extension: string): string[] {
   return fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((entry) => {
-    const rel = path.join(dir, entry.name);
+    const rel = `${dir}/${entry.name}`;
     if (entry.isDirectory()) return entry.name === '__tests__' ? [] : walkFiles(rel, extension);
     return entry.name.endsWith(extension) ? [rel] : [];
   });
@@ -486,7 +496,7 @@ test('spacing in colocated CSS stays on the derived ramp', () => {
   const problems: string[] = [];
   for (const file of walkFiles('web-src/src', '.css')) {
     const source = stripComments(read(file));
-    const relative = path.relative(path.join('web-src', 'src'), file);
+    const relative = path.posix.relative('web-src/src', file);
     const exemption = CSS_OFF_RAMP_EXEMPTIONS[relative];
     const offRamp: string[] = [];
     for (const match of source.matchAll(/-?\d+(?:\.\d+)?px/g)) {
@@ -710,7 +720,7 @@ test('a label needs a role to land on', () => {
  * can observe.
  * ------------------------------------------------------------------- */
 
-const UI_DIR = path.join('common', 'components', 'ui');
+const UI_DIR = 'common/components/ui';
 
 /**
  * The complete set of raw `<button>`/`<input>`/`<select>`/`<textarea>`
@@ -786,7 +796,7 @@ test('no feature hand-rolls a form control the primitive layer owns', () => {
   const seen = new Set<string>();
   for (const file of walkFiles('web-src/src', '.tsx')) {
     if (file.includes(UI_DIR)) continue;
-    const relative = path.relative(path.join('web-src', 'src'), file);
+    const relative = path.posix.relative('web-src/src', file);
     const found = stripComments(read(file)).match(RAW_CONTROL) ?? [];
     const exemption = RAW_CONTROL_EXEMPTIONS[relative];
     if (!exemption) {
@@ -877,7 +887,7 @@ test('the renderer stands on one component library, behind one wrapper layer', (
   // feature reaching past them re-decides focus, motion, and tokens per
   // surface, which is the exact drift the wrapper layer exists to stop.
   for (const file of [...walkFiles('web-src/src', '.tsx'), ...walkFiles('web-src/src', '.ts')]) {
-    if (file.includes(path.join('common', 'components', 'ui'))) continue;
+    if (file.includes(UI_DIR)) continue;
     assert.doesNotMatch(
       stripComments(read(file)),
       /from ['"]@base-ui\/react/,

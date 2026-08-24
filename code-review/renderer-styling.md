@@ -930,6 +930,15 @@ survives a file moving to a new feature folder) for a literal
 `border-radius: <n>px` other than the one sanctioned 999px capsule — a
 literal radius is the same violation as a literal colour.
 
+Every path these walks produce is repo-relative and POSIX-separated on
+every platform, and every path constant in that file is spelled the same
+way. The exemption tables below are keyed by path, and a key is written
+the way the repo spells it; joining with `path.join` instead made a
+Windows runner miss every lookup, reporting one file both as carrying an
+unexempted value and as a stale exemption in the same run while the rule
+it was meant to enforce went unchecked. A guard that only holds on the
+maintainer's platform is not a guard.
+
 Three more tests cover the ramps added since, and they exist because all
 three share a failure mode: each is cheap to bypass one component at a time
 (`z-[10001]`, `transition: .12s`, `px-2.25`), every bypass looks locally
