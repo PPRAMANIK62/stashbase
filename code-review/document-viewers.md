@@ -57,6 +57,12 @@ forwarding, and script confinement.
 - DOCX fetches source bytes, parses in a renderer Worker, sanitizes output, and
   falls back to durable prepared HTML after a `20 s` direct-preview deadline.
   Server preparation has its own `60 s` worker deadline.
+- Local HTML is served with the viewer bootstrap the frame needs — heading
+  ids, anchor scroll, the in-frame Find half, external-link forwarding, and a
+  neutral scrollbar rule. Injected chrome is a default, not an override: it
+  precedes the document's own styles and carries no `!important`, so a page
+  that styles its scrollbars keeps them. None of it reaches the indexed
+  plaintext.
 - Image viewing uses the shared lightbox and never turns the preview into an
   editable managed asset.
 - Audio and supported video use a compatible playback preview when necessary,
