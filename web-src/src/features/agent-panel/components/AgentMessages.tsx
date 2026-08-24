@@ -7,6 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/common/components/ui/button';
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@/common/components/ui/collapsible';
 import { AgentMarkdown } from '@/features/agent-panel/components/AgentMarkdown';
 import { ChevronDownIcon, CopyIcon, MoreHorizontalIcon } from '@/common/components/icons';
 import { Menu, type MenuItem } from '@/common/components/Menu';
@@ -236,7 +237,15 @@ function TurnBody({ blocks, liveBlockId, streaming, meta, handlers: h }: {
  * folded under a single "Worked for X" (or "You stopped after X") header, the
  * way Codex presents a completed turn. Collapsed by default once the turn is
  * done (the answer below carries the result); an interrupted turn opens by
- * default since it has no answer. The user can toggle it either way. */
+ * default since it has no answer. The user can toggle it either way.
+ *
+ * A real disclosure, not a button that happens to toggle a sibling: the
+ * `Collapsible` primitive points the trigger's `aria-controls` at the
+ * panel it actually reveals. The trigger is sized to its own label — the
+ * summary IS the control — so the hover surface hugs the words instead of
+ * washing the full transcript width, which is what a `w-full` ghost row
+ * did. The rule stays on the header wrapper, so it still spans the column
+ * and still sits between the header and whatever the panel reveals. */
 function WorkTrace({ blocks, meta, handlers, defaultOpen = false }: {
   blocks: Block[];
   meta?: TurnMeta;
@@ -246,18 +255,24 @@ function WorkTrace({ blocks, meta, handlers, defaultOpen = false }: {
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen ?? defaultOpen;
   return (
-    <section className="agent-worktrace">
-      <Button
-        variant="ghost"
-        className="h-auto w-full justify-start gap-1.5 rounded-none border-b border-border/85 px-0 pt-0.5 pb-2 text-left text-base font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
-        onClick={() => setUserOpen((value) => !(value ?? defaultOpen))}
-        aria-expanded={open}
-      >
-        <span className="agent-worktrace-label">{workTraceLabel(meta)}</span>
-        <ChevronDownIcon className={cn('size-3 shrink-0 opacity-70 transition-transform duration-fast ease-out', !open && '-rotate-90')} />
-      </Button>
-      {open && <div className="flex flex-col gap-2.5 pt-2.5">{renderReplyBlocks(blocks, null, handlers)}</div>}
-    </section>
+    <Collapsible
+      open={open}
+      onOpenChange={(next) => setUserOpen(next)}
+      render={<section className="agent-worktrace" />}
+    >
+      <div className="border-b border-b-border/85 pt-0.5 pb-2">
+        <CollapsibleTrigger
+          render={<Button variant="ghost" />}
+          className="-mx-1.5 h-auto w-fit max-w-full justify-start gap-1.5 px-1.5 py-0.5 text-left text-base font-normal text-muted-foreground"
+        >
+          <span className="agent-worktrace-label">{workTraceLabel(meta)}</span>
+          <ChevronDownIcon className={cn('size-3 shrink-0 opacity-70 transition-transform duration-fast ease-out', !open && '-rotate-90')} />
+        </CollapsibleTrigger>
+      </div>
+      <CollapsiblePanel className="flex flex-col gap-2.5 pt-2.5">
+        {renderReplyBlocks(blocks, null, handlers)}
+      </CollapsiblePanel>
+    </Collapsible>
   );
 }
 

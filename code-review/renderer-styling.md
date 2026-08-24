@@ -257,11 +257,18 @@ this file records the mechanics a change must respect.
    markup somewhere else. Colocated CSS writes the ramp step as a px
    literal, which is what the spacing guard reads.
 5. **Primitives** (`web-src/src/common/components/ui/`) — shadcn adapters
-   over Base UI: button, input, textarea, select, checkbox,
+   over Base UI: button, input, textarea, select, checkbox, collapsible,
    segmented-control, tabs, field, label, progress, dialog, alert-dialog,
    menu (+ `menu-radio`), popover, toast, tooltip, status, plus the
    non-Base-UI recipes badge, card, section, empty-state, pill, and
-   menu-option. Part names follow the
+   menu-option. `collapsible` earns its place on the WIRING, not the
+   toggle: its trigger carries `aria-controls` for the panel it reveals,
+   where a `<button aria-expanded>` beside a conditionally rendered `div`
+   announces that something expanded without saying what. Its trigger is a
+   bare part — pass `Button` through `render` — so a disclosure header
+   stays a control the size of its own label rather than a full-bleed row
+   that lights up under a pointer nowhere near it; the rule that spans the
+   column belongs to the header's wrapper, not to the control. Part names follow the
    shadcn registry (`TabsList`/`TabsTrigger`/`TabsContent`,
    `FieldSet`/`FieldLegend`/`Field`/`FieldLabel`, `Progress`/`ProgressTrack`/
    `ProgressIndicator`) with this repo's tokens substituted for the
