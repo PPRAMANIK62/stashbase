@@ -16,8 +16,10 @@
  *      .agent-turn`, and `.agent-turn-head:has(.agent-turn-edit)`
  *      (which `renderer-foundation.test.ts` also pins by name).
  *   3. CONTENT TYPOGRAPHY — `.agent-prose` styles DOM the Markdown
- *      renderer emits, so there is no call site to put a class on, and
- *      it follows the reading voice rather than the chrome type ramp.
+ *      renderer emits, so there is no call site to put a class on. It
+ *      wears the interface face like everything else; what makes it
+ *      content is the reading size, measure and leading, not a
+ *      different typeface.
  *   4. A CONTENT PALETTE — the One-Dark diff tints. Literal on purpose:
  *      a diff is rendered in the editor's colour world, not the
  *      chrome's, so these do not resolve to theme roles.
@@ -117,20 +119,42 @@
 
 /* [3] Assistant message content typography — reading content, not
  * chrome, and styling DOM the Markdown renderer emits, so there is no
- * element to hang a utility on. The serif reading voice (three-voice
- * typography): the assistant's long-form answer invites reading,
- * distinct from the sans chrome and the sans user-turn bubble.
- * Code/inline-code stay mono (rules below). Line-height sits a touch
- * looser than sans body — serif at reading size wants the air.
+ * element to hang a utility on. Code/inline-code stay mono (rules below).
+ *
+ * This carried a SERIF reading voice, on the argument that a long-form
+ * answer invites reading and should sound different from the chrome and
+ * from the user's own turn. Two problems retired it. The stack was
+ * `ui-serif, Georgia, Cambria, serif`, and only macOS and Windows have
+ * anything in it: Linux fell through to Liberation Serif, a Times clone
+ * cut for print columns, which at 14px on a backlit panel reads as a
+ * rendering fault rather than a voice. And a serif is a strong,
+ * particular register to put under EVERY assistant reply — file lists,
+ * one-line confirmations and tool output included — when only a fraction
+ * of them are prose anyone settles in to read.
+ *
+ * So the panel speaks in the interface's own voice. Two voices, not
+ * three: Inter for chrome and content alike, mono where the content is
+ * literally code. `--font-serif` survives for the Crepe document title,
+ * where an editor's title genuinely is a different register.
+ *
+ * Line-height comes back a step from the serif's 1.65 — Inter's larger
+ * x-height needs less air to stay readable at this measure, and the old
+ * value left the paragraphs looking loosely set.
  *
  * The size is the `lg` role rather than a re-typed 14px: same number,
  * but one definition, and it keeps following the interface-size
  * preference without this file having to remember to say so. */
 .agent-prose {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-lg);
-  line-height: 1.65;
-  color: var(--fg);
+  line-height: 1.6;
+  /* The reading role, not the chrome's `--fg`. In dark mode that is a
+   * step softer, because this is the longest text in the app and primary
+   * on the canvas halates at paragraph length. See `--text-reading` in
+   * globals.css for the ratios; in light mode the two are the same value.
+   * Headings and inline code below inherit it, which is what keeps a
+   * reply reading as one voice. */
+  color: var(--text-reading);
   word-break: break-word;
 }
 .agent-prose > :first-child { margin-top: 0; }

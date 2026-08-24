@@ -24,6 +24,14 @@
       --surface-hover: #eaedf0;
       --surface-selected: #e0e5e9;
       --text-primary: #202427;
+      /* Long-form reading text, as distinct from a chrome label. The
+       * content/chrome split already exists for size, measure and
+       * leading (`--reading-font-size`, `.agent-prose`); this is the same
+       * split for colour. Deliberately asymmetric between themes: in
+       * LIGHT it is simply primary, because dark type on a light ground
+       * does not bloom, so a paragraph and a button label can share one
+       * value. The dark blocks are where it earns its keep. */
+      --text-reading: var(--text-primary);
       --text-secondary: #68737a;
       /* Placeholder text — its own role, deliberately lighter than
        * secondary. A placeholder is a hint about what to type, not content:
@@ -337,7 +345,13 @@
        * each component restating a slightly different literal. Wired into
        * Tailwind's font-* utilities in styles.css @theme. Sans carries the
        * CJK fallbacks; mono is the superset stack so no surface regresses. */
-      --font-sans: -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
+      /* Inter first — bundled with the app (see styles.css), so this
+       * resolves to the same face on macOS, Windows and Linux instead of
+       * three different system faces. The platform entries stay behind it
+       * as the load-failure path, and the CJK families stay behind THOSE
+       * because Inter carries no CJK: a Chinese run falls through to
+       * PingFang/Hiragino by unicode coverage, exactly as before. */
+      --font-sans: "Inter Variable", -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
       --font-serif: ui-serif, Georgia, Cambria, "Songti SC", serif;
       --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -360,6 +374,21 @@
       --surface-hover: #30383d;
       --surface-selected: #353f45;
       --text-primary: #edf2f3;
+      /* Reading text sits BELOW primary in dark mode. Primary on the
+       * canvas is 15.2:1 — more than double WCAG AAA — and at that ratio
+       * light type on a near-black ground halates: strokes bloom, edges
+       * buzz, and a paragraph reads as glare instead of as text. Fine
+       * for a two-word label, tiring for the longest text on screen.
+       * Editors people read in all day sit far lower (VS Code Dark+
+       * 10.4:1, Slack 11.2:1).
+       *
+       * 12.8:1 on the canvas, which also matches what the user's own turn
+       * already measures (primary on the RAISED bubble surface, 12.9:1).
+       * Before this, the agent's paragraph was the harshest text in the
+       * panel while the reader's one-word reply was gentler — backwards,
+       * and only because both borrowed the same value on different
+       * surfaces. Still comfortably past AAA (7:1). */
+      --text-reading: #d8e0e3;
       --text-secondary: #aab5ba;
       --text-placeholder: #87939a;
       --text-on-accent: #06191f;
@@ -406,6 +435,21 @@
         --surface-hover: #30383d;
         --surface-selected: #353f45;
         --text-primary: #edf2f3;
+        /* Reading text sits BELOW primary in dark mode. Primary on the
+         * canvas is 15.2:1 — more than double WCAG AAA — and at that ratio
+         * light type on a near-black ground halates: strokes bloom, edges
+         * buzz, and a paragraph reads as glare instead of as text. Fine
+         * for a two-word label, tiring for the longest text on screen.
+         * Editors people read in all day sit far lower (VS Code Dark+
+         * 10.4:1, Slack 11.2:1).
+         *
+         * 12.8:1 on the canvas, which also matches what the user's own turn
+         * already measures (primary on the RAISED bubble surface, 12.9:1).
+         * Before this, the agent's paragraph was the harshest text in the
+         * panel while the reader's one-word reply was gentler — backwards,
+         * and only because both borrowed the same value on different
+         * surfaces. Still comfortably past AAA (7:1). */
+        --text-reading: #d8e0e3;
         --text-secondary: #aab5ba;
         --text-placeholder: #87939a;
         --text-on-accent: #06191f;

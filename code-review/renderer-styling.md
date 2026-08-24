@@ -1091,7 +1091,17 @@ cross-feature, not because migrating them was skipped:
   the global token layer in both themes; they never embed a fixed palette in
   the component. Content follows `--reading-font-size` or the reading step of
   the ramp, not whatever the chrome around it is wearing, and may use its own
-  serif/mono voices. The agent panel's thinking block is NOT in this category
+  mono voice where the content is code. It does NOT get its own text face:
+  the app bundles Inter (`styles.css`) and both chrome and content wear it,
+  so a reply and the interface around it differ in size and measure, not in
+  typeface. `--font-serif` is reserved for the Crepe document title.
+
+  Colour is the one place content does diverge: long-form reading text takes
+  `--text-reading`, not the chrome's `--fg`. The two are the same value in
+  light and diverge in dark, where primary on the canvas is over 15:1 and
+  halates at paragraph length. A surface that renders a paragraph someone
+  settles in to read takes the reading role; a label, a row, a button keeps
+  primary. The agent panel's thinking block is NOT in this category
   any more — it is a meta disclosure row and a quote-barred body, both plain
   utilities at the call site.
 - **State-machine and imperative-DOM hooks**: the `.tree-row` family with
