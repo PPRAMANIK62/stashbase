@@ -41,6 +41,13 @@
  * short lines, not for the paragraphs they used to hold: type left, box
  * unchanged is what makes a trimmed card look hollow.
  *
+ * Width: both cards span the full dialog column (`w-full`). A `<button>`
+ * shrinks to fit its own text even at `display: grid`, so without it the
+ * pair sized to its longest subtitle and the two cards ended on different
+ * right edges — a ragged edge reads as two unrelated controls rather than
+ * one pair of peers, and the left-aligned stack depends on both edges
+ * being shared.
+ *
  * Corners: these are BOXES, so they take `--radius-container` (the
  * `rounded-xl` step) like the composer, the inputs, and the dialog around
  * them — not the smaller `--radius-ui` used by rows and menu items INSIDE
@@ -90,7 +97,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
           type="button"
           disabled={signInDisabled}
           onClick={onSignIn}
-          className="relative grid gap-0.5 rounded-xl border border-border bg-accent/8 px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-accent/14 enabled:active:scale-97 disabled:cursor-default"
+          className="relative grid w-full gap-0.5 rounded-xl border border-border bg-accent/8 px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-accent/14 enabled:active:scale-97 disabled:cursor-default"
         >
           <span className="text-base font-semibold leading-snug text-foreground">Sign in to StashBase</span>
           <span className="text-xs leading-snug text-muted-foreground">Free monthly AI Index usage</span>
@@ -108,7 +115,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
         <button
           type="button"
           onClick={onUseOwnKey}
-          className="grid cursor-pointer gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-control hover:border-stroke-strong hover:bg-muted active:scale-97"
+          className="grid w-full cursor-pointer gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-control hover:border-stroke-strong hover:bg-muted active:scale-97"
         >
           <span className="text-base font-semibold leading-snug text-foreground">Use your own API key</span>
           <span className="text-xs leading-snug text-muted-foreground">OpenAI or OpenRouter</span>
