@@ -158,7 +158,9 @@ export function AgentView({
           // Empty chat: the composer is the hero. The greeting bottoms out
           // this flex-[3] band and the rotating suggestion bottoms out the
           // flex-[4] band below the composer, so the input rests just above
-          // the vertical center (Cursor-style) at every panel height.
+          // the vertical center (Cursor-style) at every panel height. Only
+          // the VERTICAL placement changes on send — the composer holds one
+          // width in both states, and the transcript adopts it.
           <div key="empty-above" className="flex min-h-0 flex-[3] flex-col justify-end overflow-hidden px-2">
             <div className="mx-auto w-measure-md">
               <EmptyChatGreeting

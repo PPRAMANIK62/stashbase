@@ -118,9 +118,9 @@ export function AgentComposer({
   turnActive: boolean;
   active: boolean;
   agentShortName: string;
-  /** Empty-chat layout: AgentView centers the composer mid-panel, so the
-   * root sizes itself to the hero column instead of the `agent-composer`
-   * chat-primary width hook. Same mounted instance in both layouts. */
+  /** Empty-chat PRESENTATION only — the resting height and the one
+   * sanctioned shadow. Width is deliberately NOT part of it: both layouts
+   * mount the same instance at the same measure. */
   hero?: boolean;
   /** Empty-state starter template. Prefills the draft only — never sends. */
   prefill?: { text: string; nonce: number } | null;
@@ -192,15 +192,15 @@ export function AgentComposer({
   }
 
   return (
-    // `agent-composer` is a layout hook: the chat-primary grid rules in
-    // agent-panel.css center it to the readable transcript width. In hero
-    // mode the empty-state column (656px = 640px content + own padding)
-    // replaces that hook so the composer centers mid-panel.
-    // px-3 matches the transcript's 12px insets so the composer card and
-    // the turn cards above share one column edge (the wrapper's
-    // chat-primary width budgets for it — see `.agent-composer`).
+    // ONE geometry in both states, so sending the first message cannot
+    // resize the thing you just typed into. The empty chat sets the
+    // composer's width; the transcript then matches that card rather than
+    // the other way round (see `.agent-messages`). This is also what
+    // renderer-styling's width rule already asks for — transcript and
+    // composer share the `-md` measure — which the old chat-primary hook
+    // (a 944px wrapper around a 920px card) had drifted away from.
     <div
-      className={cn('relative', hero ? 'mx-auto w-measure-md p-2' : 'agent-composer p-2 px-3')}
+      className="relative mx-auto w-measure-md p-2"
       data-draft-empty={text.trim() ? 'false' : 'true'}
     >
       <MentionSuggestions state={suggestions} skills={skills} />

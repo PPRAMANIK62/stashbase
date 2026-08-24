@@ -41,6 +41,10 @@
 - Chat-primary and docked layouts retain the same mounted session, composer,
   draft, transcript, streaming state, attachments, scroll position, and
   remembered side-panel width.
+- The composer holds one width across empty chat and full transcript, and the
+  transcript's reading column matches that card. Sending the first message
+  changes the composer's vertical placement and resting height, never its
+  measure.
 - Opening a document docks Chat. Closing the last document expands an open
   Chat. Compact view may prioritize a newly opened document, but a subsequent
   explicit Chat reveal wins until the user changes visibility again.

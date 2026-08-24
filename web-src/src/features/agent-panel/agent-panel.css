@@ -43,25 +43,30 @@
  * / `.chat-pane-shell`, live in app/app-shell.css and
  * features/workspace/workspace.css respectively. */
 
-/* [1] One 920px reading column in EVERY layout — chat-primary and the
- * docked side panel alike. A wide panel must not turn prose into
- * panel-wide lines; a narrow one degrades to the plain 12px insets (the
- * max() floor). Keep the scroll container itself full-width and center
- * content through responsive padding so wheel/trackpad input works
- * anywhere over the transcript. No utility spells a padding that is a
- * max() of a fixed inset and half the leftover width. */
+/* [1] One reading column in EVERY layout AND every state — chat-primary,
+ * the docked side panel, empty chat and full transcript alike. A wide
+ * panel must not turn prose into panel-wide lines; a narrow one degrades
+ * to the plain 12px insets (the max() floor). Keep the scroll container
+ * itself full-width and center content through responsive padding so
+ * wheel/trackpad input works anywhere over the transcript. No utility
+ * spells a padding that is a max() of a fixed inset and half the leftover
+ * width.
+ *
+ * 624 = the composer CARD: `w-measure-md` (640) less the composer
+ * wrapper's own 8px gutters, under the app-wide border-box reset. The
+ * COMPOSER owns this number and the transcript follows it, because the
+ * composer is the one element on screen in both states — turn cards must
+ * line up with the card the user typed into. Change one, change both.
+ *
+ * This used to be 920px against a 944px composer wrapper, which meant the
+ * empty state's 624px composer grew by ~300px the instant you sent your
+ * first message. It also contradicted renderer-styling's own width rule,
+ * where the transcript and its composer share the `-md` measure. The
+ * composer no longer needs a width hook of its own — it carries
+ * `w-measure-md` in both states — so `.agent-composer` is gone. */
 .agent-messages {
-  padding-right: max(12px, calc((100% - 920px) / 2));
-  padding-left: max(12px, calc((100% - 920px) / 2));
-}
-.agent-composer {
-  /* 944 = the transcript's 920px content column + this wrapper's own
-   * 12px horizontal padding — the composer CARD, not the wrapper,
-   * must line up with the turn cards. Change one, change both. */
-  width: min(944px, 100%);
-  margin-right: auto;
-  margin-left: auto;
-  box-sizing: border-box;
+  padding-right: max(12px, calc((100% - 624px) / 2));
+  padding-left: max(12px, calc((100% - 624px) / 2));
 }
 
 /* [2] Turns breathe apart while a turn's own pieces stay close — this
