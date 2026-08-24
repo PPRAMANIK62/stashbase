@@ -34,7 +34,7 @@ function SegmentedControlItem({ className, ...props }: Toggle.Props) {
         // so the thumb has to sit exactly one pixel tighter or the two
         // curves visibly disagree. Derived, never a literal — the track
         // and thumb must move together when the scale changes.
-        "flex-1 rounded-[calc(var(--radius-md)-1px)] border-0 bg-transparent px-2.5 py-1 text-base whitespace-nowrap text-muted-foreground transition-colors outline-none select-none",
+        "flex-1 rounded-[calc(var(--radius-md)-1px)] border-0 bg-transparent px-2.5 py-1 text-base whitespace-nowrap text-muted-foreground transition-tint outline-none select-none",
         "hover:text-foreground",
         "focus-visible:relative focus-visible:z-1 focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-focus",
         "data-pressed:bg-background data-pressed:font-medium data-pressed:text-foreground data-pressed:shadow-low",

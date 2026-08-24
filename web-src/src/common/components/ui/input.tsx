@@ -15,7 +15,7 @@ function Input({ className, ...props }: InputPrimitive.Props) {
         // At h-9 the corner clamps to 18 — near enough to the container's
         // 20 that a search field and the composer read as one object family
         // at two sizes, which is the whole point of the box role.
-        "h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-base text-foreground transition-colors outline-none",
+        "h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-base text-foreground transition-tint outline-none",
         "placeholder:text-placeholder",
         "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",

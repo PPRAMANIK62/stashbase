@@ -117,7 +117,7 @@ function PopupLoadingStatus({
 
   return (
     <div
-      className="fixed inset-0 z-[100]"
+      className="fixed inset-0 z-menu"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) onCancel()
       }}
@@ -129,7 +129,7 @@ function PopupLoadingStatus({
         tabIndex={-1}
         className={cn(
           statusVariants({ tone: "info" }),
-          "absolute bg-card text-xs text-muted-foreground shadow-elevation outline-none"
+          "absolute bg-popover text-xs text-muted-foreground shadow-elevation outline-none"
         )}
         style={{ left, top }}
         onPointerDown={(event) => event.stopPropagation()}

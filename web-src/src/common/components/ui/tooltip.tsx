@@ -40,13 +40,28 @@ function TooltipContent({
         data-slot="tooltip-positioner"
         sideOffset={sideOffset}
         collisionPadding={8}
-        className="z-[1000]"
+        className="z-tooltip"
         {...props}
       >
+        {/* The same entrance grammar as the menu and the popover — fade up
+          * from 96% out of `origin-anchor` — plus one thing neither of
+          * them needs: a 4px nudge from the side it is on.
+          *
+          * The nudge earns its keep here because a tooltip is the only
+          * anchored surface with no visual attachment to its trigger. A
+          * menu or popover sits 6px off its control and lands with an
+          * edge aligned to it, so the anchored scale alone says where it
+          * came from; a tooltip floats 8px away, carries no arrow, and can
+          * appear on any of four sides, so the direction it travels is the
+          * only cue naming the control it belongs to.
+          *
+          * The exit is one role step quicker than the entrance (fast 120ms
+          * in, instant 100ms out) and drops the nudge: a tooltip leaves
+          * because the pointer has already moved on. */}
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "max-w-[min(320px,calc(100vw-16px))] rounded-md border border-border bg-popover px-2 py-1 text-sm leading-tight whitespace-normal text-popover-foreground shadow-elevation outline-none transition-[opacity,transform] duration-fast ease-ui data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 data-[side=bottom]:data-[starting-style]:-translate-y-1 data-[side=left]:data-[starting-style]:translate-x-1 data-[side=right]:data-[starting-style]:-translate-x-1 data-[side=top]:data-[starting-style]:translate-y-1",
+            "max-w-overlay-xs rounded-md border border-border bg-popover px-2 py-1 text-sm leading-tight whitespace-normal text-popover-foreground shadow-elevation outline-none origin-anchor transition-surface data-[starting-style]:scale-96 data-[starting-style]:opacity-0 data-[ending-style]:scale-96 data-[ending-style]:opacity-0 data-[ending-style]:duration-instant data-[side=bottom]:data-[starting-style]:-translate-y-1 data-[side=left]:data-[starting-style]:translate-x-1 data-[side=right]:data-[starting-style]:-translate-x-1 data-[side=top]:data-[starting-style]:translate-y-1",
             className
           )}
         >
