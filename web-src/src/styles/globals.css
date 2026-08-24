@@ -56,11 +56,15 @@
       --radius-control: 6px; /* sub-24px icon buttons */
       --radius-ui: 10px;     /* items inside a box: rows, menu items, buttons */
       /* Every bordered or filled BOX: the composer, transcript cards, code
-       * blocks, inputs, cards, panels, menus, popovers, dialogs. Short
-       * boxes clamp this to half their height and come out capsule-ended,
-       * which is correct — a search field and the composer then read as
-       * the same object family at two sizes. */
-      --radius-container: 20px;
+       * blocks, inputs, cards, panels, menus, popovers, dialogs.
+       *
+       * 16, not 20. At 20 a 36px-tall box — every Input, every small card
+       * — clamps to half its height and comes out a capsule, which
+       * contradicts the rule that capsules are RESERVED for semantics
+       * that need them (identity, status, a terminal action). At 16 a
+       * short box keeps its corner and stays a box, so the capsule shape
+       * means something again wherever it does appear. */
+      --radius-container: 16px;
       --density-gap: 4px;
       --density-control: 28px;
       --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.14);
@@ -68,6 +72,15 @@
        * is a dark room in both themes, so this lives in the base :root
        * only and neither dark block redefines it. */
       --scrim: rgba(18, 18, 20, 0.92);
+      /* The stage's own drop shadow — the one shadow that is NOT a step on
+       * the --shadow-low / --shadow-elevation / --shadow-raised chrome
+       * scale, because it does a different job: it lifts a photograph off
+       * the dark room rather than a panel off the app. Theme-static for the
+       * same reason --scrim is, which is why it spells its own rgb instead
+       * of reaching for --shadow-color (that one flips 25,34,39 → 0,0,0
+       * with the theme, and the stage never flips). Base :root only;
+       * neither dark block redefines it. */
+      --shadow-stage: 0 16px 60px rgba(0, 0, 0, 0.35);
       /* Topmost-veil dim, two strengths: --veil behind modal dialogs,
        * --veil-quiet behind the lightweight pickers (Quick Open, Editor
        * History). Deliberately theme-static like --scrim: a veil darkens
@@ -75,9 +88,167 @@
        * redefines these. */
       --veil: rgba(0, 0, 0, 0.35);
       --veil-quiet: rgba(0, 0, 0, 0.18);
-      --motion-fast: 120ms;
-      --motion-standard: 180ms;
-      --motion-ease: cubic-bezier(.2, .8, .2, 1);
+      /* Motion, split by ROLE the same way corners are. Duration answers
+       * "how long"; the curve answers "what kind of movement" — and one
+       * curve cannot serve entering, moving, and tinting alike.
+       *
+       * Durations stay under 300ms app-wide: this is a workbench, and a
+       * surface someone opens fifty times a day must never feel like it is
+       * catching up with them. */
+      --motion-instant: 100ms;  /* press feedback — must feel like contact */
+      --motion-fast: 120ms;     /* hover, tint, tooltips, small popovers */
+      --motion-standard: 180ms; /* menus, selects, disclosure */
+      --motion-slow: 240ms;     /* dialogs, drawers, whole-pane composition */
+      /* Entering AND exiting. Starts fast, so the surface is already most
+       * of the way there by the time the eye arrives — the reason an
+       * ease-out at 180ms reads quicker than an ease-in at the same 180. */
+      --motion-ease-out: cubic-bezier(.23, 1, .32, 1);
+      /* Moving or morphing something already on screen: accelerate out of
+       * the old position, decelerate into the new one. */
+      --motion-ease-in-out: cubic-bezier(.77, 0, .175, 1);
+      /* Tint-only changes (hover, selection, focus ring). Nothing travels,
+       * so a plain symmetric curve is right and a dramatic one reads as
+       * lag on a control the pointer is already sitting on. */
+      --motion-ease-hover: ease;
+      /* Default alias: a rule that just wants "the app's curve" gets the
+       * entering one. */
+      --motion-ease: var(--motion-ease-out);
+
+      /* Stacking ramp. Every z-index in the renderer comes from this list.
+       * The app previously carried seventeen unrelated values (z-5, z-90,
+       * z-1200, z-[10001]) whose only ordering contract was whoever edited
+       * last — and tooltips at 1000 genuinely rendered BEHIND menus at
+       * 1300. Roles are spaced by 100 so a surface can be slipped between
+       * two of them without renumbering the ramp.
+       *
+       * A backdrop and the surface it dims are DOM siblings, so the modal
+       * pair is two roles rather than one. */
+      --layer-raised: 1;      /* in-pane overlays: PDF layers, JSON editor */
+      --layer-sticky: 10;     /* sticky headers, find bar */
+      --layer-chrome: 20;     /* floating pane chrome, drag zones */
+      --layer-banner: 30;     /* app-level banners */
+      --layer-veil: 100;      /* drop veil, picker backdrops */
+      --layer-picker: 110;    /* Quick Open / library search panels */
+      --layer-backdrop: 200;  /* modal + lightbox backdrop */
+      --layer-modal: 210;     /* dialogs, alert dialogs, lightbox stage */
+      --layer-menu: 300;      /* menus, selects, popovers */
+      /* A dialog raised from INSIDE an open menu or popover, and its own
+       * backdrop. Both nesting directions are real and one linear order
+       * cannot serve both: a menu opened from a modal (the library
+       * search's scope pill) needs `menu` above `modal`, while a
+       * confirmation opened from a menu row (the session-history delete)
+       * needs the reverse. Flipping the ramp would only move the break to
+       * the other case, so the nested dialog gets its own pair above
+       * `menu` — which is what the 100-spacing is for.
+       *
+       * Reached through `<DialogContent layer="menu">`, never by adding a
+       * `z-` class at the call site: the primitive already spells one, and
+       * two custom `z-` utilities on one element do not merge (see
+       * `ui/dialog.tsx`). Tooltip and toast still outrank both. */
+      --layer-menu-backdrop: 310;
+      --layer-menu-modal: 320;
+      --layer-tooltip: 400;   /* above menus: a menu item may carry one */
+      --layer-toast: 500;     /* above all: may report a modal's own failure */
+
+      /* Overlay geometry: how WIDE a floating surface may grow, and how
+       * TALL a scrolling one may grow. Both were typed fresh at every call
+       * site, and the giveaway is that no two agreed — thirty-one literals
+       * carrying nine widths (320/360/376/400/420/480/620/680/760), five
+       * different ways to spell "and never outgrow the window" (90vw, 92vw,
+       * 94vw, 100%, calc(100vw - 16|24|32px)), and a min() whose arguments
+       * flipped order between neighbours (min(70vh, 560px) sixty lines from
+       * min(360px, 55vh)). None of that is a set of decisions; it is what
+       * happens when each size is picked by eye against whatever else
+       * happened to be on screen at the time.
+       *
+       * Six widths, because a floating surface is one of three things and
+       * each comes in two weights: an ANCHORED STRIP (a tooltip, which
+       * wraps a sentence, and a toast, which holds title + body + action,
+       * so the toast is deliberately the wider of the pair), a DIALOG
+       * COLUMN (default and wide), and a DOCUMENT-WIDTH PANEL (a picker or
+       * crash report, and Settings). Sizing by role is also what keeps the
+       * narrow modal meaningfully narrower than the default one: that pair
+       * had drifted to 376 vs 420, a 44px gap nobody could see and
+       * everybody had to maintain.
+       *
+       * ONE viewport clamp rather than five. A floating surface keeps a
+       * 16px margin on each side and that is the whole rule; the vw
+       * percentages it replaces (90/92/94) each said the same thing with a
+       * different rounding error. Content columns inside a pane clamp to
+       * their PARENT instead — see the measure scale below. */
+      --overlay-fit: calc(100vw - 32px);
+      --overlay-w-xs: min(320px, var(--overlay-fit));  /* tooltip */
+      --overlay-w-sm: min(360px, var(--overlay-fit));  /* toast, narrow modal */
+      --overlay-w-md: min(420px, var(--overlay-fit));  /* default modal, menu, narrow picker */
+      --overlay-w-lg: min(480px, var(--overlay-fit));  /* wide modal */
+      --overlay-w-xl: min(640px, var(--overlay-fit));  /* wide picker, crash report */
+      --overlay-w-2xl: min(760px, var(--overlay-fit)); /* Settings */
+
+      /* Max-height for a surface that scrolls. The px step is what the
+       * surface wants; `70vh` is the single answer to "and never more than
+       * this much of a short window", replacing 32/48/55/60/70vh and two
+       * calc() spellings that were all doing that one job at slightly
+       * different strengths. Arguments stay in px-then-viewport order at
+       * every step — half the old call sites wrote it the other way round,
+       * which is the clearest evidence they were typed rather than
+       * chosen. */
+      --overlay-h-xs: min(180px, 70vh);  /* a status block nested inside a modal */
+      --overlay-h-sm: min(360px, 70vh);  /* a short menu, a log excerpt */
+      --overlay-h-md: min(440px, 70vh);  /* a full menu, a picker's result list */
+      --overlay-h-lg: min(560px, 70vh);  /* a long list */
+      /* The two surfaces that take the window rather than a step. The
+       * crash panel keeps the same 16px-a-side margin the widths do; the
+       * lightbox stage additionally reserves the band its floating zoom
+       * toolbar sits in, so a tall image never slides underneath it. */
+      --overlay-h-window: calc(100vh - 32px);
+      --overlay-h-stage: calc(100vh - 108px);
+      /* The stage's width clamp, paired with the height above rather than
+       * with --overlay-fit: a photograph on a dark room wants visible room
+       * around it (32px a side), where a panel only owes the window a
+       * margin (16px). Named so the pair moves together and neither is
+       * typed at the call site. */
+      --overlay-w-stage: calc(100vw - 64px);
+
+      /* Measure — the content columns INSIDE a pane. Deliberately its own
+       * scale rather than more steps on the overlay ramp, because it
+       * answers a different question: a column is bounded by the line
+       * length a person can comfortably track and it clamps to its PARENT,
+       * so it narrows when the agent panel is dragged narrow instead of
+       * when the window is. Sharing one ramp would tie the transcript's
+       * measure to the Settings dialog's width. */
+      --measure-xs: min(180px, 100%);  /* an inline control: the audio scrubber */
+      --measure-sm: min(440px, 100%);  /* a notice card */
+      --measure-md: min(640px, 100%);  /* the agent transcript and its composer */
+      --measure-lg: min(760px, 100%);  /* a media stage */
+
+      /* Where floating pane chrome starts. The main pane hangs three
+       * absolutely-positioned things off its top edge — the Markdown edit
+       * toggle, the PDF control slot, the find bar — and each one has to
+       * clear whatever precedes it in normal flow. There are exactly two
+       * stacks, so there are exactly two offsets, and the second is DERIVED
+       * from the first rather than typed.
+       *
+       * It had been typed: `top-11`, `top-[76px]` and `top-[78px]` all
+       * claimed to answer this, and none of them survived the
+       * interface-size preference. The tab strip (35.7 / 37.6 / 40.4px)
+       * and the banner both grow with the preference; a px literal does
+       * not, so at Large the strip + banner reach 82.8px and both literals
+       * are under the chrome they were meant to clear.
+       *
+       * `4px * --ui-scale` is Tailwind's --spacing restated: that variable
+       * lives in styles.css's `@theme inline` block, which inlines its
+       * value into utilities instead of emitting it, so hand-written CSS
+       * cannot reach it by name.
+       *
+       * --chrome-top is the tab strip alone: 44px at the default scale,
+       * ~6px of air under a 37.6px strip. --chrome-banner-h is the
+       * out-of-folder identity banner's own box — 6px + a 24px xs Button +
+       * 6px, plus its 1px bottom hairline, which is the only part that
+       * does not scale. Adding them keeps the SAME ~6px of air under the
+       * banner that the bare strip gets. */
+      --chrome-banner-h: calc(4px * var(--ui-scale) * 9 + 1px);
+      --chrome-top: calc(4px * var(--ui-scale) * 11);
+      --chrome-top-banner: calc(var(--chrome-top) + var(--chrome-banner-h));
       --fg: var(--text-primary);
       --muted: var(--text-secondary);
       --bg: var(--surface-base);
@@ -121,11 +292,44 @@
        * .tabs). Derived from --fg at usage time, so the dark theme's
        * --fg override re-resolves it — no dark redefinition needed. */
       --scrollbar-thumb: color-mix(in srgb, var(--fg) 25%, transparent);
+      /* UI type scale — the ONLY chrome font sizes. Desktop-density
+       * mapping (smaller than web conventions on purpose): 2xs=10 xs=11
+       * sm=12 base=13 lg=14 xl=16 2xl=20 3xl=24 4xl=30 (4xl is
+       * display-only — warmth-budget brand moments). Every step
+       * multiplies by --ui-scale so the whole ramp follows the user's
+       * interface-size preference. Content typography (Markdown reading
+       * view, Crepe editor) is separate and follows --reading-font-size.
+       *
+       * The ramp lives HERE, in the plain `:root`, rather than in
+       * styles.css's `@theme inline` block — and that is the whole point.
+       * `@theme inline` inlines a value into the utilities it generates
+       * and never emits the variable, so with the numbers written there
+       * `var(--text-sm)` resolved to nothing in hand-written CSS: the
+       * declaration was dropped and the surface silently inherited its
+       * parent's size. styles.css now FORWARDS these names into the
+       * Tailwind namespace (`--text-sm: var(--text-sm)`), the same
+       * pattern --radius-*, --shadow-* and --font-* already use, so the
+       * `text-*` utilities and colocated `.css` reach one definition
+       * instead of two copies of nine numbers. It is also what lets
+       * electron/tab-strip-layout-smoke.cjs — which concatenates this
+       * file with workspace.css and nothing else — measure a tab strip
+       * whose font size still resolves. */
+      --text-2xs: calc(10px * var(--ui-scale));
+      --text-xs: calc(11px * var(--ui-scale));
+      --text-sm: calc(12px * var(--ui-scale));
+      --text-base: calc(13px * var(--ui-scale));
+      --text-lg: calc(14px * var(--ui-scale));
+      --text-xl: calc(16px * var(--ui-scale));
+      --text-2xl: calc(20px * var(--ui-scale));
+      --text-3xl: calc(24px * var(--ui-scale));
+      --text-4xl: calc(30px * var(--ui-scale));
       /* Body default = the primary chrome body size (13 = text-base), so
        * unstyled text lands on the same size the type-scale roles call
        * "body" instead of a phantom 14 that almost nothing else uses.
-       * (Type-scale roles: see design-docs/visual-style.md.) */
-      --ui-font-size: calc(13px * var(--ui-scale));
+       * It reaches for the role rather than restating the literal, now
+       * that the role is defined here. (Type-scale roles: see
+       * design-docs/visual-style.md.) */
+      --ui-font-size: var(--text-base);
       --ui-scale: 1;
       --reading-font-size: 14px;
       /* Three-voice typography, tokenized so every surface speaks ONE
@@ -260,10 +464,10 @@
     /* Capsules and circles opt back out: at a 50%-or-larger radius a
      * squircle is a fat superellipse, not the true capsule these
      * affordances are drawing (the transcript's jump-to-latest pill,
-     * status dots, the lightbox toolbar). */
-    .rounded-full,
-    .transcription-download-progress,
-    .transcription-download-progress > span {
+     * status dots, the progress track, the lightbox toolbar). Everything
+     * that needs the opt-out reaches it through `.rounded-full`, so this
+     * stays one selector rather than a list that drifts. */
+    .rounded-full {
       corner-shape: round;
     }
 
@@ -316,23 +520,28 @@
       outline: none;
     }
 
-    /* Palette query inputs (Quick Open / library search): the modal panel is
-     * the focus affordance, and its overflow-hidden corners clip the ring to
-     * a stray thick bar under the input — suppress the ring here. (This rule
+    /* Palette query inputs (Quick Open / library search / the link-file
+     * picker): the modal panel is the focus affordance, and its
+     * overflow-hidden corners clip the ring to a stray thick bar under the
+     * input — suppress the ring here. All three palette veils are listed;
+     * the picker renders the same seam into the same overflow-hidden panel,
+     * so leaving it out only made the defect harder to find. (This rule
      * is unlayered on purpose: the Tailwind `outline-0` utility loses to the
      * unlayered ring rule above, so an unlayered override is required.) */
     .quick-open-veil input:focus-visible,
-    .library-search-veil input:focus-visible {
+    .library-search-veil input:focus-visible,
+    .link-file-picker-veil input:focus-visible {
       outline: none;
     }
 
-    /* Session-history search is the same palette pattern — the popover panel
-     * is the focus affordance, so the field shouldn't wear a loud cyan halo
-     * the moment the menu auto-focuses it. Unlike the veils above, this input
-     * is the `Input` primitive, so suppress ALL three of its focus cues: the
-     * global outline, the focus-visible border-ring, and the ring-3 glow
-     * (a box-shadow that `outline: none` alone can't clear). Unlayered, so it
-     * beats the primitive's Tailwind utilities. */
+    /* Session-history fields — the search box and the inline row rename —
+     * are the same palette pattern: the popover panel is the focus
+     * affordance, so neither should wear a loud cyan halo the moment it is
+     * auto-focused. Unlike the veils above, both are the `Input` primitive,
+     * so suppress ALL three of its focus cues: the global outline, the
+     * focus-visible border-ring, and the ring-3 glow (a box-shadow that
+     * `outline: none` alone can't clear). Unlayered, so it beats the
+     * primitive's Tailwind utilities. */
     .session-history-popover input:focus-visible {
       outline: none;
       border-color: var(--border);

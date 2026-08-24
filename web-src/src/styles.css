@@ -46,8 +46,6 @@
   --color-accent: var(--accent);
   --color-primary: var(--accent);
   --color-primary-foreground: var(--text-on-accent);
-  --color-secondary: var(--pane);
-  --color-secondary-foreground: var(--fg);
   --color-focus: var(--focus-ring);
   --color-ring: var(--focus-ring);
   --color-destructive: var(--danger);
@@ -65,6 +63,18 @@
    * `veil` behind modal dialogs, `veil-quiet` behind the pickers. */
   --color-veil: var(--veil);
   --color-veil-quiet: var(--veil-quiet);
+  /* Spacing base. Every p-/m-/gap-/size- utility is a multiple of this,
+   * so the ramp is 4px-derived with 2px half-steps (p-0.5=2 p-1=4
+   * p-1.5=6 p-2=8 …) and nothing else is legal — the app had drifted to
+   * px-2.25, py-1.75, mt-5.5 and size-1.75, which are eyeballed values
+   * wearing scale notation.
+   *
+   * It multiplies by --ui-scale for the same reason the type ramp does.
+   * Chrome text already grew with the interface-size preference while
+   * padding stayed put, so every dense row got tighter exactly as its
+   * text got bigger. At the default scale this is identical to 4px, so
+   * it changes nothing until someone asks for Large. */
+  --spacing: calc(4px * var(--ui-scale));
   --spacing-density: var(--density-gap);
   --spacing-control: var(--density-control);
   --radius-ui: var(--radius-ui);
@@ -72,7 +82,7 @@
   --radius-container: var(--radius-container);
   /* Corner scale — the ONLY radii the renderer uses. Overrides Tailwind's
    * rem-based defaults so the utilities land on the app's roles: 4 (inline
-   * runs) / 6 (sub-24px icon buttons) / 10 (items inside a box) / 20 (every
+   * runs) / 6 (sub-24px icon buttons) / 10 (items inside a box) / 16 (every
    * box). Every step forwards a globals.css role rather than restating a
    * literal, so legacy styles/*.css reaches the same roles through
    * `var(--radius-container)` and friends.
@@ -87,6 +97,24 @@
   --radius-lg: var(--radius-container);
   --radius-xl: var(--radius-container);
   --radius-2xl: var(--radius-container);
+  /* Overlay and measure geometry (steps defined in globals.css).
+   * `--container-*` is the namespace that generates width utilities, so
+   * one entry lands `w-overlay-md` AND `max-w-overlay-md` at once, so a
+   * surface can set whichever half it needs. Dialogs now set only the
+   * width: the primitive's responsive 384px cap (the shadcn recipe's) is
+   * gone, so nothing has to be beaten with an important flag any more —
+   * see `ui/dialog.tsx`. There is no matching namespace for max-height;
+   * those roles are `@utility` blocks below. */
+  --container-overlay-xs: var(--overlay-w-xs);
+  --container-overlay-sm: var(--overlay-w-sm);
+  --container-overlay-md: var(--overlay-w-md);
+  --container-overlay-lg: var(--overlay-w-lg);
+  --container-overlay-xl: var(--overlay-w-xl);
+  --container-overlay-2xl: var(--overlay-w-2xl);
+  --container-measure-xs: var(--measure-xs);
+  --container-measure-sm: var(--measure-sm);
+  --container-measure-md: var(--measure-md);
+  --container-measure-lg: var(--measure-lg);
   --shadow-elevation: var(--shadow-elevation);
   --shadow-low: 0 1px 2px rgba(var(--shadow-color), 0.05);
   /* Raised-card presence without overlay drama — the hero composer's one
@@ -101,34 +129,58 @@
    * all this layer owes is the hairline that keeps it off the ground.
    * Widening it is a regression, not a refinement. */
   --shadow-raised: 0 1px 3px rgba(var(--shadow-color), 0.06);
+  /* The image-lightbox stage's drop shadow — off the chrome scale on
+   * purpose and theme-static like `--scrim` (see globals.css). */
+  --shadow-stage: var(--shadow-stage);
   /* UI type scale — the ONLY chrome font sizes, overriding Tailwind's
    * rem-based defaults so every text-* utility scales with the user's
-   * interface-size preference. Desktop-density mapping (smaller than web
-   * conventions on purpose): 2xs=10 xs=11 sm=12 base=13 lg=14 xl=16 2xl=20
-   * 3xl=24 4xl=30 (4xl is display-only — warmth-budget brand moments).
-   * Content typography (Markdown reading view, Crepe editor) is separate
-   * and follows --reading-font-size. */
-  --text-2xs: calc(10px * var(--ui-scale));
+   * interface-size preference. Each step FORWARDS a globals.css role
+   * rather than restating a literal, exactly like the radius and font
+   * steps below and above it.
+   *
+   * That forwarding is load-bearing, not tidiness. `@theme inline`
+   * inlines a step's value into the utilities it generates and never
+   * emits the variable, so while the numbers lived here `var(--text-sm)`
+   * resolved to nothing outside a utility — every colocated `.css` file
+   * had to restate `calc(12px * var(--ui-scale))` by hand, and the
+   * "one type scale" contract held only for `.tsx`. With the numbers in
+   * globals.css's plain `:root` the name resolves everywhere: the
+   * `text-*` utilities, hand-written CSS, and the Electron tab-strip
+   * smoke, which concatenates globals.css + workspace.css and nothing
+   * else. Line heights stay here — they are Tailwind's own
+   * `--text-*--line-height` convention and nothing outside a utility
+   * reads them. */
+  --text-2xs: var(--text-2xs);
   --text-2xs--line-height: 1.35;
-  --text-xs: calc(11px * var(--ui-scale));
+  --text-xs: var(--text-xs);
   --text-xs--line-height: 1.35;
-  --text-sm: calc(12px * var(--ui-scale));
+  --text-sm: var(--text-sm);
   --text-sm--line-height: 1.4;
-  --text-base: calc(13px * var(--ui-scale));
+  --text-base: var(--text-base);
   --text-base--line-height: 1.45;
-  --text-lg: calc(14px * var(--ui-scale));
+  --text-lg: var(--text-lg);
   --text-lg--line-height: 1.45;
-  --text-xl: calc(16px * var(--ui-scale));
+  --text-xl: var(--text-xl);
   --text-xl--line-height: 1.35;
-  --text-2xl: calc(20px * var(--ui-scale));
+  --text-2xl: var(--text-2xl);
   --text-2xl--line-height: 1.25;
-  --text-3xl: calc(24px * var(--ui-scale));
+  --text-3xl: var(--text-3xl);
   --text-3xl--line-height: 1.15;
-  --text-4xl: calc(30px * var(--ui-scale));
+  --text-4xl: var(--text-4xl);
   --text-4xl--line-height: 1.1;
+  /* Motion bridge — `duration-*` and `ease-*` utilities resolve to the
+   * role tokens in globals.css. `ease-out`/`ease-in-out` deliberately
+   * OVERRIDE Tailwind's built-ins: the stock curves are too weak to read
+   * as intentional at these durations, so the utility keeps its familiar
+   * name and gains the app's stronger curve. */
+  --transition-duration-instant: var(--motion-instant);
   --transition-duration-fast: var(--motion-fast);
   --transition-duration-standard: var(--motion-standard);
-  --ease-ui: var(--motion-ease);
+  --transition-duration-slow: var(--motion-slow);
+  --ease-out: var(--motion-ease-out);
+  --ease-in-out: var(--motion-ease-in-out);
+  --ease-hover: var(--motion-ease-hover);
+  --ease-ui: var(--motion-ease-out);
   /* Three-voice font stacks (defined in globals.css :root) override
    * Tailwind's rem-based defaults so `font-sans` / `font-serif` /
    * `font-mono` utilities resolve to the app's own stacks — one mono
@@ -156,5 +208,104 @@
 }
 
 @import 'tailwindcss/utilities.css' layer(utilities);
+
+/* Stacking utilities. The ramp itself is documented in globals.css; these
+ * exist so a component names the ROLE it occupies and never a number.
+ * Tailwind has no --z-* theme namespace, so each role is a named utility
+ * rather than a generated scale. */
+/* Motion roles. A transition is three decisions — which properties, how
+ * long, what curve — and spelling all three at every call site is how the
+ * app ended up with `transition-all`, eleven bare `transition-colors`
+ * (silently falling back to Tailwind's 150ms), and four hand-listed
+ * property sets that were nearly but not quite the same.
+ *
+ * Naming the ROLE collapses that to one decision: what kind of feedback is
+ * this? Property lists stay explicit inside the utility, so nothing here
+ * animates a layout property. */
+
+/* A control answering a pointer: tint, stroke, and the press scale.
+ *
+ * `translate, scale, rotate` are listed beside `transform` because
+ * Tailwind v4 emits `scale-97` as the standalone `scale` property, not as
+ * a `transform` function — a list naming only `transform` therefore
+ * transitions nothing the press scale actually writes, and the Button
+ * primitive's whole point SNAPPED instead of easing. Tailwind's own
+ * `transition-transform` names all four for this reason; these roles
+ * simply have to match it. All four stay off the layout path. */
+@utility transition-control {
+  transition-property: color, background-color, border-color, box-shadow, transform, translate, scale, rotate;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease-out);
+}
+
+/* Colour only — hover, selection, focus ring. Nothing travels, so the
+ * symmetric curve is right. */
+@utility transition-tint {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease-hover);
+}
+
+/* Grow from the anchor, not from the middle. Base UI resolves
+ * --transform-origin to the corner a popup actually landed on after
+ * collision handling, so this is the difference between a menu that reads
+ * as caused by the control you pressed and one that reads as arriving from
+ * somewhere else. Modals deliberately do NOT use it — they are not
+ * anchored to a trigger. */
+@utility origin-anchor { transform-origin: var(--transform-origin); }
+
+/* A transient surface entering or leaving: menus, tooltips, popovers,
+ * toasts. One entrance grammar across all of them — fade up from 96%,
+ * never from zero — so `scale`/`translate` are named here for the same
+ * reason `transition-control` names them: a `scale-96` starting style
+ * writes the `scale` property, and a property list that says only
+ * `transform` leaves every popup entering as a bare fade. */
+@utility transition-surface {
+  transition-property: opacity, transform, translate, scale, rotate;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease-out);
+}
+
+/* Overlay max-height roles. Tailwind's `max-h-*` reads the spacing ramp
+ * and has no theme namespace that would generate these, so each role is a
+ * named utility for the same reason the layer roles are: the alternative
+ * is every scrolling surface re-deciding, in an arbitrary value, both how
+ * tall it wants to be and how much of a short window it may eat. */
+@utility max-h-overlay-xs { max-height: var(--overlay-h-xs); }
+@utility max-h-overlay-sm { max-height: var(--overlay-h-sm); }
+@utility max-h-overlay-md { max-height: var(--overlay-h-md); }
+@utility max-h-overlay-lg { max-height: var(--overlay-h-lg); }
+@utility max-h-overlay-window { max-height: var(--overlay-h-window); }
+@utility max-h-overlay-stage { max-height: var(--overlay-h-stage); }
+
+/* The one viewport clamp every floating surface shares — a 16px margin on
+ * each side (globals.css `--overlay-fit`). The dialog primitives spend it
+ * so `calc(100% - 2rem)` stops being a sixth spelling of the same rule. */
+@utility max-w-overlay-fit { max-width: var(--overlay-fit); }
+
+/* The image lightbox's own pair. Off the shared clamp on purpose — see
+ * `--overlay-w-stage` in globals.css. */
+@utility max-w-overlay-stage { max-width: var(--overlay-w-stage); }
+
+/* Floating pane chrome offsets. Two stacks, one derivation — see
+ * `--chrome-top` in globals.css. `top-chrome` clears the tab strip;
+ * `top-chrome-banner` additionally clears the out-of-folder identity
+ * banner, and the two must never drift apart by hand again. */
+@utility top-chrome { top: var(--chrome-top); }
+@utility top-chrome-banner { top: var(--chrome-top-banner); }
+
+@utility z-raised { z-index: var(--layer-raised); }
+@utility z-sticky { z-index: var(--layer-sticky); }
+@utility z-chrome { z-index: var(--layer-chrome); }
+@utility z-banner { z-index: var(--layer-banner); }
+@utility z-veil { z-index: var(--layer-veil); }
+@utility z-picker { z-index: var(--layer-picker); }
+@utility z-backdrop { z-index: var(--layer-backdrop); }
+@utility z-modal { z-index: var(--layer-modal); }
+@utility z-menu { z-index: var(--layer-menu); }
+@utility z-menu-backdrop { z-index: var(--layer-menu-backdrop); }
+@utility z-menu-modal { z-index: var(--layer-menu-modal); }
+@utility z-tooltip { z-index: var(--layer-tooltip); }
+@utility z-toast { z-index: var(--layer-toast); }
 
 @import './styles/globals.css';
