@@ -38,13 +38,16 @@ reason when a platform cannot exercise it.
 ## Residual checks
 
 - [ ] **J05** — When the retrieval-quality trigger above applies, select OpenAI
-  in Settings, run `pnpm eval:semantic-retrieval`, retain the complete report,
-  then repeat with OpenRouter. While the dataset is in calibration, collect its
+  in Settings, run `pnpm eval:semantic-retrieval --out <path>`, retain the
+  complete report, then repeat with OpenRouter. While the dataset is in calibration, collect its
   declared minimum of three runs per provider; after activation, one run per
   provider is sufficient for an applicable release. Confirm each report names
   the commit evidence, dataset, provider, model, gate state, Recall@3, and MRR.
   Record a precise not-applicable reason only when the release did not cross a
-  retrieval-quality trigger.
+  retrieval-quality trigger. A `CALIBRATION` gate state is expected until the
+  baselines are complete and is not a failure; a report that names a dirty
+  working tree, or a provider/model pair the dataset has no baseline for, is
+  not usable evidence.
 
 - [ ] **J01** — Install or unpack the release asset and launch it through the platform's
   normal path. Confirm one window appears and quits cleanly. On macOS, confirm

@@ -202,9 +202,10 @@ pnpm test:python
 Run `pnpm eval:semantic-retrieval` as a credentialed release check when a
 change can affect semantic ranking, chunking, or the embedding provider. This
 probabilistic Eval is not a substitute for the deterministic commands above.
-Retain the full report and do not treat thresholds as gating while it reports
-`CALIBRATION`; activation requires the baseline policy documented with the
-versioned dataset.
+Retain the full report (`--out <path>`) and do not treat thresholds as gating
+while it reports `CALIBRATION`; activation requires the baseline policy
+documented with the versioned dataset. `pnpm test:retrieval` validates the
+dataset manifest against its fixtures without credentials.
 
 Add `pnpm test:library-files` for mutation/reconcile changes and
 `pnpm test:electron:smoke` when native process or store retirement changes.

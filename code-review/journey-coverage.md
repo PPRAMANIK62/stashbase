@@ -175,12 +175,18 @@ aliases, and Journey E2E owns representative composition.
   dataset version, Recall@3, MRR, missed evidence, unexpected top results, and
   selected Exact Search comparisons against predeclared thresholds. It remains
   calibration evidence until three retained runs exist for both supported BYOK
-  providers; the runner makes that gate state explicit.
+  providers; the runner makes that gate state explicit. Ranking is scored over
+  distinct sources, not chunks, and the corpus includes multi-chunk sources so
+  chunking changes are actually observable.
 - **Release Check:** the semantic AI Eval is credentialed BYOK release evidence,
   not required or scheduled CI, because it makes paid provider requests and
   allows bounded ranking variability. Hosted account behavior remains
   lower-layer or release evidence.
-- **Gap:** library-wide readiness is not yet Shipping.
+- **Gap:** library-wide readiness is not yet Shipping. The semantic Eval is
+  present but still in calibration: no baseline run is retained, so no
+  semantic-quality gate is active yet. Completing the baselines and activating
+  the thresholds is tracked in
+  [GitHub issue #176](https://github.com/liliu-z/stashbase/issues/176).
 
 ## J06: Agent
 

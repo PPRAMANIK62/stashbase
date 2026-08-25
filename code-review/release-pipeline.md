@@ -120,10 +120,11 @@ clipboard, real-media, and N→N+1 updater seams; it does not repeat automated
 journeys.
 
 When a release changes retrieval ranking, chunking, embedding models, or
-provider integration, run `pnpm eval:semantic-retrieval` for every configured
-supported BYOK provider before publication. Retain each complete
+provider integration, run `pnpm eval:semantic-retrieval --out <path>` for every
+configured supported BYOK provider before publication. Retain each complete
 text report with the release evidence; it must identify the commit, dataset,
-provider, and model. A report marked `ACTIVE` must meet both thresholds. A
+provider, and model, and must not be marked as produced from a dirty working
+tree. A report marked `ACTIVE` must meet both thresholds. A
 report marked `CALIBRATION` contributes only baseline evidence and cannot be
 described as a passing semantic-quality gate. Required source CI remains
 credential-free and does not run this probabilistic check.
