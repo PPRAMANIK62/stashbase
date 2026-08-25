@@ -35,8 +35,11 @@ export function RemoveFolderModal({
     >
       {/* A filesystem path is DATA, not prose: it speaks the mono voice
         * on a quiet chip (xs radius — the inline-run tier), so the exact
-        * location being removed reads apart from the sentence above. */}
-      <div className="mt-2 inline-block max-w-full truncate rounded-xs bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground" title={path}>
+        * location being removed reads apart from the sentence above.
+        * `w-fit` because DialogContent is a grid — a stretched chip reads
+        * as an input field; no extra top margin — the shell's description
+        * rhythm (mb-3.5) already spaces it. */}
+      <div className="w-fit max-w-full truncate rounded-xs bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground" title={path}>
         {parentLabel}
       </div>
       <div className="mt-4 flex justify-end gap-2">
