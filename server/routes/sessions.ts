@@ -140,7 +140,7 @@ export function claudeHistoryActions(overrides: Partial<ClaudeHistoryDependencie
     },
     async messages(id, folder) {
       if (!(await belongsToFolder(id, folder))) throw new SessionNotFoundError();
-      return transcriptToBlocks(await getMessages(id));
+      return transcriptToBlocks(await getMessages(id), nativeTimesByUuid(await readNativeTranscript(id)));
     },
     async replay(id, folder) {
       if (!(await belongsToFolder(id, folder))) throw new SessionNotFoundError();
@@ -151,7 +151,7 @@ export function claudeHistoryActions(overrides: Partial<ClaudeHistoryDependencie
       const native = await readNativeTranscript(id);
       return {
         protocol: 2,
-        messages: transcriptToBlocks(messages),
+        messages: transcriptToBlocks(messages, nativeTimesByUuid(native)),
         effort: claudeTranscriptEffort(native, messages),
       };
     },
@@ -183,6 +183,7 @@ type NativeTranscriptEntry = {
   parentUuid?: string | null;
   isSidechain?: boolean;
   effort?: unknown;
+  timestamp?: unknown;
   message?: unknown;
 };
 
@@ -257,8 +258,12 @@ export function sessionInfoMatchesFolder(info: { cwd?: unknown } | null | undefi
  *  AgentView's `Block` union (history tools are always settled: 'done' or
  *  'error'). */
 type WireBlock =
-  | { kind: 'user'; id: string; text: string; attachments?: RestoredAttachment[] }
-  | { kind: 'assistant'; id: string; text: string }
+  /** `at` (epoch ms) joins the SDK message back to its native JSONL line
+   * by uuid — the SDK response is sanitized and carries no timestamp, the
+   * native line does. Absent when the join finds no valid time; replay
+   * never substitutes a clock of its own. */
+  | { kind: 'user'; id: string; text: string; attachments?: RestoredAttachment[]; at?: number }
+  | { kind: 'assistant'; id: string; text: string; at?: number }
   | { kind: 'thinking'; id: string; text: string }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
 
@@ -266,7 +271,10 @@ type WireBlock =
  *  `tool_result` (which arrives as a later user-role message) back onto
  *  its originating `tool_use` block by id — the same correlation the live
  *  WS path does, just replayed from disk. */
-export function transcriptToBlocks(msgs: Array<{ type: string; message: unknown }>): WireBlock[] {
+export function transcriptToBlocks(
+  msgs: Array<{ type: string; uuid?: string; message: unknown }>,
+  timeByUuid?: Map<string, number>,
+): WireBlock[] {
   const blocks: WireBlock[] = [];
   const toolById = new Map<string, Extract<WireBlock, { kind: 'tool' }>>();
   let seq = 0;
@@ -275,10 +283,11 @@ export function transcriptToBlocks(msgs: Array<{ type: string; message: unknown 
   for (const m of msgs) {
     const message = m.message as { role?: string; content?: unknown };
     const content = message?.content;
+    const at = m.uuid ? timeByUuid?.get(m.uuid) : undefined;
 
     if (m.type === 'user') {
       if (typeof content === 'string') {
-        appendUserBlock(blocks, id, content);
+        appendUserBlock(blocks, id, content, at);
         continue;
       }
       if (Array.isArray(content)) {
@@ -294,7 +303,7 @@ export function transcriptToBlocks(msgs: Array<{ type: string; message: unknown 
             }
           }
         }
-        appendUserBlock(blocks, id, texts.join('\n').trim());
+        appendUserBlock(blocks, id, texts.join('\n').trim(), at);
       }
       continue;
     }
@@ -302,7 +311,7 @@ export function transcriptToBlocks(msgs: Array<{ type: string; message: unknown 
     if (m.type === 'assistant' && Array.isArray(content)) {
       for (const b of content as Array<Record<string, unknown>>) {
         if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) {
-          blocks.push({ kind: 'assistant', id: id(), text: b.text });
+          blocks.push({ kind: 'assistant', id: id(), text: b.text, ...(at !== undefined ? { at } : {}) });
         } else if (b.type === 'thinking' && typeof b.thinking === 'string' && b.thinking.trim()) {
           blocks.push({ kind: 'thinking', id: id(), text: b.thinking });
         } else if (b.type === 'tool_use') {
@@ -322,7 +331,7 @@ export function transcriptToBlocks(msgs: Array<{ type: string; message: unknown 
   return blocks;
 }
 
-function appendUserBlock(blocks: WireBlock[], id: () => string, text: string): void {
+function appendUserBlock(blocks: WireBlock[], id: () => string, text: string, at?: number): void {
   const restored = restoreHistoryAttachments(text);
   if (!restored.text.trim() && restored.attachments.length === 0) return;
   blocks.push({
@@ -330,7 +339,20 @@ function appendUserBlock(blocks: WireBlock[], id: () => string, text: string): v
     id: id(),
     text: restored.text,
     ...(restored.attachments.length ? { attachments: restored.attachments } : {}),
+    ...(at !== undefined ? { at } : {}),
   });
+}
+
+/** Native-line times keyed by uuid. Only real, parseable timestamps enter
+ * the map — a missing or malformed one simply leaves the message timeless. */
+export function nativeTimesByUuid(native: NativeTranscriptEntry[]): Map<string, number> {
+  const times = new Map<string, number>();
+  for (const entry of native) {
+    if (typeof entry.uuid !== 'string' || typeof entry.timestamp !== 'string') continue;
+    const ms = Date.parse(entry.timestamp);
+    if (Number.isFinite(ms)) times.set(entry.uuid, ms);
+  }
+  return times;
 }
 
 /** Stringify a tool_result `content` (string, or text/other blocks) — the

@@ -68,7 +68,9 @@
   --stash-code-gutter: color-mix(in srgb, var(--surface-sunken) 92%, var(--surface-base));
   --stash-code-current-line: color-mix(in srgb, var(--accent) 16%, var(--surface-sunken));
   --stash-code-selection: color-mix(in srgb, var(--accent) 34%, var(--surface-sunken));
-  --crepe-font-title: var(--font-serif);
+  /* Headings share the UI sans (two-voice typography) — hierarchy comes
+   * from Crepe's size/weight ramp, not a typeface change. */
+  --crepe-font-title: var(--font-sans);
   --crepe-font-default: inherit;
   --crepe-font-code: var(--font-mono);
   --crepe-shadow-1: 0 12px 28px rgba(var(--shadow-color), .24), 0 2px 7px rgba(var(--shadow-color), .16);
@@ -88,10 +90,10 @@
   min-height: calc(100vh - 152px);
   margin: 0 auto;
   /* Side gutters are container-relative (the shell is a size
-   * container): ~6% of the pane, clamped to 20-48px, so a docked
+   * container): ~6% of the pane, clamped to 24-48px, so a docked
    * Agent panel narrows the margins with the pane instead of
    * keeping the full-width 48px inset. Vertical padding is fixed. */
-  padding: 28px clamp(20px, 6cqi, 48px) 88px;
+  padding: 28px clamp(24px, 6cqi, 48px) 88px;
   box-sizing: border-box;
   color: var(--fg);
   font-size: var(--reading-font-size);
@@ -230,8 +232,9 @@
 .crepe-shell .ProseMirror blockquote.stashbase-alert-warning { --alert-color: #b77900; }
 .crepe-shell .ProseMirror blockquote.stashbase-alert-caution { --alert-color: #c33030; }
 /* Crepe names the handle element/class `milkdown-block-handle` (there
- * is no `crepe-` prefixed variant). */
-.crepe-readonly .milkdown-block-handle { display: none; }
+ * is no `crepe-` prefixed variant). Keep this selector more specific than
+ * Crepe's later-loaded `.milkdown .milkdown-block-handle` display rule. */
+.crepe-shell.crepe-readonly .milkdown .milkdown-block-handle { display: none; }
 /* EDITABLE gutters stay at the full 48px instead of the reading
  * ramp: the left gutter seats the hover block handle, which reading
  * mode never shows. The full two-tile handle (add + drag, 66px + a

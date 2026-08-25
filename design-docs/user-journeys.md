@@ -37,8 +37,10 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
    StashBase works with ordinary local folders, prepares them as Agent context,
    and keeps source files user-owned.
 2. **Acquire useful context.** When the default folder home is genuinely new
-   and empty, inspect the ordinary **👋 Start Here** folder or add an existing
-   folder. An existing folder home is never seeded or modified by onboarding.
+   and empty, inspect the ordinary **👋 Start Here** Welcome, ask the
+   Library-scoped Chat a question grounded in its detailed guides, or add an
+   existing folder. An existing folder home is never seeded or modified by
+   onboarding.
 3. **Choose AI Index deliberately.** See why meaning-based retrieval is
    recommended, which hosted or bring-your-own-key source would be used, and
    what remains local. Configure it or deliberately skip for now without
@@ -69,8 +71,9 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
 - Local browsing, editing, preview, and Exact Search do not depend on online
   authentication, AI Index readiness, transcription, or an Agent runtime.
 - The seeded Start Here content appears only for a pristine default folder
-  home, remains an ordinary user-owned folder, and is never recreated after
-  deletion.
+  home, gives people a concise Welcome, makes detailed grounded product context
+  available to Agents, remains an ordinary user-owned folder, is not
+  overwritten by app updates, and is never recreated after deletion.
 - A fresh window does not silently select a folder, send a prompt, or install
   an Agent runtime.
 - A deliberate AI Index skip does not immediately repeat during the first
@@ -80,6 +83,10 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
 - Returning users recognize their library and completed durable setup without
   replaying first-use explanation or losing access when an optional online
   capability is unavailable.
+- When a user chooses Google sign-in for hosted AI Index, the sidebar, account
+  menu, and Settings consistently identify the connected person by optional
+  provider profile data plus the full email, without making profile loading a
+  prerequisite for local or hosted work.
 
 ### Degradation and Recovery
 
@@ -162,6 +169,8 @@ An authorized folder contains a source listed in the
 ### Required Observable Results
 
 - The visible source file remains the identity behind every view and save.
+- Repeated or concurrent navigation to that source resolves to one persistent
+  tab; a same-named source in another Library folder remains distinct.
 - Preview-only formats never expose a content-editing affordance. Workbench
   content editing, Agent/MCP content writes, and file-level rename/move/delete
   remain distinguishable capabilities.

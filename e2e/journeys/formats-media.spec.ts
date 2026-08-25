@@ -2,7 +2,12 @@ import { expect, test } from '@playwright/test';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
-import { dismissEmbeddingKeyPrompt, fileTreeRow, openLibraryFolder } from '../support/locators.ts';
+import {
+  activeDocumentTab,
+  dismissEmbeddingKeyPrompt,
+  fileTreeRow,
+  openLibraryFolder,
+} from '../support/locators.ts';
 import {
   JOURNEY_AUDIO,
   JOURNEY_DOCX,
@@ -79,6 +84,7 @@ test('valid tiny PDF navigates pages and retains its selected page across a tab 
     await expect(app.page.getByTitle('Jump to page')).toHaveAccessibleName('Page 2 of 2 — jump to page');
 
     await fileTreeRow(app.page, 'Welcome.md').click();
+    await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
     await app.page.getByRole('tab', { name: new RegExp(JOURNEY_PDF) }).click();
     await expect(app.page.getByTitle('Jump to page')).toHaveAccessibleName('Page 2 of 2 — jump to page');
     expectOnlyKnownViewerFailures(app, [
@@ -104,7 +110,10 @@ test('malformed PDF and DOCX remain visible source identities with explicit fail
     await expect(app.page.getByRole('tab', { name: new RegExp(MALFORMED_PDF) })).toHaveAttribute('aria-selected', 'true');
 
     await fileTreeRow(app.page, MALFORMED_DOCX).click();
-    await expect(app.page.getByRole('status').filter({ hasText: 'searchable text is unavailable' })).toBeVisible();
+    const docxFailure = app.page.getByRole('status').filter({ hasText: 'Direct DOCX preview failed' });
+    await expect(docxFailure).toContainText(
+      /prepared fallback when it is available|searchable fallback is unavailable/,
+    );
     await expect(app.page.locator('iframe[title="HTML preview"]')).toBeVisible();
     await expect(app.page.getByRole('tab', { name: new RegExp(MALFORMED_DOCX) })).toHaveAttribute('aria-selected', 'true');
     expectOnlyKnownViewerFailures(app, [

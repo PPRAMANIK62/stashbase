@@ -56,7 +56,8 @@ export interface AgentCapabilities {
   history: true;
   modes: boolean;
   effort: boolean;
-  /** The runtime can enumerate and select its own session models. */
+  /** The runtime can enumerate native models and accept an explicit choice;
+   * the adapter owns whether that choice begins a session or a later turn. */
   models: boolean;
   skills: boolean;
   steering: boolean;

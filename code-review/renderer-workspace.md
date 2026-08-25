@@ -18,6 +18,11 @@ semantic readiness.
 
 - Every asynchronous folder open, file load, index refresh, and binary stat
   applies only while its captured folder, tab, and generation remain current.
+- One source identity owns at most one document tab in a window. The workspace
+  reducer resolves concurrent open completions against its latest state; an
+  asynchronous caller's earlier duplicate check is never the uniqueness
+  authority. Active-folder relative paths and out-of-folder folder-plus-path
+  pairs remain distinct identities.
 - Folder switching resets folder-scoped documents and readiness without
   clearing library search or silently rebinding a started or drafted Chat.
 - Every site that clears folder context builds its preparation-indicator

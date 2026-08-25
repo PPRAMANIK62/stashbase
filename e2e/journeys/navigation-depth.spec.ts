@@ -21,6 +21,24 @@ async function openFolderMenu(app: LaunchedApp, name: string): Promise<void> {
   await app.page.getByRole('button', { name: `More actions for ${name}` }).click();
 }
 
+test('double-clicking a file opens only one tab for that path', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await dismissEmbeddingKeyPrompt(app.page);
+
+    await fileTreeRow(app.page, 'Welcome.md').dblclick();
+
+    await expect(documentTab(app.page, 'Welcome.md')).toHaveCount(1);
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
 test('persistent tabs prevent duplicates, reuse a blank tab, and expose MRU Editor History', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   let app: LaunchedApp | undefined;

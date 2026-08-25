@@ -13,7 +13,9 @@ function repositoryFiles(pathspec) {
   return execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', pathspec], {
     cwd: repoRoot,
     encoding: 'utf8',
-  }).split('\0').filter(Boolean);
+  }).split('\0')
+    .filter(Boolean)
+    .filter((file) => fs.existsSync(path.join(repoRoot, file)));
 }
 
 function headingAnchor(heading) {

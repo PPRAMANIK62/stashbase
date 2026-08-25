@@ -23,8 +23,13 @@ manager, or a primary graph-navigation tool.
   folder or installs an Agent runtime.
 - On first launch with a brand-new empty default folder home, StashBase seeds
   the ordinary local **👋 Start Here** folder and adds it to the library
-  without automatically opening it. An existing folder home is never modified,
-  and deleting the seeded folder does not recreate it.
+  without automatically opening it. Its `00 Welcome.html` is the human entry;
+  the remaining guides use a stable numbered order while the Agent-discovery
+  file remains `AGENTS.md`. Detailed user-owned Markdown makes grounded
+  product, workflow, capability, comparison, and recovery context available to
+  Library-scoped Agent retrieval. An existing folder home is never modified,
+  deleting the seeded folder does not recreate it, and application updates
+  never overwrite the user's copy.
 - Files exposes Chat, the active folder tree, and account utilities without
   making sign-in a condition of local work. With no active folder, the
   workspace distinguishes an empty library from an existing library awaiting
@@ -41,6 +46,10 @@ manager, or a primary graph-navigation tool.
   hides that announcement only — a newer release, or a download becoming ready
   to install, announces again, and Settings remains the standing update and
   preference surface.
+- A signed-in account is recognizable by its Google display name and avatar in
+  Files, with the full email retained in the account menu. Missing or failed
+  profile display data falls back without changing account controls; signed
+  out remains the complete Anonymous local-workspace state.
 - Users can open or create a local folder, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
   A created folder is an ordinary directory. Removing membership clears only
@@ -87,6 +96,9 @@ manager, or a primary graph-navigation tool.
   user's existing configuration for recovery.
 - Source and derived state remain distinguishable. The tree and tabs show
   source files, not generated representations.
+- Repeated or concurrent navigation to one source focuses its existing
+  persistent tab. The same relative path in different Library folders remains
+  a distinct source.
 - Chat visibility is explicit after initialization. Closing the last document
   expands an open Chat; hiding Chat stays respected until the user reopens it.
 - Keyboard focus, overlay dismissal, splitters, and reduced-motion behavior are

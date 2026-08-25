@@ -70,7 +70,10 @@ test('account Sign in immediately opens one Supabase Google OAuth flow without a
     assert.equal(requests.filter((request) => request.url === '/api/account/oauth/start').length, 1);
     assert.deepEqual(opened, ['https://example.supabase.co/auth/v1/authorize?provider=google']);
     assert.equal(mounted.renderer!.root.findAll((node) => node.type === 'input').length, 0);
-    assert.match(JSON.stringify(mounted.renderer!.toJSON()), /Finish signing in with Google/);
+    // After failure the primary returns as the retry affordance, and the
+    // OAuth vendor never surfaces in user-facing copy.
+    assert.match(JSON.stringify(mounted.renderer!.toJSON()), /Continue with Google/);
+    assert.doesNotMatch(JSON.stringify(mounted.renderer!.toJSON()), /Supabase/);
     assert.match(JSON.stringify(mounted.renderer!.toJSON()), /Test flow finished\./);
   } finally {
     if (mounted.renderer) await act(async () => mounted.renderer?.unmount());

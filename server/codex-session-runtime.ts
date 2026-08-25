@@ -95,12 +95,12 @@ export class CodexSession implements AttributedAgentSession {
   private interruptingTurnId: string | null = null;
   private rpc: CodexRpcPeer | null = null;
   private pendingApprovals = new Map<string, PendingApproval>();
-  /** Model selection is resolved exactly once, before a new thread's first
-   * turn. Re-checking later could silently change an existing session when a
-   * runtime catalog is refreshed or a model is withdrawn. */
+  /** The native catalog is resolved once. `selectedModel` may then change
+   * only through an explicit idle `set-model` event; a catalog refresh or
+   * runtime notification can never silently change the next turn. */
   private modelResolved = false;
-  /** Explicit override for a new thread only. Never derive this from the
-   * model the runtime reports for a resumed/default session. */
+  /** Explicit override for the next turn. Never derive this from the model
+   * the runtime reports for a resumed/default session. */
   private selectedModel: string | undefined;
   private activeModel: string | undefined;
   /** The catalog's `isDefault` entry — what a NEW thread will run when no
@@ -345,6 +345,9 @@ export class CodexSession implements AttributedAgentSession {
       case 'close':
         this.dispose();
         break;
+      case 'set-model':
+        this.setModelForNextTurn(msg.model);
+        break;
       case 'set-mode':
         this.accessMode = isAgentAccessMode(msg.mode) ? msg.mode : this.accessMode;
         break;
@@ -518,6 +521,25 @@ export class CodexSession implements AttributedAgentSession {
     this.selectedModel = selected;
     this.modelResolved = true;
     return selected;
+  }
+
+  /** Apply an explicit renderer choice to the next turn without replacing
+   * the Codex thread. WebSocket ordering makes a following prompt observe
+   * this assignment; the busy guard is the server-side backstop for the
+   * renderer's disabled picker. Missing model means native Default. */
+  private setModelForNextTurn(value: unknown): void {
+    if (this.busy || (value !== undefined && typeof value !== 'string')) return;
+    const requested = typeof value === 'string' && value ? value : undefined;
+    if (requested && !this.models.some((entry) => entry.id === requested)) {
+      this.send({
+        t: 'models',
+        models: this.models,
+        ...(this.activeModel ? { activeModel: this.activeModel } : {}),
+        fallback: 'That model is no longer available; keeping the current model.',
+      });
+      return;
+    }
+    this.selectedModel = requested;
   }
 
   /** Model catalogs are paginated by the native app-server. A valid selected

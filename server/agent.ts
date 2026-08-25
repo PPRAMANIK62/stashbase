@@ -19,6 +19,7 @@
  *   client → server:
  *     { t: "prompt", text }
  *     { t: "permission-reply", id, allow, always? }
+ *     { t: "set-model", model? }                      // next-turn model where supported
  *     { t: "set-mode", mode }                           // switch permission mode live
  *     { t: "interrupt" }
  *     { t: "close" }

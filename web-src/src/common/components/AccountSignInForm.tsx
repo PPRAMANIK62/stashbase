@@ -45,18 +45,34 @@ export function AccountSignInForm({
 
   return (
     <div>
-      <div className="text-sm font-medium">
-        {browserOpened ? 'Finish signing in with Google in your browser' : 'Opening Google sign-in…'}
-      </div>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Supabase handles the provider login in your browser. Return here when it completes; StashBase will continue automatically.
+      {/* One quiet body line — the dialog above already carries the title,
+       * so a second bold heading here just competed with it. The hand-off
+       * is described from the user's seat (browser opens, finish there,
+       * we continue); the vendor doing the OAuth plumbing is not part of
+       * that story and never surfaces in copy. */}
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Google sign-in opens in your browser. Finish there, and StashBase continues automatically.
       </p>
       {error && <StatusMessage tone="error" className="mt-2.5">{error}</StatusMessage>}
       <div className="mt-3.5 flex flex-wrap items-center gap-2">
-        {onBack && <Button variant="ghost" disabled={busy} onClick={onBack}>Back</Button>}
-        <Button disabled={busy} onClick={start}>
-          {busy ? 'Waiting for Google…' : 'Continue with Google'}
-        </Button>
+        {/* Back stays usable while waiting — the wait happens in another
+         * app, so this dialog must never trap the user behind it. */}
+        {onBack && <Button variant="ghost" onClick={onBack}>Back</Button>}
+        {/* Waiting is a STATE, not an action: a disabled primary with a
+         * swapped label read as a broken button (washed accent + white
+         * text). While the browser owns the flow there is nothing to
+         * click here, so the button yields to a status line and returns
+         * as the retry affordance on failure. */}
+        {busy ? (
+          // The app-wide working voice (globals.css .working-shimmer):
+          // the sweep marks this line as live and makes it the dialog's
+          // focal point without a spinner or a fake-disabled button.
+          <span className="working-shimmer px-2 text-xs" role="status">
+            {browserOpened ? 'Waiting for Google in your browser…' : 'Opening Google sign-in…'}
+          </span>
+        ) : (
+          <Button onClick={start}>Continue with Google</Button>
+        )}
       </div>
     </div>
   );

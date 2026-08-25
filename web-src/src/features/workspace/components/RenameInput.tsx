@@ -82,7 +82,7 @@ export function RenameInput({
      * Every one of the primitive's decisions would need an override to
      * get there, so this stays a raw field. */
     <span
-      className="flex min-w-0 flex-1 items-center rounded-md border border-accent bg-background text-base"
+      className="flex min-w-0 flex-1 items-center rounded-sm border border-accent bg-background text-base"
       onClick={(e) => e.stopPropagation()}
     >
       <input

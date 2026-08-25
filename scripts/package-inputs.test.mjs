@@ -26,6 +26,22 @@ function cjsFiles(directory) {
   });
 }
 
+test('bundled Start Here filenames preserve the intended reading order', () => {
+  const files = fs.readdirSync(path.join(root, 'assets', 'builtin-library'))
+    .filter((name) => !name.startsWith('.'))
+    .sort();
+
+  assert.deepEqual(files, [
+    '00 Welcome.html',
+    '01 Getting Started and Workflows.md',
+    '02 Product and Mental Model.md',
+    '03 Capabilities and Boundaries.md',
+    '04 FAQ and Comparisons.md',
+    '05 Troubleshooting and Reference.md',
+    'AGENTS.md',
+  ]);
+});
+
 test('electron-builder includes local CommonJS dependencies outside electron/', () => {
   const missing = [];
   const relativeRequire = /require\(\s*['"](\.\.\/[^'"]+)['"]\s*\)/g;

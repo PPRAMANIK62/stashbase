@@ -54,7 +54,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
     let composer = panel.locator('[aria-label="Message agent"]');
     await expect(composer).toHaveAttribute('contenteditable', 'true');
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Model: Fake Codex Model' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' })).toBeVisible();
 
     await composer.fill('approval turn');
     await panel.getByRole('button', { name: 'Send message' }).click();
@@ -129,8 +129,10 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
 
 test('Agent chooser reuses only blank chats, drafts freeze scope, and history resumes through the fake runtime', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
+  const protocolLog = path.join(fixture.artifacts, 'fake-codex-protocol.jsonl');
   fixture.env.STASHBASE_CODEX_BIN = FAKE_CODEX;
   fixture.env.STASHBASE_AGENT_DISCOVERY_POLICY = 'system-only';
+  fixture.env.STASHBASE_FAKE_CODEX_LOG = protocolLog;
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
@@ -171,6 +173,24 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
 
+    const modelButton = panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' });
+    await expect(modelButton).toBeEnabled();
+    await modelButton.click();
+    // The settings pill is two-level: the parent's Model row reads back the
+    // current value and its flyout (hover-opened, the native menu idiom)
+    // holds the radio list.
+    await app.page.getByRole('menuitem', { name: 'Model Fake Codex Model' }).hover();
+    await app.page.getByRole('menuitemradio', { name: /Fake Codex Model Two/ }).click();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model Two, Default' })).toBeVisible();
+    await composer.fill('wait for stop after model switch');
+    await panel.getByRole('button', { name: 'Send message' }).click();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model Two, Default — available after the current response' })).toBeDisabled();
+    await expect.poll(() => protocolRecords(protocolLog).find((entry) => (
+      entry.event === 'turn-start' && entry.prompt === 'wait for stop after model switch'
+    ))?.params?.model).toBe('fake-codex-model-two');
+    await panel.getByRole('button', { name: 'Stop agent' }).click();
+    await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
+
     // Folder-scope chat history lives on the ACTIVE folder header, so
     // switch the window back to project-alpha before resuming its session.
     await openLibraryFolder(app.page, 'project-alpha');
@@ -185,10 +205,13 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     const displayMath = panel.locator('.katex-display');
     await expect(displayMath).toBeVisible();
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Model: Fake Codex Model — fixed for this conversation' })).toBeVisible();
+    const resumedModel = panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' });
+    await expect(resumedModel).toBeVisible();
+    await expect(resumedModel).toBeEnabled();
 
-    await panel.getByRole('button', { name: 'Reply actions' }).click();
-    const copyReply = app.page.getByRole('menuitem', { name: 'Copy Reply' });
+    // Copy Reply is a standing button under the reply, not a hover or
+    // menu affordance.
+    const copyReply = panel.getByRole('button', { name: 'Copy reply' });
     await expect(copyReply).toBeVisible();
     await copyReply.click();
     await expect(app.page.getByText('Copied.', { exact: true })).toBeVisible();

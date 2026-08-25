@@ -53,10 +53,11 @@ test('model control visibility, locking label, active identity, and fallback sta
   assert.equal(modelMenuVisible(true, models), true);
   assert.equal(modelMenuVisible(false, models), false);
   assert.equal(modelMenuVisible(true, []), false);
-  assert.equal(modelMenuLocked(false, false), false);
-  assert.equal(modelMenuLocked(true, false), true);
-  assert.equal(modelMenuLocked(false, true), true);
+  assert.equal(modelMenuLocked(false, false, 'claude'), false);
+  assert.equal(modelMenuLocked(true, false, 'claude'), true);
+  assert.equal(modelMenuLocked(false, true, 'claude'), true);
   assert.equal(modelMenuLabel(models, undefined, undefined, true), 'Session model');
+  assert.equal(modelMenuLabel(models, null, 'native-model', true), 'Default');
 
   const active = applyModelEvent({ models: [], selectedModel: undefined, activeModel: undefined, notice: null, resumedSession: true }, { models, activeModel: 'native-model' });
   assert.equal(active.selectedModel, undefined);
@@ -78,4 +79,9 @@ test('model control visibility, locking label, active identity, and fallback sta
   assert.equal(defaultActive.selectedModel, undefined, 'runtime telemetry must not pin Default on reconnect');
   assert.equal(defaultActive.activeModel, 'native-model');
   assert.match(defaultActive.notice ?? '', /runtime default/, 'active-model telemetry must not hide fallback recovery');
+});
+
+test('Codex keeps model selection available between turns', () => {
+  assert.equal(modelMenuLocked(true, false, 'codex'), false, 'an idle populated Codex session can change its next-turn model');
+  assert.equal(modelMenuLocked(true, true, 'codex'), true, 'model selection stays locked while Codex is working');
 });

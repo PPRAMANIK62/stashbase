@@ -18,27 +18,6 @@
 @layer theme, utilities;
 @import 'tailwindcss/theme.css' layer(theme);
 
-/* Inter, bundled rather than borrowed. Every type stack here used to end
- * in a generic family, which meant the product had a different
- * typographic identity per platform: SF Pro on macOS, Segoe on Windows,
- * and whatever fontconfig picked on Linux (Liberation Sans, an Arial
- * clone, on a stock Arch box). A desktop app ships its own binary, so it
- * can ship its own type instead of hoping the OS has something close.
- *
- * The `wght` axis only: one variable file per subset covers 100–900, so
- * the four weights the chrome actually uses (400/500/600/700) cost one
- * download each for roman and italic. The `opsz` and `standard` builds
- * are larger and buy nothing the interface asks for. Italic is a real
- * cut, not a synthesised slant — the agent's prose renders Markdown
- * emphasis constantly.
- *
- * Subsets carry their own `unicode-range`, so a Latin session never
- * touches the Cyrillic or Greek files. CJK is deliberately NOT covered:
- * Inter has no CJK, and the stacks in globals.css keep PingFang/Songti
- * behind it for exactly that reason. */
-@import '@fontsource-variable/inter/wght.css';
-@import '@fontsource-variable/inter/wght-italic.css';
-
 @theme inline {
   --color-background: var(--bg);
   --color-foreground: var(--fg);
@@ -202,13 +181,11 @@
   --ease-in-out: var(--motion-ease-in-out);
   --ease-hover: var(--motion-ease-hover);
   --ease-ui: var(--motion-ease-out);
-  /* Three-voice font stacks (defined in globals.css :root) override
-   * Tailwind's rem-based defaults so `font-sans` / `font-serif` /
-   * `font-mono` utilities resolve to the app's own stacks — one mono
-   * voice everywhere instead of the utility default drifting from the
-   * hand-written CSS stacks. */
+  /* Two-voice font stacks (defined in globals.css :root) override
+   * Tailwind's rem-based defaults so `font-sans` / `font-mono` utilities
+   * resolve to the app's own stacks — one mono voice everywhere instead
+   * of the utility default drifting from the hand-written CSS stacks. */
   --font-sans: var(--font-sans);
-  --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
 }
 

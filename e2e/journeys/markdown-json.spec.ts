@@ -19,6 +19,42 @@ import { openedExternalUrls, stubExternalBrowser } from './journey-helpers.ts';
 
 const FRONTMATTER = '---\ntitle: Journey fixture\ntags:\n  - regression\n---\n';
 
+test('Reading View hides the Markdown block authoring handle', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  seedJourneyWorkspaces(fixture);
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await dismissEmbeddingKeyPrompt(app.page);
+    await fileTreeRow(app.page, JOURNEY_MARKDOWN).click();
+
+    const markdown = activeDocument(app.page);
+    const blockHandle = markdown.locator('.milkdown-block-handle');
+    const editableBlock = markdown.getByRole('heading', { name: 'Journey Markdown' });
+    const readingToggle = app.page.getByRole('button', { name: 'Switch to Reading View' });
+    await readingToggle.focus();
+    // A table owns row/column line handles above its content, so Playwright
+    // correctly refuses to treat the table itself as the pointer receiver.
+    // Hover a regular editable block to exercise the document block handle.
+    await editableBlock.hover();
+    await expect(blockHandle).toBeVisible();
+
+    await app.page.keyboard.press('Enter');
+
+    await expect(markdown.locator('.crepe-shell')).toHaveClass(/crepe-readonly/);
+    await expect(blockHandle).toBeHidden();
+
+    await app.page.getByRole('button', { name: 'Switch to Live Editing' }).click();
+    await editableBlock.hover();
+    await expect(blockHandle).toBeVisible();
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
 test('Markdown preserves frontmatter across editing and safely routes links and images', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   seedJourneyWorkspaces(fixture);

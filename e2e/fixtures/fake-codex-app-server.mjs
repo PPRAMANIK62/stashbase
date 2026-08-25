@@ -67,12 +67,19 @@ function handleRequest(request) {
       break;
     case 'model/list':
       respond(request.id, {
-        data: [{
-          id: 'fake-codex-model',
-          displayName: 'Fake Codex Model',
-          isDefault: true,
-          supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
-        }],
+        data: [
+          {
+            id: 'fake-codex-model',
+            displayName: 'Fake Codex Model',
+            isDefault: true,
+            supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
+          },
+          {
+            id: 'fake-codex-model-two',
+            displayName: 'Fake Codex Model Two',
+            supportedReasoningEfforts: [{ reasoningEffort: 'medium' }],
+          },
+        ],
       });
       break;
     case 'skills/list': {

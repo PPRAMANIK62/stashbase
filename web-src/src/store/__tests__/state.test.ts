@@ -85,6 +85,46 @@ test('document tab lifecycle reuses a blank tab and selects a neighbor on close'
   assert.equal(state.workspace.selectedPath, 'one.md');
 });
 
+test('concurrent file-open completions cannot create duplicate tabs for one source', () => {
+  let state = reducer(freshState(), {
+    type: 'FILE_OPEN',
+    body: { name: 'one.md', format: 'md', content: 'first response' },
+  });
+  const firstId = state.workspace.activeTabId;
+
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'one.md', format: 'md', content: 'second response' },
+    newTab: true,
+  });
+
+  assert.equal(state.workspace.tabs.length, 1);
+  assert.equal(state.workspace.activeTabId, firstId);
+  assert.equal(state.workspace.tabs[0].file?.content, 'first response');
+
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'one.md', format: 'md', content: 'other folder' },
+    newTab: true,
+    libraryFolder: '/library-b',
+  });
+  const outOfFolderId = state.workspace.activeTabId;
+  assert.equal(state.workspace.tabs.length, 2, 'same rel path in another folder is a distinct source');
+
+  state = reducer(state, {
+    type: 'FILE_OPEN',
+    body: { name: 'one.md', format: 'md', content: 'same other folder' },
+    newTab: true,
+    libraryFolder: '/library-b/',
+  });
+  assert.equal(state.workspace.tabs.length, 2);
+  assert.equal(state.workspace.activeTabId, outOfFolderId);
+  assert.equal(
+    state.workspace.tabs.find((tab) => tab.id === outOfFolderId)?.file?.content,
+    'other folder',
+  );
+});
+
 test('Markdown opens in Live Editing while read-only formats remain out of edit mode', () => {
   const markdown = reducer(freshState(), {
     type: 'FILE_OPEN',

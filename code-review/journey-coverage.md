@@ -69,6 +69,8 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
   `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
+  Account identity fixtures cover profile normalization, migration, privacy,
+  and UI fallbacks.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
   library membership, so a failed or pending membership load cannot claim the
   library is empty.
@@ -80,8 +82,11 @@ aliases, and Journey E2E owns representative composition.
 - **Journey E2E:** [launch smoke](../e2e/smoke/launch.spec.ts) and
   [library navigation](../e2e/journeys/library-navigation.spec.ts) exercise
   blank-workspace entry, AI Index skip behavior, folder selection, and local
-  availability. They do not yet prove the full orientation, first-value, and
-  return sequence as one onboarding outcome.
+  availability. [Navigation layout](../e2e/journeys/navigation-layout.spec.ts)
+  verifies that Appearance Settings remains usable with the operating system's
+  reduced-motion preference while transform movement is removed and quiet
+  state feedback remains. These checks do not yet prove the full orientation,
+  first-value, and return sequence as one onboarding outcome.
 - **AI Eval:** onboarding mechanics are deterministic. If first value uses
   semantic retrieval or a real Agent, its quality evidence comes from J05 or
   J10 rather than being duplicated here.
@@ -122,13 +127,14 @@ aliases, and Journey E2E owns representative composition.
   decisions, format detection, content-write boundaries, and their
   failure/confirmation paths.
 - **Journey E2E:** [document editing smoke](../e2e/smoke/document-editing.spec.ts),
+  [workspace navigation depth](../e2e/journeys/navigation-depth.spec.ts),
   [Markdown and JSON](../e2e/journeys/markdown-json.spec.ts),
   [outline and Find](../e2e/journeys/markdown-outline-find.spec.ts),
   [library mutations](../e2e/journeys/library-mutations.spec.ts), and
   [format and media](../e2e/journeys/formats-media.spec.ts) cover representative
   format classes and document work, including preview-only affordances,
-  external-write conflict recovery, and a live edit flushed through recovery
-  reload.
+  explicit PDF/DOCX preview-failure identity, external-write conflict recovery,
+  and a live edit flushed through recovery reload.
 - **AI Eval:** not required.
 - **Release Check:** complex packaged PDF, DOCX, and media behavior remains
   release evidence.
@@ -166,7 +172,7 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** `pnpm test:retrieval` and the data, scope, credential,
   and renderer suites cover exact filtering, semantic mechanics, source
-  remapping, access boundaries, and failure presentation.
+  remapping, access boundaries, account identity, and failure presentation.
 - **Journey E2E:** [semantic search UI](../e2e/journeys/semantic-search-ui.spec.ts)
   covers mode, scope, readiness, result presentation, and source navigation.
 - **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned, synthetic

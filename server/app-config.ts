@@ -23,6 +23,7 @@ import type {
 } from '../shared/preferences.ts';
 import type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
 import type { LocalTranscriptionModelId } from '../shared/transcription.ts';
+import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
 
 export type {
   AppearancePreferences,
@@ -75,6 +76,10 @@ export interface HostedAccountSession {
   expiresAt: number;
   userId: string;
   email: string;
+  /** Optional display-only Google profile fields. They never participate in
+   * authentication, authorization, quota ownership, or source selection. */
+  displayName?: string;
+  avatarUrl?: string;
 }
 
 const EMBEDDER_DEFAULTS: Record<EmbedderProvider, Omit<EmbedderConfig, 'provider' | 'apiKey'>> = {
@@ -272,7 +277,19 @@ export function getHostedAccountSession(): HostedAccountSession | undefined {
     typeof raw.userId !== 'string' || !raw.userId ||
     typeof raw.email !== 'string' || !raw.email
   ) return undefined;
-  return { ...raw };
+  const displayName = normalizeHostedDisplayName(raw.displayName);
+  const avatarUrl = parseGoogleAvatarUrl(raw.avatarUrl)?.toString();
+  // Select fields explicitly: malformed/legacy provider metadata and any
+  // future credentials must never hitchhike into the normalized session.
+  return {
+    accessToken: raw.accessToken,
+    refreshToken: raw.refreshToken,
+    expiresAt: raw.expiresAt,
+    userId: raw.userId,
+    email: raw.email,
+    ...(displayName ? { displayName } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
+  };
 }
 
 export function setHostedAccountSession(session: HostedAccountSession | undefined): void {

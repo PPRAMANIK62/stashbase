@@ -34,6 +34,9 @@ a transcript-centered file manager.
 - Runtime capabilities determine model, permission, and effort controls without
   rewriting global CLI defaults. New sessions start in Auto, where the agent
   decides when an action needs approval; Ask is an explicit per-session pick.
+  An idle Codex conversation can change the model used by its next turn without
+  replacing its native thread; the picker pauses while a turn is active. Claude
+  keeps its selected model fixed after the conversation has content.
   Suggestions prefill rather than send.
 - Streaming, tool activity, permissions, attachments, skills, recovery, and
   file artifacts remain inspectable. Editing and resending an earlier prompt
@@ -55,6 +58,10 @@ a transcript-centered file manager.
 - Responses support GFM and local math rendering while preserving original
   Markdown for history and copy. Raw HTML, remote images, unsafe links, and
   invalid formulas remain inert or visibly recoverable.
+- Hovering a turn reveals when its messages happened — beside the user
+  message's copy/edit cluster and the reply's standing copy control. Times
+  appear only when genuinely recorded (live sends and settles, or history
+  whose source kept them); nothing is invented for restored transcripts.
 
 ## Experience Contract
 

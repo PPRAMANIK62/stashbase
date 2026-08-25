@@ -1,17 +1,20 @@
 /* Shared tree-row primitive. Consumed by the sidebar's file tree
- * (features/workspace/components/FileTree.tsx, Sidebar.tsx) and by the two
- * in-document outline trees (common/components/DocumentOutline.tsx,
- * features/documents/components/json/JsonTreeView.tsx) — one visual family,
- * not a workspace-only concern. Relocated verbatim from styles/sidebar.css. */
+ * (features/workspace/components/FileTree.tsx, Sidebar.tsx) and the
+ * document outline (common/components/DocumentOutline.tsx) — one visual
+ * family, not a workspace-only concern. The JSON tree styles its own
+ * `json-tree-row` in json-tree.css and does not consume these rules.
+ * Relocated verbatim from styles/sidebar.css. */
 
 /* Tree rows. Indent is set inline per node depth.
  * Folder rows toggle expand/collapse; file rows open the file.
- * Rows render as inset rounded pills: the scroll containers supply the
- * horizontal gutter (px-1.5 in Sidebar.tsx / DocumentOutline.tsx), so
- * the rules here only add the radius + quiet hover/selected surfaces.
- * The transparent left border is a metric spacer — removing it would
- * shift the inline indent math — and selection is a tinted pill, not
- * an accent edge bar. */
+ * Hover/selected fills run FULL-BLEED, edge to edge: the -6px inline
+ * margins cancel the scroll containers' px-1.5 rail (Sidebar.tsx /
+ * DocumentOutline.tsx keep that rail for their other children), and the
+ * rail comes back as the transparent left border — 6px rail + the
+ * original 2px metric spacer = 8px — so every consumer's inline indent
+ * math lands exactly where it did. A bar that touches both edges has no
+ * corners to round, so the radius is 0. Selection stays a tinted fill:
+ * no accent edge bar, no focus-outlined box. */
 .tree-row {
   display: flex;
   align-items: center;
@@ -31,10 +34,11 @@
    * that is no longer on a whole pixel resolves a drop AT the middle to
    * the wrong side. `real pointer drag reorders root files` is the
    * regression test. */
-  padding: 3px 8px 3px 0;
+  margin-inline: -6px;
+  padding: 3px 14px 3px 0;
   cursor: pointer;
-  border-left: 2px solid transparent;
-  border-radius: var(--radius-ui);
+  border-left: 8px solid transparent;
+  border-radius: 0;
   font-size: var(--text-base);
   color: var(--fg);
   min-width: 0;
@@ -170,15 +174,17 @@
 }
 
 /* Same recipe as the inline rename fields (RenameInput.tsx,
- * SessionHistoryMenu.tsx): row radius, base surface, accent border
- * as the focus affordance. */
+ * SessionHistoryMenu.tsx): control-tier radius (it is a bordered input
+ * FIELD sitting in a row slot — the full-bleed row fill around it stays
+ * square, the field keeps its own small corners), base surface, accent
+ * border as the focus affordance. */
 .tree-create-input {
   flex: 1;
   min-width: 0;
   margin: 0;
   padding: 2px 6px;
   border: 1px solid var(--accent);
-  border-radius: var(--radius-ui);
+  border-radius: var(--radius-control);
   background: var(--bg);
   color: var(--fg);
   font: inherit;

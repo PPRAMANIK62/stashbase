@@ -7,7 +7,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   fmtDuration,
+  formatMessageTime,
   groupTurns,
+  replyTimestamp,
   settledReplySections,
   tailBlockSpeaks,
   turnReplyText,
@@ -139,4 +141,33 @@ test('the work trace header names what happened, with timing only when measured'
   assert.equal(workTraceLabel(), 'Worked');
   assert.equal(workTraceLabel({ durationMs: 45_000, interrupted: false }), 'Worked for 45s');
   assert.equal(workTraceLabel({ durationMs: 84_000, interrupted: true }), 'You stopped after 1m 24s');
+});
+
+test('reply time prefers the live settle clock over replayed block times', () => {
+  const turn = {
+    key: 'u1',
+    head: { kind: 'user' as const, id: 'u1', text: 'q', at: 1000 },
+    body: [
+      { kind: 'assistant' as const, id: 'a1', text: 'partial', at: 2000 },
+      { kind: 'assistant' as const, id: 'a2', text: 'final', at: 3000 },
+    ],
+  };
+  assert.equal(replyTimestamp(turn, { durationMs: 5, interrupted: false, settledAt: 9000 }), 9000);
+  // Restored history has no meta: the newest source-recorded assistant time.
+  assert.equal(replyTimestamp(turn, undefined), 3000);
+  // No clock ever saw the reply: no timestamp, never an invented one.
+  assert.equal(replyTimestamp({ key: 'u2', head: null, body: [{ kind: 'assistant', id: 'a3', text: 'x' }] }), undefined);
+});
+
+test('message times render bare for today and gain the day once older', () => {
+  const noon = new Date(2026, 7, 25, 12, 0).getTime();
+  const sameDay = formatMessageTime(new Date(2026, 7, 25, 9, 30).getTime(), noon);
+  assert.match(sameDay, /9:30|09:30/);
+  assert.doesNotMatch(sameDay, /Aug|8/);
+  // Same year: day appears, year stays implicit.
+  const sameYear = formatMessageTime(new Date(2026, 7, 20, 9, 30).getTime(), noon);
+  assert.match(sameYear, /20/);
+  assert.doesNotMatch(sameYear, /2026/);
+  // Older year: the year joins.
+  assert.match(formatMessageTime(new Date(2025, 7, 20, 9, 30).getTime(), noon), /2025/);
 });

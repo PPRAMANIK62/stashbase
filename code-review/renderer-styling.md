@@ -300,8 +300,8 @@ this file records the mechanics a change must respect.
    `pill` and `menu-option` are one idiom in two halves — a quiet
    "pick a value" trigger and the choice rows it opens onto — and they
    arrived by absorbing a shared module of twelve exported class strings
-   that the composer's model/mode pills and the search popup's scope pill
-   both had to spell in the same order. A recipe that has to be spelled is
+   that the composer's settings/mode pills and the search popup's scope
+   pill both had to spell in the same order. A recipe that has to be spelled is
    a recipe that can be spelled half: `Pill` carries `min-w-0` AND the
    label's `truncate` because the two are one decision (a flex item's
    default `min-width: auto` refuses to shrink below its content, so a long
@@ -317,7 +317,7 @@ this file records the mechanics a change must respect.
    caller's business. `MenuSectionLabel` joined `menu-radio` rather than
    `menu`, by that file's own rule — it is a grouping part and both callers
    sit behind an interaction boundary, so it costs the initial chunk
-   nothing. It is a muted grouping line rather than a `MenuSeparator`,
+   nothing; `menu-submenu` holds the nested-menu parts under the same rule. It is a muted grouping line rather than a `MenuSeparator`,
    because a hairline directly under the default row cuts a menu in half
    and reads as two.
 
@@ -330,8 +330,8 @@ this file records the mechanics a change must respect.
    replaced by "Could not open chat session." the moment a pill was
    clicked. Either put the label inside the `MenuRadioGroup`/`MenuGroup`,
    or use `MenuSectionLabel`, which needs no group. Guarded by
-   `agent-composer-pills.test.ts`, which opens each pill and reads the
-   group's name back.
+   `agent-composer-pills.test.ts`, which opens each pill's lists and reads
+   the group names back.
 
    The agent panel's `AttachmentChip` is the same absorption one layer out,
    and it deliberately stayed a feature component rather than moving here:
@@ -1097,6 +1097,17 @@ the tag.
 
 Extend them when the contract grows; never weaken one to land a change.
 
+The external ShadScan audit is a complementary regression signal for the
+shadcn/Base UI layer, not a substitute for these repository-owned invariants or
+browser evidence. CI pins the Action revision and CLI `0.17.0`, uploads the
+machine-readable report, and enforces the reviewed `45` floor. The baseline is
+intentionally not treated as a product-quality percentage: Electron/Vite
+implementations such as theme management, the Error Boundary, Toasts, and the
+command surface are observable in renderer and Playwright evidence even when
+that static ruleset does not recognize their custom wiring. Raise the floor
+only after reviewing a complete report; never add product behavior solely to
+silence an inapplicable rule.
+
 ## CSS exemptions — rules Tailwind utilities can't own
 
 These categories are still exempt from the utility-only rule; what changed
@@ -1127,11 +1138,9 @@ cross-feature, not because migrating them was skipped:
   (`features/documents/components/json/json-tree.css`). Those roles come from
   the global token layer in both themes; they never embed a fixed palette in
   the component. Content follows `--reading-font-size` or the reading step of
-  the ramp, not whatever the chrome around it is wearing, and may use its own
-  mono voice where the content is code. It does NOT get its own text face:
-  the app bundles Inter (`styles.css`) and both chrome and content wear it,
-  so a reply and the interface around it differ in size and measure, not in
-  typeface. `--font-serif` is reserved for the Crepe document title.
+  the ramp, not whatever the chrome around it is wearing. It does not get its
+  own text face: chrome and content share the system UI sans, while code/data
+  surfaces switch to bundled Geist Mono through `--font-mono`.
 
   Colour is the one place content does diverge: long-form reading text takes
   `--text-reading`, not the chrome's `--fg`. The two are the same value in
@@ -1180,7 +1189,7 @@ deletes its CSS import in the same change.
 | Overlay + measure geometry | `--overlay-w-*` / `--overlay-h-*` / `--measure-*` in `globals.css`; `--container-overlay-*` / `--container-measure-*` and `@utility max-h-overlay-*` / `max-w-overlay-fit` in `styles.css` |
 | Pane chrome offsets | `--chrome-top` / `--chrome-banner-h` / `--chrome-top-banner` in `globals.css`; `@utility top-chrome` / `top-chrome-banner` in `styles.css` |
 | Generated icon Adapter | source map in `scripts/gen-icons.mjs` → `web-src/src/common/components/icons.tsx` |
-| Focused evidence | `web-src/src/common/__tests__/renderer-foundation.test.ts`, `electron/tab-strip-layout-smoke.cjs`, and `e2e/visual/` |
+| Focused evidence | `web-src/src/common/__tests__/renderer-foundation.test.ts`, `scripts/renderer-quality-gates.test.mjs`, `electron/tab-strip-layout-smoke.cjs`, and `e2e/visual/` |
 
 ## Review checklist for styling changes
 

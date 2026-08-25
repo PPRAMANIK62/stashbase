@@ -505,12 +505,10 @@ export type Action =
    *  PUT lands). Names list may include entries that no longer exist
    *  on disk — the tree renderer filters those out. */
   | { type: 'FILE_ORDER_SET'; parentPath: string; names: string[] }
-  /** Load a file body into the active tab. `newTab: true` first pushes
-   *  a fresh blank tab and switches to it, so the file lands in a new
-   *  tab instead of replacing the current one — the normal open path,
-   *  since a sidebar click opens a persistent tab. Omitting `newTab`
-   *  replaces the active tab in place (blank-tab reuse, back/forward,
-   *  in-place anchor nav). */
+  /** Load a file body into the active tab. `newTab: true` activates the
+   *  source's existing tab when present; otherwise it pushes a fresh tab and
+   *  switches to it. Omitting `newTab` replaces the active tab in place
+   *  (blank-tab reuse, back/forward, in-place anchor nav). */
   | { type: 'FILE_OPEN'; body: FileBody; newTab?: boolean; libraryFolder?: string }
   | { type: 'FILE_PATCH'; patch: Partial<OpenFile> }
   | { type: 'DOCUMENT_DIRTY'; dirty: boolean }

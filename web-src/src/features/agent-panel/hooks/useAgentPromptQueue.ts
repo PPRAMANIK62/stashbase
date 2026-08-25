@@ -196,7 +196,7 @@ export function useAgentPromptQueue({
       return;
     }
     if (appendBlock) {
-      setBlocks((bs) => [...bs, { kind: 'user', id: nextBlockId(), text, attachments: atts.length ? atts : undefined }]);
+      setBlocks((bs) => [...bs, { kind: 'user', id: nextBlockId(), text, attachments: atts.length ? atts : undefined, at: Date.now() }]);
     }
     setTurnBusy(true);
     openKindRef.current = null;

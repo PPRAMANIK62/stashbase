@@ -111,12 +111,19 @@ test('fake Codex executable speaks the app-server lifecycle used by StashBase', 
   peer.send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'StashBase' } } });
   assert.deepEqual((await peer.response(1)).result, {});
   peer.send({ id: 2, method: 'model/list', params: {} });
-  assert.deepEqual((await peer.response(2)).result.data, [{
-    id: 'fake-codex-model',
-    displayName: 'Fake Codex Model',
-    isDefault: true,
-    supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
-  }]);
+  assert.deepEqual((await peer.response(2)).result.data, [
+    {
+      id: 'fake-codex-model',
+      displayName: 'Fake Codex Model',
+      isDefault: true,
+      supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
+    },
+    {
+      id: 'fake-codex-model-two',
+      displayName: 'Fake Codex Model Two',
+      supportedReasoningEfforts: [{ reasoningEffort: 'medium' }],
+    },
+  ]);
   peer.send({ id: 3, method: 'skills/list', params: { cwds: [spawnedCwd] } });
   assert.deepEqual((await peer.response(3)).result, { data: [{ cwd: spawnedCwd, skills: [] }] });
   peer.send({ id: 4, method: 'thread/start', params: { cwd: spawnedCwd, threadSource: 'user' } });

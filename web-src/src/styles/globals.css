@@ -1,3 +1,21 @@
+    /* Geist Mono is bundled (SIL OFL, see assets/fonts/geist-mono/) so the
+     * code voice renders identically on every platform; the ui-monospace
+     * chain in --font-mono stays behind it as fallback. */
+    @font-face {
+      font-family: 'Geist Mono';
+      src: url('../assets/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Geist Mono';
+      src: url('../assets/fonts/geist-mono/GeistMono-VariableItalic.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: italic;
+      font-display: swap;
+    }
+
     :root {
       color-scheme: light;
       /* Semantic tokens are the only cross-surface theme API. Component
@@ -61,8 +79,8 @@
        * down, not the radii — change one without the other and the shape
        * goes flat. */
       --radius-xs: 4px;      /* inline runs: code spans, mentions, marks */
-      --radius-control: 6px; /* sub-24px icon buttons */
-      --radius-ui: 10px;     /* items inside a box: rows, menu items, buttons */
+      --radius-control: 6px; /* sub-24px icon buttons; inline row inputs (rename/create) */
+      --radius-ui: 10px;     /* action items inside a box: menu items, buttons */
       /* Every bordered or filled BOX: the composer, transcript cards, code
        * blocks, inputs, cards, panels, menus, popovers, dialogs.
        *
@@ -340,20 +358,15 @@
       --ui-font-size: var(--text-base);
       --ui-scale: 1;
       --reading-font-size: 14px;
-      /* Three-voice typography, tokenized so every surface speaks ONE
-       * stack per voice (chrome sans, reading serif, data mono) instead of
-       * each component restating a slightly different literal. Wired into
-       * Tailwind's font-* utilities in styles.css @theme. Sans carries the
-       * CJK fallbacks; mono is the superset stack so no surface regresses. */
-      /* Inter first — bundled with the app (see styles.css), so this
-       * resolves to the same face on macOS, Windows and Linux instead of
-       * three different system faces. The platform entries stay behind it
-       * as the load-failure path, and the CJK families stay behind THOSE
-       * because Inter carries no CJK: a Chinese run falls through to
-       * PingFang/Hiragino by unicode coverage, exactly as before. */
-      --font-sans: "Inter Variable", -apple-system, system-ui, "PingFang SC", "Hiragino Sans", sans-serif;
-      --font-serif: ui-serif, Georgia, Cambria, "Songti SC", serif;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      /* Two-voice typography, tokenized so every surface speaks ONE stack
+       * per voice: the UI sans carries chrome AND reading content, the
+       * bundled Geist Mono carries code, paths, and structured data. Wired
+       * into Tailwind's font-* utilities in styles.css @theme. Sans lists
+       * CJK fallbacks explicitly per platform so Chinese always lands on a
+       * quality sans (PingFang/Hiragino/YaHei/Noto), never a serif or an
+       * unhinted default. */
+      --font-sans: -apple-system, system-ui, "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif;
+      --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
     :root[data-ui-scale='small'] { --ui-scale: .9; }
@@ -602,6 +615,27 @@
     .scrollbar-quiet {
       scrollbar-width: thin;
       scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+
+    /* Working shimmer (Cursor register): a soft light band sweeps through
+     * a meta label while the app is actively working on something — the
+     * agent's thinking/tool labels, the account sign-in wait. THE one
+     * working-state voice: reach for this, not a spinner.
+     * background-clip:text needs no extra elements, and children that
+     * paint their own background (the agent panel's accent Dot) are
+     * unaffected. The global reduced-motion rule zeroes the keyframe,
+     * leaving a static muted label. */
+    .working-shimmer {
+      background: linear-gradient(90deg, var(--muted) 40%, var(--fg) 50%, var(--muted) 60%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: working-shimmer 2s linear infinite;
+    }
+    @keyframes working-shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
     }
 
     @media (prefers-reduced-motion: reduce) {

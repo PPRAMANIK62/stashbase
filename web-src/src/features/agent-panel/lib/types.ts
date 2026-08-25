@@ -23,8 +23,12 @@ export interface ToolBlock {
 }
 
 export type Block =
-  | { kind: 'user'; id: string; text: string; attachments?: Attachment[] }
-  | { kind: 'assistant'; id: string; text: string }
+  /** `at` is epoch ms when the message landed, carried only when a real
+   * clock produced it (live sends; history whose source recorded times).
+   * Never invented for replayed history — absent means "don't show a
+   * time", the same honesty rule as TurnMeta durations. */
+  | { kind: 'user'; id: string; text: string; attachments?: Attachment[]; at?: number }
+  | { kind: 'assistant'; id: string; text: string; at?: number }
   | { kind: 'thinking'; id: string; text: string }
   /** Non-fatal runtime guidance. It remains transcript evidence without
    * entering the session or turn failure state machines. */

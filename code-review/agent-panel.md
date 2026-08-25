@@ -59,13 +59,22 @@
   hover surface of its own: each target in it highlights only its own box,
   and a rule separates the New Chat/agent pair from chat history.
 - The scope picker is available before session binding and remains visible but
-  locked after binding. Model and effort come from runtime capabilities;
-  Default remains an omitted override. Locked controls stay legible and inert —
-  the locked PILL goes inert and says why, rather than opening onto a dimmed
-  list.
-- One session setting is one pill over one menu. Model, mode, and effort are
-  independent, so none of them shares another's popup or appends its value to
-  another's trigger label; a pill names only the setting it changes.
+  locked after binding. Model and effort come from runtime capabilities, and
+  Default remains an omitted override. An idle Codex conversation applies a
+  model choice to its next turn on the same thread; its row is disabled only
+  during an active turn. A populated Claude conversation keeps its model fixed.
+  Locked controls stay legible and inert at the smallest surface that cannot
+  act: a pinned setting dims its own row — still naming its value and why —
+  while sibling settings stay adjustable, and a pill goes inert only when
+  everything behind it is pinned.
+- Mode is its own pill: permission state must read without opening a menu, and
+  the Shift-Tab cycle has to land somewhere visible. Model and effort share
+  the settings pill over a two-level menu — the parent holds one value row per
+  setting and each row opens a single-list flyout, so no card ever stacks two
+  headed lists. The trigger names the model and appends effort only when
+  explicitly overridden; a default or inherited effort claims no bar space.
+  When a runtime advertises only one of the two settings, the pill opens that
+  list directly.
 - CodeMirror owns composer text, selection, undo, and `@`/`/` key handoff. The
   UI remains a capped-height chat input, not an editor workbench.
 - Suggestions only prefill a draft; they never send. Their rotation pauses
@@ -101,11 +110,17 @@
   nearest user prompt above the card, never the transcript's newest.
 - Completed thinking, interim narration, and tool activity fold under one
   working-trace header while the final answer remains visible. Interrupted work
-  stays expanded. Resumed history has no invented duration.
+  stays expanded. Resumed history has no invented duration or timestamp:
+  hover message times render only when a real clock recorded them — the
+  live renderer for this session's messages, or the history source's own
+  per-message/turn times (Claude native transcript lines; Codex turn
+  boundaries).
 - Tool activity is compact and inspectable. Intermediate failure may tint its
   row but does not turn the whole summary into a terminal error.
 - Permission requests and recovery actions never enter collapsed activity.
-- User messages expose copy and edit-and-resend. Resend is a new prompt, never
+- Every settled reply exposes one standing Copy Reply control — always
+  visible, never hover- or menu-gated — carrying the untouched assistant
+  source. User messages expose copy and edit-and-resend. Resend is a new prompt, never
   transcript rewind or fork. When another turn is active, enqueue the edited
   prompt first, interrupt the old turn, and start the edit only through the
   terminal queue handoff; ordinary composer follow-ups remain non-interrupting.

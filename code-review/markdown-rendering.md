@@ -67,6 +67,10 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   replace it with an actionable retry surface rather than an indefinite blank
   pane. A builder whose creation rejected while Milkdown remains in `OnCreate`
   must not enter Milkdown's retrying destroy path; retry uses a fresh builder.
+- Reading View hides every authoring overlay at the scoped style boundary even
+  when a retained Crepe provider still reports its previous visible state.
+  Package styles load after the StashBase document stylesheet, so selectors
+  that suppress maintained Crepe controls must outrank their package rules.
 - Heading IDs derive from rendered heading text and remain stable enough for
   same-note and cross-note anchor navigation.
 - Document outlines read heading nodes from the retained ProseMirror document.

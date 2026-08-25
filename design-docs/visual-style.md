@@ -27,8 +27,12 @@ StashBase has three stable visual voices:
 - **Color:** cyan is the working accent; amber is a scarce brand counterpoint.
   Selection surfaces stay neutral, and status colors communicate state rather
   than decoration.
-- **Typography:** system sans for chrome, serif for long-form reading, and
-  monospace for paths, code, and structured data.
+- **Typography:** two voices. The system UI sans (SF Pro on macOS, with
+  explicit CJK fallbacks — PingFang SC first) carries chrome and long-form
+  reading alike; bundled Geist Mono carries paths, code, and structured
+  data on every platform. Reading surfaces are distinguished by size,
+  spacing, and measure, not by a typeface change. Documents may carry
+  their own typography (a styled HTML file keeps its fonts).
 - **Icons:** one coherent Phosphor family for product controls, with separate
   marks only for brands that have no equivalent icon.
 
@@ -66,6 +70,10 @@ type is carried primarily by shape and label rather than a rainbow of colors.
 - Circles and capsules are reserved for semantics that need them, such as
   identity, status, or a terminal action. A box never becomes a capsule by
   being short — if the shape appears, it was chosen.
+- A person avatar keeps one stable circular footprint while remote content
+  loads or fails. Its fallback order is provider image, display-name initials,
+  email initials, then the generic person icon; decorative avatar content does
+  not repeat adjacent identity text to assistive technology.
 - List hover and selection are quiet inset surfaces. Accent feedback is
   reserved for states that must be unmistakable, such as an active drop target.
 - Sibling controls align to shared grid lines. Empty states use one deliberate
