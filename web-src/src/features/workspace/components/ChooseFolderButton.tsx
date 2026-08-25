@@ -3,6 +3,7 @@ import { errorMessage } from '@/common/api/api';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { FolderIcon } from '@/common/components/icons';
 import { Menu } from '@/common/components/Menu';
+import { Button } from '@/common/components/ui/button';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { useLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 import { libraryMenuItems } from '@/features/workspace/lib/libraryMenuItems';
@@ -40,8 +41,9 @@ export function ChooseFolderButton() {
 
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         /* Same row anatomy as New Chat above it — px-2 pill row, 16px
          * icon slot around a 14px glyph, label on the shared 38px
          * gutter — so the two bare-window actions read as siblings.
@@ -50,8 +52,12 @@ export function ChooseFolderButton() {
          * transient offer cards. No chevron: in this chrome the chevron
          * marks a switchable current VALUE ("Library ⌄", the agent
          * picker) — this label is a command, and the verb already
-         * promises the menu, as with Add Folder…. */
-        className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-accent hover:bg-muted aria-expanded:bg-active"
+         * promises the menu, as with Add Folder…. `size="sm"` IS the
+         * 28px row this used to spell as `min-h-7`; the overrides below
+         * are the sidebar-row deltas only (full width, left-aligned,
+         * accent text, and the selected-surface open state a menu
+         * anchor takes instead of the plain hover tint). */
+        className="w-full justify-start gap-2 px-2 text-left text-base text-accent aria-expanded:bg-active aria-expanded:text-accent"
         aria-haspopup="menu"
         aria-expanded={anchor !== null}
         onClick={(e) => {
@@ -63,7 +69,7 @@ export function ChooseFolderButton() {
           <FolderIcon className="size-3.5" />
         </span>
         <span className="min-w-0 truncate">Choose Folder</span>
-      </button>
+      </Button>
       {anchor && (
         <Menu
           anchor={{ rect: anchor, align: 'left' }}

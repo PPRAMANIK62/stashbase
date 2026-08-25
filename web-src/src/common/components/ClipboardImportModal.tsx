@@ -1,4 +1,3 @@
-import './clipboard-offer-preview.css';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedModal } from '@/common/components/LazyManaged';
 
@@ -46,8 +45,10 @@ export function ClipboardImportModal({
         description: <>There's an image on your clipboard. Add it to this folder — its text gets extracted so you can search it later.</>,
         onCancel: onClose,
         onAdd,
+        /* Capped so a large screenshot cannot blow out the modal; the
+         * neutral frame keeps a transparent PNG legible. */
         children: (
-          <div className="clipboard-offer-preview">
+          <div className="mb-3.5 flex justify-center [&_img]:max-h-65 [&_img]:max-w-full [&_img]:rounded-lg [&_img]:border [&_img]:border-border [&_img]:bg-background [&_img]:object-contain">
             <img src={offer.dataUrl} alt="Clipboard image" />
           </div>
         ),

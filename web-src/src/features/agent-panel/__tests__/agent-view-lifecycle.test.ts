@@ -185,10 +185,10 @@ test('failed runtime setup keeps Check again available after external recovery',
   buttonNamed(renderer.root, 'Check again');
   buttonNamed(renderer.root, 'Retry');
   const checkAgain = renderer.root.findAll((node) => (
-    node.props.children === 'Check again' && typeof node.props.onPress === 'function'
+    node.props.children === 'Check again' && typeof node.props.onClick === 'function'
   ))[0];
   assert.ok(checkAgain);
-  await act(async () => { checkAgain.props.onPress(); });
+  await act(async () => { checkAgain.props.onClick(); });
   assert.equal(checks, 1);
 });
 
@@ -227,10 +227,10 @@ test('Codex authentication recovery starts login with the installed runtime', as
 
   buttonNamed(renderer.root, 'Sign in with ChatGPT');
   const signIn = renderer.root.findAll((node) => (
-    node.props.children === 'Sign in with ChatGPT' && typeof node.props.onPress === 'function'
+    node.props.children === 'Sign in with ChatGPT' && typeof node.props.onClick === 'function'
   ))[0];
   assert.ok(signIn);
-  await act(async () => { signIn.props.onPress(); });
+  await act(async () => { signIn.props.onClick(); });
   assert.equal(logins, 1);
 });
 
@@ -281,10 +281,10 @@ test('a classified turn failure explains its recovery and offers Codex sign-in i
   assert.doesNotMatch(output, /The Agent turn failed before returning a response/);
 
   const signIn = renderer.root.findAll((node) => (
-    node.props.children === 'Sign in with ChatGPT' && typeof node.props.onPress === 'function'
+    node.props.children === 'Sign in with ChatGPT' && typeof node.props.onClick === 'function'
   ))[0];
   assert.ok(signIn);
-  await act(async () => { signIn.props.onPress(); });
+  await act(async () => { signIn.props.onClick(); });
   assert.equal(logins, 1);
 
   // Acting on the card settles it: the button and guidance title are gone,
@@ -314,10 +314,10 @@ test('a classified turn failure explains its recovery and offers Codex sign-in i
 
   const promptsBefore = first.sent.map((entry) => JSON.parse(entry) as { t: string }).filter((m) => m.t === 'prompt').length;
   const tryAgain = renderer.root.findAll((node) => (
-    node.props.children === 'Try again' && typeof node.props.onPress === 'function'
+    node.props.children === 'Try again' && typeof node.props.onClick === 'function'
   ))[0];
   assert.ok(tryAgain);
-  await act(async () => { tryAgain.props.onPress(); });
+  await act(async () => { tryAgain.props.onClick(); });
   output = renderedText(renderer);
   assert.doesNotMatch(output, /Usage limit reached/);
   const prompts = first.sent.map((entry) => JSON.parse(entry) as { t: string; text?: string }).filter((m) => m.t === 'prompt');
@@ -357,10 +357,10 @@ test('an old card acted on after later turns resends its own prompt, not the new
   });
 
   const tryAgain = renderer.root.findAll((node) => (
-    node.props.children === 'Try again' && typeof node.props.onPress === 'function'
+    node.props.children === 'Try again' && typeof node.props.onClick === 'function'
   ))[0];
   assert.ok(tryAgain);
-  await act(async () => { tryAgain.props.onPress(); });
+  await act(async () => { tryAgain.props.onClick(); });
   const prompts = first.sent.map((entry) => JSON.parse(entry) as { t: string; text?: string })
     .filter((message) => message.t === 'prompt');
   assert.equal(prompts.at(-1)?.text, 'First question');
@@ -391,10 +391,10 @@ test('Claude reconnect resumes the session and auto-retries the failed prompt', 
   let output = renderedText(renderer);
   assert.match(output, /Signed out of Claude Code/);
   const reconnect = renderer.root.findAll((node) => (
-    node.props.children === 'Reconnect' && typeof node.props.onPress === 'function'
+    node.props.children === 'Reconnect' && typeof node.props.onClick === 'function'
   ))[0];
   assert.ok(reconnect);
-  await act(async () => { reconnect.props.onPress(); });
+  await act(async () => { reconnect.props.onClick(); });
 
   // The card settled (message kept, action gone) and a replacement
   // connection resumed the same native session.

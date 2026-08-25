@@ -32,7 +32,6 @@ export function RemoveFolderModal({
         </>
       }
       onCancel={removing ? () => { /* wait for removal */ } : onCancel}
-      top
     >
       <div className="mt-2 truncate text-sm text-muted-foreground" title={path}>
         {parentLabel}

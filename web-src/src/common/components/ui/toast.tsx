@@ -141,7 +141,7 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
       className={cn(
-        "scrollbar-quiet fixed right-4 bottom-4 z-[9000] flex max-h-[min(60vh,480px)] w-[min(360px,calc(100vw-32px))] flex-col gap-2 overflow-y-auto p-0.5 outline-none",
+        "scrollbar-quiet fixed right-4 bottom-4 z-toast flex max-h-overlay-md w-overlay-sm flex-col gap-2 overflow-y-auto p-0.5 outline-none",
         className
       )}
       {...props}
@@ -156,13 +156,23 @@ function ToastRoot({
 }: ToastPrimitive.Root.Props) {
   const data = toast.data as FeedbackToastData | undefined
   const level = data?.level ?? "info"
+  /* Same entrance grammar as every other transient surface in the app:
+   * fade in from 96%, never from a translate of its own and never from
+   * zero. The toast is not anchored to a trigger, so it keeps the default
+   * centre origin the dialogs use rather than `origin-anchor`.
+   *
+   * The exit is one role step QUICKER than the entrance (standard 180ms in,
+   * fast 120ms out). An arrival is information and may take its time; a
+   * dismissal is the user's own instruction already carried out, and
+   * matching the two durations makes every close feel like the surface is
+   * arguing with them. */
   return (
     <ToastPrimitive.Root
       data-slot="toast"
       toast={toast}
       swipeDirection={["down", "right"]}
       className={cn(
-        "flex items-start gap-2 rounded-lg border border-border border-l-2 bg-background px-3 py-2.5 text-base leading-snug text-foreground shadow-elevation outline-none transition-[opacity,transform] duration-standard ease-ui data-[starting-style]:translate-y-1.5 data-[starting-style]:opacity-0 data-[ending-style]:translate-y-1.5 data-[ending-style]:opacity-0",
+        "flex items-start gap-2 rounded-lg border border-border border-l-2 bg-popover px-3 py-2.5 text-base leading-snug text-popover-foreground shadow-elevation outline-none transition-surface duration-standard data-[starting-style]:scale-96 data-[starting-style]:opacity-0 data-[ending-style]:scale-96 data-[ending-style]:opacity-0 data-[ending-style]:duration-fast",
         feedbackToastPolicy[level].accentClass,
         className
       )}
@@ -231,12 +241,18 @@ function ToastClearAll({
   className?: string
 }) {
   if (count <= 1) return null
+  /* `bg-popover` overrides the `outline` recipe's `bg-background` in both
+   * themes. This control FLOATS over the app under a `shadow-elevation`,
+   * and a floating surface is `bg-popover` — the two roles agree in light
+   * mode and split apart in dark, which is the defect. The override lives
+   * at the call site rather than in the recipe because the other fifty-odd
+   * `outline` buttons sit ON a surface rather than above one. */
   return (
     <Button
       type="button"
       variant="outline"
       size="xs"
-      className={cn("self-end shadow-elevation", className)}
+      className={cn("self-end bg-popover shadow-elevation dark:bg-popover", className)}
       onClick={() => managedFeedbackToasts.clear()}
     >
       Clear all ({count})

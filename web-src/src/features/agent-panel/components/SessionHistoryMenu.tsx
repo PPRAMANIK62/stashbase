@@ -10,18 +10,22 @@
  * `sessionHistory.ts`).
  *
  * The sidebar owns the clock trigger and lazy-mounts this component at
- * the interaction boundary (react-aria stays out of the initial renderer
- * chunk), so the popover is standalone: `triggerRef` anchors it and it is
- * open for exactly as long as it is mounted.
+ * the interaction boundary, so the popover is standalone: `triggerRef`
+ * anchors it and it is open for exactly as long as it is mounted.
  */
 import { useMemo, useState, type RefObject } from 'react';
-import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } from 'react-aria-components';
+import { Button } from '@/common/components/ui/button';
+import { Popover, PopoverContent } from '@/common/components/ui/popover';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/common/components/ui/alert-dialog';
 import { AGENTS, AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { EditIcon, TrashIcon } from '@/common/components/icons';
 import { basename } from '@/common/lib/paths';
-import { buttonVariants } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
-import { emptyStateClass } from '@/common/lib/emptyState';
+import { EmptyState } from '@/common/components/ui/empty-state';
 import type { HistoryScope } from '@/common/lib/libraryScope';
 import { rowResumeFolder, type MergedSessionRow } from '@/features/agent-panel/lib/sessionHistory';
 import { useSessionHistory } from '@/features/agent-panel/hooks/useSessionHistory';
@@ -58,6 +62,10 @@ export function SessionHistoryMenu({
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  /* Which row's confirmation is open. Controlled rather than left to the
+   * trigger, because a failed delete must KEEP the dialog open so its
+   * error stays where the action was taken. */
+  const [confirmKey, setConfirmKey] = useState<string | null>(null);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -80,14 +88,16 @@ export function SessionHistoryMenu({
   }
 
   return (
-    <Popover
-      triggerRef={triggerRef}
-      isOpen
-      onOpenChange={(next) => { if (!next) onClose(); }}
-      className="session-history-popover z-20 w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border bg-card p-1.5 shadow-elevation"
-      placement="bottom end"
-    >
-      <Dialog aria-label={ariaLabel}>
+    <Popover open onOpenChange={(next) => { if (!next) onClose(); }}>
+      {/* The trigger lives in the pane header, not here, so the popup is
+        * anchored to it by ref rather than wrapped around it. */}
+      <PopoverContent
+        anchor={triggerRef}
+        side="bottom"
+        align="end"
+        aria-label={ariaLabel}
+        className="session-history-popover w-80 max-w-overlay-fit p-1.5"
+      >
         <div className="px-0.5 pt-0.5 pb-1.5">
           <Input
             type="text"
@@ -98,100 +108,140 @@ export function SessionHistoryMenu({
           />
         </div>
         <div className="max-h-80 overflow-y-auto">
-          {loading && <div className={emptyStateClass}>Loading…</div>}
-          {!loading && allFailed && <div className={emptyStateClass}>Could not load sessions.</div>}
+          {loading && <EmptyState>Loading…</EmptyState>}
+          {!loading && allFailed && <EmptyState>Could not load sessions.</EmptyState>}
           {!loading && !allFailed && failedAgents.length > 0 && (
             // Partial failure stays quiet: the loaded agent's rows render
             // normally with one muted note for the missing runtime.
-            <div className="px-2.25 pt-0.5 pb-1 text-xs text-muted-foreground" role="status">
+            <div className="px-2.5 pt-0.5 pb-1 text-xs text-muted-foreground" role="status">
               {failedAgents.map((agent) => AGENT_META[agent].shortName).join(' and ')} history could not be loaded.
             </div>
           )}
           {!loading && !allFailed && shown.length === 0 && (
-            <div className={emptyStateClass}>{q ? 'No matches.' : 'No sessions yet.'}</div>
+            <EmptyState>{q ? 'No matches.' : 'No sessions yet.'}</EmptyState>
           )}
-          {!loading && !allFailed && shown.map((row) => {
-            const key = rowKey(row);
-            const AgentIcon = AGENT_META[row.agent].Icon;
-            return (
-              // Time and hover-revealed actions share the one right-hand
-              // slot: time shows at rest, hover/focus swaps in edit/delete.
-              <div
-                key={key}
-                className="group/row relative flex items-center rounded-md hover:bg-muted"
-              >
-                {editingKey === key ? (
-                  <input
-                    className="mx-1.5 my-1 min-w-0 flex-1 rounded-md border border-accent bg-background px-1.75 py-1 text-base text-foreground outline-none"
-                    autoFocus
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); void commitRename(row); }
-                      else if (e.key === 'Escape') setEditingKey(null);
-                    }}
-                    onBlur={() => void commitRename(row)}
-                  />
-                ) : (
-                  <Button
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2.25 py-1.75 text-left text-foreground"
-                    aria-label={`Resume ${row.title}`}
-                    onPress={() => onResume(row.agent, row.id, rowResumeFolder(scope, row))}
+          {/* Sessions are a list. The empty/partial-failure notices above
+            * stay outside it so the list holds only `<li>`s and its count
+            * is the number of sessions. */}
+          {!loading && !allFailed && shown.length > 0 && (
+            <ul className="m-0 list-none p-0">
+              {shown.map((row) => {
+                const key = rowKey(row);
+                const AgentIcon = AGENT_META[row.agent].Icon;
+                return (
+                  // Time and hover-revealed actions share the one right-hand
+                  // slot: time shows at rest, hover/focus swaps in edit/delete.
+                  <li
+                    key={key}
+                    className="group/row relative flex items-center rounded-md hover:bg-muted"
                   >
-                    <AgentIcon className="size-3.25 shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate text-base">{row.title}</span>
-                    <span className="shrink-0 truncate text-xs text-muted-foreground group-hover/row:hidden group-focus-within/row:hidden">
-                      {/* The all-scope listing names each row's home so
-                        * "which folder was this?" never needs a click. */}
-                      {scope.kind === 'all' && `${row.folder ? basename(row.folder) : 'Library'} · `}
-                      {relTime(row.lastModified)}
-                    </span>
-                  </Button>
-                )}
-                <div className="hidden shrink-0 gap-px pr-1.25 group-hover/row:flex group-focus-within/row:flex">
-                  <Button
-                    className="grid size-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-3.75"
-                    aria-label={`Rename ${row.title}`}
-                    onPress={() => { setEditingKey(key); setEditText(row.title); }}
-                  >
-                    <EditIcon />
-                  </Button>
-                  <DialogTrigger onOpenChange={(isOpen) => { if (isOpen) setDeleteError(null); }}>
-                    <Button
-                      className="grid size-6 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-3.75"
-                      aria-label={`Delete ${row.title}`}
-                    >
-                      <TrashIcon />
-                    </Button>
-                    <ModalOverlay className="fixed inset-0 z-[100] grid place-items-center bg-veil p-4" isDismissable>
-                      <Modal className="w-[min(420px,90vw)] rounded-xl border border-border bg-background px-6 pt-5.5 pb-5 text-foreground shadow-elevation">
-                        <Dialog role="alertdialog" aria-label="Delete chat session">
-                          {({ close }) => (
-                            <>
-                              <Heading slot="title" className="m-0 text-base leading-none font-medium">Delete chat?</Heading>
-                              <p className="mt-2 mb-0 text-base leading-normal text-muted-foreground">Delete “{row.title}”? This cannot be undone.</p>
-                              {deleteError && <div className="mt-2 text-sm text-status-danger" role="alert">{deleteError}</div>}
-                              <div className="mt-3.5 flex justify-end gap-2">
-                                <Button className={buttonVariants({ variant: 'outline' })} onPress={close}>Cancel</Button>
-                                <Button
-                                  className={buttonVariants({ variant: 'destructive' })}
-                                  onPress={() => { void removeRow(row).then((deleted) => { if (deleted) close(); }); }}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </>
-                          )}
-                        </Dialog>
-                      </Modal>
-                    </ModalOverlay>
-                  </DialogTrigger>
-                </div>
-              </div>
-            );
-          })}
+                    {editingKey === key ? (
+                      // Same `Input` primitive as the search field above, sized
+                      // down to sit inside a row. The popover's unlayered
+                      // `input:focus-visible` rule in globals.css keeps suppressing
+                      // all three focus cues here too — the panel is the focus
+                      // affordance, and this field is autofocused the moment it
+                      // appears.
+                      <Input
+                        className="mx-1.5 my-1 h-auto w-auto flex-1 rounded-md border-accent px-2 py-1"
+                        autoFocus
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); void commitRename(row); }
+                          else if (e.key === 'Escape') setEditingKey(null);
+                        }}
+                        onBlur={() => void commitRename(row)}
+                      />
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        className="h-auto min-w-0 flex-1 justify-start gap-2 px-2.5 py-2 text-left text-foreground"
+                        aria-label={`Resume ${row.title}`}
+                        onClick={() => onResume(row.agent, row.id, rowResumeFolder(scope, row))}
+                      >
+                        <AgentIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate text-base">{row.title}</span>
+                        <span className="shrink-0 truncate text-xs text-muted-foreground group-hover/row:hidden group-focus-within/row:hidden">
+                          {/* The all-scope listing names each row's home so
+                            * "which folder was this?" never needs a click. */}
+                          {scope.kind === 'all' && `${row.folder ? basename(row.folder) : 'Library'} · `}
+                          {relTime(row.lastModified)}
+                        </span>
+                      </Button>
+                    )}
+                    <div className="hidden shrink-0 gap-px pr-1.5 group-hover/row:flex group-focus-within/row:flex">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="text-muted-foreground [&_svg]:size-3.5"
+                        aria-label={`Rename ${row.title}`}
+                        onClick={() => { setEditingKey(key); setEditText(row.title); }}
+                      >
+                        <EditIcon />
+                      </Button>
+                      <AlertDialog
+                        open={confirmKey === key}
+                        onOpenChange={(isOpen) => {
+                          setConfirmKey(isOpen ? key : null);
+                          if (isOpen) setDeleteError(null);
+                        }}
+                      >
+                        <AlertDialogTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              className="text-muted-foreground [&_svg]:size-3.5"
+                              aria-label={`Delete ${row.title}`}
+                            />
+                          }
+                        >
+                          <TrashIcon />
+                        </AlertDialogTrigger>
+                        {/* States its own rhythm now that the primitive ships
+                          * none — the same 14px the app's other confirmation
+                          * (ManagedAlertConfirmModal) puts under its header.
+                          *
+                          * `layer="menu"`: this dialog is raised from a row
+                          * INSIDE the history popover, which stays open
+                          * behind it (the popover is controlled `open` and
+                          * only closes by unmounting). On the ordinary
+                          * modal pair it renders behind that popover and
+                          * its backdrop dims everything except the one
+                          * surface it has to block. */}
+                        <AlertDialogContent layer="menu" className="w-overlay-md gap-3.5">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete chat?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Delete “{row.title}”? This cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          {deleteError && <p className="m-0 text-sm text-status-danger" role="alert">{deleteError}</p>}
+                          <AlertDialogFooter>
+                            <AlertDialogCancel render={<Button variant="outline" />}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              render={<Button variant="destructive" />}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                void removeRow(row).then((deleted) => {
+                                  if (deleted) setConfirmKey(null);
+                                });
+                              }}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
-      </Dialog>
+      </PopoverContent>
     </Popover>
   );
 }

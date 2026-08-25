@@ -33,6 +33,16 @@ export function NewFolderInput({ parentPath, depth }: { parentPath: string; dept
       style={{ paddingLeft: depth * 14 + 26 }}
     >
       <span className="chev new-folder-spacer" aria-hidden="true" />
+      {/* Deliberately NOT the `Input` primitive. `Input` is the app's
+        * BOX field — its own fill, its own stroke, the 36px box height,
+        * the container corner, and a focus ring. This is the opposite
+        * role: a field that has to sit flush inside a 22px tree row at
+        * the row's own indent, where the accent stroke IS the editing
+        * affordance and a ring would break the row's rhythm. Arriving
+        * back at that from the box would take an override for every one
+        * of those decisions, which is not a shared primitive any more —
+        * so the tree keeps its own recipe in `tree.css`, shared with the
+        * inline rename field. */}
       <input
         ref={ref}
         type="text"

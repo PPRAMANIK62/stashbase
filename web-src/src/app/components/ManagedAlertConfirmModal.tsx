@@ -36,8 +36,7 @@ export default function ManagedAlertConfirmModal({
       }}
     >
       <AlertDialogContent
-        className="w-[min(420px,90vw)] !z-[10001] !max-w-[90vw] !gap-0 border border-border bg-background px-6 pt-5.5 pb-5 shadow-elevation"
-        overlayClassName="top !z-[10000]"
+        className="w-overlay-md border border-border px-6 pt-5 pb-5 shadow-elevation"
       >
         <AlertDialogHeader>
           <AlertDialogTitle>

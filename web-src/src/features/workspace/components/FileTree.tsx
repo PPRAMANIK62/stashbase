@@ -10,10 +10,12 @@ import { basename } from '@/common/lib/paths';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { hasName } from '@/store/state/state';
 import { getFileReadiness } from '@/store/lib/fileReadiness';
-import { emptyStateClass } from '@/common/lib/emptyState';
+import { EmptyState } from '@/common/components/ui/empty-state';
+import { SectionHeading } from '@/common/components/ui/section';
 import { FileTypeIcon } from '@/common/components/FileTypeIcon';
 import { NewFolderInput } from '@/features/workspace/components/NewFolderInput';
 import { RenameInput, useRenameTarget } from '@/features/workspace/components/RenameInput';
+import { cn } from '@/common/lib/utils';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
 
@@ -35,17 +37,17 @@ export function FileTree() {
     const total = sourceCode + other;
     if (total > 0) {
       return (
-        <div className={emptyStateClass + ' flex-col items-center gap-1 text-center'}>
-          <div className="font-semibold text-foreground">No supported files found</div>
+        <EmptyState className="flex-col items-center gap-1 text-center">
+          <SectionHeading className="text-sm">No supported files found</SectionHeading>
           {/* text-xs, the ramp's meta step — the note scales with
             * --ui-scale where the old hardcoded 11px did not. */}
           <div className="text-xs leading-snug">
             StashBase found {total} file{total === 1 ? '' : 's'} in this folder, but none can currently be displayed or indexed. Nothing on disk was changed.
           </div>
-        </div>
+        </EmptyState>
       );
     }
-    return <div className={emptyStateClass}>No notes yet — click + to create one</div>;
+    return <EmptyState>No notes yet — click + to create one</EmptyState>;
   }
   return (
     <TreeRovingContext.Provider value={roving}>
@@ -185,7 +187,7 @@ function FolderRow({
         )}
       </div>
       <div
-        className={'tree-children' + (isExpanded ? '' : ' collapsed')}
+        className={cn('tree-children', !isExpanded && 'collapsed')}
         role="group"
       >
         {state.newFolderInputOpen && state.activeFolder === node.path && (
@@ -330,6 +332,7 @@ function FileRow({
       {readiness.preparationFailure ? (
         <span
           className="preparation-status-icon preparation-failure-icon"
+          role="img"
           aria-label="File preparation failed"
           title="File preparation failed; this file may not be searchable."
         >
@@ -338,6 +341,7 @@ function FileRow({
       ) : readiness.preparationCancellation ? (
         <span
           className="preparation-status-icon preparation-cancelled-icon"
+          role="img"
           aria-label="File preparation cancelled"
           title="File preparation was cancelled. Reprocess it when you want searchable text."
         >

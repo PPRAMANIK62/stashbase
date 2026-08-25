@@ -24,13 +24,13 @@ const html = `<!doctype html>
   <body>
     <main class="main" style="width: 500px">
       <div class="tab-strip">
-        <div class="tab-strip-inner">
-          <div class="tab active">
+        <div class="tab-strip-inner" role="tablist">
+          <div class="tab active" role="tab">
             <span class="tab-label">Untitled</span>
             <button type="button" class="tab-close">×</button>
           </div>
-          <button type="button" class="tab-new">+</button>
         </div>
+        <button type="button" class="tab-new">+</button>
       </div>
     </main>
   </body>

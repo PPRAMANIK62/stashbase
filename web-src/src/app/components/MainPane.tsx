@@ -8,13 +8,16 @@ import { electronBridge } from '@/common/lib/electronBridge';
 import { basename } from '@/common/lib/paths';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
+import { cn } from '@/common/lib/utils';
 
 /**
  * Right rail. Layout from top to bottom:
  *   • TabStrip                   (when any tab is open)
  *   • main-body                  (preview / md editor / empty-tab landing)
- *   • absolute-positioned chrome (top-right, `top: 44px` to clear the tab
- *     strip): the md edit toggle + save status, and the PDF control slot.
+ *   • absolute-positioned chrome (top-right, `top-chrome` to clear the
+ *     tab strip): the md edit toggle + save status, and the PDF control
+ *     slot. `top-chrome-banner` is the same offset plus the out-of-folder
+ *     identity banner; both are derived from one token (globals.css).
  *
  * When there are no tabs at all, `.main.no-file > *` hides every child so
  * the pane is a clean canvas.
@@ -40,22 +43,23 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
     })();
   }
   // Reserve room for the absolute-positioned chrome (edit toggle / PDF
-  // controls / floating-actions at top:44px, height 24px) so editor /
+  // controls / floating-actions at `top-chrome`, height 24px) so editor /
   // preview content doesn't render underneath it. HTML / image viewers
   // have no top chrome, so they skip the band and fill from just under
   // the tab strip.
   //
-  // 32px is the floor, not a taste call. The chrome sits at a fixed
-  // top:44px while the tab strip above it grows with the interface-size
-  // preference (35.7 / 37.6 / 40.4px) — 44 is already as high as the
-  // chrome can start without the largest strip covering it, so the band
-  // has to span 44 - 35.7 + 24. Every control that lives in it is
-  // therefore 24px; put a 28px one back and it hangs into the document.
+  // 32px is the floor, not a taste call. The chrome starts at
+  // --chrome-top (44px at the default interface size) while the tab strip
+  // above it grows with that preference (35.7 / 37.6 / 40.4px) — 44 is
+  // already as high as the chrome can start without the largest strip
+  // covering it, so the band has to span 44 - 35.7 + 24. Every control
+  // that lives in it is therefore 24px; put a 28px one back and it hangs
+  // into the document.
   const chromeBand = hasTabs && cur?.format !== 'html' && cur?.format !== 'image';
 
   return (
     <main
-      className={'main' + (hasTabs ? '' : ' no-file') + (cur ? ' fmt-' + cur.format : '')}
+      className={cn('main', !hasTabs && 'no-file', cur && `fmt-${cur.format}`)}
       aria-hidden={workspaceHidden || undefined}
       inert={workspaceHidden || undefined}
     >
@@ -64,7 +68,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         /* Full-width identity strip flush under the tab strip (the DOCX
          * status-row idiom). The absolute chrome below shifts down past it
          * (see chromeTop). */
-        <StatusMessage tone="info" className="z-5 flex min-h-8 shrink-0 items-center gap-2.5 rounded-none border-x-0 border-t-0 px-3.5 py-1.5">
+        <StatusMessage tone="info" className="z-chrome flex min-h-8 shrink-0 items-center gap-2.5 rounded-none border-x-0 border-t-0 px-3.5 py-1.5">
           <span className="min-w-0 flex-1 truncate">
             In <span className="font-semibold">{basename(outOfFolder)}</span> — viewing a file outside the current folder.
           </span>
@@ -83,7 +87,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         * The `main-body` class itself is the structural hook for
         * `.main.no-file > :not(.main-body)` in workspace.css. */}
       <div
-        className={'main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden' + (chromeBand ? ' pt-8' : '')}
+        className={cn('main-body grid min-h-0 min-w-0 flex-1 grid-cols-[1fr] grid-rows-[1fr] overflow-hidden', chromeBand && 'pt-8')}
         role={activeTab ? 'tabpanel' : undefined}
         id={activeTab ? 'document-panel' : undefined}
         aria-labelledby={activeTab ? `document-tab-${activeTab.id}` : undefined}
@@ -93,13 +97,13 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
            * The sidebar's zero-folder block owns the add-folder action;
            * this pane stays a quiet pointer toward it. */
           <div className="grid h-full place-items-center p-10 text-center text-base text-muted-foreground">
-            <p className="m-0 leading-[1.9]">Add a folder from the sidebar to get started.</p>
+            <p className="m-0 leading-loose">Add a folder from the sidebar to get started.</p>
           </div>
         )}
         {!hasTabs && !!state.folderPath && (
           <div className="grid h-full place-items-center p-10 text-center text-base text-muted-foreground">
             <div>
-              <p className="m-0 leading-[1.9]">Start a conversation or choose a document from Files.</p>
+              <p className="m-0 leading-loose">Start a conversation or choose a document from Files.</p>
               <div className="mt-3.5 flex justify-center gap-2">
                 <Button onClick={() => actions.openAgent(readPreferredAgent())}>
                   Start chat
@@ -111,16 +115,24 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
                   Open document
                 </Button>
               </div>
-              <p className="mt-3.5 mb-0 leading-[1.9]">
+              <p className="mt-3.5 mb-0 leading-loose">
                 Drop files or folders anywhere to stash them, or click{' '}
                 {/* Inline ghost-accent "+" — a small rounded-square add-button
                   * so the sentence reads as unmistakably clickable. `pb`
-                  * optically lifts the low-sitting "+" glyph to centre. */}
-                <button
-                  type="button"
-                  className="mx-1 inline-grid size-[1.5em] cursor-pointer place-items-center rounded-sm border border-accent bg-transparent p-0 pb-[0.14em] align-middle leading-none font-medium text-accent transition-colors duration-fast [font-size:inherit] hover:bg-accent/10"
+                  * optically lifts the low-sitting "+" glyph to centre.
+                  *
+                  * The Button primitive with an accent tint over it: the
+                  * className carries only the surface's own decisions (an
+                  * inline box that sizes off the sentence it sits in, and
+                  * the accent palette), while the press scale, the focus
+                  * ring, and the transition come from the recipe — which is
+                  * what this button was missing while it was hand-rolled. */}
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="mx-1 size-[1.5em] cursor-pointer rounded-sm border-accent p-0 pb-[0.14em] align-middle leading-none text-accent hover:bg-accent/10 hover:text-accent dark:hover:bg-accent/10 [font-size:inherit]"
                   onClick={() => { void actions.newNote(); }}
-                >+</button>{' '}
+                >+</Button>{' '}
                 for a new note.
               </p>
             </div>
@@ -142,7 +154,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         // Centered placeholder strip for an empty (Untitled) tab —
         // absolute + 50% transform centers it relative to .main, in the
         // same slot a breadcrumb path would occupy.
-        <div className="absolute top-11 left-1/2 z-4 flex h-6 max-w-[calc(100%-220px)] -translate-x-1/2 items-center overflow-hidden text-base whitespace-nowrap text-muted-foreground">
+        <div className="absolute top-chrome left-1/2 z-chrome flex h-6 max-w-[calc(100%-220px)] -translate-x-1/2 items-center overflow-hidden text-base whitespace-nowrap text-muted-foreground">
           <span className="px-1 py-0.5">Untitled</span>
         </div>
       )}
@@ -152,12 +164,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
          * tab strip (unconditionally present whenever there's an open
          * file, so a fixed offset is safe). The edit toggle lives here on
          * its own; the save status tucks in next to it while editing. */
-        <div className="absolute top-11 right-3.5 z-5 flex items-center gap-2">
+        <div className="absolute top-chrome right-3.5 z-chrome flex items-center gap-2">
           {editMode && saveStatus.text && (
             /* "Saved" / "Renaming…" share the default muted grey — green
              * felt too celebratory for a routine autosave tick. Errors
              * turn red so they break the visual rhythm. */
-            <span className={'text-sm transition-opacity duration-standard' + (saveStatus.cls === 'error' ? ' text-destructive' : ' text-muted-foreground')}>
+            <span className={cn('text-sm transition-opacity duration-standard', saveStatus.cls === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
               {saveStatus.text}
             </span>
           )}
@@ -182,9 +194,10 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         // Slot that PdfPreview portals its zoom / page-count chrome
         // into — sits on the same row as back/forward + breadcrumb
         // so we don't waste a row on viewer chrome. The out-of-folder
-        // banner (min-h-8) pushes the slot down when present.
+        // banner pushes the slot down when present, onto the second of
+        // the two shared chrome offsets.
         <div
-          className={'pointer-events-none absolute right-3.5 left-3.5 z-5 flex items-center justify-stretch gap-2 ' + (outOfFolder ? 'top-[76px]' : 'top-11')}
+          className={cn('pointer-events-none absolute right-3.5 left-3.5 z-chrome flex items-center justify-stretch gap-2', outOfFolder ? 'top-chrome-banner' : 'top-chrome')}
           id="pdf-chrome-slot"
         />
       )}

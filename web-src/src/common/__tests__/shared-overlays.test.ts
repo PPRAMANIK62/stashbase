@@ -26,10 +26,13 @@ import { ModalShell } from '@/common/components/ModalShell';
 import { OverlayStackProvider } from '@/common/components/OverlayStack';
 import { Toasts } from '@/common/components/Toasts';
 import { TooltipButton } from '@/common/components/TooltipButton';
+import { AlertDialog, AlertDialogContent, AlertDialogTitle } from '@/common/components/ui/alert-dialog';
 import { buttonVariants } from '@/common/components/ui/button';
 import { Checkbox } from '@/common/components/ui/checkbox';
+import { Popover, PopoverContent } from '@/common/components/ui/popover';
 import { OPEN_SETTINGS_EVENT } from '@/common/lib/settingsTrigger';
-import { pillClass } from '@/common/lib/pillMenuStyles';
+import { pillVariants } from '@/common/components/ui/pill';
+import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { SettingsPortal } from '@/features/settings';
 
 function keydown(key: string): KeyboardEvent {
@@ -58,7 +61,7 @@ test('the shared modal shell renders one Base UI dialog recipe: veil, width, tit
     // The one shared width recipe, and the enter/exit animation the
     // renderer's motion budget allows.
     const dialogClass = dialog.className;
-    assert.match(dialogClass, /w-\[min\(420px,90vw\)\]/, 'default dialogs share one column width');
+    assert.match(dialogClass, /(?<![\w-])w-overlay-md(?![\w-])/, 'default dialogs share one column width role');
     assert.match(dialogClass, /data-open:zoom-in-95/);
     const veil = dom.query('[data-slot="dialog-overlay"]');
     assert.ok(veil, 'the dialog brings its own veil');
@@ -77,11 +80,14 @@ test('the shared modal shell renders one Base UI dialog recipe: veil, width, tit
 });
 
 test('the wide and narrow dialog columns are the only other shell widths', async () => {
+  // Roles off the overlay width scale, not literals: the point of the
+  // assertion is that the three shells are three DISTINCT steps, which is
+  // what the 376-vs-420 pair had stopped being.
   await withDom(async (dom) => {
     await dom.render(inProvider(ModalShell, { title: 'Wide', onCancel: () => {}, wide: true }));
-    assert.match(dom.query('[role="dialog"]')!.className, /w-\[min\(480px,92vw\)\]/);
+    assert.match(dom.query('[role="dialog"]')!.className, /(?<![\w-])w-overlay-lg(?![\w-])/);
     await dom.render(inProvider(ModalShell, { title: 'Narrow', onCancel: () => {}, narrow: true }));
-    assert.match(dom.query('[role="dialog"]')!.className, /w-\[min\(376px,90vw\)\]/);
+    assert.match(dom.query('[role="dialog"]')!.className, /(?<![\w-])w-overlay-sm(?![\w-])/);
   });
 });
 
@@ -182,7 +188,7 @@ test('a confirmation is a Base UI alert dialog on the shared column width', asyn
 
     const dialog = dom.query('[role="alertdialog"]');
     assert.ok(dialog, 'a confirmation uses the alert-dialog primitive, not a plain dialog');
-    assert.match(dialog.className, /w-\[min\(420px,90vw\)\]/);
+    assert.match(dialog.className, /(?<![\w-])w-overlay-md(?![\w-])/);
     assert.ok(dom.query('[data-base-ui-portal]'), 'it mounts through the Base UI portal');
     assert.match(dialog.textContent ?? '', /Delete note\?/);
   });
@@ -303,9 +309,12 @@ test('the clipboard prompt rides the shared dialog and offers Dismiss plus a foc
     // Same shared shell — not a bespoke surface.
     const dialog = dom.query('[role="dialog"]');
     assert.ok(dialog);
-    assert.match(dialog.className, /w-\[min\(420px,90vw\)\]/);
+    assert.match(dialog.className, /(?<![\w-])w-overlay-md(?![\w-])/);
     assert.equal(dom.query('[data-slot="dialog-title"]')?.textContent, 'Add image to StashBase?');
-    assert.ok(dom.query('.clipboard-offer-preview img'), 'the thumbnail names the source');
+    // Assert the thumbnail itself, not the class that happens to style it —
+    // the preview's styling is Tailwind utilities now, and a test that
+    // pinned the old wrapper class would break on a pure restyle.
+    assert.ok(dom.query('img[alt="Clipboard image"]'), 'the thumbnail names the source');
 
     const buttons = dom.queryAll('[data-slot="button"]');
     const labels = buttons.map((button) => button.textContent);
@@ -476,7 +485,7 @@ test('buttons are items on the control corner step, never container boxes', () =
   // button into a capsule, since lg/xl/2xl all collapse onto the container
   // role. Reading the generated class strings covers every variant and
   // size, which a regex over one file's text never did.
-  const variants = ['default', 'outline', 'secondary', 'ghost', 'destructive', 'destructive-outline', 'link'] as const;
+  const variants = ['default', 'outline', 'ghost', 'destructive', 'destructive-outline', 'link'] as const;
   const sizes = ['default', 'xs', 'sm', 'lg', 'icon', 'icon-xs', 'icon-sm', 'icon-lg'] as const;
   for (const variant of variants) {
     for (const size of sizes) {
@@ -505,5 +514,84 @@ test('a checkbox is a Base UI control that sits on its label\'s baseline', async
 test('composer pills yield width under pressure instead of clipping Send', () => {
   // `min-w-0` on the trigger is what lets a tight chat bar truncate a pill
   // label rather than push the send button off the row.
-  assert.match(pillClass, /^inline-flex min-w-0 /);
+  assert.match(pillVariants(), /^inline-flex min-w-0 /);
+});
+
+test('a pill trigger renders one recipe: the quiet button, a truncating label, a chevron', async () => {
+  // The pill reaches the menu through Base UI's `render` prop, so this
+  // mounts the real trigger rather than reading the recipe back: a caller
+  // that went back to spelling the classes on `MenuTrigger` would still
+  // pass the assertion above and lose the label and the chevron here.
+  await withDom(async (dom) => {
+    await dom.render(h(ScopeMenu, {
+      scope: { kind: 'library' } as never,
+      entries: [],
+      homeDir: '/home/u',
+      heading: 'Search scope',
+      libraryDetail: 'Search every folder',
+      onSetScope: () => {},
+    }));
+    const trigger = dom.byLabel('Search scope')[0];
+    assert.ok(trigger, 'the scope trigger renders');
+    assert.equal(trigger.tagName, 'BUTTON');
+    assert.match(trigger.className, /^inline-flex min-w-0 /, 'the trigger wears the pill recipe and can yield width');
+    // `min-w-0` only shortens something that has somewhere to go, so the
+    // label's own truncate is half of the same decision.
+    const label = trigger.querySelector('span');
+    assert.match(label?.className ?? '', /(?<![\w-])truncate(?![\w-])/);
+    assert.equal(label?.textContent, 'Library');
+    assert.ok(trigger.querySelector('svg'), 'the pill carries its disclosure chevron');
+  });
+});
+
+test('a confirmation raised from inside a popover outranks the popover it came from', async () => {
+  // Base UI portals a popover and a dialog opened from within it into the
+  // SAME portal container, as plain siblings — so they compare at the root
+  // stacking context and the z-index roles are the whole of the ordering.
+  // On the ordinary modal pair the popover (`z-menu`, 300) paints over both
+  // the dialog (`z-modal`, 210) and its backdrop (`z-backdrop`, 200): the
+  // confirmation renders behind the surface that raised it and the dim
+  // never covers the one thing it has to block. `layer="menu"` is the fix.
+  await withDom(async (dom) => {
+    await dom.render(
+      h(Popover, { open: true },
+        h(PopoverContent, { 'aria-label': 'History' } as never,
+          h(AlertDialog, { open: true },
+            h(AlertDialogContent, { layer: 'menu' },
+              h(AlertDialogTitle, null, 'Delete chat?'))))),
+    );
+
+    const positioner = dom.query('[data-slot="popover-positioner"]');
+    const backdrop = dom.query('[data-slot="alert-dialog-overlay"]');
+    const popup = dom.query('[role="alertdialog"]');
+    assert.ok(positioner && backdrop && popup);
+    // The premise: they are siblings, not nested, so no parent stacking
+    // context isolates the dialog from the popover.
+    assert.equal(positioner.contains(backdrop), false, 'the dialog is not inside the popover subtree');
+    assert.equal(positioner.contains(popup), false);
+
+    assert.match(positioner.className, /(?<![\w-])z-menu(?![\w-])/);
+    assert.match(backdrop.className, /(?<![\w-])z-menu-backdrop(?![\w-])/);
+    assert.match(popup.className, /(?<![\w-])z-menu-modal(?![\w-])/);
+    // Exactly ONE layer class per element. Two custom `z-` utilities are
+    // not a conflict pair tailwind-merge resolves, so if the primitive kept
+    // its own and the caller added another, both would survive and
+    // stylesheet order — not the call site — would pick the winner. That is
+    // why the layer is a prop and not a className.
+    for (const element of [backdrop, popup]) {
+      const layers = element.className.match(/(?<![\w-])z-[a-z-]+(?![\w-])/g) ?? [];
+      assert.equal(layers.length, 1, `${element.getAttribute('data-slot')} emits ${layers.join(' + ')}`);
+    }
+  });
+});
+
+test('an ordinary dialog stays on the app pair', async () => {
+  // The default has to keep sitting BELOW the menu ramp: a menu opened from
+  // inside a modal (the library search's scope pill) depends on it.
+  await withDom(async (dom) => {
+    await dom.render(h(AlertDialog, { open: true },
+      h(AlertDialogContent, null, h(AlertDialogTitle, null, 'Delete note?'))));
+    assert.match(dom.query('[role="alertdialog"]')!.className, /(?<![\w-])z-modal(?![\w-])/);
+    assert.match(dom.query('[data-slot="alert-dialog-overlay"]')!.className, /(?<![\w-])z-backdrop(?![\w-])/);
+  });
 });

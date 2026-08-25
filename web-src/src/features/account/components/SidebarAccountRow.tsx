@@ -6,6 +6,7 @@ import { openSettings } from '@/common/lib/settingsTrigger';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
 import { DesktopUpdateBanner } from '@/common/components/DesktopUpdateBanner';
 import { Button } from '@/common/components/ui/button';
+import { Progress, ProgressIndicator, ProgressTrack } from '@/common/components/ui/progress';
 import {
   Menu as AccountMenu,
   MenuItem,
@@ -15,6 +16,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from '@/common/components/ui/menu';
+import { cn } from '@/common/lib/utils';
 
 /**
  * Bottom sidebar chrome: identity on the left and persistent utilities on the
@@ -49,13 +51,13 @@ export function SidebarAccountRow() {
                 ? <span className="relative text-2xs font-semibold text-foreground">{monogram}</span>
                 : <UserIcon className="relative size-3.5" />}
             </span>
-            <span className={`min-w-0 truncate transition-colors ${email ? 'text-muted-foreground' : 'text-placeholder group-hover/account:text-muted-foreground'}`}>
+            <span className={cn('min-w-0 truncate transition-tint', email ? 'text-muted-foreground' : 'text-placeholder group-hover/account:text-muted-foreground')}>
               {label}
             </span>
           </MenuTrigger>
           <MenuPortal>
             <MenuPositioner side="top" align="start" sideOffset={6} collisionPadding={8}>
-              <MenuPopup className="w-72 max-w-[calc(100vw-24px)] p-0" aria-label="StashBase account">
+              <MenuPopup className="w-72 max-w-overlay-fit p-0" aria-label="StashBase account">
                 {account?.signedIn ? (
                   <>
                     <div className="flex items-center gap-2.5 px-4 py-3">
@@ -73,9 +75,22 @@ export function SidebarAccountRow() {
                       </div>
                       {quota ? (
                         <>
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                            <div className="h-full rounded-full bg-accent" style={{ width: `${remainingPercent}%` }} />
-                          </div>
+                          {/* The primitive, not an inline-width div: Root
+                            * carries role="progressbar" with
+                            * aria-valuenow/max, so the menu reports the
+                            * remaining allowance as a number rather than a
+                            * coloured rectangle only sighted users can
+                            * read. The track takes the popup's full width
+                            * instead of the primitive's inline step. */}
+                          <Progress
+                            className="mt-2 block"
+                            aria-label="Remaining usage"
+                            value={remainingPercent ?? 0}
+                          >
+                            <ProgressTrack className="w-full">
+                              <ProgressIndicator className="bg-accent" />
+                            </ProgressTrack>
+                          </Progress>
                           <div className="mt-2 flex justify-between gap-3 text-xs text-muted-foreground">
                             <span>{quota.remainingTokens.toLocaleString()} tokens</span>
                             <span>{hostedQuotaResetLabel(quota)}</span>

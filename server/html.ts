@@ -91,9 +91,45 @@ export function analyzeHtml(html: string): HtmlAnalysis {
 
   return {
     headings,
-    preparedHtml: addScrollBootstrap(preparedParts.join('')),
+    preparedHtml: addScrollBootstrap(addViewerScrollbar(preparedParts.join(''))),
     plaintext: plaintextParts.join('\n').trim(),
   };
+}
+
+/** Neutral scrollbar for the preview frame.
+ *
+ * The iframe renders a user's own HTML document, so nothing in the app's
+ * stylesheet reaches it. A page that paints a dark background but never
+ * declares `color-scheme` — which is most of them — gets Chromium's
+ * DEFAULT scrollbar: a wide light track with stepper arrows, glaring
+ * against the page and against every other scroller in the app, all of
+ * which are `thin`.
+ *
+ * The thumb is a translucent mid-gray over a TRANSPARENT track rather
+ * than a themed pair. We cannot read a page's intent — a dark background
+ * may be one section's styling, not the document's scheme — and forcing
+ * `color-scheme` would change form controls and the default canvas as
+ * well, which is far more than a scrollbar's worth of opinion. Gray at
+ * 40% carries on light and dark alike, and the transparent track lets the
+ * page's own background show through, so the bar adopts whatever the
+ * document is already wearing. `.scrollbar-quiet` in globals.css uses the
+ * same transparent-track trick for the app's own panes.
+ *
+ * Injected FIRST inside `<head>` and with no `!important`. Both
+ * properties inherit, so one rule on the root reaches every nested
+ * scroller, and a page that styles its own scrollbars still wins on
+ * source order — this is a fallback for documents that said nothing, not
+ * an override of ones that did. */
+function addViewerScrollbar(html: string): string {
+  const style = '<style>html{scrollbar-width:thin;scrollbar-color:rgba(140,140,140,.4) transparent}</style>';
+  const head = /<head[^>]*>/i.exec(html);
+  if (head) {
+    const at = head.index + head[0].length;
+    return html.slice(0, at) + style + html.slice(at);
+  }
+  // No `<head>`: a fragment, or a body-only document the parser will wrap.
+  // Leading position still precedes any style the page carries.
+  return style + html;
 }
 
 function addScrollBootstrap(html: string): string {

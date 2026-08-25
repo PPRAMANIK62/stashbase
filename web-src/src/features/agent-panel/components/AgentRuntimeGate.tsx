@@ -1,16 +1,44 @@
-import { Button } from 'react-aria-components';
-import { buttonVariants } from '@/common/components/ui/button';
+import type { ReactNode } from 'react';
+import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
 import { runtimeFailurePresentation } from '@/features/agent-panel/lib/runtimeFailurePresentation';
 import type { Agent } from '@/common/api/api';
+import { cn } from '@/common/lib/utils';
 
-const runtimeCardWrapClass = 'grid min-h-45 flex-1 place-items-center px-3 py-6';
-/* One text rhythm with the app's dialogs (ManagedModalShell): body-size
+/**
+ * The card every runtime gate wears. All four gates below — pre-discovery,
+ * preparing, failed, not installed — are the SAME card with different copy
+ * and a different action row, which is why this is a component and not the
+ * five class strings it replaced: five names meant five places to edit when
+ * the shape moved, and nothing tying them together but a prefix.
+ *
+ * One text rhythm with the app's dialogs (ManagedModalShell): body-size
  * medium title, body-size muted copy at mt-2. Card surface is bg-card —
- * chat is canvas, its cards float on the card role. */
-const runtimeCardClass = 'w-[min(440px,100%)] rounded-xl border border-border bg-card p-4 text-foreground';
-const runtimeCardTitleClass = 'm-0 text-base font-medium leading-snug';
-const runtimeCardCopyClass = 'mt-2 mb-3 text-base leading-normal text-muted-foreground';
-const runtimeCardActionsClass = 'mt-3 flex justify-end gap-2';
+ * chat is canvas, its cards float on the card role.
+ */
+function RuntimeCard({ role, live, title, copy, actions, children }: {
+  role: 'status' | 'alert';
+  /** Announce the card as it changes. Only preparation needs it: its copy
+   *  updates in place while the install runs. */
+  live?: 'polite';
+  title: ReactNode;
+  copy: ReactNode;
+  /** Buttons for the trailing action row, most primary last. */
+  actions?: ReactNode;
+  /** Extra body between the copy and the action row (the progress bar). */
+  children?: ReactNode;
+}) {
+  return (
+    <div className="grid min-h-45 flex-1 place-items-center px-3 py-6" role={role} aria-live={live}>
+      <div className="w-measure-sm rounded-xl border border-border bg-card p-4 text-foreground">
+        <SectionHeading className="font-medium">{title}</SectionHeading>
+        <p className="mt-2 mb-3 text-base leading-normal text-muted-foreground">{copy}</p>
+        {children}
+        {actions && <div className="mt-3 flex justify-end gap-2">{actions}</div>}
+      </div>
+    </div>
+  );
+}
 
 function AgentRuntimeSetup({
   runtime,
@@ -25,20 +53,19 @@ function AgentRuntimeSetup({
 }) {
   const name = runtime?.label ?? fallbackName;
   return (
-    <div className={runtimeCardWrapClass} role="status">
-      <div className={runtimeCardClass}>
-        <h2 className={runtimeCardTitleClass}>{name} is not installed</h2>
-        {/* First-run install keeps ONE primary path: no manual-command
-          * escape hatch and no PATH/implementation caveats here — that
-          * recovery detail lives on the failure card, where an install
-          * has actually gone wrong. */}
-        <p className={runtimeCardCopyClass}>StashBase can set up the official runtime for you.</p>
-        <div className={runtimeCardActionsClass}>
-          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Check again</Button>
-          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={onInstall}>Install and continue</Button>
-        </div>
-      </div>
-    </div>
+    /* First-run install keeps ONE primary path: no manual-command escape
+     * hatch and no PATH/implementation caveats here — that recovery detail
+     * lives on the failure card, where an install has actually gone
+     * wrong. */
+    <RuntimeCard
+      role="status"
+      title={<>{name} is not installed</>}
+      copy="StashBase can set up the official runtime for you."
+      actions={<>
+        <Button variant="outline" size="sm" onClick={onRefresh}>Check again</Button>
+        <Button size="sm" onClick={onInstall}>Install and continue</Button>
+      </>}
+    />
   );
 }
 
@@ -47,19 +74,15 @@ function AgentRuntimeProgress({ runtime, fallbackName }: { runtime: Agent; fallb
   const name = runtime.label || fallbackName;
   const progress = typeof status?.progress === 'number' ? Math.max(0, Math.min(1, status.progress)) : null;
   return (
-    <div className={runtimeCardWrapClass} role="status" aria-live="polite">
-      <div className={runtimeCardClass}>
-        <h2 className={runtimeCardTitleClass}>Preparing {name}</h2>
-        <p className={runtimeCardCopyClass}>{status?.message ?? `Installing ${name}…`}</p>
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className={'h-full rounded-full bg-accent transition-[width] duration-standard ' + (progress == null ? 'w-1/3 animate-pulse' : '')}
-            style={progress == null ? undefined : { width: `${Math.round(progress * 100)}%` }}
-          />
-        </div>
-        <p className="mt-2 mb-0 text-xs text-muted-foreground">You can keep browsing while this finishes.</p>
+    <RuntimeCard role="status" live="polite" title={<>Preparing {name}</>} copy={status?.message ?? `Installing ${name}…`}>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn('h-full rounded-full bg-accent transition-[width] duration-standard', progress == null && 'w-1/3 animate-pulse')}
+          style={progress == null ? undefined : { width: `${Math.round(progress * 100)}%` }}
+        />
       </div>
-    </div>
+      <p className="mt-2 mb-0 text-xs text-muted-foreground">You can keep browsing while this finishes.</p>
+    </RuntimeCard>
   );
 }
 
@@ -89,44 +112,40 @@ function AgentRuntimeFailure({
       : null;
   const primaryAction = presentation.primaryAction === 'start-codex-login' ? onLogin : onRetry;
   return (
-    <div className={runtimeCardWrapClass} role="alert">
-      <div className={runtimeCardClass}>
-        <h2 className={runtimeCardTitleClass}>{presentation.title}</h2>
-        <p className={runtimeCardCopyClass}>{presentation.message}</p>
-        <div className={runtimeCardActionsClass}>
-          {manualAction && presentation.manualLabel && (
-            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={manualAction}>
-              {presentation.manualLabel}
-            </Button>
-          )}
-          {/* An MCP failure is downstream of a runtime that already
-            * answered, so re-probing it proves nothing. Every earlier stage
-            * can be settled by re-checking the local CLI. */}
-          {runtime.bootstrap?.failure?.stage !== 'mcp' && (
-            <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onCheck}>
-              Check again
-            </Button>
-          )}
-          <Button className={buttonVariants({ variant: 'default', size: 'sm' })} onPress={primaryAction}>
-            {presentation.retryLabel}
+    <RuntimeCard
+      role="alert"
+      title={presentation.title}
+      copy={presentation.message}
+      actions={<>
+        {manualAction && presentation.manualLabel && (
+          <Button variant="outline" size="sm" onClick={manualAction}>
+            {presentation.manualLabel}
           </Button>
-        </div>
-      </div>
-    </div>
+        )}
+        {/* An MCP failure is downstream of a runtime that already
+          * answered, so re-probing it proves nothing. Every earlier stage
+          * can be settled by re-checking the local CLI. */}
+        {runtime.bootstrap?.failure?.stage !== 'mcp' && (
+          <Button variant="outline" size="sm" onClick={onCheck}>
+            Check again
+          </Button>
+        )}
+        <Button size="sm" onClick={primaryAction}>
+          {presentation.retryLabel}
+        </Button>
+      </>}
+    />
   );
 }
 
 function AgentRuntimeChecking({ name, onRefresh }: { name: string; onRefresh: () => void }) {
   return (
-    <div className={runtimeCardWrapClass} role="status">
-      <div className={runtimeCardClass}>
-        <h2 className={runtimeCardTitleClass}>Checking {name}</h2>
-        <p className={runtimeCardCopyClass}>Checking whether its local CLI is installed.</p>
-        <div className={runtimeCardActionsClass}>
-          <Button className={buttonVariants({ variant: 'outline', size: 'sm' })} onPress={onRefresh}>Refresh status</Button>
-        </div>
-      </div>
-    </div>
+    <RuntimeCard
+      role="status"
+      title={<>Checking {name}</>}
+      copy="Checking whether its local CLI is installed."
+      actions={<Button variant="outline" size="sm" onClick={onRefresh}>Refresh status</Button>}
+    />
   );
 }
 

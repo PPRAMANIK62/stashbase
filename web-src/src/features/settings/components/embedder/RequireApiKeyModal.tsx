@@ -35,6 +35,7 @@ import { EmbeddingAuthChoice } from '@/features/settings/components/embedder/Emb
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/segmented-control';
+import { FieldLegend, FieldSet } from '@/common/components/ui/field';
 import { StatusMessage } from '@/common/components/ui/status';
 import { AccountSignInForm } from '@/common/components/AccountSignInForm';
 
@@ -152,9 +153,9 @@ export function RequireApiKeyModal({
         * one marked its selection with a heavier font, which at one size
         * reads as "these two words are different sizes", and it stretched
         * to the dialog width so the two providers got unequal shares. */}
+      <FieldSet className="mb-2 w-fit">
+      <FieldLegend className="sr-only">Embedding provider</FieldLegend>
       <SegmentedControl
-        aria-label="Embedding provider"
-        className="mb-2 w-fit"
         disabled={busy}
         value={[provider]}
         onValueChange={(next) => {
@@ -171,28 +172,35 @@ export function RequireApiKeyModal({
           </SegmentedControlItem>
         ))}
       </SegmentedControl>
+      </FieldSet>
       {/* Detail, not body: at 13px these two lines carried the same
         * weight as the question above them. */}
       <div className="mb-2.5 flex flex-wrap gap-x-3 gap-y-1 text-xs leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-2xs [&_code]:text-accent">
         <span>Model: <code>{PROVIDERS[provider].model}</code></span>
         <span>Stored locally in <code>~/.stashbase/config.json</code></span>
       </div>
+      {/* A real `form` for the field-plus-confirm pair, so Enter submits
+        * through implicit submission. That also retires the hand-rolled IME
+        * guard: a composing Enter never fires implicit submission in the
+        * first place, because the keystroke belongs to the input method and
+        * not to the form. `type="submit"` is spelled out because Base UI's
+        * `useButton` puts `type="button"` on every Button. `Back` stays
+        * `type="button"` — a form's default for a bare button is submit,
+        * and this one is the way OUT. */}
+      <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <Input
         ref={inputRef}
         type="password"
         className="font-mono text-sm"
+        aria-label="API key"
         placeholder={PROVIDERS[provider].placeholder}
         autoComplete="off"
         value={key}
         onChange={(e) => setKey(e.target.value)}
         disabled={busy}
-        onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return;
-          if (e.key === 'Enter') { e.preventDefault(); void submit(); }
-        }}
       />
       {error && (
-        <StatusMessage tone="error" className="mt-2.5 max-h-[min(180px,32vh)] overflow-y-auto wrap-anywhere">
+        <StatusMessage tone="error" className="mt-2.5 max-h-overlay-xs overflow-y-auto wrap-anywhere">
           {error}
         </StatusMessage>
       )}
@@ -201,18 +209,20 @@ export function RequireApiKeyModal({
           * are the low-emphasis way OUT of this dialog, so they read as
           * one control at two moments — no resting underline, no button
           * box beside the primary action, underline on hover only. */}
-        <button
-          type="button"
-          className="cursor-pointer border-0 bg-transparent p-0 text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:cursor-default disabled:opacity-60"
-          onClick={() => { setView('choice'); clearError(); }}
-          disabled={busy}
-        >Back</button>
         <Button
           type="button"
-          onClick={submit}
+          variant="link"
+          size="xs"
+          className="h-auto cursor-pointer border-0 p-0 text-muted-foreground underline-offset-2 hover:text-foreground disabled:opacity-60"
+          onClick={() => { setView('choice'); clearError(); }}
+          disabled={busy}
+        >Back</Button>
+        <Button
+          type="submit"
           disabled={busy}
         >{busy ? 'Validating…' : 'Save key'}</Button>
       </div>
+      </form>
       </>
       )}
     </ManagedModalShell>

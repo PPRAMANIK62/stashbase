@@ -19,6 +19,7 @@ import {
 } from '@/features/documents/lib/pdfText';
 import { PdfChromePortal } from './PdfChrome';
 import { PdfPage } from './PdfPage';
+import { cn } from '@/common/lib/utils';
 
 /**
  * PDF viewer built on pdfjs-dist's programmatic API. Renders every
@@ -282,10 +283,10 @@ export function PdfPreview({
         * ceiling, which only a page narrower than a third of the pane
         * can do.) */}
       <div
-        className={
-          'flex w-full flex-col items-center gap-2.5 pb-10'
-          + (autoFit && scale < PDF_MAX_SCALE - 0.001 ? '' : ' pt-2.5')
-        }
+        className={cn(
+          'flex w-full flex-col items-center gap-2.5 pb-10',
+          !(autoFit && scale < PDF_MAX_SCALE - 0.001) && 'pt-2.5',
+        )}
       >
         {doc && Array.from({ length: numPages }, (_, i) => (
           <PdfPage

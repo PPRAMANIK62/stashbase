@@ -6,18 +6,29 @@
  * turn model in `lib/turnModel`.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button } from 'react-aria-components';
+import { Button } from '@/common/components/ui/button';
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@/common/components/ui/collapsible';
 import { AgentMarkdown } from '@/features/agent-panel/components/AgentMarkdown';
 import { ChevronDownIcon, CopyIcon, MoreHorizontalIcon } from '@/common/components/icons';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 import { cn } from '@/common/lib/utils';
+import { SectionHeading } from '@/common/components/ui/section';
 import { StatusMessage } from '@/common/components/ui/status';
 import { ToolActivityGroup, PermissionCard } from '@/features/agent-panel/components/AgentToolActivity';
 import { MessageAttachments, UserMessageText, UserTurnHead } from '@/features/agent-panel/components/AgentUserTurn';
-import { accentDotClass, outlineSmClass, spinnerClass } from '@/features/agent-panel/lib/panelStyles';
+import { accentDotClass, spinnerClass, turnHeadClass } from '@/features/agent-panel/lib/panelStyles';
 import { groupTurns, settledReplySections, tailBlockSpeaks, turnReplyText, workTraceLabel, type TurnMeta } from '@/features/agent-panel/lib/turnModel';
 import { turnFailureGuidance, type TurnFailureActionId } from '@/features/agent-panel/lib/turnFailure';
 import type { AgentKind, Attachment, Block, ToolBlock } from '@/features/agent-panel/lib/types';
+
+/* One exchange: the user bubble plus the reply blocks under it. A class
+ * string rather than a component because the two call sites below wrap
+ * completely different children — a live turn and a queued preview — and
+ * only the box is shared. `agent-turn` leads it as a hook: the
+ * between-turn rhythm is an adjacent-sibling rule in agent-panel.css,
+ * and `group/turn` is what reveals the copy/edit row under the bubble
+ * (AgentUserTurn). */
+const turnClass = 'agent-turn group/turn relative flex flex-col gap-2.5';
 
 /** Accent status dot used by working/queued indicators. */
 function Dot() {
@@ -102,7 +113,7 @@ export function MessageList({
         const settled = !(turnActive && index === turns.length - 1);
         const replyText = settled ? turnReplyText(turn) : '';
         return (
-          <div className="agent-turn" key={turn.key}>
+          <div className={turnClass} key={turn.key}>
             {turn.head && (
               <UserTurnHead
                 block={turn.head}
@@ -146,8 +157,10 @@ export function MessageList({
         // Must sit above a pinned user-turn header (z-2), otherwise its
         // upper half is hidden and cannot be clicked while scrolling.
         <Button
-          className="sticky bottom-2 z-3 cursor-pointer self-center rounded-full border border-border bg-pane px-2.5 py-1.25 text-sm text-foreground shadow-elevation"
-          onPress={() => {
+          variant="outline"
+          size="sm"
+          className="sticky bottom-2 z-3 self-center rounded-full bg-popover shadow-elevation"
+          onClick={() => {
             if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
             stick.current = true;
             setShowJump(false);
@@ -224,7 +237,15 @@ function TurnBody({ blocks, liveBlockId, streaming, meta, handlers: h }: {
  * folded under a single "Worked for X" (or "You stopped after X") header, the
  * way Codex presents a completed turn. Collapsed by default once the turn is
  * done (the answer below carries the result); an interrupted turn opens by
- * default since it has no answer. The user can toggle it either way. */
+ * default since it has no answer. The user can toggle it either way.
+ *
+ * A real disclosure, not a button that happens to toggle a sibling: the
+ * `Collapsible` primitive points the trigger's `aria-controls` at the
+ * panel it actually reveals. The trigger is sized to its own label — the
+ * summary IS the control — so the hover surface hugs the words instead of
+ * washing the full transcript width, which is what a `w-full` ghost row
+ * did. The rule stays on the header wrapper, so it still spans the column
+ * and still sits between the header and whatever the panel reveals. */
 function WorkTrace({ blocks, meta, handlers, defaultOpen = false }: {
   blocks: Block[];
   meta?: TurnMeta;
@@ -234,17 +255,24 @@ function WorkTrace({ blocks, meta, handlers, defaultOpen = false }: {
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   const open = userOpen ?? defaultOpen;
   return (
-    <section className="agent-worktrace">
-      <Button
-        className="agent-worktrace-head"
-        onPress={() => setUserOpen((value) => !(value ?? defaultOpen))}
-        aria-expanded={open}
-      >
-        <span className="agent-worktrace-label">{workTraceLabel(meta)}</span>
-        <ChevronDownIcon className={cn('agent-worktrace-chev', !open && '-rotate-90')} />
-      </Button>
-      {open && <div className="agent-worktrace-body">{renderReplyBlocks(blocks, null, handlers)}</div>}
-    </section>
+    <Collapsible
+      open={open}
+      onOpenChange={(next) => setUserOpen(next)}
+      render={<section className="agent-worktrace" />}
+    >
+      <div className="border-b border-b-border/85 pt-0.5 pb-2">
+        <CollapsibleTrigger
+          render={<Button variant="ghost" />}
+          className="-mx-1.5 h-auto w-fit max-w-full justify-start gap-1.5 px-1.5 py-0.5 text-left text-base font-normal text-muted-foreground"
+        >
+          <span className="agent-worktrace-label">{workTraceLabel(meta)}</span>
+          <ChevronDownIcon className={cn('size-3 shrink-0 opacity-70 transition-transform duration-fast ease-out', !open && '-rotate-90')} />
+        </CollapsibleTrigger>
+      </div>
+      <CollapsiblePanel className="flex flex-col gap-2.5 pt-2.5">
+        {renderReplyBlocks(blocks, null, handlers)}
+      </CollapsiblePanel>
+    </Collapsible>
   );
 }
 
@@ -256,23 +284,25 @@ function QueuedTurn({
 }) {
   const label = turn.status === 'steered' ? 'Steered' : turn.status === 'steering' ? 'Steering' : 'Waiting';
   return (
-    <div className="agent-turn queued">
-      <div className="agent-turn-head queued">
+    <div className={turnClass}>
+      <div className={cn(turnHeadClass, 'text-muted-foreground')}>
         {turn.attachments && turn.attachments.length > 0 && <MessageAttachments attachments={turn.attachments} />}
-        <div className="agent-turn-line">
+        <div className="flex min-w-0 items-start gap-2.5">
           {turn.text && (
             <UserMessageText
               text={turn.text}
               attachmentPaths={turn.attachments?.map((attachment) => attachment.path)}
             />
           )}
-          <span className="agent-turn-actions">
-            <span className="agent-turn-waiting">
+          {/* 1px, not a step: it drops the status baseline onto the
+            * first line of the message text beside it. */}
+          <span className="inline-flex shrink-0 items-center gap-2.5 pt-px">
+            <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
               <Dot />
               {label}
             </span>
             {turn.canSteer && turn.status === 'waiting' && (
-              <Button className="agent-turn-steer" onPress={() => onSteer(turn.id)}>
+              <Button variant="ghost" size="xs" className="h-auto p-0 text-sm font-semibold text-muted-foreground hover:bg-transparent hover:text-accent" onClick={() => onSteer(turn.id)}>
                 Steer
               </Button>
             )}
@@ -290,7 +320,11 @@ function fatalCopy(fatal: string, agentShortName: string): { title: string; deta
   return { title: `${agentShortName} couldn't continue`, detail: fatal };
 }
 
-const fatalTitleClass = 'text-base font-semibold';
+/** The fatal message itself, capped and scrollable: a runtime failure can
+ *  arrive as a whole stack trace, and an uncapped one pushes its own retry
+ *  button off the pane. Stays a class string because its three call sites
+ *  wear three different titles (two sizes) above it — the pair is not one
+ *  component, and naming the cap once is the only thing they share. */
 const fatalDetailClass =
   'max-h-35 overflow-auto text-sm leading-normal break-words whitespace-pre-wrap text-muted-foreground';
 
@@ -305,10 +339,10 @@ function FatalState({
   const copy = fatalCopy(fatal, agentShortName);
   return (
     <div className="grid min-h-45 flex-1 place-items-center px-2 py-6">
-      <StatusMessage tone="error" className="flex w-[min(440px,100%)] flex-col items-start gap-2 rounded-xl p-3.5">
-        <div className={fatalTitleClass}>{copy.title}</div>
+      <StatusMessage tone="error" className="flex w-measure-sm flex-col items-start gap-2 rounded-xl p-3.5">
+        <SectionHeading>{copy.title}</SectionHeading>
         <div className={fatalDetailClass}>{copy.detail}</div>
-        <Button className={outlineSmClass} onPress={onRetry}>{recoveryLabel}</Button>
+        <Button variant="outline" size="sm" onClick={onRetry}>{recoveryLabel}</Button>
       </StatusMessage>
     </div>
   );
@@ -326,10 +360,10 @@ function FatalInline({
   return (
     <StatusMessage tone="error" className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5">
       <div>
-        <div className={fatalTitleClass}>{copy.title}</div>
+        <SectionHeading level={3}>{copy.title}</SectionHeading>
         <div className={fatalDetailClass}>{copy.detail}</div>
       </div>
-      <Button className={outlineSmClass} onPress={onRetry}>{recoveryLabel}</Button>
+      <Button variant="outline" size="sm" onClick={onRetry}>{recoveryLabel}</Button>
     </StatusMessage>
   );
 }
@@ -377,12 +411,13 @@ function BlockView({ block, live, handlers }: {
       }
       return (
         <StatusMessage tone="error" className="flex flex-col items-start gap-1.5 rounded-xl p-3">
-          <div className="text-sm font-semibold">{guidance.title}</div>
+          <SectionHeading level={3} className="text-sm">{guidance.title}</SectionHeading>
           <div className={fatalDetailClass}>{block.text}</div>
           <div className="text-sm leading-normal">{guidance.guidance}</div>
           <Button
-            className={outlineSmClass}
-            onPress={() => handlers.onTurnFailureAction(block.id, guidance.action.id)}
+            variant="outline"
+            size="sm"
+            onClick={() => handlers.onTurnFailureAction(block.id, guidance.action.id)}
           >
             {guidance.action.label}
           </Button>
@@ -399,14 +434,32 @@ function BlockView({ block, live, handlers }: {
 function ThinkingView({ text, active }: { text: string; active?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className={'agent-thinking' + (open ? ' open' : '')}>
-      <Button className="agent-thinking-head" onPress={() => setOpen((o) => !o)}>
-        <ChevronDownIcon className="agent-thinking-chev" />
+    <div className="min-w-0">
+      {/* A plain meta disclosure row — closed thinking should cost no
+        * chrome, so the ghost button keeps neither height nor a hover
+        * fill, only the type step every other meta line in the panel
+        * takes. Same shape as WorkTrace's own header above. */}
+      <Button
+        variant="ghost"
+        className="h-auto gap-1 px-0 py-0.5 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <ChevronDownIcon className={cn('size-3 transition-transform duration-fast ease-out', !open && '-rotate-90')} />
         {/* Shimmers while this is the stream's live block — the label
           * itself signals "working" (Cursor register). */}
         <span className={active ? 'agent-shimmer' : undefined}>Thinking</span>
       </Button>
-      {open && <div className="agent-thinking-body">{text}</div>}
+      {/* Only the opened body carries the quote bar that marks it as
+        * sidetracked prose. The 4/2/10 inset is derived, not eyeballed:
+        * it puts the body text at 16px, exactly where the head's own
+        * label starts (12px chevron + the button's 4px gap), so the
+        * quote bar hangs in the margin the disclosure already opened. */}
+      {open && (
+        <div className="ml-1 border-l-2 border-border pt-1 pb-1.5 pl-2.5 text-sm leading-normal whitespace-pre-wrap text-muted-foreground">
+          {text}
+        </div>
+      )}
     </div>
   );
 }
@@ -442,13 +495,16 @@ function TurnActions({ text, onCopy }: {
     <div className="flex justify-end">
       <Button
         className={cn(
-          'grid size-5.5 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground',
+          'grid size-5 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground',
           anchor && 'bg-active text-foreground',
         )}
         aria-label="Reply actions"
         aria-haspopup="menu"
         aria-expanded={!!anchor}
-        onPress={(e) => setAnchor((prev) => (prev ? null : (e.target as HTMLElement).getBoundingClientRect()))}
+        onClick={(event) => {
+          const trigger = event.currentTarget;
+          setAnchor((prev) => (prev ? null : trigger.getBoundingClientRect()));
+        }}
       >
         <MoreHorizontalIcon className="size-4" />
       </Button>

@@ -185,7 +185,7 @@ export function DocxPreview({ name }: { name: string }) {
      * status row, never the document viewport. */
     <div className="relative box-border flex h-full w-full flex-col overflow-hidden bg-background">
       {failure ? (
-        <StatusMessage tone="warning" className="flex min-h-7.5 shrink-0 items-center gap-1.5 rounded-none border-x-0 border-t-0 px-3.5 py-1.5">
+        <StatusMessage tone="warning" className="flex min-h-7 shrink-0 items-center gap-1.5 rounded-none border-x-0 border-t-0 px-3.5 py-1.5">
           <span className="min-w-0 flex-1">
             {retryError
               ? 'The document is visible, but search preparation could not restart.'
@@ -202,8 +202,8 @@ export function DocxPreview({ name }: { name: string }) {
           </Button>
         </StatusMessage>
       ) : preparationStatus ? (
-        <div className="box-border flex min-h-7.5 shrink-0 items-center gap-1.5 border-b border-border bg-background px-3.5 py-1.5 text-sm text-muted-foreground" role="status">
-          <span className="image-preparation-dot size-1.75 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+        <div className="box-border flex min-h-7 shrink-0 items-center gap-1.5 border-b border-border bg-background px-3.5 py-1.5 text-sm text-muted-foreground" role="status">
+          <span className="image-preparation-dot size-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />
           {preparationStatus}
         </div>
       ) : null}
@@ -267,6 +267,16 @@ function renderDocxDocument(bodyHtml: string, title: string, baseHref: string): 
   // fallback — `server/docx.ts` durable HTML — is light-locked the same
   // way), so the ink greys below are content values like the page white,
   // not chrome tokens, and deliberately do not follow the active theme.
+  // Concretely: `#222` body ink, `#d7dbe2` table/quote rules, `#555` quote
+  // ink. They are the app's last raw hexes outside the token layer and
+  // they stay raw for two independent reasons, either of which is
+  // sufficient. First, they are unreachable: this string is `srcDoc` for a
+  // sandboxed iframe, a separate document whose `:root` has none of the
+  // renderer's tokens, so `var(--fg)` would resolve to nothing and the
+  // declaration would be dropped. Second, even resolved through the
+  // build-time escape hatch used for `--font-sans` below, `--fg` flips to a
+  // near-white in the dark theme and would paint white ink on the
+  // permanently white sheet. Do not "tokenize" these.
   // The type stack IS a chrome role: resolve `--font-sans` from the parent
   // document at build time (findIframe's token-resolution pattern — the
   // iframe never receives the app stylesheet, so var() would not resolve

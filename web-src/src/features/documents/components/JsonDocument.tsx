@@ -9,6 +9,7 @@ import './json/json-tree.css';
 import { useAppActions, useWorkspace, type FindController, type FindOptions, type MatchInfo } from '@/store/contexts/AppContext';
 import { analyzeJsonSource, formatPath, matchingJsonTreeNodes } from '@/features/documents/lib/json/sourceModel';
 import type { JsonTreeSessionState } from '@/features/documents/components/json/JsonTreeView';
+import { Button } from '@/common/components/ui/button';
 
 const LazyJsonTreeView = lazy(() => import('@/features/documents/components/json/JsonTreeView').then((module) => ({ default: module.JsonTreeView })));
 interface RetainedJsonSession { tree: JsonTreeSessionState; viewMode: 'tree' | 'source' }
@@ -135,6 +136,13 @@ export function createJsonEditor(host: HTMLElement, opts: {
     destroy: () => view.destroy(),
   };
 }
+
+/* The pressed state for the Raw / Tree pair in this viewer's chrome: the
+ * neutral active wash, not an accent tint — a standing accent chip on
+ * every JSON file is the repeated colour moment the palette rations. Two
+ * `aria-pressed` variants handed to `Button`, so there is no element and
+ * no behaviour for a component to own. */
+const VIEW_MODE_CLASS = 'aria-pressed:bg-active aria-pressed:text-foreground';
 
 /** A raw JSON source surface. JSON validity never gates opening or saving. */
 export function JsonDocument({ tabId, content, readOnly, active }: {
@@ -267,9 +275,37 @@ export function JsonDocument({ tabId, content, readOnly, active }: {
   };
 
   return <div className="json-document min-h-0 overflow-hidden" data-tab-id={tabId} role="region" aria-label="JSON document" hidden={!active}>
+    {/* Two pressed-state Buttons rather than the SegmentedControl this
+      * visually resembles: JsonDocument is statically reachable from the
+      * shell, so it lands in the entry chunk, and Base UI's ToggleGroup
+      * costs ~265 bytes against a budget with three digits of headroom
+      * (scripts/check-renderer-chunks.mjs). Button is already loaded here,
+      * so the primitive's focus, disabled, and press behaviour come free.
+      * A `role="group"` of aria-pressed buttons is a correct toolbar
+      * pattern in its own right, not a downgrade. */}
     <div className="json-view-mode" role="group" aria-label="JSON view mode">
-      <button type="button" aria-pressed={viewMode === 'tree'} disabled={!analysis.available} title={analysis.available ? 'Inspect JSON as a tree' : analysis.message} onClick={() => setViewMode('tree')}>Tree</button>
-      <button type="button" aria-pressed={viewMode === 'source'} onClick={() => setViewMode('source')}>Source</button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        className={VIEW_MODE_CLASS}
+        aria-pressed={viewMode === 'tree'}
+        disabled={!analysis.available}
+        title={analysis.available ? 'Inspect JSON as a tree' : analysis.message}
+        onClick={() => setViewMode('tree')}
+      >
+        Tree
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        className={VIEW_MODE_CLASS}
+        aria-pressed={viewMode === 'source'}
+        onClick={() => setViewMode('source')}
+      >
+        Source
+      </Button>
       {!analysis.available && <span role="status">{analysis.message}</span>}
     </div>
     <div ref={hostRef} className="json-source" hidden={viewMode !== 'source'} />

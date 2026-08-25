@@ -17,11 +17,25 @@
   align-items: center;
   gap: 4px;
   min-height: 28px;
+  /* 3, off the ramp on purpose, and pinned in
+   * `CSS_OFF_RAMP_EXEMPTIONS`. This is not an amount of air: it is the
+   * largest padding that leaves `min-height` the thing DECLARING the
+   * row height. The line box is 20.15px here and 21.7px at Large, so
+   * 3+20.15+3 and 3+21.7+3 both stay under 28 and every row is exactly
+   * 28px tall.
+   *
+   * The ramp's 4 makes the content box 28.15px, which beats the
+   * min-height — so rows go fractional and each one's top carries the
+   * accumulated remainder. That is not only a blurry pill: the file
+   * tree's drop target splits at the row's midpoint, and a midpoint
+   * that is no longer on a whole pixel resolves a drop AT the middle to
+   * the wrong side. `real pointer drag reorders root files` is the
+   * regression test. */
   padding: 3px 8px 3px 0;
   cursor: pointer;
   border-left: 2px solid transparent;
   border-radius: var(--radius-ui);
-  font-size: calc(13px * var(--ui-scale));
+  font-size: var(--text-base);
   color: var(--fg);
   min-width: 0;
   user-select: none;
@@ -84,7 +98,7 @@
   color: var(--muted);
   display: grid;
   place-items: center;
-  transition: transform .12s;
+  transition: transform var(--motion-fast) var(--motion-ease-out);
 }
 
 .tree-row.collapsed .chev {
@@ -168,6 +182,6 @@
   background: var(--bg);
   color: var(--fg);
   font: inherit;
-  font-size: calc(13px * var(--ui-scale));
+  font-size: var(--text-base);
   outline: none;
 }

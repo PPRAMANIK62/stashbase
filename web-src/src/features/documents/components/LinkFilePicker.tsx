@@ -5,6 +5,7 @@ import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { LazyManagedPicker } from '@/common/components/LazyManaged';
 import { PICKER_VEIL_CLASS } from '@/common/lib/pickerChrome';
 import { OPEN_LINK_FILE_PICKER_EVENT, type LinkFilePickerRequest } from '@/features/documents/milkdown/linkFilePickerTrigger';
+import { cn } from '@/common/lib/utils';
 
 const ManagedLinkFilePicker = lazyWithRetry(() => import('./ManagedLinkFilePicker'));
 
@@ -52,7 +53,7 @@ export function LinkFilePicker() {
     setRequest(null);
     requestAnimationFrame(() => restoreRef.current?.focus());
   };
-  const loadingClass = `${PICKER_VEIL_CLASS} quick-open-blocking text-sm text-muted-foreground`;
+  const loadingClass = cn(PICKER_VEIL_CLASS, 'quick-open-blocking text-sm text-muted-foreground');
   return (
     <LazyManagedPicker
       as={ManagedLinkFilePicker}
