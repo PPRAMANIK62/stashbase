@@ -39,6 +39,7 @@ const model = {
   active: undefined,
   models: [{ id: 'sonnet', label: 'Sonnet', description: 'Fast' }],
   locked: false,
+  lockReason: null,
   notice: null,
   resumedSession: false,
   onSet: () => {},

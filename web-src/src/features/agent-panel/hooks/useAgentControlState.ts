@@ -6,10 +6,10 @@ import {
   type LibraryScope,
 } from '@/common/lib/libraryScope';
 import type { WorkspaceState } from '@/store/contexts/AppContext';
-import type { AgentPanelCapabilities } from '@/common/lib/agentCatalog';
+import type { AgentKind, AgentPanelCapabilities } from '@/common/lib/agentCatalog';
 import { chatScopePill, folderMenuLocked, newChatScope, windowFolderSwitchPlan } from '@/features/agent-panel/lib/folderState';
 import { effortMenuLocked } from '@/features/agent-panel/lib/effortMenuState';
-import { modelMenuLocked, modelMenuVisible, type ModelControlState } from '@/features/agent-panel/lib/modelState';
+import { modelMenuLockReason, modelMenuVisible, type ModelControlState } from '@/features/agent-panel/lib/modelState';
 import type { QueuedPrompt } from '@/features/agent-panel/hooks/useAgentPromptQueue';
 import type { Attachment, Block, EffortLevel, PermMode } from '@/features/agent-panel/lib/types';
 
@@ -27,6 +27,7 @@ import type { Attachment, Block, EffortLevel, PermMode } from '@/features/agent-
  *  window-folder rule below is its only reader, and the core needs nothing
  *  but the rendered flag for blank-tab reporting. */
 export function useAgentControlState({
+  agent,
   workspace,
   capabilities,
   blocks,
@@ -40,6 +41,7 @@ export function useAgentControlState({
   reconnect,
   resetSessionState,
 }: {
+  agent: AgentKind;
   workspace: WorkspaceState;
   capabilities: AgentPanelCapabilities;
   blocks: Block[];
@@ -145,16 +147,28 @@ export function useAgentControlState({
     reconnect();
   }
 
-  /** Changing model starts a new native session. A resumed or populated
-   * transcript is immutable here, so it can never silently switch models. */
+  /** A blank chat reconnects with the selected model. Codex can instead
+   * apply an explicit choice to the next idle turn of the same thread;
+   * other runtimes keep their populated-session model fixed. */
   function changeModel(next: string | undefined) {
-    if (blocks.length > 0 || turnActive) return;
-    setModelControl((current) => ({ ...current, selectedModel: next, activeModel: undefined, notice: null, resumedSession: false }));
+    if (turnActive || (blocks.length > 0 && agent !== 'codex')) return;
+    const selectedModel = next ?? null;
+    setModelControl((current) => ({
+      ...current,
+      selectedModel,
+      activeModel: undefined,
+      notice: null,
+      ...(blocks.length === 0 ? { resumedSession: false } : {}),
+    }));
+    if (blocks.length > 0) {
+      wsRef.current?.send(JSON.stringify({ t: 'set-model', ...(next ? { model: next } : {}) }));
+      return;
+    }
     reconnect();
   }
 
   const effortLocked = effortMenuLocked(blocks.length > 0, turnActive, restoredClaudeSession);
-  const modelLocked = modelMenuLocked(blocks.length > 0, turnActive);
+  const modelLockReason = modelMenuLockReason(blocks.length > 0, turnActive, agent);
   // Session-scope pill state. The shown scope is the live binding once
   // connected, else the scope the next session would bind (picked scope or
   // the window default, so unbound tabs follow the sidebar).
@@ -171,7 +185,7 @@ export function useAgentControlState({
     memberPaths,
   });
   const modelVisible = modelMenuVisible(capabilities?.models === true, modelControl.models);
-  const effectiveModel = modelControl.activeModel ?? modelControl.selectedModel;
+  const effectiveModel = modelControl.selectedModel ?? modelControl.activeModel;
   const supportedEfforts = modelControl.models.find((entry) => entry.id === effectiveModel)?.supportedEfforts;
 
   return {
@@ -191,7 +205,7 @@ export function useAgentControlState({
     modelControl,
     setModelControl,
     modelControlRef,
-    modelLocked,
+    modelLockReason,
     modelVisible,
     changeModel,
     pickedScope,

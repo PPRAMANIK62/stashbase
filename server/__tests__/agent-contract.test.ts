@@ -59,7 +59,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
   const clientEvents: AgentClientEvent[] = [
     { t: 'prompt', text: 'first', titleHint: 'Title' }, { t: 'steer', id: 'queued', text: 'follow-up' },
     { t: 'permission-reply', id: 'approval', allow: true, always: true }, { t: 'interrupt' },
-    { t: 'set-mode', mode: 'plan' }, { t: 'close' },
+    { t: 'set-model', model: 'native-model' }, { t: 'set-mode', mode: 'plan' }, { t: 'close' },
   ];
   const events: AgentServerEvent[] = [
     { t: 'ready' }, { t: 'session-id', id: 'session' }, { t: 'session-title', title: 'Title' },
@@ -75,7 +75,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
     { t: 'exit', message: 'runtime stopped unexpectedly' },
   ];
-  assert.equal(clientEvents.length, 6);
+  assert.equal(clientEvents.length, 7);
   assert.equal(events.length, 17);
 });
 

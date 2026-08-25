@@ -59,10 +59,12 @@
   hover surface of its own: each target in it highlights only its own box,
   and a rule separates the New Chat/agent pair from chat history.
 - The scope picker is available before session binding and remains visible but
-  locked after binding. Model and effort come from runtime capabilities;
-  Default remains an omitted override. Locked controls stay legible and inert —
-  the locked PILL goes inert and says why, rather than opening onto a dimmed
-  list.
+  locked after binding. Model and effort come from runtime capabilities, and
+  Default remains an omitted override. An idle Codex conversation applies a
+  model choice to its next turn on the same thread; its picker is disabled only
+  during an active turn. A populated Claude conversation keeps its model fixed.
+  Locked controls stay legible and inert — the locked pill goes inert and says
+  why, rather than opening onto a dimmed list.
 - One session setting is one pill over one menu. Model, mode, and effort are
   independent, so none of them shares another's popup or appends its value to
   another's trigger label; a pill names only the setting it changes.

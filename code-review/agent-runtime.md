@@ -182,6 +182,9 @@ assumed CLI versions.
 
 - Model catalogs and effort levels come from the native runtime. `Default`
   means no override and never rewrites global CLI configuration.
+- Codex applies an explicit idle model change to the next turn of the existing
+  thread. The Adapter ignores model changes while a turn is active; returning
+  to `Default` omits the next turn's model override.
 - Attachments are explicit; the current source is never implicit context.
 - Permission callbacks normalize into one renderer approval flow. Access policy
   remains outside transport/process modules.

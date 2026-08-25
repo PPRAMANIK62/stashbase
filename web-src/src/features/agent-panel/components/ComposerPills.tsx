@@ -27,7 +27,7 @@ import { Pill } from '@/common/components/ui/pill';
 import { cn } from '@/common/lib/utils';
 import { effortLabel, effortOptions } from '@/features/agent-panel/lib/effortMenuState';
 import type { AgentModel, EffortLevel, PermMode } from '@/features/agent-panel/lib/types';
-import { modelMenuLabel } from '@/features/agent-panel/lib/modelState';
+import { modelMenuLabel, type ModelMenuLockReason } from '@/features/agent-panel/lib/modelState';
 
 const MODES: { id: PermMode; label: string; desc: string; Icon: typeof HandIcon }[] = [
   { id: 'default', label: 'Ask', desc: 'Ask before edits or higher-risk actions', Icon: HandIcon },
@@ -78,29 +78,31 @@ export interface ComposerEffortControl {
 /** Model control for the bar's Model pill. */
 export interface ComposerModelControl {
   show: boolean;
-  /** User intent for the next session; undefined means Default (no override). */
-  selected?: string;
+  /** Explicit user intent; null means native Default. */
+  selected?: string | null;
   /** Model the runtime says the live session is actually using. */
   active?: string;
   models: AgentModel[];
   locked: boolean;
+  lockReason: ModelMenuLockReason;
   notice: string | null;
   resumedSession: boolean;
   onSet: (model?: string) => void;
 }
 
-/** Model pill — stays its own control so the current model is always
- * visible on the bar. Locked once the session has content. */
+/** Model pill — stays visible on the bar. Its runtime-specific lock reason
+ * distinguishes a temporarily active turn from a fixed conversation. */
 export function ModelMenu({ model, disabled }: { model: ComposerModelControl; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const label = modelMenuLabel(model.models, model.selected, model.active, model.resumedSession);
+  const lockDescription = model.lockReason;
   return (
     <Menu open={open} onOpenChange={setOpen}>
       <MenuTrigger
         render={<Pill locked={model.locked} className="max-w-40" />}
         disabled={disabled || model.locked}
-        aria-label={`Model: ${label}${model.locked ? ' — fixed for this conversation' : ''}`}
-        title={model.locked ? `Model — ${label} (fixed for this conversation)` : `Model — ${label}`}
+        aria-label={`Model: ${label}${lockDescription ? ` — ${lockDescription}` : ''}`}
+        title={lockDescription ? `Model — ${label} (${lockDescription})` : `Model — ${label}`}
       >
         {label === 'Default' ? 'Model: Default' : label}
       </MenuTrigger>

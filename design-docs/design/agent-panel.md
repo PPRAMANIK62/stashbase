@@ -34,6 +34,9 @@ a transcript-centered file manager.
 - Runtime capabilities determine model, permission, and effort controls without
   rewriting global CLI defaults. New sessions start in Auto, where the agent
   decides when an action needs approval; Ask is an explicit per-session pick.
+  An idle Codex conversation can change the model used by its next turn without
+  replacing its native thread; the picker pauses while a turn is active. Claude
+  keeps its selected model fixed after the conversation has content.
   Suggestions prefill rather than send.
 - Streaming, tool activity, permissions, attachments, skills, recovery, and
   file artifacts remain inspectable. Editing and resending an earlier prompt

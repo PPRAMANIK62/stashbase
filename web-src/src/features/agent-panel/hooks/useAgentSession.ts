@@ -184,6 +184,7 @@ export function useAgentSession({
   // reads now lives in that sub-hook.
   const runtimeCatalog = useAgentRuntimeCatalog({ agent, meta, agents: chat.agents, dispatch, actions });
   const controls = useAgentControlState({
+    agent,
     workspace,
     capabilities: runtimeCatalog.capabilities,
     blocks,
@@ -321,8 +322,8 @@ export function useAgentSession({
      *  reconnect forwards whatever id the dead session had). */
     resumeId?: string | null;
     /** 'new-session' clears live telemetry so a fresh session cannot wear
-     *  the old session's active model; 'resumed' locks the control to the
-     *  resumed session's own model (drops the previous tab's catalog). */
+     *  the old session's active model; 'resumed' drops the previous tab's
+     *  catalog and explicit choice until native replay publishes identity. */
     modelReset?: 'new-session' | 'resumed';
     /** Whether the current turn survives the reset. No caller keeps one
      *  alive today; the default settles it. */
@@ -451,7 +452,7 @@ export function useAgentSession({
     const wsUrl = agentConnectionUrl({
       protocol: location.protocol, host: location.host, endpoint,
       windowId: getWindowId(), effort: controls.effortRef.current, access: controls.modeRef.current,
-      agent, model: controls.modelControlRef.current.selectedModel, resume,
+      agent, model: controls.modelControlRef.current.selectedModel ?? undefined, resume,
       ...scopeRequestParams(sessionScopeForConnect),
     });
     const ws = new WebSocket(wsUrl);

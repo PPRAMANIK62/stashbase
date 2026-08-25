@@ -45,6 +45,9 @@ export type AgentClientEvent =
   | { t: 'permission-reply'; id: string; allow: boolean; always?: boolean }
   | { t: 'interrupt' }
   | { t: 'close' }
+  /** Select the model for the next turn of a runtime that supports live
+   * conversation model changes. Missing `model` means native Default. */
+  | { t: 'set-model'; model?: string }
   | { t: 'set-mode'; mode: string };
 
 export type AgentServerEvent =
