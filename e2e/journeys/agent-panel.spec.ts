@@ -187,8 +187,9 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Model: Fake Codex Model — fixed for this conversation' })).toBeVisible();
 
-    await panel.getByRole('button', { name: 'Reply actions' }).click();
-    const copyReply = app.page.getByRole('menuitem', { name: 'Copy Reply' });
+    // Copy Reply is a standing button under the reply, not a hover or
+    // menu affordance.
+    const copyReply = panel.getByRole('button', { name: 'Copy reply' });
     await expect(copyReply).toBeVisible();
     await copyReply.click();
     await expect(app.page.getByText('Copied.', { exact: true })).toBeVisible();

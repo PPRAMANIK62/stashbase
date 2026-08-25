@@ -13,6 +13,8 @@ export interface TurnMeta {
   durationMs: number;
   /** The user stopped this turn before it finished. */
   interrupted: boolean;
+  /** Epoch ms when the turn settled — the reply's hover timestamp. */
+  settledAt?: number;
 }
 
 export interface Turn { key: string; head: Extract<Block, { kind: 'user' }> | null; body: Block[] }
@@ -74,6 +76,39 @@ export function turnReplyText(turn: Turn): string {
     .map((block) => block.text)
     .join('\n\n')
     .trim();
+}
+
+/** When the turn's reply happened: the live settle clock when this
+ *  renderer witnessed it, else the newest source-recorded assistant time
+ *  from replayed history. Undefined means no real clock ever saw the
+ *  reply — the UI then shows no timestamp rather than inventing one. */
+export function replyTimestamp(turn: Turn, meta?: TurnMeta): number | undefined {
+  if (meta?.settledAt !== undefined) return meta.settledAt;
+  for (let i = turn.body.length - 1; i >= 0; i--) {
+    const block = turn.body[i];
+    if (block.kind === 'assistant' && block.at !== undefined) return block.at;
+  }
+  return undefined;
+}
+
+/** Hover-timestamp text: bare time for today's messages, day + time once
+ *  the message is older — the register Codex/ChatGPT use. Locale-formatted
+ *  so "5:56 PM" vs "17:56" follows the user's system. */
+export function formatMessageTime(at: number, now: number = Date.now()): string {
+  const stamp = new Date(at);
+  const today = new Date(now);
+  const sameDay = stamp.getFullYear() === today.getFullYear()
+    && stamp.getMonth() === today.getMonth()
+    && stamp.getDate() === today.getDate();
+  const time = stamp.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return time;
+  const sameYear = stamp.getFullYear() === today.getFullYear();
+  const day = stamp.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+  return `${day}, ${time}`;
 }
 
 export function workTraceLabel(meta?: TurnMeta): string {

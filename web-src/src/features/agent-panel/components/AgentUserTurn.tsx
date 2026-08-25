@@ -14,6 +14,7 @@ import { basename } from '@/common/lib/paths';
 import { AttachmentChip, AttachmentLightbox } from '@/features/agent-panel/components/AttachmentChip';
 import { segmentFileMentions } from '@/features/agent-panel/lib/mentionText';
 import { turnHeadClass } from '@/features/agent-panel/lib/panelStyles';
+import { formatMessageTime } from '@/features/agent-panel/lib/turnModel';
 import type { Attachment, Block } from '@/features/agent-panel/lib/types';
 
 export function UserTurnHead({
@@ -31,7 +32,10 @@ export function UserTurnHead({
   }, [block.text, editing]);
 
   return (
-    <>
+    // `agent-turn-user` scopes the hover reveal of the actions row (and its
+    // timestamp) to the QUESTION region: hovering the reply must not light
+    // up the user cluster, and vice versa.
+    <div className="agent-turn-user group/user flex flex-col gap-2.5">
       <div className={turnHeadClass}>
         {block.attachments && block.attachments.length > 0 && <MessageAttachments attachments={block.attachments} />}
         {editing ? (
@@ -65,11 +69,12 @@ export function UserTurnHead({
       {!editing && block.text && (
         <UserMessageActions
           text={block.text}
+          at={block.at}
           onCopy={onCopy}
           onEdit={() => setEditing(true)}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -194,9 +199,10 @@ function renderUserFileMentions(text: string, attachmentPaths?: string[]): React
  * resends the edited text as a NEW prompt — agent sessions cannot rewind,
  * so this is resend-from-history, never a fork. */
 function UserMessageActions({
-  text, onCopy, onEdit,
+  text, at, onCopy, onEdit,
 }: {
   text: string;
+  at?: number;
   onCopy: (text: string) => void;
   onEdit: () => void;
 }) {
@@ -206,16 +212,21 @@ function UserMessageActions({
    * navigation these two buttons do not implement. */
   return (
     <div
-      /* Revealed on hover or keyboard focus of the whole turn, which is
-       * `group/turn` on the turn wrapper in AgentMessages. The reserved
+      /* Revealed on hover or keyboard focus of the question region. The reserved
        * row also opens a little space between the user message and the
        * agent's reply. The -2px lift closes the gap the transcript's own
        * 10px turn gap would otherwise leave above a row that is mostly
        * empty space. */
-      className="-mt-0.5 flex items-center justify-end gap-0.5 text-muted-foreground opacity-0 transition-surface group-hover/turn:opacity-100 group-focus-within/turn:opacity-100"
+      className="-mt-0.5 flex items-center justify-end gap-0.5 text-muted-foreground opacity-0 transition-surface group-hover/user:opacity-100 group-focus-within/user:opacity-100"
       role="group"
       aria-label="Message actions"
     >
+      {/* Sent time leads the cluster and rides the row's hover reveal. */}
+      {at !== undefined && (
+        <span className="mr-1 select-none whitespace-nowrap text-xs text-muted-foreground">
+          {formatMessageTime(at)}
+        </span>
+      )}
       {/* 14, the app-wide chrome glyph size, over `icon-xs`'s 12: at 12
         * these two sat a step below every other icon in the panel. */}
       <Button variant="ghost" size="icon-xs" aria-label="Copy message" onClick={() => onCopy(text)}>

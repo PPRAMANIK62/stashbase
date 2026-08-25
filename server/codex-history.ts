@@ -29,8 +29,13 @@ export interface CodexSessionRow {
 }
 
 export type CodexSessionBlock =
-  | { kind: 'user'; id: string; text: string; attachments?: CodexAttachment[] }
-  | { kind: 'assistant'; id: string; text: string }
+  /** `at` (epoch ms) comes from the turn's own `startedAt`/`completedAt`
+   * — Codex records no per-item times (verified against the live
+   * app-server), so the turn boundaries are the honest per-message
+   * approximation: the user message started the turn, the reply's time
+   * is when the turn completed. Never defaulted when absent. */
+  | { kind: 'user'; id: string; text: string; attachments?: CodexAttachment[]; at?: number }
+  | { kind: 'assistant'; id: string; text: string; at?: number }
   | { kind: 'thinking'; id: string; text: string }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
 
@@ -339,6 +344,8 @@ export function codexThreadToBlocks(thread: JsonObject, rolloutTools: RolloutToo
     const turnObject = objectValue(turn);
     const items = turnObject.items;
     if (!Array.isArray(items)) continue;
+    const startedAt = strictSecondsToMillis(turnObject.startedAt);
+    const completedAt = strictSecondsToMillis(turnObject.completedAt);
     // Desktop-hosted threads omit tool calls altogether; normal app-server
     // threads already contain them. Do not add the rollout copies when the
     // authoritative response has tool items for this turn.
@@ -365,6 +372,7 @@ export function codexThreadToBlocks(thread: JsonObject, rolloutTools: RolloutToo
             id: id(),
             text: userMessage.text,
             ...(userMessage.attachments.length ? { attachments: userMessage.attachments } : {}),
+            ...(startedAt !== undefined ? { at: startedAt } : {}),
           });
         }
         continue;
@@ -372,7 +380,7 @@ export function codexThreadToBlocks(thread: JsonObject, rolloutTools: RolloutToo
       if (type === 'agentMessage') {
         const text = stringValue(item.text);
         if (text.trim()) {
-          blocks.push({ kind: 'assistant', id: id(), text });
+          blocks.push({ kind: 'assistant', id: id(), text, ...(completedAt !== undefined ? { at: completedAt } : {}) });
           assistantMessages++;
           appendToolsAfter(assistantMessages);
         }
@@ -449,4 +457,12 @@ function stringArray(value: unknown): string[] {
 
 function secondsToMillis(value: unknown): number {
   return typeof value === 'number' ? Math.round(value * 1000) : Date.now();
+}
+
+/** Unlike secondsToMillis, absence stays absent: a missing turn time must
+ * render as "no timestamp", never as a now() invented at replay time. */
+function strictSecondsToMillis(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.round(value * 1000)
+    : undefined;
 }

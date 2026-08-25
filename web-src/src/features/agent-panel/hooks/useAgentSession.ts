@@ -273,7 +273,7 @@ export function useAgentSession({
         // updater after the current call stack; reading the ref inside it made
         // an interrupted edit-and-resend turn render as ordinary "Worked".
         const interrupted = interruptedKeyRef.current === key;
-        setTurnMeta((prev) => ({ ...prev, [key]: { durationMs, interrupted } }));
+        setTurnMeta((prev) => ({ ...prev, [key]: { durationMs, interrupted, settledAt: Date.now() } }));
       }
       turnStartRef.current = null;
       interruptedKeyRef.current = null;

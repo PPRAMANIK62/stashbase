@@ -9,15 +9,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/common/components/ui/button';
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@/common/components/ui/collapsible';
 import { AgentMarkdown } from '@/features/agent-panel/components/AgentMarkdown';
-import { ChevronDownIcon, CopyIcon, MoreHorizontalIcon } from '@/common/components/icons';
-import { Menu, type MenuItem } from '@/common/components/Menu';
+import { ChevronDownIcon, CopyIcon } from '@/common/components/icons';
 import { cn } from '@/common/lib/utils';
 import { SectionHeading } from '@/common/components/ui/section';
 import { StatusMessage } from '@/common/components/ui/status';
 import { ToolActivityGroup, PermissionCard } from '@/features/agent-panel/components/AgentToolActivity';
 import { MessageAttachments, UserMessageText, UserTurnHead } from '@/features/agent-panel/components/AgentUserTurn';
 import { accentDotClass, spinnerClass, turnHeadClass } from '@/features/agent-panel/lib/panelStyles';
-import { groupTurns, settledReplySections, tailBlockSpeaks, turnReplyText, workTraceLabel, type TurnMeta } from '@/features/agent-panel/lib/turnModel';
+import { formatMessageTime, groupTurns, replyTimestamp, settledReplySections, tailBlockSpeaks, turnReplyText, workTraceLabel, type TurnMeta } from '@/features/agent-panel/lib/turnModel';
 import { turnFailureGuidance, type TurnFailureActionId } from '@/features/agent-panel/lib/turnFailure';
 import type { AgentKind, Attachment, Block, ToolBlock } from '@/features/agent-panel/lib/types';
 
@@ -25,10 +24,8 @@ import type { AgentKind, Attachment, Block, ToolBlock } from '@/features/agent-p
  * string rather than a component because the two call sites below wrap
  * completely different children — a live turn and a queued preview — and
  * only the box is shared. `agent-turn` leads it as a hook: the
- * between-turn rhythm is an adjacent-sibling rule in agent-panel.css,
- * and `group/turn` is what reveals the copy/edit row under the bubble
- * (AgentUserTurn). */
-const turnClass = 'agent-turn group/turn relative flex flex-col gap-2.5';
+ * between-turn rhythm is an adjacent-sibling rule in agent-panel.css. */
+const turnClass = 'agent-turn relative flex flex-col gap-2.5';
 
 /** Accent status dot used by working/queued indicators. */
 function Dot() {
@@ -90,12 +87,12 @@ export function MessageList({
   );
 
   return (
-    // `agent-messages` is a layout hook: the chat-primary grid rules in
-    // agent-panel.css widen its padding to center the readable column.
+    // `agent-messages` is a layout hook: agent-panel.css owns the
+    // horizontal padding (responsive centering of the readable column).
     // No top padding — the first child's own top margin carries the
     // breathing room (it scrolls away with the transcript).
     <div
-      className="agent-messages scrollbar-quiet flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-0 pb-2 [&>*:first-child]:mt-3"
+      className="agent-messages scrollbar-quiet flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pt-0 pb-2 [&>*:first-child]:mt-3"
       role="log"
       aria-label="Agent conversation"
       aria-live="polite"
@@ -121,14 +118,25 @@ export function MessageList({
                 onSendEdit={onResendUserMessage}
               />
             )}
-            <TurnBody
-              blocks={turn.body}
-              liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
-              streaming={!settled}
-              meta={turn.head ? turnMeta[turn.head.id] : undefined}
-              handlers={handlers}
-            />
-            {replyText && <TurnActions text={replyText} onCopy={onCopyUserMessage} />}
+            {/* `agent-turn-reply` scopes the reply timestamp's hover reveal
+              * to the ANSWER region, mirroring `agent-turn-user` on the
+              * question side — hovering one never lights up the other. */}
+            <div className="agent-turn-reply group/reply flex flex-col gap-2.5">
+              <TurnBody
+                blocks={turn.body}
+                liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
+                streaming={!settled}
+                meta={turn.head ? turnMeta[turn.head.id] : undefined}
+                handlers={handlers}
+              />
+              {replyText && (
+                <TurnActions
+                  text={replyText}
+                  at={replyTimestamp(turn, turn.head ? turnMeta[turn.head.id] : undefined)}
+                  onCopy={onCopyUserMessage}
+                />
+              )}
+            </div>
           </div>
         );
       })}
@@ -474,42 +482,38 @@ function AssistantBlock({ text, onOpenArtifact }: {
   return <div className="agent-prose"><AgentMarkdown markdown={text} onOpenArtifact={onOpenArtifact} /></div>;
 }
 
-/** One ⋯ menu per completed TURN, on its own line under the reply.
+/** One Copy Reply button per completed TURN, bottom-left under the
+ * reply (Codex register).
  *
  * Per-turn, not per-block: a single reply is delivered as several
- * assistant blocks separated by tool calls, so a per-block menu stamped
- * a button after every paragraph. And always visible rather than
- * hover-revealed — at one quiet button per turn there is nothing to hide
- * from, and a control that only exists under the pointer is a control
- * most people never find. Absent while the turn is still streaming:
- * there is no complete reply to act on yet. */
-function TurnActions({ text, onCopy }: {
+ * assistant blocks separated by tool calls, so a per-block button would
+ * stamp one after every paragraph. Always visible rather than
+ * hover-revealed — unlike the user bubble's hover cluster, this is the
+ * one standing action on a reply, and a control that only exists under
+ * the pointer is a control most people never find. Same CopyIcon as the
+ * user-message copy, at the 14px chrome glyph size. Absent while the
+ * turn is still streaming: there is no complete reply to act on yet. */
+function TurnActions({ text, at, onCopy }: {
   text: string;
+  at?: number;
   onCopy: (text: string) => void;
 }) {
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const items: MenuItem[] = [
-    { label: 'Copy Reply', icon: <CopyIcon />, onSelect: () => onCopy(text) },
-  ];
   return (
-    <div className="flex justify-end">
+    <div className="flex items-center justify-start gap-1.5">
       <Button
-        className={cn(
-          'grid size-5 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-muted hover:text-foreground',
-          anchor && 'bg-active text-foreground',
-        )}
-        aria-label="Reply actions"
-        aria-haspopup="menu"
-        aria-expanded={!!anchor}
-        onClick={(event) => {
-          const trigger = event.currentTarget;
-          setAnchor((prev) => (prev ? null : trigger.getBoundingClientRect()));
-        }}
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Copy reply"
+        onClick={() => onCopy(text)}
       >
-        <MoreHorizontalIcon className="size-4" />
+        <CopyIcon className="size-3.5" />
       </Button>
-      {anchor && (
-        <Menu anchor={{ rect: anchor, align: 'right' }} minWidth={170} items={items} onClose={() => setAnchor(null)} />
+      {/* Metadata, not an action: the reply time surfaces on turn hover
+        * only, while the copy button stands. */}
+      {at !== undefined && (
+        <span className="select-none whitespace-nowrap text-xs text-muted-foreground opacity-0 transition-surface group-hover/reply:opacity-100 group-focus-within/reply:opacity-100">
+          {formatMessageTime(at)}
+        </span>
       )}
     </div>
   );

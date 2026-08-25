@@ -55,6 +55,10 @@ a transcript-centered file manager.
 - Responses support GFM and local math rendering while preserving original
   Markdown for history and copy. Raw HTML, remote images, unsafe links, and
   invalid formulas remain inert or visibly recoverable.
+- Hovering a turn reveals when its messages happened — beside the user
+  message's copy/edit cluster and the reply's standing copy control. Times
+  appear only when genuinely recorded (live sends and settles, or history
+  whose source kept them); nothing is invented for restored transcripts.
 
 ## Experience Contract
 

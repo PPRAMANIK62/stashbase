@@ -24,8 +24,12 @@ export interface SessionInfo {
  *  AgentView's `Block` (history tools are always settled), so it drops
  *  straight into `setBlocks`. */
 export type SessionBlock =
-  | { kind: 'user'; id: string; text: string; attachments?: Array<{ path: string; name: string; dims?: string; previewUrl?: string }> }
-  | { kind: 'assistant'; id: string; text: string }
+  /** `at` is epoch ms from the SOURCE's own record of when the message
+   * happened. Optional and never synthesized during replay: an adapter
+   * maps it only when the underlying history stores a real per-message
+   * time, so absence renders as "no time shown", not a made-up one. */
+  | { kind: 'user'; id: string; text: string; attachments?: Array<{ path: string; name: string; dims?: string; previewUrl?: string }>; at?: number }
+  | { kind: 'assistant'; id: string; text: string; at?: number }
   | { kind: 'thinking'; id: string; text: string }
   | { kind: 'tool'; id: string; name: string; input: Record<string, unknown>; status: 'done' | 'error'; result?: string };
 

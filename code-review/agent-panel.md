@@ -101,11 +101,17 @@
   nearest user prompt above the card, never the transcript's newest.
 - Completed thinking, interim narration, and tool activity fold under one
   working-trace header while the final answer remains visible. Interrupted work
-  stays expanded. Resumed history has no invented duration.
+  stays expanded. Resumed history has no invented duration or timestamp:
+  hover message times render only when a real clock recorded them — the
+  live renderer for this session's messages, or the history source's own
+  per-message/turn times (Claude native transcript lines; Codex turn
+  boundaries).
 - Tool activity is compact and inspectable. Intermediate failure may tint its
   row but does not turn the whole summary into a terminal error.
 - Permission requests and recovery actions never enter collapsed activity.
-- User messages expose copy and edit-and-resend. Resend is a new prompt, never
+- Every settled reply exposes one standing Copy Reply control — always
+  visible, never hover- or menu-gated — carrying the untouched assistant
+  source. User messages expose copy and edit-and-resend. Resend is a new prompt, never
   transcript rewind or fork. When another turn is active, enqueue the edited
   prompt first, interrupt the old turn, and start the edit only through the
   terminal queue handoff; ordinary composer follow-ups remain non-interrupting.
