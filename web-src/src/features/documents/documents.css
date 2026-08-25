@@ -68,7 +68,9 @@
   --stash-code-gutter: color-mix(in srgb, var(--surface-sunken) 92%, var(--surface-base));
   --stash-code-current-line: color-mix(in srgb, var(--accent) 16%, var(--surface-sunken));
   --stash-code-selection: color-mix(in srgb, var(--accent) 34%, var(--surface-sunken));
-  --crepe-font-title: var(--font-serif);
+  /* Headings share the UI sans (two-voice typography) — hierarchy comes
+   * from Crepe's size/weight ramp, not a typeface change. */
+  --crepe-font-title: var(--font-sans);
   --crepe-font-default: inherit;
   --crepe-font-code: var(--font-mono);
   --crepe-shadow-1: 0 12px 28px rgba(var(--shadow-color), .24), 0 2px 7px rgba(var(--shadow-color), .16);

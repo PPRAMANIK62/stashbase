@@ -1127,11 +1127,9 @@ cross-feature, not because migrating them was skipped:
   (`features/documents/components/json/json-tree.css`). Those roles come from
   the global token layer in both themes; they never embed a fixed palette in
   the component. Content follows `--reading-font-size` or the reading step of
-  the ramp, not whatever the chrome around it is wearing, and may use its own
-  mono voice where the content is code. It does NOT get its own text face:
-  the app bundles Inter (`styles.css`) and both chrome and content wear it,
-  so a reply and the interface around it differ in size and measure, not in
-  typeface. `--font-serif` is reserved for the Crepe document title.
+  the ramp, not whatever the chrome around it is wearing. It does not get its
+  own text face: chrome and content share the system UI sans, while code/data
+  surfaces switch to bundled Geist Mono through `--font-mono`.
 
   Colour is the one place content does diverge: long-form reading text takes
   `--text-reading`, not the chrome's `--fg`. The two are the same value in

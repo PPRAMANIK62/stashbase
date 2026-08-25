@@ -138,13 +138,12 @@
  * of them are prose anyone settles in to read.
  *
  * So the panel speaks in the interface's own voice. Two voices, not
- * three: Inter for chrome and content alike, mono where the content is
- * literally code. `--font-serif` survives for the Crepe document title,
- * where an editor's title genuinely is a different register.
+ * three: the system UI sans for chrome and content alike, bundled Geist
+ * Mono where the content is literally code.
  *
- * Line-height comes back a step from the serif's 1.65 — Inter's larger
- * x-height needs less air to stay readable at this measure, and the old
- * value left the paragraphs looking loosely set.
+ * Line-height comes back a step from the serif's 1.65 — the UI sans needs
+ * less air to stay readable at this measure, and the old value left the
+ * paragraphs looking loosely set.
  *
  * The size is the `lg` role rather than a re-typed 14px: same number,
  * but one definition, and it keeps following the interface-size
@@ -207,7 +206,7 @@
   border-radius: var(--radius-container);
   padding: 8px 10px;
   overflow-x: auto;
-  /* A code block inside serif prose steps DOWN two roles from the
+  /* A code block inside reading prose steps DOWN two roles from the
    * reply's own `lg`, so the mono run does not out-measure the sentence
    * that introduced it. */
   font-size: var(--text-sm);
